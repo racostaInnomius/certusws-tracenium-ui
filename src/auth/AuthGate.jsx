@@ -8,12 +8,12 @@ export default function AuthGate({ children }) {
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/bootstrap", { credentials: "include" });
+        const res = await fetch("http://localhost:3000/api/bootstrap", { credentials: "include" });
 
         if (res.status === 401) {
           if (!redirectedRef.current) {
             redirectedRef.current = true;
-            window.location.href = "/auth/login";
+            window.location.href = "http://localhost:3000/auth/login";
           }
           return;
         }

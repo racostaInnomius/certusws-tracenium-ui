@@ -1,5 +1,7 @@
+const API_BASE = "http://localhost:3000";
+
 export async function httpGetJson(url) {
-  const res = await fetch(url, {
+  const res = await fetch(`${API_BASE}${url}`, {
     method: "GET",
     credentials: "include" // importante si OIDC usa cookies
   });
