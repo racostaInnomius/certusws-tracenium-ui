@@ -18,12 +18,11 @@ export default function OsPlatformDonut({ osPlatform }) {
   }, [osPlatform]);
 
   const total = React.useMemo(() => data.reduce((sum, x) => sum + x.value, 0), [data]);
-
   const COLORS = ["#2ec4c6", "#7bdff2", "#b2f7ef", "#cdb4db", "#a2d2ff"];
 
   return (
-    <Paper sx={{ p: 2, borderRadius: 3, height: 220 }}>
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+    <Paper sx={{ p: 2, borderRadius: 3, height: "100%" }}>
+      <Typography sx={{ fontWeight: 600, mb: 1 }}>
         OS Platform
       </Typography>
 
@@ -37,10 +36,12 @@ export default function OsPlatformDonut({ osPlatform }) {
                 data={data}
                 dataKey="value"
                 nameKey="name"
+                cx="50%"
+                cy="50%"
                 innerRadius="62%"
-                outerRadius="86%"
+                outerRadius="89%"
                 paddingAngle={2}
-                isAnimationActive={false}
+                isAnimationActive={true}
               >
                 {data.map((_, idx) => (
                   <Cell key={idx} fill={COLORS[idx % COLORS.length]} />

@@ -11,52 +11,44 @@ import {
   LabelList,
 } from "recharts";
 
-function buildLabel(row) {
-  const platform = row?.os_platform ?? row?.osPlatform ?? "";
-  const version = row?.os_version ?? row?.osVersion ?? row?.os ?? "";
-
-  const platformStr = String(platform).trim();
-  const versionStr = String(version).trim();
-
-  if (platformStr && versionStr) return `${platformStr} ${versionStr}`;
-  return versionStr || platformStr || "Unknown";
-}
-
 function toChartData(osVersions) {
   if (!Array.isArray(osVersions)) return [];
 
   return osVersions
-    .map((r) => ({
-      label: buildLabel(r),
-      hostCount: Number(r?.host_count ?? r?.hostCount ?? 0),
-    }))
-    .filter((x) => Number.isFinite(x.hostCount) && x.hostCount > 0)
+    .map((r) => {
+      const platform = (r?.os_platform ?? "Unknown").toString();
+      const version = (r?.os_version ?? "Unknown").toString();
+      return {
+        label: `${platform} ${version}`,
+        hostCount: Number(r?.host_count ?? 0),
+      };
+    })
+    .filter((x) => x.hostCount > 0)
     .sort((a, b) => b.hostCount - a.hostCount);
 }
 
 export default function OsVersionsBar({ osVersions }) {
   const data = toChartData(osVersions);
 
-  const rowHeight = 42;
-  const minHeight = 230;
-  const chartHeight = Math.max(minHeight, data.length * rowHeight);
+  // 1er lugar más oscuro, el resto más claro.
+  const barColors = ["#0c6e73", "#66e3f0", "#8feaf3", "#b9f3f7"];
 
-  // Colores como el mock (1ro más oscuro, resto claro)
-  const COLOR_PRIMARY = "#0f6b72";
-  const COLOR_SECONDARY = "#8eeef0";
-
-  // Evita usar <Cell/> (en algunas versiones aparece como deprecated)
-  const CustomBar = (props) => {
+  const BarShape = (props) => {
     const { x, y, width, height, index } = props;
-    const fill = index === 0 ? COLOR_PRIMARY : COLOR_SECONDARY;
-    return <rect x={x} y={y} width={width} height={height} fill={fill} rx={2} />;
+    const fill = barColors[index] || barColors[barColors.length - 1];
+    return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
   };
 
-  return (
-    <Box sx={{ width: "100%", height: "100%" }}>
-      <Typography sx={{ fontWeight: 700, mb: 1 }}>OS Versions</Typography>
+  const rowHeight = 44;
+  const minHeight = 220;
+  const chartHeight = Math.max(minHeight, data.length * rowHeight);
 
-      <Box sx={{ height: chartHeight, minWidth: 520 }}>
+  return (
+    <Box sx={{ width: "100%" }}>
+      <Typography sx={{ fontWeight: 600, mb: 1 }}>OS Versions</Typography>
+
+      {/* ResponsiveContainer requiere que este contenedor tenga altura */}
+      <Box sx={{ height: chartHeight, width: "100%", minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
@@ -66,21 +58,12 @@ export default function OsVersionsBar({ osVersions }) {
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" allowDecimals={false} />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={160}
-              tick={{ fontSize: 12 }}
-              tickFormatter={(v) =>
-                String(v).length > 18 ? `${String(v).slice(0, 18)}…` : v
-              }
-            />
+            <YAxis type="category" dataKey="label" width={160} tick={{ fontSize: 12 }} />
             <Tooltip
               formatter={(value) => [`${value}`, "Hosts"]}
               labelFormatter={(label) => `OS: ${label}`}
             />
-
-            <Bar dataKey="hostCount" barSize={14} shape={<CustomBar />}>
+            <Bar dataKey="hostCount" barSize={14} shape={<BarShape />}>
               <LabelList dataKey="hostCount" position="right" />
             </Bar>
           </BarChart>

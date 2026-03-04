@@ -1,91 +1,88 @@
 import * as React from "react";
-import { Grid, Paper, Typography, Box } from "@mui/material";
+import Grid from "@mui/material/Grid";
+import { Paper, Typography, Box } from "@mui/material";
+
 import { dashboardApi } from "../api/dashboard";
 import OsPlatformDonut from "../components/Charts/OsPlatformDonut";
 import TopManufacturersBar from "../components/Charts/TopManufacturersBar";
 import OsVersionsBar from "../components/Charts/OsVersionsBar";
+import PrintersByVendorPie from "../components/Charts/PrintersByVendorPie";
 
 export default function Assets() {
   const [summary, setSummary] = React.useState(null);
 
   React.useEffect(() => {
-    let cancelled = false; // evita setState si el componente se desmonta por redirect
+    let isMounted = true;
 
     (async () => {
       try {
-        const data = await dashboardApi.getSummary(); // /api/v1/dashboard/summary
-        if (!cancelled && data) setSummary(data);
+        const res = await dashboardApi.getSummary();
+        if (isMounted) setSummary(res);
       } catch (e) {
-        const msg = String(e?.message || "");
-        // Si no hay sesión, AuthGate se encargará del redirect; aquí solo evitamos ruido/flicker
-        if (msg.startsWith("UNAUTHENTICATED")) return;
-
-        console.error("getSummary failed:", e);
+        console.error("Failed to load dashboard summary", e);
       }
     })();
 
     return () => {
-      cancelled = true;
+      isMounted = false;
     };
   }, []);
 
   return (
     <Grid container spacing={2}>
-      {/* Active Hosts */}
-      <Grid item xs={12} md={3}>
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
-          <Typography variant="overline">Active Hosts</Typography>
+      {/* Row 1 */}
+      {/* <Grid size={{ xs: 12, md: 2 }}> */}
+      <Paper sx={{ p: 2, borderRadius: 3 }}>
+        <Typography sx={{ fontWeight: 600, mb: 1 }}>Active Hosts</Typography>
+        <Box sx={{ display: "flex", alignItems: "center", height: 170 }}>
           <Typography variant="h3" sx={{ fontWeight: 800 }}>
             {summary?.activeHosts ?? "—"}
           </Typography>
+        </Box>
+      </Paper>
+      {/* </Grid> */}
+
+      <Grid size={{ xs: 12, md: 3 }}>
+        {/* Recharts: el contenedor debe tener altura explícita para evitar width/height = -1 */}
+        <Box sx={{ height: 260 }}>
+          <OsPlatformDonut osPlatform={summary?.osPlatform} />
+        </Box>
+      </Grid>
+
+      <Grid size={{ xs: 12, md: 5 }}>
+        <Paper sx={{ p: 2, borderRadius: 3, height: 260, overflow: "hidden" }}>
+          <TopManufacturersBar topManufacturers={summary?.topManufacturers} />
         </Paper>
       </Grid>
 
-      {/* Charts area (OS Platform + Top Manufacturer) */}
-      <Grid item xs={12} md={6}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={5}>
-            <Box sx={{ height: 240 }}>
-              <OsPlatformDonut osPlatform={summary?.osPlatform} />
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} md={7}>
-            <Paper
-              sx={{
-                p: 2,
-                borderRadius: 3,
-                height: 240,
-                overflowY: "auto", // para simular el scroll del mock si hay muchos manufacturers
-                pr: 1,
-              }}
-            >
-              <TopManufacturersBar topManufacturers={summary?.topManufacturers} />
-            </Paper>
-          </Grid>
-        </Grid>
-      </Grid>
-
-      {/* Total Printers */}
-      <Grid item xs={12} md={3}>
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
-          <Typography variant="overline">Total Printers</Typography>
+      {/* <Grid size={{ xs: 12, md: 2 }}> */}
+      <Paper sx={{ p: 2, borderRadius: 3 }}>
+        <Typography sx={{ fontWeight: 600, mb: 1 }}>Total Printers</Typography>
+        <Box sx={{ display: "flex", alignItems: "center", height: 170 }}>
           <Typography variant="h3" sx={{ fontWeight: 800 }}>
             {summary?.totalPrinters ?? "—"}
           </Typography>
-        </Paper>
-      </Grid>
+        </Box>
+      </Paper>
+      {/* </Grid> */}
 
-      {/* OS Versions */}
-      <Grid item xs={12} md={6}>
-        <Paper sx={{ p: 2, borderRadius: 3, minHeight: 280, overflow: "auto" }}>
+      {/* Row 2 */}
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Paper sx={{ p: 2, borderRadius: 3, height: 300, overflow: "hidden" }}>
           <OsVersionsBar osVersions={summary?.osVersions} />
         </Paper>
       </Grid>
 
-      {/* Placeholder Hosts Table */}
-      <Grid item xs={12} md={6}>
-        <Paper sx={{ p: 2, borderRadius: 3, minHeight: 280 }}>
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Paper sx={{ p: 2, height: 300, borderRadius: 2}}>
+          <Box sx={{ height: 300, minHeight: 250 }}>
+            <PrintersByVendorPie printersByVendor={summary?.printersByVendor} />
+          </Box>
+        </Paper>
+      </Grid>
+
+      <Grid size={{ xs: 12, md: 6 }}>
+        <Paper sx={{ p: 2, borderRadius: 3, height: 300 }}>
           <Typography variant="overline">Placeholder: Hosts Table</Typography>
         </Paper>
       </Grid>

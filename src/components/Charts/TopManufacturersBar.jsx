@@ -9,11 +9,11 @@ import {
   CartesianGrid,
   Tooltip,
   LabelList,
-  Rectangle,
 } from "recharts";
 
 function toChartData(topManufacturers) {
   if (!Array.isArray(topManufacturers)) return [];
+
   return topManufacturers
     .map((r) => ({
       manufacturer: (r?.manufacturer ?? "Unknown").toString(),
@@ -26,42 +26,33 @@ function toChartData(topManufacturers) {
 export default function TopManufacturersBar({ topManufacturers }) {
   const data = toChartData(topManufacturers);
 
-  // Colores como tu referencia:
-  // - Top 1 un poco más oscuro
-  // - Resto más claro
-  const COLOR_TOP_1 = "#4FAFAF";
-  const COLOR_OTHERS = "#74EEF0";
+  // Paleta inspirada en tu mock: 1er lugar más oscuro, el resto más claro.
+  const barColors = ["#3aa6a6", "#66e3f0", "#8feaf3", "#b9f3f7"];
 
-  // Custom shape para colorear por índice (sin usar <Cell />)
-  const CustomBar = (props) => {
-    const { index } = props; // Recharts pasa index
-    const fill = index === 0 ? COLOR_TOP_1 : COLOR_OTHERS;
-
-    return (
-      <Rectangle
-        {...props}
-        fill={fill}
-        radius={[3, 3, 3, 3]} // bordes redondeados suaves
-      />
-    );
+  // Evitamos <Cell/> (te aparece como deprecated). Pintamos por índice con un shape custom.
+  const BarShape = (props) => {
+    const { x, y, width, height, index } = props;
+    const fill = barColors[index] || barColors[barColors.length - 1];
+    return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
   };
 
-  // Si hay muchos items, el contenedor padre hará scroll (lo vamos a poner en Paper con overflow)
+  // Si hay muchos items, el Paper padre puede usar overflow: auto.
   const rowHeight = 44;
   const minHeight = 220;
   const chartHeight = Math.max(minHeight, data.length * rowHeight);
 
   return (
-    <Box sx={{ width: "100%", height: "100%" }}>
+    <Box sx={{ width: "100%" }}>
       <Typography sx={{ fontWeight: 700, mb: 1 }}>Top Manufacturer</Typography>
 
-      <Box sx={{ height: chartHeight, minWidth: 460 }}>
+      {/* ResponsiveContainer requiere que este contenedor tenga altura */}
+      <Box sx={{ height: chartHeight, width: "100%", minWidth: 0 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
             layout="vertical"
             margin={{ top: 8, right: 24, left: 12, bottom: 8 }}
-            barCategoryGap={11} // más aire entre barras (como mock)
+            barCategoryGap={10}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" allowDecimals={false} />
@@ -75,13 +66,7 @@ export default function TopManufacturersBar({ topManufacturers }) {
               formatter={(value) => [`${value}`, "Hosts"]}
               labelFormatter={(label) => `Manufacturer: ${label}`}
             />
-
-            <Bar
-              dataKey="hostCount"
-              barSize={12} // barras más delgadas
-              shape={<CustomBar />}
-              isAnimationActive={false}
-            >
+            <Bar dataKey="hostCount" barSize={14} shape={<BarShape />}>
               <LabelList dataKey="hostCount" position="right" />
             </Bar>
           </BarChart>
