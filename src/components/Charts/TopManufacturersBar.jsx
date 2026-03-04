@@ -38,7 +38,7 @@ export default function TopManufacturersBar({ topManufacturers }) {
 
   // Si hay muchos items, el Paper padre puede usar overflow: auto.
   const rowHeight = 44;
-  const minHeight = 220;
+  const minHeight = 210;
   const chartHeight = Math.max(minHeight, data.length * rowHeight);
 
   return (
@@ -51,7 +51,7 @@ export default function TopManufacturersBar({ topManufacturers }) {
           <BarChart
             data={data}
             layout="vertical"
-            margin={{ top: 8, right: 24, left: 12, bottom: 8 }}
+            margin={{ top: 8, right: 34, left: -32, bottom: 8 }}
             barCategoryGap={10}
           >
             <CartesianGrid strokeDasharray="3 3" />

@@ -53,7 +53,7 @@ export default function OsVersionsBar({ osVersions }) {
           <BarChart
             data={data}
             layout="vertical"
-            margin={{ top: 8, right: 24, left: 12, bottom: 8 }}
+            margin={{ top: 8, right: 24, left: -12, bottom: 8 }}
             barCategoryGap={10}
           >
             <CartesianGrid strokeDasharray="3 3" />
