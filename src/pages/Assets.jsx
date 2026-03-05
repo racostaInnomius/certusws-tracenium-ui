@@ -77,8 +77,7 @@ export default function Assets() {
         const res = await httpGetJson(
           `/api/v1/dashboard/hosts/${encodeURIComponent(selectedAgentId)}/detail`
         );
-        const d = res?.detail;
-
+        const d = res;        
         if (!isMounted) return;
         setSelectedHostDetail(d? {
           ...d,
