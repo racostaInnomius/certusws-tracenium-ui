@@ -109,10 +109,29 @@ export default function Assets() {
 
       <Grid container spacing={2}>
         {/* Row 1 */}
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
-          <Typography sx={{ fontWeight: 600, mb: 1 }}>Active Hosts</Typography>
-          <Box sx={{ display: "flex", alignItems: "center", height: 170 }}>
-            <Typography variant="h3" sx={{ fontWeight: 800 }}>
+      <Paper elevation={0} sx={{ height: 292, width: 150, borderRadius: 3, overflow: "hidden",
+          border: "1px solid rgba(0,0,0,0.15)", boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+          position: "relative",
+          "&::after": {
+            content: '""', position: "absolute",
+            inset: -8, borderRadius: 4,
+            background: "rgba(80, 242, 255, 0.25)",
+            filter: "blur(14px)", zIndex: -1,
+          }, }}>
+        {/* Header */}
+        <Box sx={{ height: 40, display: "flex",
+            alignItems: "center", justifyContent: "center",
+            backgroundColor: "#2e8f92", borderBottom: "3px solid rgba(100, 255, 255, 0.55)", }}>
+          <Typography sx={{ color: "white", fontWeight: 700, letterSpacing: 0.3, fontSize: 18, }}>
+            Active Hosts
+          </Typography>
+        </Box>
+        {/* Body */}
+        <Box sx={{ height: "calc(100% - 40px)", backgroundColor: "#4aa0a2", 
+                    display: "flex", alignItems: "center", justifyContent: "center", }} >
+          <Typography sx={{ color: "white", fontWeight: 800, fontSize: 72, // número grande
+              lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.25)",
+            }}>
               {summary?.activeHosts ?? "—"}
             </Typography>
           </Box>
@@ -132,10 +151,30 @@ export default function Assets() {
           </Paper>
         </Grid>
 
-        <Paper sx={{ p: 2, borderRadius: 3 }}>
-          <Typography sx={{ fontWeight: 600, mb: 1 }}>Total Printers</Typography>
-          <Box sx={{ display: "flex", alignItems: "center", height: 170 }}>
-            <Typography variant="h3" sx={{ fontWeight: 800 }}>
+        <Paper elevation={0} sx={{ height: 292, width: 150, borderRadius: 3, overflow: "hidden",
+              border: "1px solid rgba(0,0,0,0.15)", boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+              position: "relative",
+              "&::after": {
+                content: '""', position: "absolute",
+                inset: -8, borderRadius: 4, background: "rgba(80, 242, 255, 0.25)", 
+                filter: "blur(14px)", zIndex: -1,
+              },}}>
+          <Box sx={{ height: 40, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                backgroundColor: "#2e8f92", borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
+              }}>
+            <Typography sx={{ color: "white", fontWeight: 700,
+                letterSpacing: 0.3, fontSize: 18,
+              }}>
+              Total Printers</Typography>
+          </Box>
+          {/* Body */}
+          <Box sx={{ height: "calc(100% - 40px)", backgroundColor: "#4aa0a2", // turquesa body
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+            <Typography sx={{ color: "white", fontWeight: 800,
+                fontSize: 72, lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              }}>
               {summary?.totalPrinters ?? "—"}
             </Typography>
           </Box>

@@ -1,6 +1,10 @@
 import * as React from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-
+export const API = {
+  BASE: import.meta.env.VITE_API_BASE,
+  BOOTSTRAP: "/api/bootstrap",
+  LOGIN: "/auth/login"
+};
 export default function AuthGate({ children }) {
   const [status, setStatus] = React.useState("loading"); // loading | authed
   const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
@@ -8,12 +12,12 @@ export default function AuthGate({ children }) {
   React.useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/bootstrap", { credentials: "include" });
+        const res = await fetch(`${API.BASE}${API.BOOTSTRAP}`, { credentials: "include" });
 
         if (res.status === 401) {
           if (!redirectedRef.current) {
             redirectedRef.current = true;
-            window.location.href = "http://localhost:3000/auth/login";
+            window.location.href = `${API.BASE}${API.LOGIN}`;
           }
           return;
         }
