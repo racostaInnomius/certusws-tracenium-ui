@@ -1,20 +1,21 @@
 import * as React from "react";
 import { Box, List, ListItemButton, ListItemText, Typography } from "@mui/material";
 
-const items = [
-  { label: "Overview", key: "overview" },
-  { label: "Assets", key: "assets" },
-  { label: "Active Directory", key: "ad" },
-  { label: "Office 365", key: "o365" },
-  { label: "Remote Access", key: "remote" },
-  { label: "Security", key: "security" }
-];
-
-export default function Sidebar() {
-  const [selected, setSelected] = React.useState("assets");
+export default function Sidebar({ tenantId, selected, onSelect }) {
+  const items = [
+    { label: "Overview", key: "overview" },
+    { label: "Assets", key: "assets" },
+    { label: "Active Directory", key: "ad" },
+    { label: "Office 365", key: "o365" },
+    { label: "Remote Access", key: "remote" },
+    { label: "Security", key: "security" },
+    ...(String(tenantId ?? "") === "2"
+      ? [{ key: "configurations", label: "Configurations" }]
+      : []),
+  ];
 
   return (
-    <Box sx={{ width: 260, bgcolor: "#111318", color: "white", p: 2 }}>
+    <Box sx={{ width: 190, bgcolor: "#111318", color: "white", p: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700 }}>
         Tracenium
       </Typography>
@@ -27,7 +28,7 @@ export default function Sidebar() {
           <ListItemButton
             key={it.key}
             selected={selected === it.key}
-            onClick={() => setSelected(it.key)}
+            onClick={() => onSelect?.(it.key)}
             sx={{
               borderRadius: 2,
               "&.Mui-selected": { bgcolor: "rgba(0, 200, 200, 0.25)" }

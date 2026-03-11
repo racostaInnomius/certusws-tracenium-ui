@@ -103,7 +103,7 @@ export default function Assets() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h5" sx={{ mb: 2 }}>
+      <Typography variant="h4" color="#1ba6a6" sx={{ mb: 2, fontWeight: 700 }}>
         Assets
       </Typography>
 
