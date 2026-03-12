@@ -226,21 +226,53 @@ export default function TokensAdministrator() {
     }
   };
 
+  const formatDate = (value) => {
+    if (!value) return " - ";   // evita null / undefined
+
+    const date = new Date(value);
+    
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const columns = [
-    { field: "id", headerName: "ID", width: 90 },
-    { field: "name", headerName: "Tenant", minWidth: 110, flex: 0.7 },
+    { field: "id", headerName: "ID", width: 40 },
+    { field: "name", headerName: "Tenant", minWidth: 110, flex: 0.5 },
     {
       field: "status",
       headerName: "Status",
-      minWidth: 130,
-      flex: 0.8,
+      minWidth: 100,
+      flex: 0.5,
       renderCell: (params) => renderStatusChip(params.value),
     },
-    { field: "max_uses", headerName: "Max Uses", minWidth: 110, flex: 0.7 },
-    { field: "used_count", headerName: "Used", minWidth: 90, flex: 0.6 },
-    { field: "expires_at", headerName: "Expires At", minWidth: 180, flex: 1 },
-    { field: "created_at", headerName: "Created At", minWidth: 180, flex: 1 },
-    { field: "last_used_at", headerName: "Last Used At", minWidth: 180, flex: 1 },
+    { field: "max_uses", headerName: "Max Uses", minWidth: 83, flex: 0.3 },
+    { field: "used_count", headerName: "Used", minWidth: 55, flex: 0.3 },
+    {
+      field: "expires_at",
+      headerName: "Expires At",
+      minWidth: 180,
+      flex: 1,
+      renderCell: (params) => formatDate(params?.value)
+    },
+    {
+      field: "created_at",
+      headerName: "Created At",
+      minWidth: 180,
+      flex: 1,
+      renderCell: (params) => formatDate(params?.value)
+    },
+    {
+      field: "last_used_at",
+      headerName: "Last Used At",
+      minWidth: 180,
+      flex: 1,
+      renderCell: (params) => formatDate(params?.value)
+    },
     { field: "created_by", headerName: "Created By", minWidth: 140, flex: 0.9 },
     {
       field: "actions",
@@ -292,7 +324,7 @@ export default function TokensAdministrator() {
           display: "inline-flex",
           justifyContent: "space-between",
           alignItems: { xs: "stretch", sm: "center" },
-          gap: 14,
+          gap: 13.5,
           flexWrap: "wrap",
           flexDirection: { xs: "column", sm: "row" },
         }}
@@ -421,7 +453,7 @@ export default function TokensAdministrator() {
               border: "none",
               minWidth: { xs: 760, md: "100%" },
               "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(27,166,166,0.08)",
+                backgroundColor: "rgba(166, 83, 27, 0.08)",
                 fontWeight: 700,
               },
               "& .MuiDataGrid-cell": {

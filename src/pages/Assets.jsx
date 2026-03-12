@@ -5,7 +5,7 @@ import { Paper, Typography, Box } from "@mui/material";
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
 
-import OSPlatformDonut from "../components/Charts/OSPlatformDonut";
+import OsPlatformDonut from "../components/Charts/OsPlatformDonut";
 import TopManufacturersBar from "../components/Charts/TopManufacturersBar";
 import OsVersionsBar from "../components/Charts/OsVersionsBar";
 import PrintersByVendorPie from "../components/Charts/PrintersByVendorPie";
@@ -139,7 +139,7 @@ export default function Assets() {
 
         <Grid size={{ xs: 12, md: 3 }}>
             <Box sx={{ height: 260, minHeight: 240 }}>
-              <OSPlatformDonut osPlatform={summary?.osPlatform ?? []} />
+              <OsPlatformDonut osPlatform={summary?.osPlatform ?? []} />
             </Box>
         </Grid>
 

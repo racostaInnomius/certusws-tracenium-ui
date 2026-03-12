@@ -10,9 +10,9 @@ export default function Topbar() {
   });
 
   return (
-    <Box sx={{ px: 2, py: 1.5, bgcolor: "white", borderBottom: "1px solid #e6e8ee" }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-        IT Management
+    <Box sx={{ px: 2, py: 0.5, bgcolor: "white", borderBottom: "1px solid #e6e8ee" }}>
+      <Typography variant="subtitle1" color="#dcdfdfff" sx={{ fontWeight: 700 }}>
+        IT Management 
       </Typography>
       <Typography variant="caption" sx={{ color: "#667085" }}>
         {today}

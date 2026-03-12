@@ -50,7 +50,7 @@ export default function AppShell() {
 
       <Box sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <Topbar />
-        <Box sx={{ flex: 1, p: 2, overflow: "auto", bgcolor: "#f5f6f8" }}>
+        <Box sx={{ flex: 1, p: 1.5, overflow: "auto", bgcolor: "#f5f6f8" }}>
           {content}
         </Box>
       </Box>

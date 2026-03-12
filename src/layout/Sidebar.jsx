@@ -15,7 +15,7 @@ export default function Sidebar({ tenantId, selected, onSelect }) {
   ];
 
   return (
-    <Box sx={{ width: 190, bgcolor: "#111318", color: "white", p: 2 }}>
+    <Box sx={{ width: 170, bgcolor: "#111318", color: "white", p: 2 }}>
       <Typography variant="h6" sx={{ fontWeight: 700 }}>
         Tracenium
       </Typography>
