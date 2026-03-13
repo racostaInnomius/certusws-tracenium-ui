@@ -110,6 +110,7 @@ export default function TokensAdministrator() {
   const [loading, setLoading] = React.useState(true);
 
   const [status, setStatus] = React.useState("all");
+  const [search, setSearch] = React.useState("");
 
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createdOpen, setCreatedOpen] = React.useState(false);
@@ -147,26 +148,36 @@ export default function TokensAdministrator() {
     loadData();
   }, []);
 
-  const filteredRows = React.useMemo(() => {
-    return rows.filter((row) => {
-      const matchesStatus =
-        status === "all" ||
-        String(row.status).toLowerCase() === status.toLowerCase();
+const filteredRows = React.useMemo(() => {
+  return rows.filter((row) => {
+    const matchesStatus =
+      status === "all" ||
+      String(row.status).toLowerCase() === status.toLowerCase();
 
-      return matchesStatus;
-    });
-  }, [rows, status]);
+    const matchesSearch =
+      !search ||
+      String(row.token_label || "")
+        .toLowerCase()
+        .includes(search.toLowerCase());
+
+    return matchesStatus && matchesSearch;
+  });
+}, [rows, status, search]);
 
   const summary = React.useMemo(() => {
     const total = rows.length;
     const active = rows.filter(
       (r) => String(r.status).toLowerCase() === "active"
     ).length;
-    const expiredOrRevoked = rows.filter((r) =>
-      ["expired", "revoked"].includes(String(r.status).toLowerCase())
+    const expired = rows.filter(
+      (r) => String(r.status).toLowerCase() === "expired"
+    ).length;
+    const revoked = rows.filter(
+      (r) => String(r.status).toLowerCase() === "revoked"
     ).length;
 
-    return { total, active, expiredOrRevoked };
+
+    return { total, active, expired, revoked};
   }, [rows]);
 
   const handleCreateToken = async (payload) => {
@@ -232,9 +243,10 @@ export default function TokensAdministrator() {
     const date = new Date(value);
     
     return date.toLocaleString("en-US", {
-      year: "numeric",
+      year: "2-digit",
       month: "short",
       day: "2-digit",
+      hourCycle: "h24",
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -243,6 +255,7 @@ export default function TokensAdministrator() {
   const columns = [
     { field: "id", headerName: "ID", width: 40 },
     { field: "name", headerName: "Tenant", minWidth: 110, flex: 0.5 },
+    { field: "token_label", headerName: "Label", minWidth: 110, flex: 0.5 },
     {
       field: "status",
       headerName: "Status",
@@ -255,21 +268,21 @@ export default function TokensAdministrator() {
     {
       field: "expires_at",
       headerName: "Expires At",
-      minWidth: 180,
+      minWidth: 140,
       flex: 1,
       renderCell: (params) => formatDate(params?.value)
     },
     {
       field: "created_at",
       headerName: "Created At",
-      minWidth: 180,
+      minWidth: 140,
       flex: 1,
       renderCell: (params) => formatDate(params?.value)
     },
     {
       field: "last_used_at",
       headerName: "Last Used At",
-      minWidth: 180,
+      minWidth: 140,
       flex: 1,
       renderCell: (params) => formatDate(params?.value)
     },
@@ -320,7 +333,7 @@ export default function TokensAdministrator() {
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Box
         sx={{
-          mb: 2,
+          mb: 0.5,
           display: "inline-flex",
           justifyContent: "space-between",
           alignItems: { xs: "stretch", sm: "center" },
@@ -355,11 +368,11 @@ export default function TokensAdministrator() {
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard title="Total Tokens" value={summary.total} />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard
               title="Active"
               value={summary.active}
@@ -367,10 +380,18 @@ export default function TokensAdministrator() {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }} >
+            <SummaryCard sx={{backgroundColor: "#2e8f92"}}
+              title="Expired"
+              value={summary.expired}
+              accent="#b3ac1eff"
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard
-              title="Expired / Revoked"
-              value={summary.expiredOrRevoked}
+              title="Revoked"
+              value={summary.revoked}
               accent="#b3261e"
             />
           </Grid>
@@ -392,10 +413,19 @@ export default function TokensAdministrator() {
             justifyContent: "flex-start",
             alignItems: "center",
             gap: 2,
-            mb: 1,
+            mb: 0,
             flexWrap: "wrap",
           }}
         >
+          <TextField
+            label="Search by Label"
+            size="small"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{
+              width: { xs: "100%", sm: 220 },
+            }}
+          />
           <TextField
             select
             label="Status"
@@ -426,14 +456,12 @@ export default function TokensAdministrator() {
 
         <Box
           sx={{
-            height: { 
-              xs: 480, 
+            height: {
+              xs: 420,
               sm: "calc(100vh - 360px)",
-              lg: "calc(100vh - 340px)",
+              md: "calc(100vh - 340px)",
             },
-            minHeight: 480,
             width: "100%",
-            overflowX: "auto",
           }}
         >
           <DataGrid
@@ -451,13 +479,24 @@ export default function TokensAdministrator() {
             }}
             sx={{
               border: "none",
-              minWidth: { xs: 760, md: "100%" },
+              width: "100%",
+
               "& .MuiDataGrid-columnHeaders": {
                 backgroundColor: "rgba(166, 83, 27, 0.08)",
                 fontWeight: 700,
               },
+
               "& .MuiDataGrid-cell": {
                 alignItems: "center",
+              },
+
+              "& .MuiDataGrid-columnHeaderTitle": {
+                fontWeight: 700,
+              },
+
+              "& .MuiDataGrid-cellContent": {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               },
             }}
           />

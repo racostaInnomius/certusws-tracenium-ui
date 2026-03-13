@@ -13,6 +13,7 @@ function TokensSummaryCard({ summary, loading, onClick }) {
   const tokensCount = summary?.tokensCount ?? 0;
   const activeTokensCount = summary?.activeTokensCount ?? 0;
   const expiredTokensCount = summary?.expiredTokensCount ?? 0;
+  const revokedTokensCount = summary?.revokedTokensCount ?? 0;
 
   return (
     <Paper
@@ -86,11 +87,20 @@ function TokensSummaryCard({ summary, loading, onClick }) {
           <Chip
             label={`Expired: ${loading ? "…" : expiredTokensCount}`}
             sx={{
+              bgcolor: "rgba(251, 239, 4, 0.39)",
+              color: "#b3ac1eff",
+              fontWeight: 700,
+            }}
+          />
+
+          <Chip
+            label={`Revoked: ${loading ? "…" : revokedTokensCount}`}
+            sx={{
               bgcolor: "rgba(211, 47, 47, 0.10)",
               color: "#b3261e",
               fontWeight: 700,
             }}
-          />
+          />          
         </Box>
       </Box>
     </Paper>
