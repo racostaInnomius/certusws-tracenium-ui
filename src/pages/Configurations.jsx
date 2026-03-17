@@ -35,7 +35,6 @@ function TokensSummaryCard({ summary, loading, onClick }) {
         },
       }}
     >
-      {/* header */}
       <Box
         sx={{
           px: 2,
@@ -54,7 +53,6 @@ function TokensSummaryCard({ summary, loading, onClick }) {
         </Typography>
       </Box>
 
-      {/* body */}
       <Box sx={{ p: 2.5 }}>
         <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 0.5 }}>
           Total registered
@@ -100,8 +98,82 @@ function TokensSummaryCard({ summary, loading, onClick }) {
               color: "#b3261e",
               fontWeight: 700,
             }}
-          />          
+          />
         </Box>
+      </Box>
+    </Paper>
+  );
+}
+
+function TenantsSummaryCard({ summary, loading, onClick }) {
+  const tenantsCount = summary?.tenantsCount ?? 0;
+
+  return (
+    <Paper
+      onClick={onClick}
+      sx={{
+        p: 0,
+        borderRadius: 3,
+        overflow: "hidden",
+        cursor: "pointer",
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+        "&:hover": {
+          transform: "translateY(-2px)",
+          boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
+        },
+        "&:active": {
+          transform: "scale(0.995)",
+        },
+      }}
+    >
+      <Box
+        sx={{
+          px: 2,
+          py: 1.25,
+          background: "linear-gradient(90deg, #16324f 0%, #1ba6a6 100%)",
+        }}
+      >
+        <Typography
+          sx={{
+            color: "white",
+            fontWeight: 700,
+            letterSpacing: 0.2,
+          }}
+        >
+          Tenants
+        </Typography>
+      </Box>
+
+      <Box sx={{ p: 2.5 }}>
+        <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 0.5 }}>
+          Total registered
+        </Typography>
+
+        <Typography
+          sx={{
+            fontSize: 52,
+            fontWeight: 800,
+            lineHeight: 1,
+            color: "#16324f",
+            mb: 2,
+          }}
+        >
+          {loading ? "…" : tenantsCount}
+        </Typography>
+
+        <Divider sx={{ mb: 2 }} />
+
+        <Typography
+          sx={{
+            fontSize: 14,
+            color: "text.secondary",
+            fontWeight: 500,
+          }}
+        >
+          Manage tenant records and members
+        </Typography>
       </Box>
     </Paper>
   );
@@ -109,6 +181,7 @@ function TokensSummaryCard({ summary, loading, onClick }) {
 
 export default function Configurations({ onNavigate }) {
   const [tokensSummary, setTokensSummary] = React.useState(null);
+  const [tenantsSummary, setTenantsSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
@@ -125,6 +198,7 @@ export default function Configurations({ onNavigate }) {
         if (!alive) return;
 
         setTokensSummary(res?.tokens_summary ?? null);
+        setTenantsSummary(res?.tenants_summary ?? null);
       } catch (e) {
         console.error("Configurations summary fetch failed:", e);
         if (!alive) return;
@@ -143,6 +217,10 @@ export default function Configurations({ onNavigate }) {
     onNavigate?.("tokens");
   };
 
+  const handleTenantsClick = () => {
+    onNavigate?.("tenants");
+  };
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Typography variant="h4" color="#1ba6a6" sx={{ mb: 2, fontWeight: 700 }}>
@@ -156,11 +234,19 @@ export default function Configurations({ onNavigate }) {
       )}
 
       <Grid container spacing={2}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <TokensSummaryCard
             summary={tokensSummary}
             loading={loading}
             onClick={handleTokensClick}
+          />
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 4 }}>
+          <TenantsSummaryCard
+            summary={tenantsSummary}
+            loading={loading}
+            onClick={handleTenantsClick}
           />
         </Grid>
       </Grid>

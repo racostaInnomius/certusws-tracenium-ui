@@ -7,6 +7,7 @@ import { httpGetJson } from "../api/http";
 import Assets from "../pages/Assets";
 import Configurations from "../pages/Configurations";
 import TokensAdministrator from "../pages/TokensAdministrator";
+import TenantsAdministrator from "../pages/TenantsAdministrator";
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
@@ -38,6 +39,10 @@ export default function AppShell() {
 
   if (selectedPage === "tokens") {
     content = <TokensAdministrator />;
+  }
+
+  if (selectedPage === "tenants") {
+    content = <TenantsAdministrator />;
   }
 
   return (
