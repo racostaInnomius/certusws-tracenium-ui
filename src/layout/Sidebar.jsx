@@ -1,7 +1,10 @@
 import * as React from "react";
 import { Box, List, ListItemButton, ListItemText, Typography } from "@mui/material";
+import { useAuthContext } from "../auth/AuthContext";
 
-export default function Sidebar({ tenantId, selected, onSelect }) {
+export default function Sidebar({ global_role, selected, onSelect }) {
+  const { auth, loading } = useAuthContext();
+  const globalRole = auth?.globalRole;
   const items = [
     { label: "Overview", key: "overview" },
     { label: "Assets", key: "assets" },
@@ -9,7 +12,9 @@ export default function Sidebar({ tenantId, selected, onSelect }) {
     { label: "Office 365", key: "o365" },
     { label: "Remote Access", key: "remote" },
     { label: "Security", key: "security" },
-    ...(String(tenantId ?? "") === "2"
+    ...(String(globalRole ?? "") === "admin_master" 
+    || String(globalRole ?? "") === "owner" 
+    || String(globalRole ?? "") === "admin"
       ? [{ key: "configurations", label: "Configurations" }]
       : []),
   ];

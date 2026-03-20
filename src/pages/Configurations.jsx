@@ -132,7 +132,7 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
         sx={{
           px: 2,
           py: 1.25,
-          background: "linear-gradient(90deg, #16324f 0%, #1ba6a6 100%)",
+          background: "linear-gradient(90deg, #1976d2 0%, #1ba6a6 100%)",
         }}
       >
         <Typography
@@ -179,9 +179,79 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
   );
 }
 
+function TenantMembersSummaryCard({ summary, loading, onClick }) {
+  const membersCount = summary?.membersCount ?? 0;
+  const activeMembersCount = summary?.activeMembersCount ?? 0;
+  const inactiveMembersCount = membersCount - activeMembersCount;
+
+  return (
+    <Paper
+      onClick={onClick}
+      sx={{
+        p: 0,
+        borderRadius: 3,
+        overflow: "hidden",
+        cursor: "pointer",
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+        "&:hover": {
+          transform: "translateY(-2px)",
+          boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
+        },
+      }}
+    >
+      <Box
+        sx={{
+          px: 2,
+          py: 1.25,
+          background: "linear-gradient(90deg, #0f6b72 0%, #1ba6a6 100%)",
+        }}
+      >
+        <Typography sx={{ color: "white", fontWeight: 700 }}>
+          Tenant Members
+        </Typography>
+      </Box>
+
+      <Box sx={{ p: 2.5 }}>
+        <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+          Total members
+        </Typography>
+
+        <Typography sx={{ fontSize: 52, fontWeight: 800, color: "#16324f", mb: 2 }}>
+          {loading ? "…" : membersCount}
+        </Typography>
+
+        <Divider sx={{ mb: 2 }} />
+
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+          <Chip
+            label={`Active: ${loading ? "…" : activeMembersCount}`}
+            sx={{
+              bgcolor: "rgba(27,166,166,0.12)",
+              color: "#0f6b72",
+              fontWeight: 700,
+            }}
+          />
+
+          <Chip
+            label={`Inactive: ${loading ? "…" : inactiveMembersCount}`}
+            sx={{
+              bgcolor: "rgba(211,47,47,0.12)",
+              color: "#b3261e",
+              fontWeight: 700,
+            }}
+          />
+        </Box>
+      </Box>
+    </Paper>
+  );
+}
+
 export default function Configurations({ onNavigate }) {
   const [tokensSummary, setTokensSummary] = React.useState(null);
   const [tenantsSummary, setTenantsSummary] = React.useState(null);
+  const [tenantMembersSummary, setTenantMembersSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
@@ -199,6 +269,7 @@ export default function Configurations({ onNavigate }) {
 
         setTokensSummary(res?.tokens_summary ?? null);
         setTenantsSummary(res?.tenants_summary ?? null);
+        setTenantMembersSummary(res?.tenant_members_summary ?? null);
       } catch (e) {
         console.error("Configurations summary fetch failed:", e);
         if (!alive) return;
@@ -234,7 +305,8 @@ export default function Configurations({ onNavigate }) {
       )}
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 4 }}>
+        {/* TOKENS */}
+        <Grid item xs={12} md={4}>
           <TokensSummaryCard
             summary={tokensSummary}
             loading={loading}
@@ -242,13 +314,27 @@ export default function Configurations({ onNavigate }) {
           />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
-          <TenantsSummaryCard
-            summary={tenantsSummary}
-            loading={loading}
-            onClick={handleTenantsClick}
-          />
-        </Grid>
+        {/* GLOBAL USER */}
+        {tenantsSummary && (
+          <Grid item xs={12} md={4}>
+            <TenantsSummaryCard
+              summary={tenantsSummary}
+              loading={loading}
+              onClick={() => onNavigate?.("tenants")}
+            />
+          </Grid>
+        )}
+
+        {/* TENANT USER */}
+        {tenantMembersSummary && (
+          <Grid item xs={12} md={4}>
+            <TenantMembersSummaryCard
+              summary={tenantMembersSummary}
+              loading={loading}
+              onClick={() => onNavigate?.("tenant-members")}
+            />
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

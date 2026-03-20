@@ -38,7 +38,7 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
     <Paper
       sx={{
         p: 2,
-        height: "100%",
+        height: "75%",
         minHeight: 96,
         borderRadius: 3,
         border: "1px solid rgba(0,0,0,0.08)",
@@ -199,7 +199,7 @@ function TenantDialog({
           />
 
           <TextField
-            label="External IdP Tenant"
+            label="Ext IdP Tenant"
             value={externalIdpTenant}
             onChange={(e) => setExternalIdpTenant(e.target.value)}
             fullWidth
@@ -394,6 +394,9 @@ export default function TenantsAdministrator() {
   const [editingTenant, setEditingTenant] = React.useState(null);
   const [editingMember, setEditingMember] = React.useState(null);
 
+  const [selectedTenantId, setSelectedTenantId] = React.useState(null);
+  const [membersFlash, setMembersFlash] = React.useState(false);
+
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: "",
@@ -409,9 +412,11 @@ export default function TenantsAdministrator() {
 
       if (!selectedTenant && items.length > 0) {
         setSelectedTenant(items[0]);
+        setSelectedTenantId(items[0].id);
       } else if (selectedTenant) {
         const refreshed = items.find((t) => t.id === selectedTenant.id) || null;
         setSelectedTenant(refreshed);
+        setSelectedTenantId(refreshed?.id ?? null);
       }
     } catch (e) {
       console.error(e);
@@ -435,6 +440,7 @@ export default function TenantsAdministrator() {
       setLoadingMembers(true);
       const response = await listTenantMembers(tenantId);
       setMembers(Array.isArray(response?.items) ? response.items : []);
+      setMembersFlash(true);
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -454,6 +460,16 @@ export default function TenantsAdministrator() {
   React.useEffect(() => {
     loadMembers(selectedTenant?.id);
   }, [selectedTenant?.id]);
+
+  React.useEffect(() => {
+    if (!membersFlash) return;
+
+    const timer = setTimeout(() => {
+      setMembersFlash(false);
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [membersFlash]);
 
   const filteredTenants = React.useMemo(() => {
     const q = tenantSearch.trim().toLowerCase();
@@ -807,8 +823,8 @@ export default function TenantsAdministrator() {
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Box
         sx={{
-          mb: 1.5,
-          display: "flex",
+          mb: 0.5,
+          display: "inline-flex",
           justifyContent: "space-between",
           alignItems: { xs: "stretch", sm: "center" },
           gap: 2,
@@ -842,11 +858,11 @@ export default function TenantsAdministrator() {
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard title="Total Tenants" value={summary.totalTenants} />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard
               title="Total Members"
               value={summary.totalMembers}
@@ -854,7 +870,7 @@ export default function TenantsAdministrator() {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard
               title="Active Members"
               value={summary.activeMembers}
@@ -916,7 +932,14 @@ export default function TenantsAdministrator() {
             disableRowSelectionOnClick
             getRowId={(row) => row.id}
             pageSizeOptions={[10, 25, 50]}
-            onRowClick={(params) => setSelectedTenant(params.row)}
+            rowSelectionModel={{
+                type: "include",
+                ids: selectedTenantId != null ? new Set([selectedTenantId]) : new Set(),
+            }}
+            onRowClick={(params) => {
+              setSelectedTenant(params.row);
+              setSelectedTenantId(params.row.id);
+            }}
             initialState={{
               pagination: {
                 paginationModel: { pageSize: 10, page: 0 },
@@ -933,10 +956,10 @@ export default function TenantsAdministrator() {
                 cursor: "pointer",
               },
               "& .MuiDataGrid-row.Mui-selected": {
-                backgroundColor: "rgba(27,166,166,0.08)",
+                backgroundColor: "rgba(15, 107, 114, 0.18) !important",
               },
               "& .MuiDataGrid-row.Mui-selected:hover": {
-                backgroundColor: "rgba(27,166,166,0.12)",
+                backgroundColor: "rgba(15, 107, 114, 0.24) !important",
               },
             }}
           />
@@ -1020,6 +1043,14 @@ export default function TenantsAdministrator() {
               md: 360,
             },
             width: "100%",
+            borderRadius: 2,
+            transition: "box-shadow 0.25s ease, background-color 0.25s ease",
+            boxShadow: membersFlash
+              ? "0 0 0 2px rgba(15, 107, 114, 0.25), 0 0 18px rgba(15, 107, 114, 0.12)"
+              : "none",
+            backgroundColor: membersFlash
+              ? "rgba(15, 107, 114, 0.04)"
+              : "transparent",
           }}
         >
           <DataGrid

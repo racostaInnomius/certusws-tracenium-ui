@@ -48,7 +48,7 @@ export default function AppShell() {
   return (
     <Box sx={{ display: "flex", height: "100vh" }}>
       <Sidebar
-        tenantId={bootstrap?.tenantId}
+        tenantId={bootstrap?.globalRole}
         selected={selectedPage}
         onSelect={setSelectedPage}
       />

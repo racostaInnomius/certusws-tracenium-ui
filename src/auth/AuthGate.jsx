@@ -28,7 +28,6 @@ export default function AuthGate({ children }) {
           // Decide: o rediriges o muestras error
           return;
         }
-
         // const data = await res.json(); // si lo quieres guardar luego (tenant/subject)
         setStatus("authed");
       } catch (e) {
@@ -39,7 +38,7 @@ export default function AuthGate({ children }) {
 
   if (status === "loading") {
     return (
-      <Box sx={{ height: "100vh", display: "grid", placeItems: "center" }}>
+      <Box sx={{ height: "100vh", width:"100vh", display: "grid", placeItems: "center" }}>
         <Box sx={{ textAlign: "center" }}>
           <CircularProgress />
           <Typography sx={{ mt: 2, color: "#667085" }}>
