@@ -19,10 +19,6 @@ export async function getTenantSummary(tenantId) {
   return httpGetJson(`${BASE}/${tenantId}/summary`);
 }
 
-export async function createTenant(payload) {
-  return httpPostJson(BASE, payload);
-}
-
 export async function updateTenant(tenantId, payload) {
   return httpPutJson(`${BASE}/${tenantId}`, payload);
 }

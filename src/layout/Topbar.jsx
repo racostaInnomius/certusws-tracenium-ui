@@ -45,8 +45,8 @@ export default function Topbar() {
       sx={{
         px: 2,
         py: 0.5,
-        bgcolor: "white",
-        borderBottom: "1px solid #e6e8ee",
+        bgcolor: "#c6c8cdff",
+        borderBottom: "1px solid #9fa4b1ff",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",

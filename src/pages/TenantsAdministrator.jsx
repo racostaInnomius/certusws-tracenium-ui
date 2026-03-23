@@ -24,7 +24,6 @@ import { DataGrid } from "@mui/x-data-grid";
 
 import {
   listTenants,
-  createTenant,
   updateTenant,
   deleteTenant,
   listTenantMembers,
@@ -186,7 +185,7 @@ function TenantDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{mode === "edit" ? "Edit Tenant" : "Create Tenant"}</DialogTitle>
+      <<DialogTitle>Edit Tenant</DialogTitle>
 
       <DialogContent>
         <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
@@ -231,7 +230,7 @@ function TenantDialog({
           onClick={handleSubmit}
           disabled={submitting || isDisabled}
         >
-          {mode === "edit" ? "Save Changes" : "Create"}
+          Save Changes
         </Button>
       </DialogActions>
     </Dialog>
@@ -511,12 +510,6 @@ export default function TenantsAdministrator() {
     return { totalTenants, totalMembers, activeMembers };
   }, [tenants]);
 
-  const openCreateTenant = () => {
-    setEditingTenant(null);
-    setTenantDialogMode("create");
-    setTenantDialogOpen(true);
-  };
-
   const openEditTenant = (tenant) => {
     setEditingTenant(tenant);
     setTenantDialogMode("edit");
@@ -535,39 +528,33 @@ export default function TenantsAdministrator() {
     setMemberDialogOpen(true);
   };
 
-  const handleSubmitTenant = async (payload) => {
-    try {
-      setSubmitting(true);
+const handleSubmitTenant = async (payload) => {
+  if (!editingTenant?.id) return;
 
-      if (tenantDialogMode === "edit" && editingTenant?.id) {
-        await updateTenant(editingTenant.id, payload);
-        setSnackbar({
-          open: true,
-          message: "Tenant updated successfully",
-          severity: "success",
-        });
-      } else {
-        await createTenant(payload);
-        setSnackbar({
-          open: true,
-          message: "Tenant created successfully",
-          severity: "success",
-        });
-      }
+  try {
+    setSubmitting(true);
 
-      setTenantDialogOpen(false);
-      await loadTenants();
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to save tenant",
-        severity: "error",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    await updateTenant(editingTenant.id, payload);
+
+    setSnackbar({
+      open: true,
+      message: "Tenant updated successfully",
+      severity: "success",
+    });
+
+    setTenantDialogOpen(false);
+    await loadTenants();
+  } catch (e) {
+    console.error(e);
+    setSnackbar({
+      open: true,
+      message: "Failed to save tenant",
+      severity: "error",
+    });
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const handleDeleteTenant = async () => {
     if (!editingTenant?.id) return;
@@ -840,20 +827,6 @@ export default function TenantsAdministrator() {
             Manage tenants and tenant members
           </Typography>
         </Box>
-
-        <Button
-          variant="contained"
-          onClick={openCreateTenant}
-          fullWidth={isSmDown}
-          sx={{
-            bgcolor: "#1ba6a6",
-            "&:hover": { bgcolor: "#158d8d" },
-            minWidth: { xs: "100%", sm: 170 },
-            alignSelf: { xs: "stretch", sm: "center" },
-          }}
-        >
-          + CREATE TENANT
-        </Button>
       </Box>
 
       <Box sx={{ mb: 2 }}>
