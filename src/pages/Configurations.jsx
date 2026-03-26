@@ -205,7 +205,7 @@ function TenantMembersSummaryCard({ summary, loading, onClick }) {
         sx={{
           px: 2,
           py: 1.25,
-          background: "linear-gradient(90deg, #0f6b72 0%, #1ba6a6 100%)",
+          background: "linear-gradient(90deg, #1976d2 0%, #1ba6a6 100%)",
         }}
       >
         <Typography sx={{ color: "white", fontWeight: 700 }}>
