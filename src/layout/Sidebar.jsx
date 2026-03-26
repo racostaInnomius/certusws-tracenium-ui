@@ -4,7 +4,9 @@ import { useAuthContext } from "../auth/AuthContext";
 
 export default function Sidebar({ global_role, selected, onSelect }) {
   const { auth, loading } = useAuthContext();
-  const globalRole = auth?.globalRole;
+
+  const tenantMemberRole = auth?.tenantMember?.role;
+  const tenantMemberIsActive = auth?.tenantMember?.isActive;
   const items = [
     { label: "Overview", key: "overview" },
     { label: "Assets", key: "assets" },
@@ -12,9 +14,9 @@ export default function Sidebar({ global_role, selected, onSelect }) {
     { label: "Office 365", key: "o365" },
     { label: "Remote Access", key: "remote" },
     { label: "Security", key: "security" },
-    ...(String(globalRole ?? "") === "admin_master" 
-    || String(globalRole ?? "") === "owner" 
-    || String(globalRole ?? "") === "admin"
+    ...(tenantMemberIsActive === true &&
+      (String(tenantMemberRole ?? "") === "OWNER" ||
+        String(tenantMemberRole ?? "") === "ADMIN")
       ? [{ key: "configurations", label: "Configurations" }]
       : []),
   ];

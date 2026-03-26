@@ -185,7 +185,7 @@ function TenantDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <<DialogTitle>Edit Tenant</DialogTitle>
+      <DialogTitle>Edit Tenant</DialogTitle>
 
       <DialogContent>
         <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
