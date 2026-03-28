@@ -24,6 +24,7 @@ import { DataGrid } from "@mui/x-data-grid";
 
 import {
   listTenants,
+  getTenantById,
   updateTenant,
   deleteTenant,
   listTenantMembers,
@@ -31,6 +32,7 @@ import {
   updateTenantMember,
   deleteTenantMember,
 } from "../api/tenants";
+import { useAuthContext } from "../auth/AuthContext";
 
 function SummaryCard({ title, value, accent = "#1ba6a6" }) {
   return (
@@ -145,7 +147,6 @@ function formatDate(value) {
 
 function TenantDialog({
   open,
-  mode,
   tenant,
   submitting,
   onClose,
@@ -365,13 +366,19 @@ function ConfirmDeleteDialog({
   );
 }
 
-export default function TenantsAdministrator() {
+export default function TenantsAdministrator({ mode = "global" }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
+  const { auth } = useAuthContext();
+
+  const isTenantMode = mode === "tenant";
+  const currentTenantId = auth?.tenantId;
 
   const [tenants, setTenants] = React.useState([]);
   const [selectedTenant, setSelectedTenant] = React.useState(null);
+  const [selectedTenantId, setSelectedTenantId] = React.useState(null);
+  const [tenantDetails, setTenantDetails] = React.useState(null);
   const [members, setMembers] = React.useState([]);
 
   const [loadingTenants, setLoadingTenants] = React.useState(true);
@@ -382,8 +389,6 @@ export default function TenantsAdministrator() {
   const [memberSearch, setMemberSearch] = React.useState("");
 
   const [tenantDialogOpen, setTenantDialogOpen] = React.useState(false);
-  const [tenantDialogMode, setTenantDialogMode] = React.useState("create");
-
   const [memberDialogOpen, setMemberDialogOpen] = React.useState(false);
   const [memberDialogMode, setMemberDialogMode] = React.useState("create");
 
@@ -393,7 +398,6 @@ export default function TenantsAdministrator() {
   const [editingTenant, setEditingTenant] = React.useState(null);
   const [editingMember, setEditingMember] = React.useState(null);
 
-  const [selectedTenantId, setSelectedTenantId] = React.useState(null);
   const [membersFlash, setMembersFlash] = React.useState(false);
 
   const [snackbar, setSnackbar] = React.useState({
@@ -403,6 +407,8 @@ export default function TenantsAdministrator() {
   });
 
   const loadTenants = async () => {
+    if (isTenantMode) return;
+
     try {
       setLoadingTenants(true);
       const response = await listTenants();
@@ -426,6 +432,26 @@ export default function TenantsAdministrator() {
       });
     } finally {
       setLoadingTenants(false);
+    }
+  };
+
+  const loadTenantDetails = async (tenantId) => {
+    if (!tenantId) {
+      setTenantDetails(null);
+      return;
+    }
+
+    try {
+      const data = await getTenantById(tenantId);
+      setTenantDetails(data ?? null);
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to load tenant details",
+        severity: "error",
+      });
+      setTenantDetails(null);
     }
   };
 
@@ -453,12 +479,28 @@ export default function TenantsAdministrator() {
   };
 
   React.useEffect(() => {
-    loadTenants();
-  }, []);
+    if (!isTenantMode) {
+      loadTenants();
+      return;
+    }
+
+    setLoadingTenants(false);
+  }, [isTenantMode]);
 
   React.useEffect(() => {
+    if (isTenantMode) {
+      if (currentTenantId) {
+        loadTenantDetails(currentTenantId);
+        loadMembers(currentTenantId);
+      } else {
+        setTenantDetails(null);
+        setMembers([]);
+      }
+      return;
+    }
+
     loadMembers(selectedTenant?.id);
-  }, [selectedTenant?.id]);
+  }, [isTenantMode, currentTenantId, selectedTenant?.id]);
 
   React.useEffect(() => {
     if (!membersFlash) return;
@@ -512,7 +554,6 @@ export default function TenantsAdministrator() {
 
   const openEditTenant = (tenant) => {
     setEditingTenant(tenant);
-    setTenantDialogMode("edit");
     setTenantDialogOpen(true);
   };
 
@@ -528,33 +569,33 @@ export default function TenantsAdministrator() {
     setMemberDialogOpen(true);
   };
 
-const handleSubmitTenant = async (payload) => {
-  if (!editingTenant?.id) return;
+  const handleSubmitTenant = async (payload) => {
+    if (!editingTenant?.id) return;
 
-  try {
-    setSubmitting(true);
+    try {
+      setSubmitting(true);
 
-    await updateTenant(editingTenant.id, payload);
+      await updateTenant(editingTenant.id, payload);
 
-    setSnackbar({
-      open: true,
-      message: "Tenant updated successfully",
-      severity: "success",
-    });
+      setSnackbar({
+        open: true,
+        message: "Tenant updated successfully",
+        severity: "success",
+      });
 
-    setTenantDialogOpen(false);
-    await loadTenants();
-  } catch (e) {
-    console.error(e);
-    setSnackbar({
-      open: true,
-      message: "Failed to save tenant",
-      severity: "error",
-    });
-  } finally {
-    setSubmitting(false);
-  }
-};
+      setTenantDialogOpen(false);
+      await loadTenants();
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to save tenant",
+        severity: "error",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleDeleteTenant = async () => {
     if (!editingTenant?.id) return;
@@ -566,6 +607,7 @@ const handleSubmitTenant = async (payload) => {
 
       if (selectedTenant?.id === editingTenant.id) {
         setSelectedTenant(null);
+        setSelectedTenantId(null);
         setMembers([]);
       }
 
@@ -577,36 +619,37 @@ const handleSubmitTenant = async (payload) => {
 
       await loadTenants();
     } catch (e) {
-        console.error(e);
-        const errorMessage = String(e?.message || "");
+      console.error(e);
+      const errorMessage = String(e?.message || "");
 
-        setSnackbar({
+      setSnackbar({
         open: true,
         message: errorMessage.includes("TENANT_HAS_ACTIVE_MEMBERS")
-            ? "Tenant has active members and cannot be deleted"
-            : "Failed to delete tenant",
+          ? "Tenant has active members and cannot be deleted"
+          : "Failed to delete tenant",
         severity: "error",
-        });
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleSubmitMember = async (payload) => {
-    if (!selectedTenant?.id) return;
+    const targetTenantId = isTenantMode ? currentTenantId : selectedTenant?.id;
+    if (!targetTenantId) return;
 
     try {
       setSubmitting(true);
 
       if (memberDialogMode === "edit" && editingMember?.id) {
-        await updateTenantMember(selectedTenant.id, editingMember.id, payload);
+        await updateTenantMember(targetTenantId, editingMember.id, payload);
         setSnackbar({
           open: true,
           message: "Tenant member updated successfully",
           severity: "success",
         });
       } else {
-        await createTenantMember(selectedTenant.id, payload);
+        await createTenantMember(targetTenantId, payload);
         setSnackbar({
           open: true,
           message: "Tenant member created successfully",
@@ -615,8 +658,11 @@ const handleSubmitTenant = async (payload) => {
       }
 
       setMemberDialogOpen(false);
-      await loadMembers(selectedTenant.id);
-      await loadTenants();
+      await loadMembers(targetTenantId);
+
+      if (!isTenantMode) {
+        await loadTenants();
+      }
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -630,11 +676,12 @@ const handleSubmitTenant = async (payload) => {
   };
 
   const handleDeleteMember = async () => {
-    if (!selectedTenant?.id || !editingMember?.id) return;
+    const targetTenantId = isTenantMode ? currentTenantId : selectedTenant?.id;
+    if (!targetTenantId || !editingMember?.id) return;
 
     try {
       setSubmitting(true);
-      await deleteTenantMember(selectedTenant.id, editingMember.id);
+      await deleteTenantMember(targetTenantId, editingMember.id);
       setDeleteMemberOpen(false);
 
       setSnackbar({
@@ -643,8 +690,11 @@ const handleSubmitTenant = async (payload) => {
         severity: "success",
       });
 
-      await loadMembers(selectedTenant.id);
-      await loadTenants();
+      await loadMembers(targetTenantId);
+
+      if (!isTenantMode) {
+        await loadTenants();
+      }
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -806,12 +856,14 @@ const handleSubmitTenant = async (payload) => {
     return {};
   }, [isMdDown, isSmDown]);
 
+  const displayedTenant = isTenantMode ? tenantDetails : selectedTenant;
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Box
         sx={{
-          mb: 0.5,
-          display: "inline-flex",
+          mb: 1.5,
+          display: "flex",
           justifyContent: "space-between",
           alignItems: { xs: "stretch", sm: "center" },
           gap: 2,
@@ -821,123 +873,132 @@ const handleSubmitTenant = async (payload) => {
       >
         <Box>
           <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-            Tenant Administrator
+            {isTenantMode ? "Tenant Members" : "Tenant Administrator"}
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage tenants and tenant members
+            {isTenantMode
+              ? "Manage members for your tenant"
+              : "Manage tenants and tenant members"}
           </Typography>
         </Box>
       </Box>
 
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Total Tenants" value={summary.totalTenants} />
-          </Grid>
+      {!isTenantMode && (
+        <>
+          <Box sx={{ mb: 2 }}>
+            <Grid container spacing={2} alignItems="stretch">
+              <Grid size={{ xs: 12, md: 2 }}>
+                <SummaryCard title="Total Tenants" value={summary.totalTenants} />
+              </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Total Members"
-              value={summary.totalMembers}
-              accent="#0f6b72"
-            />
-          </Grid>
+              <Grid size={{ xs: 12, md: 2 }}>
+                <SummaryCard
+                  title="Total Members"
+                  value={summary.totalMembers}
+                  accent="#0f6b72"
+                />
+              </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Active Members"
-              value={summary.activeMembers}
-              accent="#b3261e"
-            />
-          </Grid>
-        </Grid>
-      </Box>
+              <Grid size={{ xs: 12, md: 2 }}>
+                <SummaryCard
+                  title="Active Members"
+                  value={summary.activeMembers}
+                  accent="#b3261e"
+                />
+              </Grid>
+            </Grid>
+          </Box>
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 1.5 },
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
-          mb: 2,
-        }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: { xs: "stretch", sm: "center" },
-            gap: 2,
-            mb: 1,
-            flexWrap: "wrap",
-            flexDirection: { xs: "column", sm: "row" },
-          }}
-        >
-          <TextField
-            label="Search tenants"
-            size="small"
-            value={tenantSearch}
-            onChange={(e) => setTenantSearch(e.target.value)}
-            sx={{ width: { xs: "100%", sm: 260 } }}
-          />
-
-          <Typography variant="body2" color="text.secondary">
-            Click a tenant row to load its members
-          </Typography>
-        </Box>
-
-        <Box
-          sx={{
-            height: {
-              xs: 420,
-              sm: "calc(100vh - 420px)",
-              md: 360,
-            },
-            width: "100%",
-          }}
-        >
-          <DataGrid
-            rows={filteredTenants}
-            columns={tenantColumns}
-            columnVisibilityModel={tenantColumnVisibilityModel}
-            loading={loadingTenants}
-            disableRowSelectionOnClick
-            getRowId={(row) => row.id}
-            pageSizeOptions={[10, 25, 50]}
-            rowSelectionModel={{
-                type: "include",
-                ids: selectedTenantId != null ? new Set([selectedTenantId]) : new Set(),
-            }}
-            onRowClick={(params) => {
-              setSelectedTenant(params.row);
-              setSelectedTenantId(params.row.id);
-            }}
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10, page: 0 },
-              },
-            }}
+          <Paper
+            elevation={0}
             sx={{
-              border: "none",
-              width: "100%",
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(166, 83, 27, 0.08)",
-                fontWeight: 700,
-              },
-              "& .MuiDataGrid-row": {
-                cursor: "pointer",
-              },
-              "& .MuiDataGrid-row.Mui-selected": {
-                backgroundColor: "rgba(15, 107, 114, 0.18) !important",
-              },
-              "& .MuiDataGrid-row.Mui-selected:hover": {
-                backgroundColor: "rgba(15, 107, 114, 0.24) !important",
-              },
+              p: { xs: 1.5, sm: 1.5 },
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+              mb: 2,
             }}
-          />
-        </Box>
-      </Paper>
+          >
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: { xs: "stretch", sm: "center" },
+                gap: 2,
+                mb: 1,
+                flexWrap: "wrap",
+                flexDirection: { xs: "column", sm: "row" },
+              }}
+            >
+              <TextField
+                label="Search tenants"
+                size="small"
+                value={tenantSearch}
+                onChange={(e) => setTenantSearch(e.target.value)}
+                sx={{ width: { xs: "100%", sm: 260 } }}
+              />
+
+              <Typography variant="body2" color="text.secondary">
+                Click a tenant row to load its members
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                height: {
+                  xs: 420,
+                  sm: "calc(100vh - 420px)",
+                  md: 360,
+                },
+                width: "100%",
+              }}
+            >
+              <DataGrid
+                rows={filteredTenants}
+                columns={tenantColumns}
+                columnVisibilityModel={tenantColumnVisibilityModel}
+                loading={loadingTenants}
+                disableRowSelectionOnClick
+                getRowId={(row) => row.id}
+                pageSizeOptions={[10, 25, 50]}
+                rowSelectionModel={{
+                  type: "include",
+                  ids:
+                    selectedTenantId != null
+                      ? new Set([selectedTenantId])
+                      : new Set(),
+                }}
+                onRowClick={(params) => {
+                  setSelectedTenant(params.row);
+                  setSelectedTenantId(params.row.id);
+                }}
+                initialState={{
+                  pagination: {
+                    paginationModel: { pageSize: 10, page: 0 },
+                  },
+                }}
+                sx={{
+                  border: "none",
+                  width: "100%",
+                  "& .MuiDataGrid-columnHeaders": {
+                    backgroundColor: "rgba(166, 83, 27, 0.08)",
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-row": {
+                    cursor: "pointer",
+                  },
+                  "& .MuiDataGrid-row.Mui-selected": {
+                    backgroundColor: "rgba(15, 107, 114, 0.18) !important",
+                  },
+                  "& .MuiDataGrid-row.Mui-selected:hover": {
+                    backgroundColor: "rgba(15, 107, 114, 0.24) !important",
+                  },
+                }}
+              />
+            </Box>
+          </Paper>
+        </>
+      )}
 
       <Paper
         elevation={0}
@@ -964,9 +1025,11 @@ const handleSubmitTenant = async (payload) => {
               Tenant Members
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {selectedTenant
-                ? `Members for ${selectedTenant.name}`
-                : "Select a tenant to manage members"}
+              {isTenantMode
+                ? "Manage members for your tenant"
+                : displayedTenant
+                  ? `Members for ${displayedTenant.name}`
+                  : "Select a tenant to manage members"}
             </Typography>
           </Box>
 
@@ -977,13 +1040,13 @@ const handleSubmitTenant = async (payload) => {
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
               sx={{ width: { xs: "100%", sm: 240 } }}
-              disabled={!selectedTenant}
+              disabled={!displayedTenant}
             />
 
             <Button
               variant="contained"
               onClick={openCreateMember}
-              disabled={!selectedTenant}
+              disabled={!displayedTenant}
               sx={{
                 bgcolor: "#1ba6a6",
                 "&:hover": { bgcolor: "#158d8d" },
@@ -995,14 +1058,14 @@ const handleSubmitTenant = async (payload) => {
           </Box>
         </Box>
 
-        {selectedTenant && (
+        {displayedTenant && (
           <>
             <Divider sx={{ mb: 1.5 }} />
             <Box sx={{ mb: 1.5 }}>
               <Typography variant="body2" color="text.secondary">
-                <strong>Tenant DB:</strong> {selectedTenant.tenantDb} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>External IdP Tenant:</strong> {selectedTenant.externalIdpTenant} &nbsp;&nbsp;|&nbsp;&nbsp;
-                <strong>Max Devices:</strong> {selectedTenant.maxDevices}
+                <strong>Tenant DB:</strong> {displayedTenant.tenantDb} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>External IdP Tenant:</strong> {displayedTenant.externalIdpTenant} &nbsp;&nbsp;|&nbsp;&nbsp;
+                <strong>Max Devices:</strong> {displayedTenant.maxDevices}
               </Typography>
             </Box>
           </>
@@ -1053,7 +1116,6 @@ const handleSubmitTenant = async (payload) => {
 
       <TenantDialog
         open={tenantDialogOpen}
-        mode={tenantDialogMode}
         tenant={editingTenant}
         submitting={submitting}
         onClose={() => setTenantDialogOpen(false)}
