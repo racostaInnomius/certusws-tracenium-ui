@@ -9,6 +9,33 @@ import {
 } from "@mui/material";
 import { httpGetJson } from "../api/http";
 
+const summaryCardSx = {
+  p: 0,
+  height: "100%",
+  borderRadius: 3,
+  overflow: "hidden",
+  cursor: "pointer",
+  border: "1px solid rgba(0,0,0,0.10)",
+  boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+  transition: "transform 0.15s ease, box-shadow 0.15s ease",
+  display: "flex",
+  flexDirection: "column",
+  "&:hover": {
+    transform: "translateY(-2px)",
+    boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
+  },
+  "&:active": {
+    transform: "scale(0.995)",
+  },
+};
+
+const summaryBodySx = {
+  p: { xs: 2, sm: 2.5 },
+  display: "flex",
+  flexDirection: "column",
+  flex: 1,
+};
+
 function TokensSummaryCard({ summary, loading, onClick }) {
   const tokensCount = summary?.tokensCount ?? 0;
   const activeTokensCount = summary?.activeTokensCount ?? 0;
@@ -16,25 +43,7 @@ function TokensSummaryCard({ summary, loading, onClick }) {
   const revokedTokensCount = summary?.revokedTokensCount ?? 0;
 
   return (
-    <Paper
-      onClick={onClick}
-      sx={{
-        p: 0,
-        borderRadius: 3,
-        overflow: "hidden",
-        cursor: "pointer",
-        border: "1px solid rgba(0,0,0,0.10)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
-        },
-        "&:active": {
-          transform: "scale(0.995)",
-        },
-      }}
-    >
+    <Paper onClick={onClick} sx={summaryCardSx}>
       <Box
         sx={{
           px: 2,
@@ -53,14 +62,14 @@ function TokensSummaryCard({ summary, loading, onClick }) {
         </Typography>
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={summaryBodySx}>
         <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 0.5 }}>
           Total registered
         </Typography>
 
         <Typography
           sx={{
-            fontSize: 52,
+            fontSize: { xs: 42, sm: 52 },
             fontWeight: 800,
             lineHeight: 1,
             color: "#16324f",
@@ -72,7 +81,7 @@ function TokensSummaryCard({ summary, loading, onClick }) {
 
         <Divider sx={{ mb: 2 }} />
 
-        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mt: "auto" }}>
           <Chip
             label={`Active: ${loading ? "…" : activeTokensCount}`}
             sx={{
@@ -109,30 +118,12 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
   const tenantsCount = summary?.tenantsCount ?? 0;
 
   return (
-    <Paper
-      onClick={onClick}
-      sx={{
-        p: 0,
-        borderRadius: 3,
-        overflow: "hidden",
-        cursor: "pointer",
-        border: "1px solid rgba(0,0,0,0.10)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
-        },
-        "&:active": {
-          transform: "scale(0.995)",
-        },
-      }}
-    >
+    <Paper onClick={onClick} sx={summaryCardSx}>
       <Box
         sx={{
           px: 2,
           py: 1.25,
-          background: "linear-gradient(90deg, #1976d2 0%, #1ba6a6 100%)",
+          background: "linear-gradient(90deg, #16324f 0%, #1ba6a6 100%)",
         }}
       >
         <Typography
@@ -146,14 +137,14 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
         </Typography>
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
+      <Box sx={summaryBodySx}>
         <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 0.5 }}>
           Total registered
         </Typography>
 
         <Typography
           sx={{
-            fontSize: 52,
+            fontSize: { xs: 42, sm: 52 },
             fontWeight: 800,
             lineHeight: 1,
             color: "#16324f",
@@ -165,15 +156,17 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
 
         <Divider sx={{ mb: 2 }} />
 
-        <Typography
-          sx={{
-            fontSize: 14,
-            color: "text.secondary",
-            fontWeight: 500,
-          }}
-        >
-          Manage tenant records and members
-        </Typography>
+        <Box sx={{ mt: "auto" }}>
+          <Typography
+            sx={{
+              fontSize: 14,
+              color: "text.secondary",
+              fontWeight: 500,
+            }}
+          >
+            Manage tenant records and members
+          </Typography>
+        </Box>
       </Box>
     </Paper>
   );
@@ -182,49 +175,49 @@ function TenantsSummaryCard({ summary, loading, onClick }) {
 function TenantMembersSummaryCard({ summary, loading, onClick }) {
   const membersCount = summary?.membersCount ?? 0;
   const activeMembersCount = summary?.activeMembersCount ?? 0;
-  const inactiveMembersCount = membersCount - activeMembersCount;
+  const inactiveMembersCount =
+    summary?.inactiveMembersCount ?? Math.max(membersCount - activeMembersCount, 0);
 
   return (
-    <Paper
-      onClick={onClick}
-      sx={{
-        p: 0,
-        borderRadius: 3,
-        overflow: "hidden",
-        cursor: "pointer",
-        border: "1px solid rgba(0,0,0,0.10)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          boxShadow: "0 14px 28px rgba(0,0,0,0.16)",
-        },
-      }}
-    >
+    <Paper onClick={onClick} sx={summaryCardSx}>
       <Box
         sx={{
           px: 2,
           py: 1.25,
-          background: "linear-gradient(90deg, #1976d2 0%, #1ba6a6 100%)",
+          background: "linear-gradient(90deg, #0f6b72 0%, #1ba6a6 100%)",
         }}
       >
-        <Typography sx={{ color: "white", fontWeight: 700 }}>
+        <Typography
+          sx={{
+            color: "white",
+            fontWeight: 700,
+            letterSpacing: 0.2,
+          }}
+        >
           Tenant Members
         </Typography>
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
-        <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Box sx={summaryBodySx}>
+        <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 0.5 }}>
           Total members
         </Typography>
 
-        <Typography sx={{ fontSize: 52, fontWeight: 800, color: "#16324f", mb: 2 }}>
+        <Typography
+          sx={{
+            fontSize: { xs: 42, sm: 52 },
+            fontWeight: 800,
+            lineHeight: 1,
+            color: "#16324f",
+            mb: 2,
+          }}
+        >
           {loading ? "…" : membersCount}
         </Typography>
 
         <Divider sx={{ mb: 2 }} />
 
-        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mt: "auto" }}>
           <Chip
             label={`Active: ${loading ? "…" : activeMembersCount}`}
             sx={{
@@ -292,10 +285,14 @@ export default function Configurations({ onNavigate }) {
     onNavigate?.("tenants");
   };
 
+  const handleTenantMembersClick = () => {
+    onNavigate?.("tenant-members");
+  };
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Typography variant="h4" color="#1ba6a6" sx={{ mb: 2, fontWeight: 700 }}>
-        Configurations
+        Settings
       </Typography>
 
       {error && (
@@ -304,9 +301,8 @@ export default function Configurations({ onNavigate }) {
         </Typography>
       )}
 
-      <Grid container spacing={2}>
-        {/* TOKENS */}
-        <Grid item xs={12} md={4}>
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
           <TokensSummaryCard
             summary={tokensSummary}
             loading={loading}
@@ -314,24 +310,22 @@ export default function Configurations({ onNavigate }) {
           />
         </Grid>
 
-        {/* GLOBAL USER */}
         {tenantsSummary && (
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
             <TenantsSummaryCard
               summary={tenantsSummary}
               loading={loading}
-              onClick={() => onNavigate?.("tenants")}
+              onClick={handleTenantsClick}
             />
           </Grid>
         )}
 
-        {/* TENANT USER */}
         {tenantMembersSummary && (
-          <Grid item xs={12} md={4}>
+          <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
             <TenantMembersSummaryCard
               summary={tenantMembersSummary}
               loading={loading}
-              onClick={() => onNavigate?.("tenant-members")}
+              onClick={handleTenantMembersClick}
             />
           </Grid>
         )}
