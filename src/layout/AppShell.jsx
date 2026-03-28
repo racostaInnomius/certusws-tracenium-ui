@@ -42,20 +42,55 @@ export default function AppShell() {
   }
 
   if (selectedPage === "tenants") {
-    content = <TenantsAdministrator />;
+    content = <TenantsAdministrator mode="global" />;
+  }
+
+  if (selectedPage === "tenant-members") {
+    content = <TenantsAdministrator mode="tenant" />;
   }
 
   return (
-    <Box sx={{ display: "flex", height: "100vh" }}>
-      <Sidebar
-        tenantId={bootstrap?.globalRole}
-        selected={selectedPage}
-        onSelect={setSelectedPage}
-      />
+    <Box
+      sx={{
+        display: "flex",
+        minHeight: "100dvh",
+        width: "100%",
+        bgcolor: "#f5f6f8",
+      }}
+    >
+      <Sidebar selected={selectedPage} onSelect={setSelectedPage} />
 
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <Topbar />
-        <Box sx={{ flex: 1, p: 1.5, overflow: "auto", bgcolor: "#f5f6f8" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          bgcolor: "#f5f6f8",
+        }}
+      >
+        <Box
+          sx={{
+            width: "100%",
+            flexShrink: 0,
+          }}
+        >
+          <Topbar />
+        </Box>
+
+        <Box
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            width: "100%",
+            px: { xs: 1.5, sm: 2 },
+            py: { xs: 1.5, sm: 2 },
+            bgcolor: "#f5f6f8",
+            overflow: "auto",
+          }}
+        >
           {content}
         </Box>
       </Box>
