@@ -1,38 +1,7 @@
 import * as React from "react";
-import { Box, Typography, Button } from "@mui/material";
-import LogoutIcon from "@mui/icons-material/Logout";
+import { Box, Typography } from "@mui/material";
 
 export default function Topbar() {
-
-  const handleLogout = async () => {
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_BASE}/api/logout`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
-
-      let logoutUrl = "https://api.sso.safecertus.com/logout";
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.logoutUrl) {
-          logoutUrl = data.logoutUrl;
-        }
-      }
-
-      window.location.href = logoutUrl;
-
-    } catch (e) {
-      console.error("Logout failed", e);
-
-      // fallback
-      window.location.href = "https://api.sso.safecertus.com/logout";
-    }
-  };
-
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     year: "numeric",
@@ -43,6 +12,7 @@ export default function Topbar() {
   return (
     <Box
       sx={{
+        width: "100%",
         px: 2,
         py: 0.5,
         bgcolor: "#c6c8cdff",
@@ -54,24 +24,13 @@ export default function Topbar() {
     >
       <Box>
         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          IT Management
+          Endpoint Intelligence & Compliance Platform
         </Typography>
 
         <Typography variant="caption" sx={{ color: "#667085" }}>
           {today}
         </Typography>
       </Box>
-      <Button
-        color="inherit"
-        startIcon={<LogoutIcon />}
-        onClick={handleLogout}
-        sx={{
-          textTransform: "none",
-          fontWeight: 600,
-        }}
-      >
-        Logout
-      </Button>
     </Box>
   );
 }
