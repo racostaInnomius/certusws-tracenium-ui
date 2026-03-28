@@ -1,6 +1,14 @@
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { Paper, Typography, Box } from "@mui/material";
+import {
+  Box,
+  Backdrop,
+  Paper,
+  Typography,
+  CircularProgress,
+  Fade,
+} from "@mui/material";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
@@ -15,10 +23,10 @@ import HostDetails from "../components/Charts/HostDetails";
 
 export default function Assets() {
   const [summary, setSummary] = React.useState(null);
-
   const [hosts, setHosts] = React.useState([]);
   const [selectedAgentId, setSelectedAgentId] = React.useState(null);
   const [selectedHostDetail, setSelectedHostDetail] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -29,7 +37,6 @@ export default function Assets() {
         if (!isMounted) return;
         setSummary(s);
       } catch (e) {
-        // no rompas el dashboard por summary
         console.error("Summary fetch failed:", e);
       }
     })();
@@ -44,13 +51,14 @@ export default function Assets() {
 
     (async () => {
       try {
+        setLoading(true);
+
         const list = await httpGetJson("/api/v1/dashboard/hosts");
         if (!isMounted) return;
 
         const rows = Array.isArray(list) ? list : [];
         setHosts(rows);
 
-        // Auto-select primer host (UX)
         if (rows.length > 0 && !selectedAgentId) {
           setSelectedAgentId(rows[0].agent_id);
         }
@@ -58,6 +66,8 @@ export default function Assets() {
         console.error("Hosts fetch failed:", e);
         if (!isMounted) return;
         setHosts([]);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     })();
 
@@ -77,14 +87,18 @@ export default function Assets() {
         const res = await httpGetJson(
           `/api/v1/dashboard/hosts/${encodeURIComponent(selectedAgentId)}/detail`
         );
-        const d = res;        
+        const d = res;
         if (!isMounted) return;
-        setSelectedHostDetail(d? {
-          ...d,
-          serialNumber: d.serialnumber,
-          macAddress: d.macaddress,
-        } : null);
-        
+
+        setSelectedHostDetail(
+          d
+            ? {
+                ...d,
+                serialNumber: d.serialnumber,
+                macAddress: d.macaddress,
+              }
+            : null
+        );
       } catch (e) {
         console.error("Host detail fetch failed:", e);
         if (!isMounted) return;
@@ -101,86 +115,171 @@ export default function Assets() {
     return hosts.find((h) => h.agent_id === selectedAgentId) ?? null;
   }, [hosts, selectedAgentId]);
 
+  const hasNoAssetsData =
+    !loading &&
+    (!hosts || hosts.length === 0) &&
+    Number(summary?.activeHosts ?? 0) === 0 &&
+    Number(summary?.totalPrinters ?? 0) === 0;
+
   return (
-    <Box sx={{ p: 2 }}>
+    <Box
+      sx={{
+        p: 2,
+        position: "relative",
+        minHeight: "100%",
+      }}
+    >
       <Typography variant="h4" color="#1ba6a6" sx={{ mb: 2, fontWeight: 700 }}>
-        Assets
+        Asset Management
       </Typography>
 
       <Grid container spacing={2}>
         {/* Row 1 */}
-      <Paper elevation={0} sx={{ height: 292, width: 150, borderRadius: 3, overflow: "hidden",
-          border: "1px solid rgba(0,0,0,0.15)", boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-          position: "relative",
-          "&::after": {
-            content: '""', position: "absolute",
-            inset: -8, borderRadius: 4,
-            background: "rgba(80, 242, 255, 0.25)",
-            filter: "blur(14px)", zIndex: -1,
-          }, }}>
-        {/* Header */}
-        <Box sx={{ height: 40, display: "flex",
-            alignItems: "center", justifyContent: "center",
-            backgroundColor: "#2e8f92", borderBottom: "3px solid rgba(100, 255, 255, 0.55)", }}>
-          <Typography sx={{ color: "white", fontWeight: 700, letterSpacing: 0.3, fontSize: 18, }}>
-            Active Hosts
-          </Typography>
-        </Box>
-        {/* Body */}
-        <Box sx={{ height: "calc(100% - 40px)", backgroundColor: "#4aa0a2", 
-                    display: "flex", alignItems: "center", justifyContent: "center", }} >
-          <Typography sx={{ color: "white", fontWeight: 800, fontSize: 72, // número grande
-              lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.25)",
-            }}>
+        <Paper
+          elevation={0}
+          sx={{
+            height: 292,
+            width: 150,
+            borderRadius: 3,
+            overflow: "hidden",
+            border: "1px solid rgba(0,0,0,0.15)",
+            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+            position: "relative",
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              inset: -8,
+              borderRadius: 4,
+              background: "rgba(80, 242, 255, 0.25)",
+              filter: "blur(14px)",
+              zIndex: -1,
+            },
+          }}
+        >
+          <Box
+            sx={{
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#2e8f92",
+              borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
+            }}
+          >
+            <Typography
+              sx={{
+                color: "white",
+                fontWeight: 700,
+                letterSpacing: 0.3,
+                fontSize: 18,
+              }}
+            >
+              Active Hosts
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              height: "calc(100% - 40px)",
+              backgroundColor: "#4aa0a2",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Typography
+              sx={{
+                color: "white",
+                fontWeight: 800,
+                fontSize: 72,
+                lineHeight: 1,
+                textShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              }}
+            >
               {summary?.activeHosts ?? "—"}
             </Typography>
           </Box>
         </Paper>
 
         <Grid size={{ xs: 12, md: 3 }}>
-            <Box sx={{ height: 260, minHeight: 240 }}>
-              <OsPlatformDonut osPlatform={summary?.osPlatform ?? []} />
-            </Box>
+          <Box sx={{ height: 260, minHeight: 240 }}>
+            <OsPlatformDonut osPlatform={summary?.osPlatform ?? []} />
+          </Box>
         </Grid>
 
         <Grid size={{ xs: 12, md: 5 }}>
           <Paper sx={{ p: 2, borderRadius: 3, height: 260, overflow: "hidden" }}>
-            {/* <Box sx={{ height: 260, minHeight: 240 }}> */}
-              <TopManufacturersBar topManufacturers={summary?.topManufacturers ?? []} />
-            {/* </Box> */}
+            <TopManufacturersBar topManufacturers={summary?.topManufacturers ?? []} />
           </Paper>
         </Grid>
 
-        <Paper elevation={0} sx={{ height: 292, width: 150, borderRadius: 3, overflow: "hidden",
-              border: "1px solid rgba(0,0,0,0.15)", boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-              position: "relative",
-              "&::after": {
-                content: '""', position: "absolute",
-                inset: -8, borderRadius: 4, background: "rgba(80, 242, 255, 0.25)", 
-                filter: "blur(14px)", zIndex: -1,
-              },}}>
-          <Box sx={{ height: 40, display: "flex",
-                alignItems: "center", justifyContent: "center",
-                backgroundColor: "#2e8f92", borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
-              }}>
-            <Typography sx={{ color: "white", fontWeight: 700,
-                letterSpacing: 0.3, fontSize: 18,
-              }}>
-              Total Printers</Typography>
+        <Paper
+          elevation={0}
+          sx={{
+            height: 292,
+            width: 150,
+            borderRadius: 3,
+            overflow: "hidden",
+            border: "1px solid rgba(0,0,0,0.15)",
+            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+            position: "relative",
+            "&::after": {
+              content: '""',
+              position: "absolute",
+              inset: -8,
+              borderRadius: 4,
+              background: "rgba(80, 242, 255, 0.25)",
+              filter: "blur(14px)",
+              zIndex: -1,
+            },
+          }}
+        >
+          <Box
+            sx={{
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#2e8f92",
+              borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
+            }}
+          >
+            <Typography
+              sx={{
+                color: "white",
+                fontWeight: 700,
+                letterSpacing: 0.3,
+                fontSize: 18,
+              }}
+            >
+              Total Printers
+            </Typography>
           </Box>
-          {/* Body */}
-          <Box sx={{ height: "calc(100% - 40px)", backgroundColor: "#4aa0a2", // turquesa body
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-            <Typography sx={{ color: "white", fontWeight: 800,
-                fontSize: 72, lineHeight: 1, textShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              }}>
+
+          <Box
+            sx={{
+              height: "calc(100% - 40px)",
+              backgroundColor: "#4aa0a2",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Typography
+              sx={{
+                color: "white",
+                fontWeight: 800,
+                fontSize: 72,
+                lineHeight: 1,
+                textShadow: "0 2px 8px rgba(0,0,0,0.25)",
+              }}
+            >
               {summary?.totalPrinters ?? "—"}
             </Typography>
           </Box>
         </Paper>
 
-        {/* Row 2: OS Versions + Right Panel (Hosts table + details) */}
+        {/* Row 2 */}
         <Grid size={{ xs: 12, md: 6 }}>
           <Paper sx={{ p: 2, borderRadius: 3, height: 300, overflow: "hidden" }}>
             <OsVersionsBar osVersions={summary?.osVersions} />
@@ -196,7 +295,6 @@ export default function Assets() {
         </Grid>
 
         <Grid item xs={12} md={5}>
-          {/* Panel grande derecho: tabla arriba + details abajo */}
           <Paper sx={{ p: 2, borderRadius: 2, height: 360 }}>
             <Box sx={{ height: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
               <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -214,6 +312,95 @@ export default function Assets() {
           </Paper>
         </Grid>
       </Grid>
+      {hasNoAssetsData && (
+        <Backdrop
+          open
+          sx={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 20,
+            borderRadius: 2,
+
+            backgroundColor: "rgba(15, 23, 42, 0.20)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+
+            pt: { xs: "30vh", sm: "28vh", md: "25vh" },
+          }}
+        >
+          <Fade in={hasNoAssetsData} timeout={{ enter: 320, exit: 200 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                width: "100%",
+                maxWidth: 520,
+                mx: 2,
+                px: { xs: 3, sm: 4 },
+                py: { xs: 3, sm: 4 },
+                borderRadius: 3,
+                textAlign: "center",
+
+                border: "1px solid rgba(0,0,0,0.08)",
+                boxShadow: "0 18px 45px rgba(0,0,0,0.18)",
+
+                // 👇 animación suave (scale + slide)
+                transform: hasNoAssetsData
+                  ? "scale(1) translateY(0)"
+                  : "scale(0.96) translateY(12px)",
+                opacity: hasNoAssetsData ? 1 : 0,
+                transition: "transform 320ms ease, opacity 320ms ease",
+              }}
+            >
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 700,
+                  color: "#16324f",
+                  mb: 1.5,
+                }}
+              >
+                Aún no hay información disponible
+              </Typography>
+
+              <Typography
+                sx={{
+                  color: "#667085",
+                  fontSize: 16,
+                  lineHeight: 1.6,
+                  mb: 3,
+                }}
+              >
+                No tienes agentes instalados o tus agentes no han reportado datos todavía.
+              </Typography>
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    mb: 2,
+                  }}
+                >
+                  <Inventory2OutlinedIcon
+                    sx={{
+                      fontSize: 48,
+                      color: "rgba(27,166,166,0.5)",
+                      animation: "pulse 2s infinite",
+                      "@keyframes pulse": {
+                        "0%": { opacity: 0.4 },
+                        "50%": { opacity: 1 },
+                        "100%": { opacity: 0.4 },
+                      },
+                    }}
+                  />
+                </Box>
+            </Paper>
+          </Fade>
+        </Backdrop>
+      )}
     </Box>
   );
 }
