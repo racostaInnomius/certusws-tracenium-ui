@@ -8,10 +8,12 @@ import Assets from "../pages/Assets";
 import Configurations from "../pages/Configurations";
 import TokensAdministrator from "../pages/TokensAdministrator";
 import TenantsAdministrator from "../pages/TenantsAdministrator";
+import Welcome from "../pages/Welcome";
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
   const [selectedPage, setSelectedPage] = React.useState("assets");
+  const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -31,7 +33,7 @@ export default function AppShell() {
     };
   }, []);
 
-  let content = <Assets />;
+  let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
 
   if (selectedPage === "configurations") {
     content = <Configurations onNavigate={setSelectedPage} />;
@@ -49,6 +51,10 @@ export default function AppShell() {
     content = <TenantsAdministrator mode="tenant" />;
   }
 
+  if (selectedPage === "welcome") {
+    content = <Welcome onNavigate={setSelectedPage} />;
+  }
+
   return (
     <Box
       sx={{
@@ -58,7 +64,11 @@ export default function AppShell() {
         bgcolor: "#f5f6f8",
       }}
     >
-      <Sidebar selected={selectedPage} onSelect={setSelectedPage} />
+      <Sidebar
+        selected={selectedPage}
+        onSelect={setSelectedPage}
+        showWelcomeEntry={showWelcomeEntry}
+      />
 
       <Box
         sx={{
@@ -84,7 +94,7 @@ export default function AppShell() {
             flex: 1,
             minWidth: 0,
             minHeight: 0,
-            width: "100%",
+            width: "98%",
             px: { xs: 1.5, sm: 2 },
             py: { xs: 1.5, sm: 2 },
             bgcolor: "#f5f6f8",

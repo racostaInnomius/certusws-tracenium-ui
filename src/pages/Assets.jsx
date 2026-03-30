@@ -5,7 +5,6 @@ import {
   Backdrop,
   Paper,
   Typography,
-  CircularProgress,
   Fade,
 } from "@mui/material";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -21,7 +20,7 @@ import PrintersByVendorPie from "../components/Charts/PrintersByVendorPie";
 import HostsTable from "../components/Charts/HostsTable";
 import HostDetails from "../components/Charts/HostDetails";
 
-export default function Assets() {
+export default function Assets({ onAssetsEmptyStateChange }) {
   const [summary, setSummary] = React.useState(null);
   const [hosts, setHosts] = React.useState([]);
   const [selectedAgentId, setSelectedAgentId] = React.useState(null);
@@ -120,6 +119,10 @@ export default function Assets() {
     (!hosts || hosts.length === 0) &&
     Number(summary?.activeHosts ?? 0) === 0 &&
     Number(summary?.totalPrinters ?? 0) === 0;
+
+    React.useEffect(() => {
+      onAssetsEmptyStateChange?.(hasNoAssetsData);
+    }, [hasNoAssetsData, onAssetsEmptyStateChange]);
 
   return (
     <Box
