@@ -203,7 +203,7 @@ function TenantDialog({
             value={externalIdpTenant}
             onChange={(e) => setExternalIdpTenant(e.target.value)}
             fullWidth
-            required
+            disabled
           />
 
           <TextField
@@ -291,7 +291,7 @@ function TenantMemberDialog({
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             fullWidth
-            required
+            disabled
           />
 
           <TextField
@@ -803,16 +803,6 @@ export default function TenantsAdministrator({ mode = "global" }) {
           <Button size="small" onClick={() => openEditMember(params.row)}>
             Edit
           </Button>
-          <Button
-            size="small"
-            color="error"
-            onClick={() => {
-              setEditingMember(params.row);
-              setDeleteMemberOpen(true);
-            }}
-          >
-            Delete
-          </Button>
         </Box>
       ),
     },
@@ -1042,19 +1032,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
               sx={{ width: { xs: "100%", sm: 240 } }}
               disabled={!displayedTenant}
             />
-
-            <Button
-              variant="contained"
-              onClick={openCreateMember}
-              disabled={!displayedTenant}
-              sx={{
-                bgcolor: "#1ba6a6",
-                "&:hover": { bgcolor: "#158d8d" },
-                width: { xs: "100%", sm: "auto" },
-              }}
-            >
-              + ADD MEMBER
-            </Button>
+            
           </Box>
         </Box>
 
