@@ -1,15 +1,47 @@
 import * as React from "react";
-import { Box, CircularProgress, Typography, Paper } from "@mui/material";
+import {
+  Box,
+  CircularProgress,
+  Typography,
+  Paper,
+  Button,
+  Backdrop,
+  Fade,
+} from "@mui/material";
 
 export const API = {
   BASE: import.meta.env.VITE_API_BASE,
   BOOTSTRAP: "/api/bootstrap",
-  LOGIN: "/auth/login"
+  LOGIN: "/auth/login",
 };
 
 export default function AuthGate({ children }) {
   const [status, setStatus] = React.useState("loading"); // loading | authed
+  const [isInactive, setIsInactive] = React.useState(false);
   const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
+
+  const handleLogout = async () => {
+    try {
+      const res = await fetch(`${API.BASE}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      let logoutUrl = "https://api.sso.safecertus.com/logout";
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.logoutUrl) {
+          logoutUrl = data.logoutUrl;
+        }
+      }
+
+      window.location.href = logoutUrl;
+    } catch (e) {
+      console.error("Logout failed", e);
+      window.location.href = "https://api.sso.safecertus.com/logout";
+    }
+  };
 
   React.useEffect(() => {
     (async () => {
@@ -31,12 +63,112 @@ export default function AuthGate({ children }) {
           return;
         }
 
+        const data = await res.json();
+
+        if (data?.tenantMember && data.tenantMember.isActive === false) {
+          setIsInactive(true);
+          return;
+        }
+
         setStatus("authed");
       } catch (e) {
         console.error("Bootstrap fetch failed:", e);
       }
     })();
   }, []);
+
+  if (isInactive) {
+    return (
+      <Box
+        sx={{
+          minHeight: "100dvh",
+          width: "100%",
+          position: "relative",
+          overflow: "hidden",
+          background:
+            "linear-gradient(90deg, #03071b 0%, #03152f 40%, #103847 100%)",
+        }}
+      >
+        <Backdrop
+          open
+          sx={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+            backgroundColor: "rgba(2, 10, 25, 0.30)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+          }}
+        />
+
+        <Box
+          sx={{
+            position: "relative",
+            zIndex: 2,
+            minHeight: "100dvh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            px: 2,
+          }}
+        >
+          <Fade in timeout={{ enter: 260, exit: 180 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                width: "100%",
+                maxWidth: 440,
+                px: { xs: 3, sm: 4 },
+                py: { xs: 3.5, sm: 4 },
+                borderRadius: 4,
+                textAlign: "center",
+                border: "1px solid rgba(41, 197, 255, 0.18)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
+                boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
+              }}
+            >
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 800,
+                  color: "#16324f",
+                  mb: 1.5,
+                }}
+              >
+                Usuario inactivo
+              </Typography>
+
+              <Typography
+                sx={{
+                  color: "#667085",
+                  fontSize: 16,
+                  lineHeight: 1.6,
+                  mb: 3,
+                }}
+              >
+                Tu usuario está inactivo, consulta a tu Administrador.
+              </Typography>
+
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={handleLogout}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 700,
+                  bgcolor: "#1ba6a6",
+                  "&:hover": { bgcolor: "#158d8d" },
+                }}
+              >
+                Aceptar
+              </Button>
+            </Paper>
+          </Fade>
+        </Box>
+      </Box>
+    );
+  }
 
   if (status === "loading") {
     return (
