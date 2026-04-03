@@ -14,6 +14,7 @@ export const API = {
   BOOTSTRAP: "/api/bootstrap",
   LOGIN: "/auth/login",
 };
+import Logo from "../assets/T.png";
 
 export default function AuthGate({ children }) {
   const [status, setStatus] = React.useState("loading"); // loading | authed
@@ -86,7 +87,14 @@ export default function AuthGate({ children }) {
           position: "relative",
           overflow: "hidden",
           background:
-            "linear-gradient(90deg, #03071b 0%, #03152f 40%, #103847 100%)",
+            "radial-gradient(circle at top, #1d4d54 0, #020617 55%, #000 100%)",
+          backgroundSize: "200% 200%",
+          animation: "bgShift 12s ease infinite",
+          "@keyframes bgShift": {
+            "0%": { backgroundPosition: "0% 50%" },
+            "50%": { backgroundPosition: "100% 50%" },
+            "100%": { backgroundPosition: "0% 50%" },
+          },
         }}
       >
         <Backdrop
@@ -117,22 +125,25 @@ export default function AuthGate({ children }) {
               elevation={0}
               sx={{
                 width: "100%",
-                maxWidth: 440,
+                maxWidth: 420,
                 px: { xs: 3, sm: 4 },
                 py: { xs: 3.5, sm: 4 },
-                borderRadius: 4,
+                borderRadius: "16px",
                 textAlign: "center",
-                border: "1px solid rgba(41, 197, 255, 0.18)",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%)",
-                boxShadow: "0 24px 60px rgba(0,0,0,0.25)",
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(116,249,253,0.28)",
+                boxShadow: "0 0 25px rgba(116,249,253,0.18)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
               }}
             >
               <Typography
                 variant="h6"
                 sx={{
-                  fontWeight: 800,
-                  color: "#16324f",
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  fontSize: { xs: 28, sm: 30 },
+                  lineHeight: 1.2,
                   mb: 1.5,
                 }}
               >
@@ -141,7 +152,7 @@ export default function AuthGate({ children }) {
 
               <Typography
                 sx={{
-                  color: "#667085",
+                  color: "#cbd5e1",
                   fontSize: 16,
                   lineHeight: 1.6,
                   mb: 3,
@@ -156,9 +167,13 @@ export default function AuthGate({ children }) {
                 onClick={handleLogout}
                 sx={{
                   textTransform: "none",
-                  fontWeight: 700,
-                  bgcolor: "#1ba6a6",
-                  "&:hover": { bgcolor: "#158d8d" },
+                  fontWeight: 600,
+                  borderRadius: "12px",
+                  py: 1.5,
+                  background: "rgb(70,157,159)",
+                  "&:hover": {
+                    background: "rgb(60,140,142)",
+                  },
                 }}
               >
                 Aceptar
@@ -180,23 +195,30 @@ export default function AuthGate({ children }) {
           placeItems: "center",
           px: 2,
           background:
-            "linear-gradient(90deg, #03071b 0%, #03152f 40%, #103847 100%)",
+            "radial-gradient(circle at top, #1d4d54 0, #020617 55%, #000 100%)",
+          backgroundSize: "200% 200%",
+          animation: "bgShift 12s ease infinite",
+          "@keyframes bgShift": {
+            "0%": { backgroundPosition: "0% 50%" },
+            "50%": { backgroundPosition: "100% 50%" },
+            "100%": { backgroundPosition: "0% 50%" },
+          },
         }}
       >
         <Paper
           elevation={0}
           sx={{
             width: "100%",
-            maxWidth: 440,
+            maxWidth: 420,
             minHeight: 390,
-            px: { xs: 3, sm: 5 },
-            py: { xs: 5, sm: 6 },
-            borderRadius: 4,
-            border: "1px solid rgba(41, 197, 255, 0.35)",
-            background:
-              "linear-gradient(180deg, rgba(6,18,46,0.96) 0%, rgba(4,15,38,0.98) 100%)",
-            boxShadow:
-              "0 0 0 1px rgba(41, 197, 255, 0.08), 0 0 30px rgba(41, 197, 255, 0.18)",
+            px: { xs: 4, sm: 4 },
+            py: { xs: 4, sm: 4 },
+            borderRadius: "16px",
+            border: "1px solid rgba(116,249,253,0.4)",
+            background: "rgba(255,255,255,0.05)",
+            boxShadow: "0 0 25px rgba(116,249,253,0.18)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -206,45 +228,47 @@ export default function AuthGate({ children }) {
         >
           <Box
             sx={{
-              width: 72,
-              height: 72,
-              mb: 3,
+              width: 84,
+              height: 84,
+              mb: 2.5,
               borderRadius: "50%",
               display: "grid",
               placeItems: "center",
               background:
-                "radial-gradient(circle, rgba(41,197,255,0.16) 0%, rgba(41,197,255,0.04) 65%, transparent 100%)",
+                "radial-gradient(circle, rgba(116,249,253,0.18) 0%, rgba(116,249,253,0.06) 60%, transparent 100%)",
             }}
           >
             <Box
+              component="img"
+              src={Logo}
+              alt="Tracenium"
               sx={{
-                width: 44,
-                height: 44,
-                borderRadius: "50%",
-                border: "2px solid rgba(255,255,255,0.75)",
-                opacity: 0.9,
+                width: { xs: 52, sm: 56 },
+                height: "auto",
+                objectFit: "contain",
+                filter: "drop-shadow(0 0 10px rgba(116,249,253,0.35))",
               }}
             />
           </Box>
 
           <Typography
             sx={{
-              color: "white",
+              color: "#ffffff",
               fontWeight: 600,
-              fontSize: { xs: 30, sm: 34 },
-              lineHeight: 1.15,
+              fontSize: { xs: 28, sm: 30 },
+              lineHeight: 1.2,
               mb: 1.5,
             }}
           >
-            Welcome to Tracenium
+            Tracenium
           </Typography>
 
           <Typography
             sx={{
-              color: "rgba(255,255,255,0.78)",
-              fontSize: 16,
-              lineHeight: 1.5,
-              maxWidth: 300,
+              color: "#cbd5e1",
+              fontSize: 14,
+              lineHeight: 1.6,
+              maxWidth: 280,
               mb: 4,
             }}
           >
@@ -252,10 +276,10 @@ export default function AuthGate({ children }) {
           </Typography>
 
           <CircularProgress
-            size={34}
-            thickness={4.5}
+            size={40}
+            thickness={4}
             sx={{
-              color: "#63e7ff",
+              color: "rgb(116,249,253)",
             }}
           />
         </Paper>
