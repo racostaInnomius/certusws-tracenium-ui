@@ -24,7 +24,7 @@ export default function Sidebar({ global_role, selected, onSelect, showWelcomeEn
     { label: "Overview", key: "overview" },
     { label: "Asset Management", key: "assets" },
     { label: "Security Compliance", key: "ad" },
-    { label: "Software Delivery", key: "o365" },
+    { label: "Software Delivery", key: "software-delivery" },
     { label: "Patch Management", key: "remote" },
     { label: "Remote Control", key: "security" },
     { label: "Alerts", key: "alerts" },

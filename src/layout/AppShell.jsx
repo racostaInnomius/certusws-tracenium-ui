@@ -9,6 +9,7 @@ import Configurations from "../pages/Configurations";
 import TokensAdministrator from "../pages/TokensAdministrator";
 import TenantsAdministrator from "../pages/TenantsAdministrator";
 import Welcome from "../pages/Welcome";
+import SoftwareDelivery from "../pages/SoftwareDelivery";
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
@@ -53,6 +54,10 @@ export default function AppShell() {
 
   if (selectedPage === "welcome") {
     content = <Welcome onNavigate={setSelectedPage} />;
+  }
+
+  if (selectedPage === "software-delivery") {
+    content = <SoftwareDelivery />;
   }
 
   return (
