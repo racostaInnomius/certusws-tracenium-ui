@@ -30,6 +30,11 @@ export default function Sidebar({ global_role, selected, onSelect, showWelcomeEn
     { label: "Alerts", key: "alerts" },
     { label: "Reports", key: "reports" },
     ...(tenantMemberIsActive === true &&
+      (String(tenantMemberRole ?? "") === "OWNER" ||
+      String(tenantMemberRole ?? "") === "ADMIN")
+      ? [{ label: "Device Certs", key: "device-certs" }]
+      : []),
+    ...(tenantMemberIsActive === true &&
     (String(tenantMemberRole ?? "") === "OWNER" ||
       String(tenantMemberRole ?? "") === "ADMIN")
       ? [{ label: "Settings", key: "configurations" }]

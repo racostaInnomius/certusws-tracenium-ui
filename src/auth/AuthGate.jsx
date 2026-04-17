@@ -234,8 +234,6 @@ export default function AuthGate({ children }) {
               borderRadius: "50%",
               display: "grid",
               placeItems: "center",
-              background:
-                "radial-gradient(circle, rgba(116,249,253,0.18) 0%, rgba(116,249,253,0.06) 60%, transparent 100%)",
             }}
           >
             <Box
@@ -243,7 +241,7 @@ export default function AuthGate({ children }) {
               src={Logo}
               alt="Tracenium"
               sx={{
-                width: { xs: 52, sm: 56 },
+                width: { xs: 92, sm: 96 },
                 height: "auto",
                 objectFit: "contain",
                 filter: "drop-shadow(0 0 10px rgba(116,249,253,0.35))",
