@@ -10,6 +10,7 @@ import TokensAdministrator from "../pages/TokensAdministrator";
 import TenantsAdministrator from "../pages/TenantsAdministrator";
 import Welcome from "../pages/Welcome";
 import SoftwareDelivery from "../pages/SoftwareDelivery";
+import Jobs from "../pages/Jobs";
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
@@ -58,6 +59,10 @@ export default function AppShell() {
 
   if (selectedPage === "software-delivery") {
     content = <SoftwareDelivery />;
+  }
+
+  if (selectedPage === "jobs") {
+    content = <Jobs />;
   }
 
   return (

@@ -25,6 +25,11 @@ export default function Sidebar({ global_role, selected, onSelect, showWelcomeEn
     { label: "Asset Management", key: "assets" },
     { label: "Security Compliance", key: "ad" },
     { label: "Software Delivery", key: "software-delivery" },
+    ...(tenantMemberIsActive === true &&
+    (String(tenantMemberRole ?? "") === "OWNER" ||
+      String(tenantMemberRole ?? "") === "ADMIN")
+      ? [{ label: "Jobs", key: "jobs" }]
+      : []),
     { label: "Patch Management", key: "remote" },
     { label: "Remote Control", key: "security" },
     { label: "Alerts", key: "alerts" },
