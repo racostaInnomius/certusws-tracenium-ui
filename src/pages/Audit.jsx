@@ -16,6 +16,7 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 
 import {
   getAuditFacets,
@@ -23,6 +24,12 @@ import {
   listAuditEvents
 } from "../api/audit";
 import { useAuthContext } from "../auth/AuthContext";
+import {
+  downloadTextFile,
+  getSearchParam,
+  toCsv,
+  updateSearchParams,
+} from "../utils/browserState";
 
 function SummaryCard({ title, value, accent = "#1ba6a6" }) {
   return (
@@ -114,6 +121,17 @@ function toIsoOrUndefined(value) {
 }
 
 export default function Audit() {
+  const initialParamsRef = React.useRef({
+    deviceId: getSearchParam("auditDeviceId", ""),
+    eventType: getSearchParam("auditEventType", ""),
+    outcome: getSearchParam("auditOutcome", "all"),
+    correlationId: getSearchParam("auditCorrelationId", ""),
+    from: getSearchParam("auditFrom", ""),
+    to: getSearchParam("auditTo", ""),
+    page: Math.max(Number(getSearchParam("auditPage", "0")) || 0, 0),
+    pageSize: Math.max(Number(getSearchParam("auditPageSize", "10")) || 10, 1),
+    eventId: getSearchParam("auditEventId", ""),
+  });
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -129,16 +147,20 @@ export default function Audit() {
   const [selectedEvent, setSelectedEvent] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
-  const [deviceId, setDeviceId] = React.useState("");
-  const [eventType, setEventType] = React.useState("");
-  const [outcome, setOutcome] = React.useState("all");
-  const [correlationId, setCorrelationId] = React.useState("");
-  const [from, setFrom] = React.useState("");
-  const [to, setTo] = React.useState("");
-  const [paginationModel, setPaginationModel] = React.useState({ page: 0, pageSize: 10 });
+  const [deviceId, setDeviceId] = React.useState(initialParamsRef.current.deviceId);
+  const [eventType, setEventType] = React.useState(initialParamsRef.current.eventType);
+  const [outcome, setOutcome] = React.useState(initialParamsRef.current.outcome);
+  const [correlationId, setCorrelationId] = React.useState(initialParamsRef.current.correlationId);
+  const [from, setFrom] = React.useState(initialParamsRef.current.from);
+  const [to, setTo] = React.useState(initialParamsRef.current.to);
+  const [paginationModel, setPaginationModel] = React.useState({
+    page: initialParamsRef.current.page,
+    pageSize: initialParamsRef.current.pageSize,
+  });
   const [totalRows, setTotalRows] = React.useState(0);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [selectedEventId, setSelectedEventId] = React.useState(initialParamsRef.current.eventId);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -194,6 +216,10 @@ export default function Audit() {
         setRows(items);
         setTotalRows(Number(eventsResponse?.total ?? 0));
         setSelectedEvent((current) => {
+          if (selectedEventId && items.some((item) => String(item.id) === String(selectedEventId))) {
+            return items.find((item) => String(item.id) === String(selectedEventId)) ?? null;
+          }
+
           if (current && items.some((item) => item.id === current.id)) {
             return items.find((item) => item.id === current.id) ?? current;
           }
@@ -223,7 +249,32 @@ export default function Audit() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, hasInvalidDateRange, paginationModel.page, paginationModel.pageSize, queryParams, refreshNonce]);
+  }, [canAccess, hasInvalidDateRange, paginationModel.page, paginationModel.pageSize, queryParams, refreshNonce, selectedEventId]);
+
+  React.useEffect(() => {
+    updateSearchParams({
+      auditDeviceId: deviceId,
+      auditEventType: eventType,
+      auditOutcome: outcome !== "all" ? outcome : "",
+      auditCorrelationId: correlationId,
+      auditFrom: from,
+      auditTo: to,
+      auditPage: paginationModel.page,
+      auditPageSize: paginationModel.pageSize,
+      auditEventId: selectedEvent?.id ?? selectedEventId,
+    });
+  }, [
+    correlationId,
+    deviceId,
+    eventType,
+    from,
+    outcome,
+    paginationModel.page,
+    paginationModel.pageSize,
+    selectedEvent?.id,
+    selectedEventId,
+    to,
+  ]);
 
   React.useEffect(() => {
     if (!loading) {
@@ -243,8 +294,31 @@ export default function Audit() {
     setCorrelationId("");
     setFrom("");
     setTo("");
+    setSelectedEventId("");
+    setSelectedEvent(null);
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
   }, []);
+
+  const handleExportCsv = React.useCallback(() => {
+    const csv = toCsv(rows);
+    downloadTextFile(`audit-events-${new Date().toISOString()}.csv`, csv || "id\n", "text/csv;charset=utf-8");
+  }, [rows]);
+
+  const handleExportJson = React.useCallback(() => {
+    const payload = {
+      exportedAtUtc: new Date().toISOString(),
+      filters: queryParams,
+      summary,
+      totalRows,
+      items: rows,
+      selectedEvent,
+    };
+    downloadTextFile(
+      `audit-events-${new Date().toISOString()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8"
+    );
+  }, [queryParams, rows, selectedEvent, summary, totalRows]);
 
   const columns = [
     {
@@ -319,6 +393,24 @@ export default function Audit() {
         </Box>
 
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleExportCsv}
+            disabled={rows.length === 0}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleExportJson}
+            disabled={rows.length === 0}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Export JSON
+          </Button>
           <Button
             variant="outlined"
             startIcon={<RestartAltOutlinedIcon />}
@@ -454,7 +546,10 @@ export default function Audit() {
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
               getRowId={(row) => row.id}
-              onRowClick={(params) => setSelectedEvent(params.row)}
+              onRowClick={(params) => {
+                setSelectedEvent(params.row);
+                setSelectedEventId(String(params.row.id));
+              }}
               pageSizeOptions={[10, 25, 50]}
               columnVisibilityModel={columnVisibilityModel}
               sx={{

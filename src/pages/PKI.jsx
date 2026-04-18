@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 
 import {
   getCertificateActivity,
@@ -29,6 +30,12 @@ import {
   revokeCertificate,
 } from "../api/certificates";
 import { useAuthContext } from "../auth/AuthContext";
+import {
+  downloadTextFile,
+  getSearchParam,
+  toCsv,
+  updateSearchParams,
+} from "../utils/browserState";
 
 function SummaryCard({ title, value, accent = "#1ba6a6" }) {
   return (
@@ -119,6 +126,19 @@ function DetailRow({ label, value, mono = false }) {
 }
 
 export default function PKI() {
+  const initialParamsRef = React.useRef({
+    days: getSearchParam("pkiDays", "30"),
+    deviceSearch: getSearchParam("pkiDeviceSearch", ""),
+    missingSearch: getSearchParam("pkiMissingSearch", ""),
+    deviceStatus: getSearchParam("pkiDeviceStatus", ""),
+    deviceId: getSearchParam("pkiDeviceId", ""),
+    fingerprint: getSearchParam("pkiFingerprint", ""),
+    autoRefreshSeconds: getSearchParam("pkiAutoRefresh", "0"),
+    devicePage: Math.max(Number(getSearchParam("pkiDevicePage", "0")) || 0, 0),
+    devicePageSize: Math.max(Number(getSearchParam("pkiDevicePageSize", "10")) || 10, 1),
+    missingPage: Math.max(Number(getSearchParam("pkiMissingPage", "0")) || 0, 0),
+    missingPageSize: Math.max(Number(getSearchParam("pkiMissingPageSize", "5")) || 5, 1),
+  });
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const { auth } = useAuthContext();
@@ -132,17 +152,25 @@ export default function PKI() {
   const [missingActive, setMissingActive] = React.useState({ items: [], total: 0 });
   const [devices, setDevices] = React.useState({ items: [], total: 0 });
   const [deviceCertificates, setDeviceCertificates] = React.useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState(initialParamsRef.current.deviceId);
+  const [selectedFingerprint, setSelectedFingerprint] = React.useState(initialParamsRef.current.fingerprint);
   const [selectedCertificate, setSelectedCertificate] = React.useState(null);
   const [certificateActivity, setCertificateActivity] = React.useState([]);
 
-  const [days, setDays] = React.useState("30");
-  const [deviceSearch, setDeviceSearch] = React.useState("");
-  const [missingSearch, setMissingSearch] = React.useState("");
-  const [deviceStatus, setDeviceStatus] = React.useState("");
+  const [days, setDays] = React.useState(initialParamsRef.current.days);
+  const [deviceSearch, setDeviceSearch] = React.useState(initialParamsRef.current.deviceSearch);
+  const [missingSearch, setMissingSearch] = React.useState(initialParamsRef.current.missingSearch);
+  const [deviceStatus, setDeviceStatus] = React.useState(initialParamsRef.current.deviceStatus);
   const [revokeReason, setRevokeReason] = React.useState("");
-  const [devicePagination, setDevicePagination] = React.useState({ page: 0, pageSize: 10 });
-  const [missingPagination, setMissingPagination] = React.useState({ page: 0, pageSize: 5 });
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState(initialParamsRef.current.autoRefreshSeconds);
+  const [devicePagination, setDevicePagination] = React.useState({
+    page: initialParamsRef.current.devicePage,
+    pageSize: initialParamsRef.current.devicePageSize,
+  });
+  const [missingPagination, setMissingPagination] = React.useState({
+    page: initialParamsRef.current.missingPage,
+    pageSize: initialParamsRef.current.missingPageSize,
+  });
   const [overviewLoading, setOverviewLoading] = React.useState(true);
   const [devicesLoading, setDevicesLoading] = React.useState(true);
   const [detailLoading, setDetailLoading] = React.useState(false);
@@ -240,6 +268,10 @@ export default function PKI() {
         deviceId ? listDeviceCertificates(deviceId) : Promise.resolve(null),
       ]);
 
+      setSelectedFingerprint(fingerprint);
+      if (deviceId) {
+        setSelectedDeviceId(deviceId);
+      }
       setSelectedCertificate(detailResponse?.certificate ?? null);
       setCertificateActivity(Array.isArray(activityResponse?.items) ? activityResponse.items : []);
       if (deviceResponse?.certificates) {
@@ -253,7 +285,7 @@ export default function PKI() {
     }
   }, [canAccess, showMessage]);
 
-  const selectDevice = React.useCallback(async (deviceId) => {
+  const selectDevice = React.useCallback(async (deviceId, preferredFingerprint = "") => {
     if (!canAccess || !deviceId) return;
 
     try {
@@ -264,6 +296,7 @@ export default function PKI() {
       setDeviceCertificates(certificates);
 
       const preferred =
+        certificates.find((item) => String(item.fingerprint_sha256) === String(preferredFingerprint || "")) ||
         certificates.find((item) => String(item.status).toLowerCase() === "active") ||
         certificates[0];
 
@@ -319,12 +352,12 @@ export default function PKI() {
       await Promise.all([
         loadOverview(),
         loadDevices(),
-        selectedDeviceId ? selectDevice(selectedDeviceId) : Promise.resolve(),
+        selectedDeviceId ? selectDevice(selectedDeviceId, selectedFingerprint) : Promise.resolve(),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadDevices, loadOverview, selectDevice, selectedDeviceId]);
+  }, [loadDevices, loadOverview, selectDevice, selectedDeviceId, selectedFingerprint]);
 
   React.useEffect(() => {
     loadOverview();
@@ -333,6 +366,79 @@ export default function PKI() {
   React.useEffect(() => {
     loadDevices();
   }, [loadDevices]);
+
+  React.useEffect(() => {
+    if (!canAccess || !selectedDeviceId) return;
+    selectDevice(selectedDeviceId, selectedFingerprint);
+  }, [canAccess, selectDevice, selectedDeviceId]);
+
+  React.useEffect(() => {
+    const intervalSeconds = Number(autoRefreshSeconds || 0);
+    if (!canAccess || intervalSeconds <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (revokeLoading || detailLoading) return;
+      handleRefresh();
+    }, intervalSeconds * 1000);
+
+    return () => window.clearInterval(timer);
+  }, [autoRefreshSeconds, canAccess, detailLoading, handleRefresh, revokeLoading]);
+
+  React.useEffect(() => {
+    updateSearchParams({
+      pkiDays: days,
+      pkiDeviceSearch: deviceSearch,
+      pkiMissingSearch: missingSearch,
+      pkiDeviceStatus: deviceStatus,
+      pkiDeviceId: selectedDeviceId,
+      pkiFingerprint: selectedFingerprint,
+      pkiAutoRefresh: Number(autoRefreshSeconds || 0) > 0 ? autoRefreshSeconds : "",
+      pkiDevicePage: devicePagination.page,
+      pkiDevicePageSize: devicePagination.pageSize,
+      pkiMissingPage: missingPagination.page,
+      pkiMissingPageSize: missingPagination.pageSize,
+    });
+  }, [
+    autoRefreshSeconds,
+    days,
+    devicePagination.page,
+    devicePagination.pageSize,
+    deviceSearch,
+    deviceStatus,
+    missingPagination.page,
+    missingPagination.pageSize,
+    missingSearch,
+    selectedDeviceId,
+    selectedFingerprint,
+  ]);
+
+  const handleExportCoverageCsv = React.useCallback(() => {
+    const csv = toCsv(devices.items);
+    downloadTextFile(`pki-device-coverage-${new Date().toISOString()}.csv`, csv || "device_id\n", "text/csv;charset=utf-8");
+  }, [devices.items]);
+
+  const handleExportEvidenceJson = React.useCallback(() => {
+    if (!selectedCertificate) return;
+
+    const payload = {
+      exportedAtUtc: new Date().toISOString(),
+      summary,
+      selectedDeviceId,
+      selectedFingerprint,
+      certificate: selectedCertificate,
+      deviceCertificates,
+      activity: certificateActivity,
+    };
+
+    downloadTextFile(
+      `pki-evidence-${selectedCertificate.fingerprint_sha256}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json;charset=utf-8"
+    );
+  }, [certificateActivity, deviceCertificates, selectedCertificate, selectedDeviceId, selectedFingerprint, summary]);
 
   const deviceColumns = [
     { field: "device_id", headerName: "Device ID", minWidth: 220, flex: 1 },
@@ -486,15 +592,48 @@ export default function PKI() {
           </Typography>
         </Box>
 
-        <Button
-          variant="outlined"
-          startIcon={<RefreshOutlinedIcon />}
-          onClick={handleRefresh}
-          disabled={refreshing}
-          sx={{ textTransform: "none", fontWeight: 700 }}
-        >
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </Button>
+        <Stack direction={isMdDown ? "column" : "row"} spacing={1}>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleExportCoverageCsv}
+            disabled={devices.items.length === 0}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Export CSV
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={handleExportEvidenceJson}
+            disabled={!selectedCertificate}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Export JSON
+          </Button>
+          <TextField
+            select
+            label="Auto Refresh"
+            size="small"
+            value={autoRefreshSeconds}
+            onChange={(e) => setAutoRefreshSeconds(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="0">Off</MenuItem>
+            <MenuItem value="30">30s</MenuItem>
+            <MenuItem value="60">60s</MenuItem>
+            <MenuItem value="120">120s</MenuItem>
+          </TextField>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshOutlinedIcon />}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+        </Stack>
       </Box>
 
       <Box sx={{ mb: 2 }}>

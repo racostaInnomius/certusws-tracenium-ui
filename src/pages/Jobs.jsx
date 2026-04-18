@@ -185,6 +185,7 @@ export default function Jobs() {
   const [version, setVersion] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState("0");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [jobTypeFilter, setJobTypeFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -409,6 +410,21 @@ export default function Jobs() {
     }
   }, [loadJobDetail, loadMeta, loadTenantJobs, selectedJobId]);
 
+  React.useEffect(() => {
+    const intervalSeconds = Number(autoRefreshSeconds || 0);
+    if (!canManageJobs || intervalSeconds <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (submitting || jobActionRunning) return;
+      refreshAll();
+    }, intervalSeconds * 1000);
+
+    return () => window.clearInterval(timer);
+  }, [autoRefreshSeconds, canManageJobs, jobActionRunning, refreshAll, submitting]);
+
   const handleSubmit = async () => {
     if (!canManageJobs) return;
 
@@ -611,6 +627,19 @@ export default function Jobs() {
         >
           {refreshing ? "Refreshing..." : "Refresh"}
         </Button>
+        <TextField
+          select
+          label="Auto Refresh"
+          size="small"
+          value={autoRefreshSeconds}
+          onChange={(e) => setAutoRefreshSeconds(e.target.value)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="0">Off</MenuItem>
+          <MenuItem value="30">30s</MenuItem>
+          <MenuItem value="60">60s</MenuItem>
+          <MenuItem value="120">120s</MenuItem>
+        </TextField>
       </Box>
 
       <Box sx={{ mb: 2 }}>

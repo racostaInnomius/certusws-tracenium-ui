@@ -3,6 +3,7 @@ import { Box, CircularProgress } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { httpGetJson } from "../api/http";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Configurations = React.lazy(() => import("../pages/Configurations"));
@@ -31,7 +32,7 @@ function PageFallback() {
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
-  const [selectedPage, setSelectedPage] = React.useState("assets");
+  const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "assets"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
 
   React.useEffect(() => {
@@ -50,6 +51,19 @@ export default function AppShell() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  React.useEffect(() => {
+    updateSearchParams({ page: selectedPage });
+  }, [selectedPage]);
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setSelectedPage(getSearchParam("page", "assets"));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
