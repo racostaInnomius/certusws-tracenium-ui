@@ -15,20 +15,22 @@ import {
 } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
+  cancelJob,
   createDeviceJob,
   createTenantJobs,
+  getJob,
   listConnectedDevices,
   listDeviceJobs,
+  listJobTypes,
+  listTenantJobs,
+  retryJob,
 } from "../api/jobs";
-
-const JOB_TYPE_OPTIONS = [
-  { value: "facts_snapshot", label: "Facts Snapshot" },
-  { value: "agent_update", label: "Agent Update" },
-];
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -46,8 +48,7 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
     <Paper
       sx={{
         p: 2,
-        height: "100%",
-        minHeight: 96,
+        minHeight: 104,
         borderRadius: 3,
         border: "1px solid rgba(0,0,0,0.08)",
         boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
@@ -59,7 +60,6 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
       <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
         {title}
       </Typography>
-
       <Typography
         sx={{
           fontSize: 28,
@@ -83,11 +83,7 @@ function renderStatusChip(status) {
       <Chip
         label="Completed"
         size="small"
-        sx={{
-          bgcolor: "rgba(27,166,166,0.12)",
-          color: "#0f6b72",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(27,166,166,0.12)", color: "#0f6b72", fontWeight: 700 }}
       />
     );
   }
@@ -97,11 +93,7 @@ function renderStatusChip(status) {
       <Chip
         label={value === "running" ? "Running" : "Sent"}
         size="small"
-        sx={{
-          bgcolor: "rgba(25,118,210,0.12)",
-          color: "#1976d2",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(25,118,210,0.12)", color: "#1976d2", fontWeight: 700 }}
       />
     );
   }
@@ -111,11 +103,7 @@ function renderStatusChip(status) {
       <Chip
         label={value === "pending" ? "Pending" : "Retrying"}
         size="small"
-        sx={{
-          bgcolor: "rgba(255,152,0,0.14)",
-          color: "#9a6700",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(255,152,0,0.14)", color: "#9a6700", fontWeight: 700 }}
       />
     );
   }
@@ -125,11 +113,7 @@ function renderStatusChip(status) {
       <Chip
         label={String(status || "Failed")}
         size="small"
-        sx={{
-          bgcolor: "rgba(211,47,47,0.12)",
-          color: "#b3261e",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(211,47,47,0.12)", color: "#b3261e", fontWeight: 700 }}
       />
     );
   }
@@ -139,9 +123,7 @@ function renderStatusChip(status) {
 
 function formatDate(value) {
   if (!value) return " - ";
-
   const date = new Date(value);
-
   return date.toLocaleString("en-US", {
     year: "2-digit",
     month: "short",
@@ -169,18 +151,20 @@ export default function Jobs() {
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
+  const canManageJobs = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
 
-  const canManageJobs =
-    isActiveMember &&
-    (tenantRole === "ADMIN" || tenantRole === "OWNER");
-
+  const [jobTypeOptions, setJobTypeOptions] = React.useState([]);
   const [connectedDeviceIds, setConnectedDeviceIds] = React.useState([]);
+  const [tenantJobs, setTenantJobs] = React.useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
-  const [jobs, setJobs] = React.useState([]);
+  const [selectedJobId, setSelectedJobId] = React.useState("");
+  const [selectedJob, setSelectedJob] = React.useState(null);
 
-  const [loadingDevices, setLoadingDevices] = React.useState(true);
+  const [loadingMeta, setLoadingMeta] = React.useState(true);
   const [loadingJobs, setLoadingJobs] = React.useState(false);
+  const [loadingJobDetail, setLoadingJobDetail] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
+  const [jobActionRunning, setJobActionRunning] = React.useState(false);
 
   const [jobType, setJobType] = React.useState("facts_snapshot");
   const [targetMode, setTargetMode] = React.useState("device");
@@ -188,8 +172,8 @@ export default function Jobs() {
   const [version, setVersion] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
-
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [jobTypeFilter, setJobTypeFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
 
   const [snackbar, setSnackbar] = React.useState({
@@ -198,89 +182,129 @@ export default function Jobs() {
     severity: "success",
   });
 
-  const loadConnectedDevices = React.useCallback(async () => {
-    try {
-      setLoadingDevices(true);
-      const response = await listConnectedDevices();
-      const items = Array.isArray(response?.deviceIds) ? response.deviceIds : [];
-      setConnectedDeviceIds(items);
+  const loadMeta = React.useCallback(async () => {
+    if (!canManageJobs) return;
 
+    try {
+      setLoadingMeta(true);
+      const [deviceResponse, typeResponse] = await Promise.all([
+        listConnectedDevices(),
+        listJobTypes(),
+      ]);
+
+      const devices = Array.isArray(deviceResponse?.deviceIds) ? deviceResponse.deviceIds : [];
+      const types = Array.isArray(typeResponse?.items) ? typeResponse.items : [];
+
+      setConnectedDeviceIds(devices);
+      setJobTypeOptions(types);
       setSelectedDeviceId((current) => {
-        if (current && items.includes(current)) return current;
-        return items[0] || "";
+        if (current && devices.includes(current)) return current;
+        return devices[0] || "";
+      });
+      setJobType((current) => {
+        if (current && types.some((item) => item.jobType === current)) return current;
+        return types[0]?.jobType || "facts_snapshot";
       });
     } catch (e) {
       console.error(e);
       setConnectedDeviceIds([]);
-      setSelectedDeviceId("");
+      setJobTypeOptions([]);
       setSnackbar({
         open: true,
-        message: "Failed to load connected devices",
+        message: "Failed to load jobs metadata",
         severity: "error",
       });
     } finally {
-      setLoadingDevices(false);
+      setLoadingMeta(false);
     }
-  }, []);
+  }, [canManageJobs]);
 
-  const loadJobs = React.useCallback(async (deviceId) => {
-    if (!deviceId) {
-      setJobs([]);
-      return;
-    }
+  const loadTenantJobs = React.useCallback(async () => {
+    if (!canManageJobs || !tenantId) return;
 
     try {
       setLoadingJobs(true);
-      const response = await listDeviceJobs(deviceId, { limit: 100 });
-      const items = Array.isArray(response?.jobs) ? response.jobs : [];
-      setJobs(items);
+      const response = await listTenantJobs(tenantId, { limit: 200 });
+      const items = Array.isArray(response?.items) ? response.items : [];
+      setTenantJobs(items);
+      setSelectedJobId((current) => {
+        if (current && items.some((item) => item.job_id === current)) return current;
+        return items[0]?.job_id || "";
+      });
     } catch (e) {
       console.error(e);
-      setJobs([]);
+      setTenantJobs([]);
+      setSelectedJobId("");
       setSnackbar({
         open: true,
-        message: "Failed to load jobs",
+        message: "Failed to load tenant jobs",
         severity: "error",
       });
     } finally {
       setLoadingJobs(false);
     }
-  }, []);
+  }, [canManageJobs, tenantId]);
+
+  const loadJobDetail = React.useCallback(async (jobId) => {
+    if (!canManageJobs || !jobId) {
+      setSelectedJob(null);
+      return;
+    }
+
+    try {
+      setLoadingJobDetail(true);
+      const response = await getJob(jobId);
+      setSelectedJob(response?.job ?? null);
+    } catch (e) {
+      console.error(e);
+      setSelectedJob(null);
+      setSnackbar({
+        open: true,
+        message: "Failed to load job detail",
+        severity: "error",
+      });
+    } finally {
+      setLoadingJobDetail(false);
+    }
+  }, [canManageJobs]);
 
   React.useEffect(() => {
-    loadConnectedDevices();
-  }, [loadConnectedDevices]);
+    loadMeta();
+  }, [loadMeta]);
 
   React.useEffect(() => {
-    loadJobs(selectedDeviceId);
-  }, [selectedDeviceId, loadJobs]);
+    loadTenantJobs();
+  }, [loadTenantJobs]);
+
+  React.useEffect(() => {
+    loadJobDetail(selectedJobId);
+  }, [selectedJobId, loadJobDetail]);
 
   const filteredRows = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    return jobs.filter((row) => {
+    return tenantJobs.filter((row) => {
       const matchesStatus =
-        statusFilter === "all" ||
-        String(row.status || "").toLowerCase() === statusFilter;
-
+        statusFilter === "all" || String(row.status || "").toLowerCase() === statusFilter;
+      const matchesJobType =
+        jobTypeFilter === "all" || String(row.job_type || "").toLowerCase() === jobTypeFilter;
       const matchesSearch =
         !q ||
         String(row.job_id || "").toLowerCase().includes(q) ||
+        String(row.device_id || "").toLowerCase().includes(q) ||
         String(row.job_type || "").toLowerCase().includes(q) ||
         String(row.last_error || "").toLowerCase().includes(q);
 
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesJobType && matchesSearch;
     });
-  }, [jobs, search, statusFilter]);
+  }, [tenantJobs, search, statusFilter, jobTypeFilter]);
 
   const summary = React.useMemo(() => {
-    const total = jobs.length;
-    const pending = jobs.filter((job) =>
-      ["pending", "retrying", "sent", "running"].includes(
-        String(job.status || "").toLowerCase()
-      )
+    const total = tenantJobs.length;
+    const pending = tenantJobs.filter((job) =>
+      ["pending", "retrying", "sent", "running"].includes(String(job.status || "").toLowerCase())
     ).length;
-    const completed = jobs.filter(
+    const completed = tenantJobs.filter(
       (job) => String(job.status || "").toLowerCase() === "completed"
     ).length;
 
@@ -290,7 +314,7 @@ export default function Jobs() {
       pending,
       completed,
     };
-  }, [connectedDeviceIds.length, jobs]);
+  }, [connectedDeviceIds.length, tenantJobs]);
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
@@ -313,7 +337,8 @@ export default function Jobs() {
   }, [isMdDown, isSmDown]);
 
   const columns = [
-    { field: "job_id", headerName: "Job ID", minWidth: 230, flex: 1.2 },
+    { field: "job_id", headerName: "Job ID", minWidth: 210, flex: 1 },
+    { field: "device_id", headerName: "Device ID", minWidth: 210, flex: 1 },
     { field: "job_type", headerName: "Type", minWidth: 130, flex: 0.6 },
     {
       field: "status",
@@ -322,12 +347,7 @@ export default function Jobs() {
       flex: 0.55,
       renderCell: (params) => renderStatusChip(params.value),
     },
-    {
-      field: "attempts",
-      headerName: "Attempts",
-      minWidth: 90,
-      flex: 0.35,
-    },
+    { field: "attempts", headerName: "Attempts", minWidth: 90, flex: 0.35 },
     {
       field: "created_at",
       headerName: "Created At",
@@ -336,17 +356,10 @@ export default function Jobs() {
       renderCell: (params) => formatDate(params.value),
     },
     {
-      field: "sent_at",
-      headerName: "Sent At",
-      minWidth: 150,
-      flex: 0.6,
-      renderCell: (params) => formatDate(params.value),
-    },
-    {
       field: "completed_at",
       headerName: "Completed At",
       minWidth: 150,
-      flex: 0.65,
+      flex: 0.6,
       renderCell: (params) => formatDate(params.value),
     },
     {
@@ -418,7 +431,7 @@ export default function Jobs() {
         });
       } else {
         const response = await createDeviceJob(selectedDeviceId, payload);
-
+        setSelectedJobId(response?.jobId || "");
         setSnackbar({
           open: true,
           message: `Job queued successfully (${response?.jobId || "created"})`,
@@ -426,7 +439,7 @@ export default function Jobs() {
         });
       }
 
-      await loadJobs(selectedDeviceId);
+      await loadTenantJobs();
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -438,6 +451,66 @@ export default function Jobs() {
       setSubmitting(false);
     }
   };
+
+  const handleRetry = async () => {
+    if (!selectedJobId) return;
+
+    try {
+      setJobActionRunning(true);
+      await retryJob(selectedJobId);
+      setSnackbar({
+        open: true,
+        message: "Job moved back to pending",
+        severity: "success",
+      });
+      await loadTenantJobs();
+      await loadJobDetail(selectedJobId);
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to retry job",
+        severity: "error",
+      });
+    } finally {
+      setJobActionRunning(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!selectedJobId) return;
+
+    try {
+      setJobActionRunning(true);
+      await cancelJob(selectedJobId);
+      setSnackbar({
+        open: true,
+        message: "Job cancelled",
+        severity: "success",
+      });
+      await loadTenantJobs();
+      await loadJobDetail(selectedJobId);
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to cancel job",
+        severity: "error",
+      });
+    } finally {
+      setJobActionRunning(false);
+    }
+  };
+
+  if (!canManageJobs) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+          Jobs management is restricted to active tenant admins and owners.
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
@@ -457,7 +530,7 @@ export default function Jobs() {
             Jobs
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Dispatch facts snapshots and agent update jobs to connected devices
+            Dispatch jobs and review tenant-wide execution history
           </Typography>
         </Box>
 
@@ -465,8 +538,9 @@ export default function Jobs() {
           variant="outlined"
           startIcon={<RefreshOutlinedIcon />}
           onClick={() => {
-            loadConnectedDevices();
-            loadJobs(selectedDeviceId);
+            loadMeta();
+            loadTenantJobs();
+            loadJobDetail(selectedJobId);
           }}
           sx={{ textTransform: "none", fontWeight: 700 }}
         >
@@ -474,19 +548,13 @@ export default function Jobs() {
         </Button>
       </Box>
 
-      {!canManageJobs && (
-        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
-          Jobs management is restricted to active tenant admins and owners.
-        </Alert>
-      )}
-
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard title="Connected Devices" value={summary.connectedDevices} />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Jobs Loaded" value={summary.total} accent="#16324f" />
+            <SummaryCard title="Tenant Jobs" value={summary.total} accent="#16324f" />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard title="Pending / Running" value={summary.pending} accent="#9a6700" />
@@ -528,7 +596,7 @@ export default function Jobs() {
             size="small"
             value={targetMode}
             onChange={(e) => setTargetMode(e.target.value)}
-            disabled={!canManageJobs}
+            disabled={loadingMeta}
             fullWidth
           >
             {TARGET_OPTIONS.map((opt) => (
@@ -544,13 +612,11 @@ export default function Jobs() {
             size="small"
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
-            disabled={!canManageJobs || targetMode !== "device" || loadingDevices}
+            disabled={targetMode !== "device" || loadingMeta}
             helperText={
               targetMode === "tenant"
-                ? "Tenant dispatch will use all currently connected devices"
-                : loadingDevices
-                  ? "Loading connected devices..."
-                  : `${connectedDeviceIds.length} connected`
+                ? "Tenant dispatch uses all currently connected devices"
+                : `${connectedDeviceIds.length} connected`
             }
             fullWidth
           >
@@ -571,11 +637,11 @@ export default function Jobs() {
             size="small"
             value={jobType}
             onChange={(e) => setJobType(e.target.value)}
-            disabled={!canManageJobs}
+            disabled={loadingMeta}
             fullWidth
           >
-            {JOB_TYPE_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
+            {jobTypeOptions.map((opt) => (
+              <MenuItem key={opt.jobType} value={opt.jobType}>
                 {opt.label}
               </MenuItem>
             ))}
@@ -588,7 +654,6 @@ export default function Jobs() {
               size="small"
               value={factType}
               onChange={(e) => setFactType(e.target.value)}
-              disabled={!canManageJobs}
               fullWidth
             >
               {FACT_TYPE_OPTIONS.map((opt) => (
@@ -603,7 +668,6 @@ export default function Jobs() {
               size="small"
               value={version}
               onChange={(e) => setVersion(e.target.value)}
-              disabled={!canManageJobs}
               placeholder="1.0.87"
               fullWidth
             />
@@ -615,7 +679,6 @@ export default function Jobs() {
             type="number"
             value={timeoutSeconds}
             onChange={(e) => setTimeoutSeconds(e.target.value)}
-            disabled={!canManageJobs}
             fullWidth
           />
 
@@ -625,7 +688,6 @@ export default function Jobs() {
             type="number"
             value={maxAttempts}
             onChange={(e) => setMaxAttempts(e.target.value)}
-            disabled={!canManageJobs}
             fullWidth
           />
         </Box>
@@ -635,103 +697,199 @@ export default function Jobs() {
             variant="contained"
             startIcon={<PlayArrowOutlinedIcon />}
             onClick={handleSubmit}
-            disabled={submitting || !canManageJobs}
-            sx={{
-              bgcolor: "#1ba6a6",
-              "&:hover": { bgcolor: "#158d8d" },
-              minWidth: 170,
-            }}
+            disabled={submitting || loadingMeta}
+            sx={{ bgcolor: "#1ba6a6", "&:hover": { bgcolor: "#158d8d" }, minWidth: 170 }}
           >
             Dispatch Job
           </Button>
         </Box>
       </Paper>
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 1.5 },
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
-        }}
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            mb: 1.5,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "1.3fr 0.7fr",
-            },
-          }}
-        >
-          <TextField
-            label="Search Jobs"
-            size="small"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            fullWidth
-          />
-
-          <TextField
-            select
-            label="Status"
-            size="small"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            fullWidth
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 1.5, sm: 1.5 },
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+            }}
           >
-            <MenuItem value="all">all</MenuItem>
-            <MenuItem value="pending">pending</MenuItem>
-            <MenuItem value="retrying">retrying</MenuItem>
-            <MenuItem value="sent">sent</MenuItem>
-            <MenuItem value="running">running</MenuItem>
-            <MenuItem value="completed">completed</MenuItem>
-            <MenuItem value="failed">failed</MenuItem>
-            <MenuItem value="timeout">timeout</MenuItem>
-            <MenuItem value="cancelled">cancelled</MenuItem>
-          </TextField>
-        </Box>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 2,
+                mb: 1.5,
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "repeat(3, minmax(0, 1fr))",
+                },
+              }}
+            >
+              <TextField
+                label="Search Jobs"
+                size="small"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                fullWidth
+              />
+              <TextField
+                select
+                label="Status"
+                size="small"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="all">all</MenuItem>
+                <MenuItem value="pending">pending</MenuItem>
+                <MenuItem value="retrying">retrying</MenuItem>
+                <MenuItem value="sent">sent</MenuItem>
+                <MenuItem value="running">running</MenuItem>
+                <MenuItem value="completed">completed</MenuItem>
+                <MenuItem value="failed">failed</MenuItem>
+                <MenuItem value="timeout">timeout</MenuItem>
+                <MenuItem value="cancelled">cancelled</MenuItem>
+              </TextField>
+              <TextField
+                select
+                label="Job Type"
+                size="small"
+                value={jobTypeFilter}
+                onChange={(e) => setJobTypeFilter(e.target.value)}
+                fullWidth
+              >
+                <MenuItem value="all">all</MenuItem>
+                {jobTypeOptions.map((opt) => (
+                  <MenuItem key={opt.jobType} value={opt.jobType}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
 
-        <Box sx={{ mb: 1.5 }}>
-          <Typography sx={{ fontWeight: 700, color: "#16324f" }}>
-            Device History
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {selectedDeviceId
-              ? `Showing jobs for device ${selectedDeviceId}`
-              : "Select a connected device to view job history"}
-          </Typography>
-        </Box>
+            <Typography sx={{ fontWeight: 700, color: "#16324f", mb: 1 }}>
+              Tenant Job History
+            </Typography>
 
-        <DataGrid
-          autoHeight
-          disableRowSelectionOnClick
-          rows={filteredRows}
-          columns={columns}
-          loading={loadingJobs}
-          getRowId={(row) => row.job_id}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 10, page: 0 },
-            },
-          }}
-          columnVisibilityModel={columnVisibilityModel}
-          sx={{
-            border: "none",
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: "#f3f6f8",
-            },
-            "& .MuiDataGrid-cell:focus, & .MuiDataGrid-columnHeader:focus": {
-              outline: "none",
-            },
-          }}
-        />
-      </Paper>
+            <DataGrid
+              autoHeight
+              disableRowSelectionOnClick
+              rows={filteredRows}
+              columns={columns}
+              loading={loadingJobs}
+              getRowId={(row) => row.job_id}
+              onRowClick={(params) => setSelectedJobId(params.row.job_id)}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{
+                pagination: {
+                  paginationModel: { pageSize: 10, page: 0 },
+                },
+              }}
+              columnVisibilityModel={columnVisibilityModel}
+              sx={{
+                border: "none",
+                "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f3f6f8" },
+                "& .MuiDataGrid-row:hover": { cursor: "pointer" },
+              }}
+            />
+          </Paper>
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+              height: "100%",
+            }}
+          >
+            <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#16324f", mb: 1.5 }}>
+              Job Detail
+            </Typography>
+
+            {!selectedJobId ? (
+              <Typography color="text.secondary">Select a job to load detail.</Typography>
+            ) : loadingJobDetail ? (
+              <Typography color="text.secondary">Loading job detail...</Typography>
+            ) : !selectedJob ? (
+              <Typography color="text.secondary">Job detail unavailable.</Typography>
+            ) : (
+              <Box sx={{ display: "grid", gap: 1.25 }}>
+                <Typography><strong>Job ID:</strong> {selectedJob.job_id}</Typography>
+                <Typography><strong>Device:</strong> {selectedJob.device_id}</Typography>
+                <Typography><strong>Type:</strong> {selectedJob.job_type}</Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography><strong>Status:</strong></Typography>
+                  {renderStatusChip(selectedJob.status)}
+                </Box>
+                <Typography><strong>Attempts:</strong> {selectedJob.attempts}</Typography>
+                <Typography><strong>Created At:</strong> {formatDate(selectedJob.created_at)}</Typography>
+                <Typography><strong>Sent At:</strong> {formatDate(selectedJob.sent_at)}</Typography>
+                <Typography><strong>Completed At:</strong> {formatDate(selectedJob.completed_at)}</Typography>
+                <Typography><strong>Created By:</strong> {selectedJob.created_by || " - "}</Typography>
+                <Typography><strong>Trace ID:</strong> {selectedJob.trace_id || " - "}</Typography>
+                <Typography><strong>Last Error:</strong> {selectedJob.last_error || " - "}</Typography>
+
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", pt: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<RestartAltOutlinedIcon />}
+                    onClick={handleRetry}
+                    disabled={
+                      jobActionRunning ||
+                      !["failed", "timeout", "cancelled", "retrying", "pending"].includes(
+                        String(selectedJob.status || "").toLowerCase()
+                      )
+                    }
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<CancelOutlinedIcon />}
+                    onClick={handleCancel}
+                    disabled={
+                      jobActionRunning ||
+                      !["pending", "retrying", "sent", "running"].includes(
+                        String(selectedJob.status || "").toLowerCase()
+                      )
+                    }
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+
+                <Box>
+                  <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Payload JSON</Typography>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 1.25,
+                      bgcolor: "#0f172a",
+                      color: "#e2e8f0",
+                      overflow: "auto",
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {JSON.stringify(selectedJob.payload_json ?? {}, null, 2)}
+                  </Paper>
+                </Box>
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
 
       <Snackbar
         open={snackbar.open}
