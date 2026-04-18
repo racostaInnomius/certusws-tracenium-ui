@@ -29,6 +29,10 @@ export async function listDeviceJobs(deviceId, params = {}) {
   );
 }
 
+export async function getJob(jobId) {
+  return httpGetJson(`${BASE}/jobs/${encodeURIComponent(jobId)}`);
+}
+
 export async function createDeviceJob(deviceId, payload) {
   return httpPostJson(
     `${BASE}/devices/${encodeURIComponent(deviceId)}/jobs`,

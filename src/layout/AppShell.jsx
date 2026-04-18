@@ -11,6 +11,8 @@ import TenantsAdministrator from "../pages/TenantsAdministrator";
 import Welcome from "../pages/Welcome";
 import SoftwareDelivery from "../pages/SoftwareDelivery";
 import Jobs from "../pages/Jobs";
+import Audit from "../pages/Audit";
+import PKI from "../pages/PKI";
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
@@ -63,6 +65,14 @@ export default function AppShell() {
 
   if (selectedPage === "jobs") {
     content = <Jobs />;
+  }
+
+  if (selectedPage === "audit") {
+    content = <Audit />;
+  }
+
+  if (selectedPage === "pki") {
+    content = <PKI />;
   }
 
   return (
