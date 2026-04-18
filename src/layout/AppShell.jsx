@@ -1,18 +1,33 @@
 import * as React from "react";
-import { Box } from "@mui/material";
+import { Box, CircularProgress } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { httpGetJson } from "../api/http";
 
-import Assets from "../pages/Assets";
-import Configurations from "../pages/Configurations";
-import TokensAdministrator from "../pages/TokensAdministrator";
-import TenantsAdministrator from "../pages/TenantsAdministrator";
-import Welcome from "../pages/Welcome";
-import SoftwareDelivery from "../pages/SoftwareDelivery";
-import Jobs from "../pages/Jobs";
-import Audit from "../pages/Audit";
-import PKI from "../pages/PKI";
+const Assets = React.lazy(() => import("../pages/Assets"));
+const Configurations = React.lazy(() => import("../pages/Configurations"));
+const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
+const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
+const Welcome = React.lazy(() => import("../pages/Welcome"));
+const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
+const Jobs = React.lazy(() => import("../pages/Jobs"));
+const Audit = React.lazy(() => import("../pages/Audit"));
+const PKI = React.lazy(() => import("../pages/PKI"));
+
+function PageFallback() {
+  return (
+    <Box
+      sx={{
+        minHeight: 320,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <CircularProgress sx={{ color: "#1ba6a6" }} />
+    </Box>
+  );
+}
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
@@ -121,7 +136,9 @@ export default function AppShell() {
             overflow: "auto",
           }}
         >
-          {content}
+          <React.Suspense fallback={<PageFallback />}>
+            {content}
+          </React.Suspense>
         </Box>
       </Box>
     </Box>

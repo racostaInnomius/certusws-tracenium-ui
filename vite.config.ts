@@ -12,6 +12,17 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            "mui-vendor": ["@mui/material", "@mui/icons-material", "@emotion/react", "@emotion/styled"],
+            "grid-vendor": ["@mui/x-data-grid"],
+            "charts-vendor": ["recharts"],
+          },
+        },
+      },
+    },
     server: {
       port: 5173,
       proxy: {

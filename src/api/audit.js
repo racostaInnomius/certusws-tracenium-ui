@@ -1,6 +1,6 @@
 import { httpGetJson } from "./http";
 
-const BASE = "/api/v1/security/audit/events";
+const BASE = "/api/v1/security/audit";
 
 function buildQuery(params = {}) {
   const query = new URLSearchParams();
@@ -20,5 +20,13 @@ function buildQuery(params = {}) {
 }
 
 export async function listAuditEvents(params = {}) {
-  return httpGetJson(`${BASE}${buildQuery(params)}`);
+  return httpGetJson(`${BASE}/events${buildQuery(params)}`);
+}
+
+export async function getAuditSummary(params = {}) {
+  return httpGetJson(`${BASE}/summary${buildQuery(params)}`);
+}
+
+export async function getAuditFacets(params = {}) {
+  return httpGetJson(`${BASE}/facets${buildQuery(params)}`);
 }

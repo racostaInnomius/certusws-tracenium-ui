@@ -3,6 +3,7 @@ import Grid from "@mui/material/Grid";
 import {
   Alert,
   Box,
+  Button,
   Chip,
   MenuItem,
   Paper,
@@ -13,8 +14,14 @@ import {
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 
-import { listAuditEvents } from "../api/audit";
+import {
+  getAuditFacets,
+  getAuditSummary,
+  listAuditEvents
+} from "../api/audit";
 import { useAuthContext } from "../auth/AuthContext";
 
 function SummaryCard({ title, value, accent = "#1ba6a6" }) {
@@ -57,11 +64,7 @@ function renderOutcomeChip(outcome) {
       <Chip
         label="OK"
         size="small"
-        sx={{
-          bgcolor: "rgba(27,166,166,0.12)",
-          color: "#0f6b72",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(27,166,166,0.12)", color: "#0f6b72", fontWeight: 700 }}
       />
     );
   }
@@ -71,11 +74,17 @@ function renderOutcomeChip(outcome) {
       <Chip
         label="Rejected"
         size="small"
-        sx={{
-          bgcolor: "rgba(211,47,47,0.12)",
-          color: "#b3261e",
-          fontWeight: 700,
-        }}
+        sx={{ bgcolor: "rgba(211,47,47,0.12)", color: "#b3261e", fontWeight: 700 }}
+      />
+    );
+  }
+
+  if (value === "error") {
+    return (
+      <Chip
+        label="Error"
+        size="small"
+        sx={{ bgcolor: "rgba(255,152,0,0.14)", color: "#9a6700", fontWeight: 700 }}
       />
     );
   }
@@ -97,6 +106,13 @@ function formatDate(value) {
   });
 }
 
+function toIsoOrUndefined(value) {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
 export default function Audit() {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
@@ -105,11 +121,12 @@ export default function Audit() {
 
   const tenantMemberRole = String(auth?.tenantMember?.role || "");
   const tenantMemberIsActive = auth?.tenantMember?.isActive === true;
-  const canAccess =
-    tenantMemberIsActive &&
-    ["OWNER", "ADMIN"].includes(tenantMemberRole);
+  const canAccess = tenantMemberIsActive && ["OWNER", "ADMIN"].includes(tenantMemberRole);
 
   const [rows, setRows] = React.useState([]);
+  const [summary, setSummary] = React.useState(null);
+  const [facets, setFacets] = React.useState({ eventTypes: [], outcomes: [] });
+  const [selectedEvent, setSelectedEvent] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
 
   const [deviceId, setDeviceId] = React.useState("");
@@ -118,55 +135,116 @@ export default function Audit() {
   const [correlationId, setCorrelationId] = React.useState("");
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
+  const [paginationModel, setPaginationModel] = React.useState({ page: 0, pageSize: 10 });
+  const [totalRows, setTotalRows] = React.useState(0);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: "",
     severity: "success",
   });
+  const deferredDeviceId = React.useDeferredValue(deviceId);
+  const deferredCorrelationId = React.useDeferredValue(correlationId);
 
-  const loadData = React.useCallback(async () => {
-    if (!canAccess) return;
+  const queryParams = React.useMemo(() => ({
+    deviceId: deferredDeviceId || undefined,
+    eventType: eventType || undefined,
+    outcome: outcome !== "all" ? outcome : undefined,
+    correlationId: deferredCorrelationId || undefined,
+    from: toIsoOrUndefined(from),
+    to: toIsoOrUndefined(to),
+  }), [deferredCorrelationId, deferredDeviceId, eventType, from, outcome, to]);
 
-    try {
-      setLoading(true);
-      const response = await listAuditEvents({
-        deviceId: deviceId || undefined,
-        eventType: eventType || undefined,
-        outcome: outcome !== "all" ? outcome : undefined,
-        correlationId: correlationId || undefined,
-        from: from || undefined,
-        to: to || undefined,
-        limit: 200,
-      });
-
-      setRows(Array.isArray(response?.data) ? response.data : []);
-    } catch (e) {
-      console.error(e);
-      setRows([]);
-      setSnackbar({
-        open: true,
-        message: "Failed to load audit events",
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [canAccess, correlationId, deviceId, eventType, from, outcome, to]);
+  const hasInvalidDateRange = React.useMemo(() => {
+    if (!from || !to) return false;
+    const fromTime = new Date(from).getTime();
+    const toTime = new Date(to).getTime();
+    if (Number.isNaN(fromTime) || Number.isNaN(toTime)) return true;
+    return fromTime > toTime;
+  }, [from, to]);
 
   React.useEffect(() => {
-    loadData();
-  }, [loadData]);
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [deviceId, eventType, outcome, correlationId, from, to]);
 
-  const summary = React.useMemo(() => {
-    const total = rows.length;
-    const rejected = rows.filter(
-      (row) => String(row.outcome || "").toLowerCase() === "rejected"
-    ).length;
-    const uniqueDevices = new Set(rows.map((row) => row.device_id).filter(Boolean)).size;
+  React.useEffect(() => {
+    if (!canAccess) return;
+    if (hasInvalidDateRange) return;
 
-    return { total, rejected, uniqueDevices };
-  }, [rows]);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoading(true);
+        const [eventsResponse, summaryResponse, facetsResponse] = await Promise.all([
+          listAuditEvents({
+            ...queryParams,
+            page: paginationModel.page,
+            pageSize: paginationModel.pageSize,
+          }),
+          getAuditSummary(queryParams),
+          getAuditFacets(queryParams),
+        ]);
+
+        if (cancelled) return;
+
+        const items = Array.isArray(eventsResponse?.items) ? eventsResponse.items : [];
+        setRows(items);
+        setTotalRows(Number(eventsResponse?.total ?? 0));
+        setSelectedEvent((current) => {
+          if (current && items.some((item) => item.id === current.id)) {
+            return items.find((item) => item.id === current.id) ?? current;
+          }
+
+          return items[0] ?? null;
+        });
+        setSummary(summaryResponse?.summary ?? null);
+        setFacets(facetsResponse?.facets ?? { eventTypes: [], outcomes: [] });
+      } catch (e) {
+        console.error(e);
+        if (cancelled) return;
+        setRows([]);
+        setSummary(null);
+        setFacets({ eventTypes: [], outcomes: [] });
+        setSelectedEvent(null);
+        setTotalRows(0);
+        setSnackbar({
+          open: true,
+          message: "Failed to load audit events",
+          severity: "error",
+        });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccess, hasInvalidDateRange, paginationModel.page, paginationModel.pageSize, queryParams, refreshNonce]);
+
+  React.useEffect(() => {
+    if (!loading) {
+      setRefreshing(false);
+    }
+  }, [loading]);
+
+  const handleRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    setRefreshNonce((value) => value + 1);
+  }, []);
+
+  const handleReset = React.useCallback(() => {
+    setDeviceId("");
+    setEventType("");
+    setOutcome("all");
+    setCorrelationId("");
+    setFrom("");
+    setTo("");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, []);
 
   const columns = [
     {
@@ -220,25 +298,66 @@ export default function Audit() {
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box sx={{ mb: 1.5 }}>
-        <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-          Audit
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Query security events and operational traces stored in control DB
-        </Typography>
+      <Box
+        sx={{
+          mb: 1.5,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: { xs: "stretch", sm: "center" },
+          gap: 2,
+          flexWrap: "wrap",
+          flexDirection: { xs: "column", sm: "row" },
+        }}
+      >
+        <Box>
+          <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
+            Audit
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Investigate security events and operational traces from the control plane
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Button
+            variant="outlined"
+            startIcon={<RestartAltOutlinedIcon />}
+            onClick={handleReset}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Reset Filters
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshOutlinedIcon />}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            {refreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+        </Box>
       </Box>
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Loaded Events" value={summary.total} />
+            <SummaryCard title="Total" value={summary?.total ?? 0} />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Rejected" value={summary.rejected} accent="#b3261e" />
+            <SummaryCard title="OK" value={summary?.ok_count ?? 0} accent="#0f6b72" />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Devices Seen" value={summary.uniqueDevices} accent="#16324f" />
+            <SummaryCard title="Rejected" value={summary?.rejected_count ?? 0} accent="#b3261e" />
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }}>
+            <SummaryCard title="Error" value={summary?.error_count ?? 0} accent="#9a6700" />
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }}>
+            <SummaryCard title="Devices" value={summary?.unique_devices ?? 0} accent="#16324f" />
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }}>
+            <SummaryCard title="Last 24h" value={summary?.last_24h ?? 0} accent="#1976d2" />
           </Grid>
         </Grid>
       </Box>
@@ -247,6 +366,7 @@ export default function Audit() {
         elevation={0}
         sx={{
           p: { xs: 1.5, sm: 1.5 },
+          mb: 2,
           borderRadius: 3,
           border: "1px solid rgba(0,0,0,0.08)",
           boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
@@ -265,39 +385,147 @@ export default function Audit() {
           }}
         >
           <TextField label="Device ID" size="small" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} fullWidth />
-          <TextField label="Event Type" size="small" value={eventType} onChange={(e) => setEventType(e.target.value)} fullWidth />
+          <TextField
+            select
+            label="Event Type"
+            size="small"
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+            fullWidth
+          >
+            <MenuItem value="">all</MenuItem>
+            {(facets.eventTypes || []).map((item) => (
+              <MenuItem key={item.value} value={item.value}>
+                {item.value} ({item.count})
+              </MenuItem>
+            ))}
+          </TextField>
           <TextField select label="Outcome" size="small" value={outcome} onChange={(e) => setOutcome(e.target.value)} fullWidth>
             <MenuItem value="all">all</MenuItem>
-            <MenuItem value="ok">ok</MenuItem>
-            <MenuItem value="rejected">rejected</MenuItem>
+            {(facets.outcomes || []).map((item) => (
+              <MenuItem key={item.value} value={item.value}>
+                {item.value} ({item.count})
+              </MenuItem>
+            ))}
           </TextField>
           <TextField label="Correlation ID" size="small" value={correlationId} onChange={(e) => setCorrelationId(e.target.value)} fullWidth />
-          <TextField label="From (ISO)" size="small" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="2026-04-17T00:00:00Z" fullWidth />
-          <TextField label="To (ISO)" size="small" value={to} onChange={(e) => setTo(e.target.value)} placeholder="2026-04-17T23:59:59Z" fullWidth />
+          <TextField
+            label="From"
+            size="small"
+            type="datetime-local"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
+          <TextField
+            label="To"
+            size="small"
+            type="datetime-local"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            error={hasInvalidDateRange}
+            helperText={hasInvalidDateRange ? "End date must be after start date" : ""}
+            fullWidth
+          />
         </Box>
-
-        <DataGrid
-          autoHeight
-          disableRowSelectionOnClick
-          rows={rows}
-          columns={columns}
-          loading={loading}
-          getRowId={(row) => row.id}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 10, page: 0 },
-            },
-          }}
-          columnVisibilityModel={columnVisibilityModel}
-          sx={{
-            border: "none",
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: "#f3f6f8",
-            },
-          }}
-        />
       </Paper>
+
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 1.5, sm: 1.5 },
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+            }}
+          >
+            <DataGrid
+              autoHeight
+              disableRowSelectionOnClick
+              rows={rows}
+              columns={columns}
+              loading={loading}
+              rowCount={totalRows}
+              paginationMode="server"
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              getRowId={(row) => row.id}
+              onRowClick={(params) => setSelectedEvent(params.row)}
+              pageSizeOptions={[10, 25, 50]}
+              columnVisibilityModel={columnVisibilityModel}
+              sx={{
+                border: "none",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "#f3f6f8",
+                },
+                "& .MuiDataGrid-row:hover": {
+                  cursor: "pointer",
+                },
+              }}
+            />
+          </Paper>
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.08)",
+              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+              height: "100%",
+            }}
+          >
+            <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#16324f", mb: 1.5 }}>
+              Event Detail
+            </Typography>
+
+            {!selectedEvent ? (
+              <Typography color="text.secondary">
+                Select an event to inspect its detail payload.
+              </Typography>
+            ) : (
+              <Box sx={{ display: "grid", gap: 1.25 }}>
+                <Typography><strong>Occurred At:</strong> {formatDate(selectedEvent.occurred_at_utc)}</Typography>
+                <Typography><strong>Event Type:</strong> {selectedEvent.event_type}</Typography>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography><strong>Outcome:</strong></Typography>
+                  {renderOutcomeChip(selectedEvent.outcome)}
+                </Box>
+                <Typography><strong>Device:</strong> {selectedEvent.device_id || " - "}</Typography>
+                <Typography><strong>Correlation:</strong> {selectedEvent.correlation_id || " - "}</Typography>
+                <Typography><strong>Peer:</strong> {selectedEvent.peer || " - "}</Typography>
+                <Typography><strong>Reason:</strong> {selectedEvent.reason || " - "}</Typography>
+                <Typography><strong>mTLS Fingerprint:</strong> {selectedEvent.mtls_fingerprint_sha256 || " - "}</Typography>
+
+                <Box>
+                  <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Details JSON</Typography>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 1.25,
+                      bgcolor: "#0f172a",
+                      color: "#e2e8f0",
+                      overflow: "auto",
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {JSON.stringify(selectedEvent.details ?? {}, null, 2)}
+                  </Paper>
+                </Box>
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+      </Grid>
 
       <Snackbar
         open={snackbar.open}

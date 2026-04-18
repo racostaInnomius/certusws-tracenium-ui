@@ -26,7 +26,6 @@ import {
   createTenantJobs,
   getJob,
   listConnectedDevices,
-  listDeviceJobs,
   listJobTypes,
   listTenantJobs,
   retryJob,
@@ -142,6 +141,19 @@ function buildJobPayload(jobType, factType, version) {
   return { factType };
 }
 
+function validateNumericField(value, { min, max, required = false }) {
+  if (!String(value ?? "").trim()) {
+    return required ? `Value must be between ${min} and ${max}` : null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    return `Value must be between ${min} and ${max}`;
+  }
+
+  return null;
+}
+
 export default function Jobs() {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
@@ -165,6 +177,7 @@ export default function Jobs() {
   const [loadingJobDetail, setLoadingJobDetail] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [jobActionRunning, setJobActionRunning] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const [jobType, setJobType] = React.useState("facts_snapshot");
   const [targetMode, setTargetMode] = React.useState("device");
@@ -181,6 +194,7 @@ export default function Jobs() {
     message: "",
     severity: "success",
   });
+  const deferredSearch = React.useDeferredValue(search);
 
   const loadMeta = React.useCallback(async () => {
     if (!canManageJobs) return;
@@ -281,7 +295,7 @@ export default function Jobs() {
   }, [selectedJobId, loadJobDetail]);
 
   const filteredRows = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
 
     return tenantJobs.filter((row) => {
       const matchesStatus =
@@ -297,7 +311,7 @@ export default function Jobs() {
 
       return matchesStatus && matchesJobType && matchesSearch;
     });
-  }, [tenantJobs, search, statusFilter, jobTypeFilter]);
+  }, [tenantJobs, deferredSearch, statusFilter, jobTypeFilter]);
 
   const summary = React.useMemo(() => {
     const total = tenantJobs.length;
@@ -378,8 +392,45 @@ export default function Jobs() {
     },
   ];
 
+  const selectedJobStatus = String(selectedJob?.status || "").toLowerCase();
+  const canRetrySelectedJob = ["failed", "timeout", "cancelled"].includes(selectedJobStatus);
+  const canCancelSelectedJob = ["pending", "retrying", "sent", "running"].includes(selectedJobStatus);
+
+  const refreshAll = React.useCallback(async () => {
+    try {
+      setRefreshing(true);
+      await Promise.all([
+        loadMeta(),
+        loadTenantJobs(),
+        selectedJobId ? loadJobDetail(selectedJobId) : Promise.resolve(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadJobDetail, loadMeta, loadTenantJobs, selectedJobId]);
+
   const handleSubmit = async () => {
     if (!canManageJobs) return;
+
+    const timeoutError = validateNumericField(timeoutSeconds, { min: 30, max: 86400 });
+    if (timeoutError) {
+      setSnackbar({
+        open: true,
+        message: `Timeout seconds: ${timeoutError}`,
+        severity: "error",
+      });
+      return;
+    }
+
+    const maxAttemptsError = validateNumericField(maxAttempts, { min: 1, max: 10 });
+    if (maxAttemptsError) {
+      setSnackbar({
+        open: true,
+        message: `Max attempts: ${maxAttemptsError}`,
+        severity: "error",
+      });
+      return;
+    }
 
     const payload = {
       jobType,
@@ -414,6 +465,15 @@ export default function Jobs() {
       });
       return;
     }
+
+    const dispatchDescription =
+      targetMode === "tenant"
+        ? `${connectedDeviceIds.length} connected devices`
+        : `device ${selectedDeviceId}`;
+    const confirmed = window.confirm(
+      `Dispatch ${jobType} to ${dispatchDescription}?`
+    );
+    if (!confirmed) return;
 
     try {
       setSubmitting(true);
@@ -454,6 +514,10 @@ export default function Jobs() {
 
   const handleRetry = async () => {
     if (!selectedJobId) return;
+    if (!canRetrySelectedJob) return;
+
+    const confirmed = window.confirm(`Retry job ${selectedJobId}?`);
+    if (!confirmed) return;
 
     try {
       setJobActionRunning(true);
@@ -479,6 +543,10 @@ export default function Jobs() {
 
   const handleCancel = async () => {
     if (!selectedJobId) return;
+    if (!canCancelSelectedJob) return;
+
+    const confirmed = window.confirm(`Cancel job ${selectedJobId}?`);
+    if (!confirmed) return;
 
     try {
       setJobActionRunning(true);
@@ -537,14 +605,11 @@ export default function Jobs() {
         <Button
           variant="outlined"
           startIcon={<RefreshOutlinedIcon />}
-          onClick={() => {
-            loadMeta();
-            loadTenantJobs();
-            loadJobDetail(selectedJobId);
-          }}
+          onClick={refreshAll}
+          disabled={refreshing}
           sx={{ textTransform: "none", fontWeight: 700 }}
         >
-          Refresh
+          {refreshing ? "Refreshing..." : "Refresh"}
         </Button>
       </Box>
 
@@ -679,6 +744,7 @@ export default function Jobs() {
             type="number"
             value={timeoutSeconds}
             onChange={(e) => setTimeoutSeconds(e.target.value)}
+            helperText="Optional, 30 to 86400"
             fullWidth
           />
 
@@ -688,6 +754,7 @@ export default function Jobs() {
             type="number"
             value={maxAttempts}
             onChange={(e) => setMaxAttempts(e.target.value)}
+            helperText="Optional, 1 to 10"
             fullWidth
           />
         </Box>
@@ -732,6 +799,7 @@ export default function Jobs() {
                 size="small"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                helperText="Search job id, device id, type or error"
                 fullWidth
               />
               <TextField
@@ -843,9 +911,7 @@ export default function Jobs() {
                     onClick={handleRetry}
                     disabled={
                       jobActionRunning ||
-                      !["failed", "timeout", "cancelled", "retrying", "pending"].includes(
-                        String(selectedJob.status || "").toLowerCase()
-                      )
+                      !canRetrySelectedJob
                     }
                   >
                     Retry
@@ -858,9 +924,7 @@ export default function Jobs() {
                     onClick={handleCancel}
                     disabled={
                       jobActionRunning ||
-                      !["pending", "retrying", "sent", "running"].includes(
-                        String(selectedJob.status || "").toLowerCase()
-                      )
+                      !canCancelSelectedJob
                     }
                   >
                     Cancel
