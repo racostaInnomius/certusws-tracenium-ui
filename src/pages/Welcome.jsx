@@ -174,6 +174,8 @@ export default function Welcome({ onNavigate }) {
             title="Download the Tracenium Agent"
             description="Open Software Delivery from the left navigation, then select the operating system and version that matches the device you want to onboard."
             hint="Software Delivery is currently being defined and will host platform-specific agent packages."
+            actionLabel="Go to Software Delivery"
+            onAction={() => onNavigate?.("software-delivery")}
           />
         </Grid>
 

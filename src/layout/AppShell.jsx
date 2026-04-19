@@ -4,6 +4,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { httpGetJson } from "../api/http";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import DeviceCerts from "../pages/DeviceCerts";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Configurations = React.lazy(() => import("../pages/Configurations"));
@@ -102,6 +103,9 @@ export default function AppShell() {
 
   if (selectedPage === "pki") {
     content = <PKI />;
+  }
+  if (selectedPage === "device-certs") {
+    content = <DeviceCerts />;
   }
 
   return (
