@@ -1,20 +1,39 @@
 import * as React from "react";
-import { Box } from "@mui/material";
+import { Box, CircularProgress } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { httpGetJson } from "../api/http";
-
-import Assets from "../pages/Assets";
-import Configurations from "../pages/Configurations";
-import TokensAdministrator from "../pages/TokensAdministrator";
-import TenantsAdministrator from "../pages/TenantsAdministrator";
-import Welcome from "../pages/Welcome";
-import SoftwareDelivery from "../pages/SoftwareDelivery";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import DeviceCerts from "../pages/DeviceCerts";
+
+const Assets = React.lazy(() => import("../pages/Assets"));
+const Configurations = React.lazy(() => import("../pages/Configurations"));
+const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
+const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
+const Welcome = React.lazy(() => import("../pages/Welcome"));
+const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
+const Jobs = React.lazy(() => import("../pages/Jobs"));
+const Audit = React.lazy(() => import("../pages/Audit"));
+const PKI = React.lazy(() => import("../pages/PKI"));
+
+function PageFallback() {
+  return (
+    <Box
+      sx={{
+        minHeight: 320,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <CircularProgress sx={{ color: "#1ba6a6" }} />
+    </Box>
+  );
+}
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
-  const [selectedPage, setSelectedPage] = React.useState("assets");
+  const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "assets"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
 
   React.useEffect(() => {
@@ -33,6 +52,19 @@ export default function AppShell() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  React.useEffect(() => {
+    updateSearchParams({ page: selectedPage });
+  }, [selectedPage]);
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setSelectedPage(getSearchParam("page", "assets"));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
@@ -61,6 +93,17 @@ export default function AppShell() {
     content = <SoftwareDelivery />;
   }
 
+  if (selectedPage === "jobs") {
+    content = <Jobs />;
+  }
+
+  if (selectedPage === "audit") {
+    content = <Audit />;
+  }
+
+  if (selectedPage === "pki") {
+    content = <PKI />;
+  }
   if (selectedPage === "device-certs") {
     content = <DeviceCerts />;
   }
@@ -111,7 +154,9 @@ export default function AppShell() {
             overflow: "auto",
           }}
         >
-          {content}
+          <React.Suspense fallback={<PageFallback />}>
+            {content}
+          </React.Suspense>
         </Box>
       </Box>
     </Box>
