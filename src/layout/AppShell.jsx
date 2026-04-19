@@ -13,6 +13,7 @@ const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministra
 const Welcome = React.lazy(() => import("../pages/Welcome"));
 const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
+const Policies = React.lazy(() => import("../pages/Policies"));
 const Audit = React.lazy(() => import("../pages/Audit"));
 const PKI = React.lazy(() => import("../pages/PKI"));
 
@@ -95,6 +96,10 @@ export default function AppShell() {
 
   if (selectedPage === "jobs") {
     content = <Jobs />;
+  }
+
+  if (selectedPage === "policies") {
+    content = <Policies />;
   }
 
   if (selectedPage === "audit") {
