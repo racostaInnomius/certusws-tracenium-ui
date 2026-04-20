@@ -34,7 +34,13 @@ import {
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
   { value: "compliance", label: "Compliance" },
+  { value: "patch", label: "Patch" },
   { value: "all", label: "All" },
+];
+
+const PATCH_INSTALL_MODE_OPTIONS = [
+  { value: "install", label: "Install" },
+  { value: "download", label: "Download Only" },
 ];
 
 const TARGET_OPTIONS = [
@@ -133,12 +139,37 @@ function formatDate(value) {
   });
 }
 
-function buildJobPayload(jobType, factType, version) {
+function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
   if (jobType === "agent_update") {
     return { version: String(version || "").trim() };
   }
 
-  return { factType };
+  if (jobType === "facts_snapshot") {
+    return { factType };
+  }
+
+  if (jobType === "patch_scan") {
+    return {};
+  }
+
+  if (jobType === "patch_install") {
+    const normalizedKbArticleIds = String(kbArticleIds || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const payload = {
+      mode: String(patchMode || "install").trim() || "install",
+    };
+
+    if (normalizedKbArticleIds.length > 0) {
+      payload.kbArticleIds = normalizedKbArticleIds;
+    }
+
+    return payload;
+  }
+
+  return {};
 }
 
 function validateNumericField(value, { min, max, required = false }) {
@@ -183,6 +214,8 @@ export default function Jobs() {
   const [targetMode, setTargetMode] = React.useState("device");
   const [factType, setFactType] = React.useState("inventory");
   const [version, setVersion] = React.useState("");
+  const [patchMode, setPatchMode] = React.useState("install");
+  const [kbArticleIds, setKbArticleIds] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
   const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState("0");
@@ -450,7 +483,7 @@ export default function Jobs() {
 
     const payload = {
       jobType,
-      payload: buildJobPayload(jobType, factType, version),
+      payload: buildJobPayload(jobType, factType, version, patchMode, kbArticleIds),
       timeoutSeconds: timeoutSeconds ? Number(timeoutSeconds) : undefined,
       maxAttempts: maxAttempts ? Number(maxAttempts) : undefined,
     };
@@ -462,6 +495,18 @@ export default function Jobs() {
         severity: "error",
       });
       return;
+    }
+
+    if (jobType === "patch_install") {
+      const normalizedMode = String(patchMode || "").trim();
+      if (!PATCH_INSTALL_MODE_OPTIONS.some((opt) => opt.value === normalizedMode)) {
+        setSnackbar({
+          open: true,
+          message: "Patch install mode must be install or download",
+          severity: "error",
+        });
+        return;
+      }
     }
 
     if (targetMode === "device" && !selectedDeviceId) {
@@ -756,7 +801,7 @@ export default function Jobs() {
                 </MenuItem>
               ))}
             </TextField>
-          ) : (
+          ) : jobType === "agent_update" ? (
             <TextField
               label="Target Version"
               size="small"
@@ -765,7 +810,42 @@ export default function Jobs() {
               placeholder="1.0.87"
               fullWidth
             />
+          ) : jobType === "patch_install" ? (
+            <TextField
+              select
+              label="Patch Mode"
+              size="small"
+              value={patchMode}
+              onChange={(e) => setPatchMode(e.target.value)}
+              fullWidth
+            >
+              {PATCH_INSTALL_MODE_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <TextField
+              label="Execution"
+              size="small"
+              value="Patch scan will collect current patch state"
+              InputProps={{ readOnly: true }}
+              fullWidth
+            />
           )}
+
+          {jobType === "patch_install" ? (
+            <TextField
+              label="KB Article IDs"
+              size="small"
+              value={kbArticleIds}
+              onChange={(e) => setKbArticleIds(e.target.value)}
+              placeholder="KB5034123, KB5034439"
+              helperText="Optional. Leave empty to let the agent/backend decide the applicable patch set."
+              fullWidth
+            />
+          ) : null}
 
           <TextField
             label="Timeout Seconds"
