@@ -24,11 +24,16 @@ export default function Sidebar({ global_role, selected, onSelect, showWelcomeEn
     { label: "Overview", key: "overview" },
     { label: "Asset Management", key: "assets" },
     { label: "Security Compliance", key: "ad" },
-    { label: "Software Delivery", key: "software-delivery" },
+    // { label: "Software Delivery", key: "software-delivery" },
     ...(tenantMemberIsActive === true &&
     (String(tenantMemberRole ?? "") === "OWNER" ||
       String(tenantMemberRole ?? "") === "ADMIN")
       ? [{ label: "Jobs", key: "jobs" }]
+      : []),
+    ...(tenantMemberIsActive === true &&
+    (String(tenantMemberRole ?? "") === "OWNER" ||
+      String(tenantMemberRole ?? "") === "ADMIN")
+      ? [{ label: "Policies", key: "policies" }]
       : []),
     { label: "Patch Management", key: "remote" },
     { label: "Remote Control", key: "security" },
