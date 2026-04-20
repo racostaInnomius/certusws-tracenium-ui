@@ -25,8 +25,8 @@ import {
   createDeviceJob,
   createTenantJobs,
   getJob,
-  listConnectedDevices,
   listJobTypes,
+  listKnownDevices,
   listTenantJobs,
   retryJob,
 } from "../api/jobs";
@@ -167,6 +167,7 @@ export default function Jobs() {
 
   const [jobTypeOptions, setJobTypeOptions] = React.useState([]);
   const [connectedDeviceIds, setConnectedDeviceIds] = React.useState([]);
+  const [knownDevices, setKnownDevices] = React.useState([]);
   const [tenantJobs, setTenantJobs] = React.useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
   const [selectedJobId, setSelectedJobId] = React.useState("");
@@ -202,19 +203,31 @@ export default function Jobs() {
 
     try {
       setLoadingMeta(true);
-      const [deviceResponse, typeResponse] = await Promise.all([
-        listConnectedDevices(),
+      const [knownResponse, typeResponse] = await Promise.all([
+        listKnownDevices(),
         listJobTypes(),
       ]);
 
-      const devices = Array.isArray(deviceResponse?.deviceIds) ? deviceResponse.deviceIds : [];
+      const known = Array.isArray(knownResponse?.items) ? knownResponse.items.map((item) => ({
+        deviceId: String(item?.deviceId || "").trim(),
+        hostname: String(item?.hostname || "").trim() || String(item?.deviceId || "").trim(),
+        connected: item?.connected === true,
+        enrollmentStatus: item?.enrollmentStatus ?? null,
+        agentVersion: item?.agentVersion ?? null,
+        enrolledAt: item?.enrolledAt ?? null,
+        lastSeenAt: item?.lastSeenAt ?? null,
+        connectedAt: item?.connectedAt ?? null,
+        updatedAt: item?.updatedAt ?? null,
+      })).filter((item) => item.deviceId) : [];
+      const devices = known.filter((item) => item.connected).map((item) => item.deviceId);
       const types = Array.isArray(typeResponse?.items) ? typeResponse.items : [];
 
       setConnectedDeviceIds(devices);
+      setKnownDevices(known);
       setJobTypeOptions(types);
       setSelectedDeviceId((current) => {
-        if (current && devices.includes(current)) return current;
-        return devices[0] || "";
+        if (current && known.some((item) => item.deviceId === current)) return current;
+        return known[0]?.deviceId || devices[0] || "";
       });
       setJobType((current) => {
         if (current && types.some((item) => item.jobType === current)) return current;
@@ -223,6 +236,7 @@ export default function Jobs() {
     } catch (e) {
       console.error(e);
       setConnectedDeviceIds([]);
+      setKnownDevices([]);
       setJobTypeOptions([]);
       setSnackbar({
         open: true,
@@ -295,10 +309,19 @@ export default function Jobs() {
     loadJobDetail(selectedJobId);
   }, [selectedJobId, loadJobDetail]);
 
+  const deviceMap = React.useMemo(
+    () => new Map(knownDevices.map((item) => [item.deviceId, item])),
+    [knownDevices]
+  );
+
+  const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) || null : null;
+
   const filteredRows = React.useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
 
     return tenantJobs.filter((row) => {
+      const device = deviceMap.get(String(row.device_id || ""));
+      const hostname = String(device?.hostname || "").toLowerCase();
       const matchesStatus =
         statusFilter === "all" || String(row.status || "").toLowerCase() === statusFilter;
       const matchesJobType =
@@ -307,12 +330,13 @@ export default function Jobs() {
         !q ||
         String(row.job_id || "").toLowerCase().includes(q) ||
         String(row.device_id || "").toLowerCase().includes(q) ||
+        hostname.includes(q) ||
         String(row.job_type || "").toLowerCase().includes(q) ||
         String(row.last_error || "").toLowerCase().includes(q);
 
       return matchesStatus && matchesJobType && matchesSearch;
     });
-  }, [tenantJobs, deferredSearch, statusFilter, jobTypeFilter]);
+  }, [tenantJobs, deviceMap, deferredSearch, statusFilter, jobTypeFilter]);
 
   const summary = React.useMemo(() => {
     const total = tenantJobs.length;
@@ -325,11 +349,12 @@ export default function Jobs() {
 
     return {
       connectedDevices: connectedDeviceIds.length,
+      knownDevices: knownDevices.length,
       total,
       pending,
       completed,
     };
-  }, [connectedDeviceIds.length, tenantJobs]);
+  }, [connectedDeviceIds.length, knownDevices.length, tenantJobs]);
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
@@ -353,6 +378,13 @@ export default function Jobs() {
 
   const columns = [
     { field: "job_id", headerName: "Job ID", minWidth: 210, flex: 1 },
+    {
+      field: "hostname",
+      headerName: "Hostname",
+      minWidth: 180,
+      flex: 0.8,
+      valueGetter: (_value, row) => deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
+    },
     { field: "device_id", headerName: "Device ID", minWidth: 210, flex: 1 },
     { field: "job_type", headerName: "Type", minWidth: 130, flex: 0.6 },
     {
@@ -467,7 +499,7 @@ export default function Jobs() {
     if (targetMode === "device" && !selectedDeviceId) {
       setSnackbar({
         open: true,
-        message: "Select a connected device first",
+        message: "Select a device first",
         severity: "error",
       });
       return;
@@ -485,7 +517,7 @@ export default function Jobs() {
     const dispatchDescription =
       targetMode === "tenant"
         ? `${connectedDeviceIds.length} connected devices`
-        : `device ${selectedDeviceId}`;
+        : `${selectedDevice?.hostname || selectedDeviceId} (${selectedDeviceId})${selectedDevice?.connected ? "" : " [offline]"}`;
     const confirmed = window.confirm(
       `Dispatch ${jobType} to ${dispatchDescription}?`
     );
@@ -510,7 +542,9 @@ export default function Jobs() {
         setSelectedJobId(response?.jobId || "");
         setSnackbar({
           open: true,
-          message: `Job queued successfully (${response?.jobId || "created"})`,
+          message: selectedDevice?.connected
+            ? `Job queued successfully (${response?.jobId || "created"})`
+            : `Job queued offline for ${selectedDevice?.hostname || selectedDeviceId} (${response?.jobId || "created"})`,
           severity: "success",
         });
       }
@@ -648,6 +682,9 @@ export default function Jobs() {
             <SummaryCard title="Connected Devices" value={summary.connectedDevices} />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
+            <SummaryCard title="Known Devices" value={summary.knownDevices} accent="#4d6480" />
+          </Grid>
+          <Grid size={{ xs: 12, md: 2 }}>
             <SummaryCard title="Tenant Jobs" value={summary.total} accent="#16324f" />
           </Grid>
           <Grid size={{ xs: 12, md: 2 }}>
@@ -702,7 +739,7 @@ export default function Jobs() {
 
           <TextField
             select
-            label="Connected Device"
+            label="Device"
             size="small"
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
@@ -710,16 +747,20 @@ export default function Jobs() {
             helperText={
               targetMode === "tenant"
                 ? "Tenant dispatch uses all currently connected devices"
-                : `${connectedDeviceIds.length} connected`
+                : selectedDevice
+                  ? `${selectedDevice.connected ? "Connected" : "Offline"} · ${connectedDeviceIds.length} connected / ${knownDevices.length} known`
+                  : `${connectedDeviceIds.length} connected / ${knownDevices.length} known`
             }
             fullWidth
           >
-            {connectedDeviceIds.length === 0 ? (
-              <MenuItem value="">No connected devices</MenuItem>
+            {knownDevices.length === 0 ? (
+              <MenuItem value="">No known devices</MenuItem>
             ) : (
-              connectedDeviceIds.map((deviceId) => (
-                <MenuItem key={deviceId} value={deviceId}>
-                  {deviceId}
+              knownDevices.map((device) => (
+                <MenuItem key={device.deviceId} value={device.deviceId}>
+                  {device.hostname}
+                  {device.hostname !== device.deviceId ? ` · ${device.deviceId}` : ""}
+                  {device.connected ? " · online" : " · offline"}
                 </MenuItem>
               ))
             )}
@@ -828,7 +869,7 @@ export default function Jobs() {
                 size="small"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                helperText="Search job id, device id, type or error"
+                helperText="Search job id, hostname, device id, type or error"
                 fullWidth
               />
               <TextField
@@ -918,6 +959,7 @@ export default function Jobs() {
             ) : (
               <Box sx={{ display: "grid", gap: 1.25 }}>
                 <Typography><strong>Job ID:</strong> {selectedJob.job_id}</Typography>
+                <Typography><strong>Hostname:</strong> {deviceMap.get(String(selectedJob.device_id || ""))?.hostname || " - "}</Typography>
                 <Typography><strong>Device:</strong> {selectedJob.device_id}</Typography>
                 <Typography><strong>Type:</strong> {selectedJob.job_type}</Typography>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
