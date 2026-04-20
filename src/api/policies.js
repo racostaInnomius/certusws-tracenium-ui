@@ -1,4 +1,4 @@
-import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpDeleteJson, httpGetJson, httpPostJson, httpPutJson } from "./http";
 
 const BASE = "/api/v1/policies";
 
@@ -24,6 +24,10 @@ export async function getDevicePolicy(deviceId) {
 
 export async function saveDevicePolicy(deviceId, policy) {
   return httpPutJson(`${BASE}/devices/${encodeURIComponent(deviceId)}/policy`, policy);
+}
+
+export async function deleteDevicePolicy(deviceId) {
+  return httpDeleteJson(`${BASE}/devices/${encodeURIComponent(deviceId)}/policy`);
 }
 
 export async function pushDevicePolicy(deviceId) {

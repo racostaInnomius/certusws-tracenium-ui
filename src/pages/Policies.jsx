@@ -23,6 +23,7 @@ import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
+  deleteDevicePolicy,
   getDevicePolicy,
   getDevicePolicyStatus,
   getEffectivePolicy,
@@ -147,8 +148,10 @@ function PolicyEditorCard({
   onChange,
   onSave,
   onPush,
+  onClear,
   saving,
   pushing,
+  clearing,
   version,
   hash,
 }) {
@@ -251,6 +254,17 @@ function PolicyEditorCard({
           >
             {pushing ? "Pushing..." : "Push Now"}
           </Button>
+          {typeof onClear === "function" ? (
+            <Button
+              variant="text"
+              color="error"
+              onClick={onClear}
+              disabled={clearing}
+              sx={{ textTransform: "none", fontWeight: 700 }}
+            >
+              {clearing ? "Clearing..." : "Clear Override"}
+            </Button>
+          ) : null}
         </Stack>
 
         <Box>
@@ -317,6 +331,7 @@ export default function Policies() {
   const [tenantPushing, setTenantPushing] = React.useState(false);
   const [deviceSaving, setDeviceSaving] = React.useState(false);
   const [devicePushing, setDevicePushing] = React.useState(false);
+  const [deviceClearing, setDeviceClearing] = React.useState(false);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -574,6 +589,21 @@ export default function Policies() {
     }
   };
 
+  const handleClearDevicePolicy = async () => {
+    if (!selectedDeviceId) return;
+    try {
+      setDeviceClearing(true);
+      await deleteDevicePolicy(selectedDeviceId);
+      showMessage("Device override cleared");
+      await refreshAll();
+    } catch (error) {
+      console.error(error);
+      showMessage("Failed to clear device override", "error");
+    } finally {
+      setDeviceClearing(false);
+    }
+  };
+
   if (!canManagePolicies) {
     return (
       <Paper
@@ -702,14 +732,16 @@ export default function Policies() {
               title="Device Override Policy"
               subtitle="Optional override for the selected device."
               form={deviceForm}
-              onChange={setDeviceForm}
-              onSave={handleSaveDevicePolicy}
-              onPush={handlePushDevicePolicy}
-              saving={deviceSaving}
-              pushing={devicePushing}
-              version={devicePolicyMeta.version}
-              hash={devicePolicyMeta.hash}
-            />
+            onChange={setDeviceForm}
+            onSave={handleSaveDevicePolicy}
+            onPush={handlePushDevicePolicy}
+            onClear={handleClearDevicePolicy}
+            saving={deviceSaving}
+            pushing={devicePushing}
+            clearing={deviceClearing}
+            version={devicePolicyMeta.version}
+            hash={devicePolicyMeta.hash}
+          />
           </Stack>
         </Grid>
       </Grid>
