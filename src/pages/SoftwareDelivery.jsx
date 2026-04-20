@@ -107,7 +107,7 @@ function formatDate(value) {
   });
 }
 
-export default function SoftwareDelivery() {
+export default function SoftwareDelivery({ embedded = false }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -371,44 +371,52 @@ export default function SoftwareDelivery() {
   }, [isMdDown, isSmDown]);
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box
-        sx={{
-          mb: 1.5,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-            Software Delivery
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage supported Tracenium Agent packages and downloads
-          </Typography>
+
+    <Box
+      sx={{
+        px: embedded ? 0 : { xs: 2, sm: 0.5 },
+        py: embedded ? 0 : { xs: 2, sm: 0.5 },
+      }}
+    >
+      {!embedded && (
+        
+        <Box
+          sx={{
+            mb: 1.5,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: { xs: "stretch", sm: "center" },
+            gap: 2,
+            flexWrap: "wrap",
+            flexDirection: { xs: "column", sm: "row" },
+          }}
+        >
+          <Box>
+            <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
+              Software Delivery
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Manage supported Tracenium Agent packages and downloads
+            </Typography>
+          </Box>
+
+          {embedded && canEditSoftwareDelivery && (
+            <Button
+              variant="contained"
+              onClick={openCreateDialog}
+              fullWidth={isSmDown}
+              sx={{
+                bgcolor: "#1ba6a6",
+                "&:hover": { bgcolor: "#158d8d" },
+                minWidth: { xs: "100%", sm: 170 },
+                alignSelf: { xs: "stretch", sm: "center" },
+              }}
+            >
+              + ADD PACKAGE
+            </Button>
+          )}
         </Box>
-
-        {canEditSoftwareDelivery && (
-          <Button
-            variant="contained"
-            onClick={openCreateDialog}
-            fullWidth={isSmDown}
-            sx={{
-              bgcolor: "#1ba6a6",
-              "&:hover": { bgcolor: "#158d8d" },
-              minWidth: { xs: "100%", sm: 170 },
-              alignSelf: { xs: "stretch", sm: "center" },
-            }}
-          >
-            + ADD PACKAGE
-          </Button>
-        )}
-      </Box>
-
+      )}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: 2 }}>

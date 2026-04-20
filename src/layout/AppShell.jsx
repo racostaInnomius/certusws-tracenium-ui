@@ -89,11 +89,11 @@ export default function AppShell() {
   if (selectedPage === "welcome") {
     content = <Welcome onNavigate={setSelectedPage} />;
   }
-
+  /*
   if (selectedPage === "software-delivery") {
     content = <SoftwareDelivery />;
   }
-
+  */
   if (selectedPage === "jobs") {
     content = <Jobs />;
   }
