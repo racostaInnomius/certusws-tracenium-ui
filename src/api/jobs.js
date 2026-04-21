@@ -19,8 +19,8 @@ function buildQuery(params = {}) {
   return qs ? `?${qs}` : "";
 }
 
-export async function listConnectedDevices() {
-  return httpGetJson(`${BASE}/devices-connected`);
+export async function listKnownDevices(params = {}) {
+  return httpGetJson(`${BASE}/known-devices${buildQuery(params)}`);
 }
 
 export async function listJobTypes() {
