@@ -17,8 +17,9 @@ export const API = {
 import Logo from "../assets/T.png";
 
 export default function AuthGate({ children }) {
-  const [status, setStatus] = React.useState("loading"); // loading | authed
+  const [status, setStatus] = React.useState("loading"); // loading | authed | error
   const [isInactive, setIsInactive] = React.useState(false);
+  const [errorMessage, setErrorMessage] = React.useState("");
   const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
 
   const handleLogout = async () => {
@@ -45,11 +46,18 @@ export default function AuthGate({ children }) {
   };
 
   React.useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    let cancelled = false;
+
     (async () => {
       try {
         const res = await fetch(`${API.BASE}${API.BOOTSTRAP}`, {
           credentials: "include",
+          signal: controller.signal,
         });
+
+        if (cancelled) return;
 
         if (res.status === 401) {
           if (!redirectedRef.current) {
@@ -60,11 +68,16 @@ export default function AuthGate({ children }) {
         }
 
         if (!res.ok) {
-          console.error("Bootstrap error:", res.status, await res.text());
+          const text = await res.text().catch(() => "");
+          if (cancelled) return;
+          console.error("Bootstrap error:", res.status, text);
+          setErrorMessage(`Bootstrap failed (${res.status})`);
+          setStatus("error");
           return;
         }
 
         const data = await res.json();
+        if (cancelled) return;
 
         if (data?.tenantMember && data.tenantMember.isActive === false) {
           setIsInactive(true);
@@ -73,9 +86,24 @@ export default function AuthGate({ children }) {
 
         setStatus("authed");
       } catch (e) {
+        if (cancelled) return;
         console.error("Bootstrap fetch failed:", e);
+        setErrorMessage(
+          e?.name === "AbortError"
+            ? "Backend bootstrap request timed out"
+            : "Unable to reach backend bootstrap endpoint"
+        );
+        setStatus("error");
+      } finally {
+        window.clearTimeout(timeout);
       }
     })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   if (isInactive) {
@@ -280,6 +308,76 @@ export default function AuthGate({ children }) {
               color: "rgb(116,249,253)",
             }}
           />
+        </Paper>
+      </Box>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <Box
+        sx={{
+          minHeight: "100dvh",
+          width: "100%",
+          display: "grid",
+          placeItems: "center",
+          px: 2,
+          background:
+            "radial-gradient(circle at top, #1d4d54 0, #020617 55%, #000 100%)",
+        }}
+      >
+        <Paper
+          elevation={0}
+          sx={{
+            width: "100%",
+            maxWidth: 520,
+            px: { xs: 3, sm: 4 },
+            py: { xs: 3.5, sm: 4 },
+            borderRadius: "16px",
+            border: "1px solid rgba(116,249,253,0.28)",
+            background: "rgba(255,255,255,0.08)",
+            boxShadow: "0 0 25px rgba(116,249,253,0.18)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            textAlign: "center",
+          }}
+        >
+          <Typography
+            variant="h6"
+            sx={{ color: "#ffffff", fontWeight: 600, mb: 1.5 }}
+          >
+            Backend no disponible
+          </Typography>
+
+          <Typography
+            sx={{ color: "#cbd5e1", fontSize: 15, lineHeight: 1.6, mb: 3 }}
+          >
+            {errorMessage || "No fue posible completar /api/bootstrap."}
+          </Typography>
+
+          <Typography
+            sx={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.6, mb: 3 }}
+          >
+            Verifica que el backend responda en {`${API.BASE}${API.BOOTSTRAP}`}.
+          </Typography>
+
+          <Button
+            variant="contained"
+            onClick={() => window.location.reload()}
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              borderRadius: "12px",
+              py: 1.25,
+              px: 3,
+              background: "rgb(70,157,159)",
+              "&:hover": {
+                background: "rgb(60,140,142)",
+              },
+            }}
+          >
+            Reintentar
+          </Button>
         </Paper>
       </Box>
     );
