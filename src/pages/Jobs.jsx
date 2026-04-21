@@ -30,6 +30,7 @@ import {
   listTenantJobs,
   retryJob,
 } from "../api/jobs";
+import { listAgentVersions } from "../api/binaries";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -46,6 +47,17 @@ const PATCH_INSTALL_MODE_OPTIONS = [
 const TARGET_OPTIONS = [
   { value: "device", label: "Selected Device" },
   { value: "tenant", label: "All Connected Devices" },
+];
+
+const PLATFORM_OPTIONS = [
+  { value: "windows", label: "Windows" },
+  { value: "macos", label: "macOS" },
+  { value: "linux", label: "Linux" },
+];
+
+const ARCH_OPTIONS = [
+  { value: "x64", label: "x64" },
+  { value: "arm64", label: "arm64" },
 ];
 
 function SummaryCard({ title, value, accent = "#1ba6a6" }) {
@@ -214,6 +226,11 @@ export default function Jobs() {
   const [targetMode, setTargetMode] = React.useState("device");
   const [factType, setFactType] = React.useState("inventory");
   const [version, setVersion] = React.useState("");
+  const [platform, setPlatform] = React.useState("windows");
+  const [arch, setArch] = React.useState("x64");
+  const [availableVersions, setAvailableVersions] = React.useState([]);
+  const [loadingVersions, setLoadingVersions] = React.useState(false);
+  const [versionsError, setVersionsError] = React.useState("");
   const [patchMode, setPatchMode] = React.useState("install");
   const [kbArticleIds, setKbArticleIds] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
@@ -319,6 +336,43 @@ export default function Jobs() {
   React.useEffect(() => {
     loadMeta();
   }, [loadMeta]);
+
+  React.useEffect(() => {
+    if (jobType !== "agent_update" || !canManageJobs) {
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingVersions(true);
+    setVersionsError("");
+
+    listAgentVersions({ platform, arch })
+      .then((response) => {
+        if (cancelled) return;
+        const versions = Array.isArray(response?.versions) ? response.versions : [];
+        setAvailableVersions(versions);
+        setVersion((current) => {
+          if (current && versions.includes(current)) return current;
+          return response?.latestVersion || versions[0] || "";
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error(err);
+        setAvailableVersions([]);
+        setVersion("");
+        setVersionsError(
+          `No versions available for ${platform}/${arch}`
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingVersions(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobType, platform, arch, canManageJobs]);
 
   React.useEffect(() => {
     loadTenantJobs();
@@ -802,14 +856,68 @@ export default function Jobs() {
               ))}
             </TextField>
           ) : jobType === "agent_update" ? (
-            <TextField
-              label="Target Version"
-              size="small"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="1.0.87"
-              fullWidth
-            />
+            <>
+              <TextField
+                select
+                label="Platform"
+                size="small"
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                helperText="Filters versions available in storage"
+                fullWidth
+              >
+                {PLATFORM_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                select
+                label="Architecture"
+                size="small"
+                value={arch}
+                onChange={(e) => setArch(e.target.value)}
+                fullWidth
+              >
+                {ARCH_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                select
+                label="Target Version"
+                size="small"
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                disabled={loadingVersions || availableVersions.length === 0}
+                error={Boolean(versionsError)}
+                helperText={
+                  loadingVersions
+                    ? "Loading versions…"
+                    : versionsError
+                    ? versionsError
+                    : availableVersions.length > 0
+                    ? `${availableVersions.length} versions available`
+                    : "No versions available"
+                }
+                fullWidth
+              >
+                {availableVersions.length === 0 ? (
+                  <MenuItem value="">No versions available</MenuItem>
+                ) : (
+                  availableVersions.map((v) => (
+                    <MenuItem key={v} value={v}>
+                      {v}
+                    </MenuItem>
+                  ))
+                )}
+              </TextField>
+            </>
           ) : jobType === "patch_install" ? (
             <TextField
               select
