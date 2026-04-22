@@ -5,6 +5,8 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
+  Divider,
   MenuItem,
   Paper,
   Snackbar,
@@ -17,6 +19,33 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
+import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import HourglassBottomOutlinedIcon from "@mui/icons-material/HourglassBottomOutlined";
+import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+
+// Tracenium brand palette
+const BRAND = {
+  dark: "#3B404D",      // dark slate — headings, primary text
+  teal: "#5A9F9F",      // primary accent — CTAs, active states
+  tealHover: "#4E8C8C",
+  cyan: "#8FFDFF",      // bright accent — highlights
+  gray: "#BEBEBE",      // borders, neutral
+  // derived surfaces
+  tealSoft: "rgba(90,159,159,0.12)",
+  tealText: "#3E7878",
+  cyanSoft: "rgba(143,253,255,0.22)",
+  darkSoft: "rgba(59,64,77,0.08)",
+  border: "rgba(190,190,190,0.5)",
+  rowHover: "rgba(143,253,255,0.10)",
+  shadow: "0 8px 20px rgba(59,64,77,0.10)",
+};
 import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
@@ -49,45 +78,86 @@ const TARGET_OPTIONS = [
   { value: "tenant", label: "All Connected Devices" },
 ];
 
-const PLATFORM_OPTIONS = [
-  { value: "windows", label: "Windows" },
-  { value: "macos", label: "macOS" },
-  { value: "linux", label: "Linux" },
-];
+// Agent update jobs carry only { version } in the payload. The agent receives
+// the job and downloads the binary that matches ITS OWN platform/architecture,
+// so the UI does not need to expose platform/arch selectors. We query
+// available versions with this default pair, assuming releases are published
+// for all supported (platform, arch) combinations with the same version number.
+const DEFAULT_VERSION_PLATFORM = "windows";
+const DEFAULT_VERSION_ARCH = "x64";
 
-const ARCH_OPTIONS = [
-  { value: "x64", label: "x64" },
-  { value: "arm64", label: "arm64" },
-];
-
-function SummaryCard({ title, value, accent = "#1ba6a6" }) {
+function DetailRow({ label, value, mono = false }) {
   return (
-    <Paper
-      sx={{
-        p: 2,
-        minHeight: 104,
-        borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
-        {title}
+    <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
+      <Typography
+        sx={{
+          fontSize: 12,
+          color: "text.secondary",
+          fontWeight: 600,
+          minWidth: 88,
+          textTransform: "uppercase",
+          letterSpacing: 0.3,
+        }}
+      >
+        {label}
       </Typography>
       <Typography
         sx={{
-          fontSize: 28,
-          fontWeight: 800,
-          color: accent,
-          lineHeight: 1.1,
-          mt: 1,
+          fontSize: 13,
+          color: BRAND.dark,
+          fontFamily: mono ? "monospace" : "inherit",
+          wordBreak: "break-all",
+          flex: 1,
         }}
       >
         {value}
       </Typography>
+    </Box>
+  );
+}
+
+function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.75,
+        minHeight: 96,
+        borderRadius: 3,
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.75,
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
+        "&:hover": {
+          transform: "translateY(-1px)",
+          boxShadow: "0 12px 26px rgba(59,64,77,0.14)",
+        },
+      }}
+    >
+      <Box
+        sx={{
+          width: 44,
+          height: 44,
+          borderRadius: 2,
+          bgcolor: tint,
+          color: accent,
+          display: "grid",
+          placeItems: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+          {title}
+        </Typography>
+        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
+          {value}
+        </Typography>
+      </Box>
     </Paper>
   );
 }
@@ -100,7 +170,7 @@ function renderStatusChip(status) {
       <Chip
         label="Completed"
         size="small"
-        sx={{ bgcolor: "rgba(27,166,166,0.12)", color: "#0f6b72", fontWeight: 700 }}
+        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, border: `1px solid ${BRAND.teal}55` }}
       />
     );
   }
@@ -110,7 +180,7 @@ function renderStatusChip(status) {
       <Chip
         label={value === "running" ? "Running" : "Sent"}
         size="small"
-        sx={{ bgcolor: "rgba(25,118,210,0.12)", color: "#1976d2", fontWeight: 700 }}
+        sx={{ bgcolor: BRAND.cyanSoft, color: BRAND.dark, fontWeight: 700, border: `1px solid ${BRAND.cyan}88` }}
       />
     );
   }
@@ -120,7 +190,7 @@ function renderStatusChip(status) {
       <Chip
         label={value === "pending" ? "Pending" : "Retrying"}
         size="small"
-        sx={{ bgcolor: "rgba(255,152,0,0.14)", color: "#9a6700", fontWeight: 700 }}
+        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: "#8b5418", fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
       />
     );
   }
@@ -130,12 +200,18 @@ function renderStatusChip(status) {
       <Chip
         label={String(status || "Failed")}
         size="small"
-        sx={{ bgcolor: "rgba(211,47,47,0.12)", color: "#b3261e", fontWeight: 700 }}
+        sx={{ bgcolor: "rgba(179,38,30,0.12)", color: "#b3261e", fontWeight: 700, border: "1px solid rgba(179,38,30,0.35)" }}
       />
     );
   }
 
-  return <Chip label={status || "Unknown"} size="small" />;
+  return (
+    <Chip
+      label={status || "Unknown"}
+      size="small"
+      sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 700 }}
+    />
+  );
 }
 
 function formatDate(value) {
@@ -227,12 +303,11 @@ export default function Jobs() {
   const [targetMode, setTargetMode] = React.useState("device");
   const [factType, setFactType] = React.useState("inventory");
   const [version, setVersion] = React.useState("");
-  const [platform, setPlatform] = React.useState("windows");
-  const [arch, setArch] = React.useState("x64");
   const [availableVersions, setAvailableVersions] = React.useState([]);
   const [loadingVersions, setLoadingVersions] = React.useState(false);
   const [versionsError, setVersionsError] = React.useState("");
   const [patchMode, setPatchMode] = React.useState("install");
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [kbArticleIds, setKbArticleIds] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
@@ -360,7 +435,10 @@ export default function Jobs() {
     setLoadingVersions(true);
     setVersionsError("");
 
-    listAgentVersions({ platform, arch })
+    listAgentVersions({
+      platform: DEFAULT_VERSION_PLATFORM,
+      arch: DEFAULT_VERSION_ARCH,
+    })
       .then((response) => {
         if (cancelled) return;
         const versions = Array.isArray(response?.versions) ? response.versions : [];
@@ -375,9 +453,7 @@ export default function Jobs() {
         console.error(err);
         setAvailableVersions([]);
         setVersion("");
-        setVersionsError(
-          `No versions available for ${platform}/${arch}`
-        );
+        setVersionsError("No versions available");
       })
       .finally(() => {
         if (!cancelled) setLoadingVersions(false);
@@ -386,7 +462,7 @@ export default function Jobs() {
     return () => {
       cancelled = true;
     };
-  }, [jobType, platform, arch, canManageJobs]);
+  }, [jobType, canManageJobs]);
 
   React.useEffect(() => {
     loadTenantJobs();
@@ -733,7 +809,7 @@ export default function Jobs() {
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Box
         sx={{
-          mb: 1.5,
+          mb: 2,
           display: "flex",
           justifyContent: "space-between",
           alignItems: { xs: "stretch", sm: "center" },
@@ -743,54 +819,90 @@ export default function Jobs() {
         }}
       >
         <Box>
-          <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
+          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
             Jobs
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Dispatch jobs and review tenant-wide execution history
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
+            Dispatch jobs and review tenant-wide execution history.
           </Typography>
         </Box>
 
-        <Button
-          variant="outlined"
-          startIcon={<RefreshOutlinedIcon />}
-          onClick={refreshAll}
-          disabled={refreshing}
-          sx={{ textTransform: "none", fontWeight: 700 }}
-        >
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </Button>
-        <TextField
-          select
-          label="Auto Refresh"
-          size="small"
-          value={autoRefreshSeconds}
-          onChange={(e) => setAutoRefreshSeconds(e.target.value)}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="0">Off</MenuItem>
-          <MenuItem value="30">30s</MenuItem>
-          <MenuItem value="60">60s</MenuItem>
-          <MenuItem value="120">120s</MenuItem>
-        </TextField>
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
+          <TextField
+            select
+            label="Auto refresh"
+            size="small"
+            value={autoRefreshSeconds}
+            onChange={(e) => setAutoRefreshSeconds(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="0">Off</MenuItem>
+            <MenuItem value="30">Every 30s</MenuItem>
+            <MenuItem value="60">Every 60s</MenuItem>
+            <MenuItem value="120">Every 2 min</MenuItem>
+          </TextField>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshOutlinedIcon />}
+            onClick={refreshAll}
+            disabled={refreshing}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              borderColor: BRAND.teal,
+              color: BRAND.teal,
+              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+            }}
+          >
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+        </Box>
       </Box>
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Connected Devices" value={summary.connectedDevices} />
+          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <SummaryCard
+              title="Connected"
+              value={summary.connectedDevices}
+              icon={<LinkOutlinedIcon />}
+            />
           </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Known Devices" value={summary.knownDevices} accent="#4d6480" />
+          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <SummaryCard
+              title="Known Devices"
+              value={summary.knownDevices}
+              icon={<DevicesOtherOutlinedIcon />}
+              accent={BRAND.dark}
+              tint={BRAND.darkSoft}
+            />
           </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Tenant Jobs" value={summary.total} accent="#16324f" />
+          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <SummaryCard
+              title="Total Jobs"
+              value={summary.total}
+              icon={<AssignmentOutlinedIcon />}
+              accent={BRAND.dark}
+              tint={BRAND.cyanSoft}
+            />
           </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Pending / Running" value={summary.pending} accent="#9a6700" />
+          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <SummaryCard
+              title="Pending / Running"
+              value={summary.pending}
+              icon={<HourglassBottomOutlinedIcon />}
+              accent="#8b5418"
+              tint="rgba(199,121,43,0.14)"
+            />
           </Grid>
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Completed" value={summary.completed} accent="#0f6b72" />
+          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+            <SummaryCard
+              title="Completed"
+              value={summary.completed}
+              icon={<TaskAltOutlinedIcon />}
+              accent={BRAND.tealText}
+              tint={BRAND.tealSoft}
+            />
           </Grid>
         </Grid>
       </Box>
@@ -798,25 +910,35 @@ export default function Jobs() {
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 1.5, sm: 2 },
+          p: { xs: 1.5, sm: 2.5 },
           mb: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
         }}
       >
-        <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#16324f", mb: 1.5 }}>
+        <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
           Create Job
         </Typography>
+        <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 2 }}>
+          Dispatch a job to a single device or to every connected device in the tenant.
+        </Typography>
 
+        {/* ── Destination ──────────────────────────────────────────── */}
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Destination
+        </Typography>
         <Box
           sx={{
+            mt: 1,
             display: "grid",
             gap: 2,
             gridTemplateColumns: {
               xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(4, minmax(0, 1fr))",
+              sm: targetMode === "device" ? "1fr 2fr" : "1fr",
             },
           }}
         >
@@ -836,35 +958,65 @@ export default function Jobs() {
             ))}
           </TextField>
 
-          <TextField
-            select
-            label="Device"
-            size="small"
-            value={selectedDeviceId}
-            onChange={(e) => setSelectedDeviceId(e.target.value)}
-            disabled={targetMode !== "device" || loadingMeta}
-            helperText={
-              targetMode === "tenant"
-                ? "Tenant dispatch uses all currently connected devices"
-                : selectedDevice
-                  ? `${selectedDevice.connected ? "Connected" : "Offline"} · ${connectedDeviceIds.length} connected / ${knownDevices.length} known`
-                  : `${connectedDeviceIds.length} connected / ${knownDevices.length} known`
-            }
-            fullWidth
-          >
-            {knownDevices.length === 0 ? (
-              <MenuItem value="">No known devices</MenuItem>
-            ) : (
-              knownDevices.map((device) => (
-                <MenuItem key={device.deviceId} value={device.deviceId}>
-                  {device.hostname}
-                  {device.hostname !== device.deviceId ? ` · ${device.deviceId}` : ""}
-                  {device.connected ? " · online" : " · offline"}
-                </MenuItem>
-              ))
-            )}
-          </TextField>
+          {targetMode === "device" ? (
+            <TextField
+              select
+              label="Device"
+              size="small"
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              disabled={loadingMeta}
+              helperText={
+                selectedDevice
+                  ? `${selectedDevice.connected ? "Connected" : "Offline"} · agent ${selectedDevice.agentVersion || "unknown"} · ${connectedDeviceIds.length}/${knownDevices.length} online`
+                  : `${connectedDeviceIds.length}/${knownDevices.length} online`
+              }
+              fullWidth
+            >
+              {knownDevices.length === 0 ? (
+                <MenuItem value="">No known devices</MenuItem>
+              ) : (
+                knownDevices.map((device) => (
+                  <MenuItem key={device.deviceId} value={device.deviceId}>
+                    {device.hostname}
+                    {device.hostname !== device.deviceId ? ` · ${device.deviceId}` : ""}
+                    {device.connected ? " · online" : " · offline"}
+                  </MenuItem>
+                ))
+              )}
+            </TextField>
+          ) : (
+            <Alert
+              severity="info"
+              variant="outlined"
+              sx={{ borderRadius: 2, alignItems: "center", py: 0.25 }}
+            >
+              This job will be dispatched to all{" "}
+              <strong>{connectedDeviceIds.length}</strong> currently connected devices in the tenant.
+            </Alert>
+          )}
+        </Box>
 
+        <Divider sx={{ my: 2.5, borderColor: BRAND.border }} />
+
+        {/* ── Job ──────────────────────────────────────────────────── */}
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Job
+        </Typography>
+        <Box
+          sx={{
+            mt: 1,
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "1fr 1fr",
+            },
+          }}
+        >
           <TextField
             select
             label="Job Type"
@@ -897,68 +1049,33 @@ export default function Jobs() {
               ))}
             </TextField>
           ) : jobType === "agent_update" ? (
-            <>
-              <TextField
-                select
-                label="Platform"
-                size="small"
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value)}
-                helperText="Filters versions available in storage"
-                fullWidth
-              >
-                {PLATFORM_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.label}
+            <TextField
+              select
+              label="Target Version"
+              size="small"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              disabled={loadingVersions || availableVersions.length === 0}
+              error={Boolean(versionsError)}
+              helperText={
+                loadingVersions
+                  ? "Loading versions…"
+                  : versionsError
+                  ? versionsError
+                  : "Each agent downloads the binary matching its own platform and arch."
+              }
+              fullWidth
+            >
+              {availableVersions.length === 0 ? (
+                <MenuItem value="">No versions available</MenuItem>
+              ) : (
+                availableVersions.map((v) => (
+                  <MenuItem key={v} value={v}>
+                    {v}
                   </MenuItem>
-                ))}
-              </TextField>
-
-              <TextField
-                select
-                label="Architecture"
-                size="small"
-                value={arch}
-                onChange={(e) => setArch(e.target.value)}
-                fullWidth
-              >
-                {ARCH_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <TextField
-                select
-                label="Target Version"
-                size="small"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-                disabled={loadingVersions || availableVersions.length === 0}
-                error={Boolean(versionsError)}
-                helperText={
-                  loadingVersions
-                    ? "Loading versions…"
-                    : versionsError
-                    ? versionsError
-                    : availableVersions.length > 0
-                    ? `${availableVersions.length} versions available`
-                    : "No versions available"
-                }
-                fullWidth
-              >
-                {availableVersions.length === 0 ? (
-                  <MenuItem value="">No versions available</MenuItem>
-                ) : (
-                  availableVersions.map((v) => (
-                    <MenuItem key={v} value={v}>
-                      {v}
-                    </MenuItem>
-                  ))
-                )}
-              </TextField>
-            </>
+                ))
+              )}
+            </TextField>
           ) : jobType === "patch_install" ? (
             <TextField
               select
@@ -991,39 +1108,86 @@ export default function Jobs() {
               value={kbArticleIds}
               onChange={(e) => setKbArticleIds(e.target.value)}
               placeholder="KB5034123, KB5034439"
-              helperText="Optional. Leave empty to let the agent/backend decide the applicable patch set."
+              helperText="Optional. Leave empty to let the agent decide the applicable patch set."
               fullWidth
+              sx={{ gridColumn: { sm: "1 / -1" } }}
             />
           ) : null}
-
-          <TextField
-            label="Timeout Seconds"
-            size="small"
-            type="number"
-            value={timeoutSeconds}
-            onChange={(e) => setTimeoutSeconds(e.target.value)}
-            helperText="Optional, 30 to 86400"
-            fullWidth
-          />
-
-          <TextField
-            label="Max Attempts"
-            size="small"
-            type="number"
-            value={maxAttempts}
-            onChange={(e) => setMaxAttempts(e.target.value)}
-            helperText="Optional, 1 to 10"
-            fullWidth
-          />
         </Box>
 
-        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+        {/* ── Advanced (collapsible) ────────────────────────────────── */}
+        <Collapse in={showAdvanced} unmountOnExit>
+          <Divider sx={{ my: 2.5, borderColor: BRAND.border }} />
+          <Typography
+            variant="overline"
+            sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}
+          >
+            Advanced
+          </Typography>
+          <Box
+            sx={{
+              mt: 1,
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+            }}
+          >
+            <TextField
+              label="Timeout (seconds)"
+              size="small"
+              type="number"
+              value={timeoutSeconds}
+              onChange={(e) => setTimeoutSeconds(e.target.value)}
+              helperText="30 – 86400. Leave empty for default."
+              fullWidth
+            />
+            <TextField
+              label="Max Attempts"
+              size="small"
+              type="number"
+              value={maxAttempts}
+              onChange={(e) => setMaxAttempts(e.target.value)}
+              helperText="1 – 10. Leave empty for default."
+              fullWidth
+            />
+          </Box>
+        </Collapse>
+
+        {/* ── Footer actions ────────────────────────────────────────── */}
+        <Box
+          sx={{
+            mt: 2.5,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <Button
+            size="small"
+            onClick={() => setShowAdvanced((v) => !v)}
+            startIcon={<TuneOutlinedIcon />}
+            endIcon={showAdvanced ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+            sx={{ textTransform: "none", color: BRAND.dark, fontWeight: 600 }}
+          >
+            {showAdvanced ? "Hide advanced" : "Advanced options"}
+          </Button>
+
           <Button
             variant="contained"
             startIcon={<PlayArrowOutlinedIcon />}
             onClick={handleSubmit}
             disabled={submitting || loadingMeta}
-            sx={{ bgcolor: "#1ba6a6", "&:hover": { bgcolor: "#158d8d" }, minWidth: 170 }}
+            sx={{
+              bgcolor: BRAND.teal,
+              color: "#fff",
+              fontWeight: 700,
+              textTransform: "none",
+              minWidth: 170,
+              boxShadow: "0 4px 14px rgba(90,159,159,0.35)",
+              "&:hover": { bgcolor: BRAND.tealHover, boxShadow: "0 6px 18px rgba(90,159,159,0.45)" },
+            }}
           >
             Dispatch Job
           </Button>
@@ -1035,29 +1199,52 @@ export default function Jobs() {
           <Paper
             elevation={0}
             sx={{
-              p: { xs: 1.5, sm: 1.5 },
+              p: { xs: 1.5, sm: 2 },
               borderRadius: 3,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+              border: `1px solid ${BRAND.border}`,
+              boxShadow: BRAND.shadow,
             }}
           >
             <Box
               sx={{
-                display: "grid",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 gap: 2,
+                mb: 1.5,
+                flexWrap: "wrap",
+              }}
+            >
+              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                Tenant Job History
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                Showing <strong>{filteredRows.length}</strong> of {tenantJobs.length} jobs
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                display: "grid",
+                gap: 1.5,
                 mb: 1.5,
                 gridTemplateColumns: {
                   xs: "1fr",
-                  sm: "repeat(3, minmax(0, 1fr))",
+                  sm: "2fr 1fr 1fr",
                 },
               }}
             >
               <TextField
-                label="Search Jobs"
+                label="Search"
                 size="small"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                helperText="Search job id, hostname, device id, type or error"
+                placeholder="Job id, hostname, device, type, error…"
+                InputProps={{
+                  startAdornment: (
+                    <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray, mr: 1 }} />
+                  ),
+                }}
                 fullWidth
               />
               <TextField
@@ -1068,15 +1255,15 @@ export default function Jobs() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 fullWidth
               >
-                <MenuItem value="all">all</MenuItem>
-                <MenuItem value="pending">pending</MenuItem>
-                <MenuItem value="retrying">retrying</MenuItem>
-                <MenuItem value="sent">sent</MenuItem>
-                <MenuItem value="running">running</MenuItem>
-                <MenuItem value="completed">completed</MenuItem>
-                <MenuItem value="failed">failed</MenuItem>
-                <MenuItem value="timeout">timeout</MenuItem>
-                <MenuItem value="cancelled">cancelled</MenuItem>
+                <MenuItem value="all">All statuses</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="retrying">Retrying</MenuItem>
+                <MenuItem value="sent">Sent</MenuItem>
+                <MenuItem value="running">Running</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="failed">Failed</MenuItem>
+                <MenuItem value="timeout">Timeout</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
               </TextField>
               <TextField
                 select
@@ -1086,7 +1273,7 @@ export default function Jobs() {
                 onChange={(e) => setJobTypeFilter(e.target.value)}
                 fullWidth
               >
-                <MenuItem value="all">all</MenuItem>
+                <MenuItem value="all">All types</MenuItem>
                 {jobTypeOptions.map((opt) => (
                   <MenuItem key={opt.jobType} value={opt.jobType}>
                     {opt.label}
@@ -1094,10 +1281,6 @@ export default function Jobs() {
                 ))}
               </TextField>
             </Box>
-
-            <Typography sx={{ fontWeight: 700, color: "#16324f", mb: 1 }}>
-              Tenant Job History
-            </Typography>
 
             <DataGrid
               autoHeight
@@ -1116,8 +1299,27 @@ export default function Jobs() {
               columnVisibilityModel={columnVisibilityModel}
               sx={{
                 border: "none",
-                "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f3f6f8" },
-                "& .MuiDataGrid-row:hover": { cursor: "pointer" },
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: BRAND.darkSoft,
+                  color: BRAND.dark,
+                  fontWeight: 700,
+                  borderBottom: `1px solid ${BRAND.border}`,
+                },
+                "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700 },
+                "& .MuiDataGrid-row": {
+                  cursor: "pointer",
+                  transition: "background-color 0.12s ease",
+                },
+                "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
+                "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
+                  backgroundColor: BRAND.cyanSoft,
+                },
+                "& .MuiDataGrid-cell": {
+                  borderBottom: `1px solid ${BRAND.border}`,
+                },
+                "& .MuiDataGrid-footerContainer": {
+                  borderTop: `1px solid ${BRAND.border}`,
+                },
               }}
             />
           </Paper>
@@ -1129,49 +1331,148 @@ export default function Jobs() {
             sx={{
               p: 2,
               borderRadius: 3,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+              border: `1px solid ${BRAND.border}`,
+              boxShadow: BRAND.shadow,
               height: "100%",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#16324f", mb: 1.5 }}>
-              Job Detail
-            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
+              <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
+                Job Detail
+              </Typography>
+              {selectedJob ? renderStatusChip(selectedJob.status) : null}
+            </Box>
 
             {!selectedJobId ? (
-              <Typography color="text.secondary">Select a job to load detail.</Typography>
+              <Box
+                sx={{
+                  flex: 1,
+                  display: "grid",
+                  placeItems: "center",
+                  textAlign: "center",
+                  color: "text.secondary",
+                  p: 3,
+                  border: `1px dashed ${BRAND.border}`,
+                  borderRadius: 2,
+                  bgcolor: BRAND.darkSoft,
+                }}
+              >
+                <Box>
+                  <InfoOutlinedIcon sx={{ fontSize: 36, color: BRAND.gray, mb: 1 }} />
+                  <Typography variant="body2">Select a job from the table to see its details.</Typography>
+                </Box>
+              </Box>
             ) : loadingJobDetail ? (
-              <Typography color="text.secondary">Loading job detail...</Typography>
+              <Typography color="text.secondary">Loading job detail…</Typography>
             ) : !selectedJob ? (
               <Typography color="text.secondary">Job detail unavailable.</Typography>
             ) : (
-              <Box sx={{ display: "grid", gap: 1.25 }}>
-                <Typography><strong>Job ID:</strong> {selectedJob.job_id}</Typography>
-                <Typography><strong>Hostname:</strong> {deviceMap.get(String(selectedJob.device_id || ""))?.hostname || " - "}</Typography>
-                <Typography><strong>Device:</strong> {selectedJob.device_id}</Typography>
-                <Typography><strong>Type:</strong> {selectedJob.job_type}</Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <Typography><strong>Status:</strong></Typography>
-                  {renderStatusChip(selectedJob.status)}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1 }}>
+                {/* Identity */}
+                <Box>
+                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                    Identity
+                  </Typography>
+                  <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+                    <DetailRow label="Job ID" value={selectedJob.job_id} mono />
+                    <DetailRow
+                      label="Hostname"
+                      value={deviceMap.get(String(selectedJob.device_id || ""))?.hostname || "—"}
+                    />
+                    <DetailRow label="Device" value={selectedJob.device_id} mono />
+                    <DetailRow label="Type" value={selectedJob.job_type} />
+                    <DetailRow label="Attempts" value={String(selectedJob.attempts ?? 0)} />
+                    <DetailRow label="Created By" value={selectedJob.created_by || "—"} />
+                    <DetailRow label="Trace ID" value={selectedJob.trace_id || "—"} mono />
+                  </Box>
                 </Box>
-                <Typography><strong>Attempts:</strong> {selectedJob.attempts}</Typography>
-                <Typography><strong>Created At:</strong> {formatDate(selectedJob.created_at)}</Typography>
-                <Typography><strong>Sent At:</strong> {formatDate(selectedJob.sent_at)}</Typography>
-                <Typography><strong>Completed At:</strong> {formatDate(selectedJob.completed_at)}</Typography>
-                <Typography><strong>Created By:</strong> {selectedJob.created_by || " - "}</Typography>
-                <Typography><strong>Trace ID:</strong> {selectedJob.trace_id || " - "}</Typography>
-                <Typography><strong>Last Error:</strong> {selectedJob.last_error || " - "}</Typography>
 
-                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", pt: 1 }}>
+                <Divider sx={{ borderColor: BRAND.border }} />
+
+                {/* Timeline */}
+                <Box>
+                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                    Timeline
+                  </Typography>
+                  <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+                    <DetailRow label="Created" value={formatDate(selectedJob.created_at)} />
+                    <DetailRow label="Sent" value={formatDate(selectedJob.sent_at)} />
+                    <DetailRow label="Completed" value={formatDate(selectedJob.completed_at)} />
+                  </Box>
+                </Box>
+
+                {/* Error (if any) */}
+                {selectedJob.last_error ? (
+                  <>
+                    <Divider sx={{ borderColor: BRAND.border }} />
+                    <Box>
+                      <Typography variant="overline" sx={{ color: "#b3261e", fontWeight: 800, letterSpacing: 1.2 }}>
+                        Last Error
+                      </Typography>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          mt: 0.5,
+                          p: 1.25,
+                          borderColor: "rgba(179,38,30,0.35)",
+                          bgcolor: "rgba(179,38,30,0.06)",
+                          color: "#7a1a15",
+                          fontSize: 13,
+                          fontFamily: "monospace",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {selectedJob.last_error}
+                      </Paper>
+                    </Box>
+                  </>
+                ) : null}
+
+                <Divider sx={{ borderColor: BRAND.border }} />
+
+                {/* Payload */}
+                <Box>
+                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                    Payload
+                  </Typography>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      mt: 0.5,
+                      p: 1.25,
+                      bgcolor: BRAND.dark,
+                      color: "#e2e8f0",
+                      borderColor: BRAND.dark,
+                      overflow: "auto",
+                      maxHeight: 220,
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {JSON.stringify(selectedJob.payload_json ?? {}, null, 2)}
+                  </Paper>
+                </Box>
+
+                {/* Actions */}
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mt: "auto", pt: 1 }}>
                   <Button
                     size="small"
                     variant="outlined"
                     startIcon={<RestartAltOutlinedIcon />}
                     onClick={handleRetry}
-                    disabled={
-                      jobActionRunning ||
-                      !canRetrySelectedJob
-                    }
+                    disabled={jobActionRunning || !canRetrySelectedJob}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 700,
+                      borderColor: BRAND.teal,
+                      color: BRAND.teal,
+                      "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+                    }}
                   >
                     Retry
                   </Button>
@@ -1181,32 +1482,11 @@ export default function Jobs() {
                     color="error"
                     startIcon={<CancelOutlinedIcon />}
                     onClick={handleCancel}
-                    disabled={
-                      jobActionRunning ||
-                      !canCancelSelectedJob
-                    }
+                    disabled={jobActionRunning || !canCancelSelectedJob}
+                    sx={{ textTransform: "none", fontWeight: 700 }}
                   >
                     Cancel
                   </Button>
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontWeight: 700, mb: 0.5 }}>Payload JSON</Typography>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      p: 1.25,
-                      bgcolor: "#0f172a",
-                      color: "#e2e8f0",
-                      overflow: "auto",
-                      fontFamily: "monospace",
-                      fontSize: 12,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {JSON.stringify(selectedJob.payload_json ?? {}, null, 2)}
-                  </Paper>
                 </Box>
               </Box>
             )}
