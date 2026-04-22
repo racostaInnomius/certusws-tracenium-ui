@@ -5,21 +5,37 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
+  Divider,
   FormControlLabel,
+  IconButton,
+  MenuItem,
   Paper,
   Snackbar,
-  Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
   Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import { DataGrid } from "@mui/x-data-grid";
+
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import PublishOutlinedIcon from "@mui/icons-material/PublishOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
-import { DataGrid } from "@mui/x-data-grid";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
+import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
@@ -34,59 +50,93 @@ import {
   saveDevicePolicy,
   saveTenantPolicy,
 } from "../api/policies";
-import { listDeviceCertDevices } from "../api/deviceCerts";
+import { listKnownDevices } from "../api/jobs";
 
-function SummaryCard({ title, value, accent = "#1ba6a6" }) {
-  return (
-    <Paper
-      sx={{
-        p: 2,
-        minHeight: 104,
-        borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>{title}</Typography>
-      <Typography
-        sx={{
-          fontSize: 28,
-          fontWeight: 800,
-          color: accent,
-          lineHeight: 1.1,
-          mt: 1,
-        }}
-      >
-        {value}
-      </Typography>
-    </Paper>
-  );
-}
+// Tracenium brand palette
+const BRAND = {
+  dark: "#3B404D",
+  teal: "#5A9F9F",
+  tealHover: "#4E8C8C",
+  cyan: "#8FFDFF",
+  gray: "#BEBEBE",
+  tealSoft: "rgba(90,159,159,0.12)",
+  tealText: "#3E7878",
+  cyanSoft: "rgba(143,253,255,0.22)",
+  darkSoft: "rgba(59,64,77,0.08)",
+  border: "rgba(190,190,190,0.5)",
+  rowHover: "rgba(143,253,255,0.10)",
+  shadow: "0 8px 20px rgba(59,64,77,0.10)",
+};
 
-function createPolicyFromForm(form) {
-  return {
-    modules: {
-      compliance: Boolean(form.complianceEnabled),
-    },
-    plugins: {
-      enabled: [
-        ...(form.ampEnabled ? ["amp"] : []),
-        ...(form.scpEnabled ? ["scp"] : []),
-      ],
-    },
-  };
-}
+// ── Plugin descriptors. `required: true` means the plugin is part of the
+//    agent core and cannot be turned off — it ships as a locked toggle.
+//    `impliesModule` auto-enables a module when the plugin is active; the
+//    module does not need its own user-facing toggle.
+const PLUGIN_DESCRIPTORS = [
+  {
+    key: "amp",
+    label: "AMP — Asset Management",
+    description: "Hardware and software inventory. Integrated into the agent core — always on.",
+    required: true,
+  },
+  {
+    key: "scp",
+    label: "SCP — Security Compliance",
+    description:
+      "Compliance facts feeding the Security Compliance page. Enabling it activates compliance collection automatically.",
+    impliesModule: "compliance",
+  },
+  {
+    key: "pmp",
+    label: "PMP — Patch Management",
+    description: "Patch scan and install. Opt-in: disabled by default.",
+  },
+  {
+    key: "sdp",
+    label: "SDP — Software Delivery",
+    description: "Software deployment and distribution tracking.",
+  },
+];
 
+// ── Form ⇄ policy mapping. The form only tracks plugin toggles; modules
+//    are derived from plugins (see formToPolicy) and required plugins are
+//    clamped to true regardless of the incoming policy.
 function readFormFromPolicy(policy) {
   const enabled = Array.isArray(policy?.plugins?.enabled) ? policy.plugins.enabled : [];
   return {
-    complianceEnabled: Boolean(policy?.modules?.compliance),
-    ampEnabled: enabled.includes("amp"),
-    scpEnabled: enabled.includes("scp"),
+    plugins: Object.fromEntries(
+      PLUGIN_DESCRIPTORS.map((p) => [
+        p.key,
+        p.required ? true : enabled.includes(p.key),
+      ])
+    ),
   };
+}
+
+function formToPolicy(form) {
+  const pluginsEnabled = PLUGIN_DESCRIPTORS
+    .filter((p) => p.required || form.plugins[p.key])
+    .map((p) => p.key);
+
+  // Derive modules from plugins that imply one (e.g. scp → compliance).
+  const modules = {};
+  PLUGIN_DESCRIPTORS.forEach((p) => {
+    if (p.impliesModule && pluginsEnabled.includes(p.key)) {
+      modules[p.impliesModule] = true;
+    }
+  });
+
+  return {
+    modules,
+    plugins: { enabled: pluginsEnabled },
+  };
+}
+
+function isEmptyPolicy(policy) {
+  if (!policy) return true;
+  if (typeof policy !== "object") return true;
+  const keys = Object.keys(policy);
+  return keys.length === 0;
 }
 
 function formatJson(value) {
@@ -94,818 +144,1208 @@ function formatJson(value) {
 }
 
 function formatDate(value) {
-  if (!value) return " - ";
+  if (!value) return "—";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return " - ";
+  if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleString("en-US", {
     year: "2-digit",
     month: "short",
     day: "2-digit",
-    hourCycle: "h24",
+    hourCycle: "h23",
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-function renderAckChip(status) {
+function shortHash(hash) {
+  if (!hash) return "—";
+  const s = String(hash);
+  return s.length > 14 ? `${s.slice(0, 10)}…${s.slice(-4)}` : s;
+}
+
+function renderAckChip(status, reasonText) {
   if (status === 0) {
     return (
       <Chip
         label="ACK OK"
         size="small"
-        sx={{ bgcolor: "rgba(27,166,166,0.12)", color: "#0f6b72", fontWeight: 700 }}
+        icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+        sx={{
+          bgcolor: BRAND.tealSoft,
+          color: BRAND.tealText,
+          fontWeight: 700,
+          border: `1px solid ${BRAND.teal}55`,
+          "& .MuiChip-icon": { color: BRAND.tealText },
+        }}
       />
     );
   }
-
-  if (status === 1) {
+  if (status == null) {
     return (
       <Chip
-        label="ACK Retry"
+        label={reasonText || "Pending"}
         size="small"
-        sx={{ bgcolor: "rgba(255,152,0,0.14)", color: "#9a6700", fontWeight: 700 }}
+        icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+        sx={{
+          bgcolor: BRAND.darkSoft,
+          color: BRAND.dark,
+          fontWeight: 700,
+          border: `1px solid ${BRAND.border}`,
+          "& .MuiChip-icon": { color: BRAND.dark },
+        }}
       />
     );
   }
-
-  if (status === 2) {
-    return (
-      <Chip
-        label="ACK Failed"
-        size="small"
-        sx={{ bgcolor: "rgba(211,47,47,0.12)", color: "#b3261e", fontWeight: 700 }}
-      />
-    );
-  }
-
-  return <Chip label="Pending" size="small" />;
+  return (
+    <Chip
+      label={`ACK ERR ${status}`}
+      size="small"
+      icon={<ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+      sx={{
+        bgcolor: "rgba(179,38,30,0.12)",
+        color: "#b3261e",
+        fontWeight: 700,
+        border: "1px solid rgba(179,38,30,0.35)",
+        "& .MuiChip-icon": { color: "#b3261e" },
+      }}
+    />
+  );
 }
 
-function PolicyEditorCard({
-  title,
-  subtitle,
-  form,
-  onChange,
-  onSave,
-  onPush,
-  onClear,
-  saving,
-  pushing,
-  clearing,
-  version,
-  hash,
-}) {
-  const preview = React.useMemo(() => createPolicyFromForm(form), [form]);
+function renderSourceChip(source) {
+  const val = String(source || "").toLowerCase();
+  if (val === "device") {
+    return (
+      <Chip
+        label="Device override"
+        size="small"
+        sx={{
+          bgcolor: BRAND.cyanSoft,
+          color: BRAND.dark,
+          fontWeight: 700,
+          border: `1px solid ${BRAND.cyan}88`,
+        }}
+      />
+    );
+  }
+  if (val === "tenant") {
+    return (
+      <Chip
+        label="Tenant"
+        size="small"
+        sx={{
+          bgcolor: BRAND.tealSoft,
+          color: BRAND.tealText,
+          fontWeight: 700,
+          border: `1px solid ${BRAND.teal}55`,
+        }}
+      />
+    );
+  }
+  return (
+    <Chip
+      label={source || "—"}
+      size="small"
+      sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 700 }}
+    />
+  );
+}
 
+// ── Shared UI pieces ────────────────────────────────────────────────────
+
+function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
   return (
     <Paper
+      elevation={0}
       sx={{
-        p: 2.5,
+        p: 1.75,
+        minHeight: 96,
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.75,
       }}
     >
-      <Stack spacing={2}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 800 }}>
-            {title}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {subtitle}
-          </Typography>
-        </Box>
-
-        <Stack spacing={1}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            Modules
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.complianceEnabled}
-                onChange={(event) =>
-                  onChange((current) => ({
-                    ...current,
-                    complianceEnabled: event.target.checked,
-                  }))
-                }
-              />
-            }
-            label="modules.compliance"
-          />
-        </Stack>
-
-        <Stack spacing={1}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            Plugins
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.ampEnabled}
-                onChange={(event) =>
-                  onChange((current) => ({
-                    ...current,
-                    ampEnabled: event.target.checked,
-                  }))
-                }
-              />
-            }
-            label='plugins.enabled includes "amp"'
-          />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={form.scpEnabled}
-                onChange={(event) =>
-                  onChange((current) => ({
-                    ...current,
-                    scpEnabled: event.target.checked,
-                  }))
-                }
-              />
-            }
-            label='plugins.enabled includes "scp"'
-          />
-        </Stack>
-
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-          <Button
-            variant="contained"
-            startIcon={<SaveOutlinedIcon />}
-            onClick={onSave}
-            disabled={saving}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              bgcolor: "#16324f",
-              "&:hover": { bgcolor: "#10253b" },
-            }}
-          >
-            {saving ? "Saving..." : "Save Policy"}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SendOutlinedIcon />}
-            onClick={onPush}
-            disabled={pushing}
-            sx={{ textTransform: "none", fontWeight: 700 }}
-          >
-            {pushing ? "Pushing..." : "Push Now"}
-          </Button>
-          {typeof onClear === "function" ? (
-            <Button
-              variant="text"
-              color="error"
-              onClick={onClear}
-              disabled={clearing}
-              sx={{ textTransform: "none", fontWeight: 700 }}
-            >
-              {clearing ? "Clearing..." : "Clear Override"}
-            </Button>
-          ) : null}
-        </Stack>
-
-        <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-            Preview
-          </Typography>
-          <TextField
-            value={formatJson(preview)}
-            multiline
-            minRows={7}
-            fullWidth
-            InputProps={{
-              readOnly: true,
-              sx: {
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                alignItems: "flex-start",
-              },
-            }}
-          />
-        </Box>
-
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-          <Chip label={`Version: ${version || " - "}`} variant="outlined" />
-          <Chip label={`Hash: ${hash || " - "}`} variant="outlined" />
-        </Stack>
-      </Stack>
+      <Box
+        sx={{
+          width: 44,
+          height: 44,
+          borderRadius: 2,
+          bgcolor: tint,
+          color: accent,
+          display: "grid",
+          placeItems: "center",
+          flexShrink: 0,
+        }}
+      >
+        {icon}
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+          {title}
+        </Typography>
+        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
+          {value}
+        </Typography>
+      </Box>
     </Paper>
   );
 }
 
+function DetailRow({ label, value, mono = false }) {
+  return (
+    <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
+      <Typography
+        sx={{
+          fontSize: 12,
+          color: "text.secondary",
+          fontWeight: 600,
+          minWidth: 96,
+          textTransform: "uppercase",
+          letterSpacing: 0.3,
+          flexShrink: 0,
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          fontSize: 13,
+          color: BRAND.dark,
+          fontFamily: mono ? "monospace" : "inherit",
+          wordBreak: "break-all",
+          flex: 1,
+        }}
+      >
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function JsonBlock({ value, maxHeight = 260 }) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 1.25,
+        bgcolor: BRAND.dark,
+        color: "#e2e8f0",
+        borderColor: BRAND.dark,
+        overflow: "auto",
+        maxHeight,
+        fontFamily: "monospace",
+        fontSize: 12,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+      }}
+    >
+      {formatJson(value)}
+    </Paper>
+  );
+}
+
+// ── PolicyForm — module + plugin switches plus collapsible advanced JSON
+
+function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false }) {
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+
+  const handleTogglePlugin = (key) => (e) => {
+    onChange({
+      ...form,
+      plugins: { ...form.plugins, [key]: e.target.checked },
+    });
+  };
+
+  const handleJsonChange = (e) => {
+    const value = e.target.value;
+    setJsonDraft(value);
+    try {
+      const parsed = JSON.parse(value);
+      setJsonError(null);
+      onChange(readFormFromPolicy(parsed));
+    } catch (err) {
+      setJsonError(String(err?.message || err));
+    }
+  };
+
+  return (
+    <Box>
+      <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+        Plugins
+      </Typography>
+      <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+        {PLUGIN_DESCRIPTORS.map((p) => (
+          <Box
+            key={p.key}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 1.5,
+              p: 1.25,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: p.required ? BRAND.darkSoft : "#ffffff",
+              flexWrap: "wrap",
+            }}
+          >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>{p.label}</Typography>
+                {p.required ? (
+                  <Chip
+                    label="Required"
+                    size="small"
+                    sx={{
+                      height: 18,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      bgcolor: BRAND.tealSoft,
+                      color: BRAND.tealText,
+                      border: `1px solid ${BRAND.teal}55`,
+                    }}
+                  />
+                ) : null}
+              </Box>
+              <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>{p.description}</Typography>
+            </Box>
+            <Switch
+              checked={p.required ? true : Boolean(form.plugins[p.key])}
+              onChange={handleTogglePlugin(p.key)}
+              disabled={readOnly || p.required}
+              sx={{
+                "& .MuiSwitch-switchBase.Mui-checked": { color: BRAND.teal },
+                "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { backgroundColor: BRAND.teal },
+              }}
+            />
+          </Box>
+        ))}
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <Button
+          size="small"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          startIcon={<CodeOutlinedIcon />}
+          endIcon={advancedOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+          sx={{ textTransform: "none", color: BRAND.dark, fontWeight: 600 }}
+        >
+          {advancedOpen ? "Hide JSON editor" : "Advanced: edit raw JSON"}
+        </Button>
+        <Collapse in={advancedOpen} unmountOnExit>
+          <TextField
+            multiline
+            minRows={10}
+            fullWidth
+            value={jsonDraft}
+            onChange={handleJsonChange}
+            disabled={readOnly}
+            error={Boolean(jsonError)}
+            helperText={jsonError || "Preserves unknown keys. Saved value replaces the policy on the server."}
+            sx={{
+              mt: 1,
+              "& .MuiInputBase-root": {
+                fontFamily: "monospace",
+                fontSize: 12.5,
+                bgcolor: "#ffffff",
+              },
+            }}
+          />
+        </Collapse>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────
+
 export default function Policies() {
   const theme = useTheme();
-  const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
+  const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const canManagePolicies = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
 
-  const [tenantForm, setTenantForm] = React.useState({
-    complianceEnabled: false,
-    ampEnabled: true,
-    scpEnabled: false,
-  });
-  const [deviceForm, setDeviceForm] = React.useState({
-    complianceEnabled: false,
-    ampEnabled: true,
-    scpEnabled: false,
-  });
+  const [tab, setTab] = React.useState("tenant");
 
-  const [tenantPolicyMeta, setTenantPolicyMeta] = React.useState({ version: "", hash: "" });
-  const [devicePolicyMeta, setDevicePolicyMeta] = React.useState({ version: "", hash: "" });
-  const [effectivePolicy, setEffectivePolicy] = React.useState(null);
-  const [deviceStatus, setDeviceStatus] = React.useState(null);
-  const [tenantStatuses, setTenantStatuses] = React.useState([]);
-  const [devices, setDevices] = React.useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
-  const [deviceSearch, setDeviceSearch] = React.useState("");
+  // Shared
+  const [devices, setDevices] = React.useState([]); // [{deviceId, hostname, connected, agentVersion}]
+  const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
 
-  const [loading, setLoading] = React.useState(true);
-  const [refreshing, setRefreshing] = React.useState(false);
+  // Tenant state
+  const [tenantPolicy, setTenantPolicy] = React.useState(null);
+  const [tenantForm, setTenantForm] = React.useState(readFormFromPolicy({}));
+  const [tenantJsonDraft, setTenantJsonDraft] = React.useState("{}");
+  const [tenantJsonError, setTenantJsonError] = React.useState(null);
+  const [tenantStatus, setTenantStatus] = React.useState([]);
+  const [tenantLoading, setTenantLoading] = React.useState(true);
   const [tenantSaving, setTenantSaving] = React.useState(false);
   const [tenantPushing, setTenantPushing] = React.useState(false);
+
+  // Device state
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
+  const [devicePolicy, setDevicePolicy] = React.useState(null); // raw override or null
+  const [deviceForm, setDeviceForm] = React.useState(readFormFromPolicy({}));
+  const [deviceJsonDraft, setDeviceJsonDraft] = React.useState("{}");
+  const [deviceJsonError, setDeviceJsonError] = React.useState(null);
+  const [effective, setEffective] = React.useState(null);
+  const [deviceStatus, setDeviceStatus] = React.useState(null);
+  const [deviceLoading, setDeviceLoading] = React.useState(false);
   const [deviceSaving, setDeviceSaving] = React.useState(false);
   const [devicePushing, setDevicePushing] = React.useState(false);
-  const [deviceClearing, setDeviceClearing] = React.useState(false);
+  const [deviceDeleting, setDeviceDeleting] = React.useState(false);
 
-  const [snackbar, setSnackbar] = React.useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-
-  const deferredDeviceSearch = React.useDeferredValue(deviceSearch);
-
-  const showMessage = React.useCallback((message, severity = "success") => {
+  const showSnack = React.useCallback((message, severity = "success") => {
     setSnackbar({ open: true, message, severity });
   }, []);
 
-  const loadTenantState = React.useCallback(async () => {
-    if (!canManagePolicies || !tenantId) return;
-
-    const [tenantPolicyResponse, tenantStatusResponse, deviceListResponse] = await Promise.all([
-      getTenantPolicy(tenantId),
-      listTenantPolicyStatus(tenantId),
-      listDeviceCertDevices({
-        search: deferredDeviceSearch || undefined,
-        page: 1,
-        pageSize: 50,
-      }),
-    ]);
-
-    const tenantPolicy = tenantPolicyResponse?.policy ?? null;
-    if (tenantPolicy) {
-      setTenantForm(readFormFromPolicy(tenantPolicy.policy_json ?? tenantPolicy.policyJson ?? {}));
-      setTenantPolicyMeta({
-        version: tenantPolicy.policy_version ?? tenantPolicy.policyVersion ?? "",
-        hash: tenantPolicy.policy_hash ?? tenantPolicy.policyHash ?? "",
-      });
-    } else {
-      setTenantForm({
-        complianceEnabled: false,
-        ampEnabled: true,
-        scpEnabled: false,
-      });
-      setTenantPolicyMeta({ version: "", hash: "" });
-    }
-
-    setTenantStatuses(Array.isArray(tenantStatusResponse?.items) ? tenantStatusResponse.items : []);
-
-    const deviceItems = Array.isArray(deviceListResponse?.items) ? deviceListResponse.items : [];
-    setDevices(deviceItems);
-    setSelectedDeviceId((current) => {
-      if (current && deviceItems.some((item) => item.deviceId === current)) return current;
-      return deviceItems[0]?.deviceId || current || "";
-    });
-  }, [canManagePolicies, deferredDeviceSearch, tenantId]);
-
-  const loadDeviceState = React.useCallback(async () => {
-    if (!canManagePolicies || !selectedDeviceId) {
-      setEffectivePolicy(null);
-      setDeviceStatus(null);
-      setDevicePolicyMeta({ version: "", hash: "" });
-      return;
-    }
-
-    const [devicePolicyResponse, effectiveResponse, statusResponse] = await Promise.all([
-      getDevicePolicy(selectedDeviceId),
-      getEffectivePolicy(selectedDeviceId),
-      getDevicePolicyStatus(selectedDeviceId),
-    ]);
-
-    const devicePolicy = devicePolicyResponse?.policy ?? null;
-    if (devicePolicy) {
-      setDeviceForm(readFormFromPolicy(devicePolicy.policy_json ?? devicePolicy.policyJson ?? {}));
-      setDevicePolicyMeta({
-        version: devicePolicy.policy_version ?? devicePolicy.policyVersion ?? "",
-        hash: devicePolicy.policy_hash ?? devicePolicy.policyHash ?? "",
-      });
-    } else {
-      setDeviceForm({
-        complianceEnabled: false,
-        ampEnabled: true,
-        scpEnabled: false,
-      });
-      setDevicePolicyMeta({ version: "", hash: "" });
-    }
-
-    setEffectivePolicy(effectiveResponse?.policy ?? null);
-    setDeviceStatus(statusResponse?.status ?? null);
-  }, [canManagePolicies, selectedDeviceId]);
-
-  const refreshAll = React.useCallback(async () => {
-    if (!canManagePolicies || !tenantId) return;
-
+  // ── Load tenant policy + status + device list ──────────────────────────
+  const loadTenant = React.useCallback(async () => {
+    if (!canManage || !tenantId) return;
     try {
-      setRefreshing(true);
-      await loadTenantState();
-      await loadDeviceState();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to load policies", "error");
-    } finally {
-      setRefreshing(false);
-      setLoading(false);
-    }
-  }, [canManagePolicies, loadDeviceState, loadTenantState, showMessage, tenantId]);
+      setTenantLoading(true);
+      const [policyRes, statusRes, devicesRes] = await Promise.all([
+        getTenantPolicy(tenantId).catch(() => null),
+        listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
+        listKnownDevices().catch(() => ({ items: [] })),
+      ]);
 
-  React.useEffect(() => {
-    if (!canManagePolicies) {
-      setLoading(false);
+      const policy = policyRes?.policy ?? policyRes?.policyJson ?? policyRes ?? {};
+      setTenantPolicy(policyRes ?? null);
+      setTenantForm(readFormFromPolicy(policy));
+      setTenantJsonDraft(formatJson(policy));
+      setTenantJsonError(null);
+
+      const statusItems = Array.isArray(statusRes?.items) ? statusRes.items : [];
+      setTenantStatus(statusItems);
+
+      const deviceItems = Array.isArray(devicesRes?.items) ? devicesRes.items : [];
+      const normalized = deviceItems
+        .map((d) => ({
+          deviceId: String(d?.deviceId || "").trim(),
+          hostname: String(d?.hostname || "").trim() || String(d?.deviceId || "").trim(),
+          connected: d?.connected === true,
+          agentVersion: d?.agentVersion ?? null,
+        }))
+        .filter((d) => d.deviceId);
+      setDevices(normalized);
+      setSelectedDeviceId((current) => {
+        if (current && normalized.some((d) => d.deviceId === current)) return current;
+        return normalized[0]?.deviceId || "";
+      });
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to load tenant policy", "error");
+    } finally {
+      setTenantLoading(false);
+    }
+  }, [canManage, tenantId, showSnack]);
+
+  // ── Load device override + effective + status ──────────────────────────
+  const loadDevice = React.useCallback(async (deviceId) => {
+    if (!canManage || !deviceId) {
+      setDevicePolicy(null);
+      setEffective(null);
+      setDeviceStatus(null);
       return;
     }
+    try {
+      setDeviceLoading(true);
+      const [overrideRes, effectiveRes, statusRes] = await Promise.all([
+        getDevicePolicy(deviceId).catch(() => null),
+        getEffectivePolicy(deviceId).catch(() => null),
+        getDevicePolicyStatus(deviceId).catch(() => null),
+      ]);
 
-    refreshAll();
-  }, [canManagePolicies, refreshAll]);
+      const overridePolicy =
+        overrideRes?.policy ?? overrideRes?.policyJson ?? (overrideRes === null ? null : overrideRes);
+      setDevicePolicy(overrideRes ?? null);
+      setDeviceForm(readFormFromPolicy(overridePolicy || {}));
+      setDeviceJsonDraft(formatJson(overridePolicy || {}));
+      setDeviceJsonError(null);
+      setEffective(effectiveRes ?? null);
+      setDeviceStatus(statusRes ?? null);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to load device policy", "error");
+    } finally {
+      setDeviceLoading(false);
+    }
+  }, [canManage, showSnack]);
 
   React.useEffect(() => {
-    if (!canManagePolicies) return;
-    loadTenantState().catch((error) => {
-      console.error(error);
-      showMessage("Failed to refresh policy inventory", "error");
-    });
-  }, [canManagePolicies, loadTenantState, showMessage]);
+    loadTenant();
+  }, [loadTenant]);
 
   React.useEffect(() => {
-    if (!canManagePolicies) return;
-    loadDeviceState().catch((error) => {
-      console.error(error);
-      showMessage("Failed to load device policy state", "error");
-    });
-  }, [canManagePolicies, loadDeviceState, showMessage]);
+    loadDevice(selectedDeviceId);
+  }, [selectedDeviceId, loadDevice]);
 
-  const summary = React.useMemo(() => {
-    const total = tenantStatuses.length;
-    const ackOk = tenantStatuses.filter((item) => Number(item.last_ack_status) === 0).length;
-    const drift = tenantStatuses.filter(
-      (item) =>
-        item.desired_policy_version &&
-        item.last_ack_policy_version &&
-        String(item.desired_policy_version) !== String(item.last_ack_policy_version)
-    ).length;
-    const pending = tenantStatuses.filter(
-      (item) => item.desired_policy_version && !item.last_ack_policy_version
-    ).length;
-
-    return { total, ackOk, drift, pending };
-  }, [tenantStatuses]);
-
-  const policyStatusRows = React.useMemo(() => {
-    return tenantStatuses.map((row) => ({
-      id: row.device_id,
-      deviceId: row.device_id,
-      desiredPolicyVersion: row.desired_policy_version,
-      desiredPolicySource: row.desired_policy_source,
-      lastSentPolicyVersion: row.last_sent_policy_version,
-      lastAckPolicyVersion: row.last_ack_policy_version,
-      lastAckStatus: row.last_ack_status,
-      lastAckMessage: row.last_ack_message,
-      lastAckAt: row.last_ack_at,
-      updatedAt: row.updated_at,
-    }));
-  }, [tenantStatuses]);
-
-  const statusColumns = React.useMemo(
-    () => [
-      { field: "deviceId", headerName: "Device ID", minWidth: 220, flex: 1.2 },
-      { field: "desiredPolicyVersion", headerName: "Desired", minWidth: 140, flex: 0.8 },
-      { field: "desiredPolicySource", headerName: "Source", minWidth: 120, flex: 0.6 },
-      { field: "lastSentPolicyVersion", headerName: "Last Sent", minWidth: 140, flex: 0.8 },
-      { field: "lastAckPolicyVersion", headerName: "Last ACK", minWidth: 140, flex: 0.8 },
-      {
-        field: "lastAckStatus",
-        headerName: "ACK Status",
-        minWidth: 140,
-        flex: 0.8,
-        renderCell: (params) => renderAckChip(params.value),
-      },
-      { field: "lastAckMessage", headerName: "ACK Message", minWidth: 220, flex: 1.2 },
-      {
-        field: "lastAckAt",
-        headerName: "ACK At",
-        minWidth: 150,
-        flex: 0.8,
-        valueFormatter: (value) => formatDate(value),
-      },
-    ],
-    []
-  );
-
-  const selectedDevice = React.useMemo(
-    () => devices.find((item) => item.deviceId === selectedDeviceId) || null,
-    [devices, selectedDeviceId]
-  );
-
-  const handleSaveTenantPolicy = async () => {
-    if (!tenantId) return;
+  // ── Actions ────────────────────────────────────────────────────────────
+  const handleSaveTenant = async () => {
+    if (!canManage || !tenantId) return;
+    if (tenantJsonError) {
+      showSnack("Fix JSON errors before saving", "error");
+      return;
+    }
     try {
       setTenantSaving(true);
-      const response = await saveTenantPolicy(tenantId, createPolicyFromForm(tenantForm));
-      setTenantPolicyMeta({
-        version: response?.policyVersion ?? "",
-        hash: response?.policyHash ?? "",
-      });
-      showMessage("Tenant policy saved");
-      await refreshAll();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to save tenant policy", "error");
+      const policy = formToPolicy(tenantForm);
+      await saveTenantPolicy(tenantId, policy);
+      showSnack("Tenant policy saved", "success");
+      await loadTenant();
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to save tenant policy", "error");
     } finally {
       setTenantSaving(false);
     }
   };
 
-  const handlePushTenantPolicy = async () => {
-    if (!tenantId) return;
+  const handlePushTenant = async () => {
+    if (!canManage || !tenantId) return;
+    if (!window.confirm("Push the current tenant policy to every connected device?")) return;
     try {
       setTenantPushing(true);
-      const response = await pushTenantPolicy(tenantId);
-      showMessage(`Tenant policy pushed to ${Number(response?.sent ?? 0)} connected devices`);
-      await refreshAll();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to push tenant policy", "error");
+      const res = await pushTenantPolicy(tenantId);
+      showSnack(`Tenant policy dispatched to ${res?.dispatched ?? "all"} devices`, "success");
+      await loadTenant();
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to push tenant policy", "error");
     } finally {
       setTenantPushing(false);
     }
   };
 
-  const handleSaveDevicePolicy = async () => {
-    if (!selectedDeviceId) return;
+  const handleSaveDevice = async () => {
+    if (!canManage || !selectedDeviceId) return;
+    if (deviceJsonError) {
+      showSnack("Fix JSON errors before saving", "error");
+      return;
+    }
     try {
       setDeviceSaving(true);
-      const response = await saveDevicePolicy(selectedDeviceId, createPolicyFromForm(deviceForm));
-      setDevicePolicyMeta({
-        version: response?.policyVersion ?? "",
-        hash: response?.policyHash ?? "",
-      });
-      showMessage("Device override saved");
-      await refreshAll();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to save device override", "error");
+      const policy = formToPolicy(deviceForm);
+      await saveDevicePolicy(selectedDeviceId, policy);
+      showSnack("Device override saved", "success");
+      await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to save device override", "error");
     } finally {
       setDeviceSaving(false);
     }
   };
 
-  const handlePushDevicePolicy = async () => {
-    if (!selectedDeviceId) return;
+  const handlePushDevice = async () => {
+    if (!canManage || !selectedDeviceId) return;
     try {
       setDevicePushing(true);
       await pushDevicePolicy(selectedDeviceId);
-      showMessage("Device effective policy pushed");
-      await refreshAll();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to push device policy", "error");
+      showSnack("Policy dispatched to device", "success");
+      await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to push device policy", "error");
     } finally {
       setDevicePushing(false);
     }
   };
 
-  const handleClearDevicePolicy = async () => {
-    if (!selectedDeviceId) return;
+  const handleDeleteDevice = async () => {
+    if (!canManage || !selectedDeviceId) return;
+    if (!window.confirm("Remove the override? Device will fall back to tenant policy.")) return;
     try {
-      setDeviceClearing(true);
+      setDeviceDeleting(true);
       await deleteDevicePolicy(selectedDeviceId);
-      showMessage("Device override cleared");
-      await refreshAll();
-    } catch (error) {
-      console.error(error);
-      showMessage("Failed to clear device override", "error");
+      showSnack("Device override removed", "success");
+      await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to remove device override", "error");
     } finally {
-      setDeviceClearing(false);
+      setDeviceDeleting(false);
     }
   };
 
-  if (!canManagePolicies) {
+  const handleSwitchToDevice = (deviceId) => {
+    setSelectedDeviceId(deviceId);
+    setTab("device");
+  };
+
+  // ── Derived summary ────────────────────────────────────────────────────
+  const deviceMap = React.useMemo(
+    () => new Map(devices.map((d) => [d.deviceId, d])),
+    [devices]
+  );
+
+  const summary = React.useMemo(() => {
+    const total = tenantStatus.length;
+    const acked = tenantStatus.filter((s) => s.last_ack_status === 0).length;
+    const pending = tenantStatus.filter(
+      (s) => s.last_ack_status == null && s.last_sent_policy_version
+    ).length;
+    const errors = tenantStatus.filter(
+      (s) => s.last_ack_status != null && s.last_ack_status !== 0
+    ).length;
+    return { total, acked, pending, errors };
+  }, [tenantStatus]);
+
+  const tenantVersion = tenantPolicy?.version ?? tenantPolicy?.policyVersion ?? "—";
+  const tenantHash = tenantPolicy?.hash ?? tenantPolicy?.policyHash ?? null;
+  const tenantUpdatedAt = tenantPolicy?.updatedAt ?? tenantPolicy?.updated_at;
+
+  const deviceVersion = devicePolicy?.version ?? devicePolicy?.policyVersion ?? null;
+  const deviceHash = devicePolicy?.hash ?? devicePolicy?.policyHash ?? null;
+  const deviceUpdatedAt = devicePolicy?.updatedAt ?? devicePolicy?.updated_at;
+
+  const effectivePolicyJson =
+    effective?.policyJson ?? effective?.policy_json ?? effective?.policy ?? {};
+  const effectiveSource = effective?.source;
+  const effectiveVersion = effective?.policyVersion ?? effective?.policy_version;
+
+  const hasOverride = !isEmptyPolicy(devicePolicy?.policy ?? devicePolicy?.policyJson ?? devicePolicy);
+
+  // ── Rollout table columns ──────────────────────────────────────────────
+  const statusColumns = [
+    {
+      field: "device_id",
+      headerName: "Device",
+      minWidth: 200,
+      flex: 1,
+      valueGetter: (_v, row) => deviceMap.get(row.device_id)?.hostname || row.device_id,
+    },
+    {
+      field: "desired_policy_source",
+      headerName: "Source",
+      minWidth: 140,
+      flex: 0.5,
+      renderCell: (params) => renderSourceChip(params.value),
+    },
+    {
+      field: "desired_policy_version",
+      headerName: "Desired",
+      minWidth: 110,
+      flex: 0.4,
+      valueGetter: (_v, row) => row.desired_policy_version || "—",
+    },
+    {
+      field: "last_sent_policy_version",
+      headerName: "Sent",
+      minWidth: 110,
+      flex: 0.4,
+      valueGetter: (_v, row) => row.last_sent_policy_version || "—",
+    },
+    {
+      field: "last_ack_status",
+      headerName: "ACK",
+      minWidth: 130,
+      flex: 0.5,
+      renderCell: (params) => renderAckChip(params.row.last_ack_status, null),
+    },
+    {
+      field: "last_ack_at",
+      headerName: "ACK At",
+      minWidth: 140,
+      flex: 0.5,
+      renderCell: (params) => formatDate(params.value),
+    },
+    {
+      field: "last_ack_message",
+      headerName: "Message",
+      minWidth: 220,
+      flex: 1,
+      valueGetter: (_v, row) => row.last_ack_message || "—",
+    },
+  ];
+
+  const columnVisibilityModel = React.useMemo(() => {
+    if (isSmDown) {
+      return { last_ack_at: false, last_ack_message: false, desired_policy_version: false };
+    }
+    return {};
+  }, [isSmDown]);
+
+  if (!canManage) {
     return (
-      <Paper
-        sx={{
-          p: 3,
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-        }}
-      >
-        <Alert severity="info">
-          Policies management is restricted to active tenant admins and owners.
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Alert severity="warning" sx={{ borderRadius: 3 }}>
+          Policy management is restricted to active tenant admins and owners.
         </Alert>
-      </Paper>
+      </Box>
     );
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Paper
+    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
+      {/* Header */}
+      <Box
         sx={{
-          p: 2.5,
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+          mb: 2,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: { xs: "stretch", sm: "center" },
+          gap: 2,
+          flexWrap: "wrap",
+          flexDirection: { xs: "column", sm: "row" },
         }}
       >
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={2}
-          alignItems={{ xs: "stretch", md: "center" }}
-          justifyContent="space-between"
-        >
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              Policies
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Manage tenant baseline policy, device overrides, effective policy, and delivery status.
-            </Typography>
-          </Box>
+        <Box>
+          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
+            Policies
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
+            Configure tenant-wide behavior and fine-tune individual devices with overrides.
+          </Typography>
+        </Box>
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-            <TextField
-              label="Search Devices"
-              size="small"
-              value={deviceSearch}
-              onChange={(event) => setDeviceSearch(event.target.value)}
+        <Button
+          variant="outlined"
+          startIcon={<RefreshOutlinedIcon />}
+          onClick={() => {
+            loadTenant();
+            if (selectedDeviceId) loadDevice(selectedDeviceId);
+          }}
+          disabled={tenantLoading}
+          sx={{
+            textTransform: "none",
+            fontWeight: 700,
+            borderColor: BRAND.teal,
+            color: BRAND.teal,
+            "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+          }}
+        >
+          {tenantLoading ? "Loading…" : "Refresh"}
+        </Button>
+      </Box>
+
+      {/* Summary cards */}
+      <Box sx={{ mb: 2 }}>
+        <Grid container spacing={2} alignItems="stretch">
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <SummaryCard
+              title="Devices tracked"
+              value={summary.total}
+              icon={<AssignmentOutlinedIcon />}
+              accent={BRAND.dark}
+              tint={BRAND.darkSoft}
             />
-            <Button
-              variant="outlined"
-              startIcon={<RefreshOutlinedIcon />}
-              onClick={refreshAll}
-              disabled={refreshing || loading}
-              sx={{ textTransform: "none", fontWeight: 700 }}
-            >
-              {refreshing ? "Refreshing..." : "Refresh"}
-            </Button>
-          </Stack>
-        </Stack>
-      </Paper>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <SummaryCard
+              title="ACK OK"
+              value={summary.acked}
+              icon={<CheckCircleOutlineOutlinedIcon />}
+              accent={BRAND.tealText}
+              tint={BRAND.tealSoft}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <SummaryCard
+              title="Pending ACK"
+              value={summary.pending}
+              icon={<HourglassEmptyOutlinedIcon />}
+              accent="#8b5418"
+              tint="rgba(199,121,43,0.14)"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <SummaryCard
+              title="ACK errors"
+              value={summary.errors}
+              icon={<ErrorOutlineOutlinedIcon />}
+              accent="#b3261e"
+              tint="rgba(179,38,30,0.12)"
+            />
+          </Grid>
+        </Grid>
+      </Box>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard title="Tracked Devices" value={summary.total} accent="#16324f" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard title="ACK OK" value={summary.ackOk} accent="#1ba6a6" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard title="Pending ACK" value={summary.pending} accent="#9a6700" />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard title="Version Drift" value={summary.drift} accent="#b3261e" />
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, xl: 6 }}>
-          <PolicyEditorCard
-            title="Tenant Policy"
-            subtitle="Baseline policy for all devices in the tenant."
-            form={tenantForm}
-            onChange={setTenantForm}
-            onSave={handleSaveTenantPolicy}
-            onPush={handlePushTenantPolicy}
-            saving={tenantSaving}
-            pushing={tenantPushing}
-            version={tenantPolicyMeta.version}
-            hash={tenantPolicyMeta.hash}
-          />
-        </Grid>
-
-        <Grid size={{ xs: 12, xl: 6 }}>
-          <Stack spacing={2.5}>
-            <Paper
-              sx={{
-                p: 2.5,
-                borderRadius: 3,
-                border: "1px solid rgba(0,0,0,0.08)",
-                boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-              }}
-            >
-              <Stack spacing={2}>
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Device Override
-                </Typography>
-                <TextField
-                  select
-                  label="Device"
-                  size="small"
-                  value={selectedDeviceId}
-                  onChange={(event) => setSelectedDeviceId(event.target.value)}
-                  fullWidth
-                >
-                  {devices.map((device) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {device.hostname || device.deviceId}
-                    </option>
-                  ))}
-                </TextField>
-              </Stack>
-            </Paper>
-
-            <PolicyEditorCard
-              title="Device Override Policy"
-              subtitle="Optional override for the selected device."
-              form={deviceForm}
-            onChange={setDeviceForm}
-            onSave={handleSaveDevicePolicy}
-            onPush={handlePushDevicePolicy}
-            onClear={handleClearDevicePolicy}
-            saving={deviceSaving}
-            pushing={devicePushing}
-            clearing={deviceClearing}
-            version={devicePolicyMeta.version}
-            hash={devicePolicyMeta.hash}
-          />
-          </Stack>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Paper
-            sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-            }}
-          >
-            <Stack spacing={1.5}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Effective Policy
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {selectedDevice
-                  ? `Resolved policy for ${selectedDevice.hostname || selectedDevice.deviceId}`
-                  : "Select a device to inspect effective policy."}
-              </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <Chip
-                  label={`Source: ${effectivePolicy?.source || " - "}`}
-                  variant="outlined"
-                />
-                <Chip
-                  label={`Version: ${effectivePolicy?.policyVersion || " - "}`}
-                  variant="outlined"
-                />
-              </Stack>
-              <TextField
-                value={formatJson(effectivePolicy?.policyJson ?? {})}
-                multiline
-                minRows={isMdDown ? 10 : 14}
-                fullWidth
-                InputProps={{
-                  readOnly: true,
-                  sx: {
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                    alignItems: "flex-start",
-                  },
-                }}
-              />
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <Paper
-            sx={{
-              p: 2.5,
-              borderRadius: 3,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-            }}
-          >
-            <Stack spacing={1.5}>
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                Device Delivery Status
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Latest desired, sent, and ACK state for the selected device.
-              </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <Chip label={`Desired: ${deviceStatus?.desired_policy_version || " - "}`} variant="outlined" />
-                <Chip label={`Sent: ${deviceStatus?.last_sent_policy_version || " - "}`} variant="outlined" />
-                {renderAckChip(deviceStatus?.last_ack_status)}
-              </Stack>
-              <TextField
-                value={formatJson(deviceStatus ?? {})}
-                multiline
-                minRows={isMdDown ? 10 : 14}
-                fullWidth
-                InputProps={{
-                  readOnly: true,
-                  sx: {
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                    alignItems: "flex-start",
-                  },
-                }}
-              />
-            </Stack>
-          </Paper>
-        </Grid>
-      </Grid>
-
+      {/* Tabs */}
       <Paper
+        elevation={0}
         sx={{
-          p: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
+          overflow: "hidden",
+          mb: 2,
         }}
       >
-        <Stack
-          direction={{ xs: "column", sm: "row" }}
-          spacing={1.5}
-          alignItems={{ xs: "flex-start", sm: "center" }}
-          justifyContent="space-between"
-          sx={{ mb: 1.5 }}
-        >
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 800 }}>
-              Tenant Policy Status
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Delivery and ACK status for all tracked devices in the tenant.
-            </Typography>
-          </Box>
-          <Button
-            variant="outlined"
-            startIcon={<PublishOutlinedIcon />}
-            onClick={handlePushTenantPolicy}
-            disabled={tenantPushing}
-            sx={{ textTransform: "none", fontWeight: 700 }}
-          >
-            Push Tenant Policy
-          </Button>
-        </Stack>
-
-        <DataGrid
-          autoHeight
-          rows={policyStatusRows}
-          columns={statusColumns}
-          disableRowSelectionOnClick
-          loading={loading}
-          getRowId={(row) => row.id}
-          pageSizeOptions={[10, 25, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: {
-                pageSize: 10,
-                page: 0,
+        <Tabs
+          value={tab}
+          onChange={(_e, next) => setTab(next)}
+          sx={{
+            borderBottom: `1px solid ${BRAND.border}`,
+            bgcolor: BRAND.darkSoft,
+            "& .MuiTab-root": {
+              textTransform: "none",
+              fontWeight: 700,
+              color: BRAND.dark,
+              minHeight: 48,
+              outline: "none",
+              "&:focus, &:focus-visible": {
+                outline: "none",
+                boxShadow: "none",
+              },
+              "&.Mui-focusVisible": {
+                backgroundColor: BRAND.cyanSoft,
               },
             },
+            "& .Mui-selected": { color: `${BRAND.teal} !important` },
+            "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
           }}
-          onRowClick={(params) => setSelectedDeviceId(params.row.deviceId)}
-          sx={{
-            border: 0,
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: "rgba(22,50,79,0.04)",
-            },
-          }}
-        />
+        >
+          <Tab value="tenant" label="Tenant Policy" icon={<TuneOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
+          <Tab value="device" label="Device Overrides" icon={<AccountTreeOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
+        </Tabs>
+
+        <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+          {tab === "tenant" ? (
+            <TenantTab
+              tenantForm={tenantForm}
+              setTenantForm={setTenantForm}
+              tenantJsonDraft={tenantJsonDraft}
+              setTenantJsonDraft={setTenantJsonDraft}
+              tenantJsonError={tenantJsonError}
+              setTenantJsonError={setTenantJsonError}
+              tenantVersion={tenantVersion}
+              tenantHash={tenantHash}
+              tenantUpdatedAt={tenantUpdatedAt}
+              tenantSaving={tenantSaving}
+              tenantPushing={tenantPushing}
+              onSave={handleSaveTenant}
+              onPush={handlePushTenant}
+              tenantStatus={tenantStatus}
+              statusColumns={statusColumns}
+              columnVisibilityModel={columnVisibilityModel}
+              onRowClick={(row) => handleSwitchToDevice(row.device_id)}
+              loading={tenantLoading}
+            />
+          ) : (
+            <DeviceTab
+              devices={devices}
+              selectedDeviceId={selectedDeviceId}
+              setSelectedDeviceId={setSelectedDeviceId}
+              deviceMap={deviceMap}
+              hasOverride={hasOverride}
+              deviceForm={deviceForm}
+              setDeviceForm={setDeviceForm}
+              deviceJsonDraft={deviceJsonDraft}
+              setDeviceJsonDraft={setDeviceJsonDraft}
+              deviceJsonError={deviceJsonError}
+              setDeviceJsonError={setDeviceJsonError}
+              deviceVersion={deviceVersion}
+              deviceHash={deviceHash}
+              deviceUpdatedAt={deviceUpdatedAt}
+              effectivePolicyJson={effectivePolicyJson}
+              effectiveSource={effectiveSource}
+              effectiveVersion={effectiveVersion}
+              deviceStatus={deviceStatus}
+              deviceSaving={deviceSaving}
+              devicePushing={devicePushing}
+              deviceDeleting={deviceDeleting}
+              loading={deviceLoading}
+              onSave={handleSaveDevice}
+              onPush={handlePushDevice}
+              onDelete={handleDeleteDevice}
+            />
+          )}
+        </Box>
       </Paper>
 
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
-        onClose={() => setSnackbar((current) => ({ ...current, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       >
         <Alert
-          onClose={() => setSnackbar((current) => ({ ...current, open: false }))}
           severity={snackbar.severity}
           variant="filled"
-          sx={{ width: "100%" }}
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
         >
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Stack>
+    </Box>
+  );
+}
+
+// ── Tenant tab ──────────────────────────────────────────────────────────
+
+function TenantTab(props) {
+  const {
+    tenantForm, setTenantForm,
+    tenantJsonDraft, setTenantJsonDraft,
+    tenantJsonError, setTenantJsonError,
+    tenantVersion, tenantHash, tenantUpdatedAt,
+    tenantSaving, tenantPushing, onSave, onPush,
+    tenantStatus, statusColumns, columnVisibilityModel, onRowClick,
+    loading,
+  } = props;
+
+  return (
+    <Grid container spacing={2}>
+      <Grid size={{ xs: 12, lg: 5 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            borderRadius: 3,
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: BRAND.shadow,
+            minWidth: 0,
+          }}
+        >
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+              Tenant policy
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: "grid", gap: 0.5, mb: 2 }}>
+            <DetailRow label="Version" value={tenantVersion} mono />
+            <DetailRow label="Hash" value={shortHash(tenantHash)} mono />
+            <DetailRow label="Updated" value={formatDate(tenantUpdatedAt)} />
+          </Box>
+
+          <Divider sx={{ borderColor: BRAND.border, mb: 2 }} />
+
+          <PolicyForm
+            form={tenantForm}
+            onChange={setTenantForm}
+            jsonDraft={tenantJsonDraft}
+            setJsonDraft={setTenantJsonDraft}
+            jsonError={tenantJsonError}
+            setJsonError={setTenantJsonError}
+          />
+
+          <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
+            <Button
+              variant="contained"
+              startIcon={<SaveOutlinedIcon />}
+              onClick={onSave}
+              disabled={tenantSaving || Boolean(tenantJsonError)}
+              sx={{
+                bgcolor: BRAND.teal,
+                color: "#fff",
+                fontWeight: 700,
+                textTransform: "none",
+                "&:hover": { bgcolor: BRAND.tealHover },
+              }}
+            >
+              {tenantSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<SendOutlinedIcon />}
+              onClick={onPush}
+              disabled={tenantPushing}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.teal,
+                color: BRAND.teal,
+                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              {tenantPushing ? "Pushing…" : "Push to all"}
+            </Button>
+          </Box>
+        </Paper>
+      </Grid>
+
+      <Grid size={{ xs: 12, lg: 7 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            borderRadius: 3,
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: BRAND.shadow,
+            minWidth: 0,
+            overflow: "hidden",
+          }}
+        >
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+              Rollout status
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              {tenantStatus.length} devices tracked · click a row to edit override
+            </Typography>
+          </Box>
+
+          <Box sx={{ width: "100%", overflowX: "auto" }}>
+            <DataGrid
+              autoHeight
+              disableRowSelectionOnClick
+              rows={tenantStatus}
+              columns={statusColumns}
+              loading={loading}
+              getRowId={(row) => row.device_id}
+              onRowClick={(params) => onRowClick?.(params.row)}
+              columnVisibilityModel={columnVisibilityModel}
+              pageSizeOptions={[10, 25, 50]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              sx={{
+                border: "none",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: BRAND.darkSoft,
+                  color: BRAND.dark,
+                  fontWeight: 700,
+                  borderBottom: `1px solid ${BRAND.border}`,
+                },
+                "& .MuiDataGrid-row": { cursor: "pointer" },
+                "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
+                "& .MuiDataGrid-cell": { borderBottom: `1px solid ${BRAND.border}` },
+                "& .MuiDataGrid-footerContainer": { borderTop: `1px solid ${BRAND.border}` },
+              }}
+            />
+          </Box>
+        </Paper>
+      </Grid>
+    </Grid>
+  );
+}
+
+// ── Device tab ──────────────────────────────────────────────────────────
+
+function DeviceTab(props) {
+  const {
+    devices, selectedDeviceId, setSelectedDeviceId, deviceMap,
+    hasOverride,
+    deviceForm, setDeviceForm,
+    deviceJsonDraft, setDeviceJsonDraft,
+    deviceJsonError, setDeviceJsonError,
+    deviceVersion, deviceHash, deviceUpdatedAt,
+    effectivePolicyJson, effectiveSource, effectiveVersion,
+    deviceStatus,
+    deviceSaving, devicePushing, deviceDeleting, loading,
+    onSave, onPush, onDelete,
+  } = props;
+
+  const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) : null;
+
+  return (
+    <Box>
+      {/* Device selector */}
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          select
+          label="Device"
+          size="small"
+          value={selectedDeviceId}
+          onChange={(e) => setSelectedDeviceId(e.target.value)}
+          fullWidth
+          helperText={
+            selectedDevice
+              ? `${selectedDevice.connected ? "Connected" : "Offline"} · agent ${selectedDevice.agentVersion || "unknown"}`
+              : `${devices.length} devices known`
+          }
+        >
+          {devices.length === 0 ? (
+            <MenuItem value="">No devices available</MenuItem>
+          ) : (
+            devices.map((d) => (
+              <MenuItem key={d.deviceId} value={d.deviceId}>
+                {d.hostname}
+                {d.hostname !== d.deviceId ? ` · ${d.deviceId}` : ""}
+                {d.connected ? " · online" : " · offline"}
+              </MenuItem>
+            ))
+          )}
+        </TextField>
+      </Box>
+
+      {!selectedDeviceId ? (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 3,
+            borderRadius: 2,
+            borderColor: BRAND.border,
+            borderStyle: "dashed",
+            bgcolor: BRAND.darkSoft,
+            textAlign: "center",
+            color: "text.secondary",
+          }}
+        >
+          <InfoOutlinedIcon sx={{ fontSize: 32, color: BRAND.gray, mb: 1 }} />
+          <Typography variant="body2">Select a device to inspect and edit its override.</Typography>
+        </Paper>
+      ) : (
+        <Grid container spacing={2}>
+          {/* Override editor */}
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 1.5, sm: 2 },
+                borderRadius: 3,
+                border: `1px solid ${BRAND.border}`,
+                boxShadow: BRAND.shadow,
+                minWidth: 0,
+              }}
+            >
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                  Device override
+                </Typography>
+                {hasOverride ? (
+                  <Chip
+                    label="Override active"
+                    size="small"
+                    sx={{
+                      bgcolor: BRAND.cyanSoft,
+                      color: BRAND.dark,
+                      fontWeight: 700,
+                      border: `1px solid ${BRAND.cyan}88`,
+                    }}
+                  />
+                ) : (
+                  <Chip
+                    label="No override"
+                    size="small"
+                    sx={{
+                      bgcolor: BRAND.darkSoft,
+                      color: BRAND.dark,
+                      fontWeight: 700,
+                      border: `1px solid ${BRAND.border}`,
+                    }}
+                  />
+                )}
+              </Box>
+
+              <Box sx={{ display: "grid", gap: 0.5, mb: 2 }}>
+                <DetailRow label="Version" value={deviceVersion || "—"} mono />
+                <DetailRow label="Hash" value={shortHash(deviceHash)} mono />
+                <DetailRow label="Updated" value={formatDate(deviceUpdatedAt)} />
+              </Box>
+
+              <Divider sx={{ borderColor: BRAND.border, mb: 2 }} />
+
+              <PolicyForm
+                form={deviceForm}
+                onChange={setDeviceForm}
+                jsonDraft={deviceJsonDraft}
+                setJsonDraft={setDeviceJsonDraft}
+                jsonError={deviceJsonError}
+                setJsonError={setDeviceJsonError}
+              />
+
+              <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
+                <Button
+                  variant="contained"
+                  startIcon={<SaveOutlinedIcon />}
+                  onClick={onSave}
+                  disabled={deviceSaving || Boolean(deviceJsonError) || loading}
+                  sx={{
+                    bgcolor: BRAND.teal,
+                    color: "#fff",
+                    fontWeight: 700,
+                    textTransform: "none",
+                    "&:hover": { bgcolor: BRAND.tealHover },
+                  }}
+                >
+                  {deviceSaving ? "Saving…" : hasOverride ? "Update override" : "Create override"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<SendOutlinedIcon />}
+                  onClick={onPush}
+                  disabled={devicePushing || loading}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 700,
+                    borderColor: BRAND.teal,
+                    color: BRAND.teal,
+                    "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+                  }}
+                >
+                  {devicePushing ? "Pushing…" : "Push"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteOutlineOutlinedIcon />}
+                  onClick={onDelete}
+                  disabled={deviceDeleting || !hasOverride || loading}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  {deviceDeleting ? "Removing…" : "Remove override"}
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+
+          {/* Effective + status */}
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 1.5, sm: 2 },
+                borderRadius: 3,
+                border: `1px solid ${BRAND.border}`,
+                boxShadow: BRAND.shadow,
+                minWidth: 0,
+                mb: 2,
+              }}
+            >
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                  Effective policy
+                </Typography>
+                {renderSourceChip(effectiveSource)}
+              </Box>
+              <Box sx={{ display: "grid", gap: 0.5, mb: 1 }}>
+                <DetailRow label="Version" value={effectiveVersion || "—"} mono />
+              </Box>
+              <JsonBlock value={effectivePolicyJson} maxHeight={220} />
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 1.5, sm: 2 },
+                borderRadius: 3,
+                border: `1px solid ${BRAND.border}`,
+                boxShadow: BRAND.shadow,
+                minWidth: 0,
+              }}
+            >
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                  Sync status
+                </Typography>
+                {deviceStatus ? renderAckChip(deviceStatus.last_ack_status, null) : null}
+              </Box>
+              {deviceStatus ? (
+                <Box sx={{ display: "grid", gap: 0.5 }}>
+                  <DetailRow label="Desired" value={deviceStatus.desired_policy_version || "—"} mono />
+                  <DetailRow label="Source" value={deviceStatus.desired_policy_source || "—"} />
+                  <DetailRow label="Last sent" value={deviceStatus.last_sent_policy_version || "—"} mono />
+                  <DetailRow label="Sent at" value={formatDate(deviceStatus.last_sent_at)} />
+                  <DetailRow label="ACK version" value={deviceStatus.last_ack_policy_version || "—"} mono />
+                  <DetailRow label="ACK at" value={formatDate(deviceStatus.last_ack_at)} />
+                  <DetailRow label="Message" value={deviceStatus.last_ack_message || "—"} />
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  No sync activity recorded yet for this device.
+                </Typography>
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+    </Box>
   );
 }

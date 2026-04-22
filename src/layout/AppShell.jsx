@@ -4,7 +4,6 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import { httpGetJson } from "../api/http";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import DeviceCerts from "../pages/DeviceCerts";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Configurations = React.lazy(() => import("../pages/Configurations"));
@@ -16,6 +15,8 @@ const Jobs = React.lazy(() => import("../pages/Jobs"));
 const Policies = React.lazy(() => import("../pages/Policies"));
 const Audit = React.lazy(() => import("../pages/Audit"));
 const PKI = React.lazy(() => import("../pages/PKI"));
+const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
+const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 
 function PageFallback() {
   return (
@@ -27,7 +28,7 @@ function PageFallback() {
         justifyContent: "center",
       }}
     >
-      <CircularProgress sx={{ color: "#1ba6a6" }} />
+      <CircularProgress sx={{ color: "#5A9F9F" }} />
     </Box>
   );
 }
@@ -36,6 +37,7 @@ export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
   const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "assets"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -66,6 +68,11 @@ export default function AppShell() {
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const handleSelect = React.useCallback((key) => {
+    setSelectedPage(key);
+    setMobileOpen(false); // auto-close drawer when a page is picked on mobile
   }, []);
 
   let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
@@ -109,58 +116,67 @@ export default function AppShell() {
   if (selectedPage === "pki") {
     content = <PKI />;
   }
-  if (selectedPage === "device-certs") {
-    content = <DeviceCerts />;
+
+  if (selectedPage === "ad") {
+    content = <SecurityCompliance />;
+  }
+
+  if (selectedPage === "remote") {
+    content = <PatchManagement />;
   }
 
   return (
     <Box
       sx={{
         display: "flex",
-        minHeight: "100dvh",
+        height: "100dvh",
         width: "100%",
         bgcolor: "#f5f6f8",
+        overflow: "hidden", // the shell is a fixed frame
       }}
     >
       <Sidebar
         selected={selectedPage}
-        onSelect={setSelectedPage}
+        onSelect={handleSelect}
         showWelcomeEntry={showWelcomeEntry}
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
       />
 
       <Box
         sx={{
           flex: 1,
           minWidth: 0,
-          minHeight: "100dvh",
+          height: "100dvh",
           display: "flex",
           flexDirection: "column",
           bgcolor: "#f5f6f8",
+          overflow: "hidden",
         }}
       >
-        <Box
-          sx={{
-            width: "100%",
-            flexShrink: 0,
-          }}
-        >
-          <Topbar />
+        <Box sx={{ width: "100%", flexShrink: 0 }}>
+          <Topbar onMenuClick={() => setMobileOpen(true)} />
         </Box>
 
+        {/* The single scroll container for everything below the Topbar.
+            Vertical scroll is owned here. Horizontal scroll is clamped:
+            wide Papers (DataGrids) scroll internally via the :has() rule
+            in index.css. */}
         <Box
           sx={{
             flex: 1,
             minWidth: 0,
             minHeight: 0,
-            width: "98%",
-            px: { xs: 1.5, sm: 2 },
-            py: { xs: 1.5, sm: 2 },
+            width: "100%",
+            px: { xs: 1.25, sm: 2, md: 2.5 },
+            py: { xs: 1.25, sm: 2 },
             bgcolor: "#f5f6f8",
-            overflow: "auto",
+            overflowY: "auto",
+            overflowX: "hidden",
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
-            {content}
+            <Box sx={{ minWidth: 0, width: "100%" }}>{content}</Box>
           </React.Suspense>
         </Box>
       </Box>
