@@ -8,16 +8,70 @@ import {
 } from "@mui/material";
 
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
+import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
-
 import AssetsDashboard from "./AssetsDashboard";
 import SoftwareDelivery from "./SoftwareDelivery";
+
+import SoftwareInventory from "./SoftwareInventory";
+import HardwareInventory from "./HardwareInventory";
+
+function TabPanel({ children, value, index }) {
+  return (
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      id={`assets-tabpanel-${index}`}
+      aria-labelledby={`assets-tab-${index}`}
+    >
+      {value === index && <Box>{children}</Box>}
+    </Box>
+  );
+}
 
 function a11yProps(index) {
   return {
     id: `assets-tab-${index}`,
     "aria-controls": `assets-tabpanel-${index}`,
   };
+}
+
+function InventoryPlaceholder({ title, description }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 3, sm: 4 },
+        borderRadius: 3,
+        border: "1px solid rgba(0,0,0,0.08)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+        minHeight: 280,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        textAlign: "center",
+      }}
+    >
+      <Typography
+        variant="h5"
+        sx={{ fontWeight: 700, color: "#16324f", mb: 1.5 }}
+      >
+        {title}
+      </Typography>
+
+      <Typography
+        sx={{
+          maxWidth: 620,
+          color: "#667085",
+          lineHeight: 1.7,
+        }}
+      >
+        {description}
+      </Typography>
+    </Paper>
+  );
 }
 
 export default function Assets({ onAssetsEmptyStateChange }) {
@@ -29,6 +83,15 @@ export default function Assets({ onAssetsEmptyStateChange }) {
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
+          Assets
+        </Typography>
+
+        <Typography variant="body1" color="text.secondary">
+          Monitor devices, inventory and agent distribution
+        </Typography>
+      </Box>
 
       <Paper
         elevation={0}
@@ -65,49 +128,69 @@ export default function Assets({ onAssetsEmptyStateChange }) {
               fontWeight: 700,
               minHeight: 62,
               color: "#667085",
-              "&.Mui-selected": {
-                color: "#16324f",
-              },
+              "&.Mui-selected": { color: "#16324f" },
             }}
           />
 
           <Tab
-            icon={<DownloadOutlinedIcon fontSize="small" />}
+            icon={<AppsOutlinedIcon fontSize="small" />}
             iconPosition="start"
-            label="Software Delivery"
+            label="Software Inventory"
             {...a11yProps(1)}
             sx={{
               textTransform: "none",
               fontWeight: 700,
               minHeight: 62,
               color: "#667085",
-              "&.Mui-selected": {
-                color: "#16324f",
-              },
+              "&.Mui-selected": { color: "#16324f" },
+            }}
+          />
+
+          <Tab
+            icon={<MemoryOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Hardware Inventory"
+            {...a11yProps(2)}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              minHeight: 62,
+              color: "#667085",
+              "&.Mui-selected": { color: "#16324f" },
+            }}
+          />
+
+          <Tab
+            icon={<DownloadOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Agent Downloads"
+            {...a11yProps(3)}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              minHeight: 62,
+              color: "#667085",
+              "&.Mui-selected": { color: "#16324f" },
             }}
           />
         </Tabs>
       </Paper>
 
-      <Box
-        role="tabpanel"
-        hidden={activeTab !== 0}
-        id="assets-tabpanel-0"
-        aria-labelledby="assets-tab-0"
-      >
-        {activeTab === 0 && (
-          <AssetsDashboard onAssetsEmptyStateChange={onAssetsEmptyStateChange} />
-        )}
-      </Box>
+      <TabPanel value={activeTab} index={0}>
+        <AssetsDashboard onAssetsEmptyStateChange={onAssetsEmptyStateChange} />
+      </TabPanel>
 
-      <Box
-        role="tabpanel"
-        hidden={activeTab !== 1}
-        id="assets-tabpanel-1"
-        aria-labelledby="assets-tab-1"
-      >
-        {activeTab === 1 && <SoftwareDelivery embedded />}
-      </Box>
+      <TabPanel value={activeTab} index={1}>
+        <SoftwareInventory />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={2}>
+        <HardwareInventory />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={3}>
+        <SoftwareDelivery embedded />
+      </TabPanel>
     </Box>
   );
 }
