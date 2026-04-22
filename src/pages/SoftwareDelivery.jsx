@@ -393,7 +393,7 @@ export default function SoftwareDelivery({ embedded = false }) {
         >
           <Box>
             <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-              Software Delivery
+              Software Downloads
             </Typography>
             <Typography variant="body1" color="text.secondary">
               Manage supported Tracenium Agent packages and downloads
