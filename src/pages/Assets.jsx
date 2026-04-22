@@ -85,7 +85,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Box sx={{ mb: 2 }}>
         <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-          Assets
+          Asset Management
         </Typography>
 
         <Typography variant="body1" color="text.secondary">
