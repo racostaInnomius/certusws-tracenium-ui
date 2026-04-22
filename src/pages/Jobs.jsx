@@ -78,13 +78,20 @@ const TARGET_OPTIONS = [
   { value: "tenant", label: "All Connected Devices" },
 ];
 
-// Agent update jobs carry only { version } in the payload. The agent receives
-// the job and downloads the binary that matches ITS OWN platform/architecture,
-// so the UI does not need to expose platform/arch selectors. We query
-// available versions with this default pair, assuming releases are published
-// for all supported (platform, arch) combinations with the same version number.
+// Agent update jobs carry only { version } in the payload. The agent
+// receives the job and downloads the binary that matches ITS OWN
+// platform/architecture, so the UI does not need to expose platform/arch
+// selectors. What the UI DOES need is to query
+// /binaries/agent/versions using the platform of the SELECTED device,
+// so the dropdown lists versions that actually exist for that host.
+// arch isn't persisted server-side today, so we pick a sane default per
+// platform (macOS → arm64, everything else → x64).
 const DEFAULT_VERSION_PLATFORM = "windows";
 const DEFAULT_VERSION_ARCH = "x64";
+
+function archForPlatform(platform) {
+  return platform === "macos" ? "arm64" : "x64";
+}
 
 function DetailRow({ label, value, mono = false }) {
   return (
@@ -339,6 +346,10 @@ export default function Jobs() {
         connected: item?.connected === true,
         enrollmentStatus: item?.enrollmentStatus ?? null,
         agentVersion: item?.agentVersion ?? null,
+        // Normalised by the backend (windows | macos | linux | null).
+        // Used to filter /binaries/agent/versions so the dropdown shows
+        // the right version set for the selected host.
+        platform: item?.platform ?? null,
         enrolledAt: item?.enrolledAt ?? null,
         lastSeenAt: item?.lastSeenAt ?? null,
         connectedAt: item?.connectedAt ?? null,
@@ -426,6 +437,25 @@ export default function Jobs() {
     loadMeta();
   }, [loadMeta]);
 
+  // Resolve the (platform, arch) pair to use when fetching agent versions.
+  // - targetMode "device": use the selected device's platform when known;
+  //   otherwise fall back to the windows/x64 defaults so the dropdown is
+  //   never empty.
+  // - targetMode "tenant": a tenant-wide agent_update fans out to every
+  //   connected device regardless of platform; each agent downloads the
+  //   binary for its own platform at apply time. We use the defaults to
+  //   keep the dropdown deterministic.
+  const selectedDevicePlatform = React.useMemo(() => {
+    if (targetMode !== "device") return null;
+    const device = knownDevices.find((d) => d.deviceId === selectedDeviceId);
+    return device?.platform ?? null;
+  }, [targetMode, knownDevices, selectedDeviceId]);
+
+  const versionFetchPlatform = selectedDevicePlatform || DEFAULT_VERSION_PLATFORM;
+  const versionFetchArch = selectedDevicePlatform
+    ? archForPlatform(selectedDevicePlatform)
+    : DEFAULT_VERSION_ARCH;
+
   React.useEffect(() => {
     if (jobType !== "agent_update" || !canManageJobs) {
       return;
@@ -436,8 +466,8 @@ export default function Jobs() {
     setVersionsError("");
 
     listAgentVersions({
-      platform: DEFAULT_VERSION_PLATFORM,
-      arch: DEFAULT_VERSION_ARCH,
+      platform: versionFetchPlatform,
+      arch: versionFetchArch,
     })
       .then((response) => {
         if (cancelled) return;
@@ -453,7 +483,7 @@ export default function Jobs() {
         console.error(err);
         setAvailableVersions([]);
         setVersion("");
-        setVersionsError("No versions available");
+        setVersionsError(`No versions available for ${versionFetchPlatform}/${versionFetchArch}`);
       })
       .finally(() => {
         if (!cancelled) setLoadingVersions(false);
@@ -462,7 +492,7 @@ export default function Jobs() {
     return () => {
       cancelled = true;
     };
-  }, [jobType, canManageJobs]);
+  }, [jobType, canManageJobs, versionFetchPlatform, versionFetchArch]);
 
   React.useEffect(() => {
     loadTenantJobs();
@@ -1062,7 +1092,7 @@ export default function Jobs() {
                   ? "Loading versions…"
                   : versionsError
                   ? versionsError
-                  : "Each agent downloads the binary matching its own platform and arch."
+                  : `Versions available for ${versionFetchPlatform}/${versionFetchArch}. Each agent downloads the binary matching its own platform.`
               }
               fullWidth
             >
