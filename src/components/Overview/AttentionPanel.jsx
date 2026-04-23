@@ -103,7 +103,7 @@ export default function AttentionPanel({ results, onNavigate }) {
     {
       key: "findings",
       count: criticalHigh,
-      label: "critical/high findings open",
+      label: "critical/high compliance findings open",
       severity: "error",
       icon: ReportProblemOutlinedIcon,
       navigate: () => onNavigate?.("security", { severity: "high" })

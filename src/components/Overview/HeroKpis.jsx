@@ -166,7 +166,13 @@ export default function HeroKpis({ results, loading }) {
       ? ROLE.cautionSoft
       : ROLE.criticalSoft;
 
-  // Card 4: Critical + High open findings
+  // Card 4: open compliance findings with critical or high severity.
+  //
+  // Labeled "Critical findings" (not "alerts") on purpose — there is
+  // no separate alerts pipeline yet. What the card shows is strictly
+  // the SCP plugin's open findings bucketed by severity, surfaced from
+  // /security/compliance/summary → openFindings. When an alerts engine
+  // lands later, it gets a separate card rather than hijacking this one.
   const findings = compliance?.summary?.openFindings ?? {};
   const criticalHigh = (findings.critical ?? 0) + (findings.high ?? 0);
 
@@ -229,9 +235,11 @@ export default function HeroKpis({ results, loading }) {
       tint: complianceTint
     },
     {
-      title: "Critical alerts",
+      title: "Critical findings",
       value: criticalHigh,
-      subtitle: criticalHigh ? "critical + high open" : "none open",
+      subtitle: criticalHigh
+        ? `${criticalHigh} compliance · critical + high`
+        : "no open high-severity findings",
       icon: ReportProblemOutlinedIcon,
       accent: criticalHigh > 0 ? ROLE.critical : ROLE.positive,
       tint: criticalHigh > 0 ? ROLE.criticalSoft : ROLE.positiveSoft
