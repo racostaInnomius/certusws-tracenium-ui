@@ -1,0 +1,146 @@
+// src/components/Overview/JobsTimeseriesChart.jsx
+//
+// Three-line chart of orchestrator jobs per day, split into completed /
+// failed / in-flight over the last 7 days. Consumes:
+//   { windowDays: 7, buckets: [{ bucket, completed, failed, inFlight, total }] }
+// returned by GET /api/v1/orchestrator/jobs/timeseries?window=7d.
+//
+// Three separate lines (not stacked) because the user needs to read
+// "did more fail today than usual?" independently of total volume. A
+// stacked area would hide that signal. Failed line uses the red role
+// color so it stands out when it moves.
+
+import { Paper, Typography, Box, Skeleton } from "@mui/material";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  Legend
+} from "recharts";
+import { BRAND, ROLE } from "../../theme/brand";
+
+function formatDay(isoDate) {
+  if (!isoDate) return "";
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return String(isoDate);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+}
+
+export default function JobsTimeseriesChart({ result, loading }) {
+  const value =
+    result?.status === "fulfilled" ? result.value : null;
+
+  const buckets = Array.isArray(value?.buckets) ? value.buckets : [];
+  const hasData = buckets.some(
+    (b) =>
+      (b.completed ?? 0) + (b.failed ?? 0) + (b.inFlight ?? 0) > 0
+  );
+
+  const data = buckets.map((b) => ({
+    day: formatDay(b.bucket),
+    completed: b.completed ?? 0,
+    failed: b.failed ?? 0,
+    inFlight: b.inFlight ?? 0
+  }));
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2,
+        borderRadius: 2,
+        border: `1px solid ${BRAND.border}`,
+        height: "100%"
+      }}
+    >
+      <Typography
+        variant="subtitle2"
+        sx={{ color: BRAND.dark, fontWeight: 700, mb: 1 }}
+      >
+        Jobs by status — last {value?.windowDays ?? 7} days
+      </Typography>
+
+      {loading ? (
+        <Skeleton variant="rounded" height={220} />
+      ) : !hasData ? (
+        <Box
+          sx={{
+            height: 220,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: BRAND.gray
+          }}
+        >
+          <Typography variant="caption">No jobs in window</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+              <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="day"
+                tick={{ fill: BRAND.dark, fontSize: 11 }}
+                axisLine={{ stroke: BRAND.borderStrong }}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fill: BRAND.dark, fontSize: 11 }}
+                axisLine={{ stroke: BRAND.borderStrong }}
+                tickLine={false}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 8,
+                  border: `1px solid ${BRAND.border}`,
+                  fontSize: 12
+                }}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 12, color: BRAND.dark }}
+                iconType="circle"
+              />
+              <Line
+                type="monotone"
+                dataKey="completed"
+                name="Completed"
+                stroke={ROLE.positive}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="inFlight"
+                name="In flight"
+                stroke={BRAND.teal}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="failed"
+                name="Failed"
+                stroke={ROLE.critical}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </Box>
+      )}
+    </Paper>
+  );
+}

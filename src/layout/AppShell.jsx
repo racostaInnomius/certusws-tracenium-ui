@@ -6,6 +6,7 @@ import { httpGetJson } from "../api/http";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
+const Overview = React.lazy(() => import("../pages/Overview"));
 const Configurations = React.lazy(() => import("../pages/Configurations"));
 const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
 const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
@@ -76,6 +77,10 @@ export default function AppShell() {
   }, []);
 
   let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
+
+  if (selectedPage === "overview") {
+    content = <Overview />;
+  }
 
   if (selectedPage === "configurations") {
     content = <Configurations onNavigate={setSelectedPage} />;
