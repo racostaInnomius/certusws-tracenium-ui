@@ -82,15 +82,34 @@ const TARGET_OPTIONS = [
 // receives the job and downloads the binary that matches ITS OWN
 // platform/architecture, so the UI does not need to expose platform/arch
 // selectors. What the UI DOES need is to query
-// /binaries/agent/versions using the platform of the SELECTED device,
-// so the dropdown lists versions that actually exist for that host.
-// arch isn't persisted server-side today, so we pick a sane default per
-// platform (macOS → arm64, everything else → x64).
+// /binaries/agent/versions using the (platform, arch) pair of the
+// SELECTED device, so the dropdown lists versions that actually exist
+// for that host.
+//
+// Arch is now reported by the agent itself (agent.arch in the facts
+// payload) and surfaced by /known-devices. When a device pre-dates the
+// arch-reporting change and `item.arch` is null, we fall back to a
+// per-platform heuristic that's correct for most of the fleet (macOS
+// → arm64 after Apple Silicon, otherwise x64).
 const DEFAULT_VERSION_PLATFORM = "windows";
 const DEFAULT_VERSION_ARCH = "x64";
 
 function archForPlatform(platform) {
   return platform === "macos" ? "arm64" : "x64";
+}
+
+/**
+ * Resolve (platform, arch) for the device a job is targeting. Prefers
+ * the device-reported arch; falls back to the platform heuristic only
+ * when the device hasn't reported one yet (legacy agent).
+ */
+function resolveVersionFetchKey(device) {
+  if (!device) {
+    return { platform: DEFAULT_VERSION_PLATFORM, arch: DEFAULT_VERSION_ARCH };
+  }
+  const platform = device.platform || DEFAULT_VERSION_PLATFORM;
+  const arch = device.arch || archForPlatform(platform);
+  return { platform, arch };
 }
 
 function DetailRow({ label, value, mono = false }) {
@@ -445,16 +464,19 @@ export default function Jobs() {
   //   connected device regardless of platform; each agent downloads the
   //   binary for its own platform at apply time. We use the defaults to
   //   keep the dropdown deterministic.
-  const selectedDevicePlatform = React.useMemo(() => {
+  // We reuse the `selectedDevice` memo declared further below for the
+  // detail panel; here we only need the platform/arch pair for the
+  // version dropdown. Doing an inline find (rather than re-computing
+  // via deviceMap) matches the original code path and avoids reordering
+  // memos whose downstream consumers assume a specific declaration
+  // order.
+  const versionFetchDevice = React.useMemo(() => {
     if (targetMode !== "device") return null;
-    const device = knownDevices.find((d) => d.deviceId === selectedDeviceId);
-    return device?.platform ?? null;
+    return knownDevices.find((d) => d.deviceId === selectedDeviceId) ?? null;
   }, [targetMode, knownDevices, selectedDeviceId]);
 
-  const versionFetchPlatform = selectedDevicePlatform || DEFAULT_VERSION_PLATFORM;
-  const versionFetchArch = selectedDevicePlatform
-    ? archForPlatform(selectedDevicePlatform)
-    : DEFAULT_VERSION_ARCH;
+  const { platform: versionFetchPlatform, arch: versionFetchArch } =
+    resolveVersionFetchKey(versionFetchDevice);
 
   React.useEffect(() => {
     if (jobType !== "agent_update" || !canManageJobs) {

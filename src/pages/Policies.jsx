@@ -98,11 +98,21 @@ const PLUGIN_DESCRIPTORS = [
   },
 ];
 
-// ── Form ⇄ policy mapping. The form only tracks plugin toggles; modules
-//    are derived from plugins (see formToPolicy) and required plugins are
-//    clamped to true regardless of the incoming policy.
+// Compliance interval bounds — matches the server-side validator in
+// policy-runtime.ts (300s min, 86400s max). The scheduler rejects values
+// outside this range and falls back to 28800s (8h), so we clamp client-
+// side to fail fast instead of silently reverting on the device.
+const COMPLIANCE_INTERVAL_MIN = 300;
+const COMPLIANCE_INTERVAL_MAX = 86400;
+
+// ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
+//    compliance collection interval; modules are derived from plugins
+//    (see formToPolicy). Required plugins are clamped to true regardless
+//    of the incoming policy.
 function readFormFromPolicy(policy) {
   const enabled = Array.isArray(policy?.plugins?.enabled) ? policy.plugins.enabled : [];
+  const rawInterval = policy?.compliance?.intervalSeconds;
+  const intervalNum = Number(rawInterval);
   return {
     plugins: Object.fromEntries(
       PLUGIN_DESCRIPTORS.map((p) => [
@@ -110,6 +120,12 @@ function readFormFromPolicy(policy) {
         p.required ? true : enabled.includes(p.key),
       ])
     ),
+    // Plugin-specific settings live under their own sub-key so adding
+    // another plugin's options later (e.g. `patch: {...}`) stays
+    // additive without restructuring the form shape.
+    compliance: {
+      intervalSeconds: Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : null,
+    },
   };
 }
 
@@ -126,10 +142,28 @@ function formToPolicy(form) {
     }
   });
 
-  return {
+  const policy = {
     modules,
     plugins: { enabled: pluginsEnabled },
   };
+
+  // Only emit the compliance block when the module is enabled AND the
+  // user picked an explicit interval. An empty block would force the
+  // backend to persist a `compliance: {}` object that the agent would
+  // then read as "no interval" and fall back to its hardcoded default
+  // anyway — cleaner to just omit.
+  const complianceEnabled = modules.compliance === true;
+  const rawInterval = Number(form?.compliance?.intervalSeconds);
+  if (
+    complianceEnabled &&
+    Number.isFinite(rawInterval) &&
+    rawInterval >= COMPLIANCE_INTERVAL_MIN &&
+    rawInterval <= COMPLIANCE_INTERVAL_MAX
+  ) {
+    policy.compliance = { intervalSeconds: rawInterval };
+  }
+
+  return policy;
 }
 
 function isEmptyPolicy(policy) {
@@ -137,6 +171,61 @@ function isEmptyPolicy(policy) {
   if (typeof policy !== "object") return true;
   const keys = Object.keys(policy);
   return keys.length === 0;
+}
+
+/**
+ * Normalize the assorted response shapes the policies API returns into
+ * a single envelope. Backend today wraps the DB row as:
+ *   { ok: true, policy: { policy_version, policy_hash, policy_json, updated_at } }
+ * but we want to support older / alternate shapes too without hunting
+ * through every call site — any reader should treat the result of this
+ * helper as the source of truth.
+ *
+ * Returns:
+ *   {
+ *     raw: <the policy content object (modules/plugins/compliance/...)
+ *           or null if there's no override set>,
+ *     version, hash, updatedAt
+ *   }
+ */
+function extractPolicyEnvelope(response) {
+  if (!response || typeof response !== "object") {
+    return { raw: null, version: null, hash: null, updatedAt: null };
+  }
+
+  // Walk past the { ok, policy } wrapper. If the caller already passed
+  // the row or the policy content itself, `row` stays the same value.
+  const row = response?.policy ?? response;
+
+  // `row` could be a DB record (snake_case + a policy_json field) or
+  // the policy content directly. Detect by the telltale `policy_json`
+  // key.
+  let rawContent = null;
+  let version = null;
+  let hash = null;
+  let updatedAt = null;
+
+  if (row && typeof row === "object") {
+    if ("policy_json" in row || "policyJson" in row) {
+      rawContent = row.policy_json ?? row.policyJson ?? null;
+      version = row.policy_version ?? row.policyVersion ?? null;
+      hash = row.policy_hash ?? row.policyHash ?? null;
+      updatedAt = row.updated_at ?? row.updatedAt ?? null;
+    } else {
+      // Plain policy content (caller already unwrapped).
+      rawContent = row;
+      version = row.version ?? null;
+      hash = row.hash ?? null;
+      updatedAt = row.updatedAt ?? row.updated_at ?? null;
+    }
+  }
+
+  return {
+    raw: rawContent,
+    version: version != null ? String(version) : null,
+    hash: hash != null ? String(hash) : null,
+    updatedAt
+  };
 }
 
 function formatJson(value) {
@@ -253,7 +342,7 @@ function renderSourceChip(source) {
 
 // ── Shared UI pieces ────────────────────────────────────────────────────
 
-function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
+function SummaryCard({ title, value, hint, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
   return (
     <Paper
       elevation={0}
@@ -289,6 +378,11 @@ function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tea
         <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
           {value}
         </Typography>
+        {hint ? (
+          <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.25 }}>
+            {hint}
+          </Typography>
+        ) : null}
       </Box>
     </Paper>
   );
@@ -425,6 +519,81 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         ))}
       </Box>
 
+      {/* Compliance schedule — only surfaces when a plugin that implies
+          the compliance module is active (today: SCP). A dedicated card
+          below the switches keeps this additive: the day we add more
+          compliance-scoped settings (retention, skip-on-battery, etc.)
+          they drop in here without restructuring the form. */}
+      {(() => {
+        const complianceActive = PLUGIN_DESCRIPTORS.some(
+          (p) => p.impliesModule === "compliance" && form.plugins[p.key]
+        );
+        if (!complianceActive) return null;
+        const rawValue = form?.compliance?.intervalSeconds;
+        // Empty string (not null) so the TextField shows as unset rather
+        // than forcing a 0 that would then fail validation.
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < COMPLIANCE_INTERVAL_MIN ||
+            numeric > COMPLIANCE_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.tealSoft,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.tealText, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Compliance schedule
+            </Typography>
+            <TextField
+              label="Collection interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // Empty field → null so formToPolicy omits the compliance
+                // block entirely (backend default 8h takes over).
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  compliance: { ...(form.compliance || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: COMPLIANCE_INTERVAL_MIN,
+                max: COMPLIANCE_INTERVAL_MAX,
+                step: 60,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${COMPLIANCE_INTERVAL_MIN} and ${COMPLIANCE_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (8h / 28800s). Range 300–86400."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
       <Box sx={{ mt: 2 }}>
         <Button
           size="small"
@@ -516,7 +685,12 @@ export default function Policies() {
         listKnownDevices().catch(() => ({ items: [] })),
       ]);
 
-      const policy = policyRes?.policy ?? policyRes?.policyJson ?? policyRes ?? {};
+      // Normalize the response envelope once and feed the form+JSON
+      // editor from the extracted policy content. Without this the form
+      // was reading `.plugins` off the DB row (which has no such key)
+      // and all plugin toggles rendered as off.
+      const tenantEnv = extractPolicyEnvelope(policyRes);
+      const policy = tenantEnv.raw ?? {};
       setTenantPolicy(policyRes ?? null);
       setTenantForm(readFormFromPolicy(policy));
       setTenantJsonDraft(formatJson(policy));
@@ -563,14 +737,27 @@ export default function Policies() {
         getDevicePolicyStatus(deviceId).catch(() => null),
       ]);
 
-      const overridePolicy =
-        overrideRes?.policy ?? overrideRes?.policyJson ?? (overrideRes === null ? null : overrideRes);
+      // See extractPolicyEnvelope for why we normalize: backend returns
+      // `{ ok, policy: { policy_version, policy_hash, policy_json } }`
+      // and directly passing that to readFormFromPolicy left the form
+      // empty. The helper produces a `.raw` that is always the policy
+      // content (modules/plugins/compliance) or null if no override.
+      const overrideEnv = extractPolicyEnvelope(overrideRes);
+      const overridePolicy = overrideEnv.raw;
       setDevicePolicy(overrideRes ?? null);
       setDeviceForm(readFormFromPolicy(overridePolicy || {}));
       setDeviceJsonDraft(formatJson(overridePolicy || {}));
       setDeviceJsonError(null);
-      setEffective(effectiveRes ?? null);
-      setDeviceStatus(statusRes ?? null);
+      // Effective policy is wrapped as `{ ok, policy: {source, policyJson, ...} }`.
+      // Unwrap to the inner object so downstream code can read
+      // `effective.source`, `effective.policyJson`, `effective.policyVersion`
+      // directly without worrying about the envelope.
+      setEffective(effectiveRes?.policy ?? effectiveRes ?? null);
+      // Same dance for status: `{ ok, status: {...} }`. Without this
+      // unwrap `deviceStatus.last_ack_status` was always undefined and
+      // the Sync panel chip stayed stuck on "Pending" regardless of
+      // what the DB actually had.
+      setDeviceStatus(statusRes?.status ?? statusRes ?? null);
     } catch (e) {
       console.error(e);
       showSnack("Failed to load device policy", "error");
@@ -644,13 +831,96 @@ export default function Policies() {
     }
   };
 
+  // Ref that always reflects the currently-selected device id. Used by
+  // the post-push poll to detect when the user has navigated to a
+  // different device mid-poll — in that case we simply stop updating
+  // state so the new device's panel isn't contaminated with stale data
+  // from the one we were polling.
+  const selectedDeviceIdRef = React.useRef(selectedDeviceId);
+  React.useEffect(() => {
+    selectedDeviceIdRef.current = selectedDeviceId;
+  }, [selectedDeviceId]);
+
+  const [devicePolling, setDevicePolling] = React.useState(false);
+
+  /**
+   * Poll the device's policy-status endpoint every 3s for up to 30s,
+   * stopping as soon as `last_ack_at` advances past the timestamp we
+   * captured before the push. This replaces the old "one-shot refresh"
+   * behavior that left the Sync panel showing a stale ACK whenever the
+   * agent took more than a second to process the policy.
+   *
+   * Fire-and-forget: callers don't await; the UI re-renders on each
+   * setDeviceStatus update. If the user switches to another device
+   * before the poll finishes we abandon silently.
+   */
+  const pollForDeviceAck = React.useCallback(
+    async (deviceId, priorAckAt) => {
+      const started = Date.now();
+      const MAX_MS = 30_000;
+      const POLL_MS = 3_000;
+      setDevicePolling(true);
+      try {
+        while (Date.now() - started < MAX_MS) {
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          // User navigated away — don't touch state for a device that
+          // isn't on screen anymore.
+          if (selectedDeviceIdRef.current !== deviceId) return;
+
+          const res = await getDevicePolicyStatus(deviceId).catch(() => null);
+          // And check again — a slow request could have straddled a
+          // device switch.
+          if (selectedDeviceIdRef.current !== deviceId) return;
+
+          if (res) {
+            setDeviceStatus(res);
+            const nextAckAt = res?.last_ack_at ?? null;
+            if (nextAckAt && nextAckAt !== priorAckAt) {
+              if (res.last_ack_status === 0) {
+                showSnack("Agent acknowledged policy (ACK OK)", "success");
+              } else {
+                showSnack(
+                  `Agent rejected policy (ACK ${res.last_ack_status}${
+                    res.last_ack_message ? ": " + res.last_ack_message : ""
+                  })`,
+                  "warning"
+                );
+              }
+              return;
+            }
+          }
+        }
+        // Timed out. Don't swallow — surface so the operator knows the
+        // agent hasn't reported back. Common causes: device offline,
+        // gRPC bridge down on the agent, or the agent is mid-restart.
+        if (selectedDeviceIdRef.current === deviceId) {
+          showSnack(
+            "No ACK from agent in 30s — device may be offline or disconnected from gRPC",
+            "warning"
+          );
+        }
+      } finally {
+        setDevicePolling(false);
+      }
+    },
+    [showSnack]
+  );
+
   const handlePushDevice = async () => {
     if (!canManage || !selectedDeviceId) return;
+    // Snapshot the current ACK timestamp before we push. The poll uses
+    // this as the "prior" baseline so it can tell a fresh ACK apart
+    // from the previous one still displayed on screen.
+    const priorAckAt = deviceStatus?.last_ack_at ?? null;
     try {
       setDevicePushing(true);
       await pushDevicePolicy(selectedDeviceId);
       showSnack("Policy dispatched to device", "success");
       await loadDevice(selectedDeviceId);
+      // Fire-and-forget. The push button releases immediately; the poll
+      // runs in the background and updates the Sync panel as it gets
+      // fresh status payloads.
+      pollForDeviceAck(selectedDeviceId, priorAckAt);
     } catch (e) {
       console.error(e);
       showSnack("Failed to push device policy", "error");
@@ -698,20 +968,32 @@ export default function Policies() {
     return { total, acked, pending, errors };
   }, [tenantStatus]);
 
-  const tenantVersion = tenantPolicy?.version ?? tenantPolicy?.policyVersion ?? "—";
-  const tenantHash = tenantPolicy?.hash ?? tenantPolicy?.policyHash ?? null;
-  const tenantUpdatedAt = tenantPolicy?.updatedAt ?? tenantPolicy?.updated_at;
+  // Unified envelope extraction — the backend wraps DB rows as
+  // `{ ok, policy: { policy_version, policy_hash, policy_json, updated_at } }`
+  // and we want the UI to read version/hash/updatedAt regardless of
+  // which shape layer we landed in.
+  const tenantEnv = extractPolicyEnvelope(tenantPolicy);
+  const tenantVersion = tenantEnv.version ?? "—";
+  const tenantHash = tenantEnv.hash;
+  const tenantUpdatedAt = tenantEnv.updatedAt;
 
-  const deviceVersion = devicePolicy?.version ?? devicePolicy?.policyVersion ?? null;
-  const deviceHash = devicePolicy?.hash ?? devicePolicy?.policyHash ?? null;
-  const deviceUpdatedAt = devicePolicy?.updatedAt ?? devicePolicy?.updated_at;
+  const deviceEnv = extractPolicyEnvelope(devicePolicy);
+  const deviceVersion = deviceEnv.version;
+  const deviceHash = deviceEnv.hash;
+  const deviceUpdatedAt = deviceEnv.updatedAt;
 
+  // Effective policy comes from /devices/:id/effective-policy which
+  // does its own shape dance; we pick policy_json → policyJson → policy
+  // (last one is a legacy API that nested the content one level).
   const effectivePolicyJson =
-    effective?.policyJson ?? effective?.policy_json ?? effective?.policy ?? {};
+    effective?.policy_json ?? effective?.policyJson ?? effective?.policy ?? {};
   const effectiveSource = effective?.source;
-  const effectiveVersion = effective?.policyVersion ?? effective?.policy_version;
+  const effectiveVersion = effective?.policy_version ?? effective?.policyVersion;
 
-  const hasOverride = !isEmptyPolicy(devicePolicy?.policy ?? devicePolicy?.policyJson ?? devicePolicy);
+  // hasOverride is a pure "is there anything saved?" binary. Use the
+  // extracted content (what the user actually authored) — not the row
+  // wrapper, which always has policy_* columns even when empty.
+  const hasOverride = !isEmptyPolicy(deviceEnv.raw);
 
   // ── Rollout table columns ──────────────────────────────────────────────
   const statusColumns = [
@@ -826,13 +1108,18 @@ export default function Policies() {
         </Button>
       </Box>
 
-      {/* Summary cards */}
+      {/* Summary cards — intentionally complementary, not mutually
+          exclusive: a device can show up in both `Devices tracked` and
+          `ACK OK`. Tracked is total; the other three are a breakdown
+          of that total by last-ACK state. Hints below each value
+          spell this out so the numbers don't look double-counted. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <SummaryCard
               title="Devices tracked"
               value={summary.total}
+              hint="total with policy rollout state"
               icon={<AssignmentOutlinedIcon />}
               accent={BRAND.dark}
               tint={BRAND.darkSoft}
@@ -842,6 +1129,11 @@ export default function Policies() {
             <SummaryCard
               title="ACK OK"
               value={summary.acked}
+              hint={
+                summary.total > 0
+                  ? `${summary.acked} / ${summary.total} applied`
+                  : "no rollouts yet"
+              }
               icon={<CheckCircleOutlineOutlinedIcon />}
               accent={BRAND.tealText}
               tint={BRAND.tealSoft}
@@ -851,6 +1143,7 @@ export default function Policies() {
             <SummaryCard
               title="Pending ACK"
               value={summary.pending}
+              hint="sent, awaiting agent reply"
               icon={<HourglassEmptyOutlinedIcon />}
               accent="#8b5418"
               tint="rgba(199,121,43,0.14)"
@@ -860,6 +1153,7 @@ export default function Policies() {
             <SummaryCard
               title="ACK errors"
               value={summary.errors}
+              hint="agent rejected or failed to apply"
               icon={<ErrorOutlineOutlinedIcon />}
               accent="#b3261e"
               tint="rgba(179,38,30,0.12)"
@@ -951,6 +1245,7 @@ export default function Policies() {
               deviceStatus={deviceStatus}
               deviceSaving={deviceSaving}
               devicePushing={devicePushing}
+              devicePolling={devicePolling}
               deviceDeleting={deviceDeleting}
               loading={deviceLoading}
               onSave={handleSaveDevice}
@@ -1128,7 +1423,7 @@ function DeviceTab(props) {
     deviceVersion, deviceHash, deviceUpdatedAt,
     effectivePolicyJson, effectiveSource, effectiveVersion,
     deviceStatus,
-    deviceSaving, devicePushing, deviceDeleting, loading,
+    deviceSaving, devicePushing, devicePolling, deviceDeleting, loading,
     onSave, onPush, onDelete,
   } = props;
 
@@ -1325,7 +1620,31 @@ function DeviceTab(props) {
                 <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
                   Sync status
                 </Typography>
-                {deviceStatus ? renderAckChip(deviceStatus.last_ack_status, null) : null}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  {/* Lightweight live indicator while the post-push poll
+                      runs. Fades in for up to 30 s; once ACK arrives or
+                      the window elapses, the chip shows the real result. */}
+                  {devicePolling && (
+                    <Chip
+                      label="Waiting for ACK…"
+                      size="small"
+                      icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+                      sx={{
+                        bgcolor: BRAND.cyanSoft,
+                        color: BRAND.tealText,
+                        fontWeight: 700,
+                        border: `1px solid ${BRAND.teal}55`,
+                        animation: "pulse 1.5s ease-in-out infinite",
+                        "@keyframes pulse": {
+                          "0%, 100%": { opacity: 1 },
+                          "50%": { opacity: 0.5 },
+                        },
+                        "& .MuiChip-icon": { color: BRAND.tealText },
+                      }}
+                    />
+                  )}
+                  {deviceStatus ? renderAckChip(deviceStatus.last_ack_status, null) : null}
+                </Box>
               </Box>
               {deviceStatus ? (
                 <Box sx={{ display: "grid", gap: 0.5 }}>
