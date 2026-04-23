@@ -1,7 +1,8 @@
 import * as React from "react";
-import { Box, IconButton, Typography, Badge } from "@mui/material";
+import { Box, IconButton, Typography, Badge, Tooltip } from "@mui/material";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import { getAlertsUnreadCount } from "../api/alerts";
 
 const BRAND = {
   dark: "#3B404D",
@@ -11,6 +12,25 @@ const BRAND = {
 
 export const TOPBAR_HEIGHT = 56;
 
+// How often the bell polls for fresh unread count. 60s matches the
+// product decision — fast enough that operators see new alerts within
+// ~a minute, slow enough that we're not hammering the backend every
+// couple seconds with cheap-but-not-free queries.
+const UNREAD_POLL_MS = 60_000;
+
+/**
+ * Push a ?page=<key> into the URL and fire popstate so AppShell picks
+ * it up. Same pattern the pages use internally (see SecurityCompliance
+ * navigateTo) so routing stays consistent whether it's the bell, a
+ * deep-link, or an in-page nav.
+ */
+function navigateToPage(page) {
+  const params = new URLSearchParams(window.location.search);
+  params.set("page", page);
+  window.history.pushState({}, "", `${window.location.pathname}?${params.toString()}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 export default function Topbar({ onMenuClick }) {
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
@@ -18,6 +38,54 @@ export default function Topbar({ onMenuClick }) {
     month: "short",
     day: "2-digit",
   });
+
+  const [unreadCount, setUnreadCount] = React.useState(0);
+
+  // Poll /alerts/unread-count. Uses setTimeout chained re-arm (not
+  // setInterval) so when a request runs long the next tick schedules
+  // relative to actual completion, not wall-clock — avoids request
+  // pile-up if the backend is slow. Visibility-aware: pauses when the
+  // tab is hidden so background tabs don't poll forever.
+  React.useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await getAlertsUnreadCount();
+        if (!cancelled) {
+          setUnreadCount(Number(res?.count ?? 0));
+        }
+      } catch {
+        // Silent: an auth blip or a backend hiccup shouldn't spam
+        // console on every poll. Next tick will retry.
+      } finally {
+        if (!cancelled && !document.hidden) {
+          timer = setTimeout(tick, UNREAD_POLL_MS);
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (!document.hidden && !timer) {
+        tick();
+      }
+      if (document.hidden && timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    tick();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   return (
     <Box
@@ -111,19 +179,31 @@ export default function Topbar({ onMenuClick }) {
         >
           {today}
         </Typography>
-        <IconButton
-          size="small"
-          aria-label="Notifications"
-          sx={{
-            color: "#ffffff",
-            flexShrink: 0,
-            "&:hover": { bgcolor: "rgba(143,253,255,0.18)" },
-          }}
-        >
-          <Badge color="error" variant="dot" overlap="circular">
-            <NotificationsNoneOutlinedIcon fontSize="small" />
-          </Badge>
-        </IconButton>
+        <Tooltip title={unreadCount > 0 ? `${unreadCount} unread alert${unreadCount === 1 ? "" : "s"}` : "No new alerts"}>
+          <IconButton
+            size="small"
+            aria-label="Alerts"
+            onClick={() => navigateToPage("alerts")}
+            sx={{
+              color: "#ffffff",
+              flexShrink: 0,
+              "&:hover": { bgcolor: "rgba(143,253,255,0.18)" },
+            }}
+          >
+            <Badge
+              color="error"
+              // Badge switches between a numeric count (when we have a
+              // live number) and a dot (fallback when count isn't
+              // available yet). Invisible when count=0 so the bell
+              // looks clean in steady state.
+              badgeContent={unreadCount > 99 ? "99+" : unreadCount || null}
+              invisible={unreadCount <= 0}
+              overlap="circular"
+            >
+              <NotificationsNoneOutlinedIcon fontSize="small" />
+            </Badge>
+          </IconButton>
+        </Tooltip>
       </Box>
     </Box>
   );

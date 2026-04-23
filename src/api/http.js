@@ -85,6 +85,24 @@ export async function httpPutJson(url, body, { timeoutMs } = {}) {
   }
 }
 
+export async function httpPatchJson(url, body, { timeoutMs } = {}) {
+  const timeout = withTimeout(timeoutMs);
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: timeout.signal,
+    });
+    return await handleResponse(res);
+  } catch (err) {
+    throw toHumanError(err);
+  } finally {
+    timeout.done();
+  }
+}
+
 export async function httpDeleteJson(url, { timeoutMs } = {}) {
   const timeout = withTimeout(timeoutMs);
   try {
