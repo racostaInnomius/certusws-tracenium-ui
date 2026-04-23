@@ -20,6 +20,94 @@ import PrintersByVendorPie from "../components/Charts/PrintersByVendorPie";
 import HostsTable from "../components/Charts/HostsTable";
 import HostDetails from "../components/Charts/HostDetails";
 
+function MetricCard({ title, value }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        width: "100%",
+        minHeight: 260,
+        height: "100%",
+        borderRadius: 3,
+        overflow: "hidden",
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+      }}
+    >
+      <Box
+        sx={{
+          px: 2,
+          height: 52,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "#2e8f92",
+          borderBottom: "3px solid rgba(100, 255, 255, 0.45)",
+        }}
+      >
+        <Typography
+          sx={{
+            color: "white",
+            fontWeight: 700,
+            letterSpacing: 0.2,
+            fontSize: 18,
+            textAlign: "center",
+          }}
+        >
+          {title}
+        </Typography>
+      </Box>
+
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 180,
+          backgroundColor: "#4aa0a2",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          px: 2,
+        }}
+      >
+        <Typography
+          sx={{
+            color: "white",
+            fontWeight: 800,
+            fontSize: { xs: 56, md: 64 },
+            lineHeight: 1,
+            textShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          }}
+        >
+          {value ?? "—"}
+        </Typography>
+      </Box>
+    </Paper>
+  );
+}
+
+function DashboardPanel({ children, height = 260, padding = 2 }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: padding,
+        width: "100%",
+        height: "100%",
+        minHeight: height,
+        borderRadius: 3,
+        border: "1px solid rgba(0,0,0,0.10)",
+        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        overflow: "hidden",
+      }}
+    >
+      <Box sx={{ width: "100%", height: "100%" }}>{children}</Box>
+    </Paper>
+  );
+}
+
 export default function Assets({ onAssetsEmptyStateChange }) {
   const [summary, setSummary] = React.useState(null);
   const [hosts, setHosts] = React.useState([]);
@@ -73,8 +161,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedAgentId]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -86,15 +173,14 @@ export default function Assets({ onAssetsEmptyStateChange }) {
         const res = await httpGetJson(
           `/api/v1/dashboard/hosts/${encodeURIComponent(selectedAgentId)}/detail`
         );
-        const d = res;
         if (!isMounted) return;
 
         setSelectedHostDetail(
-          d
+          res
             ? {
-                ...d,
-                serialNumber: d.serialnumber,
-                macAddress: d.macaddress,
+                ...res,
+                serialNumber: res.serialnumber,
+                macAddress: res.macaddress,
               }
             : null
         );
@@ -120,186 +206,64 @@ export default function Assets({ onAssetsEmptyStateChange }) {
     Number(summary?.activeHosts ?? 0) === 0 &&
     Number(summary?.totalPrinters ?? 0) === 0;
 
-    React.useEffect(() => {
-      onAssetsEmptyStateChange?.(hasNoAssetsData);
-    }, [hasNoAssetsData, onAssetsEmptyStateChange]);
+  React.useEffect(() => {
+    onAssetsEmptyStateChange?.(hasNoAssetsData);
+  }, [hasNoAssetsData, onAssetsEmptyStateChange]);
 
   return (
     <Box
       sx={{
-        p: 2,
+        p: { xs: 0, sm: 0.5, md: 1 },
         position: "relative",
-        minHeight: "100%",
+        minHeight: "calc(100dvh - 220px)",
       }}
     >
-      <Typography variant="h4" color="#1ba6a6" sx={{ mb: 2, fontWeight: 700 }}>
-        Asset Management
-      </Typography>
-
-      <Grid container spacing={2}>
+      <Grid container spacing={2} alignItems="stretch">
         {/* Row 1 */}
-        <Paper
-          elevation={0}
-          sx={{
-            height: 292,
-            width: 150,
-            borderRadius: 3,
-            overflow: "hidden",
-            border: "1px solid rgba(0,0,0,0.15)",
-            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-            position: "relative",
-            "&::after": {
-              content: '""',
-              position: "absolute",
-              inset: -8,
-              borderRadius: 4,
-              background: "rgba(80, 242, 255, 0.25)",
-              filter: "blur(14px)",
-              zIndex: -1,
-            },
-          }}
-        >
-          <Box
-            sx={{
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#2e8f92",
-              borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
-            }}
-          >
-            <Typography
-              sx={{
-                color: "white",
-                fontWeight: 700,
-                letterSpacing: 0.3,
-                fontSize: 18,
-              }}
-            >
-              Active Hosts
-            </Typography>
-          </Box>
+        <Grid size={{ xs: 12, md: 6, lg: 2 }} sx={{ display: "flex" }}>
+          <MetricCard title="Active Hosts" value={summary?.activeHosts ?? "—"} />
+        </Grid>
 
-          <Box
-            sx={{
-              height: "calc(100% - 40px)",
-              backgroundColor: "#4aa0a2",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Typography
-              sx={{
-                color: "white",
-                fontWeight: 800,
-                fontSize: 72,
-                lineHeight: 1,
-                textShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              }}
-            >
-              {summary?.activeHosts ?? "—"}
-            </Typography>
-          </Box>
-        </Paper>
-
-        <Grid size={{ xs: 12, md: 3 }}>
-          <Box sx={{ height: 260, minHeight: 240 }}>
+        <Grid size={{ xs: 12, md: 6, lg: 3 }} sx={{ display: "flex" }}>
+          <DashboardPanel height={260}>
             <OsPlatformDonut osPlatform={summary?.osPlatform ?? []} />
-          </Box>
+          </DashboardPanel>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Paper sx={{ p: 2, borderRadius: 3, height: 260, overflow: "hidden" }}>
+        <Grid size={{ xs: 12, md: 12, lg: 5 }} sx={{ display: "flex" }}>
+          <DashboardPanel height={260}>
             <TopManufacturersBar topManufacturers={summary?.topManufacturers ?? []} />
-          </Paper>
+          </DashboardPanel>
         </Grid>
 
-        <Paper
-          elevation={0}
-          sx={{
-            height: 292,
-            width: 150,
-            borderRadius: 3,
-            overflow: "hidden",
-            border: "1px solid rgba(0,0,0,0.15)",
-            boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-            position: "relative",
-            "&::after": {
-              content: '""',
-              position: "absolute",
-              inset: -8,
-              borderRadius: 4,
-              background: "rgba(80, 242, 255, 0.25)",
-              filter: "blur(14px)",
-              zIndex: -1,
-            },
-          }}
-        >
-          <Box
-            sx={{
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#2e8f92",
-              borderBottom: "3px solid rgba(100, 255, 255, 0.55)",
-            }}
-          >
-            <Typography
-              sx={{
-                color: "white",
-                fontWeight: 700,
-                letterSpacing: 0.3,
-                fontSize: 18,
-              }}
-            >
-              Total Printers
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              height: "calc(100% - 40px)",
-              backgroundColor: "#4aa0a2",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Typography
-              sx={{
-                color: "white",
-                fontWeight: 800,
-                fontSize: 72,
-                lineHeight: 1,
-                textShadow: "0 2px 8px rgba(0,0,0,0.25)",
-              }}
-            >
-              {summary?.totalPrinters ?? "—"}
-            </Typography>
-          </Box>
-        </Paper>
+        <Grid size={{ xs: 12, md: 6, lg: 2 }} sx={{ display: "flex" }}>
+          <MetricCard title="Total Printers" value={summary?.totalPrinters ?? "—"} />
+        </Grid>
 
         {/* Row 2 */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Paper sx={{ p: 2, borderRadius: 3, height: 300, overflow: "hidden" }}>
-            <OsVersionsBar osVersions={summary?.osVersions} />
-          </Paper>
+        <Grid size={{ xs: 12, lg: 7 }} sx={{ display: "flex" }}>
+          <DashboardPanel height={300}>
+            <OsVersionsBar osVersions={summary?.osVersions ?? []} />
+          </DashboardPanel>
         </Grid>
 
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2, height: 300, width: 400, borderRadius: 2 }}>
-            <Box sx={{ height: 300, width: 410, minHeight: 250 }}>
-              <PrintersByVendorPie printersByVendor={summary?.printersByVendor} />
-            </Box>
-          </Paper>
+        <Grid size={{ xs: 12, lg: 5 }} sx={{ display: "flex" }}>
+          <DashboardPanel height={300}>
+            <PrintersByVendorPie printersByVendor={summary?.printersByVendor ?? []} />
+          </DashboardPanel>
         </Grid>
 
-        <Grid item xs={12} md={5}>
-          <Paper sx={{ p: 2, borderRadius: 2, height: 360 }}>
-            <Box sx={{ height: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
+        {/* Row 3 */}
+        <Grid size={{ xs: 12 }} sx={{ display: "flex" }}>
+          <DashboardPanel height={380}>
+            <Box
+              sx={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
               <Box sx={{ flex: 1, minHeight: 0 }}>
                 <HostsTable
                   rows={hosts}
@@ -308,13 +272,14 @@ export default function Assets({ onAssetsEmptyStateChange }) {
                 />
               </Box>
 
-              <Box sx={{ height: 180 }}>
+              <Box sx={{ height: 185, minHeight: 185 }}>
                 <HostDetails host={selectedHost} detail={selectedHostDetail} />
               </Box>
             </Box>
-          </Paper>
+          </DashboardPanel>
         </Grid>
       </Grid>
+
       {hasNoAssetsData && (
         <Backdrop
           open
@@ -323,16 +288,13 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             inset: 0,
             zIndex: 20,
             borderRadius: 2,
-
             backgroundColor: "rgba(15, 23, 42, 0.20)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
-
             display: "flex",
             justifyContent: "center",
             alignItems: "flex-start",
-
-            pt: { xs: "30vh", sm: "28vh", md: "25vh" },
+            pt: { xs: "26vh", sm: "24vh", md: "22vh" },
           }}
         >
           <Fade in={hasNoAssetsData} timeout={{ enter: 320, exit: 200 }}>
@@ -346,11 +308,8 @@ export default function Assets({ onAssetsEmptyStateChange }) {
                 py: { xs: 3, sm: 4 },
                 borderRadius: 3,
                 textAlign: "center",
-
                 border: "1px solid rgba(0,0,0,0.08)",
                 boxShadow: "0 18px 45px rgba(0,0,0,0.18)",
-
-                // 👇 animación suave (scale + slide)
                 transform: hasNoAssetsData
                   ? "scale(1) translateY(0)"
                   : "scale(0.96) translateY(12px)",
@@ -380,26 +339,26 @@ export default function Assets({ onAssetsEmptyStateChange }) {
                 No tienes agentes instalados o tus agentes no han reportado datos todavía.
               </Typography>
 
-                <Box
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  mb: 2,
+                }}
+              >
+                <Inventory2OutlinedIcon
                   sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    mb: 2,
+                    fontSize: 48,
+                    color: "rgba(27,166,166,0.5)",
+                    animation: "pulse 2s infinite",
+                    "@keyframes pulse": {
+                      "0%": { opacity: 0.4 },
+                      "50%": { opacity: 1 },
+                      "100%": { opacity: 0.4 },
+                    },
                   }}
-                >
-                  <Inventory2OutlinedIcon
-                    sx={{
-                      fontSize: 48,
-                      color: "rgba(27,166,166,0.5)",
-                      animation: "pulse 2s infinite",
-                      "@keyframes pulse": {
-                        "0%": { opacity: 0.4 },
-                        "50%": { opacity: 1 },
-                        "100%": { opacity: 0.4 },
-                      },
-                    }}
-                  />
-                </Box>
+                />
+              </Box>
             </Paper>
           </Fade>
         </Backdrop>
