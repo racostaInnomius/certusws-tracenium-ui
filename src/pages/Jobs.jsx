@@ -86,26 +86,44 @@ const TARGET_OPTIONS = [
 // SELECTED device, so the dropdown lists versions that actually exist
 // for that host.
 //
-// Arch is now reported by the agent itself (agent.arch in the facts
-// payload) and surfaced by /known-devices. When a device pre-dates the
-// arch-reporting change and `item.arch` is null, we fall back to a
-// per-platform heuristic that's correct for most of the fleet (macOS
-// → arm64 after Apple Silicon, otherwise x64).
+// Arch is reported by the agent (agent.arch in the facts payload) and
+// surfaced by /known-devices. If the device is running a legacy agent
+// that predates arch reporting, the backend tries to infer arch from
+// the CPU brand in hardware_inventory; only if that also fails does
+// `device.arch` stay null here.
+//
+// For macOS we keep a conservative heuristic: the supported floor is
+// arm64 (Apple Silicon) since Intel Macs are effectively out of fleet,
+// so defaulting to arm64 on a missing signal is empirically right.
+//
+// For Windows we deliberately do NOT default to x64. A silent default
+// was the original bug on Surface/Copilot+ arm64 hosts — the dropdown
+// listed x64 versions that don't exist in blob, or hid arm64 versions
+// that do. When arch is unknown we return null and let the caller
+// surface "device hasn't reported arch yet" in the UI.
 const DEFAULT_VERSION_PLATFORM = "windows";
-const DEFAULT_VERSION_ARCH = "x64";
+// Used only in tenant-fanout mode where each agent resolves its own
+// arch at download time — the dropdown just needs to list something.
+const DEFAULT_TENANT_FANOUT_ARCH = "x64";
 
 function archForPlatform(platform) {
-  return platform === "macos" ? "arm64" : "x64";
+  if (platform === "macos") return "arm64";
+  // windows / linux / unknown: no silent default — UI handles null.
+  return null;
 }
 
 /**
  * Resolve (platform, arch) for the device a job is targeting. Prefers
  * the device-reported arch; falls back to the platform heuristic only
  * when the device hasn't reported one yet (legacy agent).
+ *
+ * Returns arch=null for Windows/Linux devices whose arch is still
+ * unknown. Callers must handle that case explicitly — there's no
+ * silent x64 fallback anymore.
  */
 function resolveVersionFetchKey(device) {
   if (!device) {
-    return { platform: DEFAULT_VERSION_PLATFORM, arch: DEFAULT_VERSION_ARCH };
+    return { platform: DEFAULT_VERSION_PLATFORM, arch: null };
   }
   const platform = device.platform || DEFAULT_VERSION_PLATFORM;
   const arch = device.arch || archForPlatform(platform);
@@ -369,6 +387,13 @@ export default function Jobs() {
         // Used to filter /binaries/agent/versions so the dropdown shows
         // the right version set for the selected host.
         platform: item?.platform ?? null,
+        // CPU architecture reported by the agent (or inferred from
+        // hardware_inventory server-side when the agent is too old to
+        // ship `agent.arch` directly). Load-bearing for the Agent
+        // Update dropdown — without this the Windows-on-ARM devices
+        // get silently misclassified as x64 and the dropdown hides
+        // the arm64 MSI variants that actually exist in blob.
+        arch: item?.arch ?? null,
         enrolledAt: item?.enrolledAt ?? null,
         lastSeenAt: item?.lastSeenAt ?? null,
         connectedAt: item?.connectedAt ?? null,
@@ -478,8 +503,30 @@ export default function Jobs() {
   const { platform: versionFetchPlatform, arch: versionFetchArch } =
     resolveVersionFetchKey(versionFetchDevice);
 
+  // In tenant-fanout mode we still need SOME arch to list versions —
+  // the fan-out itself is arch-agnostic (each agent resolves its own
+  // binary at apply time), so picking a common default keeps the
+  // dropdown non-empty without misleading the operator about any
+  // specific device. For targeted `device` mode we respect
+  // resolveVersionFetchKey's null and surface that to the UI.
+  const effectiveArch =
+    versionFetchArch ??
+    (targetMode === "tenant" ? DEFAULT_TENANT_FANOUT_ARCH : null);
+
   React.useEffect(() => {
     if (jobType !== "agent_update" || !canManageJobs) {
+      return;
+    }
+
+    // No arch yet — don't call the versions endpoint with a made-up
+    // value. The helperText below explains the state to the user.
+    if (!effectiveArch) {
+      setAvailableVersions([]);
+      setVersion("");
+      setVersionsError(
+        "Device hasn't reported its CPU architecture yet. It will appear on the next facts ingest (usually minutes). Pick a device whose arch is already known, or wait for the next tick."
+      );
+      setLoadingVersions(false);
       return;
     }
 
@@ -489,7 +536,7 @@ export default function Jobs() {
 
     listAgentVersions({
       platform: versionFetchPlatform,
-      arch: versionFetchArch,
+      arch: effectiveArch,
     })
       .then((response) => {
         if (cancelled) return;
@@ -505,7 +552,7 @@ export default function Jobs() {
         console.error(err);
         setAvailableVersions([]);
         setVersion("");
-        setVersionsError(`No versions available for ${versionFetchPlatform}/${versionFetchArch}`);
+        setVersionsError(`No versions available for ${versionFetchPlatform}/${effectiveArch}`);
       })
       .finally(() => {
         if (!cancelled) setLoadingVersions(false);
@@ -514,7 +561,7 @@ export default function Jobs() {
     return () => {
       cancelled = true;
     };
-  }, [jobType, canManageJobs, versionFetchPlatform, versionFetchArch]);
+  }, [jobType, canManageJobs, versionFetchPlatform, effectiveArch]);
 
   React.useEffect(() => {
     loadTenantJobs();
@@ -1114,7 +1161,7 @@ export default function Jobs() {
                   ? "Loading versions…"
                   : versionsError
                   ? versionsError
-                  : `Versions available for ${versionFetchPlatform}/${versionFetchArch}. Each agent downloads the binary matching its own platform.`
+                  : `Versions available for ${versionFetchPlatform}/${effectiveArch}. Each agent downloads the binary matching its own platform.`
               }
               fullWidth
             >
