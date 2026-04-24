@@ -358,6 +358,67 @@ function navigateTo(page, extraQuery = {}) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+// Acceptable enum values for the deep-link filter params. Anything
+// else on the URL is ignored — we don't trust the query string to set
+// page state beyond what we explicitly support.
+const ALLOWED_SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
+const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
+const ALLOWED_VERSION_BUCKETS = new Set(["current", "one_behind", "older", "unknown"]);
+
+// Semver-ish comparison. Returns > 0 if b > a, matching the shape
+// JS sort expects when you want descending order (a.sort(cmp) → highest
+// first). Only used for the client-side "pick canonical latest" step in
+// the versionBucket filter, so tolerant of weird strings (non-numeric
+// segments become 0).
+function compareVersionsReverse(a, b) {
+  const parse = (v) =>
+    String(v || "")
+      .split(".")
+      .map((x) => Number(x) || 0);
+  const av = parse(a);
+  const bv = parse(b);
+  for (let i = 0; i < Math.max(av.length, bv.length); i += 1) {
+    const ai = av[i] ?? 0;
+    const bi = bv[i] ?? 0;
+    if (ai !== bi) return bi - ai;
+  }
+  return 0;
+}
+
+// Map a device's agentVersion to one of the buckets the Overview
+// donut uses. Mirrors FleetComposition's classifyAgentVersions, but
+// kept local here because this page isn't a dependent of that
+// component and we don't want to pull it in just for one helper.
+function bucketOfVersion(version, canonicalLatest) {
+  if (!version || !canonicalLatest) return "unknown";
+  const cmp = compareVersionsReverse(version, canonicalLatest);
+  // Convention matches classifyAgentVersions:
+  //   cmp < 0 → device > canonical (newer than any known latest) — treat as current
+  //   cmp === 0 → equal → current
+  //   cmp > 0 → device < canonical
+  if (cmp <= 0) return "current";
+  // One behind: same major.minor, patch within 2.
+  const v = String(version).split(".").map((x) => Number(x) || 0);
+  const l = String(canonicalLatest).split(".").map((x) => Number(x) || 0);
+  if (v[0] === l[0] && v[1] === l[1] && Math.abs((l[2] || 0) - (v[2] || 0)) <= 2) {
+    return "one_behind";
+  }
+  return "older";
+}
+
+function readUrlFilters() {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const severity = (params.get("severity") || "").toLowerCase();
+  const platform = (params.get("platform") || "").toLowerCase();
+  const versionBucket = (params.get("versionBucket") || "").toLowerCase();
+  return {
+    severity: ALLOWED_SEVERITIES.has(severity) ? severity : "",
+    platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
+    versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket) ? versionBucket : ""
+  };
+}
+
 export default function SecurityCompliance() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -367,6 +428,17 @@ export default function SecurityCompliance() {
   const [frameworkSummary, setFrameworkSummary] = React.useState([]);
   const [devices, setDevices] = React.useState([]);
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
+
+  // Deep-link filters (pre-populated from URL, user can clear via
+  // chips). Client-side only — we already have the full device list
+  // from the backend, so filtering in-memory is cheap and avoids
+  // round-tripping for every chip click.
+  const initialFilters = React.useMemo(() => readUrlFilters(), []);
+  const [severityFilter, setSeverityFilter] = React.useState(initialFilters.severity || "");
+  const [platformFilter, setPlatformFilter] = React.useState(initialFilters.platform || "");
+  const [versionBucketFilter, setVersionBucketFilter] = React.useState(
+    initialFilters.versionBucket || ""
+  );
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);
@@ -433,6 +505,44 @@ export default function SecurityCompliance() {
   const selectedFrameworkLabel = selectedFramework
     ? frameworkLabels.get(selectedFramework) || selectedFramework
     : "All frameworks (weighted)";
+
+  // Client-side filtering of the device table based on the deep-link
+  // chips. We already have the full device list from the backend, so
+  // filtering in-memory is cheap and lets the chips clear instantly
+  // without re-fetching.
+  //
+  // Severity filter is a PROXY today: the posture endpoint doesn't
+  // expose per-device severity counts, so "severity >= high" resolves
+  // to `overallStatus === 'fail'` (strongly correlated with having at
+  // least one failing finding at high+ severity). Swap to a real
+  // severity-per-device signal when the backend exposes one.
+  const filteredDevices = React.useMemo(() => {
+    return devices.filter((d) => {
+      if (platformFilter && String(d.platform || "").toLowerCase() !== platformFilter) {
+        return false;
+      }
+      if (severityFilter) {
+        // Only two states matter for this proxy: "fail" passes, anything
+        // else is hidden. Future: expose per-device severity buckets.
+        if (String(d.overallStatus || "").toLowerCase() !== "fail") return false;
+      }
+      if (versionBucketFilter) {
+        // Map the device's agentVersion into the same buckets the
+        // FleetComposition donut uses. We don't have canonicalLatest
+        // from the /binaries endpoint here, so we bucket relative to
+        // the highest version currently reporting — acceptable for a
+        // client-side filter, matches what the operator just clicked
+        // from the Overview donut.
+        const versions = devices
+          .map((x) => x.agentVersion)
+          .filter(Boolean);
+        const canonicalLatest = versions.sort(compareVersionsReverse)[0];
+        const bucket = bucketOfVersion(d.agentVersion, canonicalLatest);
+        if (bucket !== versionBucketFilter) return false;
+      }
+      return true;
+    });
+  }, [devices, platformFilter, severityFilter, versionBucketFilter]);
 
   return (
     <Box sx={{ pb: 6 }}>
@@ -657,6 +767,44 @@ export default function SecurityCompliance() {
           {loading ? <CircularProgress size={18} sx={{ color: BRAND.teal }} /> : null}
         </Stack>
 
+        {/* Deep-link filter chips. Each chip is deletable — clicking
+            the x clears that filter. When there are no active filters
+            nothing renders, so the header stays compact by default. */}
+        {(severityFilter || platformFilter || versionBucketFilter) ? (
+          <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap", gap: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: BRAND.gray, alignSelf: "center", fontWeight: 600, mr: 0.5 }}
+            >
+              Applied:
+            </Typography>
+            {severityFilter ? (
+              <Chip
+                size="small"
+                label={`Severity ≥ ${severityFilter}`}
+                onDelete={() => setSeverityFilter("")}
+                sx={{ bgcolor: ROLE.criticalSoft, color: ROLE.critical, fontWeight: 600 }}
+              />
+            ) : null}
+            {platformFilter ? (
+              <Chip
+                size="small"
+                label={`Platform: ${platformFilter}`}
+                onDelete={() => setPlatformFilter("")}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
+              />
+            ) : null}
+            {versionBucketFilter ? (
+              <Chip
+                size="small"
+                label={`Version: ${versionBucketFilter.replace("_", " ")}`}
+                onDelete={() => setVersionBucketFilter("")}
+                sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
+              />
+            ) : null}
+          </Stack>
+        ) : null}
+
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -676,14 +824,16 @@ export default function SecurityCompliance() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {devices.length === 0 && !loading ? (
+              {filteredDevices.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ color: BRAND.gray, py: 3 }}>
-                    No devices have reported compliance under this framework.
+                    {devices.length === 0
+                      ? "No devices have reported compliance under this framework."
+                      : "No devices match the applied filters. Clear chips above to see all."}
                   </TableCell>
                 </TableRow>
               ) : (
-                devices.map((d) => {
+                filteredDevices.map((d) => {
                   const useFw = Boolean(selectedFramework && d.frameworkScore);
                   const score = useFw ? d.frameworkScore.score : d.overallScore;
                   const passed = useFw ? d.frameworkScore.passed : null;

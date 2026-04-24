@@ -19,6 +19,7 @@ const PKI = React.lazy(() => import("../pages/PKI"));
 const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
 const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 const Alerts = React.lazy(() => import("../pages/Alerts"));
+const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 
 function PageFallback() {
   return (
@@ -137,8 +138,12 @@ export default function AppShell() {
     content = <SecurityCompliance />;
   }
 
-  if (selectedPage === "remote") {
+  if (selectedPage === "patch") {
     content = <PatchManagement />;
+  }
+
+  if (selectedPage === "remote-control") {
+    content = <RemoteControl />;
   }
 
   if (selectedPage === "alerts") {

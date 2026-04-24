@@ -356,9 +356,37 @@ export default function Jobs() {
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
   const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState("0");
-  const [statusFilter, setStatusFilter] = React.useState("all");
+  // Initial state honors deep-link filters from other pages (Overview
+  // KPIs, Assets "view jobs", etc.). "in_flight" is a virtual filter
+  // coming from the Overview's jobs KPI — we map it to "running" since
+  // the Jobs page's status dropdown operates on single values. Other
+  // unrecognized URL values fall through to "all" so a typo doesn't
+  // silently hide every row.
+  const initialFilters = React.useMemo(() => {
+    if (typeof window === "undefined") return {};
+    const params = new URLSearchParams(window.location.search);
+    const rawStatus = (params.get("status") || "").toLowerCase();
+    const rawSearch = params.get("search") || "";
+    const statusMap = {
+      in_flight: "running",
+      pending: "pending",
+      running: "running",
+      sent: "sent",
+      retrying: "retrying",
+      completed: "completed",
+      failed: "failed",
+      timeout: "timeout",
+      cancelled: "cancelled"
+    };
+    return {
+      status: statusMap[rawStatus] || "all",
+      search: rawSearch.trim()
+    };
+  }, []);
+
+  const [statusFilter, setStatusFilter] = React.useState(initialFilters.status || "all");
   const [jobTypeFilter, setJobTypeFilter] = React.useState("all");
-  const [search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState(initialFilters.search || "");
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,

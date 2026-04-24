@@ -10,7 +10,10 @@
 // stacked area would hide that signal. Failed line uses the red role
 // color so it stands out when it moves.
 
-import { Paper, Typography, Box, Skeleton } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Paper, Typography, Box, Skeleton, Stack } from "@mui/material";
+import { getJobsTimeseries } from "../../api/overview";
+import WindowToggle from "./WindowToggle";
 import {
   ResponsiveContainer,
   LineChart,
@@ -34,10 +37,46 @@ function formatDay(isoDate) {
   });
 }
 
-export default function JobsTimeseriesChart({ result, loading }) {
-  const value =
+export default function JobsTimeseriesChart({ result, loading, onNavigate }) {
+  // Same override pattern as AuditTimeseriesChart. See the comments
+  // there for the rationale — we keep the two charts structurally
+  // identical so they stay easy to refactor together.
+  const parentValue =
     result?.status === "fulfilled" ? result.value : null;
+  const parentWindow = parentValue?.windowDays ?? 7;
 
+  const [windowDays, setWindowDays] = useState(parentWindow);
+  const [override, setOverride] = useState(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    setWindowDays(parentWindow);
+    setOverride(null);
+  }, [parentWindow]);
+
+  useEffect(() => {
+    if (windowDays === parentWindow) {
+      setOverride(null);
+      return;
+    }
+    let cancelled = false;
+    setToggling(true);
+    getJobsTimeseries(windowDays)
+      .then((v) => {
+        if (!cancelled) setOverride(v);
+      })
+      .catch(() => {
+        if (!cancelled) setOverride(null);
+      })
+      .finally(() => {
+        if (!cancelled) setToggling(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [windowDays, parentWindow]);
+
+  const value = override ?? parentValue;
   const buckets = Array.isArray(value?.buckets) ? value.buckets : [];
   const hasData = buckets.some(
     (b) =>
@@ -51,24 +90,48 @@ export default function JobsTimeseriesChart({ result, loading }) {
     inFlight: b.inFlight ?? 0
   }));
 
+  const effectiveLoading = loading || toggling;
+
+  // Whole-card → Jobs page. Matches the AuditTimeseriesChart pattern.
+  const interactive = typeof onNavigate === "function";
+  const navigate = () => onNavigate?.("jobs", { window: `${windowDays}d` });
+
   return (
     <Paper
       elevation={0}
+      onClick={interactive ? navigate : undefined}
       sx={{
         p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        height: "100%"
+        height: "100%",
+        cursor: interactive ? "pointer" : "default",
+        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        "&:hover": interactive
+          ? { borderColor: BRAND.teal, boxShadow: "0 4px 12px rgba(59,64,77,0.08)" }
+          : undefined
       }}
     >
-      <Typography
-        variant="subtitle2"
-        sx={{ color: BRAND.dark, fontWeight: 700, mb: 1 }}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 1 }}
       >
-        Jobs by status — last {value?.windowDays ?? 7} days
-      </Typography>
+        <Typography
+          variant="subtitle2"
+          sx={{ color: BRAND.dark, fontWeight: 700 }}
+        >
+          Jobs by status — last {windowDays} day{windowDays === 1 ? "" : "s"}
+        </Typography>
+        <WindowToggle
+          value={windowDays}
+          onChange={setWindowDays}
+          disabled={effectiveLoading}
+        />
+      </Stack>
 
-      {loading ? (
+      {effectiveLoading ? (
         <Skeleton variant="rounded" height={220} />
       ) : !hasData ? (
         <Box

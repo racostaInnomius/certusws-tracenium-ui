@@ -205,8 +205,8 @@ export default function Sidebar({
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
-    { label: "Patch Management", key: "remote", icon: <SystemUpdateAltOutlinedIcon /> },
-    { label: "Remote Control", key: "security", icon: <DesktopWindowsOutlinedIcon /> },
+    { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
+    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
       : []),
