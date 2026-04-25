@@ -58,7 +58,24 @@ function getValue(result) {
   return result.value ?? null;
 }
 
-export default function LatestAlerts({ result, loading, onNavigate }) {
+// UUID v4-ish matcher. Server-generated summaries embed the raw
+// device_id as plain text ("Device <uuid> enrolled", "Agent <uuid>
+// drifted off-profile"). Swapping it for the hostname makes the strip
+// scannable without forcing the user to memorize UUIDs. We keep the
+// match case-insensitive and anchor to word boundaries so we never
+// accidentally clobber a serial or fingerprint fragment.
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+function replaceDeviceIdWithHostname(summary, deviceIndex) {
+  if (!summary) return "";
+  if (!deviceIndex || typeof deviceIndex.get !== "function") return String(summary);
+  return String(summary).replace(UUID_RE, (uuid) => {
+    const host = deviceIndex.get(uuid) || deviceIndex.get(uuid.toLowerCase());
+    return host || uuid;
+  });
+}
+
+export default function LatestAlerts({ result, loading, onNavigate, deviceIndex }) {
   const value = getValue(result);
   // We consider the strip empty both when the endpoint returned zero
   // items AND when the tenant simply hasn't enabled any rules (in which
@@ -160,6 +177,11 @@ export default function LatestAlerts({ result, loading, onNavigate }) {
         <Stack spacing={1} sx={{ flex: 1 }}>
           {items.map((event, idx) => {
             const style = SEVERITY_STYLE[event.severity] ?? SEVERITY_STYLE.low;
+            const resolvedSummary = replaceDeviceIdWithHostname(event.summary, deviceIndex);
+            const hostLabel = event.deviceId
+              ? (deviceIndex?.get(event.deviceId)
+                 || deviceIndex?.get(String(event.deviceId).toLowerCase()))
+              : null;
             return (
               <ButtonBase
                 key={`${event.source}:${event.sourceEventId}:${idx}`}
@@ -209,11 +231,11 @@ export default function LatestAlerts({ result, loading, onNavigate }) {
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap"
                       }}
-                      title={event.summary}
+                      title={resolvedSummary}
                     >
-                      {event.summary}
+                      {resolvedSummary}
                     </Typography>
-                    <Stack direction="row" spacing={0.75} sx={{ mt: 0.25, alignItems: "center" }}>
+                    <Stack direction="row" spacing={0.75} sx={{ mt: 0.25, alignItems: "center", flexWrap: "wrap" }}>
                       <Chip
                         label={style.label}
                         size="small"
@@ -226,6 +248,32 @@ export default function LatestAlerts({ result, loading, onNavigate }) {
                           border: `1px solid ${style.fg}33`
                         }}
                       />
+                      {hostLabel ? (
+                        // Small host chip surfaces the resolved hostname
+                        // even when the server-formatted summary doesn't
+                        // mention the device by name. Gives the operator
+                        // the "who is this about" answer without having
+                        // to click through.
+                        <Chip
+                          label={hostLabel}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            height: 18,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: BRAND.tealText,
+                            borderColor: `${BRAND.teal}66`,
+                            bgcolor: BRAND.tealSoft,
+                            maxWidth: 160,
+                            "& .MuiChip-label": {
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap"
+                            }
+                          }}
+                        />
+                      ) : null}
                       <Typography variant="caption" sx={{ color: BRAND.gray }}>
                         {SOURCE_LABEL[event.source] || event.source}
                         {" · "}

@@ -37,7 +37,19 @@ function formatDay(isoDate) {
   });
 }
 
-export default function JobsTimeseriesChart({ result, loading, onNavigate }) {
+export default function JobsTimeseriesChart({
+  result,
+  loading,
+  onNavigate,
+  // Optional controlled-mode props. When both are supplied (as on the
+  // Jobs page, where a companion "Jobs by type" card shares the same
+  // window), the chart lifts its window-days state to the parent and
+  // skips its internal override fetch — the parent becomes the sole
+  // source of truth. Omitting them keeps the original self-contained
+  // behaviour intact (as on Overview).
+  windowDays: windowDaysProp,
+  onWindowDaysChange,
+}) {
   // Same override pattern as AuditTimeseriesChart. See the comments
   // there for the rationale — we keep the two charts structurally
   // identical so they stay easy to refactor together.
@@ -45,16 +57,30 @@ export default function JobsTimeseriesChart({ result, loading, onNavigate }) {
     result?.status === "fulfilled" ? result.value : null;
   const parentWindow = parentValue?.windowDays ?? 7;
 
-  const [windowDays, setWindowDays] = useState(parentWindow);
+  const controlled = windowDaysProp != null && typeof onWindowDaysChange === "function";
+
+  const [internalWindowDays, setInternalWindowDays] = useState(parentWindow);
+  const windowDays = controlled ? windowDaysProp : internalWindowDays;
+  const setWindowDays = controlled ? onWindowDaysChange : setInternalWindowDays;
+
   const [override, setOverride] = useState(null);
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    setWindowDays(parentWindow);
+    if (controlled) return; // parent owns the window
+    setInternalWindowDays(parentWindow);
     setOverride(null);
-  }, [parentWindow]);
+  }, [controlled, parentWindow]);
 
   useEffect(() => {
+    // In controlled mode the parent also owns data fetching — it
+    // passes the correct result via `result` — so skip our override
+    // fetch. In uncontrolled mode we only override when the window
+    // differs from the parent-supplied data.
+    if (controlled) {
+      setOverride(null);
+      return;
+    }
     if (windowDays === parentWindow) {
       setOverride(null);
       return;
@@ -74,7 +100,7 @@ export default function JobsTimeseriesChart({ result, loading, onNavigate }) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, parentWindow]);
+  }, [controlled, windowDays, parentWindow]);
 
   const value = override ?? parentValue;
   const buckets = Array.isArray(value?.buckets) ? value.buckets : [];

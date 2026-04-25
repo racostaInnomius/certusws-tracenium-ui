@@ -19,7 +19,9 @@ import {
   getSoftwareInventoryDetail,
 } from "../api/inventoryDashboard";
 
-function SummaryCard({ title, value, accent = "#1ba6a6", subtitle }) {
+import { BRAND } from "../theme/brand";
+
+function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
     <Paper
       sx={{
@@ -28,8 +30,8 @@ function SummaryCard({ title, value, accent = "#1ba6a6", subtitle }) {
         minHeight: 132,
         height: "100%",
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -83,8 +85,8 @@ function SectionCard({ title, children }) {
         p: 2,
         width: "100%",
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         minHeight: 360,
         height: "100%",
         display: "flex",
@@ -123,7 +125,7 @@ function SectionCard({ title, children }) {
 function RankedBars({
   items,
   valueFormatter = (v) => String(v),
-  color = "#1ba6a6",
+  color = BRAND.teal,
 }) {
   const max = Math.max(...items.map((i) => Number(i.value || 0)), 0);
 
@@ -162,7 +164,7 @@ function RankedBars({
                   sx={{
                     fontSize: 13,
                     fontWeight: 600,
-                    color: "#16324f",
+                    color: BRAND.dark,
                     flex: 1,
                     minWidth: 0,
                     overflow: "hidden",
@@ -361,7 +363,7 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Installed Apps"
               value={loadingSummary ? "..." : Number(summary?.installedApps || 0)}
-              accent="#0f6b72"
+              accent={BRAND.tealText}
             />
           </Grid>
 
@@ -377,7 +379,7 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Publishers"
               value={loadingSummary ? "..." : Number(summary?.publishers || 0)}
-              accent="#b3261e"
+              accent={BRAND.alert.error}
               subtitle={
                 loadingSummary
                   ? ""
@@ -394,8 +396,8 @@ export default function SoftwareInventory() {
           p: 2,
           mb: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
         }}
       >
         <Box
@@ -459,7 +461,7 @@ export default function SoftwareInventory() {
             <SectionCard title="Top Installed Apps">
               <RankedBars
                 items={rankings?.topInstalledApps || []}
-                color="#1ba6a6"
+                color={BRAND.teal}
               />
             </SectionCard>
           </Grid>
@@ -468,7 +470,7 @@ export default function SoftwareInventory() {
             <SectionCard title="Top Publishers">
               <RankedBars
                 items={rankings?.topPublishers || []}
-                color="#0f6b72"
+                color={BRAND.tealText}
               />
             </SectionCard>
           </Grid>
@@ -486,7 +488,7 @@ export default function SoftwareInventory() {
             <SectionCard title="Apps per Device">
               <RankedBars
                 items={rankings?.appsPerDevice || []}
-                color="#b3261e"
+                color={BRAND.alert.error}
               />
             </SectionCard>
           </Grid>

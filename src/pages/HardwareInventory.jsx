@@ -18,15 +18,17 @@ import {
   getHardwareInventoryDetail,
 } from "../api/inventoryDashboard";
 
-function SummaryCard({ title, value, accent = "#1ba6a6", subtitle }) {
+import { BRAND } from "../theme/brand";
+
+function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
     <Paper
       sx={{
         p: 2,
         minHeight: 120,
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -66,8 +68,8 @@ function SectionCard({ title, children, action }) {
         sx={{
             p: 2,
             borderRadius: 3,
-            border: "1px solid rgba(0,0,0,0.08)",
-            boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: BRAND.shadow,
             minHeight: 320,
             height: "auto",
             display: "flex",
@@ -94,7 +96,7 @@ function SectionCard({ title, children, action }) {
   );
 }
 
-function RankedBars({ items, valueFormatter = (v) => String(v), color = "#1ba6a6" }) {
+function RankedBars({ items, valueFormatter = (v) => String(v), color = BRAND.teal }) {
   const max = Math.max(...items.map((i) => Number(i.value || 0)), 0);
 
   return (
@@ -116,7 +118,7 @@ function RankedBars({ items, valueFormatter = (v) => String(v), color = "#1ba6a6
                 sx={{
                   fontSize: 13,
                   fontWeight: 600,
-                  color: "#16324f",
+                  color: BRAND.dark,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
@@ -335,7 +337,7 @@ export default function HardwareInventory() {
             <SummaryCard
               title="Avg Memory"
               value={loadingSummary ? "..." : `${Number(summary?.avgMemoryGb || 0).toFixed(1)} GB`}
-              accent="#0f6b72"
+              accent={BRAND.tealText}
             />
           </Grid>
 
@@ -357,7 +359,7 @@ export default function HardwareInventory() {
                   ? "N/A"
                   : `${Number(summary?.avgBatteryPct || 0).toFixed(1)}%`
               }
-              accent="#b3261e"
+              accent={BRAND.alert.error}
               subtitle={
                 loadingSummary
                   ? ""
@@ -374,8 +376,8 @@ export default function HardwareInventory() {
           p: 2,
           mb: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
         }}
       >
         <Box
@@ -439,7 +441,7 @@ export default function HardwareInventory() {
             <SectionCard title="Top Manufacturers">
               <RankedBars
                 items={rankings?.topManufacturers || []}
-                color="#1ba6a6"
+                color={BRAND.teal}
               />
             </SectionCard>
           </Grid>
@@ -448,7 +450,7 @@ export default function HardwareInventory() {
             <SectionCard title="Top CPU Models">
               <RankedBars
                 items={rankings?.topCpuModels || []}
-                color="#0f6b72"
+                color={BRAND.tealText}
               />
             </SectionCard>
           </Grid>

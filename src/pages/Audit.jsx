@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Divider,
   MenuItem,
   Paper,
@@ -15,7 +16,6 @@ import {
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
@@ -25,12 +25,18 @@ import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
+import AuditTimeseriesChart from "../components/Overview/AuditTimeseriesChart";
 
 import {
   getAuditFacets,
   getAuditSummary,
   listAuditEvents
 } from "../api/audit";
+import { getAuditTimeseries } from "../api/overview";
 import { listKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
 import {
@@ -40,21 +46,11 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-// Tracenium brand palette
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  tealHover: "#4E8C8C",
-  cyan: "#8FFDFF",
-  gray: "#BEBEBE",
-  tealSoft: "rgba(90,159,159,0.12)",
-  tealText: "#3E7878",
-  cyanSoft: "rgba(143,253,255,0.22)",
-  darkSoft: "rgba(59,64,77,0.08)",
-  border: "rgba(190,190,190,0.5)",
-  rowHover: "rgba(143,253,255,0.10)",
-  shadow: "0 8px 20px rgba(59,64,77,0.10)",
-};
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import SummaryCard from "../components/common/SummaryCard";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 
 function DetailRow({ label, value, mono = false }) {
   return (
@@ -87,52 +83,6 @@ function DetailRow({ label, value, mono = false }) {
   );
 }
 
-function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 1.75,
-        minHeight: 96,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        alignItems: "center",
-        gap: 1.75,
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          boxShadow: "0 12px 26px rgba(59,64,77,0.14)",
-        },
-      }}
-    >
-      <Box
-        sx={{
-          width: 44,
-          height: 44,
-          borderRadius: 2,
-          bgcolor: tint,
-          color: accent,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
-          {title}
-        </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
-          {value}
-        </Typography>
-      </Box>
-    </Paper>
-  );
-}
-
 function renderOutcomeChip(outcome) {
   const value = String(outcome || "").toLowerCase();
 
@@ -151,7 +101,7 @@ function renderOutcomeChip(outcome) {
       <Chip
         label="Rejected"
         size="small"
-        sx={{ bgcolor: "rgba(179,38,30,0.12)", color: "#b3261e", fontWeight: 700, border: "1px solid rgba(179,38,30,0.35)" }}
+        sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
       />
     );
   }
@@ -222,6 +172,22 @@ export default function Audit() {
   const [facets, setFacets] = React.useState({ eventTypes: [], outcomes: [] });
   const [selectedEvent, setSelectedEvent] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  // Separate state for the timeseries chart so its own 1d/7d/30d
+  // toggle (inside AuditTimeseriesChart) can refetch independently
+  // without dragging the full audit load through a reload.
+  const [auditTimeseries, setAuditTimeseries] = React.useState(null);
+  const [loadingTimeseries, setLoadingTimeseries] = React.useState(true);
+
+  // Filters collapse state. Default closed — the page is scannable
+  // without filters most of the time, and hiding the block gives more
+  // room to the event table. When a filter param is deep-linked from
+  // another page we auto-expand so the user sees what's applied.
+  const [filtersOpen, setFiltersOpen] = React.useState(() => {
+    const p = initialParamsRef.current;
+    return Boolean(
+      p.deviceId || p.eventType || p.outcome || p.correlationId || p.from || p.to
+    );
+  });
   // device_id → hostname map, loaded once, used to render hostnames instead
   // of raw device UUIDs in table cells and detail panel.
   const [deviceIndex, setDeviceIndex] = React.useState(() => new Map());
@@ -269,6 +235,22 @@ export default function Audit() {
   React.useEffect(() => {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
   }, [deviceId, eventType, outcome, correlationId, from, to]);
+
+  // Timeseries for the chart. Default window is 7 days — matches the
+  // Overview's default so a user jumping between pages sees the same
+  // shape. The chart component itself owns its own 1d/7d/30d toggle,
+  // so this initial load is effectively a warmup; the chart refetches
+  // independently when the user flips the window.
+  React.useEffect(() => {
+    if (!canAccess) return;
+    let cancelled = false;
+    setLoadingTimeseries(true);
+    getAuditTimeseries(7)
+      .then((v) => { if (!cancelled) setAuditTimeseries(v); })
+      .catch(() => { if (!cancelled) setAuditTimeseries(null); })
+      .finally(() => { if (!cancelled) setLoadingTimeseries(false); });
+    return () => { cancelled = true; };
+  }, [canAccess]);
 
   // Load the device catalog once so we can show hostnames instead of UUIDs.
   React.useEffect(() => {
@@ -395,6 +377,8 @@ export default function Audit() {
     setRefreshNonce((value) => value + 1);
   }, []);
 
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(handleRefresh, "auditAutoRefresh");
+
   const handleReset = React.useCallback(() => {
     setDeviceId("");
     setEventType("");
@@ -487,178 +471,228 @@ export default function Audit() {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {/* Header */}
-      <Box
-        sx={{
-          mb: 2,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
-            Audit
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-            Investigate security events and operational traces from the control plane.
-          </Typography>
-        </Box>
+      <PageHeader
+        title="Audit"
+        subtitle="Investigate security events and operational traces from the control plane."
+        icon={<FactCheckOutlinedIcon />}
+        actions={
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={handleExportCsv}
+              disabled={rows.length === 0}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.teal,
+                color: BRAND.teal,
+                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              CSV
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={handleExportJson}
+              disabled={rows.length === 0}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.teal,
+                color: BRAND.teal,
+                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              JSON
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<RestartAltOutlinedIcon />}
+              onClick={handleReset}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.gray,
+                color: BRAND.dark,
+                "&:hover": { borderColor: BRAND.dark, bgcolor: BRAND.darkSoft },
+              }}
+            >
+              Reset
+            </Button>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={handleRefresh}
+              loading={refreshing}
+            />
+          </>
+        }
+      />
 
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadOutlinedIcon />}
-            onClick={handleExportCsv}
-            disabled={rows.length === 0}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            CSV
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadOutlinedIcon />}
-            onClick={handleExportJson}
-            disabled={rows.length === 0}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            JSON
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RestartAltOutlinedIcon />}
-            onClick={handleReset}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.gray,
-              color: BRAND.dark,
-              "&:hover": { borderColor: BRAND.dark, bgcolor: BRAND.darkSoft },
-            }}
-          >
-            Reset
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshOutlinedIcon />}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Summary cards */}
+      {/* Summary cards + Audit events chart.
+          Cards go on the left in a 3×2 grid (3 per row × 2 rows)
+          instead of the previous single row of 6 — frees the right
+          half for the timeseries chart. The chart mirrors the one
+          on the Overview page (same component, same contract) so
+          the two surfaces stay visually + functionally consistent.
+          Heights line up naturally: 2 rows × minHeight 96 + spacing
+          ≈ 220, which matches the chart's 220 body height. */}
       <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="Total"
-              value={summary?.total ?? 0}
-              icon={<AssessmentOutlinedIcon />}
-              accent={BRAND.dark}
-              tint={BRAND.darkSoft}
-            />
+        {/* Explicit row minHeight so the cards side can stretch to
+            match the chart's intrinsic height (~310px with the
+            toggle + 220 body + padding). Without this the cards
+            stop at their minHeight:96 and the bottom border ends
+            above the chart. */}
+        <Grid container spacing={2} alignItems="stretch" sx={{ minHeight: 312 }}>
+          <Grid size={{ xs: 12, md: 7 }} sx={{ display: "flex" }}>
+            <Grid container spacing={2} alignItems="stretch" sx={{ width: "100%" }}>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
+                <SummaryCard
+                  stretch
+                  title="Total"
+                  value={summary?.total ?? 0}
+                  icon={<AssessmentOutlinedIcon />}
+                  accent={BRAND.dark}
+                  tint={BRAND.darkSoft}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
+                <SummaryCard
+                  stretch
+                  title="OK"
+                  value={summary?.ok_count ?? 0}
+                  icon={<CheckCircleOutlineOutlinedIcon />}
+                  accent={BRAND.tealText}
+                  tint={BRAND.tealSoft}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
+                <SummaryCard
+                  stretch
+                  title="Last 24h"
+                  value={summary?.last_24h ?? 0}
+                  icon={<ScheduleOutlinedIcon />}
+                  accent={BRAND.teal}
+                  tint={BRAND.tealSoft}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
+                <SummaryCard
+                  stretch
+                  title="Rejected"
+                  value={summary?.rejected_count ?? 0}
+                  icon={<BlockOutlinedIcon />}
+                  accent={BRAND.alert.error}
+                  tint={BRAND.alert.errorSoft}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
+                <SummaryCard
+                  stretch
+                  title="Error"
+                  value={summary?.error_count ?? 0}
+                  icon={<ErrorOutlineOutlinedIcon />}
+                  accent="#8b5418"
+                  tint="rgba(199,121,43,0.14)"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <SummaryCard
+                  // Labelled "Devices seen" (not "Devices") because
+                  // `unique_devices` is COUNT(DISTINCT device_id) over
+                  // security_events — it legitimately exceeds the
+                  // current fleet when the audit log retains events
+                  // from devices that were rejected at enrollment
+                  // time or later removed. Tooltip explains that.
+                  title="Devices seen"
+                  titleHint="Distinct device IDs that ever appeared in the audit log — can exceed the current fleet because events from rejected/removed devices are retained."
+                  value={summary?.unique_devices ?? 0}
+                  icon={<DevicesOtherOutlinedIcon />}
+                  accent={BRAND.dark}
+                  tint={BRAND.cyanSoft}
+                />
+              </Grid>
+            </Grid>
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="OK"
-              value={summary?.ok_count ?? 0}
-              icon={<CheckCircleOutlineOutlinedIcon />}
-              accent={BRAND.tealText}
-              tint={BRAND.tealSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="Rejected"
-              value={summary?.rejected_count ?? 0}
-              icon={<BlockOutlinedIcon />}
-              accent="#b3261e"
-              tint="rgba(179,38,30,0.12)"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="Error"
-              value={summary?.error_count ?? 0}
-              icon={<ErrorOutlineOutlinedIcon />}
-              accent="#8b5418"
-              tint="rgba(199,121,43,0.14)"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="Devices"
-              value={summary?.unique_devices ?? 0}
-              icon={<DevicesOtherOutlinedIcon />}
-              accent={BRAND.dark}
-              tint={BRAND.cyanSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title="Last 24h"
-              value={summary?.last_24h ?? 0}
-              icon={<ScheduleOutlinedIcon />}
-              accent={BRAND.teal}
-              tint={BRAND.tealSoft}
+
+          <Grid size={{ xs: 12, md: 5 }}>
+            {/* Wrap the chart in `result` prop shape since
+                AuditTimeseriesChart expects the same
+                allSettled-style { status: 'fulfilled', value } it
+                receives on the Overview. We normalize here so the
+                chart component stays untouched. */}
+            <AuditTimeseriesChart
+              result={
+                auditTimeseries
+                  ? { status: "fulfilled", value: auditTimeseries }
+                  : null
+              }
+              loading={loadingTimeseries}
             />
           </Grid>
         </Grid>
       </Box>
 
-      {/* Filters */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 2 },
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
-        <Typography
-          variant="overline"
-          sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}
-        >
-          Filters
-        </Typography>
-        <Box
-          sx={{
-            mt: 1,
-            display: "grid",
-            gap: 1.5,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(3, minmax(0, 1fr))",
-            },
-          }}
-        >
+      {/* Filters — collapsed by default. Toggle button shows active
+          filter count so the operator can tell if something is
+          hiding without expanding. Auto-expands when the page was
+          deep-linked with any filter param applied. */}
+      {(() => {
+        const activeFilters = [
+          deviceId,
+          eventType,
+          outcome && outcome !== "all" ? outcome : "",
+          correlationId,
+          from,
+          to
+        ].filter((v) => String(v || "").trim() !== "").length;
+        return (
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", mb: filtersOpen ? 1 : 0 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FilterListOutlinedIcon />}
+                endIcon={filtersOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+                onClick={() => setFiltersOpen((v) => !v)}
+                sx={{
+                  borderColor: BRAND.border,
+                  color: BRAND.dark,
+                  "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft }
+                }}
+              >
+                {filtersOpen ? "Hide filters" : "Show filters"}
+                {activeFilters > 0 ? (
+                  <Chip
+                    size="small"
+                    label={activeFilters}
+                    sx={{
+                      ml: 1,
+                      height: 18,
+                      fontSize: 11,
+                      bgcolor: BRAND.tealSoft,
+                      color: BRAND.tealText,
+                      fontWeight: 700
+                    }}
+                  />
+                ) : null}
+              </Button>
+            </Box>
+            <Collapse in={filtersOpen} timeout="auto" unmountOnExit>
+              <SectionPaper variant="panel">
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 1.5,
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      sm: "repeat(2, minmax(0, 1fr))",
+                      lg: "repeat(3, minmax(0, 1fr))",
+                    },
+                  }}
+                >
           <TextField label="Device ID" size="small" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} fullWidth />
           <TextField
             select
@@ -704,22 +738,19 @@ export default function Audit() {
             helperText={hasInvalidDateRange ? "End date must be after start date" : ""}
             fullWidth
           />
-        </Box>
-      </Paper>
+                </Box>
+              </SectionPaper>
+            </Collapse>
+          </Box>
+        );
+      })()}
 
       {/* Table + Detail */}
       <Grid container spacing={2} alignItems="stretch">
         <Grid size={{ xs: 12, lg: 8 }}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 1.5, sm: 2 },
-              borderRadius: 3,
-              border: `1px solid ${BRAND.border}`,
-              boxShadow: BRAND.shadow,
-              minWidth: 0,
-              overflow: "hidden",
-            }}
+          <SectionPaper
+            variant="panel"
+            sx={{ minWidth: 0, overflow: "hidden" }}
           >
             <Box
               sx={{
@@ -757,43 +788,17 @@ export default function Audit() {
                 }}
                 pageSizeOptions={[10, 25, 50]}
                 columnVisibilityModel={columnVisibilityModel}
-                sx={{
-                  border: "none",
-                  "& .MuiDataGrid-columnHeaders": {
-                    backgroundColor: BRAND.darkSoft,
-                    color: BRAND.dark,
-                    fontWeight: 700,
-                    borderBottom: `1px solid ${BRAND.border}`,
-                  },
-                  "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700 },
-                  "& .MuiDataGrid-row": {
-                    cursor: "pointer",
-                    transition: "background-color 0.12s ease",
-                  },
-                  "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
-                  "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
-                    backgroundColor: BRAND.cyanSoft,
-                  },
-                  "& .MuiDataGrid-cell": {
-                    borderBottom: `1px solid ${BRAND.border}`,
-                  },
-                  "& .MuiDataGrid-footerContainer": {
-                    borderTop: `1px solid ${BRAND.border}`,
-                  },
-                }}
+                sx={DATAGRID_SX}
               />
             </Box>
-          </Paper>
+          </SectionPaper>
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
-          <Paper
-            elevation={0}
+          <SectionPaper
+            variant="panel"
             sx={{
               p: 2,
-              borderRadius: 3,
-              border: `1px solid ${BRAND.border}`,
-              boxShadow: BRAND.shadow,
               height: "100%",
               display: "flex",
               flexDirection: "column",
@@ -890,7 +895,7 @@ export default function Audit() {
                 </Box>
               </Box>
             )}
-          </Paper>
+          </SectionPaper>
         </Grid>
       </Grid>
 

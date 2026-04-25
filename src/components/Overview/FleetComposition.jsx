@@ -107,7 +107,12 @@ export function classifyAgentVersions(byVersion, latestMap) {
   return { buckets, canonicalLatest };
 }
 
-function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, onSegmentClick }) {
+// Exported as a named export so the Assets page can reuse the exact
+// same donut (classification + coloring + legend) instead of
+// re-implementing it. The default export of this module stays the
+// composition wrapper; individual primitives are opt-in for pages
+// that only want one slice.
+export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, onSegmentClick }) {
   const { buckets, canonicalLatest } = classifyAgentVersions(
     byVersion,
     latestMap
@@ -141,7 +146,7 @@ function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, onSegme
   );
 }
 
-function DonutCard({
+export function DonutCard({
   title,
   data,
   loading,
@@ -362,12 +367,17 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
     ? agentVersions.byVersion
     : [];
 
-  // Navigation helpers. Both donuts land on Security Compliance
-  // (`page=ad`) per the product decision — the dashboard's purpose for
-  // these cards is "who in my fleet needs attention", and SCP is where
-  // that's actionable (findings per device + score). Segment clicks
-  // pass a filter the SCP page can honor to scope the device list.
-  const navToAd = (query) => onNavigate?.("ad", query);
+  // Navigation helpers. OS platform + Agent versions are fleet-wide
+  // breakdowns (count every enrolled device, not just the SCP-reporting
+  // subset), so clicks land on Asset Management rather than Security
+  // Compliance — the previous `ad` destination silently dropped devices
+  // that hadn't reported SCP facts yet, causing a count mismatch
+  // between the donut and the filtered page.
+  //
+  // Patch Coverage is the exception: it IS SCP-specific by
+  // construction, so its drilldown stays in `ad` (handled by the
+  // parent via `patchCoverageSlot`).
+  const navToAssets = (query) => onNavigate?.("assets", query);
 
   // FleetComposition now renders 3 donuts internally (OS platform,
   // Agent versions, Patch coverage). At md:4 each inside a md:6 outer
@@ -384,9 +394,9 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           loading={loading}
           totalLabel="devices"
           fallbackLabel="No platform breakdown available"
-          onCardClick={() => navToAd()}
+          onCardClick={() => navToAssets()}
           onSegmentClick={(segment) =>
-            navToAd({ platform: String(segment.name || "").toLowerCase() })
+            navToAssets({ platform: String(segment.name || "").toLowerCase() })
           }
         />
       </Grid>
@@ -395,11 +405,12 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           byVersion={byVersion}
           latestMap={latestMap}
           loading={loading}
-          onCardClick={() => navToAd()}
+          onCardClick={() => navToAssets()}
           onSegmentClick={(segment) => {
             // Map the visible legend label back to a filter key the
-            // SCP page can consume. "Current" / "One behind" / "Older"
-            // / "Unknown" — mirrors the buckets from classifyAgentVersions.
+            // Assets page can consume. "Current" / "One behind" /
+            // "Older" / "Unknown" — mirrors the buckets from
+            // classifyAgentVersions.
             const label = String(segment.name || "").toLowerCase();
             const bucket = label.includes("current")
               ? "current"
@@ -410,7 +421,7 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
               : label.includes("unknown")
               ? "unknown"
               : null;
-            if (bucket) navToAd({ versionBucket: bucket });
+            if (bucket) navToAssets({ versionBucket: bucket });
           }}
         />
       </Grid>

@@ -39,6 +39,8 @@ import {
   Typography
 } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
@@ -46,6 +48,7 @@ import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 
 import { BRAND, ROLE } from "../theme/brand";
 import {
@@ -56,6 +59,9 @@ import {
   getAlertEvents,
   markAllAlertsSeen
 } from "../api/alerts";
+
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
 
 // ---------- presentational helpers ------------------------------------------
 
@@ -169,64 +175,79 @@ const TIME_WINDOWS = [
 const DEFAULT_WINDOW_HOURS = 24 * 7; // product decision: 7 days default
 
 export default function Alerts() {
-  const [events, setEvents] = React.useState([]);
-  const [total, setTotal] = React.useState(0);
-  const [lastSeenAt, setLastSeenAt] = React.useState(null);
-  const [rules, setRules] = React.useState([]);
-  const [templates, setTemplates] = React.useState([]);
-
   const [windowHours, setWindowHours] = React.useState(DEFAULT_WINDOW_HOURS);
   const [minSeverity, setMinSeverity] = React.useState(""); // "" = all
   const [sourceFilter, setSourceFilter] = React.useState(""); // "" = all
   const [searchText, setSearchText] = React.useState("");
 
-  const [loadingFeed, setLoadingFeed] = React.useState(false);
-  const [loadingRules, setLoadingRules] = React.useState(false);
   const [rulesDrawerOpen, setRulesDrawerOpen] = React.useState(false);
   const [detailEvent, setDetailEvent] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
 
   const notify = (severity, message) => setSnackbar({ open: true, severity, message });
 
-  const loadFeed = React.useCallback(async () => {
-    setLoadingFeed(true);
-    try {
-      const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
-      const res = await getAlertEvents({
-        since,
-        severity: minSeverity || undefined,
-        source: sourceFilter || undefined,
-        limit: 200
-      });
-      setEvents(Array.isArray(res?.items) ? res.items : []);
-      setTotal(Number(res?.total ?? 0));
-      setLastSeenAt(res?.lastSeenAt ?? null);
-    } catch (err) {
-      console.error(err);
-      notify("error", "Failed to load alerts feed");
-    } finally {
-      setLoadingFeed(false);
-    }
+  // Feed loader — cache key includes the user-controlled filters so
+  // each combo gets its own snapshot (returning to a previously-viewed
+  // window/severity combo is instant). The fetch only runs when the
+  // key changes.
+  const feedLoader = React.useCallback(async () => {
+    const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+    const res = await getAlertEvents({
+      since,
+      severity: minSeverity || undefined,
+      source: sourceFilter || undefined,
+      limit: 200,
+    });
+    return {
+      events: Array.isArray(res?.items) ? res.items : [],
+      total: Number(res?.total ?? 0),
+      lastSeenAt: res?.lastSeenAt ?? null,
+    };
   }, [windowHours, minSeverity, sourceFilter]);
 
-  const loadRules = React.useCallback(async () => {
-    setLoadingRules(true);
-    try {
-      const res = await getAlertRules();
-      setRules(Array.isArray(res?.rules) ? res.rules : []);
-      setTemplates(Array.isArray(res?.templates) ? res.templates : []);
-    } catch (err) {
-      console.error(err);
-      notify("error", "Failed to load alert rules");
-    } finally {
-      setLoadingRules(false);
-    }
+  const feedKey = `alerts:feed:${windowHours}:${minSeverity || "all"}:${sourceFilter || "all"}`;
+  const {
+    data: feedData,
+    loading: loadingFeed,
+    refreshing: refreshingFeed,
+    refetch: refetchFeed,
+  } = useCachedFetch(feedKey, feedLoader);
+  // Stable fallback for `events` so downstream useMemo deps don't see
+  // a new `[]` reference each render before the feed lands.
+  const events = React.useMemo(() => feedData?.events ?? [], [feedData]);
+  const total = feedData?.total ?? 0;
+
+  // lastSeenAt is the tenant's "last cursor" for the alerts feed. It
+  // reads from the feed's first response, but mutations (mark-all-seen,
+  // mark-event-seen) advance it independently — so it lives in its own
+  // state instead of derived from the cached feed.
+  const [lastSeenAt, setLastSeenAt] = React.useState(null);
+  React.useEffect(() => {
+    if (feedData?.lastSeenAt) setLastSeenAt(feedData.lastSeenAt);
+  }, [feedData?.lastSeenAt]);
+
+  const rulesLoader = React.useCallback(async () => {
+    const res = await getAlertRules();
+    return {
+      rules: Array.isArray(res?.rules) ? res.rules : [],
+      templates: Array.isArray(res?.templates) ? res.templates : [],
+    };
   }, []);
 
-  React.useEffect(() => {
-    loadFeed();
-    loadRules();
-  }, [loadFeed, loadRules]);
+  const {
+    data: rulesData,
+    loading: loadingRules,
+    refreshing: refreshingRules,
+    refetch: refetchRules,
+  } = useCachedFetch("alerts:rules", rulesLoader);
+  const rules = rulesData?.rules ?? [];
+  const templates = rulesData?.templates ?? [];
+
+  const refreshAll = React.useCallback(() => {
+    refetchFeed();
+    refetchRules();
+  }, [refetchFeed, refetchRules]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "alertsAutoRefresh");
 
   // Mark-all-seen: hitting the bell (or the Alerts page) moves the
   // tenant's cursor forward. We do it once on first successful feed
@@ -282,33 +303,29 @@ export default function Alerts() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {/* Header -------------------------------------------------------- */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ flexWrap: "wrap", gap: 1 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: BRAND.dark, letterSpacing: -0.5 }}>
-            Alerts
-          </Typography>
-          <Typography variant="body2" sx={{ color: BRAND.gray }}>
-            Tenant-configurable notifications derived from audit events, compliance findings, and device lifecycle.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            startIcon={<TuneOutlinedIcon />}
-            onClick={() => setRulesDrawerOpen(true)}
-            sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
-          >
-            Manage rules
-          </Button>
-          <IconButton
-            aria-label="refresh"
-            onClick={() => { loadFeed(); loadRules(); }}
-            sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2 }}
-          >
-            <RefreshOutlinedIcon fontSize="small" />
-          </IconButton>
-        </Stack>
-      </Stack>
+      <PageHeader
+        title="Alerts"
+        subtitle="Tenant-configurable notifications derived from audit events, compliance findings, and device lifecycle."
+        icon={<NotificationsOutlinedIcon />}
+        actions={
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<TuneOutlinedIcon />}
+              onClick={() => setRulesDrawerOpen(true)}
+              sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
+            >
+              Manage rules
+            </Button>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={refreshAll}
+              loading={loadingFeed || loadingRules || refreshingFeed || refreshingRules}
+            />
+          </>
+        }
+      />
 
       {/* Hero KPIs ----------------------------------------------------- */}
       <Grid container spacing={2}>
@@ -351,7 +368,7 @@ export default function Alerts() {
       </Grid>
 
       {/* Filter bar + feed --------------------------------------------- */}
-      <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}` }}>
+      <SectionPaper variant="panel" sx={{ p: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 1.5, alignItems: { md: "center" } }}>
           <TextField
             size="small"
@@ -489,7 +506,7 @@ export default function Alerts() {
             Mark all seen
           </Button>
         </Stack>
-      </Paper>
+      </SectionPaper>
 
       {/* Manage Rules drawer ------------------------------------------- */}
       <Drawer
@@ -505,12 +522,12 @@ export default function Alerts() {
           rules={rules}
           loading={loadingRules}
           onClose={() => setRulesDrawerOpen(false)}
-          onRefresh={loadRules}
+          onRefresh={refetchRules}
           onToggle={async (rule, enabled) => {
             try {
               await patchAlertRule(rule.id, { enabled });
               notify("success", `${rule.name} ${enabled ? "enabled" : "disabled"}`);
-              loadRules();
+              refetchRules();
             } catch (err) {
               console.error(err);
               notify("error", "Rule toggle failed");
@@ -527,8 +544,8 @@ export default function Alerts() {
                 enabled: true
               });
               notify("success", `${template.name} enabled`);
-              loadRules();
-              loadFeed();
+              refetchRules();
+              refetchFeed();
             } catch (err) {
               console.error(err);
               notify("error", "Could not enable template");
@@ -538,8 +555,8 @@ export default function Alerts() {
             try {
               await deleteAlertRule(rule.id);
               notify("success", `${rule.name} removed`);
-              loadRules();
-              loadFeed();
+              refetchRules();
+              refetchFeed();
             } catch (err) {
               console.error(err);
               notify("error", "Delete failed");

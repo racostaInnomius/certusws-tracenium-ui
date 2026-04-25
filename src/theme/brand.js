@@ -1,28 +1,87 @@
 // src/theme/brand.js
+// =============================================================================
+// TRACENIUM DESIGN SYSTEM — single source of truth
+// =============================================================================
 //
-// Centralized brand tokens. Until now the palette was duplicated inline
-// inside every page (Sidebar, Audit, PatchManagement, SecurityCompliance,
-// Topbar…) — 5 copies of the same hex values with the same "BRAND"
-// object name. Adding a new page meant grep + copy-paste.
+// This module exports every token the UI is allowed to reference for color,
+// layout, and DataGrid styling. The `eslint.config.js` guardrails enforce
+// that no other file declares its own `BRAND` or uses raw hex literals (in
+// the pages/layout/common-components scope) — if you're looking at this file
+// to add a new token, that's the right instinct; if you're looking at this
+// file to COPY values into another file, stop and import instead.
 //
-// This file is the new single source of truth. New work (Overview, and
-// whatever comes next) imports from here; existing pages can migrate
-// piecemeal without a big-bang refactor.
+// -----------------------------------------------------------------------------
+// Homologation history (keep this short — just enough to orient a reader)
+// -----------------------------------------------------------------------------
+//   Fase 1 (tokens + wrappers)
+//     - Created this file as the central palette source.
+//     - Extracted the <PageHeader>, <SectionPaper>, <SummaryCard> wrappers
+//       in src/components/common/ so layout choices live in one place.
+//     - Erradicated 7 `const BRAND = {...}` duplicates from pages + layout.
 //
-// Palette rules of thumb:
-//   - `dark`  → text primario, headers, icons cuando queremos contraste
-//     full sobre fondo blanco.
-//   - `teal`  → accent primario (SummaryCard icon boxes, primary chips,
-//     hover states). Combina con `tealSoft` / `tealText`.
-//   - `cyan`  → accent secundario; úsalo para highlights puntuales, no
-//     como fondo de páginas (satura la vista).
-//   - `gray`  → borders, secondary text, dividers. Casi siempre con
-//     alpha vía `border` o `surfaceMuted`.
+//   Fase 2 (Asset Management + Settings)
+//     - Migrated Assets/AssetsDashboard/Tokens/Tenants + 5 child pages
+//       (SoftwareInventory, HardwareInventory, SoftwareDelivery,
+//        Configurations, Welcome) off the old `#1ba6a6 / #16324f / #667085`
+//       palette onto BRAND tokens.
 //
-// Severity scale para alerts/banners es ortogonal al brand — no
-// sustituyas rojo/ámbar por teal/cyan en mensajes de error, la
-// asociación de color con severity existe por razones de usabilidad que
-// el branding no debe romper.
+//   Fase 3 (Clásicas)
+//     - Overview/Jobs/PKI/Audit/Policies/PatchManagement/Alerts/
+//       SecurityCompliance/RemoteControl all consume <PageHeader>,
+//       <SectionPaper>, shared <SummaryCard> (where layout matches),
+//       and DATAGRID_SX.
+//     - Header canonicalized as h4/800 letterSpacing -0.5 BRAND.dark.
+//
+//   Fase 4 (guardrails — this file's companion ESLint config)
+//     - Fixed the broken eslint.config.js (it imported a package that
+//       was never installed, so lint silently never ran).
+//     - Added `no-restricted-syntax` rules that FAIL the build on:
+//         • hex color literals in pages/layout/auth/non-chart components
+//         • `const BRAND = ...` declarations outside this file
+//     - Chart files are exempt from the hex rule: multi-series
+//       categorical palettes are a legitimate per-chart design concern
+//       and live as local `const PALETTE = [...]` arrays.
+//
+// -----------------------------------------------------------------------------
+// How to use
+// -----------------------------------------------------------------------------
+//
+//   import { BRAND, ROLE, LAYOUT, DATAGRID_SX } from "../theme/brand";
+//
+// Palette intent:
+//   - BRAND.dark  → primary text, headers, icons — max contrast on white.
+//   - BRAND.teal  → primary accent (CTAs, KPI icon boxes, active states);
+//                   pair with tealSoft/tealText for hover + text variants.
+//   - BRAND.cyan  → secondary accent; punctual highlights only — not page
+//                   backgrounds (it saturates).
+//   - BRAND.gray  → borders, secondary text, dividers. Usually indirectly
+//                   via `border` / `borderStrong` / `surfaceMuted`.
+//
+// Severity (ROLE.*, BRAND.alert.*) is ORTHOGONAL to the brand. Red/amber
+// in error/warning contexts is a usability signal, not a design choice —
+// never substitute teal/cyan for it.
+//
+// -----------------------------------------------------------------------------
+// Layout contract (see also src/components/common/)
+// -----------------------------------------------------------------------------
+//
+//   Header:  <PageHeader title subtitle chips actions />
+//            → h4 · fontWeight 800 · letterSpacing -0.5 · BRAND.dark
+//
+//   Card:    <SectionPaper variant="card">                  …or LAYOUT.card
+//            → elevation 0 · borderRadius 2 · BRAND.border · no shadow
+//            KPI strips, donuts, compact charts.
+//
+//   Panel:   <SectionPaper variant="panel">                 …or LAYOUT.panel
+//            → elevation 0 · borderRadius 3 · BRAND.border · BRAND.shadow
+//            DataGrids, Create-Job forms, detail drawers.
+//
+//   DataGrid sx: `sx={{ ...DATAGRID_SX, <page overrides> }}`
+//
+// If you find yourself writing a big inline `sx` that duplicates one of
+// the above, the answer is either "use the wrapper" or "extend the token" —
+// never "add another local shape".
+// =============================================================================
 
 export const BRAND = {
   // Primary palette
@@ -33,6 +92,7 @@ export const BRAND = {
 
   // Derivatives (precomputed to avoid rgba() typos scattered across code)
   tealText: "#3E7878",
+  tealHover: "#4E8C8C",
   tealSoft: "rgba(90,159,159,0.12)",
   tealSoftStrong: "rgba(90,159,159,0.22)",
   cyanSoft: "rgba(143,253,255,0.22)",
@@ -42,6 +102,11 @@ export const BRAND = {
   borderStrong: "rgba(190,190,190,0.50)",
   surface: "#FFFFFF",
   surfaceMuted: "rgba(190,190,190,0.08)",
+  // Promoted from the local `const BRAND` blocks that used to live
+  // in Jobs/PKI/Audit/Policies/PatchManagement. Same values as the
+  // former duplicates so the migration is pixel-equivalent.
+  rowHover: "rgba(143,253,255,0.10)",
+  shadow: "0 8px 20px rgba(59,64,77,0.10)",
 
   // Semantic severity (not brand — universal usability)
   alert: {
@@ -70,4 +135,104 @@ export const ROLE = {
   neutralSoft: BRAND.tealSoft,
   accent: BRAND.cyan,
   accentSoft: BRAND.cyanSoft
+};
+
+// ---------------------------------------------------------------------------
+// LAYOUT — the shared "shape" of pages, independent of color tokens above.
+//
+// Every page in src/pages has, historically, hand-rolled its own header
+// typography (sometimes h4/800, sometimes h5/700), its own Paper sx
+// (borderRadius 2 vs 3, shadow yes/no), its own responsive padding, etc.
+// That made "add a new page" an exercise in picking a random page to
+// copy-paste from, which is how we ended up with 3 conflicting layouts.
+//
+// These tokens codify the single official layout (decided in the
+// homologation Fase 1):
+//   - Header: h4 · fontWeight 800 · letterSpacing -0.5 · BRAND.dark
+//   - Card (KPI/donut/chart):  elevation 0 · borderRadius 2 · no shadow
+//   - Panel (DataGrid/form):   elevation 0 · borderRadius 3 · BRAND.shadow
+//
+// Consume via the <PageHeader>, <SummaryCard>, <SectionPaper> wrappers
+// in src/components/common so page code stays declarative.
+// ---------------------------------------------------------------------------
+
+export const LAYOUT = {
+  page: {
+    // Bottom padding so the last row doesn't kiss the scroll edge —
+    // matches what Overview/Jobs/PKI already use.
+    pb: 4,
+  },
+  header: {
+    // Applied on <Typography>. Merging this object into `sx` yields
+    // the canonical page-title look.
+    variant: "h4",
+    sx: { color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5, lineHeight: 1.2 },
+  },
+  subtitle: {
+    // The one-line description under the page title.
+    variant: "body2",
+    sx: { color: "text.secondary", mt: 0.25 },
+  },
+  card: {
+    // "Light" container — KPI strips, donuts, small charts. Deliberately
+    // shadowless: the border already separates it from the page background
+    // and piling shadows on low-density cards reads as noise.
+    elevation: 0,
+    sx: {
+      p: 2,
+      borderRadius: 2,
+      border: `1px solid ${BRAND.border}`,
+      height: "100%",
+    },
+  },
+  panel: {
+    // "Heavy" container — DataGrid wrappers, Create-Job forms, detail
+    // drawers. The shadow adds the bit of depth dense content benefits
+    // from, matches the historical Jobs/PKI/Audit pattern.
+    elevation: 0,
+    sx: {
+      p: { xs: 1.5, sm: 2 },
+      borderRadius: 3,
+      border: `1px solid ${BRAND.border}`,
+      boxShadow: BRAND.shadow,
+    },
+  },
+  grid: {
+    // Default row settings for a <Grid container>. `alignItems: stretch`
+    // is key to avoiding the "one column taller than the other" visual
+    // glitch that plagued early Overview revisions.
+    container: true,
+    spacing: 2,
+    alignItems: "stretch",
+  },
+};
+
+// ---------------------------------------------------------------------------
+// DATAGRID_SX — single `sx` blob for every MUI X DataGrid in the app.
+//
+// Previously duplicated in Jobs.jsx, PKI.jsx (as `dataGridSx`), Audit.jsx,
+// and a handful of others — with tiny typo-driven differences (rowHover
+// missing here, footer border missing there). Exporting one object
+// guarantees the grids stay visually identical as we add more pages.
+// ---------------------------------------------------------------------------
+
+export const DATAGRID_SX = {
+  border: "none",
+  "& .MuiDataGrid-columnHeaders": {
+    backgroundColor: BRAND.darkSoft,
+    color: BRAND.dark,
+    fontWeight: 700,
+    borderBottom: `1px solid ${BRAND.border}`,
+  },
+  "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700 },
+  "& .MuiDataGrid-row": {
+    cursor: "pointer",
+    transition: "background-color 0.12s ease",
+  },
+  "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
+  "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
+    backgroundColor: BRAND.cyanSoft,
+  },
+  "& .MuiDataGrid-cell": { borderBottom: `1px solid ${BRAND.border}` },
+  "& .MuiDataGrid-footerContainer": { borderTop: `1px solid ${BRAND.border}` },
 };

@@ -15,7 +15,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RefreshControl from "../components/common/RefreshControl";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -29,24 +29,18 @@ import HourglassBottomOutlinedIcon from "@mui/icons-material/HourglassBottomOutl
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-
-// Tracenium brand palette
-const BRAND = {
-  dark: "#3B404D",      // dark slate — headings, primary text
-  teal: "#5A9F9F",      // primary accent — CTAs, active states
-  tealHover: "#4E8C8C",
-  cyan: "#8FFDFF",      // bright accent — highlights
-  gray: "#BEBEBE",      // borders, neutral
-  // derived surfaces
-  tealSoft: "rgba(90,159,159,0.12)",
-  tealText: "#3E7878",
-  cyanSoft: "rgba(143,253,255,0.22)",
-  darkSoft: "rgba(59,64,77,0.08)",
-  border: "rgba(190,190,190,0.5)",
-  rowHover: "rgba(143,253,255,0.10)",
-  shadow: "0 8px 20px rgba(59,64,77,0.10)",
-};
+import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import { DataGrid } from "@mui/x-data-grid";
+import { getJobsTimeseries } from "../api/overview";
+import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
+
+// BRAND used to be duplicated here (Fase 1 homologation deleted it).
+// Central source of truth lives in src/theme/brand.js; adding
+// borderStrong/tealText/etc. there propagates automatically.
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import SummaryCard from "../components/common/SummaryCard";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
@@ -160,48 +154,122 @@ function DetailRow({ label, value, mono = false }) {
   );
 }
 
-function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
+/**
+ * Horizontal-bar breakdown of Jobs by job_type within the same
+ * windowDays the Jobs-by-status chart is using. Rendered with a
+ * lightweight CSS bar (no recharts import bloat for a list of <10
+ * short rows) — each row is {type, count}. The widest bar fills the
+ * track; everything else scales proportionally so the user reads
+ * ranking at a glance. Empty windows render an honest hint.
+ */
+function JobsByTypeCard({ windowDays, data, loading }) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const total = Number(data?.total || 0);
+  const max = items.reduce((acc, it) => Math.max(acc, Number(it.count || 0)), 0) || 1;
+
   return (
     <Paper
       elevation={0}
       sx={{
-        p: 1.75,
-        minHeight: 96,
-        borderRadius: 3,
+        p: 2,
+        borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
+        height: "100%",
         display: "flex",
-        alignItems: "center",
-        gap: 1.75,
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          boxShadow: "0 12px 26px rgba(59,64,77,0.14)",
-        },
+        flexDirection: "column",
+        minWidth: 0,
       }}
     >
       <Box
         sx={{
-          width: 44,
-          height: 44,
-          borderRadius: 2,
-          bgcolor: tint,
-          color: accent,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1,
+          mb: 1,
         }}
       >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
-          {title}
+        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
+          Jobs by type — last {windowDays} day{Number(windowDays) === 1 ? "" : "s"}
         </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
-          {value}
-        </Typography>
+        <Chip
+          size="small"
+          label={`${total} job${total === 1 ? "" : "s"}`}
+          sx={{
+            height: 20,
+            fontSize: 11,
+            fontWeight: 700,
+            bgcolor: BRAND.tealSoft,
+            color: BRAND.tealText,
+          }}
+        />
       </Box>
+
+      {loading && items.length === 0 ? (
+        <Typography variant="caption" color="text.secondary">
+          Loading…
+        </Typography>
+      ) : items.length === 0 ? (
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 160,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: BRAND.gray,
+          }}
+        >
+          <Typography variant="caption">No jobs in window</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, mt: 0.5 }}>
+          {items.map((row) => {
+            const pct = Math.round((Number(row.count || 0) / max) * 100);
+            return (
+              <Box key={row.type} sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: BRAND.dark,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      pr: 1,
+                    }}
+                  >
+                    {row.type}
+                  </Typography>
+                  <Typography
+                    sx={{ fontSize: 12, fontWeight: 700, color: BRAND.teal, flexShrink: 0 }}
+                  >
+                    {row.count}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    height: 6,
+                    borderRadius: 3,
+                    bgcolor: BRAND.darkSoft,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: `${pct}%`,
+                      height: "100%",
+                      bgcolor: BRAND.teal,
+                      transition: "width 240ms ease",
+                    }}
+                  />
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      )}
     </Paper>
   );
 }
@@ -244,7 +312,7 @@ function renderStatusChip(status) {
       <Chip
         label={String(status || "Failed")}
         size="small"
-        sx={{ bgcolor: "rgba(179,38,30,0.12)", color: "#b3261e", fontWeight: 700, border: "1px solid rgba(179,38,30,0.35)" }}
+        sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
       />
     );
   }
@@ -356,6 +424,20 @@ export default function Jobs() {
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
   const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState("0");
+
+  // Create-Job form is collapsed by default — it occupies ~600px of
+  // vertical space that most visits don't need (the page's primary
+  // job is reading Tenant Job History). The button toggle mirrors
+  // the Audit-page filter pattern so the interaction feels familiar.
+  const [createJobOpen, setCreateJobOpen] = React.useState(false);
+
+  // Shared window-days state for the Jobs-by-status timeseries chart
+  // AND the Jobs-by-type companion card. Lifting this to the page
+  // level is what "connects" them — changing the window on the
+  // chart automatically re-slices the type breakdown.
+  const [chartWindowDays, setChartWindowDays] = React.useState(7);
+  const [chartTimeseries, setChartTimeseries] = React.useState(null);
+  const [chartLoading, setChartLoading] = React.useState(true);
   // Initial state honors deep-link filters from other pages (Overview
   // KPIs, Assets "view jobs", etc.). "in_flight" is a virtual filter
   // coming from the Overview's jobs KPI — we map it to "running" since
@@ -599,6 +681,29 @@ export default function Jobs() {
     loadJobDetail(selectedJobId);
   }, [selectedJobId, loadJobDetail]);
 
+  // Fetch the Jobs-by-status timeseries whenever the window toggle
+  // changes. The response drops into `chartTimeseries` wrapped as a
+  // Promise.allSettled-shaped object so it can be handed to the
+  // shared JobsTimeseriesChart without modification.
+  React.useEffect(() => {
+    if (!canManageJobs) return;
+    let cancelled = false;
+    setChartLoading(true);
+    getJobsTimeseries(chartWindowDays)
+      .then((value) => {
+        if (!cancelled) setChartTimeseries({ status: "fulfilled", value });
+      })
+      .catch((err) => {
+        if (!cancelled) setChartTimeseries({ status: "rejected", reason: err });
+      })
+      .finally(() => {
+        if (!cancelled) setChartLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageJobs, chartWindowDays]);
+
   const deviceMap = React.useMemo(
     () => new Map(knownDevices.map((item) => [item.deviceId, item])),
     [knownDevices]
@@ -666,6 +771,31 @@ export default function Jobs() {
     return {};
   }, [isMdDown, isSmDown]);
 
+  // Group tenantJobs by job_type within the same rolling window that
+  // drives the timeseries chart. This is the "connected" part of the
+  // user ask — changing the window toggle on the chart immediately
+  // re-slices this breakdown because both reads share
+  // `chartWindowDays`. We deliberately derive from the full
+  // `tenantJobs` list (already loaded, capped server-side) instead of
+  // adding a second API endpoint: counts match what the user sees in
+  // the table, and an empty window renders an honest "no jobs".
+  const jobsByType = React.useMemo(() => {
+    const cutoffMs = Date.now() - Number(chartWindowDays) * 86_400_000;
+    const bucketsByType = new Map();
+    let total = 0;
+    for (const row of tenantJobs) {
+      const created = row?.created_at ? new Date(row.created_at).getTime() : 0;
+      if (!created || created < cutoffMs) continue;
+      const type = String(row?.job_type || "unknown");
+      bucketsByType.set(type, (bucketsByType.get(type) || 0) + 1);
+      total += 1;
+    }
+    const items = Array.from(bucketsByType.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+    return { items, total };
+  }, [tenantJobs, chartWindowDays]);
+
   const columns = [
     { field: "job_id", headerName: "Job ID", minWidth: 210, flex: 1 },
     {
@@ -675,7 +805,9 @@ export default function Jobs() {
       flex: 0.8,
       valueGetter: (_value, row) => deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
     },
-    { field: "device_id", headerName: "Device ID", minWidth: 210, flex: 1 },
+    // Device ID column dropped — the hostname column already
+    // identifies the target, and the full UUID is still available in
+    // the detail drawer for anyone who needs it for logs / support.
     { field: "job_type", headerName: "Type", minWidth: 130, flex: 0.6 },
     {
       field: "status",
@@ -700,11 +832,17 @@ export default function Jobs() {
       renderCell: (params) => formatDate(params.value),
     },
     {
+      // Backend LEFT JOIN's TenantMember on the sub so we can show the
+      // operator email instead of a raw Auth0 subject like
+      // `auth0|abc123`. Falls back to the sub when no membership row
+      // matches (e.g. old rows, deleted users) so we never show "—"
+      // in place of identifiable info.
       field: "created_by",
       headerName: "Created By",
-      minWidth: 160,
-      flex: 0.8,
-      valueGetter: (_value, row) => row.created_by || " - ",
+      minWidth: 200,
+      flex: 0.9,
+      valueGetter: (_value, row) =>
+        row.created_by_email || row.created_by || " - ",
     },
     {
       field: "last_error",
@@ -934,57 +1072,19 @@ export default function Jobs() {
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box
-        sx={{
-          mb: 2,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
-            Jobs
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-            Dispatch jobs and review tenant-wide execution history.
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center", flexWrap: "wrap" }}>
-          <TextField
-            select
-            label="Auto refresh"
-            size="small"
-            value={autoRefreshSeconds}
-            onChange={(e) => setAutoRefreshSeconds(e.target.value)}
-            sx={{ minWidth: 150 }}
-          >
-            <MenuItem value="0">Off</MenuItem>
-            <MenuItem value="30">Every 30s</MenuItem>
-            <MenuItem value="60">Every 60s</MenuItem>
-            <MenuItem value="120">Every 2 min</MenuItem>
-          </TextField>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshOutlinedIcon />}
-            onClick={refreshAll}
-            disabled={refreshing}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </Button>
-        </Box>
-      </Box>
+      <PageHeader
+        title="Jobs"
+        subtitle="Dispatch jobs and review tenant-wide execution history."
+        icon={<AssignmentOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={autoRefreshSeconds}
+            onRefreshSecondsChange={setAutoRefreshSeconds}
+            onRefresh={refreshAll}
+            loading={refreshing}
+          />
+        }
+      />
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
@@ -1034,22 +1134,77 @@ export default function Jobs() {
         </Grid>
       </Box>
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 2.5 },
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
-        <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
-          Create Job
-        </Typography>
-        <Typography sx={{ fontSize: 13, color: "text.secondary", mb: 2 }}>
-          Dispatch a job to a single device or to every connected device in the tenant.
-        </Typography>
+      {/* Jobs by status (timeseries) + Jobs by type (breakdown).
+          The two share `chartWindowDays`; the chart's window toggle
+          re-slices both cards in lock-step. Laid out 8/4 so the
+          chart gets enough horizontal room to read the lines clearly
+          on md+ screens. */}
+      <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
+        <Grid size={{ xs: 12, md: 8 }}>
+          <JobsTimeseriesChart
+            result={chartTimeseries}
+            loading={chartLoading}
+            windowDays={chartWindowDays}
+            onWindowDaysChange={setChartWindowDays}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <JobsByTypeCard
+            windowDays={chartWindowDays}
+            data={jobsByType}
+            loading={chartLoading || loadingJobs}
+          />
+        </Grid>
+      </Grid>
+
+      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
+        {/* Header row: title + collapse toggle. Create Job opens as a
+            full form on demand — most visits read Tenant Job History
+            and don't need to see the ~600px-tall form by default. */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: { xs: "flex-start", sm: "center" },
+            justifyContent: "space-between",
+            gap: 1.5,
+            flexWrap: "wrap",
+            mb: createJobOpen ? 2 : 0,
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
+              Create Job
+            </Typography>
+            <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+              Dispatch a job to a single device or to every connected device in the tenant.
+            </Typography>
+          </Box>
+          <Button
+            variant={createJobOpen ? "outlined" : "contained"}
+            onClick={() => setCreateJobOpen((v) => !v)}
+            startIcon={createJobOpen ? null : <AddCircleOutlineOutlinedIcon />}
+            endIcon={createJobOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              ...(createJobOpen
+                ? {
+                    borderColor: BRAND.teal,
+                    color: BRAND.teal,
+                    "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+                  }
+                : {
+                    bgcolor: BRAND.teal,
+                    color: "#fff",
+                    "&:hover": { bgcolor: BRAND.tealHover },
+                  }),
+            }}
+          >
+            {createJobOpen ? "Hide form" : "New job"}
+          </Button>
+        </Box>
+
+        <Collapse in={createJobOpen} timeout="auto" unmountOnExit>
 
         {/* ── Destination ──────────────────────────────────────────── */}
         <Typography
@@ -1103,11 +1258,15 @@ export default function Jobs() {
               {knownDevices.length === 0 ? (
                 <MenuItem value="">No known devices</MenuItem>
               ) : (
+                // Show hostname only — the connected/offline badge and
+                // agent version live in the helperText below the
+                // dropdown, and the device id is available on the row
+                // once selected. Keeping the MenuItem label to a single
+                // token makes scanning the list much faster for
+                // operators with fleets of dozens of devices.
                 knownDevices.map((device) => (
                   <MenuItem key={device.deviceId} value={device.deviceId}>
-                    {device.hostname}
-                    {device.hostname !== device.deviceId ? ` · ${device.deviceId}` : ""}
-                    {device.connected ? " · online" : " · offline"}
+                    {device.hostname || device.deviceId}
                   </MenuItem>
                 ))
               )}
@@ -1319,19 +1478,13 @@ export default function Jobs() {
             Dispatch Job
           </Button>
         </Box>
-      </Paper>
+
+        </Collapse>
+      </SectionPaper>
 
       <Grid container spacing={2} alignItems="stretch">
         <Grid size={{ xs: 12, lg: 8 }}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 1.5, sm: 2 },
-              borderRadius: 3,
-              border: `1px solid ${BRAND.border}`,
-              boxShadow: BRAND.shadow,
-            }}
-          >
+          <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1424,46 +1577,15 @@ export default function Jobs() {
                 },
               }}
               columnVisibilityModel={columnVisibilityModel}
-              sx={{
-                border: "none",
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: BRAND.darkSoft,
-                  color: BRAND.dark,
-                  fontWeight: 700,
-                  borderBottom: `1px solid ${BRAND.border}`,
-                },
-                "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700 },
-                "& .MuiDataGrid-row": {
-                  cursor: "pointer",
-                  transition: "background-color 0.12s ease",
-                },
-                "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
-                "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
-                  backgroundColor: BRAND.cyanSoft,
-                },
-                "& .MuiDataGrid-cell": {
-                  borderBottom: `1px solid ${BRAND.border}`,
-                },
-                "& .MuiDataGrid-footerContainer": {
-                  borderTop: `1px solid ${BRAND.border}`,
-                },
-              }}
+              sx={DATAGRID_SX}
             />
-          </Paper>
+          </SectionPaper>
         </Grid>
 
         <Grid size={{ xs: 12, lg: 4 }}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: 3,
-              border: `1px solid ${BRAND.border}`,
-              boxShadow: BRAND.shadow,
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-            }}
+          <SectionPaper
+            variant="panel"
+            sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}
           >
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
               <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
@@ -1535,7 +1657,7 @@ export default function Jobs() {
                   <>
                     <Divider sx={{ borderColor: BRAND.border }} />
                     <Box>
-                      <Typography variant="overline" sx={{ color: "#b3261e", fontWeight: 800, letterSpacing: 1.2 }}>
+                      <Typography variant="overline" sx={{ color: BRAND.alert.error, fontWeight: 800, letterSpacing: 1.2 }}>
                         Last Error
                       </Typography>
                       <Paper
@@ -1543,9 +1665,9 @@ export default function Jobs() {
                         sx={{
                           mt: 0.5,
                           p: 1.25,
-                          borderColor: "rgba(179,38,30,0.35)",
-                          bgcolor: "rgba(179,38,30,0.06)",
-                          color: "#7a1a15",
+                          borderColor: `${BRAND.alert.error}55`,
+                          bgcolor: BRAND.alert.errorSoft,
+                          color: BRAND.alert.error,
                           fontSize: 13,
                           fontFamily: "monospace",
                           whiteSpace: "pre-wrap",
@@ -1617,7 +1739,7 @@ export default function Jobs() {
                 </Box>
               </Box>
             )}
-          </Paper>
+          </SectionPaper>
         </Grid>
       </Grid>
 

@@ -28,13 +28,15 @@ import {
 import SoftwarePackageDialog from "../components/software-delivery/SoftwarePackageDialog";
 import DeleteSoftwarePackageDialog from "../components/software-delivery/DeleteSoftwarePackageDialog";
 
+import { BRAND } from "../theme/brand";
+
 const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
 const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
 const FORMAT_OPTIONS = ["all", "exe", "msi", "pkg", "dmg", "deb", "rpm", "tar.gz"];
 const CHANNEL_OPTIONS = ["all", "stable", "beta", "rc"];
 const ACTIVE_OPTIONS = ["all", "true", "false"];
 
-function SummaryCard({ title, value, accent = "#1ba6a6" }) {
+function SummaryCard({ title, value, accent = BRAND.teal }) {
   return (
     <Paper
       sx={{
@@ -42,8 +44,8 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
         height: "75%",
         minHeight: 96,
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
@@ -74,8 +76,8 @@ function renderActiveChip(value) {
       label="Active"
       size="small"
       sx={{
-        bgcolor: "rgba(27,166,166,0.12)",
-        color: "#0f6b72",
+        bgcolor: BRAND.tealSoft,
+        color: BRAND.tealText,
         fontWeight: 700,
       }}
     />
@@ -84,8 +86,8 @@ function renderActiveChip(value) {
       label="Inactive"
       size="small"
       sx={{
-        bgcolor: "rgba(211,47,47,0.12)",
-        color: "#b3261e",
+        bgcolor: BRAND.alert.errorSoft,
+        color: BRAND.alert.error,
         fontWeight: 700,
       }}
     />
@@ -392,7 +394,7 @@ export default function SoftwareDelivery({ embedded = false }) {
           }}
         >
           <Box>
-            <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
+            <Typography variant="h4" color={BRAND.teal} sx={{ fontWeight: 700 }}>
               Software Downloads
             </Typography>
             <Typography variant="body1" color="text.secondary">
@@ -406,8 +408,8 @@ export default function SoftwareDelivery({ embedded = false }) {
               onClick={openCreateDialog}
               fullWidth={isSmDown}
               sx={{
-                bgcolor: "#1ba6a6",
-                "&:hover": { bgcolor: "#158d8d" },
+                bgcolor: BRAND.teal,
+                "&:hover": { bgcolor: BRAND.tealHover },
                 minWidth: { xs: "100%", sm: 170 },
                 alignSelf: { xs: "stretch", sm: "center" },
               }}
@@ -427,7 +429,7 @@ export default function SoftwareDelivery({ embedded = false }) {
             <SummaryCard
               title="Platforms"
               value={summary.platforms}
-              accent="#0f6b72"
+              accent={BRAND.tealText}
             />
           </Grid>
 
@@ -435,7 +437,7 @@ export default function SoftwareDelivery({ embedded = false }) {
             <SummaryCard
               title="Active"
               value={summary.active}
-              accent="#b3261e"
+              accent={BRAND.alert.error}
             />
           </Grid>
         </Grid>
@@ -446,8 +448,8 @@ export default function SoftwareDelivery({ embedded = false }) {
         sx={{
           p: { xs: 1.5, sm: 1.5 },
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
         }}
       >
         <Box

@@ -16,15 +16,14 @@ import {
   Alert,
   Box,
   Grid,
-  IconButton,
   Paper,
   Skeleton,
   Snackbar,
   Stack,
-  Tooltip,
   Typography
 } from "@mui/material";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import FlashOnOutlinedIcon from "@mui/icons-material/FlashOnOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -41,6 +40,9 @@ import {
 import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
 import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
+
+import PageHeader from "../components/common/PageHeader";
+
 
 // ---------- small atoms -----------------------------------------------------
 
@@ -105,51 +107,42 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
 // ---------- page ------------------------------------------------------------
 
 export default function RemoteControl() {
-  const [loading, setLoading] = React.useState(true);
-  const [refreshedAt, setRefreshedAt] = React.useState(null);
-
-  const [summary, setSummary] = React.useState(null);
-  const [devices, setDevices] = React.useState([]);
-  const [sessions, setSessions] = React.useState([]);
-  const [sessionTotal, setSessionTotal] = React.useState(0);
-
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
 
   const notify = (severity, message) =>
     setSnackbar({ open: true, severity, message });
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      // allSettled: one slow/broken endpoint doesn't blank the rest.
-      const [sumRes, devRes, sesRes] = await Promise.allSettled([
-        getRemoteControlSummary(),
-        getConnectableDevices(),
-        getRemoteSessions({ limit: 50 })
-      ]);
-
-      if (sumRes.status === "fulfilled") {
-        setSummary(sumRes.value?.summary ?? null);
-      }
-      if (devRes.status === "fulfilled") {
-        setDevices(Array.isArray(devRes.value?.items) ? devRes.value.items : []);
-      }
-      if (sesRes.status === "fulfilled") {
-        setSessions(Array.isArray(sesRes.value?.items) ? sesRes.value.items : []);
-        setSessionTotal(Number(sesRes.value?.total ?? 0));
-      }
-      setRefreshedAt(new Date());
-    } catch (err) {
-      console.error(err);
-      notify("error", "Failed to load Remote Control data");
-    } finally {
-      setLoading(false);
-    }
+  // Bundled loader so the cache stores one snapshot per visit instead
+  // of three independent ones — when the page rehydrates, all three
+  // panels fill from the same snapshot atomically.
+  const loader = React.useCallback(async () => {
+    const [sumRes, devRes, sesRes] = await Promise.allSettled([
+      getRemoteControlSummary(),
+      getConnectableDevices(),
+      getRemoteSessions({ limit: 50 })
+    ]);
+    return {
+      summary: sumRes.status === "fulfilled" ? (sumRes.value?.summary ?? null) : null,
+      devices: devRes.status === "fulfilled" && Array.isArray(devRes.value?.items)
+        ? devRes.value.items : [],
+      sessions: sesRes.status === "fulfilled" && Array.isArray(sesRes.value?.items)
+        ? sesRes.value.items : [],
+      sessionTotal: sesRes.status === "fulfilled" ? Number(sesRes.value?.total ?? 0) : 0,
+    };
   }, []);
 
-  React.useEffect(() => {
-    load();
-  }, [load]);
+  const { data, loading, refreshing, refetch, lastUpdatedAt } = useCachedFetch(
+    "remoteControl:bundle",
+    loader,
+  );
+  const summary = data?.summary ?? null;
+  const devices = data?.devices ?? [];
+  const sessions = data?.sessions ?? [];
+  const sessionTotal = data?.sessionTotal ?? 0;
+  const refreshedAt = lastUpdatedAt ? new Date(lastUpdatedAt) : null;
+  const load = refetch;
+
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "rcAutoRefresh");
 
   /**
    * Click handler for Connect buttons in the ConnectablesTable. While
@@ -191,44 +184,27 @@ export default function RemoteControl() {
   return (
     <Box sx={{ pb: 4 }}>
       {/* Header */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ mb: 2 }}
-      >
-        <Box>
-          <Typography
-            variant="h5"
-            sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.2 }}
-          >
-            Remote Control
-          </Typography>
-          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+      <PageHeader
+        title="Remote Control"
+        subtitle={
+          <>
             Interactive sessions to managed endpoints. Gated by the{" "}
             <strong>rcp</strong> plugin — unavailable until deployed.
             {refreshedAt
               ? ` · Last refresh ${refreshedAt.toLocaleTimeString()}`
               : ""}
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh">
-          <span>
-            <IconButton
-              onClick={load}
-              disabled={loading}
-              size="small"
-              sx={{
-                color: BRAND.teal,
-                border: `1px solid ${BRAND.border}`,
-                borderRadius: 1.5
-              }}
-            >
-              <RefreshOutlinedIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Stack>
+          </>
+        }
+        icon={<DesktopWindowsOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={refreshSeconds}
+            onRefreshSecondsChange={setRefreshSeconds}
+            onRefresh={load}
+            loading={loading || refreshing}
+          />
+        }
+      />
 
       {/* Row 1 — Hero KPIs */}
       <Grid container spacing={2} sx={{ mb: 2 }}>

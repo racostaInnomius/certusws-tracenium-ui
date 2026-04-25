@@ -5,13 +5,11 @@ import {
   Box,
   Button,
   Chip,
-  Paper,
   Tab,
   Tabs,
   Typography,
 } from "@mui/material";
 
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
 import RadioButtonUncheckedOutlinedIcon from "@mui/icons-material/RadioButtonUncheckedOutlined";
@@ -27,20 +25,11 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
-// Tracenium brand palette
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  tealHover: "#4E8C8C",
-  cyan: "#8FFDFF",
-  gray: "#BEBEBE",
-  tealSoft: "rgba(90,159,159,0.12)",
-  tealText: "#3E7878",
-  cyanSoft: "rgba(143,253,255,0.22)",
-  darkSoft: "rgba(59,64,77,0.08)",
-  border: "rgba(190,190,190,0.5)",
-  shadow: "0 8px 20px rgba(59,64,77,0.10)",
-};
+import { BRAND } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import SummaryCard from "../components/common/SummaryCard";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 
 // ── Remediation catalog. Mirrors the Security Compliance categories —
 //    each compliance check has a matching remediation action here. When
@@ -274,8 +263,8 @@ function IMPACT_CHIP({ impact }) {
     none: { label: "No impact", bg: BRAND.tealSoft, fg: BRAND.tealText, border: `${BRAND.teal}55` },
     host: { label: "Host busy", bg: BRAND.cyanSoft, fg: BRAND.dark, border: `${BRAND.cyan}88` },
     access: { label: "Access change", bg: "rgba(199,121,43,0.14)", fg: "#8b5418", border: "rgba(199,121,43,0.4)" },
-    reboot: { label: "May reboot", bg: "rgba(179,38,30,0.12)", fg: "#b3261e", border: "rgba(179,38,30,0.35)" },
-    downtime: { label: "Downtime", bg: "rgba(179,38,30,0.12)", fg: "#b3261e", border: "rgba(179,38,30,0.35)" },
+    reboot: { label: "May reboot", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
+    downtime: { label: "Downtime", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
   };
   const cfg = map[impact] || { label: impact || "—", bg: BRAND.darkSoft, fg: BRAND.dark, border: BRAND.border };
   return (
@@ -291,49 +280,6 @@ function IMPACT_CHIP({ impact }) {
         border: `1px solid ${cfg.border}`,
       }}
     />
-  );
-}
-
-function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 1.75,
-        minHeight: 96,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        alignItems: "center",
-        gap: 1.75,
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": { transform: "translateY(-1px)", boxShadow: "0 12px 26px rgba(59,64,77,0.14)" },
-      }}
-    >
-      <Box
-        sx={{
-          width: 44,
-          height: 44,
-          borderRadius: 2,
-          bgcolor: tint,
-          color: accent,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
-          {title}
-        </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
-          {value}
-        </Typography>
-      </Box>
-    </Paper>
   );
 }
 
@@ -399,15 +345,9 @@ function ActionsList({ actions }) {
 
 function CategoryPanel({ category }) {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 1.5, sm: 2 },
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        minWidth: 0,
-      }}
+    <SectionPaper
+      variant="panel"
+      sx={{ minWidth: 0 }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, flexWrap: "wrap" }}>
         <Box
@@ -453,7 +393,7 @@ function CategoryPanel({ category }) {
       </Alert>
 
       <ActionsList actions={category.actions} />
-    </Paper>
+    </SectionPaper>
   );
 }
 
@@ -461,59 +401,42 @@ export default function PatchManagement() {
   const [tab, setTab] = React.useState(CATEGORIES[0].key);
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
+  // Refresh is a no-op until the PMP plugin lands — kept for visual
+  // homologation with the rest of the app. When the plugin reports
+  // patch / TLS / domain state the existing load functions will hook
+  // here.
+  const refreshNow = React.useCallback(() => {}, []);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshNow, "patchAutoRefresh");
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {/* Header */}
-      <Box
-        sx={{
-          mb: 2,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
-            Patch Management
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-            Remediate findings collected by Security Compliance. Not wired yet — every remediation
-            below is a placeholder that will activate with the PMP plugin.
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-          <Chip
-            label="PMP plugin pending"
-            size="small"
-            icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
-            sx={{
-              bgcolor: BRAND.cyanSoft,
-              color: BRAND.dark,
-              fontWeight: 700,
-              border: `1px solid ${BRAND.cyan}88`,
-              "& .MuiChip-icon": { color: BRAND.dark },
-            }}
-          />
-          <Button
-            variant="outlined"
-            startIcon={<RefreshOutlinedIcon />}
-            disabled
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Box>
+      <PageHeader
+        title="Patch Management"
+        subtitle="Remediate findings collected by Security Compliance."
+        icon={<SystemUpdateAltOutlinedIcon />}
+        actions={
+          <>
+            <Chip
+              label="PMP plugin pending"
+              size="small"
+              icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+              sx={{
+                bgcolor: BRAND.cyanSoft,
+                color: BRAND.dark,
+                fontWeight: 700,
+                border: `1px solid ${BRAND.cyan}88`,
+                "& .MuiChip-icon": { color: BRAND.dark },
+              }}
+            />
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={refreshNow}
+            />
+          </>
+        }
+      />
 
       {/* Summary cards */}
       <Box sx={{ mb: 2 }}>
@@ -567,16 +490,9 @@ export default function PatchManagement() {
       </Box>
 
       {/* Tabs + Category panel */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-          bgcolor: "#ffffff",
-          overflow: "hidden",
-          mb: 2,
-        }}
+      <SectionPaper
+        variant="panel"
+        sx={{ p: 0, bgcolor: "#ffffff", overflow: "hidden", mb: 2 }}
       >
         <Tabs
           value={tab}
@@ -616,7 +532,7 @@ export default function PatchManagement() {
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
           <CategoryPanel category={activeCategory} />
         </Box>
-      </Paper>
+      </SectionPaper>
     </Box>
   );
 }

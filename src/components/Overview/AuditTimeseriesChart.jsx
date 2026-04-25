@@ -129,7 +129,7 @@ export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
           variant="subtitle2"
           sx={{ color: BRAND.dark, fontWeight: 700 }}
         >
-          Security events — last {windowDays} day{windowDays === 1 ? "" : "s"}
+          Audit events — last {windowDays} day{windowDays === 1 ? "" : "s"}
         </Typography>
         <WindowToggle
           value={windowDays}
