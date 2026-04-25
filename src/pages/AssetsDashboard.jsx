@@ -439,12 +439,16 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         </Grid>
       </Grid>
 
-      {/* Row 2 — Fleet composition: Agent versions (donut, same as
-          Overview) + OS Platform + Top Manufacturer. Three compact
-          compositions in one row so the eye can scan "is the fleet
-          homogenous or fragmented" at a glance. */}
+      {/* Row 2 — Fleet composition (4 cards in one row at md+):
+          Agent versions · OS platform · Top manufacturers · OS versions.
+          Previously OS versions was on its own full-width row below;
+          consolidated here so the four breakdowns are scannable
+          side by side. At md the columns are tight (md:3 each) so
+          long version labels in the OS versions list ellipsize —
+          that's an acceptable trade for the at-a-glance comparison.
+          On lg+ each column gets more room. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
-        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             {/* AgentVersionDonut uses its own <Paper> wrapper via
                 DonutCard — no SectionPaper around it or we'd double
@@ -456,13 +460,11 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
             />
           </Box>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             {/* Reuses the same OS platform donut Overview shows in
                 FleetComposition so the two surfaces stay visually
-                consistent. The bar variant lives at full-width below
-                in Row 3 for OS versions where vertical stacks are a
-                better fit. */}
+                consistent. */}
             <DonutCard
               title="OS platform"
               data={osDonutData}
@@ -472,7 +474,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
             />
           </Box>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             <CompositionBars
               title="Top manufacturers"
@@ -484,21 +486,17 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
             />
           </Box>
         </Grid>
-      </Grid>
-
-      {/* Row 3 — OS Versions, full-width. The same CompositionBars
-          component but with more vertical room so version strings
-          (long windows build numbers) don't get squeezed. */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12 }}>
-          <CompositionBars
-            title="OS versions"
-            items={osVersionItems}
-            totalLabel="hosts"
-            emptyLabel="No version data"
-            minHeight={220}
-            maxItems={10}
-          />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          <Box sx={{ width: "100%" }}>
+            <CompositionBars
+              title="OS versions"
+              items={osVersionItems}
+              totalLabel="hosts"
+              emptyLabel="No version data"
+              minHeight={260}
+              maxItems={6}
+            />
+          </Box>
         </Grid>
       </Grid>
 

@@ -556,6 +556,16 @@ export default function PatchManagement() {
   const [dispatching, setDispatching] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
 
+  // Snackbar helper. Defined ahead of the action callbacks so the
+  // useCallback dep arrays below can reference `notify` without
+  // hitting the const TDZ at render time (the previous order put
+  // this declaration AFTER handleRunCategoryAction's `[notify]`
+  // dep array, which threw a ReferenceError on first render and
+  // blanked the page).
+  const notify = React.useCallback((severity, message) => {
+    setSnackbar({ open: true, severity, message });
+  }, []);
+
   // Active jobs tracker — populated on each successful dispatch and
   // shown as a sticky bottom-right card. Polled by JobTracker until
   // every job reaches a terminal state. Operators can dispatch
@@ -652,10 +662,6 @@ export default function PatchManagement() {
       setBulkDialog((prev) => prev ? { ...prev, dispatching: false } : null);
     }
   }, [bulkDialog, notify]);
-
-  const notify = React.useCallback((severity, message) => {
-    setSnackbar({ open: true, severity, message });
-  }, []);
 
   const openDrawer = React.useCallback(async (device) => {
     setDrawerDevice(device);
