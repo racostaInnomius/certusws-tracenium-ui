@@ -46,3 +46,13 @@ export async function getSoftwareInventoryDetail(params = {}) {
     `${BASE}/software-inventory/detail${buildQuery(params)}`
   );
 }
+
+export async function getSoftwareInventoryHosts(params = {}) {
+  return httpGetJson(`${BASE}/software-inventory/hosts${buildQuery(params)}`);
+}
+
+export async function getSoftwareInventoryHostApps(agentId, params = {}) {
+  return httpGetJson(
+    `${BASE}/software-inventory/hosts/${encodeURIComponent(agentId)}/apps${buildQuery(params)}`
+  );
+}
