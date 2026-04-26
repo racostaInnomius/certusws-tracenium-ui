@@ -697,19 +697,6 @@ export default function SoftwareInventory() {
 
         {!appLevelDetail && !selectedHost && (
           <>
-            <Box sx={{ mb: 2 }}>
-              <TextField
-                label="Search hosts"
-                size="small"
-                value={hostSearch}
-                onChange={(e) => {
-                  setHostPaginationModel((prev) => ({ ...prev, page: 0 }));
-                  setHostSearch(e.target.value);
-                }}
-                fullWidth
-              />
-            </Box>
-
             <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
               <DataGrid
                 rows={hostRows}
