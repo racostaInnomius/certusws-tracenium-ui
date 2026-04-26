@@ -155,16 +155,25 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // all reflect the same point in time when the page rehydrates.
   // `latestMap` keys "windows:arm64" → "1.1.2" classify each host's
   // agent_version into current / one_behind / older buckets.
+  //
+  // Important: we keep explicit success/error flags for summary and
+  // hosts. This prevents the Welcome sidebar item / empty-state overlay
+  // from appearing when the IDP/backend is waking up, timing out, or
+  // returning an auth/server error. Empty state should only mean "loaded
+  // successfully and there is truly no inventory data".
   const loader = React.useCallback(async () => {
     const [sumRes, hostsRes, latestRes] = await Promise.allSettled([
       dashboardApi.getSummary(),
       httpGetJson("/api/v1/dashboard/hosts"),
       getLatestAgentVersions(),
     ]);
-    const summary = sumRes.status === "fulfilled" ? sumRes.value : null;
-    const hosts = hostsRes.status === "fulfilled" && Array.isArray(hostsRes.value)
-      ? hostsRes.value
-      : [];
+
+    const summaryOk = sumRes.status === "fulfilled";
+    const hostsOk = hostsRes.status === "fulfilled" && Array.isArray(hostsRes.value);
+
+    const summary = summaryOk ? sumRes.value : null;
+    const hosts = hostsOk ? hostsRes.value : [];
+
     const latestMap = {};
     if (latestRes.status === "fulfilled" && Array.isArray(latestRes.value)) {
       for (const e of latestRes.value) {
@@ -173,7 +182,18 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         }
       }
     }
-    return { summary, hosts, latestMap };
+
+    return {
+      summary,
+      hosts,
+      latestMap,
+      loadState: {
+        summaryLoaded: summaryOk,
+        hostsLoaded: hostsOk,
+        summaryError: !summaryOk,
+        hostsError: !hostsOk,
+      },
+    };
   }, []);
 
   const { data, loading, refetch } = useCachedFetch("assets:bundle", loader);
@@ -183,6 +203,17 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const summary = data?.summary ?? null;
   const hosts = React.useMemo(() => data?.hosts ?? [], [data]);
   const latestMap = React.useMemo(() => data?.latestMap ?? {}, [data]);
+
+  const loadState = React.useMemo(
+    () =>
+      data?.loadState ?? {
+        summaryLoaded: false,
+        hostsLoaded: false,
+        summaryError: false,
+        hostsError: false,
+      },
+    [data]
+  );
 
   // Page-level refresh signal from the Assets wrapper — bumps the
   // cached fetch so the active tab pulls fresh data.
@@ -231,8 +262,15 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     };
   }, []);
 
-  const hasNoAssetsData =
+  const dashboardLoadedSuccessfully =
     !loading &&
+    loadState.summaryLoaded &&
+    loadState.hostsLoaded &&
+    !loadState.summaryError &&
+    !loadState.hostsError;
+
+  const hasNoAssetsData =
+    dashboardLoadedSuccessfully &&
     (!hosts || hosts.length === 0) &&
     Number(summary?.activeHosts ?? 0) === 0;
 
