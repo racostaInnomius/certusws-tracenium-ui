@@ -14,28 +14,39 @@ import {
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import { listTokens, createToken, revokeToken } from "../api/tokens";
 import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
 
-function SummaryCard({ title, value, accent = "#1ba6a6" }) {
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+
+// Fase 2 homologation — local SummaryCard kept for now because it has
+// a color-by-role `accent` for the number (active/expired/revoked
+// each use a different tone). The shared <SummaryCard /> assumes a
+// single accent+tint per card; instead of retrofitting that contract
+// we align the Paper shell to the card tokens and let the caller
+// pick the semantic color from BRAND/ROLE.
+function SummaryCard({ title, value, accent = BRAND.teal }) {
   return (
     <Paper
+      elevation={0}
       sx={{
         p: 2,
-        height: "70%",
-        minHeight: 60,
-        borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        height: "100%",
+        minHeight: 76,
+        borderRadius: 2,
+        border: `1px solid ${BRAND.border}`,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600 }}>
         {title}
       </Typography>
 
@@ -53,6 +64,11 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
   );
 }
 
+// Status chips use brand/role tokens instead of the previous
+// hardcoded `#0f6b72` / `#b3261e` / `#555`. Active = success green,
+// Expired = alert red (expired tokens are a security concern more
+// than a cautionary one), Revoked = neutral gray/dark (terminal but
+// operator-initiated).
 function renderStatusChip(status) {
   const value = String(status || "").toLowerCase();
 
@@ -62,8 +78,8 @@ function renderStatusChip(status) {
         label="Active"
         size="small"
         sx={{
-          bgcolor: "rgba(27,166,166,0.12)",
-          color: "#0f6b72",
+          bgcolor: BRAND.alert.successSoft,
+          color: BRAND.alert.success,
           fontWeight: 700,
         }}
       />
@@ -76,8 +92,8 @@ function renderStatusChip(status) {
         label="Expired"
         size="small"
         sx={{
-          bgcolor: "rgba(211,47,47,0.12)",
-          color: "#b3261e",
+          bgcolor: BRAND.alert.errorSoft,
+          color: BRAND.alert.error,
           fontWeight: 700,
         }}
       />
@@ -90,8 +106,8 @@ function renderStatusChip(status) {
         label="Revoked"
         size="small"
         sx={{
-          bgcolor: "rgba(120,120,120,0.15)",
-          color: "#555",
+          bgcolor: BRAND.darkSoft,
+          color: BRAND.dark,
           fontWeight: 700,
         }}
       />
@@ -331,41 +347,32 @@ const filteredRows = React.useMemo(() => {
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box
-        sx={{
-          mb: 0.5,
-          display: "inline-flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 13.5,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-            Tokens Administrator
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage enrollment tokens for this tenant
-          </Typography>
-        </Box>
+      <PageHeader
+        title="Tokens Administrator"
+        subtitle="Manage enrollment tokens for this tenant"
+        icon={<VpnKeyOutlinedIcon />}
+        actions={
+          <Button
+            variant="contained"
+            onClick={() => setCreateOpen(true)}
+            fullWidth={isSmDown}
+            sx={{
+              bgcolor: BRAND.teal,
+              "&:hover": { bgcolor: BRAND.tealHover },
+              minWidth: { xs: "100%", sm: 170 },
+              alignSelf: { xs: "stretch", sm: "center" },
+              textTransform: "none",
+              fontWeight: 700,
+            }}
+          >
+            + Create token
+          </Button>
+        }
+      />
 
-        <Button
-          variant="contained"
-          onClick={() => setCreateOpen(true)}
-          fullWidth={isSmDown}
-          sx={{
-            bgcolor: "#1ba6a6",
-            "&:hover": { bgcolor: "#158d8d" },
-            minWidth: { xs: "100%", sm: 170 },
-            alignSelf: { xs: "stretch", sm: "center" },
-          }}
-        >
-          + CREATE TOKEN
-        </Button>
-      </Box>
-
+      {/* KPI strip — semantic colors come from BRAND/ROLE now.
+          "Active" uses the success green (not a custom teal-dark),
+          "Expired" the caution amber, "Revoked" the critical red. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: 2 }}>
@@ -376,15 +383,15 @@ const filteredRows = React.useMemo(() => {
             <SummaryCard
               title="Active"
               value={summary.active}
-              accent="#0f6b72"
+              accent={BRAND.alert.success}
             />
           </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }} >
-            <SummaryCard sx={{backgroundColor: "#2e8f92"}}
+          <Grid size={{ xs: 12, md: 2 }}>
+            <SummaryCard
               title="Expired"
               value={summary.expired}
-              accent="#b3ac1eff"
+              accent={BRAND.alert.warning}
             />
           </Grid>
 
@@ -392,20 +399,15 @@ const filteredRows = React.useMemo(() => {
             <SummaryCard
               title="Revoked"
               value={summary.revoked}
-              accent="#b3261e"
+              accent={BRAND.alert.error}
             />
           </Grid>
         </Grid>
       </Box>
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 1.5 },
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
-        }}
+      <SectionPaper
+        variant="panel"
+        sx={{ p: { xs: 1.5, sm: 1.5 } }}
       >
         <Box
           sx={{
@@ -478,22 +480,12 @@ const filteredRows = React.useMemo(() => {
               },
             }}
             sx={{
-              border: "none",
+              ...DATAGRID_SX,
               width: "100%",
-
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(166, 83, 27, 0.08)",
-                fontWeight: 700,
-              },
-
               "& .MuiDataGrid-cell": {
+                ...DATAGRID_SX["& .MuiDataGrid-cell"],
                 alignItems: "center",
               },
-
-              "& .MuiDataGrid-columnHeaderTitle": {
-                fontWeight: 700,
-              },
-
               "& .MuiDataGrid-cellContent": {
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -501,7 +493,7 @@ const filteredRows = React.useMemo(() => {
             }}
           />
         </Box>
-      </Paper>
+      </SectionPaper>
 
       <CreateTokenDialog
         open={createOpen}

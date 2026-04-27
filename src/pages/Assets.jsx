@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   Box,
-  Paper,
   Tabs,
   Tab,
   Typography,
@@ -11,11 +10,17 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import AssetsDashboard from "./AssetsDashboard";
 import SoftwareDelivery from "./SoftwareDelivery";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
+
+import { BRAND } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 
 function TabPanel({ children, value, index }) {
   return (
@@ -37,15 +42,16 @@ function a11yProps(index) {
   };
 }
 
+// Empty-state card used when an inventory tab has no data yet.
+// Uses the shared `panel` variant so the elevation/border match the
+// rest of the app (previously it was a custom borderRadius 3 + a
+// black-alpha shadow that didn't exist anywhere else).
 function InventoryPlaceholder({ title, description }) {
   return (
-    <Paper
-      elevation={0}
+    <SectionPaper
+      variant="panel"
       sx={{
         p: { xs: 3, sm: 4 },
-        borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
         minHeight: 280,
         display: "flex",
         flexDirection: "column",
@@ -56,7 +62,7 @@ function InventoryPlaceholder({ title, description }) {
     >
       <Typography
         variant="h5"
-        sx={{ fontWeight: 700, color: "#16324f", mb: 1.5 }}
+        sx={{ fontWeight: 700, color: BRAND.dark, mb: 1.5 }}
       >
         {title}
       </Typography>
@@ -64,15 +70,26 @@ function InventoryPlaceholder({ title, description }) {
       <Typography
         sx={{
           maxWidth: 620,
-          color: "#667085",
+          color: "text.secondary",
           lineHeight: 1.7,
         }}
       >
         {description}
       </Typography>
-    </Paper>
+    </SectionPaper>
   );
 }
+
+// Shared sx for the four Tab labels. Keeping it in one place so the
+// selected-state color and the hover treatment stay uniform — the
+// previous file repeated the same object four times.
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
 
 export default function Assets({ onAssetsEmptyStateChange }) {
   const [activeTab, setActiveTab] = React.useState(0);
@@ -81,25 +98,46 @@ export default function Assets({ onAssetsEmptyStateChange }) {
     setActiveTab(newValue);
   };
 
+  // Page-level refresh — bumping the nonce signals child tabs to
+  // re-fetch. Each tab opts in by depending on `refreshNonce` in its
+  // load effects (today: AssetsDashboard; others can wire it later).
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const triggerRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    setRefreshNonce((v) => v + 1);
+    // Drop the spinner after a short window so the long button doesn't
+    // stay disabled forever — child tabs settle within ~1s on local
+    // dev and won't visibly toggle. Acceptable tradeoff: the spinner
+    // is advisory, not a strict load gate.
+    window.setTimeout(() => setRefreshing(false), 1200);
+  }, []);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(triggerRefresh, "assetsAutoRefresh");
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-          Asset Management
-        </Typography>
+      <PageHeader
+        title="Asset Management"
+        subtitle="Monitor devices, inventory and agent distribution"
+        icon={<ComputerOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={refreshSeconds}
+            onRefreshSecondsChange={setRefreshSeconds}
+            onRefresh={triggerRefresh}
+            loading={refreshing}
+          />
+        }
+      />
 
-        <Typography variant="body1" color="text.secondary">
-          Monitor devices, inventory and agent distribution
-        </Typography>
-      </Box>
-
-      <Paper
-        elevation={0}
+      <SectionPaper
+        variant="panel"
         sx={{
           mb: 2,
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          // Zero padding on the wrapper — the Tabs component brings
+          // its own min-height and we want the bottom border of the
+          // Tabs to line up with the Paper's edge.
+          p: 0,
           overflow: "hidden",
         }}
       >
@@ -114,7 +152,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             "& .MuiTabs-indicator": {
               height: 3,
               borderRadius: 999,
-              backgroundColor: "#1ba6a6",
+              backgroundColor: BRAND.teal,
             },
           }}
         >
@@ -123,13 +161,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             iconPosition="start"
             label="Asset Management"
             {...a11yProps(0)}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              minHeight: 62,
-              color: "#667085",
-              "&.Mui-selected": { color: "#16324f" },
-            }}
+            sx={TAB_SX}
           />
 
           <Tab
@@ -137,13 +169,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             iconPosition="start"
             label="Software Inventory"
             {...a11yProps(1)}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              minHeight: 62,
-              color: "#667085",
-              "&.Mui-selected": { color: "#16324f" },
-            }}
+            sx={TAB_SX}
           />
 
           <Tab
@@ -151,13 +177,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             iconPosition="start"
             label="Hardware Inventory"
             {...a11yProps(2)}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              minHeight: 62,
-              color: "#667085",
-              "&.Mui-selected": { color: "#16324f" },
-            }}
+            sx={TAB_SX}
           />
 
           <Tab
@@ -165,19 +185,16 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             iconPosition="start"
             label="Agent Downloads"
             {...a11yProps(3)}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              minHeight: 62,
-              color: "#667085",
-              "&.Mui-selected": { color: "#16324f" },
-            }}
+            sx={TAB_SX}
           />
         </Tabs>
-      </Paper>
+      </SectionPaper>
 
       <TabPanel value={activeTab} index={0}>
-        <AssetsDashboard onAssetsEmptyStateChange={onAssetsEmptyStateChange} />
+        <AssetsDashboard
+          onAssetsEmptyStateChange={onAssetsEmptyStateChange}
+          refreshNonce={refreshNonce}
+        />
       </TabPanel>
 
       <TabPanel value={activeTab} index={1}>

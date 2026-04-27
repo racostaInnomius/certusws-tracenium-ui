@@ -10,7 +10,7 @@
 // while data loads and show a neutral zero-state if a backing endpoint
 // failed — partial data is better than a blank dashboard.
 
-import { Box, Grid, Paper, Skeleton, Stack, Typography } from "@mui/material";
+import { Box, Grid, Paper, Skeleton, Stack, Typography, Tooltip } from "@mui/material";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import CloudDoneOutlinedIcon from "@mui/icons-material/CloudDoneOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
@@ -19,22 +19,49 @@ import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
-function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
+/**
+ * Tiny inline sparkline (no chart lib). Takes an array of numbers and
+ * renders a polyline + area under the curve, sized to fit a KPI card.
+ * Kept dependency-free so adding sparklines to other KPIs later only
+ * needs data — no Recharts instantiation overhead per card.
+ */
+function Sparkline({ points = [], color = BRAND.teal, height = 24 }) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+
+  const w = 64;
+  const h = height;
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const span = max - min || 1;
+
+  // Map each point to an (x, y) in the SVG viewBox.
+  const step = w / (points.length - 1);
+  const coords = points.map((p, i) => {
+    const x = i * step;
+    const y = h - ((p - min) / span) * (h - 2) - 1;
+    return [x, y];
+  });
+
+  const linePath = coords.map(([x, y], i) => (i === 0 ? `M${x},${y}` : `L${x},${y}`)).join(" ");
+  const areaPath = `${linePath} L${w},${h} L0,${h} Z`;
+
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        gap: 1.25,
-        transition: "border-color 120ms ease",
-        "&:hover": { borderColor: BRAND.borderStrong }
-      }}
-    >
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
+      <path d={areaPath} fill={color} opacity={0.15} />
+      <path d={linePath} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClick, sparkline }) {
+  // The card becomes a button only when a target is wired. That way
+  // "dead" KPIs (no drilldown yet) don't show a pointer cursor or
+  // invite clicks that do nothing — a worse UX than being visibly
+  // static.
+  const interactive = typeof onClick === "function";
+
+  const content = (
+    <>
       <Stack direction="row" spacing={1.5} alignItems="center">
         <Box
           sx={{
@@ -62,12 +89,25 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
       {loading ? (
         <Skeleton variant="text" width={90} height={40} />
       ) : (
-        <Typography
-          variant="h4"
-          sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.1 }}
-        >
-          {value}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography
+            variant="h4"
+            sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.1, flex: 1 }}
+          >
+            {value}
+          </Typography>
+          {sparkline && sparkline.length >= 2 ? (
+            // Small inline trend for the last-N-days window. Color
+            // inherits the KPI's accent so it reads as the same
+            // signal at a glance (no "is this a different metric?"
+            // confusion).
+            <Tooltip title={`Trend · last ${sparkline.length} days`} arrow>
+              <Box sx={{ flexShrink: 0 }}>
+                <Sparkline points={sparkline} color={accent} />
+              </Box>
+            </Tooltip>
+          ) : null}
+        </Stack>
       )}
 
       {subtitle != null && !loading && (
@@ -75,6 +115,43 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
           {subtitle}
         </Typography>
       )}
+    </>
+  );
+
+  return (
+    <Paper
+      elevation={0}
+      component={interactive ? "button" : "div"}
+      onClick={interactive ? onClick : undefined}
+      type={interactive ? "button" : undefined}
+      sx={{
+        p: 2,
+        borderRadius: 2,
+        border: `1px solid ${BRAND.border}`,
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        textAlign: "left",
+        gap: 1.25,
+        // Native <button> resets we need once the Paper becomes
+        // interactive — otherwise MUI's default button styling (font
+        // family, background) bleeds through.
+        background: "transparent",
+        font: "inherit",
+        cursor: interactive ? "pointer" : "default",
+        transition: "border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease",
+        "&:hover": interactive
+          ? {
+              borderColor: BRAND.teal,
+              transform: "translateY(-1px)",
+              boxShadow: "0 4px 12px rgba(59,64,77,0.08)"
+            }
+          : { borderColor: BRAND.borderStrong }
+      }}
+    >
+      {content}
     </Paper>
   );
 }
@@ -93,12 +170,14 @@ function formatPct(num) {
   return `${Math.round(num)}%`;
 }
 
-export default function HeroKpis({ results, loading }) {
+export default function HeroKpis({ results, loading, onNavigate }) {
   const dashboard = getValue(results?.dashboardSummary);
-  const audit = getValue(results?.auditSummary);
   const compliance = getValue(results?.complianceSummary);
   const connected = getValue(results?.connectedDevices);
   const jobsTs = getValue(results?.jobsTimeseries);
+  // auditSummary stayed in the bundle (other components still use it);
+  // we just no longer consume it for a Hero KPI since card 6 became
+  // "Unread alerts" — see comment above `unreadAlerts` below.
 
   // Card 1: Total devices
   //
@@ -184,24 +263,36 @@ export default function HeroKpis({ results, loading }) {
     : null;
   const jobsInFlight = lastBucket?.inFlight ?? 0;
 
-  // Card 6: Security events last 24h (with rejected+error count for
-  // color severity). Rejected/error > 0 gets a warning tint.
-  const auditSummary = audit?.summary ?? {};
-  const eventsLast24h = auditSummary.last_24h ?? 0;
-  const rejectedOrError =
-    (auditSummary.rejected_count ?? 0) + (auditSummary.error_count ?? 0);
-  const auditAccent =
-    rejectedOrError > 0
-      ? ROLE.critical
-      : eventsLast24h > 0
-      ? BRAND.teal
-      : BRAND.gray;
-  const auditTint =
-    rejectedOrError > 0
-      ? ROLE.criticalSoft
-      : eventsLast24h > 0
-      ? BRAND.tealSoft
-      : BRAND.surfaceMuted;
+  // Sparkline for "Jobs in flight" — the backend's jobsTimeseries
+  // endpoint already emits one bucket per day for the last 7 days, so
+  // we reuse that data. Other KPIs will gain sparklines as their
+  // corresponding timeseries endpoints land (Compliance, Devices,
+  // Online now, Critical findings).
+  const jobsInFlightSpark = Array.isArray(jobsTs?.buckets)
+    ? jobsTs.buckets.map((b) => Number(b?.inFlight ?? 0))
+    : [];
+
+  // Card 6 was "Security events 24h" (raw count from the audit
+  // pipeline). We replaced it with "Unread alerts" — the actionable
+  // signal from the new tenant-configurable alerts module. Raw audit
+  // counts stay accessible via the audit page (and via clicking the
+  // 7-day chart), but a CISO opening the dashboard cares more about
+  // "what unread alerts should I look at" than "how many events
+  // streamed in today".
+  const unreadAlerts = getValue(results?.alertsUnread);
+  const unreadCount = Number(unreadAlerts?.count ?? 0);
+  const alertsAccent =
+    unreadCount > 0 ? ROLE.critical : ROLE.positive;
+  const alertsTint =
+    unreadCount > 0 ? ROLE.criticalSoft : ROLE.positiveSoft;
+
+  // Each card maps to a landing page (+ optional filter) so clicking
+  // the KPI drops the operator into the drill-down already scoped.
+  // Filter keys here must match what the target page reads from the URL
+  // — `?filter=online` for Assets, `?severity=high` for SCP, etc. If
+  // the target page doesn't yet honor a given query param, the link
+  // still works (it just lands unfiltered).
+  const navigate = (page, query) => onNavigate?.(page, query);
 
   const cards = [
     {
@@ -210,7 +301,8 @@ export default function HeroKpis({ results, loading }) {
       subtitle: totalDevices ? "total enrolled" : null,
       icon: DevicesOutlinedIcon,
       accent: BRAND.teal,
-      tint: BRAND.tealSoft
+      tint: BRAND.tealSoft,
+      onClick: () => navigate("assets")
     },
     {
       title: "Online now",
@@ -221,7 +313,8 @@ export default function HeroKpis({ results, loading }) {
           : "— no session data",
       icon: CloudDoneOutlinedIcon,
       accent: onlineAccent,
-      tint: onlineTint
+      tint: onlineTint,
+      onClick: () => navigate("assets", { filter: "online" })
     },
     {
       title: "Compliance",
@@ -232,7 +325,8 @@ export default function HeroKpis({ results, loading }) {
           : null,
       icon: ShieldOutlinedIcon,
       accent: complianceAccent,
-      tint: complianceTint
+      tint: complianceTint,
+      onClick: () => navigate("ad")
     },
     {
       title: "Critical findings",
@@ -242,7 +336,8 @@ export default function HeroKpis({ results, loading }) {
         : "no open high-severity findings",
       icon: ReportProblemOutlinedIcon,
       accent: criticalHigh > 0 ? ROLE.critical : ROLE.positive,
-      tint: criticalHigh > 0 ? ROLE.criticalSoft : ROLE.positiveSoft
+      tint: criticalHigh > 0 ? ROLE.criticalSoft : ROLE.positiveSoft,
+      onClick: () => navigate("ad", { severity: "high" })
     },
     {
       title: "Jobs in flight",
@@ -250,20 +345,21 @@ export default function HeroKpis({ results, loading }) {
       subtitle: jobsInFlight ? "pending / running" : "queue clear",
       icon: WorkOutlineOutlinedIcon,
       accent: BRAND.teal,
-      tint: BRAND.cyanSoft
+      tint: BRAND.cyanSoft,
+      sparkline: jobsInFlightSpark,
+      onClick: () => navigate("jobs", { status: "in_flight" })
     },
     {
-      title: "Security events 24h",
-      value: eventsLast24h,
+      title: "Unread alerts",
+      value: unreadCount,
       subtitle:
-        rejectedOrError > 0
-          ? `${rejectedOrError} rejected/error`
-          : eventsLast24h > 0
-          ? "all ok"
-          : null,
+        unreadCount > 0
+          ? "since last visit"
+          : "all caught up",
       icon: NotificationsActiveOutlinedIcon,
-      accent: auditAccent,
-      tint: auditTint
+      accent: alertsAccent,
+      tint: alertsTint,
+      onClick: () => navigate("alerts")
     }
   ];
 

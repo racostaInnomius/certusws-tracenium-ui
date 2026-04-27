@@ -36,7 +36,6 @@ import {
   MenuItem,
   Paper,
   Select,
-  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -47,7 +46,6 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
@@ -57,6 +55,11 @@ import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
+import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 
 import {
   getComplianceSummary,
@@ -67,6 +70,12 @@ import {
   getDeviceTimeseries
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
+
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import SharedSummaryCard from "../components/common/SummaryCard";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 
 // ---------- constants --------------------------------------------------------
 
@@ -118,52 +127,6 @@ const SEVERITY_META = {
 };
 
 // ---------- small presentational atoms ---------------------------------------
-
-function SummaryCard({ title, value, hint, accent = BRAND.teal, tint = BRAND.tealSoft }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%"
-      }}
-    >
-      <Typography
-        variant="caption"
-        sx={{
-          color: BRAND.dark,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: 0.5
-        }}
-      >
-        {title}
-      </Typography>
-      <Typography
-        variant="h4"
-        sx={{ color: accent, fontWeight: 700, mt: 0.5, lineHeight: 1.1 }}
-      >
-        {value}
-      </Typography>
-      {hint ? (
-        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.5 }}>
-          {hint}
-        </Typography>
-      ) : null}
-      <Box
-        aria-hidden
-        sx={{
-          mt: 1,
-          height: 4,
-          borderRadius: 2,
-          backgroundColor: tint
-        }}
-      />
-    </Paper>
-  );
-}
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] ?? STATUS_META.unknown;
@@ -354,51 +317,125 @@ function navigateTo(page, extraQuery = {}) {
     if (v == null) params.delete(k);
     else params.set(k, String(v));
   });
-  window.history.pushState({}, "", `${window.location.pathname}?${params.toString()}`);
+  // Collapse accidental `//` in the pathname so pushState doesn't
+  // silently reject the URL as cross-origin (see navigateWithQuery
+  // comment in Overview.jsx for the full story).
+  const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+  window.history.pushState({}, "", `${pathname}?${params.toString()}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export default function SecurityCompliance() {
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
+// Acceptable enum values for the deep-link filter params. Anything
+// else on the URL is ignored — we don't trust the query string to set
+// page state beyond what we explicitly support.
+const ALLOWED_SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
+const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
+const ALLOWED_VERSION_BUCKETS = new Set(["current", "one_behind", "older", "unknown"]);
 
-  const [summary, setSummary] = React.useState(null);
-  const [frameworks, setFrameworks] = React.useState([]);
-  const [frameworkSummary, setFrameworkSummary] = React.useState([]);
-  const [devices, setDevices] = React.useState([]);
+// Semver-ish comparison. Returns > 0 if b > a, matching the shape
+// JS sort expects when you want descending order (a.sort(cmp) → highest
+// first). Only used for the client-side "pick canonical latest" step in
+// the versionBucket filter, so tolerant of weird strings (non-numeric
+// segments become 0).
+function compareVersionsReverse(a, b) {
+  const parse = (v) =>
+    String(v || "")
+      .split(".")
+      .map((x) => Number(x) || 0);
+  const av = parse(a);
+  const bv = parse(b);
+  for (let i = 0; i < Math.max(av.length, bv.length); i += 1) {
+    const ai = av[i] ?? 0;
+    const bi = bv[i] ?? 0;
+    if (ai !== bi) return bi - ai;
+  }
+  return 0;
+}
+
+// Map a device's agentVersion to one of the buckets the Overview
+// donut uses. Mirrors FleetComposition's classifyAgentVersions, but
+// kept local here because this page isn't a dependent of that
+// component and we don't want to pull it in just for one helper.
+function bucketOfVersion(version, canonicalLatest) {
+  if (!version || !canonicalLatest) return "unknown";
+  const cmp = compareVersionsReverse(version, canonicalLatest);
+  // Convention matches classifyAgentVersions:
+  //   cmp < 0 → device > canonical (newer than any known latest) — treat as current
+  //   cmp === 0 → equal → current
+  //   cmp > 0 → device < canonical
+  if (cmp <= 0) return "current";
+  // One behind: same major.minor, patch within 2.
+  const v = String(version).split(".").map((x) => Number(x) || 0);
+  const l = String(canonicalLatest).split(".").map((x) => Number(x) || 0);
+  if (v[0] === l[0] && v[1] === l[1] && Math.abs((l[2] || 0) - (v[2] || 0)) <= 2) {
+    return "one_behind";
+  }
+  return "older";
+}
+
+function readUrlFilters() {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const severity = (params.get("severity") || "").toLowerCase();
+  const platform = (params.get("platform") || "").toLowerCase();
+  const versionBucket = (params.get("versionBucket") || "").toLowerCase();
+  return {
+    severity: ALLOWED_SEVERITIES.has(severity) ? severity : "",
+    platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
+    versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket) ? versionBucket : ""
+  };
+}
+
+export default function SecurityCompliance() {
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
+
+  // Deep-link filters (pre-populated from URL, user can clear via
+  // chips). Client-side only — we already have the full device list
+  // from the backend, so filtering in-memory is cheap and avoids
+  // round-tripping for every chip click.
+  const initialFilters = React.useMemo(() => readUrlFilters(), []);
+  const [severityFilter, setSeverityFilter] = React.useState(initialFilters.severity || "");
+  const [platformFilter, setPlatformFilter] = React.useState(initialFilters.platform || "");
+  const [versionBucketFilter, setVersionBucketFilter] = React.useState(
+    initialFilters.versionBucket || ""
+  );
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);
   const [drawerTimeseries, setDrawerTimeseries] = React.useState(null);
   const [drawerLoading, setDrawerLoading] = React.useState(false);
 
-  const loadAll = React.useCallback(async (framework) => {
-    setLoading(true);
-    setError(null);
-    try {
-      // Fan out in parallel — each endpoint is independent.
-      const [sum, fw, fws, devs] = await Promise.all([
-        getComplianceSummary().catch(() => null),
-        getFrameworks().catch(() => null),
-        getFrameworkSummary().catch(() => null),
-        getDevicePosture(framework ? { framework } : {}).catch(() => null)
-      ]);
+  // Cache key includes the selected framework so flipping the picker
+  // gets its own snapshot — coming back to a previously-loaded
+  // framework rehydrates instantly. Empty framework = "All frameworks
+  // (weighted)".
+  const loader = React.useCallback(async () => {
+    const [sum, fw, fws, devs] = await Promise.all([
+      getComplianceSummary().catch(() => null),
+      getFrameworks().catch(() => null),
+      getFrameworkSummary().catch(() => null),
+      getDevicePosture(selectedFramework ? { framework: selectedFramework } : {}).catch(() => null),
+    ]);
+    return {
+      summary: sum?.summary ?? null,
+      frameworks: Array.isArray(fw?.frameworks) ? fw.frameworks : [],
+      frameworkSummary: Array.isArray(fws?.items) ? fws.items : [],
+      devices: Array.isArray(devs?.items) ? devs.items : [],
+    };
+  }, [selectedFramework]);
 
-      setSummary(sum?.summary ?? null);
-      setFrameworks(Array.isArray(fw?.frameworks) ? fw.frameworks : []);
-      setFrameworkSummary(Array.isArray(fws?.items) ? fws.items : []);
-      setDevices(Array.isArray(devs?.items) ? devs.items : []);
-    } catch (err) {
-      setError(err?.message || "Failed to load compliance data");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const cacheKey = `securityCompliance:${selectedFramework || "all"}`;
+  const { data, loading, refreshing, error, refetch } = useCachedFetch(cacheKey, loader);
+  const summary = data?.summary ?? null;
+  // Stable fallback identities — see AssetsDashboard for the same
+  // pattern. Without these, downstream useMemo deps see a fresh `[]`
+  // on every render and re-run.
+  const frameworks = React.useMemo(() => data?.frameworks ?? [], [data]);
+  const frameworkSummary = React.useMemo(() => data?.frameworkSummary ?? [], [data]);
+  const devices = React.useMemo(() => data?.devices ?? [], [data]);
+  const errorMsg = error ? error?.message || "Failed to load compliance data" : null;
 
-  React.useEffect(() => {
-    loadAll(selectedFramework);
-  }, [loadAll, selectedFramework]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "scAutoRefresh");
 
   const openDrawer = React.useCallback(async (agentId) => {
     setDrawerAgentId(agentId);
@@ -434,120 +471,145 @@ export default function SecurityCompliance() {
     ? frameworkLabels.get(selectedFramework) || selectedFramework
     : "All frameworks (weighted)";
 
+  // Client-side filtering of the device table based on the deep-link
+  // chips. We already have the full device list from the backend, so
+  // filtering in-memory is cheap and lets the chips clear instantly
+  // without re-fetching.
+  //
+  // Severity filter is a PROXY today: the posture endpoint doesn't
+  // expose per-device severity counts, so "severity >= high" resolves
+  // to `overallStatus === 'fail'` (strongly correlated with having at
+  // least one failing finding at high+ severity). Swap to a real
+  // severity-per-device signal when the backend exposes one.
+  const filteredDevices = React.useMemo(() => {
+    return devices.filter((d) => {
+      if (platformFilter && String(d.platform || "").toLowerCase() !== platformFilter) {
+        return false;
+      }
+      if (severityFilter) {
+        // Only two states matter for this proxy: "fail" passes, anything
+        // else is hidden. Future: expose per-device severity buckets.
+        if (String(d.overallStatus || "").toLowerCase() !== "fail") return false;
+      }
+      if (versionBucketFilter) {
+        // Map the device's agentVersion into the same buckets the
+        // FleetComposition donut uses. We don't have canonicalLatest
+        // from the /binaries endpoint here, so we bucket relative to
+        // the highest version currently reporting — acceptable for a
+        // client-side filter, matches what the operator just clicked
+        // from the Overview donut.
+        const versions = devices
+          .map((x) => x.agentVersion)
+          .filter(Boolean);
+        const canonicalLatest = versions.sort(compareVersionsReverse)[0];
+        const bucket = bucketOfVersion(d.agentVersion, canonicalLatest);
+        if (bucket !== versionBucketFilter) return false;
+      }
+      return true;
+    });
+  }, [devices, platformFilter, severityFilter, versionBucketFilter]);
+
   return (
     <Box sx={{ pb: 6 }}>
       {/* Page header ------------------------------------------------------- */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ mb: 2 }}
-      >
-        <Box>
-          <Typography variant="h5" sx={{ color: BRAND.dark, fontWeight: 700 }}>
-            Security Compliance
-          </Typography>
-          <Typography variant="caption" sx={{ color: BRAND.gray }}>
-            Verdict is derived from published benchmarks (CIS) and standards (NIST SP 800-53, NIST CSF). Tracenium maps the agent's evidence to the control IDs on each finding.
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh">
-          <span>
-            <IconButton
-              onClick={() => loadAll(selectedFramework)}
-              disabled={loading}
-              size="small"
-              sx={{
-                color: BRAND.teal,
-                border: `1px solid ${BRAND.border}`,
-                borderRadius: 1.5,
-                "&:hover": { backgroundColor: BRAND.tealSoft }
-              }}
-            >
-              <RefreshOutlinedIcon fontSize="small" />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Stack>
+      <PageHeader
+        title="Security Compliance"
+        subtitle={
+          <>
+            Verdict is derived from published benchmarks (CIS) and standards (NIST SP 800-53, NIST CSF).
+            <br />
+            Tracenium maps the agent&apos;s evidence to the control IDs on each finding.
+          </>
+        }
+        icon={<GppGoodOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={refreshSeconds}
+            onRefreshSecondsChange={setRefreshSeconds}
+            onRefresh={refetch}
+            loading={loading || refreshing}
+          />
+        }
+      />
 
-      {error ? (
+      {errorMsg ? (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {errorMsg}
         </Alert>
       ) : null}
 
-      {/* Hero KPIs --------------------------------------------------------- */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard
-            title="Devices reporting"
-            value={summary?.devicesReporting ?? "—"}
-            hint="SCP snapshots received"
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard
-            title="Avg score"
-            value={summary?.avgScore != null ? `${Math.round(summary.avgScore)}%` : "—"}
-            hint="severity-weighted"
-            accent={
-              summary?.avgScore == null
-                ? BRAND.gray
-                : summary.avgScore >= 85
-                ? ROLE.positive
-                : summary.avgScore >= 60
-                ? ROLE.caution
-                : ROLE.critical
-            }
-            tint={
-              summary?.avgScore == null
-                ? BRAND.surfaceMuted
-                : summary.avgScore >= 85
-                ? ROLE.positiveSoft
-                : summary.avgScore >= 60
-                ? ROLE.cautionSoft
-                : ROLE.criticalSoft
-            }
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard
-            title="Compliant"
-            value={summary?.statusBreakdown?.compliant ?? 0}
-            hint={`${summary?.statusBreakdown?.non_compliant ?? 0} non-compliant · ${summary?.statusBreakdown?.unknown ?? 0} unknown`}
-            accent={ROLE.positive}
-            tint={ROLE.positiveSoft}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <SummaryCard
-            title="Open findings"
-            value={summary?.openFindings?.total ?? 0}
-            hint={`${summary?.openFindings?.critical ?? 0} critical · ${summary?.openFindings?.high ?? 0} high`}
-            accent={
-              (summary?.openFindings?.critical ?? 0) + (summary?.openFindings?.high ?? 0) > 0
-                ? ROLE.critical
-                : BRAND.teal
-            }
-            tint={
-              (summary?.openFindings?.critical ?? 0) + (summary?.openFindings?.high ?? 0) > 0
-                ? ROLE.criticalSoft
-                : BRAND.tealSoft
-            }
-          />
-        </Grid>
-      </Grid>
+      {/* Hero KPIs — homologated with Overview's Hero. The "Compliance"
+          and "Critical findings" cards mirror Overview/HeroKpis exactly
+          (same labels, icons, score/severity color buckets) so a user
+          jumping between the two surfaces reads them as one signal.
+          "Devices reporting" + "Compliant" stay because they're
+          framework-specific — they don't appear on Overview but make
+          sense as drill-down context here. */}
+      {(() => {
+        const avgScore = summary?.avgScore;
+        const complianceAccent =
+          avgScore == null
+            ? BRAND.teal
+            : avgScore >= 85
+            ? ROLE.positive
+            : avgScore >= 60
+            ? ROLE.caution
+            : ROLE.critical;
+        const complianceTint =
+          avgScore == null
+            ? BRAND.tealSoft
+            : avgScore >= 85
+            ? ROLE.positiveSoft
+            : avgScore >= 60
+            ? ROLE.cautionSoft
+            : ROLE.criticalSoft;
+        const criticalHigh =
+          (summary?.openFindings?.critical ?? 0) +
+          (summary?.openFindings?.high ?? 0);
+        const findingsAccent = criticalHigh > 0 ? ROLE.critical : ROLE.positive;
+        const findingsTint = criticalHigh > 0 ? ROLE.criticalSoft : ROLE.positiveSoft;
+        return (
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <SharedSummaryCard
+                title="Devices reporting"
+                value={summary?.devicesReporting ?? "—"}
+                icon={<DevicesOutlinedIcon fontSize="small" />}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <SharedSummaryCard
+                title="Compliance"
+                value={avgScore != null ? `${Math.round(avgScore)}%` : "—"}
+                icon={<ShieldOutlinedIcon fontSize="small" />}
+                accent={complianceAccent}
+                tint={complianceTint}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <SharedSummaryCard
+                title="Compliant"
+                value={summary?.statusBreakdown?.compliant ?? 0}
+                icon={<VerifiedOutlinedIcon fontSize="small" />}
+                accent={ROLE.positive}
+                tint={ROLE.positiveSoft}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <SharedSummaryCard
+                title="Critical findings"
+                value={criticalHigh}
+                icon={<ReportProblemOutlinedIcon fontSize="small" />}
+                accent={findingsAccent}
+                tint={findingsTint}
+              />
+            </Grid>
+          </Grid>
+        );
+      })()}
 
       {/* Framework switcher + per-framework summary ------------------------ */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          borderRadius: 2,
-          border: `1px solid ${BRAND.border}`,
-          mb: 2
-        }}
-      >
+      <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           justifyContent="space-between"
@@ -638,13 +700,10 @@ export default function SecurityCompliance() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Paper>
+      </SectionPaper>
 
       {/* Device table ------------------------------------------------------ */}
-      <Paper
-        elevation={0}
-        sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}
-      >
+      <SectionPaper variant="panel" sx={{ p: 2 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
           <Box>
             <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
@@ -656,6 +715,44 @@ export default function SecurityCompliance() {
           </Box>
           {loading ? <CircularProgress size={18} sx={{ color: BRAND.teal }} /> : null}
         </Stack>
+
+        {/* Deep-link filter chips. Each chip is deletable — clicking
+            the x clears that filter. When there are no active filters
+            nothing renders, so the header stays compact by default. */}
+        {(severityFilter || platformFilter || versionBucketFilter) ? (
+          <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap", gap: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: BRAND.gray, alignSelf: "center", fontWeight: 600, mr: 0.5 }}
+            >
+              Applied:
+            </Typography>
+            {severityFilter ? (
+              <Chip
+                size="small"
+                label={`Severity ≥ ${severityFilter}`}
+                onDelete={() => setSeverityFilter("")}
+                sx={{ bgcolor: ROLE.criticalSoft, color: ROLE.critical, fontWeight: 600 }}
+              />
+            ) : null}
+            {platformFilter ? (
+              <Chip
+                size="small"
+                label={`Platform: ${platformFilter}`}
+                onDelete={() => setPlatformFilter("")}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
+              />
+            ) : null}
+            {versionBucketFilter ? (
+              <Chip
+                size="small"
+                label={`Version: ${versionBucketFilter.replace("_", " ")}`}
+                onDelete={() => setVersionBucketFilter("")}
+                sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
+              />
+            ) : null}
+          </Stack>
+        ) : null}
 
         <TableContainer>
           <Table size="small">
@@ -676,14 +773,16 @@ export default function SecurityCompliance() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {devices.length === 0 && !loading ? (
+              {filteredDevices.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center" sx={{ color: BRAND.gray, py: 3 }}>
-                    No devices have reported compliance under this framework.
+                    {devices.length === 0
+                      ? "No devices have reported compliance under this framework."
+                      : "No devices match the applied filters. Clear chips above to see all."}
                   </TableCell>
                 </TableRow>
               ) : (
-                devices.map((d) => {
+                filteredDevices.map((d) => {
                   const useFw = Boolean(selectedFramework && d.frameworkScore);
                   const score = useFw ? d.frameworkScore.score : d.overallScore;
                   const passed = useFw ? d.frameworkScore.passed : null;
@@ -733,7 +832,7 @@ export default function SecurityCompliance() {
             </TableBody>
           </Table>
         </TableContainer>
-      </Paper>
+      </SectionPaper>
 
       {/* Drawer: device drill-down ---------------------------------------- */}
       <Drawer
@@ -993,12 +1092,15 @@ function DeviceDrawerContent({
   frameworkLabels,
   onNavigateToAsset
 }) {
-  if (!agentId) return null;
-
   const device = data?.device;
   const findings = Array.isArray(data?.findings) ? data.findings : [];
 
-  // Group findings by category for scanning.
+  // Group findings by category for scanning. Hooks must run in the
+  // same order every render — the early `agentId` return below must
+  // therefore stay AFTER the useMemo calls. Putting the return on
+  // top (as the original code did) made React see a different hook
+  // count when the drawer toggled open/closed, which eslint's
+  // rules-of-hooks correctly flagged.
   const byCategory = React.useMemo(() => {
     const groups = new Map();
     for (const f of findings) {
@@ -1017,6 +1119,8 @@ function DeviceDrawerContent({
     }
     return c;
   }, [findings]);
+
+  if (!agentId) return null;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>

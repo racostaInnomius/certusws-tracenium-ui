@@ -9,17 +9,26 @@ import {
   Snackbar,
   Alert,
   Tooltip,
+  Switch,
+  FormControlLabel,
+  Chip,
+  IconButton,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 import {
   getSoftwareInventorySummary,
   getSoftwareInventoryRankings,
   getSoftwareInventoryDetail,
+  getSoftwareInventoryHosts,
+  getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
 
-function SummaryCard({ title, value, accent = "#1ba6a6", subtitle }) {
+import { BRAND } from "../theme/brand";
+
+function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
     <Paper
       sx={{
@@ -28,20 +37,14 @@ function SummaryCard({ title, value, accent = "#1ba6a6", subtitle }) {
         minHeight: 132,
         height: "100%",
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
       }}
     >
-      <Typography
-        sx={{
-          fontSize: 13,
-          color: "text.secondary",
-          lineHeight: 1.4,
-        }}
-      >
+      <Typography sx={{ fontSize: 13, color: "text.secondary", lineHeight: 1.4 }}>
         {title}
       </Typography>
 
@@ -83,8 +86,8 @@ function SectionCard({ title, children }) {
         p: 2,
         width: "100%",
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         minHeight: 360,
         height: "100%",
         display: "flex",
@@ -92,39 +95,29 @@ function SectionCard({ title, children }) {
         overflow: "hidden",
       }}
     >
-      <Box
-        sx={{
-          mb: 1.5,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 2,
-          flexWrap: "wrap",
-        }}
-      >
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          {title}
-        </Typography>
-      </Box>
+      {title ? (
+        <Box
+          sx={{
+            mb: 1.5,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 2,
+            flexWrap: "wrap",
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            {title}
+          </Typography>
+        </Box>
+      ) : null}
 
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflow: "hidden",
-        }}
-      >
-        {children}
-      </Box>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</Box>
     </Paper>
   );
 }
 
-function RankedBars({
-  items,
-  valueFormatter = (v) => String(v),
-  color = "#1ba6a6",
-}) {
+function RankedBars({ items, valueFormatter = (v) => String(v), color = BRAND.teal }) {
   const max = Math.max(...items.map((i) => Number(i.value || 0)), 0);
 
   return (
@@ -162,7 +155,7 @@ function RankedBars({
                   sx={{
                     fontSize: 13,
                     fontWeight: 600,
-                    color: "#16324f",
+                    color: BRAND.dark,
                     flex: 1,
                     minWidth: 0,
                     overflow: "hidden",
@@ -174,13 +167,7 @@ function RankedBars({
                 </Typography>
               </Tooltip>
 
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  color: "text.secondary",
-                  flexShrink: 0,
-                }}
-              >
+              <Typography sx={{ fontSize: 13, color: "text.secondary", flexShrink: 0 }}>
                 {valueFormatter(Number(item.value || 0))}
               </Typography>
             </Box>
@@ -227,18 +214,43 @@ function formatDate(value) {
 export default function SoftwareInventory() {
   const [summary, setSummary] = React.useState(null);
   const [rankings, setRankings] = React.useState(null);
+
   const [detailRows, setDetailRows] = React.useState([]);
   const [totalRows, setTotalRows] = React.useState(0);
+
+  const [hostRows, setHostRows] = React.useState([]);
+  const [hostTotalRows, setHostTotalRows] = React.useState(0);
+
+  const [hostAppsRows, setHostAppsRows] = React.useState([]);
+  const [hostAppsTotalRows, setHostAppsTotalRows] = React.useState(0);
 
   const [loadingSummary, setLoadingSummary] = React.useState(true);
   const [loadingRankings, setLoadingRankings] = React.useState(true);
   const [loadingDetail, setLoadingDetail] = React.useState(true);
+  const [loadingHosts, setLoadingHosts] = React.useState(false);
+  const [loadingHostApps, setLoadingHostApps] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [source, setSource] = React.useState("");
   const [publisher, setPublisher] = React.useState("");
 
+  const [hostSearch, setHostSearch] = React.useState("");
+  const [hostAppsSearch, setHostAppsSearch] = React.useState("");
+
+  const [appLevelDetail, setAppLevelDetail] = React.useState(false);
+  const [selectedHost, setSelectedHost] = React.useState(null);
+
   const [paginationModel, setPaginationModel] = React.useState({
+    page: 0,
+    pageSize: 10,
+  });
+
+  const [hostPaginationModel, setHostPaginationModel] = React.useState({
+    page: 0,
+    pageSize: 10,
+  });
+
+  const [hostAppsPaginationModel, setHostAppsPaginationModel] = React.useState({
     page: 0,
     pageSize: 10,
   });
@@ -308,22 +320,104 @@ export default function SoftwareInventory() {
     }
   };
 
+  const loadHosts = async () => {
+    try {
+      setLoadingHosts(true);
+      const res = await getSoftwareInventoryHosts({
+        search: hostSearch || undefined,
+        page: hostPaginationModel.page + 1,
+        pageSize: hostPaginationModel.pageSize,
+      });
+
+      setHostRows(Array.isArray(res?.items) ? res.items : []);
+      setHostTotalRows(Number(res?.total || 0));
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to load software hosts",
+        severity: "error",
+      });
+    } finally {
+      setLoadingHosts(false);
+    }
+  };
+
+  const loadHostApps = async () => {
+    if (!selectedHost?.agentId) return;
+
+    try {
+      setLoadingHostApps(true);
+      const res = await getSoftwareInventoryHostApps(selectedHost.agentId, {
+        search: hostAppsSearch || undefined,
+        source: source || undefined,
+        publisher: publisher || undefined,
+        page: hostAppsPaginationModel.page + 1,
+        pageSize: hostAppsPaginationModel.pageSize,
+      });
+
+      setHostAppsRows(Array.isArray(res?.items) ? res.items : []);
+      setHostAppsTotalRows(Number(res?.total || 0));
+    } catch (e) {
+      console.error(e);
+      setSnackbar({
+        open: true,
+        message: "Failed to load host software detail",
+        severity: "error",
+      });
+    } finally {
+      setLoadingHostApps(false);
+    }
+  };
+
   React.useEffect(() => {
     loadSummary();
     loadRankings();
   }, []);
 
   React.useEffect(() => {
+    if (!appLevelDetail) return;
     loadDetail();
-  }, [search, source, publisher, paginationModel.page, paginationModel.pageSize]);
+  }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize]);
+
+  React.useEffect(() => {
+    if (appLevelDetail || selectedHost) return;
+    loadHosts();
+  }, [
+    appLevelDetail,
+    selectedHost,
+    hostSearch,
+    hostPaginationModel.page,
+    hostPaginationModel.pageSize,
+  ]);
+
+  React.useEffect(() => {
+    if (!selectedHost || appLevelDetail) return;
+    loadHostApps();
+  }, [
+    selectedHost,
+    appLevelDetail,
+    hostAppsSearch,
+    source,
+    publisher,
+    hostAppsPaginationModel.page,
+    hostAppsPaginationModel.pageSize,
+  ]);
 
   const refreshAll = () => {
     loadSummary();
     loadRankings();
-    loadDetail();
+
+    if (appLevelDetail) {
+      loadDetail();
+    } else if (selectedHost) {
+      loadHostApps();
+    } else {
+      loadHosts();
+    }
   };
 
-  const columns = [
+  const appColumns = [
     {
       field: "hostname",
       headerName: "Hostname",
@@ -346,6 +440,20 @@ export default function SoftwareInventory() {
     },
   ];
 
+  const hostColumns = [
+    {
+      field: "hostname",
+      headerName: "Hostname",
+      minWidth: 220,
+      flex: 1,
+      renderCell: (params) => params.row?.hostname || " - ",
+    },
+    { field: "agentId", headerName: "Agent ID", minWidth: 220, flex: 1 },
+    { field: "installedApps", headerName: "Installed Apps", minWidth: 140, flex: 0.5 },
+    { field: "uniqueAppNames", headerName: "Unique App Names", minWidth: 160, flex: 0.6 },
+    { field: "publishers", headerName: "Publishers", minWidth: 120, flex: 0.5 },
+  ];
+
   return (
     <Box sx={{ px: 0, py: 0 }}>
       <Box sx={{ mb: 2 }}>
@@ -361,7 +469,7 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Installed Apps"
               value={loadingSummary ? "..." : Number(summary?.installedApps || 0)}
-              accent="#0f6b72"
+              accent={BRAND.tealText}
             />
           </Grid>
 
@@ -377,7 +485,7 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Publishers"
               value={loadingSummary ? "..." : Number(summary?.publishers || 0)}
-              accent="#b3261e"
+              accent={BRAND.alert.error}
               subtitle={
                 loadingSummary
                   ? ""
@@ -394,8 +502,8 @@ export default function SoftwareInventory() {
           p: 2,
           mb: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
         }}
       >
         <Box
@@ -410,12 +518,24 @@ export default function SoftwareInventory() {
           }}
         >
           <TextField
-            label="Search apps"
+            label={appLevelDetail ? "Search apps" : selectedHost ? "Search apps for selected host" : "Search hosts"}
             size="small"
-            value={search}
+            value={appLevelDetail ? search : selectedHost ? hostAppsSearch : hostSearch}
             onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setSearch(e.target.value);
+              if (appLevelDetail) {
+                setPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setSearch(e.target.value);
+                return;
+              }
+
+              if (selectedHost) {
+                setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setHostAppsSearch(e.target.value);
+                return;
+              }
+
+              setHostPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostSearch(e.target.value);
             }}
             fullWidth
           />
@@ -426,9 +546,11 @@ export default function SoftwareInventory() {
             value={source}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
               setSource(e.target.value);
             }}
             fullWidth
+            disabled={!appLevelDetail && !selectedHost}
           />
 
           <TextField
@@ -437,9 +559,11 @@ export default function SoftwareInventory() {
             value={publisher}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
               setPublisher(e.target.value);
             }}
             fullWidth
+            disabled={!appLevelDetail && !selectedHost}
           />
 
           <Button
@@ -457,68 +581,222 @@ export default function SoftwareInventory() {
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
             <SectionCard title="Top Installed Apps">
-              <RankedBars
-                items={rankings?.topInstalledApps || []}
-                color="#1ba6a6"
-              />
+              <RankedBars items={rankings?.topInstalledApps || []} color={BRAND.teal} />
             </SectionCard>
           </Grid>
 
           <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
             <SectionCard title="Top Publishers">
-              <RankedBars
-                items={rankings?.topPublishers || []}
-                color="#0f6b72"
-              />
+              <RankedBars items={rankings?.topPublishers || []} color={BRAND.tealText} />
             </SectionCard>
           </Grid>
 
           <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
             <SectionCard title="Top Sources">
-              <RankedBars
-                items={rankings?.topSources || []}
-                color="#4f46e5"
-              />
+              <RankedBars items={rankings?.topSources || []} color="#4f46e5" />
             </SectionCard>
           </Grid>
 
           <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
             <SectionCard title="Apps per Device">
-              <RankedBars
-                items={rankings?.appsPerDevice || []}
-                color="#b3261e"
-              />
+              <RankedBars items={rankings?.appsPerDevice || []} color={BRAND.alert.error} />
             </SectionCard>
           </Grid>
         </Grid>
       </Box>
 
-      <SectionCard title="Software Inventory Detail">
-        <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
-          <DataGrid
-            rows={detailRows}
-            columns={columns}
-            loading={loadingDetail || loadingRankings}
-            disableRowSelectionOnClick
-            getRowId={(row) => row.id}
-            rowCount={totalRows}
-            paginationMode="server"
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
-            pageSizeOptions={[10, 25, 50]}
+      <SectionCard title="">
+        <Box
+          sx={{
+            mb: 2,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: { xs: "stretch", sm: "center" },
+            gap: 2,
+            flexWrap: "wrap",
+            flexDirection: { xs: "column", sm: "row" },
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            {selectedHost && !appLevelDetail && (
+              <IconButton
+                onClick={() => {
+                  setSelectedHost(null);
+                  setHostAppsSearch("");
+                  setHostAppsPaginationModel({ page: 0, pageSize: 10 });
+                }}
+                sx={{
+                  border: `1px solid ${BRAND.border}`,
+                  bgcolor: "white",
+                }}
+              >
+                <ArrowBackIcon />
+              </IconButton>
+            )}
+
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                {appLevelDetail
+                  ? "Software Inventory Detail"
+                  : selectedHost
+                  ? "Host Software Detail"
+                  : "Software by Host"}
+              </Typography>
+
+              <Typography variant="body2" color="text.secondary">
+                {appLevelDetail
+                  ? "Application-level view across all devices"
+                  : selectedHost
+                  ? `${selectedHost.hostname || selectedHost.agentId} software inventory`
+                  : "Click a host to review its installed applications"}
+              </Typography>
+            </Box>
+
+            {selectedHost && !appLevelDetail && (
+              <Chip
+                label={selectedHost.hostname || selectedHost.agentId}
+                size="small"
+                sx={{
+                  bgcolor: "rgba(27,166,166,0.12)",
+                  color: BRAND.tealText,
+                  fontWeight: 700,
+                }}
+              />
+            )}
+          </Box>
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={appLevelDetail}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setAppLevelDetail(checked);
+                  setSelectedHost(null);
+                  setSearch("");
+                  setHostSearch("");
+                  setHostAppsSearch("");
+                  setSource("");
+                  setPublisher("");
+                  setPaginationModel({ page: 0, pageSize: 10 });
+                  setHostPaginationModel({ page: 0, pageSize: 10 });
+                  setHostAppsPaginationModel({ page: 0, pageSize: 10 });
+                }}
+              />
+            }
+            label="App-level detail"
             sx={{
-              border: "none",
-              width: "100%",
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(166, 83, 27, 0.08)",
+              m: 0,
+              ".MuiFormControlLabel-label": {
                 fontWeight: 700,
-              },
-              "& .MuiDataGrid-columnHeaderTitle": {
-                fontWeight: 700,
+                color: BRAND.dark,
               },
             }}
           />
         </Box>
+
+        {!appLevelDetail && !selectedHost && (
+          <>
+            <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
+              <DataGrid
+                rows={hostRows}
+                columns={hostColumns}
+                loading={loadingHosts}
+                disableRowSelectionOnClick
+                getRowId={(row) => row.agentId}
+                rowCount={hostTotalRows}
+                paginationMode="server"
+                paginationModel={hostPaginationModel}
+                onPaginationModelChange={setHostPaginationModel}
+                pageSizeOptions={[10, 25, 50]}
+                onRowClick={(params) => {
+                  setSelectedHost(params.row);
+                  setHostAppsSearch("");
+                  setHostAppsPaginationModel({ page: 0, pageSize: 10 });
+                }}
+                sx={{
+                  border: "none",
+                  width: "100%",
+                  "& .MuiDataGrid-columnHeaders": {
+                    backgroundColor: "rgba(166, 83, 27, 0.08)",
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-columnHeaderTitle": {
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-row": {
+                    cursor: "pointer",
+                  },
+                  "& .MuiDataGrid-row:hover": {
+                    backgroundColor: "rgba(27,166,166,0.08)",
+                  },
+                  "& .MuiDataGrid-row.Mui-selected": {
+                    backgroundColor: "rgba(27,166,166,0.16) !important",
+                  },
+                  "& .MuiDataGrid-row.Mui-selected:hover": {
+                    backgroundColor: "rgba(27,166,166,0.22) !important",
+                  },
+                }}
+              />
+            </Box>
+          </>
+        )}
+
+        {!appLevelDetail && selectedHost && (
+          <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
+            <DataGrid
+              rows={hostAppsRows}
+              columns={appColumns}
+              loading={loadingHostApps}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.id}
+              rowCount={hostAppsTotalRows}
+              paginationMode="server"
+              paginationModel={hostAppsPaginationModel}
+              onPaginationModelChange={setHostAppsPaginationModel}
+              pageSizeOptions={[10, 25, 50]}
+              sx={{
+                border: "none",
+                width: "100%",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "rgba(166, 83, 27, 0.08)",
+                  fontWeight: 700,
+                },
+                "& .MuiDataGrid-columnHeaderTitle": {
+                  fontWeight: 700,
+                },
+              }}
+            />
+          </Box>
+        )}
+
+        {appLevelDetail && (
+          <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
+            <DataGrid
+              rows={detailRows}
+              columns={appColumns}
+              loading={loadingDetail || loadingRankings}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.id}
+              rowCount={totalRows}
+              paginationMode="server"
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[10, 25, 50]}
+              sx={{
+                border: "none",
+                width: "100%",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "rgba(166, 83, 27, 0.08)",
+                  fontWeight: 700,
+                },
+                "& .MuiDataGrid-columnHeaderTitle": {
+                  fontWeight: 700,
+                },
+              }}
+            />
+          </Box>
+        )}
       </SectionCard>
 
       <Snackbar

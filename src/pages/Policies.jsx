@@ -7,8 +7,6 @@ import {
   Chip,
   Collapse,
   Divider,
-  FormControlLabel,
-  IconButton,
   MenuItem,
   Paper,
   Snackbar,
@@ -22,7 +20,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
@@ -36,6 +34,7 @@ import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
@@ -52,21 +51,9 @@ import {
 } from "../api/policies";
 import { listKnownDevices } from "../api/jobs";
 
-// Tracenium brand palette
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  tealHover: "#4E8C8C",
-  cyan: "#8FFDFF",
-  gray: "#BEBEBE",
-  tealSoft: "rgba(90,159,159,0.12)",
-  tealText: "#3E7878",
-  cyanSoft: "rgba(143,253,255,0.22)",
-  darkSoft: "rgba(59,64,77,0.08)",
-  border: "rgba(190,190,190,0.5)",
-  rowHover: "rgba(143,253,255,0.10)",
-  shadow: "0 8px 20px rgba(59,64,77,0.10)",
-};
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
 
 // ── Plugin descriptors. `required: true` means the plugin is part of the
 //    agent core and cannot be turned off — it ships as a locked toggle.
@@ -90,6 +77,7 @@ const PLUGIN_DESCRIPTORS = [
     key: "pmp",
     label: "PMP — Patch Management",
     description: "Patch scan and install. Opt-in: disabled by default.",
+    impliesModule: "patch",
   },
   {
     key: "sdp",
@@ -104,6 +92,8 @@ const PLUGIN_DESCRIPTORS = [
 // side to fail fast instead of silently reverting on the device.
 const COMPLIANCE_INTERVAL_MIN = 300;
 const COMPLIANCE_INTERVAL_MAX = 86400;
+const PATCH_INTERVAL_MIN = 300;
+const PATCH_INTERVAL_MAX = 604800;
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
@@ -113,6 +103,8 @@ function readFormFromPolicy(policy) {
   const enabled = Array.isArray(policy?.plugins?.enabled) ? policy.plugins.enabled : [];
   const rawInterval = policy?.compliance?.intervalSeconds;
   const intervalNum = Number(rawInterval);
+  const rawPatchInterval = policy?.patch?.intervalSeconds;
+  const patchIntervalNum = Number(rawPatchInterval);
   return {
     plugins: Object.fromEntries(
       PLUGIN_DESCRIPTORS.map((p) => [
@@ -125,6 +117,9 @@ function readFormFromPolicy(policy) {
     // additive without restructuring the form shape.
     compliance: {
       intervalSeconds: Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : null,
+    },
+    patch: {
+      intervalSeconds: Number.isFinite(patchIntervalNum) && patchIntervalNum > 0 ? patchIntervalNum : null,
     },
   };
 }
@@ -161,6 +156,17 @@ function formToPolicy(form) {
     rawInterval <= COMPLIANCE_INTERVAL_MAX
   ) {
     policy.compliance = { intervalSeconds: rawInterval };
+  }
+
+  const patchEnabled = modules.patch === true;
+  const rawPatchInterval = Number(form?.patch?.intervalSeconds);
+  if (
+    patchEnabled &&
+    Number.isFinite(rawPatchInterval) &&
+    rawPatchInterval >= PATCH_INTERVAL_MIN &&
+    rawPatchInterval <= PATCH_INTERVAL_MAX
+  ) {
+    policy.patch = { intervalSeconds: rawPatchInterval };
   }
 
   return policy;
@@ -291,11 +297,11 @@ function renderAckChip(status, reasonText) {
       size="small"
       icon={<ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
       sx={{
-        bgcolor: "rgba(179,38,30,0.12)",
-        color: "#b3261e",
+        bgcolor: BRAND.alert.errorSoft,
+        color: BRAND.alert.error,
         fontWeight: 700,
-        border: "1px solid rgba(179,38,30,0.35)",
-        "& .MuiChip-icon": { color: "#b3261e" },
+        border: `1px solid ${BRAND.alert.error}55`,
+        "& .MuiChip-icon": { color: BRAND.alert.error },
       }}
     />
   );
@@ -594,6 +600,72 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         );
       })()}
 
+      {(() => {
+        const patchActive = PLUGIN_DESCRIPTORS.some(
+          (p) => p.impliesModule === "patch" && form.plugins[p.key]
+        );
+        if (!patchActive) return null;
+        const rawValue = form?.patch?.intervalSeconds;
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < PATCH_INTERVAL_MIN ||
+            numeric > PATCH_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.cyanSoft,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Patch schedule
+            </Typography>
+            <TextField
+              label="Patch scan interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  patch: { ...(form.patch || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: PATCH_INTERVAL_MIN,
+                max: PATCH_INTERVAL_MAX,
+                step: 300,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${PATCH_INTERVAL_MIN} and ${PATCH_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (24h / 86400s). Range 300–604800."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
       <Box sx={{ mt: 2 }}>
         <Button
           size="small"
@@ -773,6 +845,12 @@ export default function Policies() {
   React.useEffect(() => {
     loadDevice(selectedDeviceId);
   }, [selectedDeviceId, loadDevice]);
+
+  const refreshAll = React.useCallback(() => {
+    loadTenant();
+    if (selectedDeviceId) loadDevice(selectedDeviceId);
+  }, [loadTenant, loadDevice, selectedDeviceId]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "policiesAutoRefresh");
 
   // ── Actions ────────────────────────────────────────────────────────────
   const handleSaveTenant = async () => {
@@ -1068,45 +1146,19 @@ export default function Policies() {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {/* Header */}
-      <Box
-        sx={{
-          mb: 2,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
-            Policies
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-            Configure tenant-wide behavior and fine-tune individual devices with overrides.
-          </Typography>
-        </Box>
-
-        <Button
-          variant="outlined"
-          startIcon={<RefreshOutlinedIcon />}
-          onClick={() => {
-            loadTenant();
-            if (selectedDeviceId) loadDevice(selectedDeviceId);
-          }}
-          disabled={tenantLoading}
-          sx={{
-            textTransform: "none",
-            fontWeight: 700,
-            borderColor: BRAND.teal,
-            color: BRAND.teal,
-            "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-          }}
-        >
-          {tenantLoading ? "Loading…" : "Refresh"}
-        </Button>
-      </Box>
+      <PageHeader
+        title="Policies"
+        subtitle="Configure tenant-wide behavior and fine-tune individual devices with overrides."
+        icon={<PolicyOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={refreshSeconds}
+            onRefreshSecondsChange={setRefreshSeconds}
+            onRefresh={refreshAll}
+            loading={tenantLoading}
+          />
+        }
+      />
 
       {/* Summary cards — intentionally complementary, not mutually
           exclusive: a device can show up in both `Devices tracked` and
@@ -1155,23 +1207,17 @@ export default function Policies() {
               value={summary.errors}
               hint="agent rejected or failed to apply"
               icon={<ErrorOutlineOutlinedIcon />}
-              accent="#b3261e"
-              tint="rgba(179,38,30,0.12)"
+              accent={BRAND.alert.error}
+              tint={BRAND.alert.errorSoft}
             />
           </Grid>
         </Grid>
       </Box>
 
       {/* Tabs */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-          overflow: "hidden",
-          mb: 2,
-        }}
+      <SectionPaper
+        variant="panel"
+        sx={{ p: 0, overflow: "hidden", mb: 2 }}
       >
         <Tabs
           value={tab}
@@ -1254,7 +1300,7 @@ export default function Policies() {
             />
           )}
         </Box>
-      </Paper>
+      </SectionPaper>
 
       <Snackbar
         open={snackbar.open}
@@ -1289,15 +1335,9 @@ function TenantTab(props) {
   return (
     <Grid container spacing={2}>
       <Grid size={{ xs: 12, lg: 5 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0 }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1354,20 +1394,13 @@ function TenantTab(props) {
               {tenantPushing ? "Pushing…" : "Push to all"}
             </Button>
           </Box>
-        </Paper>
+        </SectionPaper>
       </Grid>
 
       <Grid size={{ xs: 12, lg: 7 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1390,22 +1423,10 @@ function TenantTab(props) {
               columnVisibilityModel={columnVisibilityModel}
               pageSizeOptions={[10, 25, 50]}
               initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-              sx={{
-                border: "none",
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: BRAND.darkSoft,
-                  color: BRAND.dark,
-                  fontWeight: 700,
-                  borderBottom: `1px solid ${BRAND.border}`,
-                },
-                "& .MuiDataGrid-row": { cursor: "pointer" },
-                "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
-                "& .MuiDataGrid-cell": { borderBottom: `1px solid ${BRAND.border}` },
-                "& .MuiDataGrid-footerContainer": { borderTop: `1px solid ${BRAND.border}` },
-              }}
+              sx={DATAGRID_SX}
             />
           </Box>
-        </Paper>
+        </SectionPaper>
       </Grid>
     </Grid>
   );
@@ -1480,15 +1501,9 @@ function DeviceTab(props) {
         <Grid container spacing={2}>
           {/* Override editor */}
           <Grid size={{ xs: 12, lg: 6 }}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 1.5, sm: 2 },
-                borderRadius: 3,
-                border: `1px solid ${BRAND.border}`,
-                boxShadow: BRAND.shadow,
-                minWidth: 0,
-              }}
+            <SectionPaper
+              variant="panel"
+              sx={{ minWidth: 0 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
                 <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1578,21 +1593,14 @@ function DeviceTab(props) {
                   {deviceDeleting ? "Removing…" : "Remove override"}
                 </Button>
               </Box>
-            </Paper>
+            </SectionPaper>
           </Grid>
 
           {/* Effective + status */}
           <Grid size={{ xs: 12, lg: 6 }}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 1.5, sm: 2 },
-                borderRadius: 3,
-                border: `1px solid ${BRAND.border}`,
-                boxShadow: BRAND.shadow,
-                minWidth: 0,
-                mb: 2,
-              }}
+            <SectionPaper
+              variant="panel"
+              sx={{ minWidth: 0, mb: 2 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
                 <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1604,17 +1612,11 @@ function DeviceTab(props) {
                 <DetailRow label="Version" value={effectiveVersion || "—"} mono />
               </Box>
               <JsonBlock value={effectivePolicyJson} maxHeight={220} />
-            </Paper>
+            </SectionPaper>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 1.5, sm: 2 },
-                borderRadius: 3,
-                border: `1px solid ${BRAND.border}`,
-                boxShadow: BRAND.shadow,
-                minWidth: 0,
-              }}
+            <SectionPaper
+              variant="panel"
+              sx={{ minWidth: 0 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
                 <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1661,7 +1663,7 @@ function DeviceTab(props) {
                   No sync activity recorded yet for this device.
                 </Typography>
               )}
-            </Paper>
+            </SectionPaper>
           </Grid>
         </Grid>
       )}

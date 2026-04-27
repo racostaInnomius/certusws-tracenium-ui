@@ -13,6 +13,8 @@
 // charts + tables on the Overview.
 
 import { httpGetJson } from "./http";
+import { getAlertEvents, getAlertsUnreadCount } from "./alerts";
+import { getDevicePosture } from "./compliance";
 
 // ---- existing endpoints we already ship -------------------------------
 
@@ -50,6 +52,12 @@ export async function getAgentVersionsSummary() {
   // Raw per-tenant counts of `device_enrollments.agent_version`.
   // Shape: { ok, total, byVersion: [{ version, count }, ...] }
   return httpGetJson("/api/v1/dashboard/agent-versions");
+}
+
+export async function getPluginCoverageSummary() {
+  // Per-plugin enablement across the tenant's fleet.
+  // Shape: { ok, total, byPlugin: [{ plugin: "scp", count: 3 }, ...] }
+  return httpGetJson("/api/v1/dashboard/plugin-coverage");
 }
 
 // ---- new endpoints for the Overview ----------------------------------
@@ -126,7 +134,28 @@ export async function fetchOverviewBundle() {
     // agent_version or arch, so we need a dedicated aggregate off
     // device_enrollments to power the Fleet composition donut and the
     // AttentionPanel's "agents behind latest" count.
-    ["agentVersions", getAgentVersionsSummary()]
+    ["agentVersions", getAgentVersionsSummary()],
+    // Top N most recent alerts across all the rules the tenant has
+    // enabled. Drives the "Latest alerts" strip on the Overview.
+    // Limit 5 is deliberate — the strip is a bell-replacement, not the
+    // full feed; operators click through to /alerts for the full view.
+    ["alertEvents", getAlertEvents({ limit: 5 }).catch(() => ({ items: [] }))],
+    // Unread count (events since the tenant's last_seen_at cursor) —
+    // backs the "Unread alerts" Hero KPI. Kept as its own tiny call
+    // instead of computing from alertEvents because the backend has a
+    // dedicated handler that already knows how to compare against the
+    // cursor, and it's the same endpoint the Topbar bell polls.
+    ["alertsUnread", getAlertsUnreadCount().catch(() => ({ count: 0 }))],
+    // Device posture per host — we only need the `patchSummary` sub-
+    // object on each row, but the endpoint returns it alongside the
+    // rest of the compliance columns. Cheap on small fleets; the
+    // Patch coverage donut aggregates client-side so we don't pay a
+    // second backend hit just for the counts.
+    ["devicePosture", getDevicePosture().catch(() => ({ items: [] }))],
+    // Per-plugin enablement across the fleet. Drives the new Plugin
+    // coverage strip on the Overview — answers "of N total agents,
+    // how many have SCP / PMP / AMP on".
+    ["pluginCoverage", getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] }))]
   ];
 
   const settled = await Promise.allSettled(entries.map(([, p]) => p));

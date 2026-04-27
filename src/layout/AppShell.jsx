@@ -19,6 +19,7 @@ const PKI = React.lazy(() => import("../pages/PKI"));
 const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
 const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 const Alerts = React.lazy(() => import("../pages/Alerts"));
+const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 
 function PageFallback() {
   return (
@@ -37,7 +38,10 @@ function PageFallback() {
 
 export default function AppShell() {
   const [bootstrap, setBootstrap] = React.useState(null);
-  const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "assets"));
+  // Overview is the canonical landing page — it's the SOC-style dashboard
+  // the operator should see when they log in without a deep link. Pages
+  // with no special nav (bare `/` or `?page=` missing) resolve here.
+  const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "overview"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -65,7 +69,9 @@ export default function AppShell() {
 
   React.useEffect(() => {
     const handlePopState = () => {
-      setSelectedPage(getSearchParam("page", "assets"));
+      // Same default as the initial state — back/forward without a
+      // ?page= lands the user on Overview, not on Assets.
+      setSelectedPage(getSearchParam("page", "overview"));
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -77,10 +83,15 @@ export default function AppShell() {
     setMobileOpen(false); // auto-close drawer when a page is picked on mobile
   }, []);
 
-  let content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
+  // Default → Overview. Any unrecognized ?page= key also falls through
+  // to Overview, which is the safer behavior than dropping the user
+  // onto a page they didn't ask for.
+  let content = <Overview />;
 
-  if (selectedPage === "overview") {
-    content = <Overview />;
+  if (selectedPage === "assets") {
+    // Assets keeps its welcome-state callback because the first-time
+    // empty-fleet flow is owned by this page, not by Overview.
+    content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
   }
 
   if (selectedPage === "configurations") {
@@ -127,8 +138,12 @@ export default function AppShell() {
     content = <SecurityCompliance />;
   }
 
-  if (selectedPage === "remote") {
+  if (selectedPage === "patch") {
     content = <PatchManagement />;
+  }
+
+  if (selectedPage === "remote-control") {
+    content = <RemoteControl />;
   }
 
   if (selectedPage === "alerts") {

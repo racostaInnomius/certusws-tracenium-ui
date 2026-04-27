@@ -11,6 +11,9 @@ import {
   LabelList,
 } from "recharts";
 
+
+
+
 function toChartData(topManufacturers) {
   if (!Array.isArray(topManufacturers)) return [];
 
@@ -23,18 +26,22 @@ function toChartData(topManufacturers) {
     .sort((a, b) => b.hostCount - a.hostCount);
 }
 
+// Paleta inspirada en el mock: 1er lugar más oscuro, el resto más
+// claro. Extraída del render (era una const local + `<BarShape />`
+// interno) porque recharts recibía un component nuevo en cada render
+// — eslint's `cannot-create-components-during-render` lo marcó.
+// Evitamos `<Cell/>` (deprecated en recharts 3) pintando por índice
+// con un shape custom estable.
+const BAR_COLORS = ["#3aa6a6", "#66e3f0", "#8feaf3", "#b9f3f7"];
+
+function BarShape(props) {
+  const { x, y, width, height, index } = props;
+  const fill = BAR_COLORS[index] || BAR_COLORS[BAR_COLORS.length - 1];
+  return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
+}
+
 export default function TopManufacturersBar({ topManufacturers }) {
   const data = toChartData(topManufacturers);
-
-  // Paleta inspirada en tu mock: 1er lugar más oscuro, el resto más claro.
-  const barColors = ["#3aa6a6", "#66e3f0", "#8feaf3", "#b9f3f7"];
-
-  // Evitamos <Cell/> (te aparece como deprecated). Pintamos por índice con un shape custom.
-  const BarShape = (props) => {
-    const { x, y, width, height, index } = props;
-    const fill = barColors[index] || barColors[barColors.length - 1];
-    return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
-  };
 
   // Si hay muchos items, el Paper padre puede usar overflow: auto.
   const rowHeight = 44;

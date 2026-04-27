@@ -107,7 +107,12 @@ export function classifyAgentVersions(byVersion, latestMap) {
   return { buckets, canonicalLatest };
 }
 
-function AgentVersionDonut({ byVersion, latestMap, loading }) {
+// Exported as a named export so the Assets page can reuse the exact
+// same donut (classification + coloring + legend) instead of
+// re-implementing it. The default export of this module stays the
+// composition wrapper; individual primitives are opt-in for pages
+// that only want one slice.
+export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, onSegmentClick }) {
   const { buckets, canonicalLatest } = classifyAgentVersions(
     byVersion,
     latestMap
@@ -135,21 +140,45 @@ function AgentVersionDonut({ byVersion, latestMap, loading }) {
       loading={loading}
       totalLabel="devices"
       fallbackLabel={fallback}
+      onCardClick={onCardClick}
+      onSegmentClick={onSegmentClick}
     />
   );
 }
 
-function DonutCard({ title, data, loading, totalLabel = "items", fallbackLabel = "No data" }) {
+export function DonutCard({
+  title,
+  data,
+  loading,
+  totalLabel = "items",
+  fallbackLabel = "No data",
+  onCardClick,
+  onSegmentClick
+}) {
   const total = data.reduce((sum, x) => sum + x.value, 0);
+  // The card header + empty body is clickable as a whole (drops the
+  // operator at the target page with no filter). Individual legend
+  // rows are clickable when `onSegmentClick` is wired — those carry a
+  // filter for the segment name.
+  const interactive = typeof onCardClick === "function";
 
   return (
     <Paper
       elevation={0}
+      onClick={interactive ? onCardClick : undefined}
       sx={{
         p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        height: "100%"
+        height: "100%",
+        cursor: interactive ? "pointer" : "default",
+        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        "&:hover": interactive
+          ? {
+              borderColor: BRAND.teal,
+              boxShadow: "0 4px 12px rgba(59,64,77,0.08)"
+            }
+          : undefined
       }}
     >
       <Typography
@@ -174,8 +203,13 @@ function DonutCard({ title, data, loading, totalLabel = "items", fallbackLabel =
           <Typography variant="caption">{fallbackLabel}</Typography>
         </Box>
       ) : (
-        <Box sx={{ display: "flex", alignItems: "center", height: 170 }}>
-          <Box sx={{ flex: "0 0 130px", height: 140 }}>
+        // Stacked layout: donut on top, legend below. Previously the
+        // legend was to the right of the donut — fine at md:6 per
+        // column, broken at md:4 (labels truncated to "m"/"w"). With
+        // the donut centered and legend stacked we get full horizontal
+        // room for readable labels even when the card is narrow.
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+          <Box sx={{ width: 120, height: 120 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -195,10 +229,10 @@ function DonutCard({ title, data, loading, totalLabel = "items", fallbackLabel =
                     position="center"
                     content={() => (
                       <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                        <tspan x="50%" dy="-2" fontSize="18" fontWeight="800" fill={BRAND.dark}>
+                        <tspan x="50%" dy="-2" fontSize="16" fontWeight="800" fill={BRAND.dark}>
                           {total || "—"}
                         </tspan>
-                        <tspan x="50%" dy="16" fontSize="11" fill={BRAND.gray}>
+                        <tspan x="50%" dy="14" fontSize="10" fill={BRAND.gray}>
                           {totalLabel}
                         </tspan>
                       </text>
@@ -210,29 +244,78 @@ function DonutCard({ title, data, loading, totalLabel = "items", fallbackLabel =
             </ResponsiveContainer>
           </Box>
 
-          <Box sx={{ ml: 2, display: "flex", flexDirection: "column", gap: 0.75, flex: 1, overflow: "hidden" }}>
-            {data.map((d) => (
-              <Box
-                key={d.name}
-                sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}
-              >
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.5,
+              width: "100%",
+              overflow: "hidden"
+            }}
+          >
+            {data.map((d) => {
+              // Per-segment nav. stopPropagation so clicking the legend
+              // row doesn't also trigger the card-level onClick (which
+              // would lose the filter). Only rows with a handler get
+              // the hover/pointer cue — no-op rows stay static.
+              const segClick =
+                typeof onSegmentClick === "function"
+                  ? (e) => {
+                      e.stopPropagation();
+                      onSegmentClick(d);
+                    }
+                  : null;
+
+              return (
                 <Box
+                  key={d.name}
+                  onClick={segClick || undefined}
                   sx={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    bgcolor: d.color,
-                    flexShrink: 0
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    minWidth: 0,
+                    px: 0.5,
+                    mx: -0.5,
+                    borderRadius: 1,
+                    cursor: segClick ? "pointer" : "default",
+                    transition: "background-color 120ms ease",
+                    "&:hover": segClick
+                      ? { backgroundColor: BRAND.surfaceMuted }
+                      : undefined
                   }}
-                />
-                <Typography variant="body2" sx={{ color: BRAND.dark, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {d.name}
-                </Typography>
-                <Typography variant="body2" sx={{ color: BRAND.gray, fontWeight: 600 }}>
-                  {d.value}
-                </Typography>
-              </Box>
-            ))}
+                >
+                  <Box
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      bgcolor: d.color,
+                      flexShrink: 0
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: BRAND.dark,
+                      flex: 1,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      fontSize: 12.5
+                    }}
+                  >
+                    {d.name}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: BRAND.gray, fontWeight: 600, fontSize: 12.5 }}
+                  >
+                    {d.value}
+                  </Typography>
+                </Box>
+              );
+            })}
           </Box>
         </Box>
       )}
@@ -240,7 +323,7 @@ function DonutCard({ title, data, loading, totalLabel = "items", fallbackLabel =
   );
 }
 
-export default function FleetComposition({ results, loading }) {
+export default function FleetComposition({ results, loading, onNavigate, patchCoverageSlot = null }) {
   const dashboard = getValue(results?.dashboardSummary);
   const latest = getValue(results?.latestVersions);
   const agentVersions = getValue(results?.agentVersions);
@@ -284,23 +367,66 @@ export default function FleetComposition({ results, loading }) {
     ? agentVersions.byVersion
     : [];
 
+  // Navigation helpers. OS platform + Agent versions are fleet-wide
+  // breakdowns (count every enrolled device, not just the SCP-reporting
+  // subset), so clicks land on Asset Management rather than Security
+  // Compliance — the previous `ad` destination silently dropped devices
+  // that hadn't reported SCP facts yet, causing a count mismatch
+  // between the donut and the filtered page.
+  //
+  // Patch Coverage is the exception: it IS SCP-specific by
+  // construction, so its drilldown stays in `ad` (handled by the
+  // parent via `patchCoverageSlot`).
+  const navToAssets = (query) => onNavigate?.("assets", query);
+
+  // FleetComposition now renders 3 donuts internally (OS platform,
+  // Agent versions, Patch coverage). At md:4 each inside a md:6 outer
+  // wrapper they're narrow — we accepted that when the user asked to
+  // keep the composition compact. The PatchCoverageDonut is rendered
+  // by the parent via the `patchCoverageSlot` prop so this component
+  // doesn't need to know the patches data shape.
   return (
     <Grid container spacing={2}>
-      <Grid size={{ xs: 12, md: 6 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
         <DonutCard
           title="OS platform"
           data={osDataColored}
           loading={loading}
           totalLabel="devices"
           fallbackLabel="No platform breakdown available"
+          onCardClick={() => navToAssets()}
+          onSegmentClick={(segment) =>
+            navToAssets({ platform: String(segment.name || "").toLowerCase() })
+          }
         />
       </Grid>
-      <Grid size={{ xs: 12, md: 6 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
         <AgentVersionDonut
           byVersion={byVersion}
           latestMap={latestMap}
           loading={loading}
+          onCardClick={() => navToAssets()}
+          onSegmentClick={(segment) => {
+            // Map the visible legend label back to a filter key the
+            // Assets page can consume. "Current" / "One behind" /
+            // "Older" / "Unknown" — mirrors the buckets from
+            // classifyAgentVersions.
+            const label = String(segment.name || "").toLowerCase();
+            const bucket = label.includes("current")
+              ? "current"
+              : label.includes("one behind")
+              ? "one_behind"
+              : label.includes("older")
+              ? "older"
+              : label.includes("unknown")
+              ? "unknown"
+              : null;
+            if (bucket) navToAssets({ versionBucket: bucket });
+          }}
         />
+      </Grid>
+      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+        {patchCoverageSlot}
       </Grid>
     </Grid>
   );

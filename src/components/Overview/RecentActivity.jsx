@@ -16,7 +16,6 @@ import {
   Box,
   Stack,
   Skeleton,
-  Chip,
   Link
 } from "@mui/material";
 import { BRAND, ROLE } from "../../theme/brand";

@@ -14,6 +14,8 @@ import SettingsApplicationsOutlinedIcon from "@mui/icons-material/SettingsApplic
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 
+import { BRAND } from "../theme/brand";
+
 function StepCard({ step, title, description, icon, actionLabel, onAction, hint }) {
   return (
     <Paper
@@ -22,8 +24,8 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
         p: 2.5,
         height: "85%",
         borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
         gap: 1.5,
@@ -35,8 +37,8 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
             width: 40,
             height: 40,
             borderRadius: "50%",
-            bgcolor: "rgba(27,166,166,0.12)",
-            color: "#0f6b72",
+            bgcolor: BRAND.tealSoft,
+            color: BRAND.tealText,
             display: "grid",
             placeItems: "center",
             fontWeight: 800,
@@ -51,8 +53,8 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
             width: 44,
             height: 44,
             borderRadius: 2,
-            bgcolor: "rgba(22,50,79,0.06)",
-            color: "#16324f",
+            bgcolor: BRAND.darkSoft,
+            color: BRAND.dark,
             display: "grid",
             placeItems: "center",
             flexShrink: 0,
@@ -62,11 +64,11 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
         </Box>
       </Box>
 
-      <Typography sx={{ fontSize: 18, fontWeight: 700, color: "#16324f" }}>
+      <Typography sx={{ fontSize: 18, fontWeight: 700, color: BRAND.dark }}>
         {title}
       </Typography>
 
-      <Typography sx={{ color: "#667085", lineHeight: 1.6 }}>
+      <Typography sx={{ color: "text.secondary", lineHeight: 1.6 }}>
         {description}
       </Typography>
 
@@ -85,11 +87,11 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
             sx={{
               textTransform: "none",
               fontWeight: 700,
-              borderColor: "rgba(27,166,166,0.45)",
-              color: "#0f6b72",
+              borderColor: BRAND.tealSoftStrong,
+              color: BRAND.tealText,
               "&:hover": {
-                borderColor: "#0f6b72",
-                backgroundColor: "rgba(27,166,166,0.06)",
+                borderColor: BRAND.tealText,
+                backgroundColor: BRAND.tealSoft,
               },
             }}
           >
@@ -110,10 +112,9 @@ export default function Welcome({ onNavigate }) {
           p: { xs: 3, sm: 4 },
           mb: 2,
           borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
-          background:
-            "linear-gradient(135deg, rgba(27,166,166,0.08) 0%, rgba(22,50,79,0.05) 100%)",
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
+          background: `linear-gradient(135deg, ${BRAND.tealSoft} 0%, ${BRAND.darkSoft} 100%)`,
         }}
       >
         <Stack spacing={1.5}>
@@ -121,8 +122,8 @@ export default function Welcome({ onNavigate }) {
             label="Getting Started"
             sx={{
               alignSelf: "flex-start",
-              bgcolor: "rgba(27,166,166,0.12)",
-              color: "#0f6b72",
+              bgcolor: BRAND.tealSoft,
+              color: BRAND.tealText,
               fontWeight: 700,
             }}
           />
@@ -131,7 +132,7 @@ export default function Welcome({ onNavigate }) {
             variant="h4"
             sx={{
               fontWeight: 800,
-              color: "#16324f",
+              color: BRAND.dark,
               lineHeight: 1.1,
             }}
           >
@@ -141,7 +142,7 @@ export default function Welcome({ onNavigate }) {
           <Typography
             sx={{
               maxWidth: 820,
-              color: "#667085",
+              color: "text.secondary",
               fontSize: 16,
               lineHeight: 1.7,
             }}

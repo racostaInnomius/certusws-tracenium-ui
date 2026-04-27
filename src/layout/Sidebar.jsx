@@ -29,13 +29,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
 import { TOPBAR_HEIGHT } from "./Topbar";
 
-// Tracenium brand palette (kept inline to avoid a shared theme import for now)
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  cyan: "#8FFDFF",
-  gray: "#BEBEBE",
-};
+import { BRAND } from "../theme/brand";
 
 export const SIDEBAR_WIDTH = 210;
 
@@ -62,7 +56,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
           alignItems: "center",
           justifyContent: "center",
           px: 1,
-          borderBottom: `1px solid ${BRAND.cyan}`,
+          borderBottom: `3px solid ${BRAND.cyan}`,
         }}
       >
         <Box
@@ -205,8 +199,8 @@ export default function Sidebar({
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
-    { label: "Patch Management", key: "remote", icon: <SystemUpdateAltOutlinedIcon /> },
-    { label: "Remote Control", key: "security", icon: <DesktopWindowsOutlinedIcon /> },
+    { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
+    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
       : []),

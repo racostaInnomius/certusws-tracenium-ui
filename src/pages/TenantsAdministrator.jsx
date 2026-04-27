@@ -21,6 +21,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 
 import {
   listTenants,
@@ -34,22 +35,28 @@ import {
 } from "../api/tenants";
 import { useAuthContext } from "../auth/AuthContext";
 
-function SummaryCard({ title, value, accent = "#1ba6a6" }) {
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+
+// Fase 2 — SummaryCard aligned with the Tokens page version. Same
+// shell tokens; `accent` is the semantic color of the big number.
+function SummaryCard({ title, value, accent = BRAND.teal }) {
   return (
     <Paper
+      elevation={0}
       sx={{
         p: 2,
-        height: "75%",
+        height: "100%",
         minHeight: 96,
-        borderRadius: 3,
-        border: "1px solid rgba(0,0,0,0.08)",
-        boxShadow: "0 10px 24px rgba(0,0,0,0.08)",
+        borderRadius: 2,
+        border: `1px solid ${BRAND.border}`,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600 }}>
         {title}
       </Typography>
 
@@ -68,6 +75,10 @@ function SummaryCard({ title, value, accent = "#1ba6a6" }) {
   );
 }
 
+// Role & status chips — colors now come from BRAND tokens.
+// ADMIN uses the neutral teal (it's a privileged-but-not-superuser
+// role), USER the subtle dark soft, Active/Inactive the role
+// success/error pair.
 function renderRoleChip(role) {
   const value = String(role || "").toUpperCase();
 
@@ -81,8 +92,8 @@ function renderRoleChip(role) {
         label="ADMIN"
         size="small"
         sx={{
-          bgcolor: "rgba(27,166,166,0.12)",
-          color: "#0f6b72",
+          bgcolor: BRAND.tealSoft,
+          color: BRAND.tealText,
           fontWeight: 700,
         }}
       />
@@ -95,8 +106,8 @@ function renderRoleChip(role) {
         label="USER"
         size="small"
         sx={{
-          bgcolor: "rgba(120,120,120,0.12)",
-          color: "#555",
+          bgcolor: BRAND.darkSoft,
+          color: BRAND.dark,
           fontWeight: 700,
         }}
       />
@@ -112,8 +123,8 @@ function renderActiveChip(isActive) {
       label="Active"
       size="small"
       sx={{
-        bgcolor: "rgba(27,166,166,0.12)",
-        color: "#0f6b72",
+        bgcolor: BRAND.alert.successSoft,
+        color: BRAND.alert.success,
         fontWeight: 700,
       }}
     />
@@ -122,8 +133,8 @@ function renderActiveChip(isActive) {
       label="Inactive"
       size="small"
       sx={{
-        bgcolor: "rgba(211,47,47,0.12)",
-        color: "#b3261e",
+        bgcolor: BRAND.alert.errorSoft,
+        color: BRAND.alert.error,
         fontWeight: 700,
       }}
     />
@@ -850,31 +861,21 @@ export default function TenantsAdministrator({ mode = "global" }) {
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <Box
-        sx={{
-          mb: 1.5,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" color="#1ba6a6" sx={{ fontWeight: 700 }}>
-            {isTenantMode ? "Tenant Members" : "Tenant Administrator"}
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            {isTenantMode
-              ? "Manage members for your tenant"
-              : "Manage tenants and tenant members"}
-          </Typography>
-        </Box>
-      </Box>
+      <PageHeader
+        title={isTenantMode ? "Tenant Members" : "Tenant Administrator"}
+        subtitle={
+          isTenantMode
+            ? "Manage members for your tenant"
+            : "Manage tenants and tenant members"
+        }
+        icon={<BusinessOutlinedIcon />}
+      />
 
       {!isTenantMode && (
         <>
+          {/* Semantic KPIs — "Total Tenants" stays brand teal, the
+              two member counts map to their natural roles: Members
+              (neutral dark), Active (success green). */}
           <Box sx={{ mb: 2 }}>
             <Grid container spacing={2} alignItems="stretch">
               <Grid size={{ xs: 12, md: 2 }}>
@@ -885,7 +886,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
                 <SummaryCard
                   title="Total Members"
                   value={summary.totalMembers}
-                  accent="#0f6b72"
+                  accent={BRAND.dark}
                 />
               </Grid>
 
@@ -893,19 +894,16 @@ export default function TenantsAdministrator({ mode = "global" }) {
                 <SummaryCard
                   title="Active Members"
                   value={summary.activeMembers}
-                  accent="#b3261e"
+                  accent={BRAND.alert.success}
                 />
               </Grid>
             </Grid>
           </Box>
 
-          <Paper
-            elevation={0}
+          <SectionPaper
+            variant="panel"
             sx={{
               p: { xs: 1.5, sm: 1.5 },
-              borderRadius: 3,
-              border: "1px solid rgba(0,0,0,0.08)",
-              boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
               mb: 2,
             }}
           >
@@ -968,36 +966,18 @@ export default function TenantsAdministrator({ mode = "global" }) {
                   },
                 }}
                 sx={{
-                  border: "none",
+                  ...DATAGRID_SX,
                   width: "100%",
-                  "& .MuiDataGrid-columnHeaders": {
-                    backgroundColor: "rgba(166, 83, 27, 0.08)",
-                    fontWeight: 700,
-                  },
-                  "& .MuiDataGrid-row": {
-                    cursor: "pointer",
-                  },
-                  "& .MuiDataGrid-row.Mui-selected": {
-                    backgroundColor: "rgba(15, 107, 114, 0.18) !important",
-                  },
-                  "& .MuiDataGrid-row.Mui-selected:hover": {
-                    backgroundColor: "rgba(15, 107, 114, 0.24) !important",
-                  },
                 }}
               />
             </Box>
-          </Paper>
+          </SectionPaper>
         </>
       )}
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 1.5 },
-          borderRadius: 3,
-          border: "1px solid rgba(0,0,0,0.08)",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.06)",
-        }}
+      <SectionPaper
+        variant="panel"
+        sx={{ p: { xs: 1.5, sm: 1.5 } }}
       >
         <Box
           sx={{
@@ -1059,12 +1039,12 @@ export default function TenantsAdministrator({ mode = "global" }) {
             width: "100%",
             borderRadius: 2,
             transition: "box-shadow 0.25s ease, background-color 0.25s ease",
+            // Flash highlight when members refresh after a tenant click.
+            // Now uses the brand teal instead of the old "#0f6b72" tone.
             boxShadow: membersFlash
-              ? "0 0 0 2px rgba(15, 107, 114, 0.25), 0 0 18px rgba(15, 107, 114, 0.12)"
+              ? `0 0 0 2px ${BRAND.tealSoftStrong}, 0 0 18px ${BRAND.tealSoft}`
               : "none",
-            backgroundColor: membersFlash
-              ? "rgba(15, 107, 114, 0.04)"
-              : "transparent",
+            backgroundColor: membersFlash ? BRAND.tealSoft : "transparent",
           }}
         >
           <DataGrid
@@ -1081,16 +1061,12 @@ export default function TenantsAdministrator({ mode = "global" }) {
               },
             }}
             sx={{
-              border: "none",
+              ...DATAGRID_SX,
               width: "100%",
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(166, 83, 27, 0.08)",
-                fontWeight: 700,
-              },
             }}
           />
         </Box>
-      </Paper>
+      </SectionPaper>
 
       <TenantDialog
         open={tenantDialogOpen}

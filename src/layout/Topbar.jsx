@@ -4,11 +4,7 @@ import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNone
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import { getAlertsUnreadCount } from "../api/alerts";
 
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  cyan: "#8FFDFF",
-};
+import { BRAND } from "../theme/brand";
 
 export const TOPBAR_HEIGHT = 56;
 
@@ -27,7 +23,12 @@ const UNREAD_POLL_MS = 60_000;
 function navigateToPage(page) {
   const params = new URLSearchParams(window.location.search);
   params.set("page", page);
-  window.history.pushState({}, "", `${window.location.pathname}?${params.toString()}`);
+  // Collapse accidental leading `//` in the pathname — the auth
+  // redirect sometimes lands users on `http://host//?page=...` and
+  // a URL starting with `//` is treated by pushState as
+  // protocol-relative (same-origin check rejects it silently).
+  const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+  window.history.pushState({}, "", `${pathname}?${params.toString()}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
@@ -95,7 +96,7 @@ export default function Topbar({ onMenuClick }) {
         px: { xs: 1.5, sm: 2, md: 3 },
         gap: 1,
         background: `linear-gradient(90deg, ${BRAND.dark} 0%, ${BRAND.teal} 100%)`,
-        borderBottom: `1px solid ${BRAND.cyan}`,
+        borderBottom: `3px solid ${BRAND.cyan}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",

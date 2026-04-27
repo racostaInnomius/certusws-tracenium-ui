@@ -18,7 +18,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -31,6 +31,7 @@ import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import BlockIcon from "@mui/icons-material/Block";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import {
   getCertificateActivity,
@@ -51,21 +52,10 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-// Tracenium brand palette
-const BRAND = {
-  dark: "#3B404D",
-  teal: "#5A9F9F",
-  tealHover: "#4E8C8C",
-  cyan: "#8FFDFF",
-  gray: "#BEBEBE",
-  tealSoft: "rgba(90,159,159,0.12)",
-  tealText: "#3E7878",
-  cyanSoft: "rgba(143,253,255,0.22)",
-  darkSoft: "rgba(59,64,77,0.08)",
-  border: "rgba(190,190,190,0.5)",
-  rowHover: "rgba(143,253,255,0.10)",
-  shadow: "0 8px 20px rgba(59,64,77,0.10)",
-};
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import SummaryCard from "../components/common/SummaryCard";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -137,10 +127,10 @@ function StatusChip({ status }) {
         label="Revoked"
         size="small"
         sx={{
-          bgcolor: "rgba(179,38,30,0.12)",
-          color: "#b3261e",
+          bgcolor: BRAND.alert.errorSoft,
+          color: BRAND.alert.error,
           fontWeight: 700,
-          border: "1px solid rgba(179,38,30,0.35)",
+          border: `1px solid ${BRAND.alert.error}55`,
         }}
       />
     );
@@ -165,52 +155,6 @@ function StatusChip({ status }) {
       size="small"
       sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 700 }}
     />
-  );
-}
-
-function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tealSoft }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 1.75,
-        minHeight: 96,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        alignItems: "center",
-        gap: 1.75,
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        "&:hover": {
-          transform: "translateY(-1px)",
-          boxShadow: "0 12px 26px rgba(59,64,77,0.14)",
-        },
-      }}
-    >
-      <Box
-        sx={{
-          width: 44,
-          height: 44,
-          borderRadius: 2,
-          bgcolor: tint,
-          color: accent,
-          display: "grid",
-          placeItems: "center",
-          flexShrink: 0,
-        }}
-      >
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
-          {title}
-        </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
-          {value}
-        </Typography>
-      </Box>
-    </Paper>
   );
 }
 
@@ -245,28 +189,6 @@ function DetailRow({ label, value, mono = false }) {
   );
 }
 
-// Shared DataGrid sx theme aligned with brand
-const dataGridSx = {
-  border: "none",
-  "& .MuiDataGrid-columnHeaders": {
-    backgroundColor: BRAND.darkSoft,
-    color: BRAND.dark,
-    fontWeight: 700,
-    borderBottom: `1px solid ${BRAND.border}`,
-  },
-  "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700 },
-  "& .MuiDataGrid-row": {
-    cursor: "pointer",
-    transition: "background-color 0.12s ease",
-  },
-  "& .MuiDataGrid-row:hover": { backgroundColor: BRAND.rowHover },
-  "& .MuiDataGrid-row.Mui-selected, & .MuiDataGrid-row.Mui-selected:hover": {
-    backgroundColor: BRAND.cyanSoft,
-  },
-  "& .MuiDataGrid-cell": { borderBottom: `1px solid ${BRAND.border}` },
-  "& .MuiDataGrid-footerContainer": { borderTop: `1px solid ${BRAND.border}` },
-};
-
 export default function PKI() {
   const initialParamsRef = React.useRef({
     days: getSearchParam("pkiDays", "30"),
@@ -275,7 +197,6 @@ export default function PKI() {
     deviceStatus: getSearchParam("pkiDeviceStatus", ""),
     deviceId: getSearchParam("pkiDeviceId", ""),
     fingerprint: getSearchParam("pkiFingerprint", ""),
-    autoRefreshSeconds: getSearchParam("pkiAutoRefresh", "0"),
     tab: getSearchParam("pkiTab", "overview"),
     devicePage: Math.max(Number(getSearchParam("pkiDevicePage", "0")) || 0, 0),
     devicePageSize: Math.max(Number(getSearchParam("pkiDevicePageSize", "10")) || 10, 1),
@@ -311,7 +232,6 @@ export default function PKI() {
   const [missingSearch, setMissingSearch] = React.useState(initialParamsRef.current.missingSearch);
   const [deviceStatus, setDeviceStatus] = React.useState(initialParamsRef.current.deviceStatus);
   const [revokeReason, setRevokeReason] = React.useState("");
-  const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState(initialParamsRef.current.autoRefreshSeconds);
   const [devicePagination, setDevicePagination] = React.useState({
     page: initialParamsRef.current.devicePage,
     pageSize: initialParamsRef.current.devicePageSize,
@@ -491,6 +411,8 @@ export default function PKI() {
     }
   }, [loadDevices, loadOverview, selectDevice, selectedDeviceId, selectedFingerprint]);
 
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(handleRefresh, "pkiAutoRefresh");
+
   React.useEffect(() => { loadOverview(); }, [loadOverview]);
   React.useEffect(() => { loadDevices(); }, [loadDevices]);
 
@@ -529,17 +451,6 @@ export default function PKI() {
   }, [canAccess, selectedDeviceId]);
 
   React.useEffect(() => {
-    const intervalSeconds = Number(autoRefreshSeconds || 0);
-    if (!canAccess || intervalSeconds <= 0) return undefined;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      if (revokeLoading || detailLoading) return;
-      handleRefresh();
-    }, intervalSeconds * 1000);
-    return () => window.clearInterval(timer);
-  }, [autoRefreshSeconds, canAccess, detailLoading, handleRefresh, revokeLoading]);
-
-  React.useEffect(() => {
     updateSearchParams({
       pkiTab: tab,
       pkiDays: days,
@@ -548,14 +459,13 @@ export default function PKI() {
       pkiDeviceStatus: deviceStatus,
       pkiDeviceId: selectedDeviceId,
       pkiFingerprint: selectedFingerprint,
-      pkiAutoRefresh: Number(autoRefreshSeconds || 0) > 0 ? autoRefreshSeconds : "",
       pkiDevicePage: devicePagination.page,
       pkiDevicePageSize: devicePagination.pageSize,
       pkiMissingPage: missingPagination.page,
       pkiMissingPageSize: missingPagination.pageSize,
     });
   }, [
-    tab, autoRefreshSeconds, days,
+    tab, days,
     devicePagination.page, devicePagination.pageSize,
     deviceSearch, deviceStatus,
     missingPagination.page, missingPagination.pageSize,
@@ -750,87 +660,54 @@ export default function PKI() {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {/* Header */}
-      <Box
-        sx={{
-          mb: 2,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: { xs: "stretch", sm: "center" },
-          gap: 2,
-          flexWrap: "wrap",
-          flexDirection: { xs: "column", sm: "row" },
-        }}
-      >
-        <Box>
-          <Typography variant="h4" sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: -0.5 }}>
-            PKI
-          </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-            Certificate coverage, lifecycle, activity and remediation for the current tenant.
-          </Typography>
-        </Box>
-
-        <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
-          <TextField
-            select
-            label="Auto refresh"
-            size="small"
-            value={autoRefreshSeconds}
-            onChange={(e) => setAutoRefreshSeconds(e.target.value)}
-            sx={{ minWidth: 140 }}
-          >
-            <MenuItem value="0">Off</MenuItem>
-            <MenuItem value="30">Every 30s</MenuItem>
-            <MenuItem value="60">Every 60s</MenuItem>
-            <MenuItem value="120">Every 2 min</MenuItem>
-          </TextField>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadOutlinedIcon />}
-            onClick={handleExportCoverageCsv}
-            disabled={devices.items.length === 0}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            CSV
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<DownloadOutlinedIcon />}
-            onClick={handleExportEvidenceJson}
-            disabled={!selectedCertificate}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            JSON
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshOutlinedIcon />}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderColor: BRAND.teal,
-              color: BRAND.teal,
-              "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-            }}
-          >
-            {refreshing ? "Refreshing…" : "Refresh"}
-          </Button>
-        </Box>
-      </Box>
+      <PageHeader
+        title="PKI"
+        subtitle="Certificate coverage, lifecycle, activity and remediation for the current tenant."
+        icon={<VpnKeyOutlinedIcon />}
+        actions={
+          <>
+            {/* Auto-refresh was moved to the Overview page (a single,
+                tenant-wide cadence control there keeps the pattern
+                consistent and avoids per-page widgets that nobody finds). */}
+            <Button
+              variant="outlined"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={handleExportCoverageCsv}
+              disabled={devices.items.length === 0}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.teal,
+                color: BRAND.teal,
+                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              CSV
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={handleExportEvidenceJson}
+              disabled={!selectedCertificate}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderColor: BRAND.teal,
+                color: BRAND.teal,
+                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              JSON
+            </Button>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={handleRefresh}
+              loading={refreshing}
+            />
+          </>
+        }
+      />
 
       {/* Summary cards */}
       <Box sx={{ mb: 2 }}>
@@ -867,8 +744,8 @@ export default function PKI() {
               title="Revoked"
               value={summary?.revoked ?? 0}
               icon={<BlockOutlinedIcon />}
-              accent="#b3261e"
-              tint="rgba(179,38,30,0.12)"
+              accent={BRAND.alert.error}
+              tint={BRAND.alert.errorSoft}
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
@@ -885,23 +762,17 @@ export default function PKI() {
               title="No active cert"
               value={summary?.devices_without_active_cert ?? 0}
               icon={<GppMaybeOutlinedIcon />}
-              accent="#b3261e"
-              tint="rgba(179,38,30,0.12)"
+              accent={BRAND.alert.error}
+              tint={BRAND.alert.errorSoft}
             />
           </Grid>
         </Grid>
       </Box>
 
       {/* Tabs container */}
-      <Paper
-        elevation={0}
-        sx={{
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-          overflow: "hidden",
-          mb: 2,
-        }}
+      <SectionPaper
+        variant="panel"
+        sx={{ p: 0, overflow: "hidden", mb: 2 }}
       >
         <Tabs
           value={tab}
@@ -973,7 +844,7 @@ export default function PKI() {
             />
           ) : null}
         </Box>
-      </Paper>
+      </SectionPaper>
 
       <Snackbar
         open={snackbar.open}
@@ -1008,16 +879,9 @@ function OverviewTab(props) {
     <Grid container spacing={2}>
       {/* Coverage */}
       <Grid size={{ xs: 12, xl: 7 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1082,24 +946,16 @@ function OverviewTab(props) {
             pageSizeOptions={[10, 25, 50]}
             getRowId={(row) => row.device_id}
             onRowClick={(params) => onJumpToInspector(params.row.device_id)}
-            sx={dataGridSx}
+            sx={DATAGRID_SX}
           />
-        </Paper>
+        </SectionPaper>
       </Grid>
 
       {/* Expiring + Missing */}
       <Grid size={{ xs: 12, xl: 5 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-            mb: 2,
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden", mb: 2 }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
             <Box>
@@ -1137,20 +993,13 @@ function OverviewTab(props) {
             onRowClick={(params) =>
               onJumpToInspector(params.row.device_id, params.row.fingerprint_sha256)
             }
-            sx={dataGridSx}
+            sx={DATAGRID_SX}
           />
-        </Paper>
+        </SectionPaper>
 
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
             <Box>
@@ -1193,9 +1042,9 @@ function OverviewTab(props) {
             pageSizeOptions={[5, 10, 25]}
             getRowId={(row) => row.device_id}
             onRowClick={(params) => onJumpToInspector(params.row.device_id)}
-            sx={dataGridSx}
+            sx={DATAGRID_SX}
           />
-        </Paper>
+        </SectionPaper>
       </Grid>
     </Grid>
   );
@@ -1243,15 +1092,9 @@ function InspectorTab(props) {
     <Grid container spacing={2}>
       {/* Certificate detail */}
       <Grid size={{ xs: 12, lg: 5 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0 }}
         >
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1329,7 +1172,7 @@ function InspectorTab(props) {
               <Divider sx={{ borderColor: BRAND.border }} />
 
               <Box>
-                <Typography variant="overline" sx={{ color: "#b3261e", fontWeight: 800, letterSpacing: 1.2 }}>
+                <Typography variant="overline" sx={{ color: BRAND.alert.error, fontWeight: 800, letterSpacing: 1.2 }}>
                   Revocation
                 </Typography>
                 <TextField
@@ -1362,22 +1205,14 @@ function InspectorTab(props) {
               </Box>
             </Box>
           )}
-        </Paper>
+        </SectionPaper>
       </Grid>
 
       {/* Chain + Activity */}
       <Grid size={{ xs: 12, lg: 7 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-            mb: 2,
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden", mb: 2 }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1396,21 +1231,22 @@ function InspectorTab(props) {
             hideFooter
             getRowId={(row) => row.fingerprint_sha256}
             onRowClick={(params) => onPickCert(params.row.fingerprint_sha256, params.row.device_id)}
-            rowSelectionModel={selectedFingerprint ? [selectedFingerprint] : []}
-            sx={dataGridSx}
+            // MUI X v8 changed `rowSelectionModel` from array to
+            // `{ type: 'include'|'exclude', ids: Set }`. Passing the old
+            // array shape under the free DataGrid throws
+            // "rowSelectionModel can only contain 1 item" during mount
+            // and blanks the Inspector tab. Use the object form.
+            rowSelectionModel={{
+              type: "include",
+              ids: new Set(selectedFingerprint ? [selectedFingerprint] : []),
+            }}
+            sx={DATAGRID_SX}
           />
-        </Paper>
+        </SectionPaper>
 
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 1.5, sm: 2 },
-            borderRadius: 3,
-            border: `1px solid ${BRAND.border}`,
-            boxShadow: BRAND.shadow,
-            minWidth: 0,
-            overflow: "hidden",
-          }}
+        <SectionPaper
+          variant="panel"
+          sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
             <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
@@ -1428,7 +1264,7 @@ function InspectorTab(props) {
             loading={detailLoading}
             hideFooter
             getRowId={(row) => row.id}
-            sx={dataGridSx}
+            sx={DATAGRID_SX}
           />
 
           {selectedCertificate && certificateActivity.length > 0 ? (
@@ -1457,7 +1293,7 @@ function InspectorTab(props) {
               </Paper>
             </>
           ) : null}
-        </Paper>
+        </SectionPaper>
       </Grid>
     </Grid>
   );
