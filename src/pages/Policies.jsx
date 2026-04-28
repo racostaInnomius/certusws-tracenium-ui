@@ -14,6 +14,7 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -50,6 +51,9 @@ import {
   saveTenantPolicy,
 } from "../api/policies";
 import { listKnownDevices } from "../api/jobs";
+import { getPluginCoverageSummary } from "../api/overview";
+import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
+import OnlineDot from "../components/common/OnlineDot";
 
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
@@ -236,6 +240,32 @@ function extractPolicyEnvelope(response) {
 
 function formatJson(value) {
   return JSON.stringify(value ?? {}, null, 2);
+}
+
+// Compact relative time formatter — "Now" / "5m ago" / "2h ago" / "3d ago".
+//
+// Used in tabular columns where space is tight and the operator wants to
+// scan-read freshness, not parse exact timestamps. Pair with
+// `formatDate(value)` as a tooltip when context warrants the absolute
+// reading. Returns "—" for null/invalid input so the cell renders
+// consistently with other helpers.
+function formatRelativeTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 0) return "Now"; // future timestamp (clock skew) — round to now
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return "Now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const days = Math.floor(hr / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
 }
 
 function formatDate(value) {
@@ -728,6 +758,12 @@ export default function Policies() {
   const [tenantLoading, setTenantLoading] = React.useState(true);
   const [tenantSaving, setTenantSaving] = React.useState(false);
   const [tenantPushing, setTenantPushing] = React.useState(false);
+  // Plugin coverage real-state — distinto de policy ack: lee de
+  // agent_payload->agent->capabilities (último facts publish del agent),
+  // representando el runtime efectivo no la promesa contractual del ack.
+  // Operadores necesitan esto en la página Policies para distinguir
+  // "device confirmó la policy" vs "plugin realmente corriendo".
+  const [pluginCoverageResult, setPluginCoverageResult] = React.useState(null);
 
   // Device state
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
@@ -751,11 +787,17 @@ export default function Policies() {
     if (!canManage || !tenantId) return;
     try {
       setTenantLoading(true);
-      const [policyRes, statusRes, devicesRes] = await Promise.all([
+      // Plugin coverage usa allSettled porque PluginCoverageStrip lee
+      // `result.status === "fulfilled"` y `result.value` — formato
+      // estándar de Promise.allSettled. Se carga en paralelo con el
+      // resto (no bloquea la página si está lento o falla).
+      const [policyRes, statusRes, devicesRes, coverageSettled] = await Promise.all([
         getTenantPolicy(tenantId).catch(() => null),
         listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
         listKnownDevices().catch(() => ({ items: [] })),
+        Promise.allSettled([getPluginCoverageSummary()]).then((arr) => arr[0]),
       ]);
+      setPluginCoverageResult(coverageSettled);
 
       // Normalize the response envelope once and feed the form+JSON
       // editor from the extracted policy content. Without this the form
@@ -1091,6 +1133,16 @@ export default function Policies() {
   const hasOverride = !isEmptyPolicy(deviceEnv.raw);
 
   // ── Rollout table columns ──────────────────────────────────────────────
+  //
+  // Liveness columns (Online + Last seen) van junto al Device para que
+  // el operador interprete el ack a la derecha en su contexto correcto:
+  //   * online + ack reciente  → policy aplicada y viva (alta confianza)
+  //   * online + ack viejo     → policy estable, no requiere re-ack
+  //   * offline + ack reciente → aplicada antes de offline (media)
+  //   * offline + ack antiguo  → estado real desconocido (baja)
+  // Sin estas columnas, un ack OK podía interpretarse erróneamente como
+  // "device aplicó y sigue corriendo el plugin", aunque el device esté
+  // offline desde hace días o nunca recibió un policy_applied real.
   const statusColumns = [
     {
       field: "device_id",
@@ -1098,6 +1150,45 @@ export default function Policies() {
       minWidth: 200,
       flex: 1,
       valueGetter: (_v, row) => deviceMap.get(row.device_id)?.hostname || row.device_id,
+    },
+    {
+      field: "is_connected",
+      headerName: "Online",
+      minWidth: 75,
+      flex: 0.25,
+      sortable: true,
+      renderCell: (params) => {
+        const online = params.row?.is_connected === true;
+        const lastSeen = params.row?.last_heartbeat;
+        // Tooltip enriquecido con last seen para evitar dos hovers
+        // separados — el operador ve el dot y al pasar el mouse
+        // entiende exactamente qué tan reciente es esa señal.
+        const tooltip = online
+          ? lastSeen
+            ? `Online · last heartbeat ${formatRelativeTime(lastSeen)}`
+            : "Online — active session"
+          : lastSeen
+            ? `Offline · last seen ${formatRelativeTime(lastSeen)}`
+            : "Offline · never seen";
+        return <OnlineDot online={online} title={tooltip} />;
+      },
+    },
+    {
+      field: "last_heartbeat",
+      headerName: "Last seen",
+      minWidth: 110,
+      flex: 0.4,
+      // Render relative para scan-rapido, tooltip absoluto para
+      // precision cuando el operador necesita correlacionar con logs.
+      renderCell: (params) => {
+        const value = params.value;
+        if (!value) return <Typography variant="caption" sx={{ color: "text.secondary" }}>Never</Typography>;
+        return (
+          <Tooltip title={formatDate(value)} arrow>
+            <Typography variant="caption">{formatRelativeTime(value)}</Typography>
+          </Tooltip>
+        );
+      },
     },
     {
       field: "desired_policy_source",
@@ -1145,7 +1236,17 @@ export default function Policies() {
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
-      return { last_ack_at: false, last_ack_message: false, desired_policy_version: false };
+      // En móvil priorizamos: Device + Online + ACK status. Ocultamos
+      // detalles que requieren precisión (versions, timestamps,
+      // mensajes) — el operador puede tap en una row para ver el
+      // device override panel con el detalle completo.
+      return {
+        last_ack_at: false,
+        last_ack_message: false,
+        desired_policy_version: false,
+        last_heartbeat: false,
+        last_sent_policy_version: false,
+      };
     }
     return {};
   }, [isSmDown]);
@@ -1285,6 +1386,7 @@ export default function Policies() {
               columnVisibilityModel={columnVisibilityModel}
               onRowClick={(row) => handleSwitchToDevice(row.device_id)}
               loading={tenantLoading}
+              pluginCoverageResult={pluginCoverageResult}
             />
           ) : (
             <DeviceTab
@@ -1347,6 +1449,7 @@ function TenantTab(props) {
     tenantSaving, tenantPushing, onSave, onPush,
     tenantStatus, statusColumns, columnVisibilityModel, onRowClick,
     loading,
+    pluginCoverageResult,
   } = props;
 
   return (
@@ -1415,6 +1518,19 @@ function TenantTab(props) {
       </Grid>
 
       <Grid size={{ xs: 12, lg: 7 }}>
+        {/*
+          Plugin coverage real — qué plugins están EFECTIVAMENTE corriendo
+          en runtime según el último facts publish de cada agent. Distinto
+          de "ack OK" en la tabla de Rollout status abajo: el ack confirma
+          que el agent recibió y procesó la policy en su momento, pero un
+          ack viejo en un device offline o un runtime desincronizado
+          (bug de la saga PMP) no garantiza que el plugin esté activo
+          ahora. Esta strip lo refleja desde agent.capabilities.
+        */}
+        <Box sx={{ mb: 2 }}>
+          <PluginCoverageStrip result={pluginCoverageResult} loading={loading} />
+        </Box>
+
         <SectionPaper
           variant="panel"
           sx={{ minWidth: 0, overflow: "hidden" }}
