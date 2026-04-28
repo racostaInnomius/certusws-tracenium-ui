@@ -26,10 +26,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Tooltip,
   Typography,
 } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND } from "../../theme/brand";
+import OnlineDot from "../common/OnlineDot";
 
 // Platform chip colors map to the brand family used across the app.
 // A chip (vs. raw text) makes it easier to eyeball filter results —
@@ -59,29 +59,6 @@ function PlatformChip({ platform }) {
         border: `1px solid ${style.fg}33`,
       }}
     />
-  );
-}
-
-// Traffic-light indicator: filled green circle when online, open
-// gray ring when offline. Glow on the online variant makes the eye
-// catch the "is this device actually reachable" question at a
-// glance in a crowded table.
-function OnlineDot({ online }) {
-  return (
-    <Tooltip title={online ? "Online — active session" : "Offline"} arrow>
-      <Box
-        aria-label={online ? "Online" : "Offline"}
-        sx={{
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          bgcolor: online ? ROLE.positive : "transparent",
-          border: `1.5px solid ${online ? ROLE.positive : BRAND.gray}`,
-          boxShadow: online ? `0 0 0 3px ${ROLE.positiveSoft}` : "none",
-          display: "inline-block",
-        }}
-      />
-    </Tooltip>
   );
 }
 
