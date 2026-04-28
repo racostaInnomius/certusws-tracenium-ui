@@ -440,6 +440,10 @@ export default function SoftwareInventory() {
     },
   ];
 
+  const hostAppColumns = appColumns.filter(
+    (column) => column.field !== "hostname" && column.field !== "agentId"
+  );
+
   const hostColumns = [
     {
       field: "hostname",
@@ -746,7 +750,7 @@ export default function SoftwareInventory() {
           <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
             <DataGrid
               rows={hostAppsRows}
-              columns={appColumns}
+              columns={hostAppColumns}
               loading={loadingHostApps}
               disableRowSelectionOnClick
               getRowId={(row) => row.id}
