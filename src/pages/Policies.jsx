@@ -875,11 +875,28 @@ export default function Policies() {
 
   const handlePushTenant = async () => {
     if (!canManage || !tenantId) return;
-    if (!window.confirm("Push the current tenant policy to every connected device?")) return;
+    if (!window.confirm(
+      "Push the current tenant policy to every device?\n\n" +
+      "This will reset any pre-existing device-level overrides for this tenant. " +
+      "Devices with custom policies will receive the tenant policy instead."
+    )) return;
     try {
       setTenantPushing(true);
       const res = await pushTenantPolicy(tenantId);
-      showSnack(`Tenant policy dispatched to ${res?.dispatched ?? "all"} devices`, "success");
+      // Backend retorna: { targeted, connected, sent, failed, clearedOverrides }
+      // Mostramos los counters útiles para el operador. El número de
+      // devices entregados de inmediato (`sent`) puede ser menor que
+      // `targeted` cuando hay devices conectados a una instancia gRPC
+      // distinta de la REST que recibió el push — esos los cosecha la
+      // heartbeat reconciliation en sus próximos heartbeats.
+      const targeted = res?.targeted ?? 0;
+      const sent = res?.sent ?? 0;
+      const cleared = res?.clearedOverrides ?? 0;
+      const parts = [`${targeted} targeted`, `${sent} delivered immediately`];
+      if (cleared > 0) {
+        parts.push(`${cleared} device override${cleared === 1 ? "" : "s"} reset`);
+      }
+      showSnack(`Tenant policy push: ${parts.join(" · ")}`, "success");
       await loadTenant();
     } catch (e) {
       console.error(e);
