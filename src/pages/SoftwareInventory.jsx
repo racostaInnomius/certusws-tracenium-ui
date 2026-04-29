@@ -254,6 +254,10 @@ export default function SoftwareInventory() {
     page: 0,
     pageSize: 10,
   });
+  // new change
+  const [hostSortModel, setHostSortModel] = React.useState([
+    { field: "hostname", sort: "asc" },
+  ]);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -323,10 +327,18 @@ export default function SoftwareInventory() {
   const loadHosts = async () => {
     try {
       setLoadingHosts(true);
+
+      const currentSort = hostSortModel?.[0] || {
+        field: "hostname",
+        sort: "asc",
+      };
+
       const res = await getSoftwareInventoryHosts({
         search: hostSearch || undefined,
         page: hostPaginationModel.page + 1,
         pageSize: hostPaginationModel.pageSize,
+        sortBy: currentSort.field,
+        sortDir: currentSort.sort || "asc",
       });
 
       setHostRows(Array.isArray(res?.items) ? res.items : []);
@@ -389,6 +401,7 @@ export default function SoftwareInventory() {
     hostSearch,
     hostPaginationModel.page,
     hostPaginationModel.pageSize,
+    hostSortModel,
   ]);
 
   React.useEffect(() => {
@@ -685,6 +698,7 @@ export default function SoftwareInventory() {
                   setPaginationModel({ page: 0, pageSize: 10 });
                   setHostPaginationModel({ page: 0, pageSize: 10 });
                   setHostAppsPaginationModel({ page: 0, pageSize: 10 });
+                  setHostSortModel([{ field: "hostname", sort: "asc" }]);
                 }}
               />
             }
@@ -700,50 +714,57 @@ export default function SoftwareInventory() {
         </Box>
 
         {!appLevelDetail && !selectedHost && (
-          <>
-            <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
-              <DataGrid
-                rows={hostRows}
-                columns={hostColumns}
-                loading={loadingHosts}
-                disableRowSelectionOnClick
-                getRowId={(row) => row.agentId}
-                rowCount={hostTotalRows}
-                paginationMode="server"
-                paginationModel={hostPaginationModel}
-                onPaginationModelChange={setHostPaginationModel}
-                pageSizeOptions={[10, 25, 50]}
-                onRowClick={(params) => {
-                  setSelectedHost(params.row);
-                  setHostAppsSearch("");
-                  setHostAppsPaginationModel({ page: 0, pageSize: 10 });
-                }}
-                sx={{
-                  border: "none",
-                  width: "100%",
-                  "& .MuiDataGrid-columnHeaders": {
-                    backgroundColor: "rgba(166, 83, 27, 0.08)",
-                    fontWeight: 700,
-                  },
-                  "& .MuiDataGrid-columnHeaderTitle": {
-                    fontWeight: 700,
-                  },
-                  "& .MuiDataGrid-row": {
-                    cursor: "pointer",
-                  },
-                  "& .MuiDataGrid-row:hover": {
-                    backgroundColor: "rgba(27,166,166,0.08)",
-                  },
-                  "& .MuiDataGrid-row.Mui-selected": {
-                    backgroundColor: "rgba(27,166,166,0.16) !important",
-                  },
-                  "& .MuiDataGrid-row.Mui-selected:hover": {
-                    backgroundColor: "rgba(27,166,166,0.22) !important",
-                  },
-                }}
-              />
-            </Box>
-          </>
+          <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
+            <DataGrid
+              rows={hostRows}
+              columns={hostColumns}
+              loading={loadingHosts}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.agentId}
+              rowCount={hostTotalRows}
+              paginationMode="server"
+              sortingMode="server"
+              sortModel={hostSortModel}
+              onSortModelChange={(model) => {
+                const nextModel =
+                  model.length > 0 ? model : [{ field: "hostname", sort: "asc" }];
+
+                setHostPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setHostSortModel(nextModel);
+              }}
+              paginationModel={hostPaginationModel}
+              onPaginationModelChange={setHostPaginationModel}
+              pageSizeOptions={[10, 25, 50]}
+              onRowClick={(params) => {
+                setSelectedHost(params.row);
+                setHostAppsSearch("");
+                setHostAppsPaginationModel({ page: 0, pageSize: 10 });
+              }}
+              sx={{
+                border: "none",
+                width: "100%",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "rgba(166, 83, 27, 0.08)",
+                  fontWeight: 700,
+                },
+                "& .MuiDataGrid-columnHeaderTitle": {
+                  fontWeight: 700,
+                },
+                "& .MuiDataGrid-row": {
+                  cursor: "pointer",
+                },
+                "& .MuiDataGrid-row:hover": {
+                  backgroundColor: "rgba(27,166,166,0.08)",
+                },
+                "& .MuiDataGrid-row.Mui-selected": {
+                  backgroundColor: "rgba(27,166,166,0.16) !important",
+                },
+                "& .MuiDataGrid-row.Mui-selected:hover": {
+                  backgroundColor: "rgba(27,166,166,0.22) !important",
+                },
+              }}
+            />
+          </Box>
         )}
 
         {!appLevelDetail && selectedHost && (
