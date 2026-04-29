@@ -8,6 +8,8 @@ import {
   ListItemText,
   Button,
   Chip,
+  Divider,
+  Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -25,6 +27,8 @@ import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlin
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
+import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
+import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
 import { TOPBAR_HEIGHT } from "./Topbar";
@@ -73,6 +77,38 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
 
       <List disablePadding sx={{ flex: 1, px: 1.5, pt: 1.5 }}>
         {items.map((it) => {
+          // Divider rows: a faint horizontal rule with a small section
+          // label above it. Uses the same teal-on-dark family the rest
+          // of the sidebar uses (BRAND.cyan at low alpha) so it reads
+          // as part of the chrome, not a heavy separator. The label is
+          // optional — if absent, render only the line.
+          if (it.type === "divider") {
+            return (
+              <Box key={it.key} sx={{ mt: 1.5, mb: 0.75, px: 1.1 }}>
+                {it.label ? (
+                  <Typography
+                    component="div"
+                    sx={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      color: "rgba(143,253,255,0.55)",
+                      mb: 0.5,
+                    }}
+                  >
+                    {it.label}
+                  </Typography>
+                ) : null}
+                <Divider
+                  sx={{
+                    borderColor: "rgba(143,253,255,0.18)",
+                  }}
+                />
+              </Box>
+            );
+          }
+
           const isSelected = selected === it.key;
           return (
             <ListItemButton
@@ -192,6 +228,24 @@ export default function Sidebar({
     (String(tenantMemberRole ?? "") === "OWNER" ||
       String(tenantMemberRole ?? "") === "ADMIN");
 
+  // Items render top-to-bottom in the sidebar. The list is split into
+  // two functional groups separated by a divider:
+  //
+  //   1. Operational pages — what an operator monitors day-to-day
+  //      (fleet state, posture, jobs, alerts).
+  //   2. Administration pages — surfaces a privileged user touches
+  //      occasionally (enrolling new devices, managing certificates,
+  //      tenant settings). Pushing them below the divider keeps the
+  //      ops-focused list short and signals that they're configuration
+  //      surfaces, not daily-driver pages.
+  //
+  // Items use a tagged-union shape: regular nav items have
+  // `{label, key, icon, highlighted?}`; the separator is
+  // `{type: "divider"}`. The render loop in <SidebarContent /> picks
+  // the right component per type. We place the divider only when the
+  // admin group has at least one entry (i.e. when the user is
+  // privileged) so non-privileged users don't see a trailing line
+  // with nothing under it.
   const items = [
     ...(showWelcomeEntry
       ? [{ label: "Welcome", key: "welcome", icon: <RocketLaunchOutlinedIcon />, highlighted: true }]
@@ -208,14 +262,22 @@ export default function Sidebar({
       ? [{ label: "Policies", key: "policies", icon: <PolicyOutlinedIcon /> }]
       : []),
     ...(isPrivileged
-      ? [{ label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> }]
-      : []),
-    ...(isPrivileged
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
       : []),
     { label: "Alerts", key: "alerts", icon: <NotificationsOutlinedIcon /> },
+
+    // ── Administration group ───────────────────────────────
     ...(isPrivileged
-      ? [{ label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> }]
+      ? [
+          { type: "divider", key: "divider-admin", label: "Administration" },
+          { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
+          { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
+          // Plugin Control — tenant-wide enable/disable for plugins.
+          // Inserted between PKI and Settings as agreed; visually
+          // groups with the other admin surfaces.
+          { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
+          { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
+        ]
       : []),
   ];
 

@@ -9,13 +9,17 @@ import {
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
-import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import AssetsDashboard from "./AssetsDashboard";
-import SoftwareDelivery from "./SoftwareDelivery";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
+
+// Note: the "Agent Downloads" tab moved to its own top-level page
+// (Device Enrollment) in tandem with the enrollment-token surface.
+// Asset Management is now strictly inventory; the binary catalog is
+// part of the enrollment flow, which is where new operators expect to
+// find it.
 
 import { BRAND } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
@@ -179,14 +183,6 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             {...a11yProps(2)}
             sx={TAB_SX}
           />
-
-          <Tab
-            icon={<DownloadOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Agent Downloads"
-            {...a11yProps(3)}
-            sx={TAB_SX}
-          />
         </Tabs>
       </SectionPaper>
 
@@ -203,10 +199,6 @@ export default function Assets({ onAssetsEmptyStateChange }) {
 
       <TabPanel value={activeTab} index={2}>
         <HardwareInventory />
-      </TabPanel>
-
-      <TabPanel value={activeTab} index={3}>
-        <SoftwareDelivery embedded />
       </TabPanel>
     </Box>
   );

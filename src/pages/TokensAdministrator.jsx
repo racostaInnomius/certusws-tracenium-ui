@@ -117,7 +117,13 @@ function renderStatusChip(status) {
   return <Chip label={status || "Unknown"} size="small" />;
 }
 
-export default function TokensAdministrator() {
+// `embedded` mirrors the contract of <SoftwareDelivery />: when true, we
+// skip the top-level PageHeader and zero out the Box's outer padding so
+// the host page (e.g. <DeviceEnrollment />) controls layout. The Create
+// token button moves into the embedded host's right slot via the
+// `headerAction` we still render via PageHeader's `actions` — to avoid
+// losing the action when embedded, we expose it inline in the toolbar.
+export default function TokensAdministrator({ embedded = false } = {}) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -346,12 +352,49 @@ const filteredRows = React.useMemo(() => {
   }, [isMdDown, isSmDown]);
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
-      <PageHeader
-        title="Tokens Administrator"
-        subtitle="Manage enrollment tokens for this tenant"
-        icon={<VpnKeyOutlinedIcon />}
-        actions={
+    <Box
+      sx={{
+        px: embedded ? 0 : { xs: 2, sm: 0.5 },
+        py: embedded ? 0 : { xs: 2, sm: 0.5 },
+      }}
+    >
+      {!embedded && (
+        <PageHeader
+          title="Tokens Administrator"
+          subtitle="Manage enrollment tokens for this tenant"
+          icon={<VpnKeyOutlinedIcon />}
+          actions={
+            <Button
+              variant="contained"
+              onClick={() => setCreateOpen(true)}
+              fullWidth={isSmDown}
+              sx={{
+                bgcolor: BRAND.teal,
+                "&:hover": { bgcolor: BRAND.tealHover },
+                minWidth: { xs: "100%", sm: 170 },
+                alignSelf: { xs: "stretch", sm: "center" },
+                textTransform: "none",
+                fontWeight: 700,
+              }}
+            >
+              + Create token
+            </Button>
+          }
+        />
+      )}
+
+      {/* When embedded, the host page owns the page chrome — but the
+          "+ Create token" action still has to live SOMEWHERE accessible
+          on this view. We render a right-aligned button row so the
+          embedded layout doesn't lose the primary CTA. */}
+      {embedded && (
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "flex-end",
+            mb: 1.5,
+          }}
+        >
           <Button
             variant="contained"
             onClick={() => setCreateOpen(true)}
@@ -360,15 +403,14 @@ const filteredRows = React.useMemo(() => {
               bgcolor: BRAND.teal,
               "&:hover": { bgcolor: BRAND.tealHover },
               minWidth: { xs: "100%", sm: 170 },
-              alignSelf: { xs: "stretch", sm: "center" },
               textTransform: "none",
               fontWeight: 700,
             }}
           >
             + Create token
           </Button>
-        }
-      />
+        </Box>
+      )}
 
       {/* KPI strip — semantic colors come from BRAND/ROLE now.
           "Active" uses the success green (not a custom teal-dark),

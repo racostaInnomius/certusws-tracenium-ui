@@ -10,7 +10,6 @@ import {
   MenuItem,
   Paper,
   Snackbar,
-  Switch,
   Tab,
   Tabs,
   TextField,
@@ -58,37 +57,14 @@ import OnlineDot from "../components/common/OnlineDot";
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import { PLUGIN_CATALOG } from "../constants/plugins";
 
-// ── Plugin descriptors. `required: true` means the plugin is part of the
-//    agent core and cannot be turned off — it ships as a locked toggle.
-//    `impliesModule` auto-enables a module when the plugin is active; the
-//    module does not need its own user-facing toggle.
-const PLUGIN_DESCRIPTORS = [
-  {
-    key: "amp",
-    label: "AMP — Asset Management",
-    description: "Hardware and software inventory. Integrated into the agent core — always on.",
-    required: true,
-  },
-  {
-    key: "scp",
-    label: "SCP — Security Compliance",
-    description:
-      "Compliance facts feeding the Security Compliance page. Enabling it activates compliance collection automatically.",
-    impliesModule: "compliance",
-  },
-  {
-    key: "pmp",
-    label: "PMP — Patch Management",
-    description: "Patch scan and install. Opt-in: disabled by default.",
-    impliesModule: "patch",
-  },
-  {
-    key: "sdp",
-    label: "SDP — Software Delivery",
-    description: "Software deployment and distribution tracking.",
-  },
-];
+// Plugin catalog now lives in src/constants/plugins.js so the new
+// Plugin Control page and this page render the same metadata. Aliased
+// to PLUGIN_DESCRIPTORS locally because that's the name the rest of
+// this file already uses; renaming everywhere would balloon this diff
+// without changing behavior.
+const PLUGIN_DESCRIPTORS = PLUGIN_CATALOG;
 
 // Compliance interval bounds — matches the server-side validator in
 // policy-runtime.ts (300s min, 86400s max). The scheduler rejects values
@@ -477,17 +453,19 @@ function JsonBlock({ value, maxHeight = 260 }) {
   );
 }
 
-// ── PolicyForm — module + plugin switches plus collapsible advanced JSON
+// ── PolicyForm — collection intervals + collapsible advanced JSON.
+//
+// Plugin enable/disable used to live here as a row of switches. It
+// moved to the new Plugin Control page so this surface is now strictly
+// about HOW enabled plugins behave, not WHICH plugins are on. The form
+// still tracks `form.plugins` internally because the conditional
+// schedule panels (Compliance / Patch) check it to decide whether to
+// render — that state is populated read-only from the loaded policy by
+// `readFormFromPolicy()` and only mutates if the operator drops into
+// the advanced JSON editor (power-user mode).
 
 function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false }) {
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
-
-  const handleTogglePlugin = (key) => (e) => {
-    onChange({
-      ...form,
-      plugins: { ...form.plugins, [key]: e.target.checked },
-    });
-  };
 
   const handleJsonChange = (e) => {
     const value = e.target.value;
@@ -501,65 +479,64 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
     }
   };
 
+  // Build a quick reference list of which plugins are enabled in the
+  // currently-loaded policy. We render it as a chip strip at the top of
+  // the form so the operator can see at a glance what configuration
+  // panels apply ("compliance shows because SCP is on") without having
+  // to bounce to Plugin Control to check.
+  const enabledPluginsSummary = PLUGIN_DESCRIPTORS.filter(
+    (p) => p.required || Boolean(form.plugins?.[p.key])
+  );
+
   return (
     <Box>
-      <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
-        Plugins
-      </Typography>
-      <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
-        {PLUGIN_DESCRIPTORS.map((p) => (
-          <Box
-            key={p.key}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 1.5,
-              p: 1.25,
-              border: `1px solid ${BRAND.border}`,
-              borderRadius: 2,
-              bgcolor: p.required ? BRAND.darkSoft : "#ffffff",
-              flexWrap: "wrap",
-            }}
-          >
-            <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-                <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>{p.label}</Typography>
-                {p.required ? (
-                  <Chip
-                    label="Required"
-                    size="small"
-                    sx={{
-                      height: 18,
-                      fontSize: 10,
-                      fontWeight: 800,
-                      bgcolor: BRAND.tealSoft,
-                      color: BRAND.tealText,
-                      border: `1px solid ${BRAND.teal}55`,
-                    }}
-                  />
-                ) : null}
-              </Box>
-              <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>{p.description}</Typography>
-            </Box>
-            <Switch
-              checked={p.required ? true : Boolean(form.plugins[p.key])}
-              onChange={handleTogglePlugin(p.key)}
-              disabled={readOnly || p.required}
-              sx={{
-                "& .MuiSwitch-switchBase.Mui-checked": { color: BRAND.teal },
-                "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": { backgroundColor: BRAND.teal },
-              }}
-            />
-          </Box>
-        ))}
+      <Box
+        sx={{
+          mb: 2,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Currently enabled plugins
+        </Typography>
+        <Box sx={{ mt: 0.5, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+          {enabledPluginsSummary.length === 0 ? (
+            <Typography variant="caption" sx={{ color: BRAND.gray }}>
+              No plugins enabled.
+            </Typography>
+          ) : (
+            enabledPluginsSummary.map((p) => (
+              <Chip
+                key={p.key}
+                label={`${p.label} · ${p.title}`}
+                size="small"
+                sx={{
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                  fontWeight: 700,
+                  border: `1px solid ${BRAND.teal}55`,
+                }}
+              />
+            ))
+          )}
+        </Box>
+        <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.75, display: "block" }}>
+          Toggle plugins on or off in <strong>Plugin Control</strong>. The settings
+          below apply to plugins that are currently enabled.
+        </Typography>
       </Box>
 
       {/* Compliance schedule — only surfaces when a plugin that implies
           the compliance module is active (today: SCP). A dedicated card
-          below the switches keeps this additive: the day we add more
-          compliance-scoped settings (retention, skip-on-battery, etc.)
-          they drop in here without restructuring the form. */}
+          below keeps this additive: the day we add more compliance-scoped
+          settings (retention, skip-on-battery, etc.) they drop in here
+          without restructuring the form. */}
       {(() => {
         const complianceActive = PLUGIN_DESCRIPTORS.some(
           (p) => p.impliesModule === "compliance" && form.plugins[p.key]
@@ -1266,7 +1243,7 @@ export default function Policies() {
       {/* Header */}
       <PageHeader
         title="Policies"
-        subtitle="Configure tenant-wide behavior and fine-tune individual devices with overrides."
+        subtitle="Configure plugin behavior — collection intervals and runtime flags. Enable plugins themselves under Plugin Control."
         icon={<PolicyOutlinedIcon />}
         actions={
           <RefreshControl
