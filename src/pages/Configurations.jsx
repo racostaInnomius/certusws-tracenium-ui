@@ -25,7 +25,6 @@
 import * as React from "react";
 import Grid from "@mui/material/Grid";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
@@ -159,7 +158,9 @@ function StatChip({ label, count, variant = "teal", loading }) {
 }
 
 export default function Configurations({ onNavigate }) {
-  const [tokensSummary, setTokensSummary] = React.useState(null);
+  // Note: `tokensSummary` was removed when the Tokens card moved to
+  // Device Enrollment. The /api/v1/configurations/summary endpoint
+  // still returns `tokens_summary`; we just don't render it here.
   const [tenantsSummary, setTenantsSummary] = React.useState(null);
   const [tenantMembersSummary, setTenantMembersSummary] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -173,7 +174,6 @@ export default function Configurations({ onNavigate }) {
         setError("");
         const res = await httpGetJson("/api/v1/configurations/summary");
         if (!alive) return;
-        setTokensSummary(res?.tokens_summary ?? null);
         setTenantsSummary(res?.tenants_summary ?? null);
         setTenantMembersSummary(res?.tenant_members_summary ?? null);
       } catch (e) {
@@ -189,11 +189,6 @@ export default function Configurations({ onNavigate }) {
     };
   }, []);
 
-  const tokensTotal      = tokensSummary?.tokensCount        ?? 0;
-  const tokensActive     = tokensSummary?.activeTokensCount  ?? 0;
-  const tokensExpired    = tokensSummary?.expiredTokensCount ?? 0;
-  const tokensRevoked    = tokensSummary?.revokedTokensCount ?? 0;
-
   const tenantsTotal     = tenantsSummary?.tenantsCount      ?? 0;
 
   const membersTotal     = tenantMembersSummary?.membersCount         ?? 0;
@@ -206,7 +201,7 @@ export default function Configurations({ onNavigate }) {
     <Box sx={{ pb: 4 }}>
       <PageHeader
         title="Settings"
-        subtitle="Administrative surfaces for tenants, members and enrollment tokens."
+        subtitle="Administrative surfaces for tenants and members."
         icon={<SettingsOutlinedIcon />}
       />
 
@@ -216,40 +211,12 @@ export default function Configurations({ onNavigate }) {
         </Typography>
       ) : null}
 
+      {/* The "Tokens" card was removed in favor of the new Device
+          Enrollment page (top-level sidebar entry), which combines
+          token generation with agent installer downloads — the two
+          things needed to onboard a device. Settings now hosts only
+          tenant and member admin surfaces. */}
       <Grid container spacing={2} alignItems="stretch">
-        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-          <SettingsCard
-            title="Tokens"
-            valueHint="Enrollment tokens · total registered"
-            value={tokensTotal}
-            icon={<VpnKeyOutlinedIcon />}
-            loading={loading}
-            onClick={() => onNavigate?.("tokens")}
-            footer={
-              <>
-                <StatChip
-                  label="Active"
-                  count={tokensActive}
-                  variant="success"
-                  loading={loading}
-                />
-                <StatChip
-                  label="Expired"
-                  count={tokensExpired}
-                  variant="warning"
-                  loading={loading}
-                />
-                <StatChip
-                  label="Revoked"
-                  count={tokensRevoked}
-                  variant="error"
-                  loading={loading}
-                />
-              </>
-            }
-          />
-        </Grid>
-
         {tenantsSummary ? (
           <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
             <SettingsCard

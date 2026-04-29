@@ -12,6 +12,8 @@ const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrato
 const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
 const Welcome = React.lazy(() => import("../pages/Welcome"));
 const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
+const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
+const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
 const Policies = React.lazy(() => import("../pages/Policies"));
 const Audit = React.lazy(() => import("../pages/Audit"));
@@ -98,6 +100,24 @@ export default function AppShell() {
     content = <Configurations onNavigate={setSelectedPage} />;
   }
 
+  // Device Enrollment is the new combined surface — sidebar entry for
+  // operators ("download installer + mint a token in the same flow").
+  if (selectedPage === "enrollment") {
+    content = <DeviceEnrollment />;
+  }
+
+  // Plugin Control — tenant-wide plugin enablement, split out of
+  // Policies so the "what's on" knob is separated from the "how it
+  // behaves" knobs. Admin-scoped at the UI layer; backend hardening
+  // (whitelist + role middleware) is Phase 2.
+  if (selectedPage === "plugin-control") {
+    content = <PluginControl />;
+  }
+
+  // Legacy `tokens` route kept alive so existing bookmarks / deep links
+  // (Settings → Tokens cards from prior releases, automation links)
+  // don't 404. The standalone TokensAdministrator still works; the new
+  // primary entry point is Device Enrollment.
   if (selectedPage === "tokens") {
     content = <TokensAdministrator />;
   }
@@ -113,11 +133,12 @@ export default function AppShell() {
   if (selectedPage === "welcome") {
     content = <Welcome onNavigate={setSelectedPage} />;
   }
-  /*
+  // Legacy `software-delivery` route kept alive for the same reason
+  // (back-compat for existing bookmarks). Primary entry: Device
+  // Enrollment → Agent Downloads tab.
   if (selectedPage === "software-delivery") {
     content = <SoftwareDelivery />;
   }
-  */
   if (selectedPage === "jobs") {
     content = <Jobs />;
   }
