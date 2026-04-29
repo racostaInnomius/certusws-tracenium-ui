@@ -60,6 +60,17 @@ export async function getPluginCoverageSummary() {
   return httpGetJson("/api/v1/dashboard/plugin-coverage");
 }
 
+export async function getPluginCoverageDevices(plugin) {
+  // Drill-down: which devices are covered vs missing for a given plugin.
+  // Shape: {
+  //   ok, plugin, total, coveredCount, missingCount,
+  //   covered: [{agentId, hostname, platform, lastSeenAt}, ...],
+  //   missing: [{agentId, hostname, platform, lastSeenAt}, ...]
+  // }
+  const safe = encodeURIComponent(String(plugin || "").toLowerCase().trim());
+  return httpGetJson(`/api/v1/dashboard/plugin-coverage/${safe}/devices`);
+}
+
 // ---- new endpoints for the Overview ----------------------------------
 
 export async function getComplianceSummary() {
