@@ -471,6 +471,48 @@ export default function SoftwareInventory() {
     { field: "publishers", headerName: "Publishers", minWidth: 120, flex: 0.5 },
   ];
 
+  const TraceniumSwitch = (props) => (
+    <Switch
+      {...props}
+      disableRipple
+      sx={{
+        width: 46,
+        height: 26,
+        padding: 0,
+
+        "& .MuiSwitch-switchBase": {
+          padding: 0,
+          margin: "3px",
+          transitionDuration: "300ms",
+
+          "&.Mui-checked": {
+            transform: "translateX(20px)",
+            color: "#fff",
+
+            "& + .MuiSwitch-track": {
+              backgroundColor: BRAND.teal,
+              opacity: 1,
+            },
+          },
+        },
+
+        "& .MuiSwitch-thumb": {
+          boxSizing: "border-box",
+          width: 20,
+          height: 20,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.25)", // efecto premium
+        },
+
+        "& .MuiSwitch-track": {
+          borderRadius: 26 / 2,
+          backgroundColor: "rgba(0,0,0,0.25)",
+          opacity: 1,
+          transition: "all 0.3s ease",
+        },
+      }}
+    />
+  );
+
   return (
     <Box sx={{ px: 0, py: 0 }}>
       <Box sx={{ mb: 2 }}>
@@ -684,7 +726,7 @@ export default function SoftwareInventory() {
 
           <FormControlLabel
             control={
-              <Switch
+              <TraceniumSwitch
                 checked={appLevelDetail}
                 onChange={(e) => {
                   const checked = e.target.checked;
@@ -698,18 +740,10 @@ export default function SoftwareInventory() {
                   setPaginationModel({ page: 0, pageSize: 10 });
                   setHostPaginationModel({ page: 0, pageSize: 10 });
                   setHostAppsPaginationModel({ page: 0, pageSize: 10 });
-                  setHostSortModel([{ field: "hostname", sort: "asc" }]);
                 }}
               />
             }
             label="App-level detail"
-            sx={{
-              m: 0,
-              ".MuiFormControlLabel-label": {
-                fontWeight: 700,
-                color: BRAND.dark,
-              },
-            }}
           />
         </Box>
 
@@ -762,6 +796,12 @@ export default function SoftwareInventory() {
                 "& .MuiDataGrid-row.Mui-selected:hover": {
                   backgroundColor: "rgba(27,166,166,0.22) !important",
                 },
+                "& .MuiLinearProgress-root": {
+                  backgroundColor: "rgba(27,166,166,0.15)",
+                },
+                "& .MuiLinearProgress-bar": {
+                  backgroundColor: BRAND.teal,  
+                },
               }}
             />
           </Box>
@@ -790,6 +830,12 @@ export default function SoftwareInventory() {
                 "& .MuiDataGrid-columnHeaderTitle": {
                   fontWeight: 700,
                 },
+                "& .MuiLinearProgress-root": {
+                  backgroundColor: "rgba(27,166,166,0.15)",
+                },
+                "& .MuiLinearProgress-bar": {
+                  backgroundColor: BRAND.teal,
+                },
               }}
             />
           </Box>
@@ -817,6 +863,12 @@ export default function SoftwareInventory() {
                 },
                 "& .MuiDataGrid-columnHeaderTitle": {
                   fontWeight: 700,
+                },
+                "& .MuiLinearProgress-root": {
+                  backgroundColor: "rgba(27,166,166,0.15)",
+                },
+                "& .MuiLinearProgress-bar": {
+                  backgroundColor: BRAND.teal,
                 },
               }}
             />
