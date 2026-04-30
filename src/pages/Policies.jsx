@@ -881,12 +881,26 @@ export default function Policies() {
     try {
       setTenantSaving(true);
       const policy = formToPolicy(tenantForm);
-      await saveTenantPolicy(tenantId, policy);
+      // Opt-locking: send the version we loaded the policy at as
+      // If-Match. If Plugin Control (or another operator) wrote in the
+      // meantime, backend returns 409 and we surface a non-blocking
+      // notice + reload so the user can re-apply on top of fresh state.
+      const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
+      await saveTenantPolicy(tenantId, policy, { expectedVersion });
       showSnack("Tenant policy saved", "success");
       await loadTenant();
     } catch (e) {
-      console.error(e);
-      showSnack("Failed to save tenant policy", "error");
+      if (e?.status === 409) {
+        console.warn("[policies] tenant save rejected: stale policy", e?.body);
+        showSnack(
+          "Policy was modified by someone else. Reloaded — review your changes and save again.",
+          "warning"
+        );
+        await loadTenant();
+      } else {
+        console.error(e);
+        showSnack("Failed to save tenant policy", "error");
+      }
     } finally {
       setTenantSaving(false);
     }
@@ -934,12 +948,26 @@ export default function Policies() {
     try {
       setDeviceSaving(true);
       const policy = formToPolicy(deviceForm);
-      await saveDevicePolicy(selectedDeviceId, policy);
+      // Same opt-locking rationale as tenant save above. `devicePolicy`
+      // can be null when there's no override yet — extractPolicyEnvelope
+      // returns version=null in that case, which becomes "no If-Match
+      // header sent" (legacy last-writer-wins for first writes).
+      const expectedVersion = extractPolicyEnvelope(devicePolicy).version;
+      await saveDevicePolicy(selectedDeviceId, policy, { expectedVersion });
       showSnack("Device override saved", "success");
       await loadDevice(selectedDeviceId);
     } catch (e) {
-      console.error(e);
-      showSnack("Failed to save device override", "error");
+      if (e?.status === 409) {
+        console.warn("[policies] device save rejected: stale policy", e?.body);
+        showSnack(
+          "Device override was modified by someone else. Reloaded — review your changes and save again.",
+          "warning"
+        );
+        await loadDevice(selectedDeviceId);
+      } else {
+        console.error(e);
+        showSnack("Failed to save device override", "error");
+      }
     } finally {
       setDeviceSaving(false);
     }

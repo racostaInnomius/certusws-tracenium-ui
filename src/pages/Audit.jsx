@@ -7,24 +7,26 @@ import {
   Chip,
   Collapse,
   Divider,
+  Drawer,
+  IconButton,
+  ListSubheader,
   MenuItem,
   Paper,
   Snackbar,
   TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
-import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
@@ -51,6 +53,37 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
+
+/**
+ * Render an event_type cell with a category-tinted chip and the
+ * pretty label. Tooltip shows the raw token for grep-driven users
+ * who already know "POLICY_TENANT_PUSHED" by name and want to
+ * confirm what they're looking at.
+ */
+function EventTypeChip({ value, dense = false }) {
+  const meta = getEventTypeMeta(value);
+  return (
+    <Tooltip title={meta.raw || "—"} placement="top" arrow>
+      <Chip
+        size="small"
+        label={meta.label}
+        sx={{
+          bgcolor: meta.tint,
+          color: meta.color,
+          fontWeight: 700,
+          fontSize: dense ? 11 : 12,
+          border: `1px solid ${meta.color}55`,
+          maxWidth: "100%",
+          "& .MuiChip-label": {
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          },
+        }}
+      />
+    </Tooltip>
+  );
+}
 
 function DetailRow({ label, value, mono = false }) {
   return (
@@ -420,7 +453,13 @@ export default function Audit() {
       flex: 0.7,
       renderCell: (params) => formatDate(params.value),
     },
-    { field: "event_type", headerName: "Event Type", minWidth: 180, flex: 0.8 },
+    {
+      field: "event_type",
+      headerName: "Event Type",
+      minWidth: 200,
+      flex: 0.9,
+      renderCell: (params) => <EventTypeChip value={params.value} dense />,
+    },
     {
       field: "outcome",
       headerName: "Outcome",
@@ -507,20 +546,10 @@ export default function Audit() {
             >
               JSON
             </Button>
-            <Button
-              variant="outlined"
-              startIcon={<RestartAltOutlinedIcon />}
-              onClick={handleReset}
-              sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                borderColor: BRAND.gray,
-                color: BRAND.dark,
-                "&:hover": { borderColor: BRAND.dark, bgcolor: BRAND.darkSoft },
-              }}
-            >
-              Reset
-            </Button>
+            {/* Reset moved into the filter bar as "Clear filters"
+                — surfaces only when there's something to clear, and
+                keeps the header focused on the high-level actions
+                (export + refresh). */}
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
@@ -531,114 +560,108 @@ export default function Audit() {
         }
       />
 
-      {/* Summary cards + Audit events chart.
-          Cards go on the left in a 3×2 grid (3 per row × 2 rows)
-          instead of the previous single row of 6 — frees the right
-          half for the timeseries chart. The chart mirrors the one
-          on the Overview page (same component, same contract) so
-          the two surfaces stay visually + functionally consistent.
-          Heights line up naturally: 2 rows × minHeight 96 + spacing
-          ≈ 220, which matches the chart's 220 body height. */}
+      {/* KPI strip — 4 cards in a single uniform row, then the
+          timeseries chart full-width below.
+          Why 4 instead of the previous 6:
+            * Total = OK + Rejected + Error, so showing all four is
+              redundant when Rejected/Error are zero (the common
+              case). Folded Rejected+Error into a single "Failures"
+              card with an inline breakdown.
+            * Side-by-side cards + chart at md=7/5 left the chart
+              cramped and the bottom-row card ("Devices seen") at
+              a different height because it lacked `stretch`. A
+              single full-width chart shows the histogram shape much
+              better and fixes the asymmetry by removing the layout
+              that caused it. */}
       <Box sx={{ mb: 2 }}>
-        {/* Explicit row minHeight so the cards side can stretch to
-            match the chart's intrinsic height (~310px with the
-            toggle + 220 body + padding). Without this the cards
-            stop at their minHeight:96 and the bottom border ends
-            above the chart. */}
-        <Grid container spacing={2} alignItems="stretch" sx={{ minHeight: 312 }}>
-          <Grid size={{ xs: 12, md: 7 }} sx={{ display: "flex" }}>
-            <Grid container spacing={2} alignItems="stretch" sx={{ width: "100%" }}>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
-                <SummaryCard
-                  stretch
-                  title="Total"
-                  value={summary?.total ?? 0}
-                  icon={<AssessmentOutlinedIcon />}
-                  accent={BRAND.dark}
-                  tint={BRAND.darkSoft}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
-                <SummaryCard
-                  stretch
-                  title="OK"
-                  value={summary?.ok_count ?? 0}
-                  icon={<CheckCircleOutlineOutlinedIcon />}
-                  accent={BRAND.tealText}
-                  tint={BRAND.tealSoft}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
-                <SummaryCard
-                  stretch
-                  title="Last 24h"
-                  value={summary?.last_24h ?? 0}
-                  icon={<ScheduleOutlinedIcon />}
-                  accent={BRAND.teal}
-                  tint={BRAND.tealSoft}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
-                <SummaryCard
-                  stretch
-                  title="Rejected"
-                  value={summary?.rejected_count ?? 0}
-                  icon={<BlockOutlinedIcon />}
-                  accent={BRAND.alert.error}
-                  tint={BRAND.alert.errorSoft}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: "flex" }}>
-                <SummaryCard
-                  stretch
-                  title="Error"
-                  value={summary?.error_count ?? 0}
-                  icon={<ErrorOutlineOutlinedIcon />}
-                  accent="#8b5418"
-                  tint="rgba(199,121,43,0.14)"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                <SummaryCard
-                  // Labelled "Devices seen" (not "Devices") because
-                  // `unique_devices` is COUNT(DISTINCT device_id) over
-                  // security_events — it legitimately exceeds the
-                  // current fleet when the audit log retains events
-                  // from devices that were rejected at enrollment
-                  // time or later removed. Tooltip explains that.
-                  title="Devices seen"
-                  titleHint="Distinct device IDs that ever appeared in the audit log — can exceed the current fleet because events from rejected/removed devices are retained."
-                  value={summary?.unique_devices ?? 0}
-                  icon={<DevicesOtherOutlinedIcon />}
-                  accent={BRAND.dark}
-                  tint={BRAND.cyanSoft}
-                />
-              </Grid>
-            </Grid>
+        <Grid container spacing={2} alignItems="stretch">
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <SummaryCard
+              stretch
+              title="Total events"
+              value={summary?.total ?? 0}
+              icon={<AssessmentOutlinedIcon />}
+              accent={BRAND.dark}
+              tint={BRAND.darkSoft}
+            />
           </Grid>
-
-          <Grid size={{ xs: 12, md: 5 }}>
-            {/* Wrap the chart in `result` prop shape since
-                AuditTimeseriesChart expects the same
-                allSettled-style { status: 'fulfilled', value } it
-                receives on the Overview. We normalize here so the
-                chart component stays untouched. */}
-            <AuditTimeseriesChart
-              result={
-                auditTimeseries
-                  ? { status: "fulfilled", value: auditTimeseries }
-                  : null
-              }
-              loading={loadingTimeseries}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            {/* Failures = Rejected + Error. Tooltip on the title
+                spells out the breakdown so an operator scanning a
+                non-zero count knows whether to chase rejections
+                (auth / policy) or errors (transport / runtime).
+                When zero, the card stays neutral-tinted; when
+                positive we lean error-tinted to draw the eye. */}
+            {(() => {
+              const rejected = summary?.rejected_count ?? 0;
+              const errors = summary?.error_count ?? 0;
+              const failures = rejected + errors;
+              const breakdown =
+                failures > 0
+                  ? `Rejected: ${rejected} · Error: ${errors}`
+                  : "No rejected or errored events.";
+              return (
+                <SummaryCard
+                  stretch
+                  title="Failures"
+                  titleHint={`Sum of rejected + error outcomes. ${breakdown}`}
+                  value={failures}
+                  icon={<BlockOutlinedIcon />}
+                  accent={failures > 0 ? BRAND.alert.error : BRAND.gray}
+                  tint={failures > 0 ? BRAND.alert.errorSoft : BRAND.darkSoft}
+                />
+              );
+            })()}
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <SummaryCard
+              stretch
+              title="Last 24h"
+              value={summary?.last_24h ?? 0}
+              icon={<ScheduleOutlinedIcon />}
+              accent={BRAND.teal}
+              tint={BRAND.tealSoft}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <SummaryCard
+              stretch
+              title="Devices seen"
+              titleHint="Distinct device IDs that ever appeared in the audit log — can exceed the current fleet because events from rejected/removed devices are retained."
+              value={summary?.unique_devices ?? 0}
+              icon={<DevicesOtherOutlinedIcon />}
+              accent={BRAND.dark}
+              tint={BRAND.cyanSoft}
             />
           </Grid>
         </Grid>
       </Box>
 
-      {/* Filters — collapsed by default. Toggle button shows active
-          filter count so the operator can tell if something is
-          hiding without expanding. Auto-expands when the page was
-          deep-linked with any filter param applied. */}
+      {/* Timeseries chart — full width below the KPI strip.
+          AuditTimeseriesChart expects the allSettled-style envelope
+          (same shape it gets on the Overview page); we adapt here so
+          the chart component stays untouched. */}
+      <Box sx={{ mb: 2 }}>
+        <AuditTimeseriesChart
+          result={
+            auditTimeseries
+              ? { status: "fulfilled", value: auditTimeseries }
+              : null
+          }
+          loading={loadingTimeseries}
+        />
+      </Box>
+
+      {/* Filter bar — single horizontal line when collapsed, dense
+          4-col grid when expanded.
+          Quick filter chips ("Policy / PKI / gRPC") sit inline with
+          the Filters toggle so 80% of operator triage flows ("show
+          me policy events from the last day") become a one-click
+          action, no panel expansion needed. Each chip drives the
+          eventType state to the SCREAMING_SNAKE/lowercase top
+          member of its category — picked from the live facets so
+          we never set a filter to a key the backend doesn't have
+          rows for. */}
       {(() => {
         const activeFilters = [
           deviceId,
@@ -646,258 +669,458 @@ export default function Audit() {
           outcome && outcome !== "all" ? outcome : "",
           correlationId,
           from,
-          to
+          to,
         ].filter((v) => String(v || "").trim() !== "").length;
+
+        // Map each Quick Filter chip → the highest-volume event_type
+        // currently in the facets that belongs to the named category.
+        // If a category has no rows yet, the chip stays disabled so
+        // the operator doesn't get an empty result page after click.
+        const groupedFacets = groupFacetsByCategory(facets.eventTypes || []);
+        const facetByCategory = Object.fromEntries(
+          groupedFacets.map((g) => [g.category, g])
+        );
+        const QUICK_CHIPS = ["Policies", "PKI", "gRPC"];
+
         return (
           <Box sx={{ mb: 2 }}>
-            <Box sx={{ display: "flex", justifyContent: "flex-end", mb: filtersOpen ? 1 : 0 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<FilterListOutlinedIcon />}
-                endIcon={filtersOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
-                onClick={() => setFiltersOpen((v) => !v)}
+            <SectionPaper
+              variant="panel"
+              sx={{ p: { xs: 1, sm: 1.25 } }}
+            >
+              {/* Header row: toggle + active count + quick chips +
+                  Reset (only when there's something to reset). One
+                  flex row that wraps gracefully on small screens. */}
+              <Box
                 sx={{
-                  borderColor: BRAND.border,
-                  color: BRAND.dark,
-                  "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft }
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 1,
                 }}
               >
-                {filtersOpen ? "Hide filters" : "Show filters"}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<FilterListOutlinedIcon />}
+                  endIcon={filtersOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
+                  onClick={() => setFiltersOpen((v) => !v)}
+                  sx={{
+                    textTransform: "none",
+                    borderColor: BRAND.border,
+                    color: BRAND.dark,
+                    "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft },
+                  }}
+                >
+                  Filters
+                  {activeFilters > 0 ? (
+                    <Chip
+                      size="small"
+                      label={activeFilters}
+                      sx={{
+                        ml: 0.75,
+                        height: 18,
+                        fontSize: 11,
+                        bgcolor: BRAND.tealSoft,
+                        color: BRAND.tealText,
+                        fontWeight: 700,
+                      }}
+                    />
+                  ) : null}
+                </Button>
+
+                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />
+
+                <Typography
+                  sx={{
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    textTransform: "uppercase",
+                    color: BRAND.gray,
+                  }}
+                >
+                  Quick:
+                </Typography>
+                {QUICK_CHIPS.map((cat) => {
+                  const group = facetByCategory[cat];
+                  const top = group?.items?.[0];
+                  const disabled = !top;
+                  const meta = top ? getEventTypeMeta(top.value) : null;
+                  const isActive = top && eventType === top.value;
+                  return (
+                    <Chip
+                      key={cat}
+                      label={cat}
+                      size="small"
+                      clickable={!disabled}
+                      onClick={() => {
+                        if (!top) return;
+                        setEventType(isActive ? "" : top.value);
+                      }}
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor: isActive
+                          ? meta?.color || BRAND.teal
+                          : meta?.tint || BRAND.darkSoft,
+                        color: isActive ? "#fff" : meta?.color || BRAND.gray,
+                        border: `1px solid ${(meta?.color || BRAND.border)}55`,
+                        opacity: disabled ? 0.4 : 1,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        "&:hover": disabled
+                          ? {}
+                          : {
+                              bgcolor: isActive
+                                ? meta?.color
+                                : meta?.tint || BRAND.tealSoft,
+                              filter: "brightness(0.97)",
+                            },
+                      }}
+                    />
+                  );
+                })}
+
+                <Box sx={{ flex: 1 }} />
+
                 {activeFilters > 0 ? (
-                  <Chip
+                  <Button
                     size="small"
-                    label={activeFilters}
+                    variant="text"
+                    startIcon={<RestartAltOutlinedIcon />}
+                    onClick={handleReset}
                     sx={{
-                      ml: 1,
-                      height: 18,
-                      fontSize: 11,
-                      bgcolor: BRAND.tealSoft,
-                      color: BRAND.tealText,
-                      fontWeight: 700
+                      textTransform: "none",
+                      color: BRAND.dark,
+                      "&:hover": { bgcolor: BRAND.darkSoft },
                     }}
-                  />
+                  >
+                    Clear filters
+                  </Button>
                 ) : null}
-              </Button>
-            </Box>
-            <Collapse in={filtersOpen} timeout="auto" unmountOnExit>
-              <SectionPaper variant="panel">
+              </Box>
+
+              {/* Expanded panel — dense 4-col grid in md+ for less
+                  vertical real estate. Renders inside the same
+                  SectionPaper so the visual frame stays continuous
+                  with the toggle row above. */}
+              <Collapse in={filtersOpen} timeout="auto" unmountOnExit>
+                <Divider sx={{ my: 1.25, borderColor: BRAND.border }} />
                 <Box
                   sx={{
                     display: "grid",
-                    gap: 1.5,
+                    gap: 1.25,
                     gridTemplateColumns: {
                       xs: "1fr",
                       sm: "repeat(2, minmax(0, 1fr))",
-                      lg: "repeat(3, minmax(0, 1fr))",
+                      md: "repeat(4, minmax(0, 1fr))",
                     },
                   }}
                 >
-          <TextField label="Device ID" size="small" value={deviceId} onChange={(e) => setDeviceId(e.target.value)} fullWidth />
-          <TextField
-            select
-            label="Event Type"
-            size="small"
-            value={eventType}
-            onChange={(e) => setEventType(e.target.value)}
-            fullWidth
-          >
-            <MenuItem value="">All event types</MenuItem>
-            {(facets.eventTypes || []).map((item) => (
-              <MenuItem key={item.value} value={item.value}>
-                {item.value} ({item.count})
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField select label="Outcome" size="small" value={outcome} onChange={(e) => setOutcome(e.target.value)} fullWidth>
-            <MenuItem value="all">All outcomes</MenuItem>
-            {(facets.outcomes || []).map((item) => (
-              <MenuItem key={item.value} value={item.value}>
-                {item.value} ({item.count})
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField label="Correlation ID" size="small" value={correlationId} onChange={(e) => setCorrelationId(e.target.value)} fullWidth />
-          <TextField
-            label="From"
-            size="small"
-            type="datetime-local"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            fullWidth
-          />
-          <TextField
-            label="To"
-            size="small"
-            type="datetime-local"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            error={hasInvalidDateRange}
-            helperText={hasInvalidDateRange ? "End date must be after start date" : ""}
-            fullWidth
-          />
+                  <TextField
+                    label="Device ID"
+                    size="small"
+                    value={deviceId}
+                    onChange={(e) => setDeviceId(e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    select
+                    label="Event Type"
+                    size="small"
+                    value={eventType}
+                    onChange={(e) => setEventType(e.target.value)}
+                    fullWidth
+                  >
+                    <MenuItem value="">All event types</MenuItem>
+                    {groupedFacets.flatMap((group) => [
+                      <ListSubheader
+                        key={`hdr-${group.category}`}
+                        sx={{
+                          bgcolor: group.tint,
+                          color: group.color,
+                          fontWeight: 800,
+                          letterSpacing: 0.5,
+                          fontSize: 11,
+                          textTransform: "uppercase",
+                          lineHeight: "28px",
+                        }}
+                      >
+                        {group.category}
+                      </ListSubheader>,
+                      ...group.items.map((item) => (
+                        <MenuItem key={item.value} value={item.value} sx={{ pl: 3 }}>
+                          <Box
+                            component="span"
+                            sx={{
+                              flex: 1,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {item.label}
+                          </Box>
+                          <Typography
+                            component="span"
+                            sx={{
+                              ml: 1,
+                              fontSize: 11,
+                              color: BRAND.gray,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {item.count}
+                          </Typography>
+                        </MenuItem>
+                      )),
+                    ])}
+                  </TextField>
+                  <TextField
+                    select
+                    label="Outcome"
+                    size="small"
+                    value={outcome}
+                    onChange={(e) => setOutcome(e.target.value)}
+                    fullWidth
+                  >
+                    <MenuItem value="all">All outcomes</MenuItem>
+                    {(facets.outcomes || []).map((item) => (
+                      <MenuItem key={item.value} value={item.value}>
+                        {item.value} ({item.count})
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  <TextField
+                    label="Correlation ID"
+                    size="small"
+                    value={correlationId}
+                    onChange={(e) => setCorrelationId(e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    label="From"
+                    size="small"
+                    type="datetime-local"
+                    value={from}
+                    onChange={(e) => setFrom(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                  />
+                  <TextField
+                    label="To"
+                    size="small"
+                    type="datetime-local"
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    error={hasInvalidDateRange}
+                    helperText={hasInvalidDateRange ? "End date must be after start date" : ""}
+                    fullWidth
+                  />
                 </Box>
-              </SectionPaper>
-            </Collapse>
+              </Collapse>
+            </SectionPaper>
           </Box>
         );
       })()}
 
-      {/* Table + Detail */}
-      <Grid container spacing={2} alignItems="stretch">
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <SectionPaper
-            variant="panel"
-            sx={{ minWidth: 0, overflow: "hidden" }}
-          >
+      {/* Audit table — full width. The detail panel previously sat
+          to the right (lg=4) and ate ~33% of horizontal real estate
+          even when nothing was selected. Now it lives in a Drawer
+          (right side, ~520px) that opens on row click and closes
+          via X / backdrop click — same pattern as Patch Management.
+          DataGrid uses density="compact" in md+ for ~30% more rows
+          per viewport without sacrificing legibility. */}
+      <SectionPaper variant="panel" sx={{ minWidth: 0, overflow: "hidden" }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 2,
+            mb: 1.5,
+            flexWrap: "wrap",
+          }}
+        >
+          <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            Audit Events
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <strong>{totalRows}</strong> total
+          </Typography>
+        </Box>
+
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <DataGrid
+            autoHeight
+            density={isSmDown ? "standard" : "compact"}
+            disableRowSelectionOnClick
+            rows={rows}
+            columns={columns}
+            loading={loading}
+            rowCount={totalRows}
+            paginationMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            getRowId={(row) => row.id}
+            onRowClick={(params) => {
+              setSelectedEvent(params.row);
+              setSelectedEventId(String(params.row.id));
+            }}
+            pageSizeOptions={[10, 25, 50]}
+            columnVisibilityModel={columnVisibilityModel}
+            sx={DATAGRID_SX}
+          />
+        </Box>
+      </SectionPaper>
+
+      {/* Detail Drawer — opens when a row is clicked, closes on
+          backdrop click, ESC, or the close button. Width is responsive:
+          full-width on mobile, ~520px on tablet+, ~600px on wide
+          screens. State is driven by `selectedEvent` (already in
+          place) — we just route it through `open` instead of a
+          conditional sidebar. */}
+      <Drawer
+        anchor="right"
+        open={Boolean(selectedEvent)}
+        onClose={() => {
+          setSelectedEvent(null);
+          setSelectedEventId("");
+        }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: { xs: "100%", sm: 520, lg: 600 },
+              p: 2,
+              bgcolor: "#fff",
+            },
+          },
+        }}
+      >
+        {selectedEvent ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, height: "100%" }}>
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: 2,
-                mb: 1.5,
-                flexWrap: "wrap",
+                gap: 1,
               }}
             >
-              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
-                Audit Events
-              </Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-                <strong>{totalRows}</strong> total
-              </Typography>
-            </Box>
-
-            <Box sx={{ width: "100%", overflowX: "auto" }}>
-              <DataGrid
-                autoHeight
-                disableRowSelectionOnClick
-                rows={rows}
-                columns={columns}
-                loading={loading}
-                rowCount={totalRows}
-                paginationMode="server"
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                getRowId={(row) => row.id}
-                onRowClick={(params) => {
-                  setSelectedEvent(params.row);
-                  setSelectedEventId(String(params.row.id));
-                }}
-                pageSizeOptions={[10, 25, 50]}
-                columnVisibilityModel={columnVisibilityModel}
-                sx={DATAGRID_SX}
-              />
-            </Box>
-          </SectionPaper>
-        </Grid>
-
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <SectionPaper
-            variant="panel"
-            sx={{
-              p: 2,
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              minWidth: 0,
-            }}
-          >
-            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
               <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
                 Event Detail
               </Typography>
-              {selectedEvent ? renderOutcomeChip(selectedEvent.outcome) : null}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                {renderOutcomeChip(selectedEvent.outcome)}
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    setSelectedEvent(null);
+                    setSelectedEventId("");
+                  }}
+                  aria-label="Close detail"
+                  sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
+                >
+                  <CloseOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Box>
             </Box>
 
-            {!selectedEvent ? (
-              <Box
-                sx={{
-                  flex: 1,
-                  display: "grid",
-                  placeItems: "center",
-                  textAlign: "center",
-                  color: "text.secondary",
-                  p: 3,
-                  border: `1px dashed ${BRAND.border}`,
-                  borderRadius: 2,
-                  bgcolor: BRAND.darkSoft,
-                }}
-              >
-                <Box>
-                  <InfoOutlinedIcon sx={{ fontSize: 36, color: BRAND.gray, mb: 1 }} />
-                  <Typography variant="body2">
-                    Select an event from the table to inspect its detail payload.
-                  </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1, overflow: "auto" }}>
+              {/* Identity */}
+              <Box>
+                <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                  Identity
+                </Typography>
+                <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+                  <DetailRow label="Occurred" value={formatDate(selectedEvent.occurred_at_utc)} />
+                  {/* Event Type — chip + raw token together so the
+                      operator gets the pretty label AND can copy
+                      the raw string for ticket / grep / docs. */}
+                  <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                    <Typography
+                      sx={{
+                        fontSize: 12,
+                        color: "text.secondary",
+                        fontWeight: 600,
+                        minWidth: 96,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.3,
+                        flexShrink: 0,
+                      }}
+                    >
+                      Event Type
+                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1, minWidth: 0 }}>
+                      <EventTypeChip value={selectedEvent.event_type} />
+                      <Typography
+                        sx={{
+                          fontSize: 11,
+                          color: BRAND.gray,
+                          fontFamily: "monospace",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {selectedEvent.event_type}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <DetailRow label="Host" value={getHostname(selectedEvent.device_id)} />
+                  <DetailRow label="Device ID" value={selectedEvent.device_id || "—"} mono />
+                  <DetailRow label="Correlation" value={selectedEvent.correlation_id || "—"} mono />
                 </Box>
               </Box>
-            ) : (
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1 }}>
-                {/* Identity */}
-                <Box>
-                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
-                    Identity
-                  </Typography>
-                  <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
-                    <DetailRow label="Occurred" value={formatDate(selectedEvent.occurred_at_utc)} />
-                    <DetailRow label="Event Type" value={selectedEvent.event_type} />
-                    <DetailRow label="Host" value={getHostname(selectedEvent.device_id)} />
-                    <DetailRow label="Device ID" value={selectedEvent.device_id || "—"} mono />
-                    <DetailRow label="Correlation" value={selectedEvent.correlation_id || "—"} mono />
-                  </Box>
-                </Box>
 
-                <Divider sx={{ borderColor: BRAND.border }} />
+              <Divider sx={{ borderColor: BRAND.border }} />
 
-                {/* Context */}
-                <Box>
-                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
-                    Context
-                  </Typography>
-                  <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
-                    <DetailRow label="Peer" value={selectedEvent.peer || "—"} />
-                    <DetailRow label="Reason" value={selectedEvent.reason || "—"} />
-                    <DetailRow
-                      label="mTLS FP"
-                      value={selectedEvent.mtls_fingerprint_sha256 || "—"}
-                      mono
-                    />
-                  </Box>
-                </Box>
-
-                <Divider sx={{ borderColor: BRAND.border }} />
-
-                {/* Details JSON */}
-                <Box>
-                  <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
-                    Details
-                  </Typography>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      mt: 0.5,
-                      p: 1.25,
-                      bgcolor: BRAND.dark,
-                      color: "#e2e8f0",
-                      borderColor: BRAND.dark,
-                      overflow: "auto",
-                      maxHeight: 260,
-                      fontFamily: "monospace",
-                      fontSize: 12,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {JSON.stringify(selectedEvent.details ?? {}, null, 2)}
-                  </Paper>
+              {/* Context */}
+              <Box>
+                <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                  Context
+                </Typography>
+                <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+                  <DetailRow label="Peer" value={selectedEvent.peer || "—"} />
+                  <DetailRow label="Reason" value={selectedEvent.reason || "—"} />
+                  <DetailRow
+                    label="mTLS FP"
+                    value={selectedEvent.mtls_fingerprint_sha256 || "—"}
+                    mono
+                  />
                 </Box>
               </Box>
-            )}
-          </SectionPaper>
-        </Grid>
-      </Grid>
+
+              <Divider sx={{ borderColor: BRAND.border }} />
+
+              {/* Details JSON */}
+              <Box>
+                <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                  Details
+                </Typography>
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    mt: 0.5,
+                    p: 1.25,
+                    bgcolor: BRAND.dark,
+                    color: "#e2e8f0",
+                    borderColor: BRAND.dark,
+                    overflow: "auto",
+                    maxHeight: 360,
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {JSON.stringify(selectedEvent.details ?? {}, null, 2)}
+                </Paper>
+              </Box>
+            </Box>
+          </Box>
+        ) : null}
+      </Drawer>
 
       <Snackbar
         open={snackbar.open}

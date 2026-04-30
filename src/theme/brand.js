@@ -108,14 +108,46 @@ export const BRAND = {
   rowHover: "rgba(143,253,255,0.10)",
   shadow: "0 8px 20px rgba(59,64,77,0.10)",
 
-  // Semantic severity (not brand — universal usability)
+  // Semantic severity — the "semáforo" trio used across charts, chips,
+  // KPI accents, alert banners. These are part of the Tracenium brand
+  // identity, not a stock Material palette.
+  //
+  //   success → RGB(82, 183, 136)  · #52B788   (positive / OK)
+  //   warning → RGB(244, 211, 125) · #F4D37D   (caution / pending)
+  //   error   → RGB(227, 125, 120) · #E37D78   (critical / failed)
+  //
+  // Color theory rationale: the brand axis is teal (hue 180°). Putting
+  // success at hue 146° keeps it identifiably "green positive" while
+  // staying inside the same cromatic semicircle as teal — no jarring
+  // jump across the wheel. Coral (3°) and butter (43°) sit on the warm
+  // side, which is the natural habitat for "stop / caution" semantics.
+  //
+  // Why luminance 52% (over the candidate 59%): in our preprod side-
+  // by-side, the lighter green (#6FBF98) felt washed-out next to the
+  // warm coral/butter — the trio lost visual anchor. The slightly
+  // darker `#52B788` reads as "present, confident" against fleet-table
+  // chips and AuditTimeseriesChart bars without crossing into the
+  // heavy MUI-green territory of the original `#2E7D32` (luminance 33%).
+  //
+  // Why the success *Soft alpha is lower (0.16) than coral/butter:
+  // `#52B788` has higher saturation (38%) than the pastel coral/butter
+  // (which sit around 65–84% saturation but at much higher luminance),
+  // so a 16% tint already reads visibly on white. Bumping to 28% would
+  // make it muddy. The other two stay at 0.22/0.30 because their high
+  // luminance (68%/72%) needs more alpha to show up.
+  //
+  // Contrast caveat: text in the matching `*` color over `*Soft` bg is
+  // pleasantly soft but does NOT meet WCAG AA for body text. For chip
+  // labels we accept the brand intent ("filled tint stands out, not
+  // an outline"). For longer text use BRAND.dark over the *Soft bg
+  // instead of the alert hue.
   alert: {
-    error: "#C62828",
-    errorSoft: "rgba(198,40,40,0.08)",
-    warning: "#ED6C02",
-    warningSoft: "rgba(237,108,2,0.10)",
-    success: "#2E7D32",
-    successSoft: "rgba(46,125,50,0.10)",
+    error: "#E37D78",
+    errorSoft: "rgba(227,125,120,0.22)",
+    warning: "#F4D37D",
+    warningSoft: "rgba(244,211,125,0.30)",
+    success: "#52B788",
+    successSoft: "rgba(82,183,136,0.16)",
     info: "#5A9F9F",
     infoSoft: "rgba(90,159,159,0.12)"
   }

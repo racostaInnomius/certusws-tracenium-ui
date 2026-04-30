@@ -65,6 +65,19 @@ function extractPolicyContent(response) {
   return row; // already unwrapped
 }
 
+// Pull the policy_version out of the same envelope. Used as the
+// `expectedVersion` token for opt-locking on save (Phase 2.B).
+function extractPolicyVersion(response) {
+  if (!response || typeof response !== "object") return null;
+  const row = response?.policy ?? response;
+  if (!row || typeof row !== "object") return null;
+  return (
+    row.policy_version ??
+    row.policyVersion ??
+    null
+  );
+}
+
 // Build the new full policy_json to PUT, given the loaded original and
 // the user's desired plugin enablement. Preserves every key the loaded
 // policy had EXCEPT the ones we own (plugins, modules) and the
@@ -197,6 +210,13 @@ export default function PluginControl() {
   const [saving, setSaving] = React.useState(false);
   const [pushing, setPushing] = React.useState(false);
   const [loadedPolicy, setLoadedPolicy] = React.useState(null); // raw policy_json
+  // Track the version we loaded the policy at so we can send it back as
+  // the `If-Match` opt-lock token. If a Policies page user (or another
+  // operator) writes between our load and our save, the backend returns
+  // 409 STALE_POLICY and we silently reload + retry. Without this token
+  // we'd be in last-writer-wins mode and could clobber the OTHER page's
+  // edits with our stale view.
+  const [loadedVersion, setLoadedVersion] = React.useState(null);
   const [draftEnabled, setDraftEnabled] = React.useState(() => new Set());
   const [coverage, setCoverage] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -214,7 +234,9 @@ export default function PluginControl() {
         getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] })),
       ]);
       const policyJson = extractPolicyContent(policyRes) ?? {};
+      const version = extractPolicyVersion(policyRes);
       setLoadedPolicy(policyJson);
+      setLoadedVersion(version != null ? String(version) : null);
       setDraftEnabled(getEnabledPluginSet(policyJson));
       setCoverage(coverageRes || { total: 0, byPlugin: [] });
     } catch (e) {
@@ -270,14 +292,31 @@ export default function PluginControl() {
         .filter((p) => p.required || draftEnabled.has(p.key))
         .map((p) => p.key);
       const fullPolicy = buildPolicyForSave(loadedPolicy || {}, enabledArray);
-      await saveTenantPolicy(tenantId, fullPolicy);
+      await saveTenantPolicy(tenantId, fullPolicy, {
+        expectedVersion: loadedVersion,
+      });
       showSnack("Plugin enablement saved");
       // Reload so the loaded baseline matches what's now persisted
       // and `dirty` resets.
       await load();
     } catch (e) {
-      console.error("[plugin-control] save failed", e);
-      showSnack(`Save failed: ${e?.message || e}`, "error");
+      // 409 STALE_POLICY → someone else wrote between our load and our
+      // save (e.g. Policies page changed an interval). The Plugin
+      // Control draft only touched plugins, so reloading and silently
+      // re-applying would discard their config edit if the user clicks
+      // Save again without checking. Surface a non-blocking message
+      // and reload so the user can decide.
+      if (e?.status === 409) {
+        console.warn("[plugin-control] save rejected: stale policy", e?.body);
+        showSnack(
+          "Policy was modified by someone else. Reloaded — review your changes and save again.",
+          "warning"
+        );
+        await load();
+      } else {
+        console.error("[plugin-control] save failed", e);
+        showSnack(`Save failed: ${e?.message || e}`, "error");
+      }
     } finally {
       setSaving(false);
     }
