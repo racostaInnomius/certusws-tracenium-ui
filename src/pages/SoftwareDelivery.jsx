@@ -276,9 +276,23 @@ export default function SoftwareDelivery({ embedded = false }) {
       throw new Error("Missing downloadUrl");
     } catch (e) {
       console.error(e);
+      // Distinguish "the artifact for this format/arch isn't published"
+      // (404 invalid_request / binary_not_found) from generic transport
+      // failures. Without this, an operator clicking a stale row got a
+      // generic "Failed to resolve" toast and didn't know whether to
+      // retry or contact the team — and a previous code path could
+      // silently fall through to an empty .exe download.
+      const status = e?.status;
+      const errCode = e?.body?.error;
+      let message = "Failed to resolve download link";
+      if (status === 404 || errCode === "binary_not_found") {
+        message = `No published artifact for ${row.platform}/${row.arch}/${row.format} v${row.version}. The package row may be stale — disable it from the catalog.`;
+      } else if (status === 400 || errCode === "invalid_request") {
+        message = `Format ${row.format} is no longer supported on ${row.platform}. Disable this row from the catalog.`;
+      }
       setSnackbar({
         open: true,
-        message: "Failed to resolve download link",
+        message,
         severity: "error",
       });
     }

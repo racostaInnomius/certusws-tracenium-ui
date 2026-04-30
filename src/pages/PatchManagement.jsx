@@ -805,13 +805,30 @@ export default function PatchManagement() {
       minWidth: 140,
       renderCell: (params) => {
         const v = String(params.row.overallStatus || "unknown");
+        // Mirrors PmpOverallStatus in the agent
+        // (pmp-types.ts: 8 values + 'unknown' fallback). Adding a
+        // new agent status without listing it here means devices
+        // show up as "Unknown" in the table — they're not actually
+        // unknown, just unmapped. Color logic:
+        //   positive (green)  → healthy
+        //   teal              → in-flight states (installing, scan_pending)
+        //   caution (amber)   → updates available
+        //   critical (red)    → reboot pending or error
+        //   neutral grey      → idle / inventory_only / unknown
+        // `inventory_only` is intentionally neutral: the scan ran
+        // and found 0 pending patches — that's a calm "OK" state,
+        // not a victory call (we reserve "Healthy" for the explicit
+        // provider-reported healthy).
         const meta = {
-          healthy:           { label: "Healthy",          fg: ROLE.positive,  bg: ROLE.positiveSoft },
-          updates_available: { label: "Updates avail.",   fg: ROLE.caution,   bg: ROLE.cautionSoft },
-          installing:        { label: "Installing",       fg: BRAND.tealText, bg: BRAND.tealSoft },
-          reboot_required:   { label: "Reboot pending",   fg: ROLE.critical,  bg: ROLE.criticalSoft },
-          error:             { label: "Error",            fg: ROLE.critical,  bg: ROLE.criticalSoft },
-          unknown:           { label: "Unknown",          fg: BRAND.gray,     bg: BRAND.surfaceMuted }
+          idle:              { label: "Idle",              fg: BRAND.gray,     bg: BRAND.surfaceMuted },
+          inventory_only:    { label: "Inventory only",    fg: BRAND.dark,     bg: BRAND.darkSoft     },
+          scan_pending:      { label: "Scan pending",      fg: BRAND.tealText, bg: BRAND.tealSoft     },
+          updates_available: { label: "Updates avail.",    fg: ROLE.caution,   bg: ROLE.cautionSoft   },
+          installing:        { label: "Installing",        fg: BRAND.tealText, bg: BRAND.tealSoft     },
+          reboot_required:   { label: "Reboot pending",    fg: ROLE.critical,  bg: ROLE.criticalSoft  },
+          healthy:           { label: "Healthy",           fg: ROLE.positive,  bg: ROLE.positiveSoft  },
+          error:             { label: "Error",             fg: ROLE.critical,  bg: ROLE.criticalSoft  },
+          unknown:           { label: "Unknown",           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
         };
         const m = meta[v] || meta.unknown;
         return (

@@ -757,13 +757,22 @@ export default function SecurityCompliance() {
         <TableContainer>
           <Table size="small">
             <TableHead>
+              {/* Pass / Applicable only carries meaningful data when a
+                  framework filter is active — frameworkScore.passed and
+                  .applicable are only populated under that scope. With
+                  no framework selected the column rendered "—" for every
+                  row and was just visual noise. We hide it entirely in
+                  that case so the table stays focused on the columns
+                  that actually have signal. */}
               <TableRow>
                 <TableCell sx={{ fontWeight: 700 }}>Host</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Platform</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Agent</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Score</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>Pass / Applicable</TableCell>
+                {selectedFramework ? (
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Pass / Applicable</TableCell>
+                ) : null}
                 {/* Patch-level chip: count + days-since-latest, color coded.
                     Intentionally sits between pass/applicable and last report
                     so operators can scan "how many passing checks vs how
@@ -775,7 +784,7 @@ export default function SecurityCompliance() {
             <TableBody>
               {filteredDevices.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ color: BRAND.gray, py: 3 }}>
+                  <TableCell colSpan={selectedFramework ? 8 : 7} align="center" sx={{ color: BRAND.gray, py: 3 }}>
                     {devices.length === 0
                       ? "No devices have reported compliance under this framework."
                       : "No devices match the applied filters. Clear chips above to see all."}
@@ -814,9 +823,11 @@ export default function SecurityCompliance() {
                       <TableCell align="right">
                         <ScoreBar value={score ?? 0} />
                       </TableCell>
-                      <TableCell align="right">
-                        {useFw ? `${passed} / ${applicable}` : "—"}
-                      </TableCell>
+                      {selectedFramework ? (
+                        <TableCell align="right">
+                          {useFw ? `${passed} / ${applicable}` : "—"}
+                        </TableCell>
+                      ) : null}
                       <TableCell align="right">
                         <PatchChip patchSummary={d.patchSummary} />
                       </TableCell>

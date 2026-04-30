@@ -14,16 +14,47 @@ function withTimeout(ms = DEFAULT_TIMEOUT_MS) {
   };
 }
 
+/**
+ * Wrap an HTTP failure in an Error that carries enough metadata for
+ * callers to branch without parsing the message string.
+ *
+ * Why: until Phase 2.B we threw `new Error("HTTP 409: <text>")` and
+ * callers had to regex-match the message — fragile and inverted the
+ * structure that was already in the response. The optimistic-locking
+ * flow needs to distinguish 409 (stale policy → reload) from 400
+ * (validation → show field errors) from 500 (transient → retry), so
+ * we attach `status` and the parsed `body` (when JSON) to the Error
+ * instance.
+ *
+ * Backward compat: `err.message` is unchanged ("HTTP <code>: <text>"),
+ * so existing callers that only read `.message` keep working.
+ */
 async function handleResponse(res) {
+  if (res.ok) {
+    return res.json();
+  }
+
+  const text = await res.text().catch(() => "");
+  let body = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+  }
+
   if (res.status === 401) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`UNAUTHENTICATED:${text}`);
+    const err = new Error(`UNAUTHENTICATED:${text}`);
+    err.status = 401;
+    err.body = body;
+    throw err;
   }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text}`);
-  }
-  return res.json();
+
+  const err = new Error(`HTTP ${res.status}: ${text}`);
+  err.status = res.status;
+  err.body = body;
+  throw err;
 }
 
 function toHumanError(err) {
@@ -67,13 +98,17 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
   }
 }
 
-export async function httpPutJson(url, body, { timeoutMs } = {}) {
+export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PUT",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      // Spread caller-provided headers AFTER Content-Type so they can't
+      // accidentally override it. Used today for `If-Match` (Phase 2.B
+      // optimistic locking on policy writes); future call sites can add
+      // more without touching the signature.
+      headers: { "Content-Type": "application/json", ...(headers || {}) },
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
