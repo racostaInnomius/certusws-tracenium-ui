@@ -1,5 +1,6 @@
 import * as React from "react";
 import Grid from "@mui/material/Grid";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
   Box,
   Paper,
@@ -604,20 +605,12 @@ export default function SoftwareDelivery({ embedded = false }) {
         onConfirm={handleDelete}
       />
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={3500}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={snackbar.severity}
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-          variant="filled"
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }

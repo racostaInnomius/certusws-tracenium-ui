@@ -50,6 +50,7 @@ import {
 
 import { BRAND } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 
 // Same envelope-unwrap pattern Policies.jsx uses — backend wraps the
@@ -396,21 +397,12 @@ export default function PluginControl() {
         </Stack>
       </SectionPaper>
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={5000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-          sx={{ width: "100%" }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }

@@ -21,6 +21,7 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
@@ -37,6 +38,7 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import {
   deleteDevicePolicy,
   getDevicePolicy,
@@ -714,6 +716,7 @@ export default function Policies() {
   const theme = useTheme();
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
+  const confirm = useConfirm();
 
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
@@ -894,11 +897,16 @@ export default function Policies() {
 
   const handlePushTenant = async () => {
     if (!canManage || !tenantId) return;
-    if (!window.confirm(
-      "Push the current tenant policy to every device?\n\n" +
-      "This will reset any pre-existing device-level overrides for this tenant. " +
-      "Devices with custom policies will receive the tenant policy instead."
-    )) return;
+    const ok = await confirm({
+      title: "Push tenant policy?",
+      body:
+        "This will broadcast the current tenant policy to every device.\n\n" +
+        "Any pre-existing device-level overrides will be reset — devices with " +
+        "custom policies will receive the tenant policy instead.",
+      confirmText: "Push to all devices",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       setTenantPushing(true);
       const res = await pushTenantPolicy(tenantId);
@@ -1045,7 +1053,13 @@ export default function Policies() {
 
   const handleDeleteDevice = async () => {
     if (!canManage || !selectedDeviceId) return;
-    if (!window.confirm("Remove the override? Device will fall back to tenant policy.")) return;
+    const ok = await confirm({
+      title: "Remove device override?",
+      body: "The device will fall back to the tenant-level policy on its next sync.",
+      confirmText: "Remove override",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       setDeviceDeleting(true);
       await deleteDevicePolicy(selectedDeviceId);
@@ -1398,19 +1412,12 @@ export default function Policies() {
         </Box>
       </SectionPaper>
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }
