@@ -27,58 +27,25 @@
 import * as React from "react";
 import {
   Box,
-  Tabs,
-  Tab,
   Stack,
   Typography,
   Paper,
+  ButtonBase,
 } from "@mui/material";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 
 import PageHeader from "../components/common/PageHeader";
-import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
 
 import TokensAdministrator from "./TokensAdministrator";
 import SoftwareDelivery from "./SoftwareDelivery";
 
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 600,
-  minHeight: 62,
-  letterSpacing: 0.2,
-};
-
-function a11yProps(index) {
-  return {
-    id: `enrollment-tab-${index}`,
-    "aria-controls": `enrollment-tabpanel-${index}`,
-  };
-}
-
-function TabPanel({ children, value, index, ...other }) {
-  return (
-    <Box
-      role="tabpanel"
-      hidden={value !== index}
-      id={`enrollment-tabpanel-${index}`}
-      aria-labelledby={`enrollment-tab-${index}`}
-      sx={{ pt: 2 }}
-      {...other}
-    >
-      {value === index ? children : null}
-    </Box>
-  );
-}
-
-// Compact horizontal "Step 1 → Step 2" guide that replaces a long-form
-// "How to enroll a device" doc. Two cards because there are exactly
-// two prerequisites; numbered chips keep the order obvious. Uses
-// neutral surface tones — we don't want the guide to compete with the
-// data tables below.
-function EnrollmentSteps() {
+// Compact horizontal "Step 1 → Step 2" guide. The cards now replace
+// the old tabs: clicking each step switches the content below.
+function EnrollmentSteps({ activeTab, onSelectTab }) {
   return (
     <Paper
       elevation={0}
@@ -103,77 +70,136 @@ function EnrollmentSteps() {
         alignItems="stretch"
       >
         <StepCard
+          active={activeTab === 0}
           number={1}
           icon={<VpnKeyOutlinedIcon fontSize="small" />}
           title="Generate an enrollment token"
-          body="Use the Enrollment Tokens tab below. The token is a one-time secret — copy it as soon as it's shown."
+          body="Create a one-time enrollment token. Copy it as soon as it is shown because it will be required during agent installation."
+          actionLabel="Open Enrollment Tokens"
+          onClick={() => onSelectTab(0)}
         />
+
         <StepCard
+          active={activeTab === 1}
           number={2}
           icon={<DownloadOutlinedIcon fontSize="small" />}
           title="Download the agent installer"
-          body="Pick the platform / architecture in the Agent Downloads tab. Run the installer on the target device and paste the token when prompted."
+          body="Pick the platform and architecture that matches the target device, then run the installer and paste the token when prompted."
+          actionLabel="Open Agent Downloads"
+          onClick={() => onSelectTab(1)}
         />
       </Stack>
     </Paper>
   );
 }
 
-function StepCard({ number, icon, title, body }) {
+function StepCard({ active, number, icon, title, body, actionLabel, onClick }) {
   return (
-    <Paper
-      elevation={0}
+    <ButtonBase
+      onClick={onClick}
       sx={{
         flex: 1,
-        p: 1.5,
+        textAlign: "left",
         borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        bgcolor: "#fff",
-        display: "flex",
-        gap: 1.25,
-        alignItems: "flex-start",
+        display: "block",
       }}
     >
-      <Box
+      <Paper
+        elevation={0}
         sx={{
-          width: 28,
-          height: 28,
-          borderRadius: "50%",
-          bgcolor: BRAND.teal,
-          color: "#fff",
-          fontSize: 13,
-          fontWeight: 700,
+          height: "100%",
+          p: 1.5,
+          borderRadius: 2,
+          border: active
+            ? `1px solid ${BRAND.teal}`
+            : `1px solid ${BRAND.border}`,
+          bgcolor: "#fff",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          mt: 0.25,
+          gap: 1.25,
+          alignItems: "flex-start",
+          boxShadow: active
+            ? "0 14px 30px rgba(27,166,166,0.18)"
+            : "none",
+          transition:
+            "border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease",
+          "&:hover": {
+            borderColor: BRAND.teal,
+            boxShadow: "0 14px 30px rgba(59,64,77,0.10)",
+            transform: "translateY(-1px)",
+          },
         }}
       >
-        {number}
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
-          <Box sx={{ color: BRAND.teal, display: "flex" }}>{icon}</Box>
+        <Box
+          sx={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            bgcolor: active ? BRAND.teal : BRAND.tealSoftStrong,
+            color: active ? "#fff" : BRAND.tealText,
+            fontSize: 13,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            mt: 0.25,
+          }}
+        >
+          {number}
+        </Box>
+
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ mb: 0.25 }}>
+            <Box sx={{ color: BRAND.teal, display: "flex" }}>{icon}</Box>
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: 800, color: BRAND.dark }}
+            >
+              {title}
+            </Typography>
+          </Stack>
+
           <Typography
-            variant="body2"
-            sx={{ fontWeight: 700, color: BRAND.dark }}
+            variant="caption"
+            sx={{
+              color: BRAND.gray,
+              display: "block",
+              lineHeight: 1.7,
+              mb: 1.25,
+            }}
           >
-            {title}
+            {body}
           </Typography>
-        </Stack>
-        <Typography variant="caption" sx={{ color: BRAND.gray }}>
-          {body}
-        </Typography>
-      </Box>
-    </Paper>
+
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            <Typography
+              variant="caption"
+              sx={{
+                color: active ? BRAND.tealText : BRAND.dark,
+                fontWeight: 800,
+              }}
+            >
+              {actionLabel}
+            </Typography>
+            <ArrowForwardRoundedIcon
+              sx={{
+                fontSize: 16,
+                color: active ? BRAND.tealText : BRAND.gray,
+              }}
+            />
+          </Stack>
+        </Box>
+      </Paper>
+    </ButtonBase>
   );
+}
+
+function TabPanel({ children, value, index }) {
+  return value === index ? <Box sx={{ pt: 0 }}>{children}</Box> : null;
 }
 
 export default function DeviceEnrollment() {
   const [activeTab, setActiveTab] = React.useState(0);
-
-  const handleChange = (_e, value) => setActiveTab(value);
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -183,47 +209,7 @@ export default function DeviceEnrollment() {
         icon={<InstallDesktopOutlinedIcon />}
       />
 
-      <EnrollmentSteps />
-
-      <SectionPaper
-        variant="panel"
-        sx={{
-          mb: 2,
-          p: 0,
-          overflow: "hidden",
-        }}
-      >
-        <Tabs
-          value={activeTab}
-          onChange={handleChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal,
-            },
-          }}
-        >
-          <Tab
-            icon={<VpnKeyOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Enrollment Tokens"
-            {...a11yProps(0)}
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<DownloadOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Agent Downloads"
-            {...a11yProps(1)}
-            sx={TAB_SX}
-          />
-        </Tabs>
-      </SectionPaper>
+      <EnrollmentSteps activeTab={activeTab} onSelectTab={setActiveTab} />
 
       <TabPanel value={activeTab} index={0}>
         <TokensAdministrator embedded />
