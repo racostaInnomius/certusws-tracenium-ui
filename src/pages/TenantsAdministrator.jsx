@@ -37,6 +37,7 @@ import { useAuthContext } from "../auth/AuthContext";
 
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 
 // Fase 2 — SummaryCard aligned with the Tokens page version. Same
@@ -1103,20 +1104,12 @@ export default function TenantsAdministrator({ mode = "global" }) {
         onConfirm={handleDeleteMember}
       />
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={3500}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={snackbar.severity}
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-          variant="filled"
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }

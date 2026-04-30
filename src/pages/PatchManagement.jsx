@@ -42,6 +42,7 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import { BRAND, ROLE, DATAGRID_SX } from "../theme/brand";
 import { DataGrid } from "@mui/x-data-grid";
 import PageHeader from "../components/common/PageHeader";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -1300,20 +1301,12 @@ export default function PatchManagement() {
         ) : null}
       </Drawer>
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={5000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
 
       {/* Bulk-install confirm dialog. Two states:
             * loading: dry-run is in flight (spinner)

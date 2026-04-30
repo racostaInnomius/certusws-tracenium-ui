@@ -43,6 +43,8 @@ import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useConfirm } from "../components/common/ConfirmDialog";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
   cancelJob,
   createDeviceJob,
@@ -390,6 +392,7 @@ export default function Jobs() {
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
+  const confirm = useConfirm();
 
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
@@ -958,9 +961,11 @@ export default function Jobs() {
       targetMode === "tenant"
         ? `${connectedDeviceIds.length} connected devices`
         : `${selectedDevice?.hostname || selectedDeviceId} (${selectedDeviceId})${selectedDevice?.connected ? "" : " [offline]"}`;
-    const confirmed = window.confirm(
-      `Dispatch ${jobType} to ${dispatchDescription}?`
-    );
+    const confirmed = await confirm({
+      title: `Dispatch ${jobType}?`,
+      body: `The job will be queued for ${dispatchDescription}.`,
+      confirmText: "Dispatch",
+    });
     if (!confirmed) return;
 
     try {
@@ -1006,7 +1011,11 @@ export default function Jobs() {
     if (!selectedJobId) return;
     if (!canRetrySelectedJob) return;
 
-    const confirmed = window.confirm(`Retry job ${selectedJobId}?`);
+    const confirmed = await confirm({
+      title: "Retry this job?",
+      body: `Job ${selectedJobId} will be moved back to pending and re-dispatched on the next scheduler tick.`,
+      confirmText: "Retry",
+    });
     if (!confirmed) return;
 
     try {
@@ -1035,7 +1044,13 @@ export default function Jobs() {
     if (!selectedJobId) return;
     if (!canCancelSelectedJob) return;
 
-    const confirmed = window.confirm(`Cancel job ${selectedJobId}?`);
+    const confirmed = await confirm({
+      title: "Cancel this job?",
+      body: `Job ${selectedJobId} will be marked cancelled and won't be dispatched. In-flight executions on the device side may still complete.`,
+      confirmText: "Cancel job",
+      cancelText: "Keep job",
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -1743,19 +1758,12 @@ export default function Jobs() {
         </Grid>
       </Grid>
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }

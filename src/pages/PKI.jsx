@@ -19,6 +19,8 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import BrandSnackbar from "../components/common/BrandSnackbar";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -190,6 +192,7 @@ function DetailRow({ label, value, mono = false }) {
 }
 
 export default function PKI() {
+  const confirm = useConfirm();
   const initialParamsRef = React.useRef({
     days: getSearchParam("pkiDays", "30"),
     deviceSearch: getSearchParam("pkiDeviceSearch", ""),
@@ -375,9 +378,12 @@ export default function PKI() {
       showMessage("Revocation reason is required", "error");
       return;
     }
-    const confirmed = window.confirm(
-      `Revoke certificate ${shortFp(selectedCertificate.fingerprint_sha256)}?`
-    );
+    const confirmed = await confirm({
+      title: "Revoke this certificate?",
+      body: `Certificate ${shortFp(selectedCertificate.fingerprint_sha256)} will be added to the CRL and the device will be disconnected from the gRPC stream. This action cannot be undone.\n\nReason: ${normalizedReason}`,
+      confirmText: "Revoke certificate",
+      danger: true,
+    });
     if (!confirmed) return;
 
     try {
@@ -396,7 +402,7 @@ export default function PKI() {
     } finally {
       setRevokeLoading(false);
     }
-  }, [loadCertificateDetail, loadDevices, loadOverview, revokeReason, selectedCertificate, showMessage]);
+  }, [confirm, loadCertificateDetail, loadDevices, loadOverview, revokeReason, selectedCertificate, showMessage]);
 
   const handleRefresh = React.useCallback(async () => {
     try {
@@ -846,19 +852,12 @@ export default function PKI() {
         </Box>
       </SectionPaper>
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }

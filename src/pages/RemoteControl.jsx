@@ -23,6 +23,7 @@ import {
   Typography
 } from "@mui/material";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import FlashOnOutlinedIcon from "@mui/icons-material/FlashOnOutlined";
@@ -271,21 +272,12 @@ export default function RemoteControl() {
       {/* Row 3 — Session history */}
       <SessionHistoryTable sessions={sessions} total={sessionTotal} loading={loading} />
 
-      <Snackbar
+      <BrandSnackbar
         open={snackbar.open}
-        autoHideDuration={5000}
+        severity={snackbar.severity}
+        message={snackbar.message}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        <Alert
-          severity={snackbar.severity}
-          variant="filled"
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-          sx={{ maxWidth: 420 }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 }
