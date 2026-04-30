@@ -326,14 +326,14 @@ export default function HardwareInventory() {
     <Box sx={{ px: 0, py: 0 }}>
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
             <SummaryCard
               title="Devices"
               value={loadingSummary ? "..." : Number(summary?.devices || 0)}
             />
           </Grid>
 
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
             <SummaryCard
               title="Avg Memory"
               value={loadingSummary ? "..." : `${Number(summary?.avgMemoryGb || 0).toFixed(1)} GB`}
@@ -341,32 +341,6 @@ export default function HardwareInventory() {
             />
           </Grid>
 
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <SummaryCard
-              title="Avg Disk Usage"
-              value={loadingSummary ? "..." : `${Number(summary?.avgDiskUsagePct || 0).toFixed(1)}%`}
-              accent="#b45309"
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-            <SummaryCard
-              title="Avg Battery"
-              value={
-                loadingSummary
-                  ? "..."
-                  : summary?.avgBatteryPct == null
-                  ? "N/A"
-                  : `${Number(summary?.avgBatteryPct || 0).toFixed(1)}%`
-              }
-              accent={BRAND.alert.error}
-              subtitle={
-                loadingSummary
-                  ? ""
-                  : `${Number(summary?.devicesWithBattery || 0)} devices with battery data`
-              }
-            />
-          </Grid>
         </Grid>
       </Box>
 
