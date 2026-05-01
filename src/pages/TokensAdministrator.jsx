@@ -10,13 +10,14 @@ import {
   Chip,
   Snackbar,
   Alert,
+  Stack,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
-import { listTokens, createToken, revokeToken } from "../api/tokens";
+import { listTokens, getTokenQuota, createToken, revokeToken } from "../api/tokens";
 import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
@@ -32,7 +33,7 @@ import SectionPaper from "../components/common/SectionPaper";
 // single accent+tint per card; instead of retrofitting that contract
 // we align the Paper shell to the card tokens and let the caller
 // pick the semantic color from BRAND/ROLE.
-function SummaryCard({ title, value, accent = BRAND.teal }) {
+function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
     <Paper
       elevation={0}
@@ -51,16 +52,74 @@ function SummaryCard({ title, value, accent = BRAND.teal }) {
         {title}
       </Typography>
 
-      <Typography
-        sx={{
-          fontSize: 28,
-          fontWeight: 800,
-          color: accent,
-          lineHeight: 1.1,
-        }}
-      >
-        {value}
-      </Typography>
+      <Box>
+        <Typography
+          sx={{
+            fontSize: 28,
+            fontWeight: 800,
+            color: accent,
+            lineHeight: 1.1,
+          }}
+        >
+          {value}
+        </Typography>
+        {subtitle ? (
+          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
+            {subtitle}
+          </Typography>
+        ) : null}
+      </Box>
+    </Paper>
+  );
+}
+
+function MetricGroup({ title, subtitle, children, accent = BRAND.teal }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: { xs: 1.5, sm: 2 },
+        height: "100%",
+        width: "100%",
+        borderRadius: 3,
+        border: `1px solid ${BRAND.border}`,
+        bgcolor: BRAND.surface,
+        boxShadow: "0 12px 30px rgba(59,64,77,0.08)",
+        position: "relative",
+        overflow: "hidden",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(135deg, ${BRAND.tealSoft} 0%, rgba(255,255,255,0) 42%)`,
+          pointerEvents: "none",
+        },
+      }}
+    >
+      <Box sx={{ position: "relative", mb: 1.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box
+            sx={{
+              width: 8,
+              height: 26,
+              borderRadius: 999,
+              bgcolor: accent,
+              boxShadow: `0 0 0 4px ${BRAND.tealSoft}`,
+              flexShrink: 0,
+            }}
+          />
+
+          <Typography sx={{ fontSize: 15, fontWeight: 900, color: BRAND.dark }}>
+            {title}
+          </Typography>
+        </Box>
+
+        <Typography sx={{ mt: 0.5, fontSize: 12, color: "text.secondary", pl: 2.25 }}>
+          {subtitle}
+        </Typography>
+      </Box>
+
+      <Box sx={{ position: "relative" }}>{children}</Box>
     </Paper>
   );
 }
@@ -131,6 +190,8 @@ export default function TokensAdministrator({ embedded = false } = {}) {
 
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [quota, setQuota] = React.useState(null);
+  const [quotaLoading, setQuotaLoading] = React.useState(true);
 
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -148,6 +209,24 @@ export default function TokensAdministrator({ embedded = false } = {}) {
     message: "",
     severity: "success",
   });
+
+  const loadQuota = async () => {
+    try {
+      setQuotaLoading(true);
+      const data = await getTokenQuota();
+      setQuota(data || null);
+    } catch (e) {
+      console.error(e);
+      setQuota(null);
+      setSnackbar({
+        open: true,
+        message: "Failed to load token quota",
+        severity: "error",
+      });
+    } finally {
+      setQuotaLoading(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -167,8 +246,12 @@ export default function TokensAdministrator({ embedded = false } = {}) {
     }
   };
 
+  const refreshAll = async () => {
+    await Promise.all([loadData(), loadQuota()]);
+  };
+
   React.useEffect(() => {
-    loadData();
+    refreshAll();
   }, []);
 
 const filteredRows = React.useMemo(() => {
@@ -203,6 +286,20 @@ const filteredRows = React.useMemo(() => {
     return { total, active, expired, revoked};
   }, [rows]);
 
+  const quotaSummary = React.useMemo(() => {
+    const maxDevices = Number(quota?.maxDevices ?? 0);
+    const used = Number(quota?.used ?? 0);
+    const remaining = Number(quota?.remaining ?? Math.max(maxDevices - used, 0));
+
+    return {
+      maxDevices: Number.isFinite(maxDevices) ? maxDevices : 0,
+      used: Number.isFinite(used) ? used : 0,
+      remaining: Number.isFinite(remaining) ? Math.max(remaining, 0) : 0,
+    };
+  }, [quota]);
+
+  const canCreateToken = quotaLoading || quotaSummary.remaining > 0;
+
   const handleCreateToken = async (payload) => {
     try {
       setSubmitting(true);
@@ -212,7 +309,7 @@ const filteredRows = React.useMemo(() => {
       setCreateOpen(false);
       setCreatedOpen(true);
 
-      await loadData();
+      await refreshAll();
 
       setSnackbar({
         open: true,
@@ -241,7 +338,7 @@ const filteredRows = React.useMemo(() => {
       setRevokeOpen(false);
       setSelectedToken(null);
 
-      await loadData();
+      await refreshAll();
 
       setSnackbar({
         open: true,
@@ -368,6 +465,7 @@ const filteredRows = React.useMemo(() => {
             <Button
               variant="contained"
               onClick={() => setCreateOpen(true)}
+              disabled={!canCreateToken}
               fullWidth={isSmDown}
               sx={{
                 bgcolor: BRAND.teal,
@@ -389,16 +487,17 @@ const filteredRows = React.useMemo(() => {
           on this view. We render a right-aligned button row so the
           embedded layout doesn't lose the primary CTA. */}
       {embedded && (
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "flex-end",
-            mb: 1.5,
-          }}
-        >
+          <Stack
+            alignItems="center"
+            sx={{
+              mb: 1.5,
+              width: "100%",
+            }}
+          >
           <Button
             variant="contained"
             onClick={() => setCreateOpen(true)}
+            disabled={!canCreateToken}
             fullWidth={isSmDown}
             sx={{
               bgcolor: BRAND.teal,
@@ -410,40 +509,89 @@ const filteredRows = React.useMemo(() => {
           >
             + Create token
           </Button>
-        </Box>
+        </Stack>
       )}
 
       {/* KPI strip — semantic colors come from BRAND/ROLE now.
           "Active" uses the success green (not a custom teal-dark),
-          "Expired" the caution amber, "Revoked" the critical red. */}
+          "Expired" the caution amber, "Revoked" the critical red.
+          Device quota cards are tenant-level capacity metrics used to
+          safely cap the Max Uses value when creating a new enrollment token. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Total Tokens" value={summary.total} />
+          <Grid size={{ xs: 12, xl: 7 }} sx={{ display: "flex" }}>
+            <MetricGroup
+              title="Token lifecycle"
+              subtitle="Operational status of enrollment tokens in this tenant"
+              accent={BRAND.teal}
+            >
+              <Grid container spacing={1.5} alignItems="stretch">
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                  <SummaryCard title="Total Tokens" value={summary.total} />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                  <SummaryCard
+                    title="Active"
+                    value={summary.active}
+                    accent={BRAND.alert.success}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                  <SummaryCard
+                    title="Expired"
+                    value={summary.expired}
+                    accent={BRAND.alert.warning}
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                  <SummaryCard
+                    title="Revoked"
+                    value={summary.revoked}
+                    accent={BRAND.alert.error}
+                  />
+                </Grid>
+              </Grid>
+            </MetricGroup>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Active"
-              value={summary.active}
-              accent={BRAND.alert.success}
-            />
-          </Grid>
+          <Grid size={{ xs: 12, xl: 5 }} sx={{ display: "flex" }}>
+            <MetricGroup
+              title="Tenant capacity"
+              subtitle="Device allocation limit based on enrollment token usage"
+              accent={quotaSummary.remaining > 0 ? BRAND.alert.success : BRAND.alert.error}
+            >
+              <Grid container spacing={1.5} alignItems="stretch">
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <SummaryCard
+                    title="Max Devices"
+                    value={quotaLoading ? "..." : quotaSummary.maxDevices}
+                    accent={BRAND.dark}
+                    subtitle="Tenant limit"
+                  />
+                </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Expired"
-              value={summary.expired}
-              accent={BRAND.alert.warning}
-            />
-          </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <SummaryCard
+                    title="Used"
+                    value={quotaLoading ? "..." : quotaSummary.used}
+                    accent={BRAND.tealText}
+                    subtitle="Allocated uses"
+                  />
+                </Grid>
 
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Revoked"
-              value={summary.revoked}
-              accent={BRAND.alert.error}
-            />
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <SummaryCard
+                    title="Remaining"
+                    value={quotaLoading ? "..." : quotaSummary.remaining}
+                    accent={quotaSummary.remaining > 0 ? BRAND.alert.success : BRAND.alert.error}
+                    subtitle="Available"
+                  />
+                </Grid>
+              </Grid>
+            </MetricGroup>
           </Grid>
         </Grid>
       </Box>
@@ -488,7 +636,7 @@ const filteredRows = React.useMemo(() => {
           </TextField>
 
           <Button
-            onClick={loadData}
+            onClick={refreshAll}
             variant="outlined"
             sx={{
               width: { xs: "100%", sm: "auto" },
@@ -541,6 +689,7 @@ const filteredRows = React.useMemo(() => {
       <CreateTokenDialog
         open={createOpen}
         submitting={submitting}
+        quota={quotaSummary}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreateToken}
       />
