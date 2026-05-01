@@ -6,7 +6,8 @@ import {
   Typography,
 } from "@mui/material";
 
-import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
@@ -14,6 +15,7 @@ import AssetsDashboard from "./AssetsDashboard";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
+import AssetGroups from "./AssetGroups";
 
 // Note: the "Agent Downloads" tab moved to its own top-level page
 // (Device Enrollment) in tandem with the enrollment-token surface.
@@ -160,11 +162,25 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             },
           }}
         >
+          {/* Tab order is intentional: Dashboard (overview) → Asset
+              Groups (organizational layer over the fleet) → the two
+              inventory drilldowns. The Dashboard label replaced the
+              previous "Asset Management" tab because the page itself
+              is already named "Asset Management" — the duplicated label
+              read as redundant in the tab bar. */}
           <Tab
-            icon={<Inventory2OutlinedIcon fontSize="small" />}
+            icon={<DashboardOutlinedIcon fontSize="small" />}
             iconPosition="start"
-            label="Asset Management"
+            label="Dashboard"
             {...a11yProps(0)}
+            sx={TAB_SX}
+          />
+
+          <Tab
+            icon={<GroupWorkOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Asset Groups"
+            {...a11yProps(1)}
             sx={TAB_SX}
           />
 
@@ -172,7 +188,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             icon={<AppsOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Software Inventory"
-            {...a11yProps(1)}
+            {...a11yProps(2)}
             sx={TAB_SX}
           />
 
@@ -180,7 +196,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
             icon={<MemoryOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Hardware Inventory"
-            {...a11yProps(2)}
+            {...a11yProps(3)}
             sx={TAB_SX}
           />
         </Tabs>
@@ -194,10 +210,14 @@ export default function Assets({ onAssetsEmptyStateChange }) {
       </TabPanel>
 
       <TabPanel value={activeTab} index={1}>
-        <SoftwareInventory />
+        <AssetGroups />
       </TabPanel>
 
       <TabPanel value={activeTab} index={2}>
+        <SoftwareInventory />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={3}>
         <HardwareInventory />
       </TabPanel>
     </Box>
