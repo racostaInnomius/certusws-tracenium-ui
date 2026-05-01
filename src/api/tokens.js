@@ -5,6 +5,10 @@ export async function listTokens() {
   return httpGetJson("/api/v1/security/enroll/tokens");
 }
 
+export async function getTokenQuota() {
+  return httpGetJson("/api/v1/security/enroll/tokens/quota");
+}
+
 export async function createToken(payload) {
   const res = await fetch(`${API_BASE}/api/v1/security/enroll/tokens`, {
     method: "POST",
