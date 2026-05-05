@@ -9,7 +9,6 @@ import {
   Button,
   Snackbar,
   Alert,
-  Tooltip,
   Switch,
   FormControlLabel,
   Chip,
@@ -28,6 +27,7 @@ import {
 } from "../api/inventoryDashboard";
 
 import { BRAND } from "../theme/brand";
+import CompositionBars from "../components/common/CompositionBars";
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
@@ -115,87 +115,6 @@ function SectionCard({ title, children }) {
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</Box>
     </Paper>
-  );
-}
-
-function RankedBars({ items, valueFormatter = (v) => String(v), color = BRAND.teal }) {
-  const max = Math.max(...items.map((i) => Number(i.value || 0)), 0);
-
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gap: 1.25,
-        alignContent: "start",
-        minHeight: 180,
-        maxHeight: 260,
-        overflowY: "auto",
-        pr: 0.5,
-      }}
-    >
-      {items.length === 0 ? (
-        <Typography color="text.secondary">No data available.</Typography>
-      ) : (
-        items.map((item, index) => (
-          <Box
-            key={`${item.label || item.agentId || "unknown"}-${item.value}-${index}`}
-            sx={{ minWidth: 0 }}
-          >
-            <Box
-              sx={{
-                mb: 0.5,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 1.5,
-                minWidth: 0,
-              }}
-            >
-              <Tooltip title={item.agentId || item.label || ""} arrow>
-                <Typography
-                  sx={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: BRAND.dark,
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label || item.agentId || "Unknown"}
-                </Typography>
-              </Tooltip>
-
-              <Typography sx={{ fontSize: 13, color: "text.secondary", flexShrink: 0 }}>
-                {valueFormatter(Number(item.value || 0))}
-              </Typography>
-            </Box>
-
-            <Box
-              sx={{
-                height: 10,
-                width: "100%",
-                borderRadius: 999,
-                bgcolor: "rgba(15, 23, 42, 0.08)",
-                overflow: "hidden",
-              }}
-            >
-              <Box
-                sx={{
-                  width: `${max > 0 ? (Number(item.value || 0) / max) * 100 : 0}%`,
-                  maxWidth: "100%",
-                  height: "100%",
-                  borderRadius: 999,
-                  bgcolor: color,
-                }}
-              />
-            </Box>
-          </Box>
-        ))
-      )}
-    </Box>
   );
 }
 
@@ -639,28 +558,68 @@ export default function SoftwareInventory() {
 
       <Box sx={{ mb: 3 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
-            <SectionCard title="Top Installed Apps">
-              <RankedBars items={rankings?.topInstalledApps || []} color={BRAND.teal} />
-            </SectionCard>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top installed apps"
+                items={(rankings?.topInstalledApps || []).map((item) => ({
+                  ...item,
+                  color: BRAND.teal,
+                }))}
+                totalLabel="installs"
+                emptyLabel="No installed apps data"
+                minHeight={260}
+                maxItems={6}
+              />
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
-            <SectionCard title="Top Publishers">
-              <RankedBars items={rankings?.topPublishers || []} color={BRAND.tealText} />
-            </SectionCard>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top publishers"
+                items={(rankings?.topPublishers || []).map((item) => ({
+                  ...item,
+                  color: BRAND.teal,
+                }))}
+                totalLabel="apps"
+                emptyLabel="No publisher data"
+                minHeight={260}
+                maxItems={6}
+              />
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
-            <SectionCard title="Top Sources">
-              <RankedBars items={rankings?.topSources || []} color="#4f46e5" />
-            </SectionCard>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top sources"
+                items={(rankings?.topSources || []).map((item) => ({
+                  ...item,
+                  color: BRAND.dark,
+                }))}
+                totalLabel="apps"
+                emptyLabel="No source data"
+                minHeight={260}
+                maxItems={6}
+              />
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 6, xl: 3 }} sx={{ display: "flex" }}>
-            <SectionCard title="Apps per Device">
-              <RankedBars items={rankings?.appsPerDevice || []} color={BRAND.alert.error} />
-            </SectionCard>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Apps per device"
+                items={(rankings?.appsPerDevice || []).map((item) => ({
+                  ...item,
+                  color: BRAND.alert.error,
+                }))}
+                totalLabel="apps"
+                emptyLabel="No device app data"
+                minHeight={260}
+                maxItems={6}
+              />
+            </Box>
           </Grid>
         </Grid>
       </Box>

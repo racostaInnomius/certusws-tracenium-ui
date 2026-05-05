@@ -20,6 +20,7 @@ import {
 } from "../api/inventoryDashboard";
 
 import { BRAND } from "../theme/brand";
+import CompositionBars from "../components/common/CompositionBars";
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
@@ -94,72 +95,6 @@ function SectionCard({ title, children, action }) {
       </Box>
       {children}
     </Paper>
-  );
-}
-
-function RankedBars({ items, valueFormatter = (v) => String(v), color = BRAND.teal }) {
-  const max = Math.max(...items.map((i) => Number(i.value || 0)), 0);
-
-  return (
-    <Box sx={{ display: "grid", gap: 1.25 }}>
-      {items.length === 0 ? (
-        <Typography color="text.secondary">No data available.</Typography>
-      ) : (
-        items.map((item) => (
-          <Box key={`${item.label}-${item.value}`}>
-            <Box
-              sx={{
-                mb: 0.5,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 2,
-              }}
-            >
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: BRAND.dark,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {item.label}
-              </Typography>
-
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  color: "text.secondary",
-                  flexShrink: 0,
-                }}
-              >
-                {valueFormatter(Number(item.value || 0))}
-              </Typography>
-            </Box>
-
-            <Box
-              sx={{
-                height: 10,
-                borderRadius: 999,
-                bgcolor: "rgba(15, 23, 42, 0.08)",
-                overflow: "hidden",
-              }}
-            >
-              <Box
-                sx={{
-                  width: `${max > 0 ? (Number(item.value || 0) / max) * 100 : 0}%`,
-                  height: "100%",
-                  borderRadius: 999,
-                  bgcolor: color,
-                }}
-              />
-            </Box>
-          </Box>
-        ))
-      )}
-    </Box>
   );
 }
 
@@ -412,41 +347,70 @@ export default function HardwareInventory() {
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, lg: 3 }}>
-            <SectionCard title="Top Manufacturers">
-              <RankedBars
-                items={rankings?.topManufacturers || []}
-                color={BRAND.teal}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top manufacturers"
+                items={(rankings?.topManufacturers || []).map((item) => ({
+                  ...item,
+                  color: BRAND.teal,
+                }))}
+                totalLabel="hosts"
+                emptyLabel="No manufacturer data"
+                minHeight={260}
+                maxItems={6}
               />
-            </SectionCard>
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, lg: 3 }}>
-            <SectionCard title="Top CPU Models">
-              <RankedBars
-                items={rankings?.topCpuModels || []}
-                color={BRAND.tealText}
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top CPU models"
+                items={(rankings?.topCpuModels || []).map((item) => ({
+                  ...item,
+                  color: BRAND.teal,
+                }))}
+                totalLabel="devices"
+                emptyLabel="No CPU model data"
+                minHeight={260}
+                maxItems={6}
               />
-            </SectionCard>
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, lg: 3 }}>
-            <SectionCard title="Top Platforms">
-              <RankedBars
-                items={rankings?.topPlatforms || []}
-                color="#4f46e5"
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top platforms"
+                items={(rankings?.topPlatforms || []).map((item) => ({
+                  ...item,
+                  color: BRAND.dark,
+                }))}
+                totalLabel="devices"
+                emptyLabel="No platform data"
+                minHeight={260}
+                maxItems={6}
               />
-            </SectionCard>
+            </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, lg: 3 }}>
-            <SectionCard title="Highest Disk Usage">
-              <RankedBars
-                items={rankings?.highestDiskUsage || []}
-                valueFormatter={(v) => `${Number(v).toFixed(1)}%`}
-                color="#b45309"
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Highest disk usage"
+                items={(rankings?.highestDiskUsage || []).map((item) => ({
+                  ...item,
+                  value: Number(item.value || 0),
+                  color: BRAND.alert.error,
+                  sub: `${Number(item.value || 0).toFixed(1)}% used`,
+                }))}
+                totalLabel="% cumulative"
+                emptyLabel="No disk usage data"
+                minHeight={260}
+                maxItems={6}
               />
-            </SectionCard>
+            </Box>
           </Grid>
         </Grid>
       </Box>

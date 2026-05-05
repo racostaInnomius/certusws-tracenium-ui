@@ -30,8 +30,10 @@ import {
   Box,
   Chip,
   Fade,
+  MenuItem,
   Paper,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
@@ -43,6 +45,7 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
 import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
+import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 
 import HostsTable from "../components/Charts/HostsTable";
 import SectionPaper from "../components/common/SectionPaper";
@@ -77,11 +80,18 @@ function readUrlFilters() {
   const params = new URLSearchParams(window.location.search);
   const platform = (params.get("platform") || "").toLowerCase();
   const versionBucket = (params.get("versionBucket") || "").toLowerCase();
+  // Phase 4: optional `groupId` deep-link from the Asset Groups tab —
+  // operator can click "View devices" on a group and land on the
+  // Dashboard pre-scoped to that group's membership. We coerce to a
+  // positive integer string; anything else falls back to "".
+  const rawGroupId = String(params.get("groupId") || "").trim();
+  const groupIdValid = /^[0-9]+$/.test(rawGroupId) && Number(rawGroupId) > 0;
   return {
     platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
     versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket)
       ? versionBucket
-      : ""
+      : "",
+    groupId: groupIdValid ? rawGroupId : "",
   };
 }
 
@@ -149,6 +159,17 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [versionBucketFilter, setVersionBucketFilter] = React.useState(
     initialFilters.versionBucket || ""
   );
+  // Phase 4: filter by Asset Group membership. Two pieces of state —
+  // the selected group id (as a string so the dropdown plays nicely
+  // with empty=""), and the resolved Set of deviceIds for that group.
+  // Loaded on demand: empty selection skips the fetch entirely so
+  // operators who never use the filter pay zero extra requests.
+  const [groupFilter, setGroupFilter] = React.useState(
+    initialFilters.groupId || ""
+  );
+  const [groupCatalog, setGroupCatalog] = React.useState([]);
+  const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
+  const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
 
   // Bundled loader: summary + hosts + latestMap fetched together so the
   // cache snapshot is consistent — the table, KPIs and version donut
@@ -262,6 +283,70 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     };
   }, []);
 
+  // ── Phase 4: Asset-group filter wiring ─────────────────────────
+  //
+  // (1) Catalog: load the tenant's groups once. We only need {id, name,
+  //     kind, memberCount} to render the dropdown — refresh follows the
+  //     page-level refreshNonce so a freshly-created group appears
+  //     after the operator hits Refresh.
+  React.useEffect(() => {
+    let cancelled = false;
+    listAssetGroups()
+      .then((res) => {
+        if (cancelled) return;
+        const items = Array.isArray(res?.items) ? res.items : [];
+        setGroupCatalog(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // Soft-fail: dashboard works without the filter dropdown if the
+        // backend doesn't return groups (e.g. older deployment).
+        console.warn("asset-groups list failed:", err?.message || err);
+        setGroupCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNonce]);
+
+  // (2) Members for the selected group. Refetched whenever the
+  //     selection or the page-level refresh nonce changes — dynamic
+  //     groups especially benefit, since "Refresh" should re-evaluate.
+  React.useEffect(() => {
+    if (!groupFilter) {
+      setGroupMembers(null);
+      setGroupMembersLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setGroupMembersLoading(true);
+    listAssetGroupMembers(groupFilter)
+      .then((res) => {
+        if (cancelled) return;
+        const ids = Array.isArray(res?.items) ? res.items.map((m) => String(m.deviceId)) : [];
+        setGroupMembers(new Set(ids));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("asset-group members fetch failed:", err?.message || err);
+        // Empty set rather than null on error — the table shows zero
+        // rows under the chip, which signals "filter is active and
+        // matched nothing" instead of silently bypassing the filter.
+        setGroupMembers(new Set());
+      })
+      .finally(() => {
+        if (!cancelled) setGroupMembersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupFilter, refreshNonce]);
+
+  const selectedGroup = React.useMemo(
+    () => groupCatalog.find((g) => String(g.id) === String(groupFilter)) || null,
+    [groupCatalog, groupFilter]
+  );
+
   const dashboardLoadedSuccessfully =
     !loading &&
     loadState.summaryLoaded &&
@@ -295,7 +380,11 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // Filtering is deliberately additive (AND): chips can combine so a
   // user can deep-link "Windows devices one-behind" in the future.
   const filteredHosts = React.useMemo(() => {
-    if (!platformFilter && !versionBucketFilter) return hosts;
+    const groupFilterActive = !!groupFilter;
+    if (!platformFilter && !versionBucketFilter && !groupFilterActive) return hosts;
+    // While the member set is still loading, hide rows so the operator
+    // doesn't briefly see the unfiltered fleet under an active chip.
+    if (groupFilterActive && groupMembers === null) return [];
     return hosts.filter((h) => {
       if (platformFilter) {
         const p = normalizePlatform(h.os_platform);
@@ -305,9 +394,19 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         const bucket = bucketOfVersion(h.agent_version, canonicalLatest);
         if (bucket !== versionBucketFilter) return false;
       }
+      if (groupFilterActive && groupMembers) {
+        if (!groupMembers.has(String(h.agent_id))) return false;
+      }
       return true;
     });
-  }, [hosts, platformFilter, versionBucketFilter, canonicalLatest]);
+  }, [
+    hosts,
+    platformFilter,
+    versionBucketFilter,
+    canonicalLatest,
+    groupFilter,
+    groupMembers,
+  ]);
 
   // ── Data shaped for the composition charts ─────────────────────────
   //
@@ -550,15 +649,56 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
               justifyContent="space-between"
               sx={{ mb: 1.5, flexWrap: "wrap", gap: 1 }}
             >
-              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
-                Devices
-              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                  Devices
+                </Typography>
+                {/* Group filter dropdown. Lazy-bound to the Asset
+                    Groups catalog. Empty option clears the filter.
+                    Hidden entirely when the tenant has no groups, so
+                    the toolbar doesn't carry dead weight for tenants
+                    who never opened the Groups tab. */}
+                {groupCatalog.length > 0 ? (
+                  <TextField
+                    select
+                    size="small"
+                    value={groupFilter}
+                    onChange={(e) => setGroupFilter(e.target.value)}
+                    sx={{
+                      minWidth: 180,
+                      "& .MuiInputBase-root": { fontSize: 13 },
+                    }}
+                    SelectProps={{ displayEmpty: true }}
+                  >
+                    <MenuItem value="">
+                      <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+                        Filter by group…
+                      </Typography>
+                    </MenuItem>
+                    {groupCatalog.map((g) => (
+                      <MenuItem key={g.id} value={String(g.id)}>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                            {g.name}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+                            {g.kind === "dynamic" ? "dyn" : "static"}
+                            {Number.isFinite(g.memberCount)
+                              ? ` · ${g.memberCount}`
+                              : ""}
+                          </Typography>
+                        </Stack>
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
+              </Stack>
               <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
                 {filteredHosts.length} of {hosts.length} · {kpis.onlineCount} online
               </Typography>
             </Stack>
 
-            {(platformFilter || versionBucketFilter) ? (
+            {(platformFilter || versionBucketFilter || groupFilter) ? (
               <Stack
                 direction="row"
                 spacing={0.75}
@@ -584,6 +724,24 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
                     label={`Version: ${versionBucketFilter.replace("_", " ")}`}
                     onDelete={() => setVersionBucketFilter("")}
                     sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
+                  />
+                ) : null}
+                {groupFilter ? (
+                  <Chip
+                    size="small"
+                    label={
+                      groupMembersLoading
+                        ? `Group: ${selectedGroup?.name || groupFilter}…`
+                        : `Group: ${selectedGroup?.name || groupFilter} (${
+                            groupMembers ? groupMembers.size : 0
+                          })`
+                    }
+                    onDelete={() => setGroupFilter("")}
+                    sx={{
+                      bgcolor: BRAND.cyanSoft || BRAND.tealSoft,
+                      color: BRAND.tealText,
+                      fontWeight: 600,
+                    }}
                   />
                 ) : null}
               </Stack>
