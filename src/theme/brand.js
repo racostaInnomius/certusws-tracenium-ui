@@ -21,8 +21,9 @@
 //
 //   Fase 2 (Asset Management + Settings)
 //     - Migrated Assets/AssetsDashboard/Tokens/Tenants + 5 child pages
-//       (SoftwareInventory, HardwareInventory, SoftwareDelivery,
-//        Configurations, Welcome) off the old `#1ba6a6 / #16324f / #667085`
+//       (SoftwareInventory, HardwareInventory, AgentReleases [formerly
+//        SoftwareDelivery, renamed 2026-05-01], Configurations, Welcome)
+//       off the old `#1ba6a6 / #16324f / #667085`
 //       palette onto BRAND tokens.
 //
 //   Fase 3 (Clásicas)

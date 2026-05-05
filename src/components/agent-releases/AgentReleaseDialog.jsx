@@ -17,7 +17,7 @@ const ARCH_OPTIONS = ["x64", "arm64", "x86"];
 const FORMAT_OPTIONS = ["exe", "msi", "pkg", "dmg", "deb", "rpm", "tar.gz"];
 const CHANNEL_OPTIONS = ["stable", "beta", "rc"];
 
-export default function SoftwarePackageDialog({
+export default function AgentReleaseDialog({
   open,
   mode,
   item,
@@ -85,7 +85,7 @@ export default function SoftwarePackageDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        {mode === "edit" ? "Edit Software Package" : "Add Software Package"}
+        {mode === "edit" ? "Edit Agent Release" : "Add Agent Release"}
       </DialogTitle>
 
       <DialogContent>

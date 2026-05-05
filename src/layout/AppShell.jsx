@@ -11,7 +11,7 @@ const Configurations = React.lazy(() => import("../pages/Configurations"));
 const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
 const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
 const Welcome = React.lazy(() => import("../pages/Welcome"));
-const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
+const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
@@ -133,11 +133,13 @@ export default function AppShell() {
   if (selectedPage === "welcome") {
     content = <Welcome onNavigate={setSelectedPage} />;
   }
-  // Legacy `software-delivery` route kept alive for the same reason
-  // (back-compat for existing bookmarks). Primary entry: Device
-  // Enrollment → Agent Downloads tab.
-  if (selectedPage === "software-delivery") {
-    content = <SoftwareDelivery />;
+  // Agent releases — admin catalog of Tracenium agent installer
+  // binaries. The primary user-facing entry is the Device Enrollment
+  // → Agent Downloads tab; this page itself is mostly admin-only CRUD.
+  // Originally mounted at `software-delivery` until the 2026-05-01
+  // rename; the transition alias was dropped in Batch 3.
+  if (selectedPage === "agent-releases") {
+    content = <AgentReleases />;
   }
   if (selectedPage === "jobs") {
     content = <Jobs />;

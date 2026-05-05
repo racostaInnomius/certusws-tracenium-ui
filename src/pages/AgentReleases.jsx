@@ -19,15 +19,15 @@ import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
 import {
-  listSoftwareDelivery,
-  createSoftwareDelivery,
-  updateSoftwareDelivery,
-  deleteSoftwareDelivery,
-  resolveSoftwareDeliveryDownload,
-} from "../api/softwareDelivery";
+  listAgentReleases,
+  createAgentRelease,
+  updateAgentRelease,
+  deleteAgentRelease,
+  resolveAgentReleaseDownload,
+} from "../api/agentReleases";
 
-import SoftwarePackageDialog from "../components/software-delivery/SoftwarePackageDialog";
-import DeleteSoftwarePackageDialog from "../components/software-delivery/DeleteSoftwarePackageDialog";
+import AgentReleaseDialog from "../components/agent-releases/AgentReleaseDialog";
+import DeleteAgentReleaseDialog from "../components/agent-releases/DeleteAgentReleaseDialog";
 
 import { BRAND } from "../theme/brand";
 
@@ -110,7 +110,7 @@ function formatDate(value) {
   });
 }
 
-export default function SoftwareDelivery({ embedded = false }) {
+export default function AgentReleases({ embedded = false }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -119,7 +119,7 @@ export default function SoftwareDelivery({ embedded = false }) {
   const tenantRole = auth?.tenantMember?.role;
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
-  const canEditSoftwareDelivery =
+  const canEditAgentReleases =
     isActiveMember && String(tenantRole ?? "") === "ADMIN";
 
   const [rows, setRows] = React.useState([]);
@@ -150,7 +150,7 @@ export default function SoftwareDelivery({ embedded = false }) {
     try {
       setLoading(true);
 
-      const response = await listSoftwareDelivery({
+      const response = await listAgentReleases({
         search: search || undefined,
         platform: platform !== "all" ? platform : undefined,
         arch: arch !== "all" ? arch : undefined,
@@ -201,14 +201,14 @@ export default function SoftwareDelivery({ embedded = false }) {
       setSubmitting(true);
 
       if (dialogMode === "edit" && editingItem?.id) {
-        await updateSoftwareDelivery(editingItem.id, payload);
+        await updateAgentRelease(editingItem.id, payload);
         setSnackbar({
           open: true,
           message: "Software package updated successfully",
           severity: "success",
         });
       } else {
-        await createSoftwareDelivery(payload);
+        await createAgentRelease(payload);
         setSnackbar({
           open: true,
           message: "Software package created successfully",
@@ -222,7 +222,7 @@ export default function SoftwareDelivery({ embedded = false }) {
       console.error(e);
 
       const errorMessage = String(e?.message || "");
-      const message = errorMessage.includes("SOFTWARE_DELIVERY_DUPLICATE_VARIANT")
+      const message = errorMessage.includes("AGENT_RELEASE_DUPLICATE_VARIANT")
         ? "A package with the same platform, architecture, format, version and channel already exists"
         : "Failed to save software package";
 
@@ -241,7 +241,7 @@ export default function SoftwareDelivery({ embedded = false }) {
 
     try {
       setSubmitting(true);
-      await deleteSoftwareDelivery(deletingItem.id);
+      await deleteAgentRelease(deletingItem.id);
 
       setDeleteOpen(false);
       setDeletingItem(null);
@@ -267,7 +267,7 @@ export default function SoftwareDelivery({ embedded = false }) {
 
   const handleDownload = async (row) => {
     try {
-      const res = await resolveSoftwareDeliveryDownload(row.downloadPath);
+      const res = await resolveAgentReleaseDownload(row.downloadPath);
       if (res?.downloadUrl) {
         window.open(res.downloadUrl, "_blank", "noopener,noreferrer");
         return;
@@ -337,7 +337,7 @@ export default function SoftwareDelivery({ embedded = false }) {
         </Button>
       ),
     },
-    ...(canEditSoftwareDelivery
+    ...(canEditAgentReleases
       ? [
           {
             field: "actions",
@@ -417,7 +417,7 @@ export default function SoftwareDelivery({ embedded = false }) {
             </Typography>
           </Box>
 
-          {embedded && canEditSoftwareDelivery && (
+          {embedded && canEditAgentReleases && (
             <Button
               variant="contained"
               onClick={openCreateDialog}
@@ -602,7 +602,7 @@ export default function SoftwareDelivery({ embedded = false }) {
         </Box>
       </Paper>
 
-      <SoftwarePackageDialog
+      <AgentReleaseDialog
         open={dialogOpen}
         mode={dialogMode}
         item={editingItem}
@@ -611,7 +611,7 @@ export default function SoftwareDelivery({ embedded = false }) {
         onSubmit={handleSave}
       />
 
-      <DeleteSoftwarePackageDialog
+      <DeleteAgentReleaseDialog
         open={deleteOpen}
         item={deletingItem}
         submitting={submitting}

@@ -177,7 +177,7 @@ function renderStatusChip(status) {
   return <Chip label={status || "Unknown"} size="small" />;
 }
 
-// `embedded` mirrors the contract of <SoftwareDelivery />: when true, we
+// `embedded` mirrors the contract of <AgentReleases />: when true, we
 // skip the top-level PageHeader and zero out the Box's outer padding so
 // the host page (e.g. <DeviceEnrollment />) controls layout. The Create
 // token button moves into the embedded host's right slot via the
