@@ -1,49 +1,80 @@
+// src/api/softwareDelivery.js
+//
+// Wrapper over /api/v1/software-delivery — the actual SDP feature
+// (third-party software deployment to the fleet). Distinct from
+// /api/v1/agent-releases (Tracenium agent installer catalog), which
+// formerly lived at this path until the 2026-05-01 rename.
+
 import {
   httpGetJson,
   httpPostJson,
-  httpPutJson,
+  httpPatchJson,
   httpDeleteJson,
 } from "./http";
 
 const BASE = "/api/v1/software-delivery";
 
 function buildQuery(params = {}) {
-  const query = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (
-      value !== undefined &&
-      value !== null &&
-      String(value).trim() !== ""
-    ) {
-      query.append(key, String(value));
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && String(v).trim() !== "") {
+      q.append(k, String(v));
     }
   });
-
-  const qs = query.toString();
-  return qs ? `?${qs}` : "";
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
-export async function listSoftwareDelivery(params = {}) {
+// ── Catalog (software_packages) ──────────────────────────────────
+
+export async function listPackages(params = {}) {
   return httpGetJson(`${BASE}${buildQuery(params)}`);
 }
 
-export async function getSoftwareDeliveryById(id) {
-  return httpGetJson(`${BASE}/${id}`);
+export async function getPackage(id) {
+  return httpGetJson(`${BASE}/${encodeURIComponent(id)}`);
 }
 
-export async function createSoftwareDelivery(payload) {
+export async function createPackage(payload) {
   return httpPostJson(BASE, payload);
 }
 
-export async function updateSoftwareDelivery(id, payload) {
-  return httpPutJson(`${BASE}/${id}`, payload);
+export async function updatePackage(id, payload) {
+  return httpPatchJson(`${BASE}/${encodeURIComponent(id)}`, payload);
 }
 
-export async function deleteSoftwareDelivery(id) {
-  return httpDeleteJson(`${BASE}/${id}`);
+export async function deletePackage(id) {
+  return httpDeleteJson(`${BASE}/${encodeURIComponent(id)}`);
 }
 
-export async function resolveSoftwareDeliveryDownload(downloadPath) {
-  return httpGetJson(downloadPath);
+// ── Deployments ───────────────────────────────────────────────────
+
+export async function deployPackage(packageId, body) {
+  // Fan-out: backend resolves target, snapshots package, creates one
+  // job per device. Returns 202 with the deployment + initial counts.
+  return httpPostJson(
+    `${BASE}/${encodeURIComponent(packageId)}/deploy`,
+    body
+  );
+}
+
+export async function listDeployments(params = {}) {
+  return httpGetJson(`${BASE}/deployments${buildQuery(params)}`);
+}
+
+export async function getDeployment(id) {
+  return httpGetJson(`${BASE}/deployments/${encodeURIComponent(id)}`);
+}
+
+export async function listDeploymentResults(id) {
+  return httpGetJson(
+    `${BASE}/deployments/${encodeURIComponent(id)}/results`
+  );
+}
+
+export async function cancelDeployment(id) {
+  return httpPostJson(
+    `${BASE}/deployments/${encodeURIComponent(id)}/cancel`,
+    {}
+  );
 }

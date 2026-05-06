@@ -11,6 +11,7 @@ const Configurations = React.lazy(() => import("../pages/Configurations"));
 const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
 const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
 const Welcome = React.lazy(() => import("../pages/Welcome"));
+const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
 const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
@@ -133,12 +134,24 @@ export default function AppShell() {
   if (selectedPage === "welcome") {
     content = <Welcome onNavigate={setSelectedPage} />;
   }
-  // Legacy `software-delivery` route kept alive for the same reason
-  // (back-compat for existing bookmarks). Primary entry: Device
-  // Enrollment → Agent Downloads tab.
-  if (selectedPage === "software-delivery") {
-    content = <SoftwareDelivery />;
+  // Agent releases — admin catalog of Tracenium agent installer
+  // binaries. The primary user-facing entry is the Device Enrollment
+  // → Agent Downloads tab; this page itself is mostly admin-only CRUD.
+  // Originally mounted at `software-delivery` until the 2026-05-01
+  // rename; the transition alias was dropped in Batch 3.
+  if (selectedPage === "agent-releases") {
+    content = <AgentReleases />;
   }
+
+  // Software Delivery (SDP) — operator surface for deploying
+  // third-party software to the fleet. Distinct from `agent-releases`
+  // (which catalogs the Tracenium agent's own installer binaries).
+  // Two tabs: Catalog (CRUD packages) and Deployments (history +
+  // per-device results).
+  if (selectedPage === "software-delivery") {
+    content = <SoftwareDelivery onNavigate={setSelectedPage} />;
+  }
+
   if (selectedPage === "jobs") {
     content = <Jobs />;
   }

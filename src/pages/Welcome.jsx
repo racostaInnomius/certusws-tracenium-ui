@@ -173,10 +173,10 @@ export default function Welcome({ onNavigate }) {
             step="2"
             icon={<DownloadOutlinedIcon />}
             title="Download the Tracenium Agent"
-            description="Open Software Delivery from the left navigation, then select the operating system and version that matches the device you want to onboard."
-            hint="Software Delivery is currently being defined and will host platform-specific agent packages."
-            actionLabel="Go to Software Delivery"
-            onAction={() => onNavigate?.("software-delivery")}
+            description="Open Agent Releases from the left navigation, then select the operating system and version that matches the device you want to onboard."
+            hint="Agent Releases hosts the catalog of platform-specific Tracenium agent installer binaries."
+            actionLabel="Go to Agent Releases"
+            onAction={() => onNavigate?.("agent-releases")}
           />
         </Grid>
 

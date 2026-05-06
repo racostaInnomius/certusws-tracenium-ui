@@ -8,7 +8,7 @@ import {
   Button,
 } from "@mui/material";
 
-export default function DeleteSoftwarePackageDialog({
+export default function DeleteAgentReleaseDialog({
   open,
   item,
   submitting,
@@ -17,11 +17,11 @@ export default function DeleteSoftwarePackageDialog({
 }) {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>Delete Software Package</DialogTitle>
+      <DialogTitle>Delete Agent Release</DialogTitle>
 
       <DialogContent>
         <Typography color="text.secondary">
-          This action will permanently delete the selected software package
+          This action will permanently delete the selected agent release
           {item?.name ? `: "${item.name}"` : ""}.
         </Typography>
       </DialogContent>

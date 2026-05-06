@@ -1,629 +1,901 @@
+// src/pages/SoftwareDelivery.jsx
+//
+// SDP — Phase 1-H. Operator surface for the Software Delivery
+// Plugin: catalog of third-party packages + history of fan-out
+// deployments. Distinct from `AgentReleases` (catalog of Tracenium
+// agent installer binaries — different feature, different table).
+//
+// Two tabs:
+//   * Catalog      — CRUD + Deploy button per row
+//   * Deployments  — historical list, drilldown into per-device results
+
 import * as React from "react";
-import Grid from "@mui/material/Grid";
-import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
   Box,
-  Paper,
-  Typography,
+  Tabs,
+  Tab,
+  Stack,
   Button,
+  Typography,
+  Chip,
   TextField,
   MenuItem,
-  Chip,
-  Snackbar,
-  Alert,
-  useMediaQuery,
-  useTheme,
+  IconButton,
+  CircularProgress,
+  Tooltip,
 } from "@mui/material";
-import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import { DataGrid } from "@mui/x-data-grid";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
+import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
+import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
+import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 
+import { BRAND, DATAGRID_SX } from "../theme/brand";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useAuthContext } from "../auth/AuthContext";
 import {
-  listSoftwareDelivery,
-  createSoftwareDelivery,
-  updateSoftwareDelivery,
-  deleteSoftwareDelivery,
-  resolveSoftwareDeliveryDownload,
+  listPackages,
+  createPackage,
+  updatePackage,
+  deletePackage,
+  deployPackage,
+  listDeployments,
 } from "../api/softwareDelivery";
+import { getTenantPolicy } from "../api/policies";
+import { getEnabledPluginSet } from "../constants/plugins";
 
-import SoftwarePackageDialog from "../components/software-delivery/SoftwarePackageDialog";
-import DeleteSoftwarePackageDialog from "../components/software-delivery/DeleteSoftwarePackageDialog";
+import PackageDialog from "../components/software-delivery/PackageDialog";
+import DeletePackageDialog from "../components/software-delivery/DeletePackageDialog";
+import DeployWizardDialog from "../components/software-delivery/DeployWizardDialog";
+import DeploymentDetailDrawer from "../components/software-delivery/DeploymentDetailDrawer";
 
-import { BRAND } from "../theme/brand";
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 56,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
 
-const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
-const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
-const FORMAT_OPTIONS = ["all", "exe", "msi", "pkg", "dmg", "deb", "rpm", "tar.gz"];
-const CHANNEL_OPTIONS = ["all", "stable", "beta", "rc"];
-const ACTIVE_OPTIONS = ["all", "true", "false"];
-
-function SummaryCard({ title, value, accent = BRAND.teal }) {
-  return (
-    <Paper
-      sx={{
-        p: 2,
-        height: "75%",
-        minHeight: 96,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
-        {title}
-      </Typography>
-
-      <Typography
-        sx={{
-          fontSize: 28,
-          fontWeight: 800,
-          color: accent,
-          lineHeight: 1.1,
-          mt: 1,
-        }}
-      >
-        {value}
-      </Typography>
-    </Paper>
-  );
-}
-
-function renderActiveChip(value) {
-  return value ? (
-    <Chip
-      label="Active"
-      size="small"
-      sx={{
-        bgcolor: BRAND.tealSoft,
-        color: BRAND.tealText,
-        fontWeight: 700,
-      }}
-    />
-  ) : (
-    <Chip
-      label="Inactive"
-      size="small"
-      sx={{
-        bgcolor: BRAND.alert.errorSoft,
-        color: BRAND.alert.error,
-        fontWeight: 700,
-      }}
-    />
-  );
-}
-
-function formatDate(value) {
-  if (!value) return " - ";
-
-  const date = new Date(value);
-
-  return date.toLocaleString("en-US", {
+function formatTime(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
     year: "2-digit",
     month: "short",
     day: "2-digit",
-    hourCycle: "h24",
+    hourCycle: "h23",
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
-export default function SoftwareDelivery({ embedded = false }) {
-  const theme = useTheme();
-  const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
-  const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
-  const { auth } = useAuthContext();
+// ── Catalog tab ───────────────────────────────────────────────────
 
-  const tenantRole = auth?.tenantMember?.role;
-  const isActiveMember = auth?.tenantMember?.isActive === true;
-
-  const canEditSoftwareDelivery =
-    isActiveMember && String(tenantRole ?? "") === "ADMIN";
-
-  const [rows, setRows] = React.useState([]);
+function CatalogTab({ canManage, notify, onDeployFire }) {
+  const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [submitting, setSubmitting] = React.useState(false);
-
   const [search, setSearch] = React.useState("");
   const [platform, setPlatform] = React.useState("all");
-  const [arch, setArch] = React.useState("all");
-  const [format, setFormat] = React.useState("all");
-  const [channel, setChannel] = React.useState("all");
-  const [isActiveFilter, setIsActiveFilter] = React.useState("all");
 
-  const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [dialogMode, setDialogMode] = React.useState("create");
-  const [editingItem, setEditingItem] = React.useState(null);
+  const [editorOpen, setEditorOpen] = React.useState(false);
+  const [editorMode, setEditorMode] = React.useState("create");
+  const [editorItem, setEditorItem] = React.useState(null);
+  const [editorSubmitting, setEditorSubmitting] = React.useState(false);
 
   const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [deletingItem, setDeletingItem] = React.useState(null);
+  const [deleteItem, setDeleteItem] = React.useState(null);
+  const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
 
-  const [snackbar, setSnackbar] = React.useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
+  const [deployOpen, setDeployOpen] = React.useState(false);
+  const [deployItem, setDeployItem] = React.useState(null);
 
-  const loadData = async () => {
+  const load = React.useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-
-      const response = await listSoftwareDelivery({
-        search: search || undefined,
-        platform: platform !== "all" ? platform : undefined,
-        arch: arch !== "all" ? arch : undefined,
-        format: format !== "all" ? format : undefined,
-        channel: channel !== "all" ? channel : undefined,
-        isActive: isActiveFilter !== "all" ? isActiveFilter : undefined,
-      });
-
-      setRows(Array.isArray(response?.items) ? response.items : []);
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load software delivery packages",
-        severity: "error",
-      });
+      const params = {};
+      if (search.trim()) params.search = search.trim();
+      if (platform !== "all") params.platform = platform;
+      const res = await listPackages(params);
+      setItems(Array.isArray(res?.items) ? res.items : []);
+    } catch (err) {
+      notify("error", err?.body?.message || err?.message || "Failed to load packages");
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, platform, notify]);
 
   React.useEffect(() => {
-    loadData();
-  }, [search, platform, arch, format, channel, isActiveFilter]);
+    load();
+  }, [load]);
 
-  const summary = React.useMemo(() => {
-    const total = rows.length;
-    const active = rows.filter((r) => Boolean(r.isActive)).length;
-    const platforms = new Set(rows.map((r) => r.platform).filter(Boolean)).size;
-
-    return { total, active, platforms };
-  }, [rows]);
-
-  const openCreateDialog = () => {
-    setDialogMode("create");
-    setEditingItem(null);
-    setDialogOpen(true);
+  const openCreate = () => {
+    setEditorMode("create");
+    setEditorItem(null);
+    setEditorOpen(true);
   };
-
-  const openEditDialog = (row) => {
-    setDialogMode("edit");
-    setEditingItem(row);
-    setDialogOpen(true);
+  const openEdit = (item) => {
+    setEditorMode("edit");
+    setEditorItem(item);
+    setEditorOpen(true);
   };
-
-  const handleSave = async (payload) => {
+  const handleSubmit = async (payload) => {
+    setEditorSubmitting(true);
     try {
-      setSubmitting(true);
-
-      if (dialogMode === "edit" && editingItem?.id) {
-        await updateSoftwareDelivery(editingItem.id, payload);
-        setSnackbar({
-          open: true,
-          message: "Software package updated successfully",
-          severity: "success",
-        });
+      if (editorMode === "edit" && editorItem) {
+        await updatePackage(editorItem.id, payload);
+        notify("success", "Package updated");
       } else {
-        await createSoftwareDelivery(payload);
-        setSnackbar({
-          open: true,
-          message: "Software package created successfully",
-          severity: "success",
-        });
+        await createPackage(payload);
+        notify("success", "Package created");
       }
-
-      setDialogOpen(false);
-      await loadData();
-    } catch (e) {
-      console.error(e);
-
-      const errorMessage = String(e?.message || "");
-      const message = errorMessage.includes("SOFTWARE_DELIVERY_DUPLICATE_VARIANT")
-        ? "A package with the same platform, architecture, format, version and channel already exists"
-        : "Failed to save software package";
-
-      setSnackbar({
-        open: true,
-        message,
-        severity: "error",
-      });
+      setEditorOpen(false);
+      load();
+    } catch (err) {
+      const code = err?.body?.error;
+      const msg =
+        code === "SOFTWARE_PACKAGE_CONFLICT"
+          ? "A package with this (name, version, platform, arch) already exists"
+          : err?.body?.message || err?.message || "Save failed";
+      notify("error", msg);
     } finally {
-      setSubmitting(false);
+      setEditorSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deletingItem?.id) return;
-
+    if (!deleteItem) return;
+    setDeleteSubmitting(true);
     try {
-      setSubmitting(true);
-      await deleteSoftwareDelivery(deletingItem.id);
-
+      await deletePackage(deleteItem.id);
+      notify("success", `Deleted ${deleteItem.name}`);
       setDeleteOpen(false);
-      setDeletingItem(null);
-
-      setSnackbar({
-        open: true,
-        message: "Software package deleted successfully",
-        severity: "success",
-      });
-
-      await loadData();
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete software package",
-        severity: "error",
-      });
+      setDeleteItem(null);
+      load();
+    } catch (err) {
+      const code = err?.body?.error;
+      const msg =
+        code === "SOFTWARE_PACKAGE_CONFLICT"
+          ? "Cannot delete: still referenced by one or more deployments. Mark inactive instead."
+          : err?.body?.message || err?.message || "Delete failed";
+      notify("error", msg);
     } finally {
-      setSubmitting(false);
+      setDeleteSubmitting(false);
     }
   };
 
-  const handleDownload = async (row) => {
-    try {
-      const res = await resolveSoftwareDeliveryDownload(row.downloadPath);
-      if (res?.downloadUrl) {
-        window.open(res.downloadUrl, "_blank", "noopener,noreferrer");
-        return;
-      }
-
-      throw new Error("Missing downloadUrl");
-    } catch (e) {
-      console.error(e);
-      // Distinguish "the artifact for this format/arch isn't published"
-      // (404 invalid_request / binary_not_found) from generic transport
-      // failures. Without this, an operator clicking a stale row got a
-      // generic "Failed to resolve" toast and didn't know whether to
-      // retry or contact the team — and a previous code path could
-      // silently fall through to an empty .exe download.
-      const status = e?.status;
-      const errCode = e?.body?.error;
-      let message = "Failed to resolve download link";
-      if (status === 404 || errCode === "binary_not_found") {
-        message = `No published artifact for ${row.platform}/${row.arch}/${row.format} v${row.version}. The package row may be stale — disable it from the catalog.`;
-      } else if (status === 400 || errCode === "invalid_request") {
-        message = `Format ${row.format} is no longer supported on ${row.platform}. Disable this row from the catalog.`;
-      }
-      setSnackbar({
-        open: true,
-        message,
-        severity: "error",
-      });
-    }
+  const handleDeployFire = async (body) => {
+    if (!deployItem) return;
+    const res = await deployPackage(deployItem.id, body);
+    notify(
+      "success",
+      `Deployment #${res?.deployment?.id} created — ${res?.deployment?.counts?.pending ?? 0} job(s) queued`
+    );
+    setDeployOpen(false);
+    setDeployItem(null);
+    onDeployFire?.(res?.deployment?.id);
   };
 
   const columns = [
-    { field: "name", headerName: "Name", minWidth: 220, flex: 1.1 },
-    { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.5 },
-    { field: "arch", headerName: "Arch", minWidth: 100, flex: 0.45 },
-    { field: "format", headerName: "Format", minWidth: 100, flex: 0.45 },
-    { field: "version", headerName: "Version", minWidth: 100, flex: 0.45 },
-    { field: "channel", headerName: "Channel", minWidth: 100, flex: 0.45 },
+    {
+      field: "name",
+      headerName: "Name",
+      flex: 1,
+      minWidth: 220,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+            {params.row.name}
+          </Typography>
+          {params.row.vendor ? (
+            <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+              {params.row.vendor}
+            </Typography>
+          ) : null}
+        </Box>
+      ),
+    },
+    {
+      field: "version",
+      headerName: "Version",
+      width: 110,
+      renderCell: (p) => (
+        <Typography sx={{ fontSize: 12, fontFamily: "monospace" }}>
+          {p.row.version}
+        </Typography>
+      ),
+    },
+    {
+      field: "platform",
+      headerName: "Target",
+      width: 170,
+      renderCell: (p) => (
+        <Stack direction="row" spacing={0.5}>
+          <Chip
+            size="small"
+            label={p.row.platform}
+            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+          />
+          <Chip
+            size="small"
+            label={p.row.arch}
+            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+          />
+          <Chip
+            size="small"
+            label={(p.row.format || "").toUpperCase()}
+            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.cyanSoft, color: BRAND.dark }}
+          />
+        </Stack>
+      ),
+    },
+    {
+      field: "detectionRule",
+      headerName: "Detection",
+      width: 160,
+      renderCell: (p) => {
+        const r = p.row.detectionRule;
+        if (!r) {
+          return (
+            <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>
+              none
+            </Typography>
+          );
+        }
+        return (
+          <Tooltip title={JSON.stringify(r, null, 2)} placement="top">
+            <Chip
+              size="small"
+              label={r.type}
+              sx={{
+                height: 20,
+                fontSize: 11,
+                fontWeight: 700,
+                bgcolor: BRAND.darkSoft,
+                color: BRAND.dark,
+                fontFamily: "monospace",
+              }}
+            />
+          </Tooltip>
+        );
+      },
+    },
     {
       field: "isActive",
+      headerName: "Active",
+      width: 90,
+      renderCell: (p) =>
+        p.row.isActive ? (
+          <Chip
+            size="small"
+            label="active"
+            sx={{
+              height: 20,
+              fontSize: 11,
+              fontWeight: 700,
+              bgcolor: BRAND.alert?.successSoft,
+              color: BRAND.alert?.success,
+            }}
+          />
+        ) : (
+          <Chip
+            size="small"
+            label="inactive"
+            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
+          />
+        ),
+    },
+    {
+      field: "updatedAt",
+      headerName: "Updated",
+      width: 130,
+      renderCell: (p) => (
+        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+          {formatTime(p.row.updatedAt)}
+        </Typography>
+      ),
+    },
+    {
+      field: "actions",
+      headerName: "",
+      width: 150,
+      sortable: false,
+      renderCell: (p) => (
+        <Stack direction="row" spacing={0.25}>
+          {canManage && p.row.isActive ? (
+            <Tooltip title="Deploy to fleet">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setDeployItem(p.row);
+                  setDeployOpen(true);
+                }}
+                sx={{ color: BRAND.teal, "&:hover": { color: BRAND.tealHover } }}
+              >
+                <RocketLaunchOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {canManage ? (
+            <>
+              <IconButton
+                size="small"
+                onClick={() => openEdit(p.row)}
+                sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setDeleteItem(p.row);
+                  setDeleteOpen(true);
+                }}
+                sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert?.error } }}
+              >
+                <DeleteOutlineOutlinedIcon fontSize="small" />
+              </IconButton>
+            </>
+          ) : null}
+        </Stack>
+      ),
+    },
+  ];
+
+  return (
+    <SectionPaper variant="panel" sx={{ p: 2 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: "center" } }}>
+        <TextField
+          size="small"
+          placeholder="Search by name / version / vendor…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ minWidth: 280, flex: 1 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Platform"
+          value={platform}
+          onChange={(e) => setPlatform(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="all">All</MenuItem>
+          <MenuItem value="windows">Windows</MenuItem>
+          <MenuItem value="macos">macOS</MenuItem>
+          <MenuItem value="linux">Linux</MenuItem>
+        </TextField>
+        <Box sx={{ flex: 1 }} />
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<RefreshOutlinedIcon />}
+          onClick={load}
+          sx={{ textTransform: "none", color: BRAND.gray, borderColor: BRAND.border }}
+        >
+          Refresh
+        </Button>
+        {canManage ? (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddOutlinedIcon />}
+            onClick={openCreate}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              bgcolor: BRAND.teal,
+              "&:hover": { bgcolor: BRAND.tealHover },
+            }}
+          >
+            New package
+          </Button>
+        ) : null}
+      </Stack>
+
+      {loading && items.length === 0 ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress size={28} sx={{ color: BRAND.teal }} />
+        </Box>
+      ) : items.length === 0 ? (
+        <Box sx={{ p: 4, textAlign: "center", color: BRAND.gray }}>
+          <Typography variant="body2">
+            No packages in the catalog yet.
+            {canManage ? " Click 'New package' to add one." : ""}
+          </Typography>
+        </Box>
+      ) : (
+        <DataGrid
+          rows={items}
+          columns={columns}
+          density="compact"
+          disableRowSelectionOnClick
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+          sx={DATAGRID_SX}
+          autoHeight
+        />
+      )}
+
+      <PackageDialog
+        open={editorOpen}
+        mode={editorMode}
+        item={editorItem}
+        submitting={editorSubmitting}
+        onClose={() => setEditorOpen(false)}
+        onSubmit={handleSubmit}
+      />
+
+      <DeletePackageDialog
+        open={deleteOpen}
+        item={deleteItem}
+        submitting={deleteSubmitting}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeleteItem(null);
+        }}
+        onConfirm={handleDelete}
+      />
+
+      <DeployWizardDialog
+        open={deployOpen}
+        pkg={deployItem}
+        onClose={() => {
+          setDeployOpen(false);
+          setDeployItem(null);
+        }}
+        onConfirm={handleDeployFire}
+        notify={notify}
+      />
+    </SectionPaper>
+  );
+}
+
+// ── Deployments tab ──────────────────────────────────────────────
+
+function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen }) {
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] = React.useState("all");
+
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerDeployment, setDrawerDeployment] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = { limit: 200 };
+      if (statusFilter !== "all") params.status = statusFilter;
+      const res = await listDeployments(params);
+      setItems(Array.isArray(res?.items) ? res.items : []);
+    } catch (err) {
+      notify("error", err?.body?.message || err?.message || "Failed to load deployments");
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, notify]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  // If the catalog tab fired a deploy and switched us here, auto-open
+  // the drawer for the freshly-created deployment so the operator
+  // sees the per-device results stream in.
+  React.useEffect(() => {
+    if (!autoOpenDeploymentId || items.length === 0) return;
+    const found = items.find((d) => Number(d.id) === Number(autoOpenDeploymentId));
+    if (found) {
+      setDrawerDeployment(found);
+      setDrawerOpen(true);
+      onConsumedAutoOpen?.();
+    }
+  }, [autoOpenDeploymentId, items, onConsumedAutoOpen]);
+
+  // Auto-refresh while we have non-terminal deployments.
+  React.useEffect(() => {
+    const hasInflight = items.some(
+      (d) => d.status !== "completed" && d.status !== "cancelled" && d.status !== "failed"
+    );
+    if (!hasInflight) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 12_000);
+    return () => clearInterval(id);
+  }, [items, load]);
+
+  const columns = [
+    {
+      field: "id",
+      headerName: "#",
+      width: 70,
+      renderCell: (p) => (
+        <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>
+          {p.row.id}
+        </Typography>
+      ),
+    },
+    {
+      field: "package",
+      headerName: "Package",
+      flex: 1,
+      minWidth: 240,
+      renderCell: (p) => {
+        const pkg = p.row.packageSnapshot || {};
+        return (
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+              {pkg.name} <span style={{ color: BRAND.gray, fontWeight: 500 }}>v{pkg.version}</span>
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+              {pkg.platform}/{pkg.arch}/{(pkg.format || "").toUpperCase()}
+            </Typography>
+          </Box>
+        );
+      },
+    },
+    {
+      field: "target",
+      headerName: "Target",
+      width: 200,
+      renderCell: (p) => {
+        if (p.row.targetKind === "asset_group") {
+          return (
+            <Typography sx={{ fontSize: 12 }}>
+              Group #{p.row.assetGroupId ?? "?"}
+            </Typography>
+          );
+        }
+        return (
+          <Typography sx={{ fontSize: 12 }}>
+            {p.row.deviceIds?.length ?? 0} device(s)
+          </Typography>
+        );
+      },
+    },
+    {
+      field: "status",
       headerName: "Status",
-      minWidth: 110,
-      flex: 0.5,
-      renderCell: (params) => renderActiveChip(params.value),
+      width: 120,
+      renderCell: (p) => {
+        const map = {
+          queued:    { bg: BRAND.darkSoft,           color: BRAND.gray },
+          running:   { bg: BRAND.tealSoft,           color: BRAND.tealText },
+          completed: { bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
+          cancelled: { bg: BRAND.darkSoft,           color: BRAND.gray },
+          failed:    { bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
+        };
+        const e = map[p.row.status] || { bg: BRAND.darkSoft, color: BRAND.gray };
+        return (
+          <Chip
+            size="small"
+            label={p.row.status}
+            sx={{ fontWeight: 700, fontSize: 11, height: 20, bgcolor: e.bg, color: e.color }}
+          />
+        );
+      },
+    },
+    {
+      field: "counts",
+      headerName: "Outcomes",
+      flex: 1,
+      minWidth: 280,
+      renderCell: (p) => {
+        const c = p.row.counts || {};
+        const groups = [
+          ["ok", (c.success || 0) + (c.already_installed || 0) + (c.reboot_required || 0), BRAND.alert?.successSoft, BRAND.alert?.success],
+          ["pending/running", (c.pending || 0) + (c.running || 0), BRAND.darkSoft, BRAND.gray],
+          ["failed", (c.failed || 0) + (c.rejected || 0) + (c.timed_out || 0), BRAND.alert?.errorSoft, BRAND.alert?.error],
+          ["cancelled", c.cancelled || 0, BRAND.darkSoft, BRAND.gray],
+        ];
+        return (
+          <Stack direction="row" spacing={0.5}>
+            {groups.map(([label, n, bg, color]) =>
+              n > 0 ? (
+                <Chip
+                  key={label}
+                  size="small"
+                  label={`${label}: ${n}`}
+                  sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: bg, color: color }}
+                />
+              ) : null
+            )}
+          </Stack>
+        );
+      },
     },
     {
       field: "createdAt",
-      headerName: "Created At",
-      minWidth: 150,
-      flex: 0.7,
-      renderCell: (params) => formatDate(params.value),
-    },
-    {
-      field: "download",
-      headerName: "Download",
-      minWidth: 140,
-      flex: 0.65,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <Button
-          size="small"
-          startIcon={<DownloadOutlinedIcon />}
-          onClick={() => handleDownload(params.row)}
-          sx={{ textTransform: "none", fontWeight: 700 }}
-        >
-          Download
-        </Button>
+      headerName: "Created",
+      width: 130,
+      renderCell: (p) => (
+        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+          {formatTime(p.row.createdAt)}
+        </Typography>
       ),
     },
-    ...(canEditSoftwareDelivery
-      ? [
-          {
-            field: "actions",
-            headerName: "Actions",
-            minWidth: 170,
-            flex: 0.9,
-            sortable: false,
-            filterable: false,
-            renderCell: (params) => (
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button size="small" onClick={() => openEditDialog(params.row)}>
-                  Edit
-                </Button>
-
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() => {
-                    setDeletingItem(params.row);
-                    setDeleteOpen(true);
-                  }}
-                >
-                  Delete
-                </Button>
-              </Box>
-            ),
-          },
-        ]
-      : []),
   ];
 
-  const columnVisibilityModel = React.useMemo(() => {
-    if (isSmDown) {
-      return {
-        version: false,
-        channel: false,
-        createdAt: false,
-      };
-    }
+  return (
+    <SectionPaper variant="panel" sx={{ p: 2 }}>
+      <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, alignItems: "center" }}>
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="all">All</MenuItem>
+          <MenuItem value="queued">Queued</MenuItem>
+          <MenuItem value="running">Running</MenuItem>
+          <MenuItem value="completed">Completed</MenuItem>
+          <MenuItem value="failed">Failed</MenuItem>
+          <MenuItem value="cancelled">Cancelled</MenuItem>
+        </TextField>
+        <Box sx={{ flex: 1 }} />
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<RefreshOutlinedIcon />}
+          onClick={load}
+          sx={{ textTransform: "none", color: BRAND.gray, borderColor: BRAND.border }}
+        >
+          Refresh
+        </Button>
+      </Stack>
 
-    if (isMdDown) {
-      return {
-        createdAt: false,
-      };
-    }
+      {loading && items.length === 0 ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress size={28} sx={{ color: BRAND.teal }} />
+        </Box>
+      ) : items.length === 0 ? (
+        <Box sx={{ p: 4, textAlign: "center", color: BRAND.gray }}>
+          <Typography variant="body2">
+            No deployments yet. Use the Catalog tab to deploy a package to the fleet.
+          </Typography>
+        </Box>
+      ) : (
+        <DataGrid
+          rows={items}
+          columns={columns}
+          density="compact"
+          disableRowSelectionOnClick
+          pageSizeOptions={[10, 25, 50]}
+          initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+          sx={{
+            ...DATAGRID_SX,
+            "& .MuiDataGrid-row:hover": { cursor: "pointer" },
+          }}
+          autoHeight
+          onRowClick={(p) => {
+            setDrawerDeployment(p.row);
+            setDrawerOpen(true);
+          }}
+        />
+      )}
 
-    return {};
-  }, [isMdDown, isSmDown]);
+      <DeploymentDetailDrawer
+        open={drawerOpen}
+        deployment={drawerDeployment}
+        canManage={canManage}
+        notify={notify}
+        onChanged={load}
+        onClose={() => setDrawerOpen(false)}
+      />
+    </SectionPaper>
+  );
+}
+
+// ── Page shell ────────────────────────────────────────────────────
+
+export default function SoftwareDelivery({ onNavigate }) {
+  const { auth } = useAuthContext();
+  const tenantId = auth?.tenantId;
+  const tenantRole = auth?.tenantMember?.role;
+  const isActive = auth?.tenantMember?.isActive === true;
+  const isAdmin =
+    isActive && (String(tenantRole ?? "") === "ADMIN" || String(tenantRole ?? "") === "OWNER");
+
+  // Plugin entitlement gate. SDP is opt-in per tenant — if the
+  // tenant's policy doesn't list "sdp" in `plugins.enabled[]`, we
+  // render the page in read-only mode with a banner pointing to
+  // Plugin Control. This mirrors how the backend gates writes
+  // (403 SOFTWARE_DELIVERY_PLUGIN_DISABLED on POST /:id/deploy).
+  //
+  // Tri-valued state during load:
+  //   null  → still fetching the tenant policy (don't render
+  //           write-enabling controls yet to avoid a flash).
+  //   true  → enabled, full UI.
+  //   false → disabled, banner + read-only.
+  const [sdpEnabled, setSdpEnabled] = React.useState(null);
+  const [policyError, setPolicyError] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!tenantId) {
+      setSdpEnabled(false);
+      return undefined;
+    }
+    let cancelled = false;
+    getTenantPolicy(tenantId)
+      .then((res) => {
+        if (cancelled) return;
+        // Backend returns 404 → http helper resolves null. The
+        // helper also accepts the policy json directly; both shapes
+        // route through the same getEnabledPluginSet logic.
+        const policyJson = res?.policy_json ?? res?.policyJson ?? null;
+        const enabled = getEnabledPluginSet(policyJson);
+        setSdpEnabled(enabled.has("sdp"));
+        setPolicyError(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // Soft-fail: if we can't read the tenant policy, treat as
+        // not enabled and surface a generic banner. We DON'T silently
+        // assume enabled — better to block deploys than leak ones we
+        // shouldn't allow.
+        console.warn("[SoftwareDelivery] tenant policy fetch failed", err);
+        setSdpEnabled(false);
+        setPolicyError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  // Effective `canManage` is the AND of admin role + plugin enabled.
+  // Reads stay open even when the plugin is disabled (so the operator
+  // can browse what they had pre-disable, and so the disabled-state
+  // banner shows alongside any existing rows for context).
+  const canManage = isAdmin && sdpEnabled === true;
+
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    severity: "success",
+    message: "",
+  });
+  const [autoOpenDeploymentId, setAutoOpenDeploymentId] = React.useState(null);
+
+  const notify = React.useCallback((severity, message) => {
+    setSnackbar({ open: true, severity, message });
+  }, []);
+
+  const handleDeployFired = React.useCallback((id) => {
+    setAutoOpenDeploymentId(id);
+    setActiveTab(1);
+  }, []);
+
+  const goToPluginControl = () => {
+    if (typeof onNavigate === "function") {
+      onNavigate("plugin-control");
+    } else if (typeof window !== "undefined") {
+      // AppShell passes onNavigate; this fallback covers a direct
+      // route or embedded usage.
+      const url = new URL(window.location.href);
+      url.searchParams.set("page", "plugin-control");
+      window.location.href = url.toString();
+    }
+  };
 
   return (
+    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+      <PageHeader
+        title="Software Delivery"
+        subtitle="Deploy third-party software to the fleet — catalog, target groups, per-device results"
+        icon={<CloudDownloadOutlinedIcon />}
+      />
 
-    <Box
-      sx={{
-        px: embedded ? 0 : { xs: 2, sm: 0.5 },
-        py: embedded ? 0 : { xs: 2, sm: 0.5 },
-      }}
-    >
-      {!embedded && (
-        
-        <Box
+      {/* Plugin-disabled banner. Renders only after we've resolved
+          the policy state — sdpEnabled === false means a confirmed
+          off, NOT loading. */}
+      {sdpEnabled === false ? (
+        <SectionPaper
+          variant="panel"
           sx={{
-            mb: 1.5,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: { xs: "stretch", sm: "center" },
-            gap: 2,
-            flexWrap: "wrap",
-            flexDirection: { xs: "column", sm: "row" },
+            mb: 2,
+            p: 2,
+            borderLeft: `4px solid ${BRAND.alert?.warning || BRAND.teal}`,
           }}
         >
-          <Box>
-            <Typography variant="h4" color={BRAND.teal} sx={{ fontWeight: 700 }}>
-              Software Downloads
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Manage supported Tracenium Agent packages and downloads
-            </Typography>
-          </Box>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            alignItems={{ xs: "flex-start", sm: "center" }}
+            justifyContent="space-between"
+          >
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 14 }}>
+                {policyError
+                  ? "Could not verify SDP entitlement"
+                  : "Software Delivery plugin is disabled for this tenant"}
+              </Typography>
+              <Typography sx={{ fontSize: 13, color: BRAND.gray, mt: 0.5 }}>
+                {policyError
+                  ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
+                  : isAdmin
+                    ? "Enable SDP from Plugin Control to start managing the catalog and deploying software to the fleet. Reads stay open."
+                    : "Ask an ADMIN to enable SDP from Plugin Control. Reads stay open."}
+              </Typography>
+            </Box>
+            {isAdmin && !policyError ? (
+              <Button
+                variant="contained"
+                onClick={goToPluginControl}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 700,
+                  bgcolor: BRAND.teal,
+                  "&:hover": { bgcolor: BRAND.tealHover },
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Open Plugin Control
+              </Button>
+            ) : null}
+          </Stack>
+        </SectionPaper>
+      ) : null}
 
-          {embedded && canEditSoftwareDelivery && (
-            <Button
-              variant="contained"
-              onClick={openCreateDialog}
-              fullWidth={isSmDown}
-              sx={{
-                bgcolor: BRAND.teal,
-                "&:hover": { bgcolor: BRAND.tealHover },
-                minWidth: { xs: "100%", sm: 170 },
-                alignSelf: { xs: "stretch", sm: "center" },
-              }}
-            >
-              + ADD PACKAGE
-            </Button>
-          )}
-        </Box>
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_e, v) => setActiveTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 56,
+            "& .MuiTabs-indicator": {
+              height: 3,
+              borderRadius: 999,
+              backgroundColor: BRAND.teal,
+            },
+          }}
+        >
+          <Tab
+            icon={<InventoryOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Catalog"
+            sx={TAB_SX}
+          />
+          <Tab
+            icon={<LocalShippingOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Deployments"
+            sx={TAB_SX}
+          />
+        </Tabs>
+      </SectionPaper>
+
+      {activeTab === 0 ? (
+        <CatalogTab
+          canManage={canManage}
+          notify={notify}
+          onDeployFire={handleDeployFired}
+        />
+      ) : (
+        <DeploymentsTab
+          canManage={canManage}
+          notify={notify}
+          autoOpenDeploymentId={autoOpenDeploymentId}
+          onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
+        />
       )}
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Total Packages" value={summary.total} />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Platforms"
-              value={summary.platforms}
-              accent={BRAND.tealText}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Active"
-              value={summary.active}
-              accent={BRAND.alert.error}
-            />
-          </Grid>
-        </Grid>
-      </Box>
-
-      <Paper
-        elevation={0}
-        sx={{
-          p: { xs: 1.5, sm: 1.5 },
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            mb: 1.5,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(6, minmax(0, 1fr))",
-            },
-          }}
-        >
-          <TextField
-            label="Search"
-            size="small"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            fullWidth
-          />
-
-          <TextField
-            select
-            label="Platform"
-            size="small"
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value)}
-            fullWidth
-          >
-            {PLATFORM_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>
-                {opt}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Architecture"
-            size="small"
-            value={arch}
-            onChange={(e) => setArch(e.target.value)}
-            fullWidth
-          >
-            {ARCH_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>
-                {opt}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Format"
-            size="small"
-            value={format}
-            onChange={(e) => setFormat(e.target.value)}
-            fullWidth
-          >
-            {FORMAT_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>
-                {opt}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Channel"
-            size="small"
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-            fullWidth
-          >
-            {CHANNEL_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>
-                {opt}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Status"
-            size="small"
-            value={isActiveFilter}
-            onChange={(e) => setIsActiveFilter(e.target.value)}
-            fullWidth
-          >
-            {ACTIVE_OPTIONS.map((opt) => (
-              <MenuItem key={opt} value={opt}>
-                {opt}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Box>
-
-        <Box
-          sx={{
-            height: {
-              xs: 480,
-              sm: "calc(100vh - 370px)",
-              md: "calc(100vh - 350px)",
-            },
-            minHeight: 480,
-            width: "100%",
-          }}
-        >
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            columnVisibilityModel={columnVisibilityModel}
-            loading={loading}
-            disableRowSelectionOnClick
-            getRowId={(row) => row.id}
-            pageSizeOptions={[10, 25, 50]}
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10, page: 0 },
-              },
-            }}
-            sx={{
-              border: "none",
-              width: "100%",
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "rgba(166, 83, 27, 0.08)",
-                fontWeight: 700,
-              },
-              "& .MuiDataGrid-columnHeaderTitle": {
-                fontWeight: 700,
-              },
-            }}
-          />
-        </Box>
-      </Paper>
-
-      <SoftwarePackageDialog
-        open={dialogOpen}
-        mode={dialogMode}
-        item={editingItem}
-        submitting={submitting}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleSave}
-      />
-
-      <DeleteSoftwarePackageDialog
-        open={deleteOpen}
-        item={deletingItem}
-        submitting={submitting}
-        onClose={() => setDeleteOpen(false)}
-        onConfirm={handleDelete}
-      />
 
       <BrandSnackbar
         open={snackbar.open}
         severity={snackbar.severity}
         message={snackbar.message}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
       />
     </Box>
   );

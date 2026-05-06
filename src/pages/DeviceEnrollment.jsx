@@ -41,7 +41,7 @@ import PageHeader from "../components/common/PageHeader";
 import { BRAND } from "../theme/brand";
 
 import TokensAdministrator from "./TokensAdministrator";
-import SoftwareDelivery from "./SoftwareDelivery";
+import AgentReleases from "./AgentReleases";
 
 // Compact horizontal "Step 1 → Step 2" guide. The cards now replace
 // the old tabs: clicking each step switches the content below.
@@ -216,7 +216,7 @@ export default function DeviceEnrollment() {
       </TabPanel>
 
       <TabPanel value={activeTab} index={1}>
-        <SoftwareDelivery embedded />
+        <AgentReleases embedded />
       </TabPanel>
     </Box>
   );

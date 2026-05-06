@@ -23,6 +23,7 @@ import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
 import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
+import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
@@ -254,6 +255,10 @@ export default function Sidebar({
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
+    // Software Delivery (SDP) — Phase 1. Sits next to Patch Management
+    // because they're conceptually adjacent ("the fleet runs these
+    // bits") and admins often jump between them.
+    { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
     { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
