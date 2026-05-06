@@ -433,6 +433,14 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // visual idioms doesn't change which slice maps to which platform.
   // Cycles through teal/dark/cyan/gray for any tail beyond the keyed
   // platforms — matches the Overview donut's color sequence.
+  function formatPlatformLabel(value) {
+    return String(value || "Unknown")
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  }
+
   const osDonutData = React.useMemo(() => {
     const cycleColors = [BRAND.teal, BRAND.dark, BRAND.cyan, BRAND.gray];
     const rows = Array.isArray(summary?.osPlatform) ? summary.osPlatform : [];
@@ -441,7 +449,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         const rawName = String(r?.os_platform ?? r?.name ?? "Unknown");
         const normalized = normalizePlatform(rawName);
         return {
-          name: rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase(),
+          name: formatPlatformLabel(rawName),
           value: Number(r?.host_count ?? r?.count ?? 0),
           color: normalized ? platformColors[normalized] : cycleColors[i % cycleColors.length],
         };
@@ -473,8 +481,8 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         // row is self-describing; rendering uses `sub` for the
         // secondary line (platform family) so scanning the list
         // groups visually by platform even though the list is flat.
-        label: version,
-        sub: platform
+        sub: version,
+        label: platform
           ? platform.charAt(0).toUpperCase() + platform.slice(1)
           : null,
         value: Number(r?.host_count ?? r?.count ?? 0),
