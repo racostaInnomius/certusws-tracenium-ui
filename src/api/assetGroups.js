@@ -14,6 +14,23 @@ import {
 
 const BASE = "/api/v1/asset-groups";
 
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() !== ""
+    ) {
+      query.append(key, String(value));
+    }
+  });
+
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export async function listAssetGroups() {
   return httpGetJson(BASE);
 }
@@ -36,8 +53,10 @@ export async function deleteAssetGroup(id) {
   return httpDeleteJson(`${BASE}/${encodeURIComponent(id)}`);
 }
 
-export async function listAssetGroupMembers(id) {
-  return httpGetJson(`${BASE}/${encodeURIComponent(id)}/members`);
+export async function listAssetGroupMembers(id, params = {}) {
+  return httpGetJson(
+    `${BASE}/${encodeURIComponent(id)}/members${buildQuery(params)}`
+  );
 }
 
 export async function addAssetGroupMembers(id, deviceIds) {
