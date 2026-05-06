@@ -20,7 +20,13 @@ function buildQuery(params = {}) {
 }
 
 export async function listKnownDevices(params = {}) {
-  return httpGetJson(`${BASE}/known-devices${buildQuery(params)}`);
+  return httpGetJson(
+    `${BASE}/known-devices${buildQuery({
+      page: params.page,
+      pageSize: params.pageSize,
+      search: params.search,
+    })}`
+  );
 }
 
 export async function listJobTypes() {

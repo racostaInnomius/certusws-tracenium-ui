@@ -306,9 +306,303 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
   );
 }
 
+
+// ── Server-side known devices picker ─────────────────────────────
+//
+// Asset Groups used to receive every known device when the page loaded
+// and then filtered locally. That worked for small tenants, but it does
+// not scale. This picker now talks directly to:
+//   GET /api/v1/orchestrator/known-devices?page=1&pageSize=25&search=...
+// Search is debounced, pagination is server-side, and selections are
+// maintained locally across pages so operators can add devices from
+// different result pages before submitting the group.
+
+function normalizeKnownDevice(d) {
+  return {
+    deviceId: String(d?.deviceId || "").trim(),
+    hostname: String(d?.hostname || "").trim(),
+    platform: String(d?.platform || d?.osPlatform || "").trim(),
+    agentVersion: String(d?.agentVersion || d?.agent_version || "").trim(),
+    connected: d?.connected === true,
+  };
+}
+
+function KnownDevicesPicker({
+  open,
+  selectedIds,
+  onToggleDevice,
+  excludeIds,
+  selectedLabel = "selected",
+  emptyLabel = "No devices match.",
+}) {
+  const [rows, setRows] = React.useState([]);
+  const [total, setTotal] = React.useState(0);
+  const [page, setPage] = React.useState(0);
+  const [pageSize] = React.useState(25);
+  const [search, setSearch] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    if (open) {
+      setPage(0);
+      setSearch("");
+      setRows([]);
+      setTotal(0);
+      setError("");
+    }
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const res = await listKnownDevices({
+          page: page + 1,
+          pageSize,
+          search: search.trim() || undefined,
+        });
+
+        if (cancelled) return;
+
+        const items = Array.isArray(res?.items) ? res.items : [];
+        setRows(
+          items
+            .map(normalizeKnownDevice)
+            .filter((d) => d.deviceId && !excludeIds?.has(d.deviceId))
+        );
+        setTotal(Number(res?.total ?? res?.count ?? 0));
+      } catch (err) {
+        if (cancelled) return;
+        setRows([]);
+        setTotal(0);
+        setError(err?.body?.message || err?.message || "Failed to load devices");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [open, page, pageSize, search, excludeIds]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return (
+    <Box>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 1,
+          gap: 1,
+          flexWrap: "wrap",
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{
+            color: BRAND.gray,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+          }}
+        >
+          Members
+        </Typography>
+        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
+          <strong>{selectedIds.size}</strong> {selectedLabel} · {total} known
+        </Typography>
+      </Box>
+
+      <TextField
+        size="small"
+        placeholder="Search hostname / device ID / platform / agent version…"
+        value={search}
+        onChange={(e) => {
+          setPage(0);
+          setSearch(e.target.value);
+        }}
+        fullWidth
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+            </InputAdornment>
+          ),
+          endAdornment: loading ? (
+            <InputAdornment position="end">
+              <CircularProgress size={16} sx={{ color: BRAND.teal }} />
+            </InputAdornment>
+          ) : null,
+        }}
+        sx={{ mb: 1 }}
+      />
+
+      {error ? (
+        <Alert severity="error" variant="outlined" sx={{ mb: 1 }}>
+          {error}
+        </Alert>
+      ) : null}
+
+      <Box
+        sx={{
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          maxHeight: 320,
+          overflowY: "auto",
+          bgcolor: BRAND.surface,
+        }}
+      >
+        {rows.length === 0 && !loading ? (
+          <Box sx={{ p: 2, textAlign: "center", color: BRAND.gray }}>
+            <Typography variant="body2">{emptyLabel}</Typography>
+          </Box>
+        ) : (
+          rows.map((d) => {
+            const checked = selectedIds.has(d.deviceId);
+            return (
+              <Box
+                key={d.deviceId}
+                onClick={() => onToggleDevice(d.deviceId)}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  px: 1.5,
+                  py: 0.75,
+                  cursor: "pointer",
+                  bgcolor: checked ? BRAND.tealSoft : "transparent",
+                  borderBottom: `1px solid ${BRAND.border}`,
+                  "&:hover": { bgcolor: BRAND.rowHover },
+                }}
+              >
+                <Box
+                  sx={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 0.5,
+                    border: `2px solid ${checked ? BRAND.teal : BRAND.gray}`,
+                    bgcolor: checked ? BRAND.teal : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    flexShrink: 0,
+                  }}
+                >
+                  {checked ? "✓" : ""}
+                </Box>
+
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: BRAND.dark,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.hostname || d.deviceId}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      color: BRAND.gray,
+                      fontFamily: "monospace",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {d.deviceId}
+                  </Typography>
+                </Box>
+
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  {d.platform ? (
+                    <Chip
+                      size="small"
+                      label={d.platform}
+                      sx={{
+                        height: 18,
+                        fontSize: 10.5,
+                        bgcolor: BRAND.darkSoft,
+                        color: BRAND.dark,
+                        fontWeight: 700,
+                      }}
+                    />
+                  ) : null}
+                  {d.connected ? (
+                    <Chip
+                      size="small"
+                      label="online"
+                      sx={{
+                        height: 18,
+                        fontSize: 10.5,
+                        bgcolor: ROLE.positiveSoft,
+                        color: ROLE.positive,
+                        fontWeight: 700,
+                      }}
+                    />
+                  ) : null}
+                </Stack>
+              </Box>
+            );
+          })
+        )}
+      </Box>
+
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        alignItems={{ xs: "stretch", sm: "center" }}
+        justifyContent="space-between"
+        sx={{ mt: 1 }}
+      >
+        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+          Page {page + 1} of {totalPages}
+        </Typography>
+        <Stack direction="row" spacing={1} justifyContent="flex-end">
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={loading || page <= 0}
+            onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+            sx={{ textTransform: "none", borderColor: BRAND.border, color: BRAND.dark }}
+          >
+            Previous
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={loading || page + 1 >= totalPages}
+            onClick={() => setPage((prev) => prev + 1)}
+            sx={{ textTransform: "none", borderColor: BRAND.border, color: BRAND.dark }}
+          >
+            Next
+          </Button>
+        </Stack>
+      </Stack>
+    </Box>
+  );
+}
+
 // ── Create / edit dialog ──────────────────────────────────────────
 
-function CreateGroupDialog({ open, onClose, onCreated, devices }) {
+function CreateGroupDialog({ open, onClose, onCreated }) {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [kind, setKind] = React.useState("static");
@@ -406,17 +700,6 @@ function CreateGroupDialog({ open, onClose, onCreated, devices }) {
     }, 600);
     return () => clearTimeout(handle);
   }, [kind, predicates]);
-
-  const filteredDevices = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return devices;
-    return devices.filter((d) => {
-      return (
-        (d.hostname || "").toLowerCase().includes(q) ||
-        (d.deviceId || "").toLowerCase().includes(q)
-      );
-    });
-  }, [devices, search]);
 
   const toggleDevice = (deviceId) => {
     setSelectedIds((prev) => {
@@ -666,137 +949,13 @@ function CreateGroupDialog({ open, onClose, onCreated, devices }) {
           )}
 
           {kind === "static" && (
-            <Box>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  mb: 1,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: BRAND.gray,
-                    fontWeight: 700,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.5,
-                  }}
-                >
-                  Members
-                </Typography>
-                <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
-                  <strong>{selectedIds.size}</strong> selected · {devices.length} known
-                </Typography>
-              </Box>
-              <TextField
-                size="small"
-                placeholder="Search hostname / device ID…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ mb: 1 }}
-              />
-              <Box
-                sx={{
-                  border: `1px solid ${BRAND.border}`,
-                  borderRadius: 2,
-                  maxHeight: 280,
-                  overflowY: "auto",
-                  bgcolor: BRAND.surface,
-                }}
-              >
-                {filteredDevices.length === 0 ? (
-                  <Box sx={{ p: 2, textAlign: "center", color: BRAND.gray }}>
-                    <Typography variant="body2">No devices match.</Typography>
-                  </Box>
-                ) : (
-                  filteredDevices.map((d) => {
-                    const checked = selectedIds.has(d.deviceId);
-                    return (
-                      <Box
-                        key={d.deviceId}
-                        onClick={() => toggleDevice(d.deviceId)}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 1.5,
-                          px: 1.5,
-                          py: 0.75,
-                          cursor: "pointer",
-                          bgcolor: checked ? BRAND.tealSoft : "transparent",
-                          borderBottom: `1px solid ${BRAND.border}`,
-                          "&:hover": { bgcolor: BRAND.rowHover },
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: 16,
-                            height: 16,
-                            borderRadius: 0.5,
-                            border: `2px solid ${checked ? BRAND.teal : BRAND.gray}`,
-                            bgcolor: checked ? BRAND.teal : "transparent",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#fff",
-                            fontSize: 12,
-                            fontWeight: 800,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {checked ? "✓" : ""}
-                        </Box>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            sx={{
-                              fontSize: 13,
-                              fontWeight: 600,
-                              color: BRAND.dark,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {d.hostname || d.deviceId}
-                          </Typography>
-                          <Typography
-                            sx={{
-                              fontSize: 11,
-                              color: BRAND.gray,
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            {d.deviceId}
-                          </Typography>
-                        </Box>
-                        {d.connected ? (
-                          <Chip
-                            size="small"
-                            label="online"
-                            sx={{
-                              height: 18,
-                              fontSize: 10.5,
-                              bgcolor: ROLE.positiveSoft,
-                              color: ROLE.positive,
-                              fontWeight: 700,
-                            }}
-                          />
-                        ) : null}
-                      </Box>
-                    );
-                  })
-                )}
-              </Box>
-            </Box>
+            <KnownDevicesPicker
+              open={open}
+              selectedIds={selectedIds}
+              onToggleDevice={toggleDevice}
+              selectedLabel="selected"
+              emptyLabel="No devices match."
+            />
           )}
 
           {errorMessage ? (
@@ -1171,33 +1330,64 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
 
 function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, onMembersChanged }) {
   const [members, setMembers] = React.useState([]);
+  const [membersTotal, setMembersTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
   const [addPickerOpen, setAddPickerOpen] = React.useState(false);
   const [dispatchOpen, setDispatchOpen] = React.useState(false);
+  const [memberSearch, setMemberSearch] = React.useState("");
+  const [memberPaginationModel, setMemberPaginationModel] = React.useState({
+    page: 0,
+    pageSize: 25,
+  });
+  const [memberSortModel, setMemberSortModel] = React.useState([
+    { field: "hostname", sort: "asc" },
+  ]);
   const confirm = useConfirm();
 
   const loadMembers = React.useCallback(async () => {
     if (!group) return;
     setLoading(true);
     try {
-      const res = await listAssetGroupMembers(group.id);
+      const currentSort = memberSortModel?.[0] || { field: "hostname", sort: "asc" };
+      const res = await listAssetGroupMembers(group.id, {
+        page: memberPaginationModel.page + 1,
+        pageSize: memberPaginationModel.pageSize,
+        search: memberSearch || undefined,
+        sortBy: currentSort.field,
+        sortDir: currentSort.sort || "asc",
+      });
+
       setMembers(Array.isArray(res?.items) ? res.items : []);
+      setMembersTotal(Number(res?.total ?? res?.count ?? 0));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load members");
+      setMembers([]);
+      setMembersTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [group, notify]);
+  }, [group, memberPaginationModel.page, memberPaginationModel.pageSize, memberSearch, memberSortModel, notify]);
 
   React.useEffect(() => {
     if (open && group) {
-      loadMembers();
-    } else {
-      setMembers([]);
-      setAddPickerOpen(false);
-      setDispatchOpen(false);
+      const handle = setTimeout(() => {
+        loadMembers();
+      }, memberSearch ? 350 : 0);
+      return () => clearTimeout(handle);
     }
-  }, [open, group, loadMembers]);
+
+    setMembers([]);
+    setMembersTotal(0);
+    setAddPickerOpen(false);
+    setDispatchOpen(false);
+  }, [open, group, loadMembers, memberSearch]);
+
+  React.useEffect(() => {
+    if (!open || !group) return;
+    setMemberSearch("");
+    setMemberPaginationModel({ page: 0, pageSize: 25 });
+    setMemberSortModel([{ field: "hostname", sort: "asc" }]);
+  }, [open, group?.id]);
 
   // Decorate device IDs with hostnames using the known-devices index.
   const deviceIndex = React.useMemo(() => {
@@ -1208,16 +1398,23 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
 
   const memberRows = React.useMemo(() => {
     return members.map((m) => {
-      const dev = deviceIndex.get(m.deviceId);
+      const deviceId = String(m?.deviceId ?? m?.device_id ?? "").trim();
+      const dev = deviceIndex.get(deviceId);
+      const connected =
+        m?.connected === true ||
+        String(m?.status || "").toLowerCase() === "online" ||
+        dev?.connected === true;
+
       return {
-        id: m.deviceId,
-        deviceId: m.deviceId,
-        hostname: dev?.hostname || null,
-        connected: dev?.connected === true,
-        addedAt: m.addedAt,
-        addedBy: m.addedBy,
+        id: deviceId,
+        deviceId,
+        hostname: m?.hostname || dev?.hostname || null,
+        connected,
+        status: m?.status || (connected ? "online" : "offline"),
+        addedAt: m?.addedAt || m?.added_at,
+        addedBy: m?.addedBy || m?.added_by,
       };
-    });
+    }).filter((m) => m.deviceId);
   }, [members, deviceIndex]);
 
   const handleRemove = async (deviceId) => {
@@ -1280,11 +1477,11 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
       ),
     },
     {
-      field: "connected",
+      field: "status",
       headerName: "Status",
       width: 100,
       renderCell: (params) =>
-        params.value ? (
+        params.row.connected ? (
           <Chip
             size="small"
             label="online"
@@ -1406,18 +1603,23 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
 
           <Divider sx={{ borderColor: BRAND.border }} />
 
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Typography
-              variant="caption"
-              sx={{
-                color: BRAND.gray,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Members
-            </Typography>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+            <Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: BRAND.gray,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                Members
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                {membersTotal} total · sorted by hostname
+              </Typography>
+            </Box>
             <Stack direction="row" spacing={1}>
               {/* Dispatch is available for both static and dynamic
                   groups (admin-gated). For dynamic the backend
@@ -1464,30 +1666,49 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
             </Stack>
           </Box>
 
-          <Box sx={{ flex: 1, overflow: "hidden" }}>
-            {loading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : memberRows.length === 0 ? (
-              <Box sx={{ p: 3, textAlign: "center", color: BRAND.gray }}>
-                <Typography variant="body2">
-                  This group has no members yet.
-                </Typography>
-              </Box>
-            ) : (
+          <Stack spacing={1} sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <TextField
+              size="small"
+              placeholder="Search hostname / device ID…"
+              value={memberSearch}
+              onChange={(e) => {
+                setMemberPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setMemberSearch(e.target.value);
+              }}
+              fullWidth
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <Box sx={{ flex: 1, minHeight: 360, overflow: "hidden" }}>
               <DataGrid
                 rows={memberRows}
                 columns={columns}
                 density="compact"
                 disableRowSelectionOnClick
-                pageSizeOptions={[10, 25, 50]}
-                initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+                loading={loading}
+                rowCount={membersTotal}
+                paginationMode="server"
+                sortingMode="server"
+                paginationModel={memberPaginationModel}
+                onPaginationModelChange={setMemberPaginationModel}
+                sortModel={memberSortModel}
+                onSortModelChange={(model) => {
+                  const nextModel =
+                    model.length > 0 ? model : [{ field: "hostname", sort: "asc" }];
+                  setMemberPaginationModel((prev) => ({ ...prev, page: 0 }));
+                  setMemberSortModel(nextModel);
+                }}
+                pageSizeOptions={[10, 25, 50, 100]}
                 sx={DATAGRID_SX}
-                autoHeight
               />
-            )}
-          </Box>
+            </Box>
+          </Stack>
         </Box>
       ) : null}
 
@@ -1499,7 +1720,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
         open={addPickerOpen}
         onClose={() => setAddPickerOpen(false)}
         onConfirm={handleAddMembers}
-        devices={devices.filter((d) => !memberIds.has(d.deviceId))}
+        excludeIds={memberIds}
         groupName={group?.name || ""}
       />
 
@@ -1518,26 +1739,14 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
   );
 }
 
-function AddMembersDialog({ open, onClose, onConfirm, devices, groupName }) {
+function AddMembersDialog({ open, onClose, onConfirm, excludeIds, groupName }) {
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
-  const [search, setSearch] = React.useState("");
 
   React.useEffect(() => {
     if (open) {
       setSelectedIds(new Set());
-      setSearch("");
     }
   }, [open]);
-
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return devices;
-    return devices.filter(
-      (d) =>
-        (d.hostname || "").toLowerCase().includes(q) ||
-        (d.deviceId || "").toLowerCase().includes(q)
-    );
-  }, [devices, search]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -1545,100 +1754,21 @@ function AddMembersDialog({ open, onClose, onConfirm, devices, groupName }) {
         Add devices to {groupName}
       </DialogTitle>
       <DialogContent>
-        <TextField
-          size="small"
-          placeholder="Search hostname / device ID…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          fullWidth
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
-              </InputAdornment>
-            ),
+        <KnownDevicesPicker
+          open={open}
+          selectedIds={selectedIds}
+          excludeIds={excludeIds}
+          selectedLabel="selected"
+          emptyLabel="No devices available to add."
+          onToggleDevice={(deviceId) => {
+            setSelectedIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(deviceId)) next.delete(deviceId);
+              else next.add(deviceId);
+              return next;
+            });
           }}
-          sx={{ mb: 1 }}
         />
-        <Box
-          sx={{
-            border: `1px solid ${BRAND.border}`,
-            borderRadius: 2,
-            maxHeight: 320,
-            overflowY: "auto",
-            bgcolor: BRAND.surface,
-          }}
-        >
-          {filtered.length === 0 ? (
-            <Box sx={{ p: 2, textAlign: "center", color: BRAND.gray }}>
-              <Typography variant="body2">No devices available to add.</Typography>
-            </Box>
-          ) : (
-            filtered.map((d) => {
-              const checked = selectedIds.has(d.deviceId);
-              return (
-                <Box
-                  key={d.deviceId}
-                  onClick={() =>
-                    setSelectedIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(d.deviceId)) next.delete(d.deviceId);
-                      else next.add(d.deviceId);
-                      return next;
-                    })
-                  }
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1.5,
-                    px: 1.5,
-                    py: 0.75,
-                    cursor: "pointer",
-                    bgcolor: checked ? BRAND.tealSoft : "transparent",
-                    borderBottom: `1px solid ${BRAND.border}`,
-                    "&:hover": { bgcolor: BRAND.rowHover },
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 0.5,
-                      border: `2px solid ${checked ? BRAND.teal : BRAND.gray}`,
-                      bgcolor: checked ? BRAND.teal : "transparent",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {checked ? "✓" : ""}
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      sx={{
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: BRAND.dark,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {d.hostname || d.deviceId}
-                    </Typography>
-                    <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
-                      {d.deviceId}
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })
-          )}
-        </Box>
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} sx={{ textTransform: "none", color: BRAND.dark }}>
@@ -1694,7 +1824,10 @@ export default function AssetGroups() {
 
   const loadDevices = React.useCallback(async () => {
     try {
-      const res = await listKnownDevices();
+      // Lightweight lookup cache for decorating existing group members.
+      // Device pickers themselves use server-side search/pagination and
+      // do not depend on this page-level list.
+      const res = await listKnownDevices({ page: 1, pageSize: 100 });
       const items = Array.isArray(res?.items) ? res.items : [];
       setDevices(
         items.map((d) => ({
@@ -1933,7 +2066,6 @@ export default function AssetGroups() {
       <CreateGroupDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        devices={devices}
         onCreated={(group) => {
           notify("success", `Group "${group?.name || ""}" created`);
           loadGroups();
