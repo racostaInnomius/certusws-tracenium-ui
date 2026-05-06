@@ -58,6 +58,7 @@ import {
   bulkScan
 } from "../api/patchManagement";
 import { createDeviceJob } from "../api/jobs";
+import FindingsPanel from "../components/patch-management/FindingsPanel";
 
 // ── Remediation catalog. Mirrors the Security Compliance categories —
 //    each compliance check has a matching remediation action here. When
@@ -485,6 +486,15 @@ export default function PatchManagement() {
 
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
+  // PMv2 — admin-gating for the new remediation actions (apply +
+  // dry-run + cancel). Reads stay open for any tenant member, same
+  // pattern as SDP. `canManage` derives from `pmpEnabled` further
+  // below so we do the AND there, not here.
+  const tenantRole = auth?.tenantMember?.role;
+  const isActiveMember = auth?.tenantMember?.isActive === true;
+  const isAdmin =
+    isActiveMember
+    && (String(tenantRole ?? "") === "ADMIN" || String(tenantRole ?? "") === "OWNER");
 
   // Tenant policy — the source of truth for "is PMP active". Cached
   // so toggling between pages doesn't flash the placeholder while
@@ -499,6 +509,7 @@ export default function PatchManagement() {
     policyLoader
   );
   const pmpEnabled = isPmpEnabledIn(policyRes);
+  const canManage = isAdmin && pmpEnabled;
 
   // Summary + device list — only fetched when PMP is enabled. Callers
   // pass `enabled` so the loader is a no-op for tenants that haven't
@@ -1104,11 +1115,49 @@ export default function PatchManagement() {
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
-          <CategoryPanel
-            category={activeCategory}
-            pmpEnabled={pmpEnabled}
-            onRunAction={handleRunCategoryAction}
-          />
+          {/* Patches tab keeps the legacy CategoryPanel — the
+              "documentation-of-actions + Run buttons" surface that
+              wires into bulkInstall / bulkScan. The other tabs are
+              the v2 surface: real findings + click-to-fix. */}
+          {tab === "patches" ? (
+            <CategoryPanel
+              category={activeCategory}
+              pmpEnabled={pmpEnabled}
+              onRunAction={handleRunCategoryAction}
+            />
+          ) : (
+            <FindingsPanel
+              tabKey={tab}
+              category={
+                tab === "tls"    ? "cryptography"
+                : tab === "smb"  ? "network_sharing"
+                : tab === "shares" ? "network_sharing"
+                : tab === "other" ? "firewall"
+                  // ^^^ Phase 1: "other" surfaces firewall findings
+                  // only — the catalog also has antimalware /
+                  // disk_encryption / identity_policy / integrity in
+                  // this bucket but the agent has no auto-fix for
+                  // them yet. Phase 2: backend grows
+                  // `categoriesNotIn` and we drop the firewall-only
+                  // narrowing here, so "other" lists everything that
+                  // isn't tls/smb/shares.
+                : undefined
+              }
+              checkIdContains={
+                // Split the shared `network_sharing` catalog category
+                // between the SMB and Shares tabs. Catalog's checkId
+                // naming convention puts "smb" or "share" in the
+                // last segment, so a substring match is unambiguous.
+                tab === "smb"    ? "smb"
+                : tab === "shares" ? "share"
+                : undefined
+              }
+              canManage={canManage}
+              notify={(severity, message) =>
+                setSnackbar({ open: true, severity, message })
+              }
+            />
+          )}
         </Box>
       </SectionPaper>
 

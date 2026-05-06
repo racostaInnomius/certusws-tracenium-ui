@@ -42,3 +42,64 @@ export async function bulkInstall(payload) {
 export async function bulkScan() {
   return httpPostJson(`${BASE}/bulk-scan`, {});
 }
+
+// ── PMv2 — non-patch security remediation ─────────────────────────
+//
+// Layered on top of the existing PMP plugin. The agent dispatches by
+// `checkId` to a hardcoded whitelist of remediation handlers (TLS,
+// SMB, firewall, etc.); this client just speaks the REST shape.
+
+function buildQuery(params = {}) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && String(v).trim() !== "") {
+      q.append(k, String(v));
+    }
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+// Aggregated findings for the new tabs (TLS / SMB / Shares / Other).
+// Filters supported: category, checkIdContains, severity, limit.
+// Returns `{ ok, items: FindingAggregateRow[], totals: {...} }` —
+// totals power the per-tab sub-KPI strip.
+export async function getFindings(params = {}) {
+  return httpGetJson(`${BASE}/findings${buildQuery(params)}`);
+}
+
+// Per-finding drilldown: which devices currently fail this checkId.
+// Used by the drawer's "Step 1 - target" preview before apply.
+export async function getDevicesAffectedByCheck(checkId) {
+  return httpGetJson(
+    `${BASE}/findings/${encodeURIComponent(checkId)}/devices`
+  );
+}
+
+// Create a remediation campaign and fan out one job per device.
+// payload: { checkId, mode: "apply" | "dry_run",
+//            assetGroupId? | deviceIds? }
+export async function remediate(payload) {
+  return httpPostJson(`${BASE}/remediate`, payload);
+}
+
+export async function listRemediations(params = {}) {
+  return httpGetJson(`${BASE}/remediations${buildQuery(params)}`);
+}
+
+export async function getRemediation(id) {
+  return httpGetJson(`${BASE}/remediations/${encodeURIComponent(id)}`);
+}
+
+export async function getRemediationResults(id) {
+  return httpGetJson(
+    `${BASE}/remediations/${encodeURIComponent(id)}/results`
+  );
+}
+
+export async function cancelRemediation(id) {
+  return httpPostJson(
+    `${BASE}/remediations/${encodeURIComponent(id)}/cancel`,
+    {}
+  );
+}
