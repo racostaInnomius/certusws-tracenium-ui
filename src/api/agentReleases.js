@@ -3,9 +3,8 @@
 // Wrapper over /api/v1/agent-releases. Renamed from
 // `softwareDelivery.js` (2026-05-01) so the `software-delivery` name
 // is free for the actual SDP feature (third-party software
-// deployment to the fleet). The backend still serves both
-// `/api/v1/agent-releases` and the deprecated `/api/v1/software-delivery`
-// alias during the transition window.
+// deployment to the fleet). The transition alias at
+// `/api/v1/software-delivery` was dropped in Batch 3.
 
 import {
   httpGetJson,

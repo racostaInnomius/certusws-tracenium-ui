@@ -12,6 +12,7 @@ const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrato
 const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
 const Welcome = React.lazy(() => import("../pages/Welcome"));
 const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
+const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
@@ -141,6 +142,16 @@ export default function AppShell() {
   if (selectedPage === "agent-releases") {
     content = <AgentReleases />;
   }
+
+  // Software Delivery (SDP) — operator surface for deploying
+  // third-party software to the fleet. Distinct from `agent-releases`
+  // (which catalogs the Tracenium agent's own installer binaries).
+  // Two tabs: Catalog (CRUD packages) and Deployments (history +
+  // per-device results).
+  if (selectedPage === "software-delivery") {
+    content = <SoftwareDelivery onNavigate={setSelectedPage} />;
+  }
+
   if (selectedPage === "jobs") {
     content = <Jobs />;
   }
