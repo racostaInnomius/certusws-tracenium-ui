@@ -13,10 +13,21 @@ import {
   FormControlLabel,
   Chip,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
+  Stack,
+  Tooltip,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
+import CloseIcon from "@mui/icons-material/Close";
 
 import {
   getSoftwareInventorySummary,
@@ -131,9 +142,63 @@ function formatDate(value) {
   });
 }
 
+function normalizeRankingRows(items = [], fallbackColor = BRAND.teal) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => Number(item?.value || 0) > 0)
+    .map((item, index) => ({
+      ...item,
+      id: `${String(item?.label || "item")}-${index}`,
+      rank: index + 1,
+      label: item?.label || "Unknown",
+      value: Number(item?.value || 0),
+      color: item?.color || fallbackColor,
+    }))
+    .sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
+}
+
+function RankingViewAllButton({ disabled = false, onClick }) {
+  return (
+    <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
+      <span>
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<FormatListBulletedIcon sx={{ fontSize: 16 }} />}
+          disabled={disabled}
+          onClick={onClick}
+          sx={{
+            px: 1,
+            py: 0.25,
+            minWidth: "auto",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 800,
+            color: BRAND.tealText,
+            whiteSpace: "nowrap",
+            "&:hover": {
+              bgcolor: BRAND.tealSoft,
+            },
+          }}
+        >
+          View all
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
 export default function SoftwareInventory() {
+  const theme = useTheme();
+  const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
+
   const [summary, setSummary] = React.useState(null);
   const [rankings, setRankings] = React.useState(null);
+  const [rankingDialog, setRankingDialog] = React.useState(null);
+  const [rankingDialogSearch, setRankingDialogSearch] = React.useState("");
 
   const [detailRows, setDetailRows] = React.useState([]);
   const [totalRows, setTotalRows] = React.useState(0);
@@ -391,6 +456,140 @@ export default function SoftwareInventory() {
     { field: "publishers", headerName: "Publishers", minWidth: 120, flex: 0.5 },
   ];
 
+  const topInstalledAppsRows = React.useMemo(
+    () => normalizeRankingRows(rankings?.topInstalledApps, BRAND.teal),
+    [rankings?.topInstalledApps]
+  );
+
+  const topPublishersRows = React.useMemo(
+    () => normalizeRankingRows(rankings?.topPublishers, BRAND.teal),
+    [rankings?.topPublishers]
+  );
+
+  const topSourcesRows = React.useMemo(
+    () => normalizeRankingRows(rankings?.topSources, BRAND.dark),
+    [rankings?.topSources]
+  );
+
+  const appsPerDeviceRows = React.useMemo(
+    () => normalizeRankingRows(rankings?.appsPerDevice, BRAND.alert.error),
+    [rankings?.appsPerDevice]
+  );
+
+  const openRankingDialog = React.useCallback((config) => {
+    setRankingDialog(config);
+    setRankingDialogSearch("");
+  }, []);
+
+  const closeRankingDialog = React.useCallback(() => {
+    setRankingDialog(null);
+    setRankingDialogSearch("");
+  }, []);
+
+  const rankingDialogRows = React.useMemo(() => {
+    const rows = Array.isArray(rankingDialog?.items) ? rankingDialog.items : [];
+    const query = rankingDialogSearch.trim().toLowerCase();
+
+    if (!query) return rows;
+
+    return rows.filter((row) => {
+      const label = String(row?.label || "").toLowerCase();
+      const sub = String(row?.sub || "").toLowerCase();
+      return label.includes(query) || sub.includes(query);
+    });
+  }, [rankingDialog?.items, rankingDialogSearch]);
+
+  const rankingDialogTotal = React.useMemo(
+    () => rankingDialogRows.reduce((acc, row) => acc + Number(row?.value || 0), 0),
+    [rankingDialogRows]
+  );
+
+  const rankingDialogColumns = React.useMemo(
+    () => [
+      {
+        field: "rank",
+        headerName: "#",
+        width: 74,
+        sortable: false,
+        align: "center",
+        headerAlign: "center",
+        renderCell: (params) => (
+          <Chip
+            label={params.value}
+            size="small"
+            sx={{
+              width: 34,
+              height: 24,
+              fontWeight: 800,
+              bgcolor: BRAND.tealSoft,
+              color: BRAND.tealText,
+            }}
+          />
+        ),
+      },
+      {
+        field: "label",
+        headerName: rankingDialog?.labelHeader || "Name",
+        minWidth: 220,
+        flex: 1,
+        renderCell: (params) => (
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: BRAND.dark,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={params.value}
+            >
+              {params.value || "Unknown"}
+            </Typography>
+            {params.row?.sub ? (
+              <Typography
+                sx={{
+                  fontSize: 11,
+                  color: "text.secondary",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={params.row.sub}
+              >
+                {params.row.sub}
+              </Typography>
+            ) : null}
+          </Box>
+        ),
+      },
+      {
+        field: "value",
+        headerName: rankingDialog?.valueHeader || "Total",
+        width: 130,
+        align: "right",
+        headerAlign: "right",
+        renderCell: (params) => (
+          <Typography sx={{ fontSize: 13, fontWeight: 800, color: BRAND.dark }}>
+            {Number(params.value || 0)}
+          </Typography>
+        ),
+      },
+    ],
+    [rankingDialog?.labelHeader, rankingDialog?.valueHeader]
+  );
+
+  const renderViewAllButton = React.useCallback(
+    (config) => (
+      <RankingViewAllButton
+        disabled={!Array.isArray(config.items) || config.items.length === 0}
+        onClick={() => openRankingDialog(config)}
+      />
+    ),
+    [openRankingDialog]
+  );
+
   const TraceniumSwitch = (props) => (
     <Switch
       {...props}
@@ -475,7 +674,95 @@ export default function SoftwareInventory() {
         </Grid>
       </Box>
 
-      <Paper
+      <Box sx={{ mb: 3 }}>
+        <Grid container spacing={2} alignItems="stretch">
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top installed apps"
+                items={topInstalledAppsRows}
+                totalLabel="installs"
+                emptyLabel="No installed apps data"
+                minHeight={260}
+                maxItems={5}
+                headerExtra={renderViewAllButton({
+                  title: "Top installed apps",
+                  subtitle: "Complete application ranking by detected installs.",
+                  items: topInstalledAppsRows,
+                  totalLabel: "installs",
+                  labelHeader: "Application",
+                  valueHeader: "Installs",
+                })}
+              />
+            </Box>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top publishers"
+                items={topPublishersRows}
+                totalLabel="apps"
+                emptyLabel="No publisher data"
+                minHeight={260}
+                maxItems={5}
+                headerExtra={renderViewAllButton({
+                  title: "Top publishers",
+                  subtitle: "Complete publisher ranking by detected applications.",
+                  items: topPublishersRows,
+                  totalLabel: "apps",
+                  labelHeader: "Publisher",
+                  valueHeader: "Apps",
+                })}
+              />
+            </Box>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Top sources"
+                items={topSourcesRows}
+                totalLabel="apps"
+                emptyLabel="No source data"
+                minHeight={260}
+                maxItems={5}
+                headerExtra={renderViewAllButton({
+                  title: "Top sources",
+                  subtitle: "Complete software source ranking.",
+                  items: topSourcesRows,
+                  totalLabel: "apps",
+                  labelHeader: "Source",
+                  valueHeader: "Apps",
+                })}
+              />
+            </Box>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <CompositionBars
+                title="Apps per device"
+                items={appsPerDeviceRows}
+                totalLabel="apps"
+                emptyLabel="No device app data"
+                minHeight={260}
+                maxItems={5}
+                headerExtra={renderViewAllButton({
+                  title: "Apps per device",
+                  subtitle: "Complete device ranking by installed applications.",
+                  items: appsPerDeviceRows,
+                  totalLabel: "apps",
+                  labelHeader: "Device",
+                  valueHeader: "Apps",
+                })}
+              />
+            </Box>
+          </Grid>
+        </Grid>
+      </Box>
+
+<Paper
         elevation={0}
         sx={{
           p: 2,
@@ -555,74 +842,6 @@ export default function SoftwareInventory() {
           </Button>
         </Box>
       </Paper>
-
-      <Box sx={{ mb: 3 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top installed apps"
-                items={(rankings?.topInstalledApps || []).map((item) => ({
-                  ...item,
-                  color: BRAND.teal,
-                }))}
-                totalLabel="installs"
-                emptyLabel="No installed apps data"
-                minHeight={260}
-                maxItems={6}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top publishers"
-                items={(rankings?.topPublishers || []).map((item) => ({
-                  ...item,
-                  color: BRAND.teal,
-                }))}
-                totalLabel="apps"
-                emptyLabel="No publisher data"
-                minHeight={260}
-                maxItems={6}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top sources"
-                items={(rankings?.topSources || []).map((item) => ({
-                  ...item,
-                  color: BRAND.dark,
-                }))}
-                totalLabel="apps"
-                emptyLabel="No source data"
-                minHeight={260}
-                maxItems={6}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Apps per device"
-                items={(rankings?.appsPerDevice || []).map((item) => ({
-                  ...item,
-                  color: BRAND.alert.error,
-                }))}
-                totalLabel="apps"
-                emptyLabel="No device app data"
-                minHeight={260}
-                maxItems={6}
-              />
-            </Box>
-          </Grid>
-        </Grid>
-      </Box>
 
       <SectionCard title="">
         <Box
@@ -835,6 +1054,154 @@ export default function SoftwareInventory() {
           </Box>
         )}
       </SectionCard>
+
+      <Dialog
+        open={Boolean(rankingDialog)}
+        onClose={closeRankingDialog}
+        fullWidth
+        maxWidth="md"
+        fullScreen={rankingDialogFullScreen}
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+            border: { xs: "none", sm: `1px solid ${BRAND.border}` },
+            boxShadow: BRAND.shadow,
+            overflow: "hidden",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            p: { xs: 2, sm: 2.5 },
+            pb: 1.5,
+          }}
+        >
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            alignItems={{ xs: "stretch", sm: "flex-start" }}
+            justifyContent="space-between"
+            spacing={2}
+          >
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: BRAND.dark }}>
+                {rankingDialog?.title || "Ranking"}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
+                {rankingDialog?.subtitle || "Complete ranking list"}
+              </Typography>
+            </Box>
+
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              justifyContent={{ xs: "space-between", sm: "flex-end" }}
+              sx={{ flexShrink: 0 }}
+            >
+              <Chip
+                size="small"
+                label={`${rankingDialogRows.length} rows`}
+                sx={{
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                  fontWeight: 800,
+                }}
+              />
+              <Chip
+                size="small"
+                label={`${rankingDialogTotal} ${rankingDialog?.totalLabel || "items"}`}
+                sx={{
+                  bgcolor: "rgba(15, 23, 42, 0.06)",
+                  color: BRAND.dark,
+                  fontWeight: 800,
+                }}
+              />
+              <IconButton
+                aria-label="Close ranking dialog"
+                onClick={closeRankingDialog}
+                sx={{
+                  border: `1px solid ${BRAND.border}`,
+                  bgcolor: "white",
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+
+        <Divider />
+
+        <DialogContent
+          sx={{
+            p: { xs: 2, sm: 2.5 },
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+          }}
+        >
+          <TextField
+            label="Search ranking"
+            size="small"
+            value={rankingDialogSearch}
+            onChange={(e) => setRankingDialogSearch(e.target.value)}
+            fullWidth
+            autoFocus={!rankingDialogFullScreen}
+          />
+
+          <Box sx={{ height: { xs: "calc(100vh - 236px)", sm: 460 }, width: "100%" }}>
+            <DataGrid
+              rows={rankingDialogRows}
+              columns={rankingDialogColumns}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.id}
+              pageSizeOptions={[10, 25, 50, 100]}
+              initialState={{
+                pagination: {
+                  paginationModel: { page: 0, pageSize: 10 },
+                },
+              }}
+              sx={{
+                border: `1px solid ${BRAND.border}`,
+                borderRadius: 2,
+                overflow: "hidden",
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "rgba(27,166,166,0.08)",
+                  fontWeight: 800,
+                },
+                "& .MuiDataGrid-columnHeaderTitle": {
+                  fontWeight: 800,
+                },
+                "& .MuiDataGrid-cell": {
+                  alignItems: "center",
+                },
+              }}
+            />
+          </Box>
+        </DialogContent>
+
+        <DialogActions
+          sx={{
+            px: { xs: 2, sm: 2.5 },
+            pb: { xs: 2, sm: 2.5 },
+            pt: 0,
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={closeRankingDialog}
+            sx={{
+              borderRadius: 999,
+              px: 2.5,
+              fontWeight: 800,
+              bgcolor: BRAND.teal,
+              "&:hover": { bgcolor: BRAND.tealText },
+            }}
+          >
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <BrandSnackbar
         open={snackbar.open}

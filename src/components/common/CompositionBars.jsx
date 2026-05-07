@@ -1,24 +1,4 @@
 // src/components/common/CompositionBars.jsx
-//
-// Ranked breakdown card — title + a vertical list of rows, each with
-// a colored CSS bar, a label on the left, a count on the right. The
-// widest bar fills the track; everything scales proportionally.
-//
-// Used as a drop-in replacement for the various recharts BarChart +
-// DonutChart combos that felt heavy for the tiny categorical data we
-// actually have ("3 OS versions", "2 manufacturers"). A flat list
-// reads in <200ms and doesn't waste the whole panel on axes + legend.
-//
-// Consumers pass `items` as `[{ label, value, color?, sub? }]`. Color
-// defaults to BRAND.teal; `sub` is an optional secondary line
-// (platform family, version tag, etc.) that renders smaller beneath
-// the label.
-//
-// The bar fills "value / maxValue" so rank ordering is visual: the
-// largest bucket is 100% width, everything else is relative. A
-// total-row chip in the header shows the sum and the subset label
-// (e.g. "6 hosts", "10 jobs") — same pattern as `JobsByTypeCard` in
-// the Jobs page.
 
 import { Box, Chip, Paper, Stack, Typography } from "@mui/material";
 import { BRAND } from "../../theme/brand";
@@ -68,12 +48,34 @@ export default function CompositionBars({
         direction="row"
         alignItems="center"
         justifyContent="space-between"
-        sx={{ mb: 1.25, gap: 1 }}
+        sx={{
+          mb: 1.25,
+          gap: 1,
+          flexWrap: "wrap",
+        }}
       >
-        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{
+            color: BRAND.dark,
+            fontWeight: 700,
+            minWidth: 0,
+            flex: "1 1 130px",
+          }}
+        >
           {title}
         </Typography>
-        <Stack direction="row" alignItems="center" spacing={1}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{
+            flex: "0 1 auto",
+            flexWrap: "wrap",
+            rowGap: 0.75,
+            justifyContent: "flex-end",
+          }}
+        >
           {headerExtra}
           <Chip
             size="small"
