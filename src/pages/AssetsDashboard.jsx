@@ -38,9 +38,9 @@ import {
 } from "@mui/material";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import WifiTetheringOutlinedIcon from "@mui/icons-material/WifiTetheringOutlined";
-import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
@@ -135,6 +135,29 @@ function normalizePlatform(raw) {
   if (v === "macos" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
   if (v === "linux") return "linux";
   return null;
+}
+
+function toSafeNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getOsVersionDisplayTitle(row) {
+  return (
+    row?.display_title ||
+    row?.commercial_name ||
+    row?.os_label ||
+    "Unknown OS"
+  );
+}
+
+function getOsVersionDisplaySubtitle(row) {
+  return (
+    row?.display_subtitle ||
+    row?.technical_version ||
+    row?.os_version ||
+    ""
+  );
 }
 
 // ---------- component --------------------------------------------------------
@@ -457,39 +480,22 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
       .filter((d) => d.value > 0);
   }, [summary, platformColors]);
 
-  const manufacturerItems = React.useMemo(() => {
-    const rows = Array.isArray(summary?.topManufacturers)
-      ? summary.topManufacturers
-      : [];
-    return rows.map((r) => ({
-      label: String(r?.manufacturer || "Unknown"),
-      value: Number(r?.host_count ?? r?.count ?? 0),
-      // All manufacturer bars use brand teal — the ranking IS the
-      // information; per-manufacturer colors would just add noise.
-      color: BRAND.teal,
-    }));
-  }, [summary]);
+const osVersionItems = React.useMemo(() => {
+  const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
 
-  const osVersionItems = React.useMemo(() => {
-    const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
-    return rows.map((r) => {
-      const platform = String(r?.os_platform ?? "").toLowerCase();
-      const normalized = normalizePlatform(platform);
-      const version = String(r?.os_version ?? "Unknown");
-      return {
-        // Keep the platform+version combo on a single label so the
-        // row is self-describing; rendering uses `sub` for the
-        // secondary line (platform family) so scanning the list
-        // groups visually by platform even though the list is flat.
-        sub: version,
-        label: platform
-          ? platform.charAt(0).toUpperCase() + platform.slice(1)
-          : null,
-        value: Number(r?.host_count ?? r?.count ?? 0),
-        color: normalized ? platformColors[normalized] : BRAND.gray,
-      };
-    });
-  }, [summary, platformColors]);
+  return rows.map((r) => {
+    const platform = String(r?.os_platform ?? "").toLowerCase();
+    const normalized = normalizePlatform(platform);
+
+    return {
+      label: getOsVersionDisplayTitle(r),
+      sub: getOsVersionDisplaySubtitle(r),
+      value: toSafeNumber(r?.host_count ?? r?.count),
+      color: normalized ? platformColors[normalized] : BRAND.gray,
+      raw: r,
+    };
+  });
+}, [summary, platformColors]);
 
   // `byVersion` for the AgentVersionDonut. The Overview endpoint
   // (/dashboard/agent-versions) would return this directly, but we
@@ -534,7 +540,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     return {
       activeHosts,
       onlineCount,
-      platformCount: platformBuckets,
+      inactiveAssets7d: Number(summary?.inactiveAssets7d ?? 0),
       versionCount: versionSet.size,
     };
   }, [summary, hosts, connectedIds]);
@@ -570,9 +576,12 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <SummaryCard
-            title="OS platforms"
-            value={kpis.platformCount}
-            icon={<DesktopWindowsOutlinedIcon />}
+            title="Inactive assets"
+            value={kpis.inactiveAssets7d}
+            icon={<ReportProblemOutlinedIcon />}
+            accent={ROLE.caution}
+            tint={ROLE.cautionSoft}
+            titleHint="Devices that have not reported inventory or telemetry in more than 7 days."
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -593,7 +602,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
           that's an acceptable trade for the at-a-glance comparison.
           On lg+ each column gets more room. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             {/* AgentVersionDonut uses its own <Paper> wrapper via
                 DonutCard — no SectionPaper around it or we'd double
@@ -605,7 +614,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
             />
           </Box>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             {/* Reuses the same OS platform donut Overview shows in
                 FleetComposition so the two surfaces stay visually
@@ -619,19 +628,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
             />
           </Box>
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-          <Box sx={{ width: "100%" }}>
-            <CompositionBars
-              title="Top manufacturers"
-              items={manufacturerItems}
-              totalLabel="hosts"
-              emptyLabel="No manufacturer data"
-              minHeight={260}
-              maxItems={6}
-            />
-          </Box>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
             <CompositionBars
               title="OS versions"
