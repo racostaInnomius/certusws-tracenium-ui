@@ -11,6 +11,7 @@ import {
   Snackbar,
   Alert,
   Stack,
+  Tooltip,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -177,6 +178,175 @@ function renderStatusChip(status) {
   return <Chip label={status || "Unknown"} size="small" />;
 }
 
+function toFiniteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function readFirstNumber(source, keys, fallback = 0) {
+  if (!source || typeof source !== "object") return fallback;
+
+  for (const key of keys) {
+    if (source[key] !== undefined && source[key] !== null && source[key] !== "") {
+      return toFiniteNumber(source[key], fallback);
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeQuotaResponse(quota) {
+  const maxDevicesRaw = readFirstNumber(
+    quota,
+    ["maxDevices", "max_devices", "maxDeviceCount", "deviceLimit", "device_limit", "limit"],
+    0
+  );
+
+  const usedRaw = readFirstNumber(
+    quota,
+    [
+      "used",
+      "usedDevices",
+      "used_devices",
+      "usedDeviceCount",
+      "agentCount",
+      "agent_count",
+      "deviceCount",
+      "device_count",
+      "devicesUsed",
+      "devices_used",
+      "used_count",
+      "usedCount",
+    ],
+    0
+  );
+
+  const maxDevices = Math.max(0, Math.floor(maxDevicesRaw));
+  const used = Math.max(0, Math.floor(usedRaw));
+
+  const warningThreshold = Math.max(
+    0,
+    Math.floor(
+      readFirstNumber(
+        quota,
+        ["warningThreshold", "warning_threshold", "warningLimit", "warning_limit"],
+        Math.floor(maxDevices * 0.8)
+      )
+    )
+  );
+
+  const standardLimit = Math.max(
+    0,
+    Math.floor(
+      readFirstNumber(
+        quota,
+        ["standardLimit", "standard_limit"],
+        maxDevices
+      )
+    )
+  );
+
+  const upperLimit = Math.max(
+    standardLimit,
+    Math.ceil(
+      readFirstNumber(
+        quota,
+        ["upperLimit", "upper_limit", "hardLimit", "hard_limit"],
+        maxDevices * 1.2
+      )
+    )
+  );
+
+  const explicitRemaining = readFirstNumber(
+    quota,
+    ["remaining", "remainingDevices", "remaining_devices", "remaining_count", "remainingCount"],
+    Number.NaN
+  );
+
+  const remaining = Number.isFinite(explicitRemaining)
+    ? Math.floor(explicitRemaining)
+    : standardLimit - used;
+
+  const usagePercent = Number(
+    readFirstNumber(quota, ["usagePercent", "usage_percent"], standardLimit > 0 ? (used / standardLimit) * 100 : 0).toFixed(1)
+  );
+
+  const upperUsagePercent = Number(
+    readFirstNumber(quota, ["upperUsagePercent", "upper_usage_percent"], upperLimit > 0 ? (used / upperLimit) * 100 : 0).toFixed(1)
+  );
+
+  const backendStatus = String(quota?.status || "").toUpperCase();
+  const inferredStatus =
+    used >= upperLimit
+      ? "UPPER_LIMIT_REACHED"
+      : used >= standardLimit
+        ? "STANDARD_LIMIT_EXCEEDED"
+        : used >= warningThreshold
+          ? "APPROACHING_LIMIT"
+          : "NORMAL";
+
+  const status = backendStatus || inferredStatus;
+  const canCreateToken =
+    typeof quota?.canCreateToken === "boolean"
+      ? quota.canCreateToken
+      : used < upperLimit;
+
+  const creatableRemaining = Math.max(upperLimit - used, 0);
+
+  return {
+    tenantId: quota?.tenantId ?? quota?.tenant_id ?? null,
+    maxDevices,
+    used,
+    remaining,
+    warningThreshold,
+    standardLimit,
+    upperLimit,
+    usagePercent,
+    upperUsagePercent,
+    status,
+    canCreateToken,
+    message: quota?.message || "",
+    creatableRemaining,
+  };
+}
+
+function getQuotaStatusMeta(status) {
+  switch (String(status || "").toUpperCase()) {
+    case "APPROACHING_LIMIT":
+      return {
+        severity: "warning",
+        accent: BRAND.alert.warning,
+        soft: BRAND.alert.warningSoft,
+        title: "Approaching device limit",
+        defaultMessage: "You are approaching your tenant device limit. Enrollment is still available.",
+      };
+    case "STANDARD_LIMIT_EXCEEDED":
+      return {
+        severity: "warning",
+        accent: BRAND.alert.warning,
+        soft: BRAND.alert.warningSoft,
+        title: "Standard device limit exceeded",
+        defaultMessage: "This tenant has exceeded the standard device limit, but temporary enrollment capacity is still available.",
+      };
+    case "UPPER_LIMIT_REACHED":
+      return {
+        severity: "error",
+        accent: BRAND.alert.error,
+        soft: BRAND.alert.errorSoft,
+        title: "Enrollment upper limit reached",
+        defaultMessage: "Device enrollment upper limit reached. Increase the tenant device limit before creating more tokens.",
+      };
+    default:
+      return {
+        severity: "info",
+        accent: BRAND.alert.success,
+        soft: BRAND.alert.successSoft,
+        title: "Device enrollment capacity is healthy",
+        defaultMessage: "This tenant is within its device enrollment capacity.",
+      };
+  }
+}
+
 // `embedded` mirrors the contract of <AgentReleases />: when true, we
 // skip the top-level PageHeader and zero out the Box's outer padding so
 // the host page (e.g. <DeviceEnrollment />) controls layout. The Create
@@ -192,6 +362,7 @@ export default function TokensAdministrator({ embedded = false } = {}) {
   const [loading, setLoading] = React.useState(true);
   const [quota, setQuota] = React.useState(null);
   const [quotaLoading, setQuotaLoading] = React.useState(true);
+  const [quotaError, setQuotaError] = React.useState("");
 
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -213,11 +384,13 @@ export default function TokensAdministrator({ embedded = false } = {}) {
   const loadQuota = async () => {
     try {
       setQuotaLoading(true);
+      setQuotaError("");
       const data = await getTokenQuota();
       setQuota(data || null);
     } catch (e) {
       console.error(e);
       setQuota(null);
+      setQuotaError("Failed to load token quota. Refresh the page or try again.");
       setSnackbar({
         open: true,
         message: "Failed to load token quota",
@@ -286,19 +459,29 @@ const filteredRows = React.useMemo(() => {
     return { total, active, expired, revoked};
   }, [rows]);
 
-  const quotaSummary = React.useMemo(() => {
-    const maxDevices = Number(quota?.maxDevices ?? 0);
-    const used = Number(quota?.used ?? 0);
-    const remaining = Number(quota?.remaining ?? Math.max(maxDevices - used, 0));
+  const quotaSummary = React.useMemo(() => normalizeQuotaResponse(quota), [quota]);
+  const quotaStatusMeta = React.useMemo(
+    () => getQuotaStatusMeta(quotaSummary.status),
+    [quotaSummary.status]
+  );
 
-    return {
-      maxDevices: Number.isFinite(maxDevices) ? maxDevices : 0,
-      used: Number.isFinite(used) ? used : 0,
-      remaining: Number.isFinite(remaining) ? Math.max(remaining, 0) : 0,
-    };
-  }, [quota]);
+  const canCreateToken = !quotaLoading && !quotaError && quotaSummary.canCreateToken;
 
-  const canCreateToken = quotaLoading || quotaSummary.remaining > 0;
+  const shouldShowQuotaBanner =
+    !quotaLoading &&
+    !quotaError &&
+    ["APPROACHING_LIMIT", "STANDARD_LIMIT_EXCEEDED", "UPPER_LIMIT_REACHED"].includes(
+      quotaSummary.status
+    );
+
+  const createTokenDisabledReason = React.useMemo(() => {
+    if (quotaLoading) return "Loading tenant enrollment capacity...";
+    if (quotaError) return quotaError;
+    if (!quotaSummary.canCreateToken) {
+      return quotaSummary.message || quotaStatusMeta.defaultMessage;
+    }
+    return "";
+  }, [quotaError, quotaLoading, quotaStatusMeta.defaultMessage, quotaSummary]);
 
   const handleCreateToken = async (payload) => {
     try {
@@ -320,7 +503,7 @@ const filteredRows = React.useMemo(() => {
       console.error(e);
       setSnackbar({
         open: true,
-        message: "Failed to create token",
+        message: e?.message || "Failed to create token",
         severity: "error",
       });
     } finally {
@@ -462,22 +645,26 @@ const filteredRows = React.useMemo(() => {
           subtitle="Manage enrollment tokens for this tenant"
           icon={<VpnKeyOutlinedIcon />}
           actions={
-            <Button
-              variant="contained"
-              onClick={() => setCreateOpen(true)}
-              disabled={!canCreateToken}
-              fullWidth={isSmDown}
-              sx={{
-                bgcolor: BRAND.teal,
-                "&:hover": { bgcolor: BRAND.tealHover },
-                minWidth: { xs: "100%", sm: 170 },
-                alignSelf: { xs: "stretch", sm: "center" },
-                textTransform: "none",
-                fontWeight: 700,
-              }}
-            >
-              + Create token
-            </Button>
+            <Tooltip title={createTokenDisabledReason} disableHoverListener={canCreateToken}>
+              <span style={{ width: isSmDown ? "100%" : "auto" }}>
+                <Button
+                  variant="contained"
+                  onClick={() => setCreateOpen(true)}
+                  disabled={!canCreateToken}
+                  fullWidth={isSmDown}
+                  sx={{
+                    bgcolor: BRAND.teal,
+                    "&:hover": { bgcolor: BRAND.tealHover },
+                    minWidth: { xs: "100%", sm: 170 },
+                    alignSelf: { xs: "stretch", sm: "center" },
+                    textTransform: "none",
+                    fontWeight: 700,
+                  }}
+                >
+                  {quotaLoading ? "Loading capacity..." : "+ Create token"}
+                </Button>
+              </span>
+            </Tooltip>
           }
         />
       )}
@@ -487,29 +674,72 @@ const filteredRows = React.useMemo(() => {
           on this view. We render a right-aligned button row so the
           embedded layout doesn't lose the primary CTA. */}
       {embedded && (
-          <Stack
-            alignItems="center"
-            sx={{
-              mb: 1.5,
-              width: "100%",
-            }}
-          >
-          <Button
-            variant="contained"
-            onClick={() => setCreateOpen(true)}
-            disabled={!canCreateToken}
-            fullWidth={isSmDown}
-            sx={{
-              bgcolor: BRAND.teal,
-              "&:hover": { bgcolor: BRAND.tealHover },
-              minWidth: { xs: "100%", sm: 170 },
-              textTransform: "none",
-              fontWeight: 700,
-            }}
-          >
-            + Create token
-          </Button>
+        <Stack
+          alignItems="center"
+          sx={{
+            mb: 1.5,
+            width: "100%",
+          }}
+        >
+          <Tooltip title={createTokenDisabledReason} disableHoverListener={canCreateToken}>
+            <span style={{ width: isSmDown ? "100%" : "auto" }}>
+              <Button
+                variant="contained"
+                onClick={() => setCreateOpen(true)}
+                disabled={!canCreateToken}
+                fullWidth={isSmDown}
+                sx={{
+                  bgcolor: BRAND.teal,
+                  "&:hover": { bgcolor: BRAND.tealHover },
+                  minWidth: { xs: "100%", sm: 170 },
+                  textTransform: "none",
+                  fontWeight: 700,
+                }}
+              >
+                {quotaLoading ? "Loading capacity..." : "+ Create token"}
+              </Button>
+            </span>
+          </Tooltip>
         </Stack>
+      )}
+
+      {quotaError && (
+        <Alert
+          severity="error"
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+            bgcolor: BRAND.alert.errorSoft,
+            color: BRAND.dark,
+            "& .MuiAlert-icon": { color: BRAND.alert.error },
+          }}
+        >
+          {quotaError}
+        </Alert>
+      )}
+
+      {shouldShowQuotaBanner && (
+        <Alert
+          severity={quotaStatusMeta.severity}
+          sx={{
+            mb: 2,
+            borderRadius: 2,
+            bgcolor: quotaStatusMeta.soft,
+            color: BRAND.dark,
+            alignItems: "flex-start",
+            "& .MuiAlert-icon": { color: quotaStatusMeta.accent },
+          }}
+        >
+          <Typography sx={{ fontWeight: 900, color: BRAND.dark, mb: 0.25 }}>
+            {quotaStatusMeta.title}
+          </Typography>
+          <Typography sx={{ fontSize: 13, color: BRAND.dark }}>
+            {quotaSummary.message || quotaStatusMeta.defaultMessage}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
+            Used agents: {quotaSummary.used} · Standard limit: {quotaSummary.standardLimit} · Upper limit: {quotaSummary.upperLimit} · Available capacity: {quotaSummary.creatableRemaining}
+          </Typography>
+        </Alert>
       )}
 
       {/* KPI strip — semantic colors come from BRAND/ROLE now.
@@ -560,34 +790,43 @@ const filteredRows = React.useMemo(() => {
           <Grid size={{ xs: 12, xl: 5 }} sx={{ display: "flex" }}>
             <MetricGroup
               title="Tenant capacity"
-              subtitle="Device allocation limit based on enrollment token usage"
-              accent={quotaSummary.remaining > 0 ? BRAND.alert.success : BRAND.alert.error}
+              subtitle="Real enrolled devices compared with standard and upper limits"
+              accent={quotaStatusMeta.accent}
             >
               <Grid container spacing={1.5} alignItems="stretch">
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
                   <SummaryCard
                     title="Max Devices"
                     value={quotaLoading ? "..." : quotaSummary.maxDevices}
                     accent={BRAND.dark}
-                    subtitle="Tenant limit"
+                    subtitle="Standard limit"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
                   <SummaryCard
-                    title="Used"
+                    title="Used Agents"
                     value={quotaLoading ? "..." : quotaSummary.used}
                     accent={BRAND.tealText}
-                    subtitle="Allocated uses"
+                    subtitle="Real enrolled devices"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
                   <SummaryCard
                     title="Remaining"
                     value={quotaLoading ? "..." : quotaSummary.remaining}
-                    accent={quotaSummary.remaining > 0 ? BRAND.alert.success : BRAND.alert.error}
-                    subtitle="Available"
+                    accent={quotaSummary.remaining >= 0 ? BRAND.alert.success : BRAND.alert.warning}
+                    subtitle="Before standard limit"
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                  <SummaryCard
+                    title="Upper Capacity"
+                    value={quotaLoading ? "..." : quotaSummary.creatableRemaining}
+                    accent={quotaSummary.canCreateToken ? BRAND.alert.success : BRAND.alert.error}
+                    subtitle={`Until ${quotaSummary.upperLimit} devices`}
                   />
                 </Grid>
               </Grid>

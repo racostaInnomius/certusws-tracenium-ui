@@ -25,13 +25,25 @@ export default function CreateTokenDialog({
   submitting,
   quota,
 }) {
-  const remaining = toPositiveNumber(quota?.remaining, 0);
   const maxDevices = toPositiveNumber(quota?.maxDevices, 0);
   const used = toPositiveNumber(quota?.used, 0);
-  const hasQuota = remaining > 0;
+  const remaining = Number.isFinite(Number(quota?.remaining))
+    ? Math.floor(Number(quota.remaining))
+    : maxDevices - used;
+  const upperLimit = toPositiveNumber(quota?.upperLimit, Math.ceil(maxDevices * 1.2));
+  const creatableRemaining = toPositiveNumber(
+    quota?.creatableRemaining,
+    Math.max(upperLimit - used, 0)
+  );
+  const overageRemaining = toPositiveNumber(
+    quota?.overageRemaining,
+    Math.max(upperLimit - Math.max(maxDevices, used), 0)
+  );
+  const capacityStatus = quota?.capacityStatus || "normal";
+  const hasCreatableCapacity = creatableRemaining > 0;
 
   const [tokenLabel, setTokenLabel] = React.useState("");
-  const [maxUses, setMaxUses] = React.useState(remaining || 1);
+  const [maxUses, setMaxUses] = React.useState(creatableRemaining || 1);
   const [expiresInHours, setExpiresInHours] = React.useState(24);
 
   const [labelError, setLabelError] = React.useState(false);
@@ -40,12 +52,12 @@ export default function CreateTokenDialog({
   React.useEffect(() => {
     if (open) {
       setTokenLabel("");
-      setMaxUses(remaining > 0 ? remaining : 1);
+      setMaxUses(creatableRemaining > 0 ? creatableRemaining : 1);
       setExpiresInHours(24);
       setLabelError(false);
       setMaxUsesError("");
     }
-  }, [open, remaining]);
+  }, [open, creatableRemaining]);
 
   const validateMaxUses = (value) => {
     const n = Number(value);
@@ -58,8 +70,8 @@ export default function CreateTokenDialog({
       return "Max uses must be a whole number.";
     }
 
-    if (n > remaining) {
-      return `Max uses cannot exceed the remaining quota (${remaining}).`;
+    if (n > creatableRemaining) {
+      return `Max uses cannot exceed the available enrollment capacity (${creatableRemaining}).`;
     }
 
     return "";
@@ -101,21 +113,35 @@ export default function CreateTokenDialog({
       <DialogContent>
         <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
           <Alert
-            severity={hasQuota ? "info" : "warning"}
+            severity={capacityStatus === "blocked" ? "error" : capacityStatus === "exceeded" || capacityStatus === "approaching" ? "warning" : "info"}
             sx={{
               borderRadius: 2,
-              bgcolor: hasQuota ? BRAND.tealSoft : BRAND.alert.warningSoft,
+              bgcolor:
+                capacityStatus === "blocked"
+                  ? BRAND.alert.errorSoft
+                  : capacityStatus === "exceeded" || capacityStatus === "approaching"
+                    ? BRAND.alert.warningSoft
+                    : BRAND.tealSoft,
               color: BRAND.dark,
               "& .MuiAlert-icon": {
-                color: hasQuota ? BRAND.tealText : BRAND.alert.warning,
+                color:
+                  capacityStatus === "blocked"
+                    ? BRAND.alert.error
+                    : capacityStatus === "exceeded" || capacityStatus === "approaching"
+                      ? BRAND.alert.warning
+                      : BRAND.tealText,
               },
             }}
           >
             <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
-              Device enrollment quota
+              Device enrollment capacity
             </Typography>
             <Typography sx={{ fontSize: 13 }}>
-              Max devices: {maxDevices} · Used: {used} · Remaining: {remaining}
+              Max devices: {maxDevices} · Used agents: {used} · Remaining before standard limit: {remaining}
+            </Typography>
+            <Typography sx={{ fontSize: 13 }}>
+              Upper cap: {upperLimit} · Available token capacity: {creatableRemaining}
+              {capacityStatus === "exceeded" ? ` · Grace remaining: ${overageRemaining}` : ""}
             </Typography>
           </Alert>
 
@@ -145,14 +171,14 @@ export default function CreateTokenDialog({
             error={Boolean(maxUsesError)}
             helperText={
               maxUsesError ||
-              `You can allocate up to ${remaining} remaining device enrollment${remaining === 1 ? "" : "s"}.`
+              `You can allocate up to ${creatableRemaining} device enrollment${creatableRemaining === 1 ? "" : "s"} before reaching the upper cap.`
             }
             fullWidth
-            disabled={!hasQuota}
+            disabled={!hasCreatableCapacity}
             slotProps={{
               htmlInput: {
                 min: 1,
-                max: remaining,
+                max: creatableRemaining,
                 step: 1,
               },
             }}
@@ -183,7 +209,7 @@ export default function CreateTokenDialog({
           onClick={handleSubmit}
           disabled={
             submitting ||
-            !hasQuota ||
+            !hasCreatableCapacity ||
             !tokenLabel.trim() ||
             Boolean(validateMaxUses(maxUses))
           }
