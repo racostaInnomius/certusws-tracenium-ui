@@ -286,7 +286,23 @@ export default function HardwareInventory() {
   };
 
   const columns = [
-    { field: "hostname", headerName: "Hostname", minWidth: 180, flex: 0.9, renderCell: (params) => params.row?.hostname || params.row?.agentId || " - ", },
+    {
+      field: "hostname",
+      headerName: "Hostname",
+      minWidth: 180,
+      flex: 0.9,
+      renderCell: (params) => params.row?.hostname || params.row?.agentId || " - ",
+    },
+    {
+      field: "serial",
+      headerName: "Serial",
+      minWidth: 150,
+      flex: 0.65,
+      renderCell: (params) => {
+        const serial = String(params.value || "").trim();
+        return serial || "—";
+      },
+    },
     { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.45 },
     { field: "distro", headerName: "OS", minWidth: 150, flex: 0.7 },
     { field: "manufacturer", headerName: "Manufacturer", minWidth: 140, flex: 0.7 },
@@ -518,71 +534,6 @@ export default function HardwareInventory() {
         </Grid>
       </Box>
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "2fr 1fr 1fr auto",
-            },
-          }}
-        >
-          <TextField
-            label="Search devices"
-            size="small"
-            value={search}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setSearch(e.target.value);
-            }}
-            fullWidth
-          />
-
-          <TextField
-            label="Platform"
-            size="small"
-            value={platform}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setPlatform(e.target.value);
-            }}
-            fullWidth
-          />
-
-          <TextField
-            label="Manufacturer"
-            size="small"
-            value={manufacturer}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setManufacturer(e.target.value);
-            }}
-            fullWidth
-          />
-
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={refreshAll}
-            sx={{ minHeight: 40 }}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Paper>
-
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
@@ -670,6 +621,71 @@ export default function HardwareInventory() {
           </Grid>
         </Grid>
       </Box>
+
+<Paper
+        elevation={0}
+        sx={{
+          p: 2,
+          mb: 2,
+          borderRadius: 3,
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
+        }}
+      >
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, minmax(0, 1fr))",
+              lg: "2fr 1fr 1fr auto",
+            },
+          }}
+        >
+          <TextField
+            label="Search devices"
+            size="small"
+            value={search}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setSearch(e.target.value);
+            }}
+            fullWidth
+          />
+
+          <TextField
+            label="Platform"
+            size="small"
+            value={platform}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setPlatform(e.target.value);
+            }}
+            fullWidth
+          />
+
+          <TextField
+            label="Manufacturer"
+            size="small"
+            value={manufacturer}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setManufacturer(e.target.value);
+            }}
+            fullWidth
+          />
+
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={refreshAll}
+            sx={{ minHeight: 40 }}
+          >
+            Refresh
+          </Button>
+        </Box>
+      </Paper>
 
       <SectionCard title="Hardware Inventory Detail">
         <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
