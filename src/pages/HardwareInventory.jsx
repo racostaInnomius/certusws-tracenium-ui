@@ -286,7 +286,23 @@ export default function HardwareInventory() {
   };
 
   const columns = [
-    { field: "hostname", headerName: "Hostname", minWidth: 180, flex: 0.9, renderCell: (params) => params.row?.hostname || params.row?.agentId || " - ", },
+    {
+      field: "hostname",
+      headerName: "Hostname",
+      minWidth: 180,
+      flex: 0.9,
+      renderCell: (params) => params.row?.hostname || params.row?.agentId || " - ",
+    },
+    {
+      field: "serial",
+      headerName: "Serial",
+      minWidth: 150,
+      flex: 0.65,
+      renderCell: (params) => {
+        const serial = String(params.value || "").trim();
+        return serial || "—";
+      },
+    },
     { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.45 },
     { field: "distro", headerName: "OS", minWidth: 150, flex: 0.7 },
     { field: "manufacturer", headerName: "Manufacturer", minWidth: 140, flex: 0.7 },
@@ -479,12 +495,20 @@ export default function HardwareInventory() {
   );
 
   const renderViewAllButton = React.useCallback(
-    (config) => (
-      <RankingViewAllButton
-        disabled={!Array.isArray(config.items) || config.items.length === 0}
-        onClick={() => openRankingDialog(config)}
-      />
-    ),
+    (config) => {
+      const itemsCount = Array.isArray(config.items) ? config.items.length : 0;
+
+      if (itemsCount <= 5) {
+        return null;
+      }
+
+      return (
+        <RankingViewAllButton
+          disabled={itemsCount === 0}
+          onClick={() => openRankingDialog(config)}
+        />
+      );
+    },
     [openRankingDialog]
   );
 
@@ -598,7 +622,7 @@ export default function HardwareInventory() {
         </Grid>
       </Box>
 
-      <Paper
+<Paper
         elevation={0}
         sx={{
           p: 2,
@@ -662,94 +686,6 @@ export default function HardwareInventory() {
           </Button>
         </Box>
       </Paper>
-
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top manufacturers"
-                items={topManufacturersRows}
-                totalLabel="hosts"
-                emptyLabel="No manufacturer data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Top manufacturers",
-                  subtitle: "Complete manufacturer ranking by reporting hosts.",
-                  items: topManufacturersRows,
-                  totalLabel: "hosts",
-                  labelHeader: "Manufacturer",
-                  valueHeader: "Hosts",
-                })}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top CPU models"
-                items={topCpuModelsRows}
-                totalLabel="devices"
-                emptyLabel="No CPU model data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Top CPU models",
-                  subtitle: "Complete CPU model ranking by devices.",
-                  items: topCpuModelsRows,
-                  totalLabel: "devices",
-                  labelHeader: "CPU Model",
-                  valueHeader: "Devices",
-                })}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top platforms"
-                items={topPlatformsRows}
-                totalLabel="devices"
-                emptyLabel="No platform data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Top platforms",
-                  subtitle: "Complete platform ranking by devices.",
-                  items: topPlatformsRows,
-                  totalLabel: "devices",
-                  labelHeader: "Platform",
-                  valueHeader: "Devices",
-                })}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Highest disk usage"
-                items={highestDiskUsageRows}
-                totalLabel="% cumulative"
-                emptyLabel="No disk usage data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Highest disk usage",
-                  subtitle: "Complete device ranking by disk usage percentage.",
-                  items: highestDiskUsageRows,
-                  totalLabel: "% cumulative",
-                  labelHeader: "Device",
-                  valueHeader: "Usage %",
-                })}
-              />
-            </Box>
-          </Grid>
-        </Grid>
-      </Box>
 
       <SectionCard title="Hardware Inventory Detail">
         <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
