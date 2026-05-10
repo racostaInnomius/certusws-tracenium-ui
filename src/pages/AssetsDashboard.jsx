@@ -562,6 +562,7 @@ const osVersionItems = React.useMemo(() => {
             title="Active hosts"
             value={kpis.activeHosts}
             icon={<DevicesOtherOutlinedIcon />}
+            titleHint="Devices that have communicated with Tracenium in the last 24 hours. Use this metric to understand recent activity across your enrolled environment."
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>

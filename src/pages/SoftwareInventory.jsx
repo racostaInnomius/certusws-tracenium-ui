@@ -581,12 +581,20 @@ export default function SoftwareInventory() {
   );
 
   const renderViewAllButton = React.useCallback(
-    (config) => (
-      <RankingViewAllButton
-        disabled={!Array.isArray(config.items) || config.items.length === 0}
-        onClick={() => openRankingDialog(config)}
-      />
-    ),
+    (config) => {
+      const itemsCount = Array.isArray(config.items) ? config.items.length : 0;
+
+      if (itemsCount <= 5) {
+        return null;
+      }
+
+      return (
+        <RankingViewAllButton
+          disabled={itemsCount === 0}
+          onClick={() => openRankingDialog(config)}
+        />
+      );
+    },
     [openRankingDialog]
   );
 
