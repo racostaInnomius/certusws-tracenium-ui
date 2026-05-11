@@ -28,22 +28,43 @@ import Grid from "@mui/material/Grid";
 import {
   Backdrop,
   Box,
+  Button,
   Chip,
+  CircularProgress,
+  Divider,
   Fade,
+  IconButton,
   MenuItem,
   Paper,
   Stack,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
+import ComputerRoundedIcon from "@mui/icons-material/ComputerRounded";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import WifiTetheringOutlinedIcon from "@mui/icons-material/WifiTetheringOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import MemoryRoundedIcon from "@mui/icons-material/MemoryRounded";
+import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
+import {
+  getHardwareInventoryDetail,
+  getSoftwareInventoryHostApps,
+} from "../api/inventoryDashboard";
 import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 
@@ -160,6 +181,413 @@ function getOsVersionDisplaySubtitle(row) {
   );
 }
 
+function formatDetailValue(value, fallback = "—") {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text ? text : fallback;
+}
+
+function formatDetailDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-US", {
+    year: "2-digit",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h24",
+  });
+}
+
+function formatBytesToGb(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+function formatDetailPercent(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return "—";
+  return `${parsed.toFixed(1)}%`;
+}
+
+function coalesceValue(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return value;
+  }
+  return undefined;
+}
+
+const HOST_SORT_FIELDS = new Set([
+  "hostname",
+  "agentId",
+  "osPlatform",
+  "osVersion",
+  "manufacturer",
+  "model",
+  "lastLogonUser",
+  "localIp",
+  "agentVersion",
+  "collectedAtUtc",
+]);
+
+function normalizeHostRow(row = {}) {
+  const agentId = coalesceValue(row.agentId, row.agent_id, row.deviceId, row.device_id);
+  const hostname = coalesceValue(row.hostname, row.host, row.deviceName, row.device_name);
+  const osPlatform = coalesceValue(row.osPlatform, row.os_platform, row.platform);
+  const osVersion = coalesceValue(row.osVersion, row.os_version, row.version);
+  const lastLogonUser = coalesceValue(row.lastLogonUser, row.last_logon_user);
+  const localIp = coalesceValue(row.localIp, row.local_ip);
+  const agentVersion = coalesceValue(row.agentVersion, row.agent_version);
+  const collectedAtUtc = coalesceValue(row.collectedAtUtc, row.collected_at_utc);
+
+  return {
+    ...row,
+    agentId,
+    agent_id: agentId,
+    hostname,
+    osPlatform,
+    os_platform: osPlatform,
+    osVersion,
+    os_version: osVersion,
+    lastLogonUser,
+    last_logon_user: lastLogonUser,
+    localIp,
+    local_ip: localIp,
+    agentVersion,
+    agent_version: agentVersion,
+    collectedAtUtc,
+    collected_at_utc: collectedAtUtc,
+    manufacturer: coalesceValue(row.manufacturer),
+    model: coalesceValue(row.model),
+  };
+}
+
+function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
+  const params = new URLSearchParams();
+  params.set("page", String(page + 1));
+  params.set("pageSize", String(pageSize));
+
+  const normalizedSearch = String(search || "").trim();
+  if (normalizedSearch.length >= 3) {
+    params.set("search", normalizedSearch);
+  }
+
+  params.set("sortBy", HOST_SORT_FIELDS.has(sortBy) ? sortBy : "hostname");
+  params.set("sortDir", sortDir === "desc" ? "desc" : "asc");
+
+  return params.toString();
+}
+
+function normalizeHostDetailPayload(payload, fallbackHost = {}) {
+  const source = payload?.agent || payload?.host || payload?.item || payload || {};
+  return {
+    agentId: coalesceValue(
+      source.agentId,
+      source.agent_id,
+      source.deviceId,
+      source.device_id,
+      fallbackHost.agent_id,
+      fallbackHost.agentId
+    ),
+    hostname: coalesceValue(
+      source.hostname,
+      source.host,
+      source.deviceName,
+      source.device_name,
+      fallbackHost.hostname
+    ),
+    platform: coalesceValue(source.platform, source.os_platform, fallbackHost.os_platform),
+    os: coalesceValue(source.distro, source.os, source.os_version, fallbackHost.os_version),
+    agentVersion: coalesceValue(source.agentVersion, source.agent_version, fallbackHost.agent_version),
+    lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
+    localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),
+    lastSeenAt: coalesceValue(source.lastSeenAt, source.last_seen_at, source.lastHeartbeat, source.last_heartbeat),
+    raw: source,
+  };
+}
+
+function normalizeHardwareDetailPayload(payload, agentId) {
+  const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+  const exact = items.find((item) => String(item?.agentId || item?.agent_id || "") === String(agentId));
+  return exact || items[0] || null;
+}
+
+function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper }) {
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 2,
+        height: "100%",
+        borderRadius: 3,
+        border: `1px solid ${BRAND.border}`,
+        background: "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(190,190,190,0.07))",
+        boxShadow: "0 6px 18px rgba(59,64,77,0.07)",
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.25 }}>
+        <Box
+          sx={{
+            width: 34,
+            height: 34,
+            borderRadius: 2,
+            display: "grid",
+            placeItems: "center",
+            bgcolor: `${accent}22`,
+            color: accent,
+            flexShrink: 0,
+          }}
+        >
+          {icon}
+        </Box>
+        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+          {title}
+        </Typography>
+      </Stack>
+      <Typography sx={{ fontSize: 20, fontWeight: 900, color: BRAND.dark, lineHeight: 1.15 }} noWrap title={String(value || "—")}>
+        {value || "—"}
+      </Typography>
+      {helper ? (
+        <Typography sx={{ mt: 0.75, fontSize: 12, color: "text.secondary" }} noWrap title={helper}>
+          {helper}
+        </Typography>
+      ) : null}
+    </Paper>
+  );
+}
+
+function DetailField({ label, value, mono = false }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          mt: 0.35,
+          fontSize: 13,
+          fontWeight: 700,
+          color: BRAND.dark,
+          fontFamily: mono ? "monospace" : "inherit",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={String(value || "—")}
+      >
+        {value || "—"}
+      </Typography>
+    </Box>
+  );
+}
+
+function FieldGrid({ children }) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" },
+        gap: 1.5,
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function AgentDetailWorkbench({
+  selectedHost,
+  connected,
+  loading,
+  error,
+  profile,
+  hardware,
+  softwareRows,
+  softwareTotal,
+  tab,
+  onTabChange,
+  onBack,
+}) {
+  const hostname = formatDetailValue(profile?.hostname || selectedHost?.hostname || selectedHost?.agent_id, "Unknown host");
+  const agentId = formatDetailValue(profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId);
+  const platform = formatDetailValue(profile?.platform || hardware?.platform);
+  const agentVersion = formatDetailValue(profile?.agentVersion || selectedHost?.agent_version);
+  const softwareCount = Number.isFinite(Number(softwareTotal)) ? Number(softwareTotal) : softwareRows.length;
+
+  return (
+    <Box>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={2}
+        alignItems={{ xs: "stretch", md: "flex-start" }}
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
+        <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ minWidth: 0 }}>
+          <IconButton
+            aria-label="Back to devices"
+            onClick={onBack}
+            sx={{
+              border: `1px solid ${BRAND.border}`,
+              bgcolor: BRAND.surface,
+              boxShadow: "0 4px 12px rgba(59,64,77,0.08)",
+              "&:hover": { bgcolor: BRAND.tealSoft },
+            }}
+          >
+            <ArrowBackRoundedIcon />
+          </IconButton>
+          <Box sx={{ minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+              <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 900, color: BRAND.dark }} noWrap title={hostname}>
+                {hostname}
+              </Typography>
+              <Chip
+                size="small"
+                label={connected ? "Online" : "Offline"}
+                sx={{
+                  bgcolor: connected ? ROLE.positiveSoft : BRAND.surfaceMuted,
+                  color: connected ? ROLE.positive : BRAND.gray,
+                  fontWeight: 800,
+                }}
+              />
+              <Chip size="small" label={platform} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
+            </Stack>
+            <Typography sx={{ mt: 0.5, fontSize: 12, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
+              {agentId}
+            </Typography>
+          </Box>
+        </Stack>
+      </Stack>
+
+      {error ? (
+        <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: 2, border: `1px solid ${ROLE.caution}55`, bgcolor: ROLE.cautionSoft }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+            Some agent detail data could not be loaded. Showing the available device information.
+          </Typography>
+        </Paper>
+      ) : null}
+
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <DetailStatCard title="Agent version" value={agentVersion} icon={<SystemUpdateAltOutlinedIcon fontSize="small" />} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <DetailStatCard title="Serial" value={formatDetailValue(hardware?.serial)} icon={<ComputerRoundedIcon fontSize="small" />} accent={BRAND.tealText} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <DetailStatCard title="Software apps" value={softwareCount} icon={<AppsRoundedIcon fontSize="small" />} accent={ROLE.positive} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <DetailStatCard title="Disk usage" value={formatDetailPercent(hardware?.diskUsagePct)} icon={<StorageRoundedIcon fontSize="small" />} accent={ROLE.critical} helper={formatBytesToGb(hardware?.diskUsedBytes)} />
+        </Grid>
+      </Grid>
+
+      <Paper elevation={0} sx={{ borderRadius: 3, border: `1px solid ${BRAND.border}`, overflow: "hidden", bgcolor: BRAND.surface }}>
+        <Tabs
+          value={tab}
+          onChange={onTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: 1,
+            borderBottom: `1px solid ${BRAND.border}`,
+            "& .MuiTab-root": { textTransform: "none", fontWeight: 800, minHeight: 48 },
+            "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
+          }}
+        >
+          <Tab label="Agent" />
+          <Tab label="Hardware" />
+          <Tab label="Software" />
+        </Tabs>
+
+        <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+          {loading ? (
+            <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ py: 6 }}>
+              <CircularProgress size={28} sx={{ color: BRAND.teal }} />
+              <Typography sx={{ fontSize: 13, color: "text.secondary" }}>Loading agent detail…</Typography>
+            </Stack>
+          ) : null}
+
+          {!loading && tab === 0 ? (
+            <FieldGrid>
+              <DetailField label="Hostname" value={hostname} />
+              <DetailField label="Agent ID" value={agentId} mono />
+              <DetailField label="Platform" value={platform} />
+              <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
+              <DetailField label="Agent version" value={agentVersion} mono />
+              <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
+              <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
+              <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
+              <DetailField label="Status" value={connected ? "Online" : "Offline"} />
+            </FieldGrid>
+          ) : null}
+
+          {!loading && tab === 1 ? (
+            <FieldGrid>
+              <DetailField label="Serial" value={formatDetailValue(hardware?.serial)} mono />
+              <DetailField label="Manufacturer" value={formatDetailValue(hardware?.manufacturer)} />
+              <DetailField label="Model" value={formatDetailValue(hardware?.model)} />
+              <DetailField label="CPU" value={formatDetailValue(hardware?.cpuBrand)} />
+              <DetailField label="Physical cores" value={formatDetailValue(hardware?.physicalCores)} />
+              <DetailField label="Memory" value={formatBytesToGb(hardware?.totalMemoryBytes)} />
+              <DetailField label="Disk total" value={formatBytesToGb(hardware?.diskTotalBytes)} />
+              <DetailField label="Disk used" value={formatBytesToGb(hardware?.diskUsedBytes)} />
+              <DetailField label="Disk usage" value={formatDetailPercent(hardware?.diskUsagePct)} />
+              <DetailField label="Battery" value={formatDetailPercent(hardware?.batteryPercent)} />
+              <DetailField label="Collected at" value={formatDetailDate(hardware?.collectedAtUtc)} />
+            </FieldGrid>
+          ) : null}
+
+          {!loading && tab === 2 ? (
+            <Box>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
+                  Installed applications
+                </Typography>
+                <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, alignSelf: { xs: "flex-start", sm: "center" } }} />
+              </Stack>
+              <TableContainer sx={{ maxHeight: 360, border: `1px solid ${BRAND.border}`, borderRadius: 2 }}>
+                <Table stickyHeader size="small" aria-label="agent software table">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 800 }}>Application</TableCell>
+                      <TableCell sx={{ fontWeight: 800 }}>Publisher</TableCell>
+                      <TableCell sx={{ fontWeight: 800 }}>Source</TableCell>
+                      <TableCell sx={{ fontWeight: 800 }}>Detected</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {softwareRows.map((app, index) => (
+                      <TableRow key={app.id || `${app.name}-${index}`} hover>
+                        <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
+                        <TableCell>{formatDetailValue(app.publisher)}</TableCell>
+                        <TableCell>{formatDetailValue(app.source)}</TableCell>
+                        <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
+                      </TableRow>
+                    ))}
+                    {softwareRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} sx={{ color: "text.secondary" }}>
+                          No software inventory found for this device.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : null}
+        </Box>
+      </Paper>
+    </Box>
+  );
+}
+
 // ---------- component --------------------------------------------------------
 
 export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce = 0 }) {
@@ -194,6 +622,46 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
   const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
 
+  const [hostsSearchInput, setHostsSearchInput] = React.useState("");
+  const [hostsSearch, setHostsSearch] = React.useState("");
+  const [hostsPaginationModel, setHostsPaginationModel] = React.useState({
+    page: 0,
+    pageSize: 25,
+  });
+  const [hostsSortModel, setHostsSortModel] = React.useState([
+    { field: "hostname", sort: "asc" },
+  ]);
+
+  const [selectedAgent, setSelectedAgent] = React.useState(null);
+  const [agentDetailTab, setAgentDetailTab] = React.useState(0);
+  const [agentDetailLoading, setAgentDetailLoading] = React.useState(false);
+  const [agentDetailError, setAgentDetailError] = React.useState("");
+  const [agentProfile, setAgentProfile] = React.useState(null);
+  const [agentHardware, setAgentHardware] = React.useState(null);
+  const [agentSoftwareRows, setAgentSoftwareRows] = React.useState([]);
+  const [agentSoftwareTotal, setAgentSoftwareTotal] = React.useState(0);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => {
+      const normalized = hostsSearchInput.trim();
+      const nextSearch = normalized.length === 0 || normalized.length >= 3 ? normalized : "";
+
+      setHostsPaginationModel((prev) => {
+        if (hostsSearch === nextSearch) return prev;
+        return { ...prev, page: 0 };
+      });
+      setHostsSearch(nextSearch);
+    }, 450);
+
+    return () => window.clearTimeout(id);
+  }, [hostsSearchInput, hostsSearch]);
+
+  const activeHostsSort = hostsSortModel?.[0] || { field: "hostname", sort: "asc" };
+  const hostsSortBy = HOST_SORT_FIELDS.has(activeHostsSort.field)
+    ? activeHostsSort.field
+    : "hostname";
+  const hostsSortDir = activeHostsSort.sort === "desc" ? "desc" : "asc";
+
   // Bundled loader: summary + hosts + latestMap fetched together so the
   // cache snapshot is consistent — the table, KPIs and version donut
   // all reflect the same point in time when the page rehydrates.
@@ -206,17 +674,53 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // returning an auth/server error. Empty state should only mean "loaded
   // successfully and there is truly no inventory data".
   const loader = React.useCallback(async () => {
+    const hostsQuery = buildHostsQuery({
+      page: hostsPaginationModel.page,
+      pageSize: hostsPaginationModel.pageSize,
+      search: hostsSearch,
+      sortBy: hostsSortBy,
+      sortDir: hostsSortDir,
+    });
+
     const [sumRes, hostsRes, latestRes] = await Promise.allSettled([
       dashboardApi.getSummary(),
-      httpGetJson("/api/v1/dashboard/hosts"),
+      httpGetJson(`/api/v1/dashboard/hosts?${hostsQuery}`),
       getLatestAgentVersions(),
     ]);
 
     const summaryOk = sumRes.status === "fulfilled";
-    const hostsOk = hostsRes.status === "fulfilled" && Array.isArray(hostsRes.value);
+    const rawHostsPayload = hostsRes.status === "fulfilled" ? hostsRes.value : null;
+    const rawHostItems = Array.isArray(rawHostsPayload)
+      ? rawHostsPayload
+      : Array.isArray(rawHostsPayload?.items)
+      ? rawHostsPayload.items
+      : [];
+    const hostsOk = hostsRes.status === "fulfilled" && (Array.isArray(rawHostsPayload) || Array.isArray(rawHostsPayload?.items));
 
     const summary = summaryOk ? sumRes.value : null;
-    const hosts = hostsOk ? hostsRes.value : [];
+    const hosts = hostsOk ? rawHostItems.map(normalizeHostRow) : [];
+    const totalHosts = Number(rawHostsPayload?.total ?? rawHostItems.length ?? 0);
+
+    const calculatedTotalPages = Math.max(
+      1,
+      Math.ceil(totalHosts / Number(hostsPaginationModel.pageSize || 25))
+    );
+
+    const hostsMeta = {
+      total: hostsOk ? totalHosts : 0,
+      page: hostsOk
+        ? Number(rawHostsPayload?.page ?? hostsPaginationModel.page + 1)
+        : hostsPaginationModel.page + 1,
+      pageSize: hostsOk
+        ? Number(rawHostsPayload?.pageSize ?? hostsPaginationModel.pageSize)
+        : hostsPaginationModel.pageSize,
+      totalPages: hostsOk
+        ? Number(rawHostsPayload?.totalPages ?? calculatedTotalPages)
+        : 1,
+      search: hostsOk ? String(rawHostsPayload?.search ?? hostsSearch ?? "") : hostsSearch,
+      sortBy: hostsSortBy,
+      sortDir: hostsSortDir,
+    };
 
     const latestMap = {};
     if (latestRes.status === "fulfilled" && Array.isArray(latestRes.value)) {
@@ -230,6 +734,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     return {
       summary,
       hosts,
+      hostsMeta,
       latestMap,
       loadState: {
         summaryLoaded: summaryOk,
@@ -238,14 +743,34 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         hostsError: !hostsOk,
       },
     };
-  }, []);
+  }, [
+    hostsPaginationModel.page,
+    hostsPaginationModel.pageSize,
+    hostsSearch,
+    hostsSortBy,
+    hostsSortDir,
+  ]);
 
-  const { data, loading, refetch } = useCachedFetch("assets:bundle", loader);
+  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}`;
+  const { data, loading, refetch } = useCachedFetch(hostsCacheKey, loader);
   // Memoize the destructured slices so identity is stable across
   // renders — `data?.foo ?? []` would create a fresh fallback every
   // render and invalidate downstream useMemo deps unnecessarily.
   const summary = data?.summary ?? null;
   const hosts = React.useMemo(() => data?.hosts ?? [], [data]);
+  const hostsMeta = React.useMemo(
+    () =>
+      data?.hostsMeta ?? {
+        total: 0,
+        page: hostsPaginationModel.page + 1,
+        pageSize: hostsPaginationModel.pageSize,
+        totalPages: 1,
+        search: hostsSearch,
+        sortBy: hostsSortBy,
+        sortDir: hostsSortDir,
+      },
+    [data, hostsPaginationModel.page, hostsPaginationModel.pageSize, hostsSearch, hostsSortBy, hostsSortDir]
+  );
   const latestMap = React.useMemo(() => data?.latestMap ?? {}, [data]);
 
   const loadState = React.useMemo(
@@ -365,6 +890,78 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     };
   }, [groupFilter, refreshNonce]);
 
+
+  const handleAgentSelect = React.useCallback((host) => {
+    setSelectedAgent(host || null);
+    setAgentDetailTab(0);
+    setAgentDetailError("");
+  }, []);
+
+  const handleCloseAgentDetail = React.useCallback(() => {
+    setSelectedAgent(null);
+    setAgentDetailTab(0);
+    setAgentDetailError("");
+    setAgentProfile(null);
+    setAgentHardware(null);
+    setAgentSoftwareRows([]);
+    setAgentSoftwareTotal(0);
+  }, []);
+
+  React.useEffect(() => {
+    const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
+    if (!agentId) return undefined;
+
+    let cancelled = false;
+    setAgentDetailLoading(true);
+    setAgentDetailError("");
+    setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
+    setAgentHardware(null);
+    setAgentSoftwareRows([]);
+    setAgentSoftwareTotal(0);
+
+    Promise.allSettled([
+      dashboardApi.getHostDetail(agentId),
+      getHardwareInventoryDetail({ search: agentId, page: 1, pageSize: 10 }),
+      getSoftwareInventoryHostApps(agentId, { page: 1, pageSize: 8 }),
+    ])
+      .then(([profileRes, hardwareRes, softwareRes]) => {
+        if (cancelled) return;
+
+        if (profileRes.status === "fulfilled") {
+          setAgentProfile(normalizeHostDetailPayload(profileRes.value, selectedAgent));
+        } else {
+          setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
+        }
+
+        if (hardwareRes.status === "fulfilled") {
+          setAgentHardware(normalizeHardwareDetailPayload(hardwareRes.value, agentId));
+        }
+
+        if (softwareRes.status === "fulfilled") {
+          const rows = Array.isArray(softwareRes.value?.items) ? softwareRes.value.items : [];
+          setAgentSoftwareRows(rows);
+          setAgentSoftwareTotal(Number(softwareRes.value?.total ?? rows.length));
+        }
+
+        const failed = [profileRes, hardwareRes, softwareRes].some((res) => res.status === "rejected");
+        if (failed) {
+          setAgentDetailError("partial");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("agent detail load failed:", err?.message || err);
+        setAgentDetailError("full");
+      })
+      .finally(() => {
+        if (!cancelled) setAgentDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgent]);
+
   const selectedGroup = React.useMemo(
     () => groupCatalog.find((g) => String(g.id) === String(groupFilter)) || null,
     [groupCatalog, groupFilter]
@@ -379,7 +976,11 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
 
   const hasNoAssetsData =
     dashboardLoadedSuccessfully &&
-    (!hosts || hosts.length === 0) &&
+    !hostsSearch &&
+    !platformFilter &&
+    !versionBucketFilter &&
+    !groupFilter &&
+    Number(hostsMeta.total || 0) === 0 &&
     Number(summary?.activeHosts ?? 0) === 0;
 
   React.useEffect(() => {
@@ -649,111 +1250,174 @@ const osVersionItems = React.useMemo(() => {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12 }}>
           <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              sx={{ mb: 1.5, flexWrap: "wrap", gap: 1 }}
-            >
-              <Stack direction="row" alignItems="center" spacing={1.5}>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
-                  Devices
-                </Typography>
-                {/* Group filter dropdown. Lazy-bound to the Asset
-                    Groups catalog. Empty option clears the filter.
-                    Hidden entirely when the tenant has no groups, so
-                    the toolbar doesn't carry dead weight for tenants
-                    who never opened the Groups tab. */}
-                {groupCatalog.length > 0 ? (
-                  <TextField
-                    select
-                    size="small"
-                    value={groupFilter}
-                    onChange={(e) => setGroupFilter(e.target.value)}
-                    sx={{
-                      minWidth: 180,
-                      "& .MuiInputBase-root": { fontSize: 13 },
-                    }}
-                    SelectProps={{ displayEmpty: true }}
-                  >
-                    <MenuItem value="">
-                      <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
-                        Filter by group…
-                      </Typography>
-                    </MenuItem>
-                    {groupCatalog.map((g) => (
-                      <MenuItem key={g.id} value={String(g.id)}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                            {g.name}
-                          </Typography>
-                          <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
-                            {g.kind === "dynamic" ? "dyn" : "static"}
-                            {Number.isFinite(g.memberCount)
-                              ? ` · ${g.memberCount}`
-                              : ""}
-                          </Typography>
-                        </Stack>
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                ) : null}
-              </Stack>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-                {filteredHosts.length} of {hosts.length} · {kpis.onlineCount} online
-              </Typography>
-            </Stack>
-
-            {(platformFilter || versionBucketFilter || groupFilter) ? (
-              <Stack
-                direction="row"
-                spacing={0.75}
-                sx={{ mb: 1.5, flexWrap: "wrap", gap: 0.5, alignItems: "center" }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ color: BRAND.gray, fontWeight: 600, mr: 0.5 }}
+            {selectedAgent ? (
+              <AgentDetailWorkbench
+                selectedHost={selectedAgent}
+                connected={connectedIds.has(String(selectedAgent.agent_id || selectedAgent.agentId))}
+                loading={agentDetailLoading}
+                error={agentDetailError}
+                profile={agentProfile}
+                hardware={agentHardware}
+                softwareRows={agentSoftwareRows}
+                softwareTotal={agentSoftwareTotal}
+                tab={agentDetailTab}
+                onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
+                onBack={handleCloseAgentDetail}
+              />
+            ) : (
+              <>
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  alignItems={{ xs: "stretch", md: "flex-start" }}
+                  justifyContent="space-between"
+                  sx={{ mb: 1.5, gap: 1.5 }}
                 >
-                  Filtered
-                </Typography>
-                {platformFilter ? (
-                  <Chip
-                    size="small"
-                    label={`Platform: ${platformFilter}`}
-                    onDelete={() => setPlatformFilter("")}
-                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
-                  />
-                ) : null}
-                {versionBucketFilter ? (
-                  <Chip
-                    size="small"
-                    label={`Version: ${versionBucketFilter.replace("_", " ")}`}
-                    onDelete={() => setVersionBucketFilter("")}
-                    sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
-                  />
-                ) : null}
-                {groupFilter ? (
-                  <Chip
-                    size="small"
-                    label={
-                      groupMembersLoading
-                        ? `Group: ${selectedGroup?.name || groupFilter}…`
-                        : `Group: ${selectedGroup?.name || groupFilter} (${
-                            groupMembers ? groupMembers.size : 0
-                          })`
-                    }
-                    onDelete={() => setGroupFilter("")}
-                    sx={{
-                      bgcolor: BRAND.cyanSoft || BRAND.tealSoft,
-                      color: BRAND.tealText,
-                      fontWeight: 600,
-                    }}
-                  />
-                ) : null}
-              </Stack>
-            ) : null}
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    spacing={1.5}
+                    sx={{ minWidth: 0, flex: 1 }}
+                  >
+                    <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark, flexShrink: 0 }}>
+                      Devices
+                    </Typography>
 
-            <HostsTable rows={filteredHosts} connectedIds={connectedIds} />
+                    <TextField
+                      size="small"
+                      value={hostsSearchInput}
+                      onChange={(e) => setHostsSearchInput(e.target.value)}
+                      placeholder="Search devices..."
+                      helperText={
+                        hostsSearchInput.trim().length > 0 && hostsSearchInput.trim().length < 3
+                          ? "Type at least 3 characters to search"
+                          : " "
+                      }
+                      sx={{
+                        width: { xs: "100%", sm: 260, md: 300 },
+                        "& .MuiFormHelperText-root": {
+                          mx: 0,
+                          mt: 0.35,
+                          fontSize: 11,
+                          color: "text.secondary",
+                        },
+                      }}
+                    />
+
+                    {groupCatalog.length > 0 ? (
+                      <TextField
+                        select
+                        size="small"
+                        value={groupFilter}
+                        onChange={(e) => setGroupFilter(e.target.value)}
+                        sx={{
+                          minWidth: 180,
+                          "& .MuiInputBase-root": { fontSize: 13 },
+                        }}
+                        SelectProps={{ displayEmpty: true }}
+                      >
+                        <MenuItem value="">
+                          <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+                            Filter by group…
+                          </Typography>
+                        </MenuItem>
+                        {groupCatalog.map((g) => (
+                          <MenuItem key={g.id} value={String(g.id)}>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                                {g.name}
+                              </Typography>
+                              <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+                                {g.kind === "dynamic" ? "dyn" : "static"}
+                                {Number.isFinite(g.memberCount)
+                                  ? ` · ${g.memberCount}`
+                                  : ""}
+                              </Typography>
+                            </Stack>
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : null}
+                  </Stack>
+                  <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                    {filteredHosts.length} shown · {Number(hostsMeta.total || 0)} total · {kpis.onlineCount} online
+                  </Typography>
+                </Stack>
+
+                {(platformFilter || versionBucketFilter || groupFilter) ? (
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    sx={{ mb: 1.5, flexWrap: "wrap", gap: 0.5, alignItems: "center" }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ color: BRAND.gray, fontWeight: 600, mr: 0.5 }}
+                    >
+                      Filtered
+                    </Typography>
+                    {platformFilter ? (
+                      <Chip
+                        size="small"
+                        label={`Platform: ${platformFilter}`}
+                        onDelete={() => setPlatformFilter("")}
+                        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
+                      />
+                    ) : null}
+                    {versionBucketFilter ? (
+                      <Chip
+                        size="small"
+                        label={`Version: ${versionBucketFilter.replace("_", " ")}`}
+                        onDelete={() => setVersionBucketFilter("")}
+                        sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
+                      />
+                    ) : null}
+                    {groupFilter ? (
+                      <Chip
+                        size="small"
+                        label={
+                          groupMembersLoading
+                            ? `Group: ${selectedGroup?.name || groupFilter}…`
+                            : `Group: ${selectedGroup?.name || groupFilter} (${
+                                groupMembers ? groupMembers.size : 0
+                              })`
+                        }
+                        onDelete={() => setGroupFilter("")}
+                        sx={{
+                          bgcolor: BRAND.cyanSoft || BRAND.tealSoft,
+                          color: BRAND.tealText,
+                          fontWeight: 600,
+                        }}
+                      />
+                    ) : null}
+                  </Stack>
+                ) : null}
+
+                <HostsTable
+                  rows={filteredHosts}
+                  connectedIds={connectedIds}
+                  selectedAgentId={selectedAgent?.agent_id || selectedAgent?.agentId}
+                  onRowClick={handleAgentSelect}
+                  loading={loading}
+                  page={hostsPaginationModel.page}
+                  pageSize={hostsPaginationModel.pageSize}
+                  rowCount={Number(hostsMeta.total || 0)}
+                  sortModel={hostsSortModel}
+                  onPageChange={(nextPage) => setHostsPaginationModel((prev) => ({ ...prev, page: nextPage }))}
+                  onPageSizeChange={(nextPageSize) =>
+                    setHostsPaginationModel({ page: 0, pageSize: nextPageSize })
+                  }
+                  onSortChange={(field) => {
+                    if (!HOST_SORT_FIELDS.has(field)) return;
+                    setHostsPaginationModel((prev) => ({ ...prev, page: 0 }));
+                    setHostsSortModel((prev) => {
+                      const current = prev?.[0] || { field: "hostname", sort: "asc" };
+                      const nextSort = current.field === field && current.sort === "asc" ? "desc" : "asc";
+                      return [{ field, sort: nextSort }];
+                    });
+                  }}
+                />
+              </>
+            )}
           </SectionPaper>
         </Grid>
       </Grid>
