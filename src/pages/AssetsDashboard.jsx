@@ -462,6 +462,15 @@ function AgentDetailWorkbench({
             </Typography>
           </Box>
         </Stack>
+
+        <Button
+          variant="outlined"
+          onClick={onBack}
+          startIcon={<ArrowBackRoundedIcon />}
+          sx={{ borderRadius: 999, fontWeight: 800, alignSelf: { xs: "flex-start", md: "center" } }}
+        >
+          Back to dashboard
+        </Button>
       </Stack>
 
       {error ? (
@@ -700,7 +709,6 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     const summary = summaryOk ? sumRes.value : null;
     const hosts = hostsOk ? rawHostItems.map(normalizeHostRow) : [];
     const totalHosts = Number(rawHostsPayload?.total ?? rawHostItems.length ?? 0);
-
     const calculatedTotalPages = Math.max(
       1,
       Math.ceil(totalHosts / Number(hostsPaginationModel.pageSize || 25))
@@ -1274,11 +1282,20 @@ const osVersionItems = React.useMemo(() => {
                 >
                   <Stack
                     direction={{ xs: "column", sm: "row" }}
-                    alignItems={{ xs: "stretch", sm: "center" }}
+                    alignItems={{ xs: "stretch", sm: "flex-start" }}
                     spacing={1.5}
                     sx={{ minWidth: 0, flex: 1 }}
                   >
-                    <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark, flexShrink: 0 }}>
+                    <Typography
+                      sx={{
+                        pt: { xs: 0, sm: "10px" },
+                        fontSize: 16,
+                        fontWeight: 800,
+                        color: BRAND.dark,
+                        flexShrink: 0,
+                        lineHeight: 1.25,
+                      }}
+                    >
                       Devices
                     </Typography>
 
@@ -1293,12 +1310,24 @@ const osVersionItems = React.useMemo(() => {
                           : " "
                       }
                       sx={{
-                        width: { xs: "100%", sm: 260, md: 300 },
+                        width: { xs: "100%", sm: 300, md: 320 },
+                        flexShrink: 0,
+                        "& .MuiOutlinedInput-root": {
+                          height: 40,
+                          borderRadius: 1,
+                          bgcolor: "background.paper",
+                        },
+                        "& .MuiInputBase-input": {
+                          py: 0,
+                          fontSize: 14,
+                        },
                         "& .MuiFormHelperText-root": {
+                          minHeight: 16,
                           mx: 0,
                           mt: 0.35,
                           fontSize: 11,
                           color: "text.secondary",
+                          lineHeight: 1.25,
                         },
                       }}
                     />
@@ -1309,14 +1338,31 @@ const osVersionItems = React.useMemo(() => {
                         size="small"
                         value={groupFilter}
                         onChange={(e) => setGroupFilter(e.target.value)}
+                        helperText=" "
                         sx={{
-                          minWidth: 180,
-                          "& .MuiInputBase-root": { fontSize: 13 },
+                          width: { xs: "100%", sm: 220, md: 240 },
+                          flexShrink: 0,
+                          "& .MuiOutlinedInput-root": {
+                            height: 40,
+                            borderRadius: 1,
+                            bgcolor: "background.paper",
+                          },
+                          "& .MuiInputBase-input": {
+                            py: 0,
+                            fontSize: 14,
+                          },
+                          "& .MuiFormHelperText-root": {
+                            minHeight: 16,
+                            mx: 0,
+                            mt: 0.35,
+                            fontSize: 11,
+                            lineHeight: 1.25,
+                          },
                         }}
                         SelectProps={{ displayEmpty: true }}
                       >
                         <MenuItem value="">
-                          <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+                          <Typography sx={{ fontSize: 14, color: BRAND.gray }}>
                             Filter by group…
                           </Typography>
                         </MenuItem>
@@ -1338,7 +1384,15 @@ const osVersionItems = React.useMemo(() => {
                       </TextField>
                     ) : null}
                   </Stack>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                  <Typography
+                    sx={{
+                      pt: { xs: 0, md: "10px" },
+                      fontSize: 12,
+                      color: "text.secondary",
+                      whiteSpace: "nowrap",
+                      textAlign: { xs: "left", md: "right" },
+                    }}
+                  >
                     {filteredHosts.length} shown · {Number(hostsMeta.total || 0)} total · {kpis.onlineCount} online
                   </Typography>
                 </Stack>

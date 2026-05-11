@@ -160,6 +160,89 @@ function normalizeRankingRows(items = [], fallbackColor = BRAND.teal) {
     }));
 }
 
+
+const enterpriseDataGridSx = {
+  border: `1px solid ${BRAND.border}`,
+  borderRadius: 2.5,
+  overflow: "hidden",
+  width: "100%",
+  bgcolor: "background.paper",
+
+  // Match the Devices table: clean surface, horizontal separators only,
+  // compact rows, and no vertical grid lines.
+  "& .MuiDataGrid-main": {
+    borderRadius: 2.5,
+  },
+  "& .MuiDataGrid-columnHeaders": {
+    backgroundColor: "background.paper",
+    borderBottom: `1px solid ${BRAND.border}`,
+    minHeight: "44px !important",
+    maxHeight: "44px !important",
+    lineHeight: "44px !important",
+  },
+  "& .MuiDataGrid-columnHeader": {
+    outline: "none !important",
+    borderRight: "none",
+    paddingTop: 0,
+    paddingBottom: 0,
+  },
+  "& .MuiDataGrid-columnSeparator": {
+    display: "none",
+  },
+  "& .MuiDataGrid-columnHeaderTitle": {
+    fontWeight: 700,
+    fontSize: 14,
+    color: BRAND.dark,
+    lineHeight: 1.25,
+  },
+  "& .MuiDataGrid-cell": {
+    display: "flex",
+    alignItems: "center",
+    borderBottom: `1px solid ${BRAND.border}`,
+    borderRight: "none",
+    fontSize: 14,
+    color: BRAND.dark,
+    outline: "none !important",
+    paddingTop: "0 !important",
+    paddingBottom: "0 !important",
+    lineHeight: 1.25,
+  },
+  "& .MuiDataGrid-row": {
+    minHeight: "40px !important",
+    maxHeight: "40px !important",
+    transition: "background-color 160ms ease",
+  },
+  "& .MuiDataGrid-row:hover": {
+    backgroundColor: BRAND.rowHover,
+  },
+  "& .MuiDataGrid-row.Mui-selected": {
+    backgroundColor: `${BRAND.tealSoft} !important`,
+  },
+  "& .MuiDataGrid-row.Mui-selected:hover": {
+    backgroundColor: `${BRAND.tealSoftStrong} !important`,
+  },
+  "& .MuiDataGrid-virtualScroller": {
+    backgroundColor: "background.paper",
+  },
+  "& .MuiDataGrid-footerContainer": {
+    minHeight: 52,
+    borderTop: `1px solid ${BRAND.border}`,
+    backgroundColor: "background.paper",
+  },
+  "& .MuiTablePagination-root": {
+    color: BRAND.dark,
+  },
+  "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+    fontSize: 13,
+  },
+  "& .MuiLinearProgress-root": {
+    backgroundColor: "rgba(27,166,166,0.15)",
+  },
+  "& .MuiLinearProgress-bar": {
+    backgroundColor: BRAND.teal,
+  },
+};
+
 function RankingViewAllButton({ disabled = false, onClick }) {
   return (
     <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
@@ -961,33 +1044,14 @@ export default function SoftwareInventory() {
                 setHostAppsSearch("");
                 setHostAppsPaginationModel({ page: 0, pageSize: 10 });
               }}
+              rowHeight={40}
+              columnHeaderHeight={44}
+              localeText={{ footerRowsPerPage: "Rows" }}
               sx={{
-                border: "none",
-                width: "100%",
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: "rgba(166, 83, 27, 0.08)",
-                  fontWeight: 700,
-                },
-                "& .MuiDataGrid-columnHeaderTitle": {
-                  fontWeight: 700,
-                },
+                ...enterpriseDataGridSx,
                 "& .MuiDataGrid-row": {
+                  ...enterpriseDataGridSx["& .MuiDataGrid-row"],
                   cursor: "pointer",
-                },
-                "& .MuiDataGrid-row:hover": {
-                  backgroundColor: "rgba(27,166,166,0.08)",
-                },
-                "& .MuiDataGrid-row.Mui-selected": {
-                  backgroundColor: "rgba(27,166,166,0.16) !important",
-                },
-                "& .MuiDataGrid-row.Mui-selected:hover": {
-                  backgroundColor: "rgba(27,166,166,0.22) !important",
-                },
-                "& .MuiLinearProgress-root": {
-                  backgroundColor: "rgba(27,166,166,0.15)",
-                },
-                "& .MuiLinearProgress-bar": {
-                  backgroundColor: BRAND.teal,  
                 },
               }}
             />
@@ -1007,23 +1071,10 @@ export default function SoftwareInventory() {
               paginationModel={hostAppsPaginationModel}
               onPaginationModelChange={setHostAppsPaginationModel}
               pageSizeOptions={[10, 25, 50]}
-              sx={{
-                border: "none",
-                width: "100%",
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: "rgba(166, 83, 27, 0.08)",
-                  fontWeight: 700,
-                },
-                "& .MuiDataGrid-columnHeaderTitle": {
-                  fontWeight: 700,
-                },
-                "& .MuiLinearProgress-root": {
-                  backgroundColor: "rgba(27,166,166,0.15)",
-                },
-                "& .MuiLinearProgress-bar": {
-                  backgroundColor: BRAND.teal,
-                },
-              }}
+              rowHeight={40}
+              columnHeaderHeight={44}
+              localeText={{ footerRowsPerPage: "Rows" }}
+              sx={enterpriseDataGridSx}
             />
           </Box>
         )}
@@ -1041,23 +1092,10 @@ export default function SoftwareInventory() {
               paginationModel={paginationModel}
               onPaginationModelChange={setPaginationModel}
               pageSizeOptions={[10, 25, 50]}
-              sx={{
-                border: "none",
-                width: "100%",
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: "rgba(166, 83, 27, 0.08)",
-                  fontWeight: 700,
-                },
-                "& .MuiDataGrid-columnHeaderTitle": {
-                  fontWeight: 700,
-                },
-                "& .MuiLinearProgress-root": {
-                  backgroundColor: "rgba(27,166,166,0.15)",
-                },
-                "& .MuiLinearProgress-bar": {
-                  backgroundColor: BRAND.teal,
-                },
-              }}
+              rowHeight={40}
+              columnHeaderHeight={44}
+              localeText={{ footerRowsPerPage: "Rows" }}
+              sx={enterpriseDataGridSx}
             />
           </Box>
         )}
