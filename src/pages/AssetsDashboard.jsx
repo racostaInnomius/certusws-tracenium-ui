@@ -69,6 +69,7 @@ import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 
 import HostsTable from "../components/Charts/HostsTable";
+import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import CompositionBars from "../components/common/CompositionBars";
@@ -463,14 +464,6 @@ function AgentDetailWorkbench({
           </Box>
         </Stack>
 
-        <Button
-          variant="outlined"
-          onClick={onBack}
-          startIcon={<ArrowBackRoundedIcon />}
-          sx={{ borderRadius: 999, fontWeight: 800, alignSelf: { xs: "flex-start", md: "center" } }}
-        >
-          Back to dashboard
-        </Button>
       </Stack>
 
       {error ? (
@@ -630,7 +623,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [groupCatalog, setGroupCatalog] = React.useState([]);
   const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
   const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
-
+  const [assetWorkbenchView, setAssetWorkbenchView] = React.useState("devices"); // devices | inactive-assets
   const [hostsSearchInput, setHostsSearchInput] = React.useState("");
   const [hostsSearch, setHostsSearch] = React.useState("");
   const [hostsPaginationModel, setHostsPaginationModel] = React.useState({
@@ -915,6 +908,16 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     setAgentSoftwareTotal(0);
   }, []);
 
+  const openInactiveAssetsWorkbench = React.useCallback(() => {
+    handleCloseAgentDetail();
+    setAssetWorkbenchView("inactive-assets");
+  }, [handleCloseAgentDetail]);
+
+  const openDevicesWorkbench = React.useCallback(() => {
+    handleCloseAgentDetail();
+    setAssetWorkbenchView("devices");
+  }, [handleCloseAgentDetail]);
+
   React.useEffect(() => {
     const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
     if (!agentId) return undefined;
@@ -1192,6 +1195,12 @@ const osVersionItems = React.useMemo(() => {
             accent={ROLE.caution}
             tint={ROLE.cautionSoft}
             titleHint="Devices that have not reported inventory or telemetry in more than 7 days."
+            onClick={openInactiveAssetsWorkbench}
+            sx={
+              assetWorkbenchView === "inactive-assets"
+                ? { borderColor: ROLE.caution, boxShadow: "0 4px 12px rgba(166, 83, 27, 0.12)" }
+                : null
+            }
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -1271,6 +1280,13 @@ const osVersionItems = React.useMemo(() => {
                 tab={agentDetailTab}
                 onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
                 onBack={handleCloseAgentDetail}
+              />
+            ) : assetWorkbenchView === "inactive-assets" ? (
+              <InactiveAssetsTable
+                assetGroups={groupCatalog}
+                initialInactiveDays={7}
+                onBack={openDevicesWorkbench}
+                onRowClick={handleAgentSelect}
               />
             ) : (
               <>

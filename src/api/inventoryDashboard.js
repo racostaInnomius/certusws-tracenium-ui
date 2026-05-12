@@ -19,6 +19,10 @@ function buildQuery(params = {}) {
 
 const BASE = "/api/v1/dashboard";
 
+export async function getInactiveAssets(params = {}) {
+  return httpGetJson(`${BASE}/inactive-assets${buildQuery(params)}`);
+}
+
 export async function getHardwareInventorySummary() {
   return httpGetJson(`${BASE}/hardware-inventory/summary`);
 }

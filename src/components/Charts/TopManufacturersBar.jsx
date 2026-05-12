@@ -32,7 +32,7 @@ function toChartData(topManufacturers) {
 // — eslint's `cannot-create-components-during-render` lo marcó.
 // Evitamos `<Cell/>` (deprecated en recharts 3) pintando por índice
 // con un shape custom estable.
-const BAR_COLORS = ["#3aa6a6", "#66e3f0", "#8feaf3", "#b9f3f7"];
+const BAR_COLORS = ["#5A9F9F", "#3E7878", "#52B788", "#B9E3D0"];
 
 function BarShape(props) {
   const { x, y, width, height, index } = props;

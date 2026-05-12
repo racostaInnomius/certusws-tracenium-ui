@@ -18,7 +18,7 @@ export default function OsPlatformDonut({ osPlatform }) {
   }, [osPlatform]);
 
   const total = React.useMemo(() => data.reduce((sum, x) => sum + x.value, 0), [data]);
-  const COLORS = ["#2ec4c6", "#7bdff2", "#b2f7ef", "#cdb4db", "#a2d2ff"];
+  const COLORS = ["#5A9F9F", "#3E7878", "#52B788", "#86C6A8", "#B9E3D0"];
 
   return (
     <Paper sx={{ p: 2, borderRadius: 3, height: "100%" }}>
@@ -56,7 +56,7 @@ export default function OsPlatformDonut({ osPlatform }) {
                         <tspan x="50%" dy="-2" fontSize="18" fontWeight="800">
                           {total || "—"}
                         </tspan>
-                        <tspan x="50%" dy="16" fontSize="12" fill="#667085">
+                        <tspan x="50%" dy="16" fontSize="12" fill="#3E7878">
                           hosts
                         </tspan>
                       </text>
@@ -81,7 +81,7 @@ export default function OsPlatformDonut({ osPlatform }) {
                   bgcolor: COLORS[idx % COLORS.length]
                 }}
               />
-              <Typography variant="body2" sx={{ color: "#0f172a" }}>
+              <Typography variant="body2" sx={{ color: "#3B404D" }}>
                 {d.name}
               </Typography>
             </Box>

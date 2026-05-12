@@ -61,7 +61,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
           alignItems: "center",
           justifyContent: "center",
           px: 1,
-          borderBottom: `3px solid ${BRAND.cyan}`,
+          borderBottom: `3px solid ${BRAND.teal}`,
         }}
       >
         <Box
@@ -94,7 +94,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
                       fontWeight: 700,
                       letterSpacing: 1,
                       textTransform: "uppercase",
-                      color: "rgba(143,253,255,0.55)",
+                      color: "rgba(90,159,159,0.72)",
                       mb: 0.5,
                     }}
                   >
@@ -103,7 +103,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
                 ) : null}
                 <Divider
                   sx={{
-                    borderColor: "rgba(143,253,255,0.18)",
+                    borderColor: "rgba(90,159,159,0.28)",
                   }}
                 />
               </Box>
@@ -125,18 +125,18 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
                 color: "#e7e9ee",
                 transition: "background-color 0.12s ease, color 0.12s ease",
                 ...(it.highlighted && {
-                  bgcolor: "rgba(143,253,255,0.12)",
-                  border: "1px solid rgba(143,253,255,0.35)",
-                  "&:hover": { bgcolor: "rgba(143,253,255,0.2)" },
+                  bgcolor: BRAND.tealSoft,
+                  border: `1px solid ${BRAND.tealSoftStrong}`,
+                  "&:hover": { bgcolor: BRAND.tealSoftStrong },
                 }),
                 "&:hover": {
-                  bgcolor: "rgba(143,253,255,0.08)",
+                  bgcolor: "rgba(90,159,159,0.16)",
                   color: "#ffffff",
                 },
                 "&.Mui-selected": {
                   bgcolor: "rgba(90,159,159,0.28)",
                   color: "#ffffff",
-                  "& .MuiListItemIcon-root": { color: BRAND.cyan },
+                  "& .MuiListItemIcon-root": { color: BRAND.teal },
                 },
                 "&.Mui-selected:hover": {
                   bgcolor: "rgba(90,159,159,0.36)",
@@ -146,7 +146,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
               <ListItemIcon
                 sx={{
                   minWidth: 32,
-                  color: isSelected ? BRAND.cyan : "#b9bec8",
+                  color: isSelected ? BRAND.teal : "#b9bec8",
                   "& svg": { fontSize: 20 },
                 }}
               >
@@ -172,7 +172,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
                   sx={{
                     ml: 0.5,
                     height: 20,
-                    bgcolor: BRAND.cyan,
+                    bgcolor: BRAND.teal,
                     color: BRAND.dark,
                     fontWeight: 800,
                     fontSize: 10,
@@ -198,7 +198,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
             py: 0.75,
             borderRadius: 2,
             "&:hover": {
-              bgcolor: "rgba(143,253,255,0.08)",
+              bgcolor: "rgba(90,159,159,0.16)",
               color: "#ffffff",
             },
           }}

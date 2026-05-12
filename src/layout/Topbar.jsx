@@ -96,7 +96,7 @@ export default function Topbar({ onMenuClick }) {
         px: { xs: 1.5, sm: 2, md: 3 },
         gap: 1,
         background: `linear-gradient(90deg, ${BRAND.dark} 0%, ${BRAND.teal} 100%)`,
-        borderBottom: `3px solid ${BRAND.cyan}`,
+        borderBottom: `3px solid ${BRAND.teal}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -116,7 +116,7 @@ export default function Topbar({ onMenuClick }) {
             mr: 0.5,
             flexShrink: 0,
             display: { xs: "inline-flex", md: "none" },
-            "&:hover": { bgcolor: "rgba(143,253,255,0.18)" },
+            "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
           }}
         >
           <MenuOutlinedIcon />
@@ -153,12 +153,12 @@ export default function Topbar({ onMenuClick }) {
           >
             <Box
               component="span"
-              sx={{ color: BRAND.cyan, fontWeight: 900, mx: 1 }}
+              sx={{ color: BRAND.tealSoftStrong, fontWeight: 900, mx: 1 }}
             >
               |
             </Box>
             Endpoint Intelligence{" "}
-            <Box component="span" sx={{ color: BRAND.cyan, px: 0.25 }}>
+            <Box component="span" sx={{ color: BRAND.tealSoftStrong, px: 0.25 }}>
               &
             </Box>{" "}
             Compliance Platform
@@ -188,7 +188,7 @@ export default function Topbar({ onMenuClick }) {
             sx={{
               color: "#ffffff",
               flexShrink: 0,
-              "&:hover": { bgcolor: "rgba(143,253,255,0.18)" },
+              "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
             }}
           >
             <Badge

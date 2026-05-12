@@ -1,4 +1,6 @@
 import { StrictMode } from 'react'
+import { ThemeProvider } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -7,13 +9,17 @@ import { AuthProvider } from "./auth/AuthContext";
 // need confirmation use `useConfirm()` instead of window.confirm,
 // keeping the visual identity consistent across the portal.
 import { ConfirmProvider } from "./components/common/ConfirmDialog";
+import traceniumMuiTheme from "./theme/traceniumMuiTheme";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <ConfirmProvider>
-        <App />
-      </ConfirmProvider>
-    </AuthProvider>
+    <ThemeProvider theme={traceniumMuiTheme}>
+      <CssBaseline />
+      <AuthProvider>
+        <ConfirmProvider>
+          <App />
+        </ConfirmProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </StrictMode>,
 )
