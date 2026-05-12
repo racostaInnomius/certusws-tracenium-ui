@@ -126,8 +126,9 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClic
       type={interactive ? "button" : undefined}
       sx={{
         p: 2,
-        borderRadius: 2,
+        borderRadius: 3,
         border: `1px solid ${BRAND.border}`,
+        boxShadow: BRAND.shadow,
         height: "100%",
         width: "100%",
         display: "flex",
@@ -138,7 +139,8 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClic
         // Native <button> resets we need once the Paper becomes
         // interactive — otherwise MUI's default button styling (font
         // family, background) bleeds through.
-        background: "transparent",
+        backgroundColor: BRAND.surface || "#fff",
+        backgroundImage: "none",
         font: "inherit",
         cursor: interactive ? "pointer" : "default",
         transition: "border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease",
