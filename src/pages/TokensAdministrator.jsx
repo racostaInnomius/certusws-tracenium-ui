@@ -799,7 +799,7 @@ const filteredRows = React.useMemo(() => {
                     title="Max Devices"
                     value={quotaLoading ? "..." : quotaSummary.maxDevices}
                     accent={BRAND.dark}
-                    subtitle="Standard limit"
+                    subtitle="Subscription limit"
                   />
                 </Grid>
 
@@ -817,18 +817,11 @@ const filteredRows = React.useMemo(() => {
                     title="Remaining"
                     value={quotaLoading ? "..." : quotaSummary.remaining}
                     accent={quotaSummary.remaining >= 0 ? BRAND.alert.success : BRAND.alert.warning}
-                    subtitle="Before standard limit"
+                    subtitle="Before subscription limit"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                  <SummaryCard
-                    title="Upper Capacity"
-                    value={quotaLoading ? "..." : quotaSummary.creatableRemaining}
-                    accent={quotaSummary.canCreateToken ? BRAND.alert.success : BRAND.alert.error}
-                    subtitle={`Until ${quotaSummary.upperLimit} devices`}
-                  />
-                </Grid>
+
               </Grid>
             </MetricGroup>
           </Grid>
