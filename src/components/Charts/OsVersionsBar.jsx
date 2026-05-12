@@ -35,7 +35,7 @@ function toChartData(osVersions) {
 // component inside the render body reinstantiates it every tick and
 // eslint's `react-hooks/cannot-create-components-during-render` rule
 // (correctly) flagged it.
-const BAR_COLORS = ["#0c6e73", "#66e3f0", "#8feaf3", "#b9f3f7"];
+const BAR_COLORS = ["#5A9F9F", "#3E7878", "#52B788", "#B9E3D0"];
 
 function BarShape(props) {
   const { x, y, width, height, index } = props;
