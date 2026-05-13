@@ -1095,15 +1095,46 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
 const osVersionItems = React.useMemo(() => {
   const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
 
-  return rows.map((r) => {
+  return rows.map((r, rowIndex) => {
     const platform = String(r?.os_platform ?? "").toLowerCase();
     const normalized = normalizePlatform(platform);
+    const color = normalized ? platformColors[normalized] : BRAND.gray;
+    const parentValue = toSafeNumber(r?.host_count ?? r?.count);
+    const children = Array.isArray(r?.children)
+      ? r.children
+          .map((child, childIndex) => ({
+            id: `${getOsVersionDisplayTitle(r)}-${child?.technical_version || child?.version_label || childIndex}`,
+            label:
+              child?.display_title ||
+              (child?.version_label ? `Version ${child.version_label}` : null) ||
+              child?.technical_version ||
+              child?.os_version ||
+              "Unknown version",
+            sub:
+              child?.display_subtitle ||
+              (child?.build_number ? `Build ${child.build_number}` : null) ||
+              child?.technical_version ||
+              "",
+            value: toSafeNumber(child?.host_count ?? child?.count),
+            percentage:
+              child?.percentage != null
+                ? Number(child.percentage)
+                : parentValue > 0
+                ? (toSafeNumber(child?.host_count ?? child?.count) / parentValue) * 100
+                : 0,
+            color,
+            raw: child,
+          }))
+          .filter((child) => Number(child.value || 0) > 0)
+      : [];
 
     return {
+      id: `${getOsVersionDisplayTitle(r)}-${r?.technical_version || r?.version_label || rowIndex}`,
       label: getOsVersionDisplayTitle(r),
       sub: getOsVersionDisplaySubtitle(r),
-      value: toSafeNumber(r?.host_count ?? r?.count),
-      color: normalized ? platformColors[normalized] : BRAND.gray,
+      value: parentValue,
+      color,
+      children,
       raw: r,
     };
   });
@@ -1254,7 +1285,7 @@ const osVersionItems = React.useMemo(() => {
               items={osVersionItems}
               totalLabel="hosts"
               emptyLabel="No version data"
-              minHeight={260}
+              minHeight={280}
               maxItems={6}
             />
           </Box>
