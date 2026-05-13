@@ -164,13 +164,14 @@ const enterpriseDataGridSx = {
     borderRadius: 2.5,
   },
   "& .MuiDataGrid-columnHeaders": {
-    backgroundColor: "background.paper",
+    backgroundColor: `${BRAND.surfaceMuted} !important`,
     borderBottom: `1px solid ${BRAND.border}`,
     minHeight: "44px !important",
     maxHeight: "44px !important",
     lineHeight: "44px !important",
   },
   "& .MuiDataGrid-columnHeader": {
+    backgroundColor: `${BRAND.surfaceMuted} !important`,
     outline: "none !important",
     borderRight: "none",
     paddingTop: 0,
@@ -902,8 +903,11 @@ export default function HardwareInventory() {
                 borderRadius: 2,
                 overflow: "hidden",
                 "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: "rgba(27,166,166,0.08)",
+                  backgroundColor: `${BRAND.surfaceMuted} !important`,
                   fontWeight: 800,
+                },
+                "& .MuiDataGrid-columnHeader": {
+                  backgroundColor: `${BRAND.surfaceMuted} !important`,
                 },
                 "& .MuiDataGrid-columnHeaderTitle": {
                   fontWeight: 800,

@@ -49,16 +49,47 @@ const traceniumMuiTheme = createTheme({
       paper: BRAND.surface,
     },
   },
+  // Keep Tracenium surfaces refined, not overly rounded.
+  // MUI multiplies numeric sx values like borderRadius: 3 by this value,
+  // so 4 gives cards a clean ~12px radius instead of very rounded ~30px corners.
   shape: {
-    borderRadius: 10,
+    borderRadius: 4,
   },
   components: {
+    MuiPaper: {
+      styleOverrides: {
+        rounded: {
+          borderRadius: 10,
+        },
+      },
+    },
+    MuiMenu: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiPopover: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 12,
+        },
+      },
+    },
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: "none",
           fontWeight: 700,
-          borderRadius: 999,
+          borderRadius: 8,
           boxShadow: "none",
           "&:hover": {
             boxShadow: "none",
