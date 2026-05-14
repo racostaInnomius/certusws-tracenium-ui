@@ -107,17 +107,17 @@ export default function CompositionBars({
       elevation={0}
       sx={{
         p: 2,
-        borderRadius: 2,
+        borderRadius: 3,
         border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
+        boxShadow: BRAND.shadow,
+        bgcolor: BRAND.surface || "#fff",
+        width: "100%",
         minHeight,
-        height: minHeight,
         maxHeight: minHeight,
         minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
         overflow: "hidden",
-        ...(sx || {}),
       }}
     >
       <Box
