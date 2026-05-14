@@ -103,3 +103,7 @@ export async function previewAssetGroupCriteria(criteriaJson, sampleSize) {
     ...(sampleSize !== undefined ? { sampleSize } : {}),
   });
 }
+
+export async function getCriteriaSuggestions(params = {}) {
+  return httpGetJson(`${BASE}/criteria-suggestions${buildQuery(params)}`);
+}

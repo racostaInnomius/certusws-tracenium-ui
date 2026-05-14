@@ -20,6 +20,7 @@
 import * as React from "react";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -68,6 +69,7 @@ import {
   addAssetGroupMembers,
   removeAssetGroupMember,
   getCriteriaCatalog,
+  getCriteriaSuggestions,
   previewAssetGroupCriteria,
   dispatchAssetGroupJob,
 } from "../api/assetGroups";
@@ -112,6 +114,605 @@ function KindChip({ kind }) {
         fontWeight: 700,
         border: `1px solid ${BRAND.teal}55`,
       }}
+    />
+  );
+}
+
+
+
+const PLATFORM_FALLBACK_OPTIONS = [
+  { label: "Windows", value: "windows", description: "Windows workstation devices" },
+  { label: "Windows Server", value: "windows-server", description: "Windows Server devices" },
+  { label: "macOS", value: "macos", description: "Apple macOS devices" },
+  { label: "Linux", value: "linux", description: "Linux devices" },
+  { label: "Unknown", value: "unknown", description: "Devices without reliable platform classification" },
+];
+
+const PLUGIN_ENABLED_OPTIONS = [
+  { label: "Enabled", value: "true", description: "Plugin is enabled" },
+  { label: "Disabled", value: "false", description: "Plugin is disabled" },
+];
+
+const PLATFORM_CANONICAL_LABELS = {
+  macos: "macOS",
+  windows: "Windows",
+  "windows-server": "Windows Server",
+  linux: "Linux",
+  unknown: "Unknown",
+};
+
+const PLATFORM_VALUE_ALIASES = {
+  mac: "macos",
+  "mac-os": "macos",
+  macos: "macos",
+  osx: "macos",
+  darwin: "macos",
+  win: "windows",
+  windows: "windows",
+  "windows-workstation": "windows",
+  "windows-client": "windows",
+  "windows-server": "windows-server",
+  "windows_server": "windows-server",
+  "win-server": "windows-server",
+  winserver: "windows-server",
+  linux: "linux",
+  ubuntu: "linux",
+  debian: "linux",
+  rhel: "linux",
+  centos: "linux",
+  unknown: "unknown",
+};
+
+const MULTI_VALUE_OPS = new Set([
+  "in",
+  "not_in",
+  "notin",
+  "nin",
+  "any",
+  "any_of",
+  "is_any_of",
+  "isanyof",
+  "is_none_of",
+  "isnoneof",
+  "none_of",
+]);
+
+const PARTIAL_TEXT_OPS = new Set([
+  "contains",
+  "matches",
+  "starts_with",
+  "startswith",
+  "ends_with",
+  "endswith",
+]);
+
+function normalizeOptionLabel(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[\s_-]+/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function normalizeCatalogOption(option) {
+  if (option == null) return null;
+
+  if (typeof option === "string") {
+    const value = option.trim();
+    if (!value) return null;
+    return {
+      label: normalizeOptionLabel(value),
+      value,
+      description: "Available value",
+    };
+  }
+
+  const value = String(option.value ?? option.key ?? option.id ?? option.label ?? "").trim();
+  if (!value) return null;
+
+  return {
+    label: String(option.label ?? normalizeOptionLabel(value)).trim(),
+    value,
+    description: option.description || option.subtitle || option.details || "Available value",
+  };
+}
+
+function normalizeCriteriaKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizePlatformCriteriaValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const aliasKey = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return PLATFORM_VALUE_ALIASES[aliasKey] || raw;
+}
+
+function normalizeSuggestionValue(fieldKey, value) {
+  if (normalizeCriteriaKey(fieldKey) === "platform") {
+    return normalizePlatformCriteriaValue(value);
+  }
+  return String(value ?? "").trim();
+}
+
+function normalizeSuggestionOption(option, fieldKey) {
+  const normalized = normalizeCatalogOption(option);
+  if (!normalized) return null;
+
+  const value = normalizeSuggestionValue(fieldKey, normalized.value);
+  if (!value) return null;
+
+  const canonicalLabel =
+    normalizeCriteriaKey(fieldKey) === "platform"
+      ? PLATFORM_CANONICAL_LABELS[value]
+      : null;
+
+  return {
+    ...normalized,
+    label: canonicalLabel || normalized.label || normalizeOptionLabel(value),
+    value,
+  };
+}
+
+function getCatalogOptions(fieldSpec, fieldKey) {
+  const rawOptions =
+    fieldSpec?.options ||
+    fieldSpec?.values ||
+    fieldSpec?.suggestions ||
+    fieldSpec?.allowedValues ||
+    [];
+
+  return (Array.isArray(rawOptions) ? rawOptions : [])
+    .map((option) => normalizeSuggestionOption(option, fieldKey || fieldSpec?.key))
+    .filter(Boolean);
+}
+
+function isField(fieldSpec, fieldKey, allowed) {
+  const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
+  const label = normalizeCriteriaKey(fieldSpec?.label);
+  return allowed.includes(key) || allowed.includes(label);
+}
+
+function getSuggestionFieldKey(fieldSpec, fieldKey) {
+  const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
+  const label = normalizeCriteriaKey(fieldSpec?.label);
+  const candidate = key || label;
+
+  if (["platform", "os_platform", "osplatform"].includes(candidate)) return "platform";
+  if (["hostname", "host", "device_name", "devicename"].includes(candidate)) return "hostname";
+  if (["os_release", "osrelease", "os_version", "osversion", "release"].includes(candidate)) return "osRelease";
+  if (["agent_version", "agentversion"].includes(candidate)) return "agentVersion";
+  if (["architecture", "arch"].includes(candidate)) return "architecture";
+  if (["policy_version", "policyversion"].includes(candidate)) return "policyVersion";
+  if (["plugin_enabled", "pluginenabled", "plugin"].includes(candidate)) return "pluginEnabled";
+  if (["ip", "local_ip", "localip", "ip_address", "ipaddress"].includes(candidate)) return "ip";
+
+  return fieldSpec?.key || fieldKey || "";
+}
+
+function isPlatformField(fieldSpec, fieldKey) {
+  return getSuggestionFieldKey(fieldSpec, fieldKey) === "platform";
+}
+
+function isPluginEnabledField(fieldSpec, fieldKey) {
+  return getSuggestionFieldKey(fieldSpec, fieldKey) === "pluginEnabled";
+}
+
+function isIpSubnetOperator(opSpec) {
+  const key = normalizeCriteriaKey(opSpec?.key ?? opSpec?.value);
+  const label = normalizeCriteriaKey(opSpec?.label ?? opSpec?.name);
+  return key === "in_subnet" || key === "cidr" || label.includes("subnet");
+}
+
+function operatorExpectsArray(opSpec) {
+  const key = normalizeCriteriaKey(opSpec?.key ?? opSpec?.value);
+  const label = normalizeCriteriaKey(opSpec?.label ?? opSpec?.name);
+
+  return (
+    Boolean(opSpec?.expectsArray) ||
+    Boolean(opSpec?.multiple) ||
+    Boolean(opSpec?.isMulti) ||
+    opSpec?.valueType === "array" ||
+    opSpec?.inputType === "array" ||
+    MULTI_VALUE_OPS.has(key) ||
+    label.includes("any_of") ||
+    label.includes("one_of") ||
+    label.includes("in_list") ||
+    label.includes("none_of")
+  );
+}
+
+function operatorAllowsPartialText(opSpec) {
+  const key = normalizeCriteriaKey(opSpec?.key ?? opSpec?.value);
+  const label = normalizeCriteriaKey(opSpec?.label ?? opSpec?.name);
+  return (
+    PARTIAL_TEXT_OPS.has(key) ||
+    label.includes("contains") ||
+    label.includes("matches") ||
+    label.includes("starts") ||
+    label.includes("ends")
+  );
+}
+
+function shouldUseRemoteAutocomplete(fieldKey) {
+  return [
+    "platform",
+    "pluginEnabled",
+    "hostname",
+    "osRelease",
+    "agentVersion",
+    "architecture",
+    "policyVersion",
+    "ip",
+  ].includes(fieldKey);
+}
+
+function isCatalogLikeField(fieldKey) {
+  return fieldKey === "platform" || fieldKey === "pluginEnabled";
+}
+
+function getLocalFallbackOptions(fieldKey) {
+  if (fieldKey === "platform") return PLATFORM_FALLBACK_OPTIONS;
+  if (fieldKey === "pluginEnabled") return PLUGIN_ENABLED_OPTIONS;
+  return [];
+}
+
+function getPlaceholder(fieldKey, multiple, partialText) {
+  if (multiple) return "Select one or more values…";
+  if (fieldKey === "ip") return partialText ? "e.g. 160 or 192.168" : "Select or type IP…";
+  if (fieldKey === "hostname") return partialText ? "e.g. macbook or server" : "Select or type hostname…";
+  if (fieldKey === "osRelease") return "e.g. 10.0.20348, Microsoft Windows 11 Pro";
+  if (fieldKey === "agentVersion") return "e.g. 1.1.13";
+  if (fieldKey === "architecture") return "e.g. arm64 or x64";
+  if (fieldKey === "policyVersion") return "Select or type policy version…";
+  if (fieldKey === "pluginEnabled") return "Select enabled state…";
+  if (fieldKey === "platform") return "Select platform…";
+  return "Value";
+}
+
+function getHelperText({ fieldKey, search, error, loading, multiple, freeSolo }) {
+  if (error) return error;
+  if (loading) return "Loading suggestions...";
+  if (!isCatalogLikeField(fieldKey) && String(search || "").trim().length > 0 && String(search || "").trim().length < 2) {
+    return "Type at least 2 characters to search";
+  }
+  if (fieldKey === "platform") return "Select a supported platform bucket. Windows and Windows Server are evaluated separately.";
+  if (fieldKey === "pluginEnabled") return "Select whether the plugin should be enabled or disabled.";
+  if (fieldKey === "ip") return multiple ? "Select multiple IPs or type a value and press Enter." : "Suggestions come from device IPs. Partial text is allowed for contains/matches operators.";
+  if (freeSolo) return "Select a suggestion or type a custom value.";
+  return multiple ? "Select one or more values." : "Select a suggested value.";
+}
+
+function CriteriaValueEditor({ pred, fieldSpec, opSpec, disabled, onChange }) {
+  const fieldKey = getSuggestionFieldKey(fieldSpec, pred?.field);
+  const expectsArray = operatorExpectsArray(opSpec);
+  const partialText = operatorAllowsPartialText(opSpec);
+  const isSubnet = isIpSubnetOperator(opSpec);
+  const useAutocomplete = shouldUseRemoteAutocomplete(fieldKey) && !isSubnet;
+  const isCatalog = isCatalogLikeField(fieldKey);
+  const freeSolo = !["platform", "pluginEnabled"].includes(fieldKey);
+
+  const currentArrayValue = React.useMemo(() => {
+    if (Array.isArray(pred?.value)) return pred.value.map((item) => String(item ?? "").trim()).filter(Boolean);
+    const single = String(pred?.value ?? "").trim();
+    return single ? [single] : [];
+  }, [pred?.value]);
+
+  const currentSingleValue = React.useMemo(() => {
+    if (Array.isArray(pred?.value)) return String(pred.value[0] ?? "").trim();
+    return String(pred?.value ?? "").trim();
+  }, [pred?.value]);
+
+  const [inputValue, setInputValue] = React.useState(currentSingleValue);
+  const [search, setSearch] = React.useState(currentSingleValue);
+  const [options, setOptions] = React.useState(() => getLocalFallbackOptions(fieldKey));
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const requestIdRef = React.useRef(0);
+
+  React.useEffect(() => {
+    setInputValue(expectsArray ? "" : currentSingleValue);
+    setSearch(expectsArray ? "" : currentSingleValue);
+  }, [fieldKey, pred?.op, expectsArray, currentSingleValue]);
+
+  React.useEffect(() => {
+    if (!useAutocomplete) return;
+
+    const localFallbacks = getLocalFallbackOptions(fieldKey);
+    const catalogOptions = getCatalogOptions(fieldSpec, fieldKey);
+    const mergedLocal = [...localFallbacks, ...catalogOptions]
+      .map((option) => normalizeSuggestionOption(option, fieldKey))
+      .filter(Boolean);
+
+    const normalizedSearch = String(search || "").trim();
+    const shouldFetch = isCatalog || normalizedSearch.length >= 2;
+
+    if (!shouldFetch) {
+      setOptions(mergedLocal);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setLoading(true);
+    setError("");
+
+    const handle = setTimeout(async () => {
+      try {
+        const res = await getCriteriaSuggestions({
+          field: fieldKey,
+          search: normalizedSearch || undefined,
+          limit: 15,
+        });
+
+        if (requestIdRef.current !== requestId) return;
+
+        const remoteOptions = (Array.isArray(res?.items) ? res.items : [])
+          .map((option) => normalizeSuggestionOption(option, fieldKey))
+          .filter(Boolean);
+
+        const deduped = new Map();
+        [...mergedLocal, ...remoteOptions, ...currentArrayValue.map((value) => ({ label: normalizeOptionLabel(value), value, description: "Selected value" }))].forEach((option) => {
+          const key = String(option?.value ?? "").toLowerCase();
+          if (key && !deduped.has(key)) deduped.set(key, option);
+        });
+
+        setOptions(Array.from(deduped.values()));
+      } catch (err) {
+        if (requestIdRef.current !== requestId) return;
+        setOptions(mergedLocal);
+        setError(err?.body?.message || err?.message || "Failed to load suggestions");
+      } finally {
+        if (requestIdRef.current === requestId) setLoading(false);
+      }
+    }, isCatalog ? 0 : 400);
+
+    return () => clearTimeout(handle);
+  }, [useAutocomplete, isCatalog, fieldKey, fieldSpec, search, currentArrayValue]);
+
+  const optionByValue = React.useMemo(() => {
+    const map = new Map();
+    options.forEach((option) => {
+      const value = String(option?.value ?? "");
+      if (value) map.set(value.toLowerCase(), option);
+    });
+    return map;
+  }, [options]);
+
+  const optionValues = React.useMemo(() => {
+    const values = options.map((option) => String(option?.value ?? "").trim()).filter(Boolean);
+    currentArrayValue.forEach((value) => {
+      if (value && !values.some((item) => item.toLowerCase() === value.toLowerCase())) {
+        values.push(value);
+      }
+    });
+    return values;
+  }, [options, currentArrayValue]);
+
+  const getOption = React.useCallback(
+    (value) => optionByValue.get(String(value ?? "").toLowerCase()),
+    [optionByValue]
+  );
+
+  const getOptionLabel = React.useCallback(
+    (value) => {
+      const rawValue = String(value ?? "").trim();
+      if (!rawValue) return "";
+      const option = getOption(rawValue);
+      return option?.label || normalizeOptionLabel(rawValue);
+    },
+    [getOption]
+  );
+
+  const renderOption = React.useCallback(
+    (props, value) => {
+      const { key, ...optionProps } = props;
+      const rawValue = String(value ?? "").trim();
+      const option = getOption(rawValue) || {
+        label: normalizeOptionLabel(rawValue),
+        value: rawValue,
+        description: "Custom value",
+      };
+
+      return (
+        <Box
+          key={key || option.value}
+          component="li"
+          {...optionProps}
+          sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", py: 0.75 }}
+        >
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+            {option.label}
+          </Typography>
+          {option.description ? (
+            <Typography sx={{ fontSize: 11, color: BRAND.gray, lineHeight: 1.25 }}>
+              {option.description}
+            </Typography>
+          ) : null}
+        </Box>
+      );
+    },
+    [getOption]
+  );
+
+  if (!useAutocomplete) {
+    return (
+      <TextField
+        size="small"
+        label="Value"
+        value={String(pred?.value ?? "")}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        fullWidth
+        sx={{ flex: 1, minWidth: 200 }}
+        placeholder={fieldKey === "ip" && isSubnet ? "192.168.1.0/24" : undefined}
+        helperText={fieldKey === "ip" && isSubnet ? "Enter a CIDR subnet range." : undefined}
+      />
+    );
+  }
+
+  if (expectsArray) {
+    return (
+      <Autocomplete
+        key={`${fieldKey}-${String(pred?.op || "")}-multi`}
+        multiple
+        freeSolo={freeSolo}
+        openOnFocus
+        forcePopupIcon
+        clearOnEscape
+        disableCloseOnSelect
+        autoHighlight
+        filterOptions={(items) => items}
+        options={optionValues}
+        value={currentArrayValue}
+        inputValue={inputValue}
+        limitTags={2}
+        loading={loading}
+        disabled={disabled}
+        noOptionsText={!isCatalog && String(search || "").trim().length < 2 ? "Type at least 2 characters" : "No suggestions found"}
+        loadingText="Loading suggestions..."
+        getOptionLabel={getOptionLabel}
+        isOptionEqualToValue={(option, value) =>
+          String(option ?? "").toLowerCase() === String(value ?? "").toLowerCase()
+        }
+        onInputChange={(_, nextInputValue, reason) => {
+          if (reason === "reset") return;
+          setInputValue(nextInputValue || "");
+          setSearch(nextInputValue || "");
+        }}
+        onChange={(_, nextValue) => {
+          const safeNext = (Array.isArray(nextValue) ? nextValue : [])
+            .map((item) => normalizeSuggestionValue(fieldKey, item))
+            .filter(Boolean);
+          const deduped = Array.from(new Set(safeNext));
+          onChange(deduped);
+          setInputValue("");
+          setSearch("");
+        }}
+        renderOption={renderOption}
+        renderTags={(value, getTagProps) =>
+          (Array.isArray(value) ? value : []).map((item, index) => {
+            const { key, ...tagProps } = getTagProps({ index });
+            return (
+              <Chip
+                key={key || `${item}-${index}`}
+                {...tagProps}
+                size="small"
+                label={getOptionLabel(item)}
+                sx={{
+                  height: 22,
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                  border: `1px solid ${BRAND.teal}44`,
+                  fontWeight: 700,
+                }}
+              />
+            );
+          })
+        }
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            size="small"
+            label="Value"
+            placeholder={currentArrayValue.length ? "" : getPlaceholder(fieldKey, true, partialText)}
+            helperText={getHelperText({ fieldKey, search, error, loading, multiple: true, freeSolo })}
+            error={Boolean(error)}
+            InputProps={{
+              ...params.InputProps,
+              endAdornment: (
+                <>
+                  {loading ? <CircularProgress color="inherit" size={16} sx={{ color: BRAND.teal }} /> : null}
+                  {params.InputProps.endAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+        sx={{ flex: 1, minWidth: { xs: "100%", md: 240 } }}
+      />
+    );
+  }
+
+  return (
+    <Autocomplete
+      key={`${fieldKey}-${String(pred?.op || "")}-single`}
+      freeSolo={freeSolo}
+      openOnFocus
+      forcePopupIcon
+      clearOnEscape
+      autoHighlight
+      selectOnFocus
+      clearOnBlur={false}
+      handleHomeEndKeys
+      filterOptions={(items) => items}
+      options={optionValues}
+      value={currentSingleValue || null}
+      inputValue={inputValue}
+      loading={loading}
+      disabled={disabled}
+      noOptionsText={!isCatalog && String(search || "").trim().length < 2 ? "Type at least 2 characters" : "No suggestions found"}
+      loadingText="Loading suggestions..."
+      getOptionLabel={getOptionLabel}
+      isOptionEqualToValue={(option, value) =>
+        String(option ?? "").toLowerCase() === String(value ?? "").toLowerCase()
+      }
+      onInputChange={(_, nextInputValue, reason) => {
+        if (reason === "reset") return;
+        const next = normalizeSuggestionValue(fieldKey, nextInputValue);
+        setInputValue(next);
+        setSearch(next);
+        if (freeSolo) onChange(next);
+      }}
+      onChange={(_, nextOption) => {
+        const next = normalizeSuggestionValue(fieldKey, nextOption || "");
+        onChange(next);
+        setInputValue(next);
+        setSearch(next);
+      }}
+      renderOption={renderOption}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          size="small"
+          label="Value"
+          placeholder={getPlaceholder(fieldKey, false, partialText)}
+          helperText={getHelperText({ fieldKey, search, error, loading, multiple: false, freeSolo })}
+          error={Boolean(error)}
+          InputProps={{
+            ...params.InputProps,
+            endAdornment: (
+              <>
+                {loading ? <CircularProgress color="inherit" size={16} sx={{ color: BRAND.teal }} /> : null}
+                {params.InputProps.endAdornment}
+              </>
+            ),
+          }}
+        />
+      )}
+      sx={{ flex: 1, minWidth: { xs: "100%", md: 240 } }}
+    />
+  );
+}
+
+function CriteriaValueInput({ pred, fieldSpec, opSpec, disabled, onChange }) {
+  return (
+    <CriteriaValueEditor
+      pred={pred}
+      fieldSpec={fieldSpec}
+      opSpec={opSpec}
+      disabled={disabled}
+      onChange={onChange}
     />
   );
 }
@@ -174,9 +775,9 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
           return (
             <Stack
               key={idx}
-              direction="row"
+              direction={{ xs: "column", md: "row" }}
               spacing={1}
-              alignItems="flex-start"
+              alignItems={{ xs: "stretch", md: "flex-start" }}
               sx={{
                 p: 1,
                 bgcolor: BRAND.surfaceMuted,
@@ -200,10 +801,10 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                   updatePredicate(idx, {
                     field: newField,
                     op: firstOp?.key || "eq",
-                    value: firstOp?.expectsArray ? [] : "",
+                    value: operatorExpectsArray(firstOp) ? [] : "",
                   });
                 }}
-                sx={{ minWidth: 160 }}
+                sx={{ width: { xs: "100%", md: 180 }, flexShrink: 0 }}
               >
                 {fields.map((f) => (
                   <MenuItem key={f.key} value={f.key}>
@@ -222,16 +823,16 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                   // Coerce value shape if the op switched between
                   // single and array variants.
                   const wasArray = Array.isArray(pred.value);
-                  const expectsArray = Boolean(newOpSpec?.expectsArray);
+                  const expectsArray = operatorExpectsArray(newOpSpec);
                   let newValue = pred.value;
                   if (expectsArray && !wasArray) {
-                    newValue = pred.value ? [pred.value] : [];
+                    newValue = pred.value ? parseCommaSeparatedValues(pred.value) : [];
                   } else if (!expectsArray && wasArray) {
                     newValue = pred.value[0] || "";
                   }
                   updatePredicate(idx, { op: newOp, value: newValue });
                 }}
-                sx={{ minWidth: 120 }}
+                sx={{ width: { xs: "100%", md: 136 }, flexShrink: 0 }}
               >
                 {(fieldSpec?.ops || []).map((o) => (
                   <MenuItem key={o.key} value={o.key}>
@@ -239,37 +840,13 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                   </MenuItem>
                 ))}
               </TextField>
-              {opSpec?.expectsArray ? (
-                <TextField
-                  size="small"
-                  label="Values (comma-separated)"
-                  value={
-                    Array.isArray(pred.value) ? pred.value.join(", ") : ""
-                  }
-                  onChange={(e) =>
-                    updatePredicate(idx, {
-                      value: e.target.value
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter((s) => s.length > 0),
-                    })
-                  }
-                  fullWidth
-                  sx={{ flex: 1, minWidth: 200 }}
-                  placeholder="e.g. x64, arm64"
-                />
-              ) : (
-                <TextField
-                  size="small"
-                  label="Value"
-                  value={String(pred.value ?? "")}
-                  onChange={(e) =>
-                    updatePredicate(idx, { value: e.target.value })
-                  }
-                  fullWidth
-                  sx={{ flex: 1, minWidth: 200 }}
-                />
-              )}
+              <CriteriaValueInput
+                pred={pred}
+                fieldSpec={fieldSpec}
+                opSpec={opSpec}
+                disabled={false}
+                onChange={(value) => updatePredicate(idx, { value })}
+              />
               <IconButton
                 size="small"
                 onClick={() => removePredicate(idx)}
