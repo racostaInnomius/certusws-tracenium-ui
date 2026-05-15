@@ -960,13 +960,73 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
 // different result pages before submitting the group.
 
 function normalizeKnownDevice(d) {
+  const groupCount = Number(d?.groupCount ?? d?.group_count ?? 0);
+  const isGrouped =
+    d?.isGrouped === true ||
+    d?.is_grouped === true ||
+    String(d?.groupCoverage ?? d?.group_coverage ?? "").toLowerCase() === "grouped" ||
+    groupCount > 0;
+
   return {
     deviceId: String(d?.deviceId || "").trim(),
     hostname: String(d?.hostname || "").trim(),
     platform: String(d?.platform || d?.osPlatform || "").trim(),
     agentVersion: String(d?.agentVersion || d?.agent_version || "").trim(),
     connected: d?.connected === true,
+    isGrouped,
+    groupCount,
+    groupCoverage: isGrouped ? "grouped" : "ungrouped",
   };
+}
+
+function DeviceGroupCoverageChip({ device }) {
+  const isGrouped = device?.isGrouped === true || Number(device?.groupCount || 0) > 0;
+  const groupCount = Number(device?.groupCount || 0);
+
+  if (!isGrouped) {
+    return (
+      <Tooltip title="This device is not assigned to any asset group yet." arrow>
+        <Chip
+          size="small"
+          icon={<Inventory2OutlinedIcon sx={{ fontSize: 13 }} />}
+          label="Ungrouped"
+          sx={{
+            height: 20,
+            fontSize: 10.5,
+            bgcolor: ROLE.cautionSoft,
+            color: BRAND.dark,
+            border: `1px solid ${ROLE.caution}88`,
+            fontWeight: 800,
+            "& .MuiChip-icon": {
+              color: ROLE.caution,
+              ml: 0.5,
+              mr: -0.25,
+            },
+          }}
+        />
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Tooltip
+      title={`Assigned to ${groupCount} asset group${groupCount === 1 ? "" : "s"}.`}
+      arrow
+    >
+      <Chip
+        size="small"
+        label={`${groupCount} group${groupCount === 1 ? "" : "s"}`}
+        sx={{
+          height: 20,
+          fontSize: 10.5,
+          bgcolor: BRAND.tealSoft,
+          color: BRAND.tealText,
+          border: `1px solid ${BRAND.teal}55`,
+          fontWeight: 800,
+        }}
+      />
+    </Tooltip>
+  );
 }
 
 function KnownDevicesPicker({
@@ -1173,7 +1233,14 @@ function KnownDevicesPicker({
                   </Typography>
                 </Box>
 
-                <Stack direction="row" spacing={0.5} alignItems="center">
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  alignItems="center"
+                  justifyContent="flex-end"
+                  sx={{ flexShrink: 0, flexWrap: "wrap", maxWidth: { xs: 148, sm: 260 } }}
+                >
+                  <DeviceGroupCoverageChip device={d} />
                   {d.platform ? (
                     <Chip
                       size="small"
@@ -1520,6 +1587,11 @@ function UngroupedDevicesDrawer({ open, onClose, notify }) {
         keepMounted: true,
       }}
       sx={{
+        // This drawer can be launched from inside the "New asset group"
+        // dialog. MUI Drawers normally sit below Dialogs in the z-index
+        // stack, which made the ungrouped list render behind the modal.
+        // Raise only this operational drilldown drawer above dialogs so
+        // the operator can inspect devices without closing the group form.
         zIndex: (theme) => theme.zIndex.modal + 30,
         "& .MuiBackdrop-root": {
           zIndex: (theme) => theme.zIndex.modal + 29,
@@ -2960,6 +3032,11 @@ export default function AssetGroups() {
       // If the drawer was open on this group, close it before refresh
       // — the next loadGroups won't include it anymore.
       if (drawerGroup?.id === group.id) setDrawerGroup(null);
+
+      // Deleting either a static or dynamic group can immediately change
+      // fleet coverage, so refresh the groups list and the coverage summary
+      // together. This keeps the Group coverage notice in sync without
+      // requiring a full page reload.
       await Promise.all([loadGroups(), loadCoverage()]);
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Delete failed");
