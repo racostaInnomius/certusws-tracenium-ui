@@ -7,9 +7,11 @@ import {
   Chip,
   Collapse,
   Divider,
+  FormControlLabel,
   MenuItem,
   Paper,
   Snackbar,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -68,25 +70,61 @@ import { PLUGIN_CATALOG } from "../constants/plugins";
 // without changing behavior.
 const PLUGIN_DESCRIPTORS = PLUGIN_CATALOG;
 
-// Compliance interval bounds — matches the server-side validator in
-// policy-runtime.ts (300s min, 86400s max). The scheduler rejects values
-// outside this range and falls back to 28800s (8h), so we clamp client-
-// side to fail fast instead of silently reverting on the device.
-const COMPLIANCE_INTERVAL_MIN = 300;
-const COMPLIANCE_INTERVAL_MAX = 86400;
-const PATCH_INTERVAL_MIN = 300;
-const PATCH_INTERVAL_MAX = 604800;
+// Interval bounds — mirror the server-side validator
+// (modules/policies/policies.service.ts) AND the agent's
+// policy-runtime.ts. The agent silently reverts out-of-range values
+// to its hardcoded default, so we clamp here too to fail fast at
+// authoring time instead of letting the operator save a number that
+// the agent will quietly ignore.
+//
+// Sprint 1 of Policy v2 added inventory + update bounds — they were
+// previously hardcoded on the agent and not editable from the UI at
+// all.
+const INVENTORY_INTERVAL_MIN = 60;       // 1m   — AMP scans can be tight
+const INVENTORY_INTERVAL_MAX = 86400;    // 24h
+const COMPLIANCE_INTERVAL_MIN = 300;     // 5m
+const COMPLIANCE_INTERVAL_MAX = 86400;   // 24h
+const PATCH_INTERVAL_MIN = 300;          // 5m
+const PATCH_INTERVAL_MAX = 604800;       // 7d
+const UPDATE_INTERVAL_MIN = 60;          // 1m   — but useful range is hourly
+const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable the
+                                          //         module instead of cranking it
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
 //    (see formToPolicy). Required plugins are clamped to true regardless
 //    of the incoming policy.
+// Reads either the v1 top-level path or the v2 `agent.schedules.*`
+// path. v2 wins on conflict. Pair function with writeIntervalToPolicy
+// below; together they let the form stay schema-agnostic.
+function pickInterval(policy, key) {
+  const v2 = policy?.agent?.schedules?.[key]?.intervalSeconds;
+  if (v2 !== undefined && v2 !== null) return Number(v2);
+  const v1 = policy?.[key]?.intervalSeconds;
+  if (v1 !== undefined && v1 !== null) return Number(v1);
+  return NaN;
+}
+
+function pickFeature(policy, key) {
+  const v2 = policy?.agent?.features?.[key];
+  if (v2 !== undefined) return Boolean(v2);
+  const v1 = policy?.features?.[key];
+  if (v1 !== undefined) return Boolean(v1);
+  return null; // unset
+}
+
 function readFormFromPolicy(policy) {
-  const enabled = Array.isArray(policy?.plugins?.enabled) ? policy.plugins.enabled : [];
-  const rawInterval = policy?.compliance?.intervalSeconds;
-  const intervalNum = Number(rawInterval);
-  const rawPatchInterval = policy?.patch?.intervalSeconds;
-  const patchIntervalNum = Number(rawPatchInterval);
+  const enabled = Array.isArray(policy?.plugins?.enabled)
+    ? policy.plugins.enabled
+    : Array.isArray(policy?.agent?.plugins?.enabled)
+    ? policy.agent.plugins.enabled
+    : [];
+
+  const inventoryNum = pickInterval(policy, "inventory");
+  const complianceNum = pickInterval(policy, "compliance");
+  const patchNum = pickInterval(policy, "patch");
+  const updateNum = pickInterval(policy, "update");
+
   return {
     plugins: Object.fromEntries(
       PLUGIN_DESCRIPTORS.map((p) => [
@@ -97,11 +135,31 @@ function readFormFromPolicy(policy) {
     // Plugin-specific settings live under their own sub-key so adding
     // another plugin's options later (e.g. `patch: {...}`) stays
     // additive without restructuring the form shape.
+    inventory: {
+      intervalSeconds:
+        Number.isFinite(inventoryNum) && inventoryNum > 0 ? inventoryNum : null,
+    },
     compliance: {
-      intervalSeconds: Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : null,
+      intervalSeconds:
+        Number.isFinite(complianceNum) && complianceNum > 0 ? complianceNum : null,
     },
     patch: {
-      intervalSeconds: Number.isFinite(patchIntervalNum) && patchIntervalNum > 0 ? patchIntervalNum : null,
+      intervalSeconds:
+        Number.isFinite(patchNum) && patchNum > 0 ? patchNum : null,
+    },
+    update: {
+      intervalSeconds:
+        Number.isFinite(updateNum) && updateNum > 0 ? updateNum : null,
+    },
+    features: {
+      // selfUpdate defaults to true on the agent if unset, but for the
+      // form we surface `null` (unset) so the operator can distinguish
+      // "I haven't touched this" from "I explicitly turned it off".
+      selfUpdate: pickFeature(policy, "selfUpdate"),
+      // remoteShell is a placeholder for the future RCP (remote
+      // control plugin). The form reads + writes the flag but the UI
+      // renders it as "coming soon" — not editable yet.
+      remoteShell: pickFeature(policy, "remoteShell"),
     },
   };
 }
@@ -124,31 +182,70 @@ function formToPolicy(form) {
     plugins: { enabled: pluginsEnabled },
   };
 
-  // Only emit the compliance block when the module is enabled AND the
-  // user picked an explicit interval. An empty block would force the
-  // backend to persist a `compliance: {}` object that the agent would
-  // then read as "no interval" and fall back to its hardcoded default
-  // anyway — cleaner to just omit.
-  const complianceEnabled = modules.compliance === true;
-  const rawInterval = Number(form?.compliance?.intervalSeconds);
-  if (
-    complianceEnabled &&
-    Number.isFinite(rawInterval) &&
-    rawInterval >= COMPLIANCE_INTERVAL_MIN &&
-    rawInterval <= COMPLIANCE_INTERVAL_MAX
-  ) {
-    policy.compliance = { intervalSeconds: rawInterval };
+  // Helper: emit a `{<key>: {intervalSeconds: N}}` block on the
+  // policy only when the operator entered a value within range. Same
+  // omit-vs-include logic as before — empty fields mean "use the
+  // backend default", and we represent that by leaving the key off
+  // entirely rather than serializing an empty object that the agent
+  // would still treat as "no value".
+  function maybeAddInterval(key, raw, min, max, gateEnabled) {
+    if (!gateEnabled) return;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max) return;
+    policy[key] = { intervalSeconds: n };
   }
 
-  const patchEnabled = modules.patch === true;
-  const rawPatchInterval = Number(form?.patch?.intervalSeconds);
-  if (
-    patchEnabled &&
-    Number.isFinite(rawPatchInterval) &&
-    rawPatchInterval >= PATCH_INTERVAL_MIN &&
-    rawPatchInterval <= PATCH_INTERVAL_MAX
-  ) {
-    policy.patch = { intervalSeconds: rawPatchInterval };
+  // Inventory rides the AMP module — emitted when AMP is enabled.
+  // AMP is a required plugin so this is effectively always on, but
+  // keeping the gate explicit makes the intent legible.
+  maybeAddInterval(
+    "inventory",
+    form?.inventory?.intervalSeconds,
+    INVENTORY_INTERVAL_MIN,
+    INVENTORY_INTERVAL_MAX,
+    pluginsEnabled.includes("amp")
+  );
+
+  maybeAddInterval(
+    "compliance",
+    form?.compliance?.intervalSeconds,
+    COMPLIANCE_INTERVAL_MIN,
+    COMPLIANCE_INTERVAL_MAX,
+    modules.compliance === true
+  );
+
+  maybeAddInterval(
+    "patch",
+    form?.patch?.intervalSeconds,
+    PATCH_INTERVAL_MIN,
+    PATCH_INTERVAL_MAX,
+    modules.patch === true
+  );
+
+  // Update interval is gated by the update module — but the module
+  // is on by default (modules.update=true at the agent level even
+  // without explicit policy). We emit when the operator set a value;
+  // the agent default (6h) takes over otherwise.
+  maybeAddInterval(
+    "update",
+    form?.update?.intervalSeconds,
+    UPDATE_INTERVAL_MIN,
+    UPDATE_INTERVAL_MAX,
+    true
+  );
+
+  // ── Feature toggles ──────────────────────────────────────────────
+  // Only emit fields the operator explicitly changed (null = unset).
+  // remoteShell is wire-accepted but UI-disabled until RCP ships.
+  const features = {};
+  if (form?.features?.selfUpdate !== null && form?.features?.selfUpdate !== undefined) {
+    features.selfUpdate = Boolean(form.features.selfUpdate);
+  }
+  if (form?.features?.remoteShell !== null && form?.features?.remoteShell !== undefined) {
+    features.remoteShell = Boolean(form.features.remoteShell);
+  }
+  if (Object.keys(features).length > 0) {
+    policy.features = features;
   }
 
   return policy;
@@ -534,6 +631,72 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         </Typography>
       </Box>
 
+      {/* Inventory schedule (AMP) — Sprint 1 of Policy v2 surfaces the
+          previously-invisible inventory interval. AMP is a required
+          plugin, so this card always renders. The agent's AMP collector
+          rides the unified `inventory` schedule. */}
+      {(() => {
+        const rawValue = form?.inventory?.intervalSeconds;
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < INVENTORY_INTERVAL_MIN ||
+            numeric > INVENTORY_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.surfaceMuted,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Inventory schedule (AMP)
+            </Typography>
+            <TextField
+              label="Asset collection interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  inventory: { ...(form.inventory || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: INVENTORY_INTERVAL_MIN,
+                max: INVENTORY_INTERVAL_MAX,
+                step: 60,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${INVENTORY_INTERVAL_MIN} and ${INVENTORY_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (6h / 21600s). Range 60–86400."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
       {/* Compliance schedule — only surfaces when a plugin that implies
           the compliance module is active (today: SCP). A dedicated card
           below keeps this additive: the day we add more compliance-scoped
@@ -674,6 +837,151 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
           </Box>
         );
       })()}
+
+      {/* Update schedule — controls how often the agent probes the
+          backend for a newer release. Previously hardcoded to 6h in
+          the agent's scheduler.ts; Sprint 1 of Policy v2 made it
+          editable. The actual install path is gated separately by
+          features.selfUpdate below. */}
+      {(() => {
+        const rawValue = form?.update?.intervalSeconds;
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < UPDATE_INTERVAL_MIN ||
+            numeric > UPDATE_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.surfaceMuted,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Agent update schedule
+            </Typography>
+            <TextField
+              label="Update probe interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  update: { ...(form.update || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: UPDATE_INTERVAL_MIN,
+                max: UPDATE_INTERVAL_MAX,
+                step: 300,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${UPDATE_INTERVAL_MIN} and ${UPDATE_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (6h / 21600s). Set higher to slow down auto-update; disable entirely via Self-update toggle below."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
+      {/* Feature toggles — Sprint 1 of Policy v2 surfaces selfUpdate and
+          a placeholder for remoteShell (gated to the future RCP plugin).
+          Previously these only existed in the agent's policy default and
+          could only be flipped via the advanced JSON editor. */}
+      <Box
+        sx={{
+          mt: 2,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Features
+        </Typography>
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 0.5 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={form?.features?.selfUpdate !== false}
+                onChange={(e) =>
+                  onChange({
+                    ...form,
+                    features: {
+                      ...(form.features || {}),
+                      selfUpdate: e.target.checked,
+                    },
+                  })
+                }
+                disabled={readOnly}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Self-update
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  When off, the agent's update probe keeps running (to report
+                  available versions) but the install path is suppressed. Use
+                  to freeze a fleet on a specific agent version while
+                  staging a rollout.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={Boolean(form?.features?.remoteShell)}
+                disabled
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.gray }}>
+                  Remote shell <Chip label="coming soon" size="small" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  Will be governed by the Remote Control Plugin (RCP). Toggle
+                  not editable until the plugin ships.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+          />
+        </Box>
+      </Box>
 
       <Box sx={{ mt: 2 }}>
         <Button
