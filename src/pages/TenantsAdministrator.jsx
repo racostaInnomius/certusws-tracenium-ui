@@ -8,8 +8,6 @@ import {
   TextField,
   MenuItem,
   Chip,
-  Snackbar,
-  Alert,
   Divider,
   Dialog,
   DialogTitle,
@@ -497,6 +495,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
     }
 
     setLoadingTenants(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTenants closes over stable refs; adding it would re-fetch on every render.
   }, [isTenantMode]);
 
   React.useEffect(() => {
@@ -567,12 +566,6 @@ export default function TenantsAdministrator({ mode = "global" }) {
   const openEditTenant = (tenant) => {
     setEditingTenant(tenant);
     setTenantDialogOpen(true);
-  };
-
-  const openCreateMember = () => {
-    setEditingMember(null);
-    setMemberDialogMode("create");
-    setMemberDialogOpen(true);
   };
 
   const openEditMember = (member) => {

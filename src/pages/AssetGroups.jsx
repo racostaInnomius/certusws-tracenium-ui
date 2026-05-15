@@ -333,12 +333,6 @@ function getCatalogOptions(fieldSpec, fieldKey) {
     .filter(Boolean);
 }
 
-function isField(fieldSpec, fieldKey, allowed) {
-  const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
-  const label = normalizeCriteriaKey(fieldSpec?.label);
-  return allowed.includes(key) || allowed.includes(label);
-}
-
 function getSuggestionFieldKey(fieldSpec, fieldKey) {
   const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
   const label = normalizeCriteriaKey(fieldSpec?.label);
@@ -360,14 +354,6 @@ function getSuggestionFieldKey(fieldSpec, fieldKey) {
   if (["ip", "local_ip", "localip", "ip_address", "ipaddress"].includes(candidate)) return "ip";
 
   return fieldSpec?.key || fieldKey || "";
-}
-
-function isPlatformField(fieldSpec, fieldKey) {
-  return getSuggestionFieldKey(fieldSpec, fieldKey) === "platform";
-}
-
-function isPluginEnabledField(fieldSpec, fieldKey) {
-  return getSuggestionFieldKey(fieldSpec, fieldKey) === "pluginEnabled";
 }
 
 function isIpSubnetOperator(opSpec) {
@@ -891,7 +877,16 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                   const expectsArray = operatorExpectsArray(newOpSpec);
                   let newValue = pred.value;
                   if (expectsArray && !wasArray) {
-                    newValue = pred.value ? parseCommaSeparatedValues(pred.value) : [];
+                    // Switching from a single-value op (e.g. `equals`)
+                    // to an array op (`in`) — coerce the existing
+                    // scalar to a CSV split so the user doesn't lose
+                    // their typing. Empty/null → empty array.
+                    newValue = pred.value
+                      ? String(pred.value)
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                      : [];
                   } else if (!expectsArray && wasArray) {
                     newValue = pred.value[0] || "";
                   }
@@ -1748,7 +1743,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
   const [description, setDescription] = React.useState("");
   const [kind, setKind] = React.useState("static");
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
-  const [search, setSearch] = React.useState("");
+  const [_search, setSearch] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
@@ -2537,6 +2532,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
     setMemberSearch("");
     setMemberPaginationModel({ page: 0, pageSize: 25 });
     setMemberSortModel([{ field: "hostname", sort: "asc" }]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-reset member view when the dialog opens for a different group id; full group object would re-trigger on every parent re-render.
   }, [open, group?.id]);
 
   // Decorate device IDs with hostnames using the known-devices index.
@@ -2990,7 +2986,7 @@ export default function AssetGroups() {
           connected: d?.connected === true,
         })).filter((d) => d.deviceId)
       );
-    } catch (err) {
+    } catch {
       // Devices list isn't critical for the groups page itself; just
       // means the picker / hostname decoration shows IDs only.
       notify("error", "Failed to load device list");

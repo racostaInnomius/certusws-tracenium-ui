@@ -12,7 +12,6 @@ import {
   ListSubheader,
   MenuItem,
   Paper,
-  Snackbar,
   TextField,
   Tooltip,
   Typography,

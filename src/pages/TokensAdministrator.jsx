@@ -8,7 +8,6 @@ import {
   TextField,
   MenuItem,
   Chip,
-  Snackbar,
   Alert,
   Stack,
   Tooltip,
@@ -425,6 +424,7 @@ export default function TokensAdministrator({ embedded = false } = {}) {
 
   React.useEffect(() => {
     refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshAll closes over stable refs; adding it would re-fetch on every render.
   }, []);
 
 const filteredRows = React.useMemo(() => {

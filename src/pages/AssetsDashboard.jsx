@@ -28,10 +28,8 @@ import Grid from "@mui/material/Grid";
 import {
   Backdrop,
   Box,
-  Button,
   Chip,
   CircularProgress,
-  Divider,
   Fade,
   IconButton,
   MenuItem,
@@ -56,7 +54,6 @@ import WifiTetheringOutlinedIcon from "@mui/icons-material/WifiTetheringOutlined
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
-import MemoryRoundedIcon from "@mui/icons-material/MemoryRounded";
 import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 
 import { dashboardApi } from "../api/dashboard";
@@ -1164,13 +1161,6 @@ const osVersionItems = React.useMemo(() => {
   // from the summary + hosts aggregates.
   const kpis = React.useMemo(() => {
     const activeHosts = Number(summary?.activeHosts ?? hosts.length ?? 0);
-    const platformBuckets = Array.isArray(summary?.osPlatform)
-      ? summary.osPlatform.length
-      : new Set(
-          hosts
-            .map((h) => normalizePlatform(h.os_platform))
-            .filter(Boolean)
-        ).size;
     const versionSet = new Set(
       hosts
         .map((h) => String(h.agent_version || "").trim())

@@ -27,10 +27,12 @@ import Grid from "@mui/material/Grid";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
+import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
 import { httpGetJson } from "../api/http";
+import { getRetentionStats } from "../api/retention";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
@@ -134,7 +136,13 @@ function SettingsCard({
 // Small helper — render one semantic chip. Keeps the three cards
 // below tight because each card has 2-3 of these in a row.
 function StatChip({ label, count, variant = "teal", loading }) {
+  // Passing count=""/null/undefined renders a label-only chip (e.g.
+  // "Paused"), useful for status badges that don't carry a numeric
+  // value. Falsy-but-not-zero is the trigger — `count: 0` still
+  // renders as "Label: 0" because that IS information.
   const display = loading ? "…" : count;
+  const labelText =
+    display === "" || display == null ? label : `${label}: ${display}`;
   const styles = {
     teal:    { bg: BRAND.tealSoft,           fg: BRAND.tealText        },
     success: { bg: BRAND.alert.successSoft,  fg: BRAND.alert.success   },
@@ -145,7 +153,7 @@ function StatChip({ label, count, variant = "teal", loading }) {
   const s = styles[variant] || styles.teal;
   return (
     <Chip
-      label={`${label}: ${display}`}
+      label={labelText}
       size="small"
       sx={{
         bgcolor: s.bg,
@@ -163,6 +171,7 @@ export default function Configurations({ onNavigate }) {
   // still returns `tokens_summary`; we just don't render it here.
   const [tenantsSummary, setTenantsSummary] = React.useState(null);
   const [tenantMembersSummary, setTenantMembersSummary] = React.useState(null);
+  const [retentionStats, setRetentionStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
 
@@ -172,10 +181,19 @@ export default function Configurations({ onNavigate }) {
       try {
         setLoading(true);
         setError("");
-        const res = await httpGetJson("/api/v1/configurations/summary");
+        // Two independent calls in parallel. Retention is admin-scoped
+        // and may 401 for non-admin viewers — we swallow that quietly
+        // so the rest of the page still renders. The other call (config
+        // summary) is the page's primary content; if it fails we show
+        // an error.
+        const [summary, retention] = await Promise.all([
+          httpGetJson("/api/v1/configurations/summary"),
+          getRetentionStats().catch(() => null),
+        ]);
         if (!alive) return;
-        setTenantsSummary(res?.tenants_summary ?? null);
-        setTenantMembersSummary(res?.tenant_members_summary ?? null);
+        setTenantsSummary(summary?.tenants_summary ?? null);
+        setTenantMembersSummary(summary?.tenant_members_summary ?? null);
+        setRetentionStats(retention ?? null);
       } catch (e) {
         console.error("Configurations summary fetch failed:", e);
         if (!alive) return;
@@ -196,6 +214,45 @@ export default function Configurations({ onNavigate }) {
   const membersInactive  =
     tenantMembersSummary?.inactiveMembersCount
     ?? Math.max(membersTotal - membersActive, 0);
+
+  // Retention card values. Sum bytes across the per-table breakdown
+  // — that's the headline "how much data does this tenant carry"
+  // number operators care about. Last-run date is the second piece
+  // of context (paused? ran today?) and lives in the footer chips.
+  const retentionPolicy = retentionStats?.policy ?? null;
+  const retentionSizes  = retentionStats?.sizes ?? null;
+  const retentionEnabled = !!retentionPolicy?.enabled;
+  const retentionTotalBytes = React.useMemo(
+    () =>
+      (retentionSizes?.perTable ?? []).reduce(
+        (acc, r) => acc + (Number.isFinite(r.sizeBytes) ? r.sizeBytes : 0),
+        0
+      ),
+    [retentionSizes]
+  );
+  const retentionLastRunLabel = (() => {
+    const iso = retentionPolicy?.lastRunAtUtc;
+    if (!iso) return "never";
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) return "never";
+    const hoursAgo = Math.max(0, Math.floor((Date.now() - t) / 3_600_000));
+    if (hoursAgo < 1) return "<1h ago";
+    if (hoursAgo < 24) return `${hoursAgo}h ago`;
+    const days = Math.floor(hoursAgo / 24);
+    return `${days}d ago`;
+  })();
+  function formatBytesShort(n) {
+    if (!Number.isFinite(n) || n < 0) return "—";
+    if (n < 1024) return `${n}B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let v = n / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i += 1;
+    }
+    return `${v.toFixed(v >= 100 ? 0 : 1)}${units[i]}`;
+  }
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -250,6 +307,44 @@ export default function Configurations({ onNavigate }) {
                   <StatChip
                     label="Inactive"
                     count={membersInactive}
+                    variant="neutral"
+                    loading={loading}
+                  />
+                </>
+              }
+            />
+          </Grid>
+        ) : null}
+
+        {/* Retention card — admin only. The retentionStats fetch quietly
+            returns null for non-admin viewers (401), so the card simply
+            doesn't render. Click → full retention page. */}
+        {retentionStats ? (
+          <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+            <SettingsCard
+              title="Database retention"
+              valueHint={
+                retentionEnabled
+                  ? `Cleanup enabled · last run ${retentionLastRunLabel}`
+                  : "Cleanup paused"
+              }
+              value={formatBytesShort(retentionTotalBytes)}
+              icon={<StorageOutlinedIcon />}
+              accent={retentionEnabled ? BRAND.teal : BRAND.alert.warning}
+              tint={retentionEnabled ? BRAND.tealSoft : BRAND.alert.warningSoft}
+              loading={loading}
+              onClick={() => onNavigate?.("retention")}
+              footer={
+                <>
+                  <StatChip
+                    label={retentionEnabled ? "Enabled" : "Paused"}
+                    count=""
+                    variant={retentionEnabled ? "success" : "warning"}
+                    loading={loading}
+                  />
+                  <StatChip
+                    label="Tables tracked"
+                    count={retentionSizes?.perTable?.length ?? 0}
                     variant="neutral"
                     loading={loading}
                   />

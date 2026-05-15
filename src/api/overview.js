@@ -77,6 +77,18 @@ export async function getComplianceSummary() {
   return httpGetJson("/api/v1/security/compliance/summary");
 }
 
+/**
+ * Fleet-wide compliance score trend: one point per day = avg score
+ * of each device's latest scored snapshot that day. Backend filters
+ * out unscored hosts (score=0) so a fleet of just-enrolled agents
+ * doesn't drag the average to zero.
+ *
+ * Shape: { ok, windowDays, buckets: [{ bucket, avgScore, devicesScored, compliant, nonCompliant }] }
+ */
+export async function getFleetComplianceTimeseries(windowDays = 30) {
+  return httpGetJson(`/api/v1/security/compliance/fleet-timeseries?windowDays=${windowDays}`);
+}
+
 export async function getAuditTimeseries(windowDays = 7) {
   return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d`);
 }
@@ -166,7 +178,13 @@ export async function fetchOverviewBundle() {
     // Per-plugin enablement across the fleet. Drives the new Plugin
     // coverage strip on the Overview — answers "of N total agents,
     // how many have SCP / PMP / AMP on".
-    ["pluginCoverage", getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] }))]
+    ["pluginCoverage", getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] }))],
+    // Fleet-wide compliance trend — drives the Compliance Trend
+    // sparkline card on the Overview. 30-day window: matches the
+    // dashboard "trend" period operators care about for posture, and
+    // stays under the snapshot retention floor (90d).
+    ["fleetComplianceTimeseries",
+     getFleetComplianceTimeseries(30).catch(() => ({ windowDays: 30, buckets: [] }))]
   ];
 
   const settled = await Promise.allSettled(entries.map(([, p]) => p));

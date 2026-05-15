@@ -77,7 +77,7 @@ export default function CompositionBars({
   maxItems = 8,
   headerExtra = null,
   minHeight = 260,
-  sx = null,
+  _sx = null,
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];

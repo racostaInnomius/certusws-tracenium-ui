@@ -25,6 +25,8 @@ import RecentActivity from "../components/Overview/RecentActivity";
 import LatestAlerts from "../components/Overview/LatestAlerts";
 import PatchCoverageCard from "../components/Overview/PatchCoverageCard";
 import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
+import ComplianceTrendCard from "../components/Overview/ComplianceTrendCard";
+import HealthDistributionCard from "../components/Overview/HealthDistributionCard";
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -176,6 +178,31 @@ export default function Overview() {
           <PluginCoverageStrip
             result={results?.pluginCoverage}
             loading={loading}
+          />
+        </Grid>
+      </Grid>
+
+      {/* Row 3.5 — Compliance trend (U2) + Health distribution (U3).
+          Two halves of the same question: U2 is "how is the fleet
+          moving over time?", U3 is "right now, where does each
+          device sit?". Side-by-side so the operator can read trend
+          and current state in one glance — the trend ALONE doesn't
+          say "but those 3 devices below 60 are the problem", and the
+          distribution alone doesn't say "and it's been like this for
+          a week". */}
+      <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
+        <Grid size={{ xs: 12, md: 6 }}>
+          <ComplianceTrendCard
+            result={results?.fleetComplianceTimeseries}
+            loading={loading}
+            onNavigate={navigateWithQuery}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <HealthDistributionCard
+            result={results?.devicePosture}
+            loading={loading}
+            onNavigate={navigateWithQuery}
           />
         </Grid>
       </Grid>

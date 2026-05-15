@@ -9,8 +9,6 @@ import {
   TextField,
   MenuItem,
   Chip,
-  Snackbar,
-  Alert,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -174,6 +172,7 @@ export default function AgentReleases({ embedded = false }) {
 
   React.useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData closes over stable refs; adding it would re-fetch on every render.
   }, [search, platform, arch, format, channel, isActiveFilter]);
 
   const summary = React.useMemo(() => {
