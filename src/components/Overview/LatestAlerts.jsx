@@ -90,7 +90,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
     <Paper
       elevation={0}
       sx={{
-        p: 2,
+        p: 4.5,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
         // Min-height (not height:100%) because the parent stack now
@@ -157,7 +157,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
           <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
             No alerts in the last 7 days
           </Typography>
-          <Typography variant="caption" sx={{ color: BRAND.gray, maxWidth: 260 }}>
+          <Typography variant="caption" sx={{ color: BRAND.gray, maxWidth: 260, textAlign: 'left' }}>
             Either everything is quiet or no rules are enabled. Open
             Alerts → Manage rules to configure what you want to see.
           </Typography>

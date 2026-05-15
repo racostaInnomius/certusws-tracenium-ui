@@ -173,11 +173,9 @@ export default function Overview() {
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <LatestAlerts
-            result={results?.alertEvents}
+          <PluginCoverageStrip
+            result={results?.pluginCoverage}
             loading={loading}
-            onNavigate={navigateWithQuery}
-            deviceIndex={deviceIndex}
           />
         </Grid>
       </Grid>
@@ -195,9 +193,11 @@ export default function Overview() {
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <PluginCoverageStrip
-            result={results?.pluginCoverage}
+          <LatestAlerts
+            result={results?.alertEvents}
             loading={loading}
+            onNavigate={navigateWithQuery}
+            deviceIndex={deviceIndex}
           />
         </Grid>
       </Grid>
