@@ -54,6 +54,8 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 
 import { BRAND, ROLE, DATAGRID_SX } from "../theme/brand";
 import SectionPaper from "../components/common/SectionPaper";
@@ -70,6 +72,8 @@ import {
   removeAssetGroupMember,
   getCriteriaCatalog,
   getCriteriaSuggestions,
+  getAssetGroupCoverage,
+  listUngroupedDevices,
   previewAssetGroupCriteria,
   dispatchAssetGroupJob,
 } from "../api/assetGroups";
@@ -87,6 +91,60 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatPercent(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0%";
+  return `${Math.round(n)}%`;
+}
+
+function formatNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+function getCoverageTone(coverage) {
+  const ungrouped = Number(coverage?.ungroupedDevices || 0);
+  if (ungrouped <= 0) return "success";
+  const percent = Number(coverage?.coveragePercent || 0);
+  if (percent >= 85) return "info";
+  if (percent >= 60) return "warning";
+  return "critical";
+}
+
+function getCoveragePalette(tone) {
+  if (tone === "success") {
+    return {
+      bg: ROLE.positiveSoft,
+      border: `${ROLE.positive}55`,
+      color: ROLE.positive,
+      iconBg: "#fff",
+    };
+  }
+  if (tone === "critical") {
+    return {
+      bg: ROLE.criticalSoft,
+      border: `${ROLE.critical}55`,
+      color: ROLE.critical,
+      iconBg: "#fff",
+    };
+  }
+  if (tone === "warning") {
+    return {
+      bg: ROLE.cautionSoft,
+      border: `${ROLE.caution}55`,
+      color: ROLE.caution,
+      iconBg: "#fff",
+    };
+  }
+  return {
+    bg: BRAND.tealSoft,
+    border: `${BRAND.teal}55`,
+    color: BRAND.tealText,
+    iconBg: "#fff",
+  };
 }
 
 function KindChip({ kind }) {
@@ -291,6 +349,12 @@ function getSuggestionFieldKey(fieldSpec, fieldKey) {
   if (["os_release", "osrelease", "os_version", "osversion", "release"].includes(candidate)) return "osRelease";
   if (["agent_version", "agentversion"].includes(candidate)) return "agentVersion";
   if (["architecture", "arch"].includes(candidate)) return "architecture";
+  // Always call the backend suggestion endpoint with the canonical
+  // policyVersion alias. The persisted criteria field remains the
+  // catalog key (for example policy_version) so existing backend
+  // evaluators stay compatible, but autocomplete suggestions come from
+  // CWSBtracenium.public.tenant_policies.policy_version through the
+  // generic criteria-suggestions endpoint.
   if (["policy_version", "policyversion"].includes(candidate)) return "policyVersion";
   if (["plugin_enabled", "pluginenabled", "plugin"].includes(candidate)) return "pluginEnabled";
   if (["ip", "local_ip", "localip", "ip_address", "ipaddress"].includes(candidate)) return "ip";
@@ -369,11 +433,11 @@ function getPlaceholder(fieldKey, multiple, partialText) {
   if (multiple) return "Select one or more values…";
   if (fieldKey === "ip") return partialText ? "e.g. 160 or 192.168" : "Select or type IP…";
   if (fieldKey === "hostname") return partialText ? "e.g. macbook or server" : "Select or type hostname…";
-  if (fieldKey === "osRelease") return "e.g. 10.0.20348, Microsoft Windows 11 Pro";
-  if (fieldKey === "agentVersion") return "e.g. 1.1.13";
+  if (fieldKey === "osRelease") return "Select or type OS release…";
+  if (fieldKey === "agentVersion") return "Select or type agent version…";
   if (fieldKey === "architecture") return "e.g. arm64 or x64";
-  if (fieldKey === "policyVersion") return "Select or type policy version…";
-  if (fieldKey === "pluginEnabled") return "Select enabled state…";
+  if (fieldKey === "policyVersion") return "e.g. 1777000000004";
+  /* if (fieldKey === "pluginEnabled") return "Select enabled state…"; */
   if (fieldKey === "platform") return "Select platform…";
   return "Value";
 }
@@ -386,6 +450,7 @@ function getHelperText({ fieldKey, search, error, loading, multiple, freeSolo })
   }
   if (fieldKey === "platform") return "Select a supported platform bucket. Windows and Windows Server are evaluated separately.";
   if (fieldKey === "pluginEnabled") return "Select whether the plugin should be enabled or disabled.";
+  if (fieldKey === "policyVersion") return multiple ? "Select one or more tenant policy versions. Suggestions come from tenant policies." : "Suggestions come from tenant policies. You can also type a policy version manually.";
   if (fieldKey === "ip") return multiple ? "Select multiple IPs or type a value and press Enter." : "Suggestions come from device IPs. Partial text is allowed for contains/matches operators.";
   if (freeSolo) return "Select a suggestion or type a custom value.";
   return multiple ? "Select one or more values." : "Select a suggested value.";
@@ -1177,9 +1242,436 @@ function KnownDevicesPicker({
   );
 }
 
+
+function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefresh, onViewUngrouped }) {
+  const totalDevices = Number(coverage?.totalDevices || 0);
+  const groupedDevices = Number(coverage?.groupedDevices || 0);
+  const ungroupedDevices = Number(coverage?.ungroupedDevices || 0);
+  const coveragePercent = Number(coverage?.coveragePercent || 0);
+  const tone = getCoverageTone(coverage);
+  const palette = getCoveragePalette(tone);
+  const hasUngrouped = ungroupedDevices > 0;
+
+  if (error) {
+    return (
+      <Alert
+        severity="warning"
+        variant="outlined"
+        sx={{
+          borderColor: BRAND.border,
+          bgcolor: BRAND.surfaceMuted,
+          color: BRAND.dark,
+          "& .MuiAlert-icon": { color: ROLE.caution },
+        }}
+        action={
+          onRefresh ? (
+            <Button size="small" onClick={onRefresh} sx={{ color: BRAND.tealText, textTransform: "none", fontWeight: 700 }}>
+              Retry
+            </Button>
+          ) : null
+        }
+      >
+        Group coverage could not be loaded right now.
+      </Alert>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        p: compact ? 1.25 : 1.5,
+        borderRadius: 2,
+        border: `1px solid ${palette.border}`,
+        bgcolor: palette.bg,
+        display: "grid",
+        gap: 1.25,
+        gridTemplateColumns: { xs: "1fr", md: compact ? "1fr" : "auto 1fr auto" },
+        alignItems: "center",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: 2,
+            bgcolor: palette.iconBg,
+            color: palette.color,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            border: `1px solid ${palette.border}`,
+          }}
+        >
+          <Inventory2OutlinedIcon fontSize="small" />
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: BRAND.dark, lineHeight: 1.25 }}>
+            {loading
+              ? "Checking group coverage…"
+              : hasUngrouped
+              ? `${formatNumber(ungroupedDevices)} device${ungroupedDevices === 1 ? "" : "s"} not assigned to any group`
+              : "All known devices are assigned to at least one group"}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: BRAND.gray, lineHeight: 1.45, mt: 0.25 }}>
+            {loading
+              ? "Validating static and dynamic asset group coverage."
+              : hasUngrouped
+              ? "These devices are outside static and dynamic group coverage. Review them before targeting jobs, policies, or reporting by group."
+              : "Your fleet has complete asset group coverage based on the latest backend evaluation."}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Stack
+        direction="row"
+        spacing={0.75}
+        sx={{
+          flexWrap: "wrap",
+          gap: 0.75,
+          justifyContent: { xs: "flex-start", md: compact ? "flex-start" : "center" },
+        }}
+      >
+        <Chip
+          size="small"
+          label={`${formatPercent(coveragePercent)} covered`}
+          sx={{ bgcolor: "#fff", color: BRAND.dark, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+        />
+        <Chip
+          size="small"
+          label={`${formatNumber(groupedDevices)} grouped`}
+          sx={{ bgcolor: "#fff", color: BRAND.tealText, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+        />
+        <Chip
+          size="small"
+          label={`${formatNumber(totalDevices)} total`}
+          sx={{ bgcolor: "#fff", color: BRAND.gray, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+        />
+      </Stack>
+
+      <Stack
+        direction="row"
+        spacing={1}
+        justifyContent={{ xs: "flex-start", md: compact ? "flex-start" : "flex-end" }}
+        sx={{ minWidth: { md: compact ? 0 : 220 } }}
+      >
+        {hasUngrouped ? (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<VisibilityOutlinedIcon />}
+            onClick={onViewUngrouped}
+            disabled={loading}
+            sx={{
+              textTransform: "none",
+              fontWeight: 800,
+              bgcolor: BRAND.teal,
+              "&:hover": { bgcolor: BRAND.tealHover },
+            }}
+          >
+            View devices
+          </Button>
+        ) : null}
+        {onRefresh ? (
+          <IconButton
+            size="small"
+            onClick={onRefresh}
+            disabled={loading}
+            sx={{
+              bgcolor: "#fff",
+              color: BRAND.tealText,
+              border: `1px solid ${BRAND.border}`,
+              "&:hover": { bgcolor: BRAND.tealSoft },
+            }}
+            title="Refresh group coverage"
+          >
+            {loading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : <RefreshOutlinedIcon fontSize="small" />}
+          </IconButton>
+        ) : null}
+      </Stack>
+    </Box>
+  );
+}
+
+function UngroupedDevicesDrawer({ open, onClose, notify }) {
+  const [rows, setRows] = React.useState([]);
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [platform, setPlatform] = React.useState("");
+  const [paginationModel, setPaginationModel] = React.useState({ page: 0, pageSize: 25 });
+  const [sortModel, setSortModel] = React.useState([{ field: "hostname", sort: "asc" }]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handle = setTimeout(() => {
+      const trimmed = search.trim();
+      setDebouncedSearch(trimmed.length >= 3 || trimmed.length === 0 ? trimmed : "");
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [open, search]);
+
+  const loadRows = React.useCallback(async () => {
+    if (!open) return;
+    const currentSort = sortModel?.[0] || { field: "hostname", sort: "asc" };
+    try {
+      setLoading(true);
+      setError("");
+      const res = await listUngroupedDevices({
+        page: paginationModel.page + 1,
+        pageSize: paginationModel.pageSize,
+        search: debouncedSearch || undefined,
+        platform: platform || undefined,
+        sortBy: currentSort.field || "hostname",
+        sortDir: currentSort.sort || "asc",
+      });
+      setRows(Array.isArray(res?.items) ? res.items : []);
+      setTotal(Number(res?.total ?? 0));
+    } catch (err) {
+      const message = err?.body?.message || err?.message || "Failed to load ungrouped devices";
+      setRows([]);
+      setTotal(0);
+      setError(message);
+      notify?.("error", message);
+    } finally {
+      setLoading(false);
+    }
+  }, [open, paginationModel.page, paginationModel.pageSize, debouncedSearch, platform, sortModel, notify]);
+
+  React.useEffect(() => {
+    loadRows();
+  }, [loadRows]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setPaginationModel({ page: 0, pageSize: 25 });
+    setSortModel([{ field: "hostname", sort: "asc" }]);
+    setSearch("");
+    setDebouncedSearch("");
+    setPlatform("");
+    setError("");
+  }, [open]);
+
+  const columns = React.useMemo(
+    () => [
+      {
+        field: "hostname",
+        headerName: "Hostname",
+        minWidth: 220,
+        flex: 1,
+        renderCell: (params) => (
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {params.row?.hostname || params.row?.deviceId || "—"}
+            </Typography>
+            <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {params.row?.deviceId || "—"}
+            </Typography>
+          </Box>
+        ),
+      },
+      {
+        field: "platform",
+        headerName: "Platform",
+        width: 120,
+        renderCell: (params) => (
+          params.value ? (
+            <Chip size="small" label={params.value} sx={{ height: 22, fontSize: 11, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
+          ) : "—"
+        ),
+      },
+      {
+        field: "serial",
+        headerName: "Serial",
+        minWidth: 150,
+        flex: 0.65,
+        renderCell: (params) => params.value || "—",
+      },
+      {
+        field: "agentVersion",
+        headerName: "Agent",
+        width: 120,
+        renderCell: (params) => params.value || "—",
+      },
+      {
+        field: "lastSeenAt",
+        headerName: "Last seen",
+        minWidth: 160,
+        flex: 0.7,
+        renderCell: (params) => formatDate(params.value),
+      },
+    ],
+    []
+  );
+
+  const searchHelper = search.trim().length > 0 && search.trim().length < 3
+    ? "Type at least 3 characters to search"
+    : "Search hostname, device ID, serial, platform, or agent version";
+
+  return (
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      ModalProps={{
+        keepMounted: true,
+      }}
+      sx={{
+        zIndex: (theme) => theme.zIndex.modal + 30,
+        "& .MuiBackdrop-root": {
+          zIndex: (theme) => theme.zIndex.modal + 29,
+          backgroundColor: "rgba(15, 23, 42, 0.34)",
+          backdropFilter: "blur(1px)",
+        },
+        "& .MuiDrawer-paper": {
+          zIndex: (theme) => theme.zIndex.modal + 31,
+        },
+      }}
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: "100%", md: 820, xl: 920 },
+            p: { xs: 1.5, sm: 2 },
+            bgcolor: "#fff",
+            borderLeft: { xs: "none", md: `1px solid ${BRAND.border}` },
+            boxShadow: "-18px 0 44px rgba(15, 23, 42, 0.18)",
+          },
+        },
+      }}
+    >
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
+        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 2,
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Inventory2OutlinedIcon fontSize="small" />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, lineHeight: 1.2 }}>
+                  Ungrouped devices
+                </Typography>
+                <Typography sx={{ fontSize: 12.5, color: BRAND.gray, mt: 0.25 }}>
+                  Devices not assigned to any static or dynamic asset group.
+                </Typography>
+              </Box>
+            </Stack>
+          </Box>
+          <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+            <CloseOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Box>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 180px auto" },
+            gap: 1,
+            alignItems: "flex-start",
+          }}
+        >
+          <TextField
+            size="small"
+            placeholder="Search ungrouped devices…"
+            value={search}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setSearch(e.target.value);
+            }}
+            helperText={searchHelper}
+            fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Platform"
+            value={platform}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setPlatform(e.target.value);
+            }}
+            helperText=" "
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="windows">Windows</MenuItem>
+            <MenuItem value="windows-server">Windows Server</MenuItem>
+            <MenuItem value="macos">macOS</MenuItem>
+            <MenuItem value="linux">Linux</MenuItem>
+            <MenuItem value="unknown">Unknown</MenuItem>
+          </TextField>
+          <Button
+            variant="outlined"
+            startIcon={loading ? <CircularProgress size={14} sx={{ color: BRAND.teal }} /> : <RefreshOutlinedIcon />}
+            onClick={loadRows}
+            sx={{
+              minHeight: 40,
+              textTransform: "none",
+              borderColor: BRAND.border,
+              color: BRAND.dark,
+              "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft },
+            }}
+          >
+            Refresh
+          </Button>
+        </Box>
+
+        {error ? (
+          <Alert severity="error" variant="outlined">
+            {error}
+          </Alert>
+        ) : null}
+
+        <Box sx={{ flex: 1, minHeight: 360, overflow: "hidden" }}>
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            density="compact"
+            disableRowSelectionOnClick
+            loading={loading}
+            getRowId={(row) => row.deviceId}
+            rowCount={total}
+            paginationMode="server"
+            sortingMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            sortModel={sortModel}
+            onSortModelChange={(model) => {
+              const nextModel = model.length > 0 ? model : [{ field: "hostname", sort: "asc" }];
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setSortModel(nextModel);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            sx={DATAGRID_SX}
+          />
+        </Box>
+      </Box>
+    </Drawer>
+  );
+}
+
 // ── Create / edit dialog ──────────────────────────────────────────
 
-function CreateGroupDialog({ open, onClose, onCreated }) {
+function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading, coverageError, onRefreshCoverage, onViewUngrouped }) {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [kind, setKind] = React.useState("static");
@@ -1405,6 +1897,15 @@ function CreateGroupDialog({ open, onClose, onCreated }) {
             multiline
             minRows={2}
             inputProps={{ maxLength: 280 }}
+          />
+
+          <GroupCoverageNotice
+            coverage={coverage}
+            loading={coverageLoading}
+            error={coverageError}
+            compact
+            onRefresh={onRefreshCoverage}
+            onViewUngrouped={onViewUngrouped}
           />
 
           <FormControl disabled={submitting}>
@@ -2383,6 +2884,10 @@ export default function AssetGroups() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [renameTarget, setRenameTarget] = React.useState(null);
   const [drawerGroup, setDrawerGroup] = React.useState(null);
+  const [ungroupedOpen, setUngroupedOpen] = React.useState(false);
+  const [coverage, setCoverage] = React.useState(null);
+  const [coverageLoading, setCoverageLoading] = React.useState(false);
+  const [coverageError, setCoverageError] = React.useState("");
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
   const confirm = useConfirm();
 
@@ -2420,10 +2925,26 @@ export default function AssetGroups() {
     }
   }, [notify]);
 
+
+  const loadCoverage = React.useCallback(async () => {
+    try {
+      setCoverageLoading(true);
+      setCoverageError("");
+      const res = await getAssetGroupCoverage();
+      setCoverage(res || null);
+    } catch (err) {
+      const message = err?.body?.message || err?.message || "Failed to load group coverage";
+      setCoverage(null);
+      setCoverageError(message);
+    } finally {
+      setCoverageLoading(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([loadGroups(), loadDevices()]).finally(() => setLoading(false));
-  }, [loadGroups, loadDevices]);
+    Promise.all([loadGroups(), loadDevices(), loadCoverage()]).finally(() => setLoading(false));
+  }, [loadGroups, loadDevices, loadCoverage]);
 
   const handleDelete = async (group) => {
     const ok = await confirm({
@@ -2439,7 +2960,7 @@ export default function AssetGroups() {
       // If the drawer was open on this group, close it before refresh
       // — the next loadGroups won't include it anymore.
       if (drawerGroup?.id === group.id) setDrawerGroup(null);
-      await loadGroups();
+      await Promise.all([loadGroups(), loadCoverage()]);
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Delete failed");
     }
@@ -2579,7 +3100,7 @@ export default function AssetGroups() {
               startIcon={<RefreshOutlinedIcon />}
               onClick={() => {
                 setLoading(true);
-                Promise.all([loadGroups(), loadDevices()]).finally(() => setLoading(false));
+                Promise.all([loadGroups(), loadDevices(), loadCoverage()]).finally(() => setLoading(false));
               }}
               sx={{
                 textTransform: "none",
@@ -2614,6 +3135,16 @@ export default function AssetGroups() {
           </Alert>
         ) : null}
 
+        <Box sx={{ mb: 2 }}>
+          <GroupCoverageNotice
+            coverage={coverage}
+            loading={coverageLoading}
+            error={coverageError}
+            onRefresh={loadCoverage}
+            onViewUngrouped={() => setUngroupedOpen(true)}
+          />
+        </Box>
+
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
             <CircularProgress size={28} />
@@ -2643,9 +3174,15 @@ export default function AssetGroups() {
       <CreateGroupDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+        coverage={coverage}
+        coverageLoading={coverageLoading}
+        coverageError={coverageError}
+        onRefreshCoverage={loadCoverage}
+        onViewUngrouped={() => setUngroupedOpen(true)}
         onCreated={(group) => {
           notify("success", `Group "${group?.name || ""}" created`);
           loadGroups();
+          loadCoverage();
         }}
       />
 
@@ -2667,7 +3204,13 @@ export default function AssetGroups() {
         devices={devices}
         canManage={canManage}
         notify={notify}
-        onMembersChanged={loadGroups}
+        onMembersChanged={() => { loadGroups(); loadCoverage(); }}
+      />
+
+      <UngroupedDevicesDrawer
+        open={ungroupedOpen}
+        onClose={() => setUngroupedOpen(false)}
+        notify={notify}
       />
 
       <BrandSnackbar
