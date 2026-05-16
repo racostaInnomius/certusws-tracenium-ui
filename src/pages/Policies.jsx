@@ -7,8 +7,11 @@ import {
   Chip,
   Collapse,
   Divider,
+  FormControlLabel,
   MenuItem,
   Paper,
+  Snackbar,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -67,25 +70,248 @@ import { PLUGIN_CATALOG } from "../constants/plugins";
 // without changing behavior.
 const PLUGIN_DESCRIPTORS = PLUGIN_CATALOG;
 
-// Compliance interval bounds — matches the server-side validator in
-// policy-runtime.ts (300s min, 86400s max). The scheduler rejects values
-// outside this range and falls back to 28800s (8h), so we clamp client-
-// side to fail fast instead of silently reverting on the device.
-const COMPLIANCE_INTERVAL_MIN = 300;
-const COMPLIANCE_INTERVAL_MAX = 86400;
-const PATCH_INTERVAL_MIN = 300;
-const PATCH_INTERVAL_MAX = 604800;
+// Interval bounds — mirror the server-side validator
+// (modules/policies/policies.service.ts) AND the agent's
+// policy-runtime.ts. The agent silently reverts out-of-range values
+// to its hardcoded default, so we clamp here too to fail fast at
+// authoring time instead of letting the operator save a number that
+// the agent will quietly ignore.
+//
+// Sprint 1 of Policy v2 added inventory + update bounds — they were
+// previously hardcoded on the agent and not editable from the UI at
+// all.
+const INVENTORY_INTERVAL_MIN = 60;       // 1m   — AMP scans can be tight
+const INVENTORY_INTERVAL_MAX = 86400;    // 24h
+const COMPLIANCE_INTERVAL_MIN = 300;     // 5m
+const COMPLIANCE_INTERVAL_MAX = 86400;   // 24h
+const PATCH_INTERVAL_MIN = 300;          // 5m
+const PATCH_INTERVAL_MAX = 604800;       // 7d
+const UPDATE_INTERVAL_MIN = 60;          // 1m   — but useful range is hourly
+const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable the
+                                          //         module instead of cranking it
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
 //    (see formToPolicy). Required plugins are clamped to true regardless
 //    of the incoming policy.
+// Reads either the v1 top-level path or the v2 `agent.schedules.*`
+// path. v2 wins on conflict. Pair function with writeIntervalToPolicy
+// below; together they let the form stay schema-agnostic.
+function pickInterval(policy, key) {
+  const v2 = policy?.agent?.schedules?.[key]?.intervalSeconds;
+  if (v2 !== undefined && v2 !== null) return Number(v2);
+  const v1 = policy?.[key]?.intervalSeconds;
+  if (v1 !== undefined && v1 !== null) return Number(v1);
+  return NaN;
+}
+
+function pickFeature(policy, key) {
+  const v2 = policy?.agent?.features?.[key];
+  if (v2 !== undefined) return Boolean(v2);
+  const v1 = policy?.features?.[key];
+  if (v1 !== undefined) return Boolean(v1);
+  return null; // unset
+}
+
+// ── Security Policy schema mirror (Sprint 2 of Policy v2) ─────────
+// Stays in sync with src/core/policy-runtime.ts:SecurityPolicy in the
+// agent + the validator in modules/policies/policies.service.ts. The
+// form structure is flat: one entry per capability, each with a
+// `mode` and capability-specific scalar fields.
+const SECURITY_MODES = [
+  { value: "off",          label: "Off",          tone: "muted",
+    description: "No reads, no remediation. The capability is not evaluated." },
+  { value: "report-only",  label: "Report only",  tone: "info",
+    description: "Detect drift and surface in the dashboard. Never modify the device." },
+  { value: "auto",         label: "Auto-remediate", tone: "warn",
+    description: "Detect drift AND apply the remediation immediately. Use after vetting in report-only." },
+];
+
+// Catalog of every security capability the UI knows about. Each
+// entry declares its desired-state field shape so the form can
+// render the right control (boolean → switch, enum → radio, etc.).
+//
+// `enforcer: true`  → agent has a working pmp.remediate handler.
+//                     Mode "auto" actually does something.
+// `enforcer: false` → policy is stored but agent doesn't enforce
+//                     yet. UI grays the mode selector at "auto" and
+//                     marks the card "report-only available, auto
+//                     coming in a later release".
+const SECURITY_CAPABILITIES = [
+  {
+    key: "firewall",
+    label: "Host firewall",
+    description: "Ensure the host's local firewall is enabled. ufw on Debian/Ubuntu, firewalld on RHEL family, Windows Defender Firewall on Windows.",
+    osTags: ["Linux", "Windows"],
+    enforcer: true,
+    fields: [
+      { key: "required", label: "Required to be enabled", type: "boolean", default: true },
+    ],
+  },
+  {
+    key: "ssh",
+    label: "SSH hardening",
+    description: "Enforce sshd configuration. Writes drop-in under /etc/ssh/sshd_config.d/ and reloads sshd. Linux only — the SCP collector doesn't extract sshd config on Windows even when OpenSSH Server is installed.",
+    osTags: ["Linux"],
+    enforcer: true,
+    fields: [
+      { key: "permitRootLogin", label: "PermitRootLogin", type: "enum",
+        options: [
+          { value: "no", label: "no (recommended)" },
+          { value: "yes", label: "yes (insecure)" },
+        ], default: "no" },
+      { key: "passwordAuthentication", label: "PasswordAuthentication", type: "boolean",
+        default: false, trueLabel: "yes (allow)", falseLabel: "no (key-only, recommended)" },
+      { key: "weakKexDisabled", label: "Disable weak SSH KEX algorithms", type: "boolean",
+        default: true, trueLabel: "Disable", falseLabel: "Allow" },
+    ],
+  },
+  {
+    key: "tls",
+    label: "TLS legacy controls (SCHANNEL)",
+    description: "Disable TLS 1.0 / 1.1 and weak SCHANNEL ciphers. Writes HKLM\\SYSTEM\\...\\SCHANNEL registry entries; requires a reboot to fully apply (LSA reload).",
+    osTags: ["Windows"],
+    enforcer: true,
+    fields: [
+      { key: "legacyDisabled", label: "Disable TLS 1.0 / 1.1", type: "boolean",
+        default: true, trueLabel: "Disable", falseLabel: "Allow" },
+      { key: "weakCiphersDisabled", label: "Disable weak ciphers (RC4, 3DES, DES, NULL)", type: "boolean",
+        default: true, trueLabel: "Disable", falseLabel: "Allow" },
+    ],
+  },
+  {
+    key: "smb",
+    label: "SMB protocol controls",
+    description: "Disable SMBv1. Registry edit + PowerShell feature unload; full removal requires a reboot.",
+    osTags: ["Windows"],
+    enforcer: true,
+    fields: [
+      { key: "smbv1Disabled", label: "Disable SMBv1", type: "boolean",
+        default: true, trueLabel: "Disable", falseLabel: "Allow" },
+    ],
+  },
+
+  // ── Placeholders below: policy is persisted but the agent has no
+  //    enforcer yet. The UI lets the operator pick `mode` and the
+  //    desired state, but `auto` is effectively the same as
+  //    `report-only` until the corresponding privsvc handler ships.
+  {
+    key: "passwordPolicy",
+    label: "Password policy",
+    description: "Maximum password age and hash algorithm (read from /etc/login.defs on Linux, local security policy on Windows). Collector exists; auto-remediation in a later release.",
+    osTags: ["Linux"],
+    enforcer: false,
+    fields: [
+      { key: "passMaxDaysMax", label: "Max password age (days)", type: "number",
+        min: 1, max: 99999, default: 365 },
+      { key: "encryptMethod", label: "Hash algorithm", type: "enum",
+        options: [
+          { value: "SHA512", label: "SHA512" },
+          { value: "YESCRYPT", label: "YESCRYPT" },
+        ], default: "SHA512" },
+    ],
+  },
+  {
+    key: "bitlocker",
+    label: "BitLocker (Windows)",
+    description: "Ensure system drive is encrypted with BitLocker. Collector reports current status; auto-remediation in a later release.",
+    osTags: ["Windows"],
+    enforcer: false,
+    fields: [
+      { key: "required", label: "Required on system drive", type: "boolean", default: true },
+    ],
+  },
+  {
+    key: "usb",
+    label: "USB control",
+    description: "Block or allow USB devices by VID:PID. Greenfield — no collector or enforcer yet; setting here parks the desired state for a future release.",
+    osTags: ["Windows", "Linux"],
+    enforcer: false,
+    fields: [
+      // Skipped in MVP UI — list fields require a richer editor we
+      // don't have on this page yet. Operators with strong USB
+      // policy needs can use the Advanced JSON editor below.
+    ],
+  },
+  {
+    key: "shares",
+    label: "Network shares",
+    description: "Block SMB shares granting Everyone:FullControl. Collector exists; auto-remediation in a later release.",
+    osTags: ["Windows"],
+    enforcer: false,
+    fields: [
+      { key: "denyEveryoneFullControl", label: "Deny Everyone:FullControl", type: "boolean",
+        default: true, trueLabel: "Deny", falseLabel: "Allow" },
+    ],
+  },
+];
+
+function readSecurityFromPolicy(policy) {
+  const security = policy?.security ?? null;
+  if (!security || typeof security !== "object") {
+    return {
+      defaultMode: "report-only",
+      capabilities: {},
+    };
+  }
+  const capabilities = {};
+  for (const cap of SECURITY_CAPABILITIES) {
+    const block = security[cap.key];
+    if (!block || typeof block !== "object") {
+      capabilities[cap.key] = { mode: null, values: {} };
+      continue;
+    }
+    const values = {};
+    for (const field of cap.fields) {
+      if (block[field.key] !== undefined) values[field.key] = block[field.key];
+    }
+    capabilities[cap.key] = {
+      mode: block.mode ?? null,
+      values,
+    };
+  }
+  return {
+    defaultMode: security.defaultMode || "report-only",
+    capabilities,
+  };
+}
+
+function securityFormToPolicy(securityForm) {
+  // Only emit fields the operator actually configured. An empty
+  // capability object would still convey "this capability is in the
+  // policy" — which would override the backend default in confusing
+  // ways. Skip empty entries entirely.
+  const out = {};
+  if (securityForm.defaultMode && securityForm.defaultMode !== "report-only") {
+    out.defaultMode = securityForm.defaultMode;
+  }
+  for (const cap of SECURITY_CAPABILITIES) {
+    const entry = securityForm.capabilities?.[cap.key];
+    if (!entry) continue;
+    const hasValues = Object.keys(entry.values || {}).length > 0;
+    const hasMode = entry.mode !== null && entry.mode !== undefined;
+    if (!hasValues && !hasMode) continue;
+
+    const block = {};
+    if (hasMode) block.mode = entry.mode;
+    Object.assign(block, entry.values || {});
+    out[cap.key] = block;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function readFormFromPolicy(policy) {
-  const enabled = Array.isArray(policy?.plugins?.enabled) ? policy.plugins.enabled : [];
-  const rawInterval = policy?.compliance?.intervalSeconds;
-  const intervalNum = Number(rawInterval);
-  const rawPatchInterval = policy?.patch?.intervalSeconds;
-  const patchIntervalNum = Number(rawPatchInterval);
+  const enabled = Array.isArray(policy?.plugins?.enabled)
+    ? policy.plugins.enabled
+    : Array.isArray(policy?.agent?.plugins?.enabled)
+    ? policy.agent.plugins.enabled
+    : [];
+
+  const inventoryNum = pickInterval(policy, "inventory");
+  const complianceNum = pickInterval(policy, "compliance");
+  const patchNum = pickInterval(policy, "patch");
+  const updateNum = pickInterval(policy, "update");
+
   return {
     plugins: Object.fromEntries(
       PLUGIN_DESCRIPTORS.map((p) => [
@@ -96,12 +322,37 @@ function readFormFromPolicy(policy) {
     // Plugin-specific settings live under their own sub-key so adding
     // another plugin's options later (e.g. `patch: {...}`) stays
     // additive without restructuring the form shape.
+    inventory: {
+      intervalSeconds:
+        Number.isFinite(inventoryNum) && inventoryNum > 0 ? inventoryNum : null,
+    },
     compliance: {
-      intervalSeconds: Number.isFinite(intervalNum) && intervalNum > 0 ? intervalNum : null,
+      intervalSeconds:
+        Number.isFinite(complianceNum) && complianceNum > 0 ? complianceNum : null,
     },
     patch: {
-      intervalSeconds: Number.isFinite(patchIntervalNum) && patchIntervalNum > 0 ? patchIntervalNum : null,
+      intervalSeconds:
+        Number.isFinite(patchNum) && patchNum > 0 ? patchNum : null,
     },
+    update: {
+      intervalSeconds:
+        Number.isFinite(updateNum) && updateNum > 0 ? updateNum : null,
+    },
+    features: {
+      // selfUpdate defaults to true on the agent if unset, but for the
+      // form we surface `null` (unset) so the operator can distinguish
+      // "I haven't touched this" from "I explicitly turned it off".
+      selfUpdate: pickFeature(policy, "selfUpdate"),
+      // remoteShell is a placeholder for the future RCP (remote
+      // control plugin). The form reads + writes the flag but the UI
+      // renders it as "coming soon" — not editable yet.
+      remoteShell: pickFeature(policy, "remoteShell"),
+    },
+    // Security Policy v2 — separate sub-form so the security cards
+    // can be a sibling section. Stored back into policy.security on
+    // formToPolicy. Empty policies result in the empty default
+    // shape (no capabilities configured).
+    security: readSecurityFromPolicy(policy),
   };
 }
 
@@ -123,31 +374,80 @@ function formToPolicy(form) {
     plugins: { enabled: pluginsEnabled },
   };
 
-  // Only emit the compliance block when the module is enabled AND the
-  // user picked an explicit interval. An empty block would force the
-  // backend to persist a `compliance: {}` object that the agent would
-  // then read as "no interval" and fall back to its hardcoded default
-  // anyway — cleaner to just omit.
-  const complianceEnabled = modules.compliance === true;
-  const rawInterval = Number(form?.compliance?.intervalSeconds);
-  if (
-    complianceEnabled &&
-    Number.isFinite(rawInterval) &&
-    rawInterval >= COMPLIANCE_INTERVAL_MIN &&
-    rawInterval <= COMPLIANCE_INTERVAL_MAX
-  ) {
-    policy.compliance = { intervalSeconds: rawInterval };
+  // Helper: emit a `{<key>: {intervalSeconds: N}}` block on the
+  // policy only when the operator entered a value within range. Same
+  // omit-vs-include logic as before — empty fields mean "use the
+  // backend default", and we represent that by leaving the key off
+  // entirely rather than serializing an empty object that the agent
+  // would still treat as "no value".
+  function maybeAddInterval(key, raw, min, max, gateEnabled) {
+    if (!gateEnabled) return;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max) return;
+    policy[key] = { intervalSeconds: n };
   }
 
-  const patchEnabled = modules.patch === true;
-  const rawPatchInterval = Number(form?.patch?.intervalSeconds);
-  if (
-    patchEnabled &&
-    Number.isFinite(rawPatchInterval) &&
-    rawPatchInterval >= PATCH_INTERVAL_MIN &&
-    rawPatchInterval <= PATCH_INTERVAL_MAX
-  ) {
-    policy.patch = { intervalSeconds: rawPatchInterval };
+  // Inventory rides the AMP module — emitted when AMP is enabled.
+  // AMP is a required plugin so this is effectively always on, but
+  // keeping the gate explicit makes the intent legible.
+  maybeAddInterval(
+    "inventory",
+    form?.inventory?.intervalSeconds,
+    INVENTORY_INTERVAL_MIN,
+    INVENTORY_INTERVAL_MAX,
+    pluginsEnabled.includes("amp")
+  );
+
+  maybeAddInterval(
+    "compliance",
+    form?.compliance?.intervalSeconds,
+    COMPLIANCE_INTERVAL_MIN,
+    COMPLIANCE_INTERVAL_MAX,
+    modules.compliance === true
+  );
+
+  maybeAddInterval(
+    "patch",
+    form?.patch?.intervalSeconds,
+    PATCH_INTERVAL_MIN,
+    PATCH_INTERVAL_MAX,
+    modules.patch === true
+  );
+
+  // Update interval is gated by the update module — but the module
+  // is on by default (modules.update=true at the agent level even
+  // without explicit policy). We emit when the operator set a value;
+  // the agent default (6h) takes over otherwise.
+  maybeAddInterval(
+    "update",
+    form?.update?.intervalSeconds,
+    UPDATE_INTERVAL_MIN,
+    UPDATE_INTERVAL_MAX,
+    true
+  );
+
+  // ── Feature toggles ──────────────────────────────────────────────
+  // Only emit fields the operator explicitly changed (null = unset).
+  // remoteShell is wire-accepted but UI-disabled until RCP ships.
+  const features = {};
+  if (form?.features?.selfUpdate !== null && form?.features?.selfUpdate !== undefined) {
+    features.selfUpdate = Boolean(form.features.selfUpdate);
+  }
+  if (form?.features?.remoteShell !== null && form?.features?.remoteShell !== undefined) {
+    features.remoteShell = Boolean(form.features.remoteShell);
+  }
+  if (Object.keys(features).length > 0) {
+    policy.features = features;
+  }
+
+  // ── Security policy block (Sprint 2 of Policy v2) ───────────────
+  // Same omit-empty rule as the rest of formToPolicy. If the operator
+  // configured anything in the Security section, securityFormToPolicy
+  // returns a non-null object that becomes `policy.security`.
+  // Otherwise the key is omitted so the policy stays minimal.
+  const securityBlock = securityFormToPolicy(form.security || {});
+  if (securityBlock) {
+    policy.security = securityBlock;
   }
 
   return policy;
@@ -533,6 +833,72 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         </Typography>
       </Box>
 
+      {/* Inventory schedule (AMP) — Sprint 1 of Policy v2 surfaces the
+          previously-invisible inventory interval. AMP is a required
+          plugin, so this card always renders. The agent's AMP collector
+          rides the unified `inventory` schedule. */}
+      {(() => {
+        const rawValue = form?.inventory?.intervalSeconds;
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < INVENTORY_INTERVAL_MIN ||
+            numeric > INVENTORY_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.surfaceMuted,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Inventory schedule (AMP)
+            </Typography>
+            <TextField
+              label="Asset collection interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  inventory: { ...(form.inventory || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: INVENTORY_INTERVAL_MIN,
+                max: INVENTORY_INTERVAL_MAX,
+                step: 60,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${INVENTORY_INTERVAL_MIN} and ${INVENTORY_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (6h / 21600s). Range 60–86400."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
       {/* Compliance schedule — only surfaces when a plugin that implies
           the compliance module is active (today: SCP). A dedicated card
           below keeps this additive: the day we add more compliance-scoped
@@ -673,6 +1039,358 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
           </Box>
         );
       })()}
+
+      {/* Update schedule — controls how often the agent probes the
+          backend for a newer release. Previously hardcoded to 6h in
+          the agent's scheduler.ts; Sprint 1 of Policy v2 made it
+          editable. The actual install path is gated separately by
+          features.selfUpdate below. */}
+      {(() => {
+        const rawValue = form?.update?.intervalSeconds;
+        const displayValue =
+          rawValue === null || rawValue === undefined || rawValue === ""
+            ? ""
+            : String(rawValue);
+        const numeric = Number(rawValue);
+        const outOfRange =
+          rawValue !== null &&
+          rawValue !== undefined &&
+          rawValue !== "" &&
+          (!Number.isFinite(numeric) ||
+            numeric < UPDATE_INTERVAL_MIN ||
+            numeric > UPDATE_INTERVAL_MAX);
+        return (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1.5,
+              border: `1px solid ${BRAND.border}`,
+              borderRadius: 2,
+              bgcolor: BRAND.surfaceMuted,
+            }}
+          >
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Agent update schedule
+            </Typography>
+            <TextField
+              label="Update probe interval (seconds)"
+              type="number"
+              size="small"
+              fullWidth
+              value={displayValue}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const next = raw === "" ? null : Number(raw);
+                onChange({
+                  ...form,
+                  update: { ...(form.update || {}), intervalSeconds: next },
+                });
+              }}
+              disabled={readOnly}
+              inputProps={{
+                min: UPDATE_INTERVAL_MIN,
+                max: UPDATE_INTERVAL_MAX,
+                step: 300,
+              }}
+              error={outOfRange}
+              helperText={
+                outOfRange
+                  ? `Must be between ${UPDATE_INTERVAL_MIN} and ${UPDATE_INTERVAL_MAX} seconds`
+                  : "Blank = use backend default (6h / 21600s). Set higher to slow down auto-update; disable entirely via Self-update toggle below."
+              }
+              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
+            />
+          </Box>
+        );
+      })()}
+
+      {/* Feature toggles — Sprint 1 of Policy v2 surfaces selfUpdate and
+          a placeholder for remoteShell (gated to the future RCP plugin).
+          Previously these only existed in the agent's policy default and
+          could only be flipped via the advanced JSON editor. */}
+      <Box
+        sx={{
+          mt: 2,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Features
+        </Typography>
+
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 0.5 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={form?.features?.selfUpdate !== false}
+                onChange={(e) =>
+                  onChange({
+                    ...form,
+                    features: {
+                      ...(form.features || {}),
+                      selfUpdate: e.target.checked,
+                    },
+                  })
+                }
+                disabled={readOnly}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Self-update
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  When off, the agent's update probe keeps running (to report
+                  available versions) but the install path is suppressed. Use
+                  to freeze a fleet on a specific agent version while
+                  staging a rollout.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={Boolean(form?.features?.remoteShell)}
+                disabled
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.gray }}>
+                  Remote shell <Chip label="coming soon" size="small" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  Will be governed by the Remote Control Plugin (RCP). Toggle
+                  not editable until the plugin ships.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+          />
+        </Box>
+      </Box>
+
+      {/* ── Security Policy section (Sprint 2 of Policy v2) ───────
+          Sits below the Agent Policy fields. One card per capability;
+          functional ones (firewall, ssh, tls, smb) have working agent
+          enforcement, placeholder ones store the desired state but
+          enforcement comes in a later release. */}
+      <Box
+        sx={{
+          mt: 4,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Security policy
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Declarative posture rules. Each capability has a <strong>mode</strong>:
+          {" "}<em>Off</em> (skip), <em>Report only</em> (detect drift, never modify), or
+          {" "}<em>Auto-remediate</em> (fix drift on the device). Default mode is
+          {" "}<em>Report only</em>. Functional capabilities are enforced by the agent
+          on every compliance pass; placeholders below are stored but not yet enforced.
+        </Typography>
+
+        {SECURITY_CAPABILITIES.map((cap) => {
+          const entry = form.security?.capabilities?.[cap.key] || { mode: null, values: {} };
+          const onModeChange = (newMode) => {
+            onChange({
+              ...form,
+              security: {
+                ...(form.security || {}),
+                capabilities: {
+                  ...(form.security?.capabilities || {}),
+                  [cap.key]: {
+                    ...entry,
+                    mode: newMode,
+                  },
+                },
+              },
+            });
+          };
+          const onValueChange = (fieldKey, newValue) => {
+            const nextValues = { ...(entry.values || {}) };
+            if (newValue === null || newValue === undefined || newValue === "") {
+              delete nextValues[fieldKey];
+            } else {
+              nextValues[fieldKey] = newValue;
+            }
+            onChange({
+              ...form,
+              security: {
+                ...(form.security || {}),
+                capabilities: {
+                  ...(form.security?.capabilities || {}),
+                  [cap.key]: {
+                    ...entry,
+                    values: nextValues,
+                  },
+                },
+              },
+            });
+          };
+
+          return (
+            <Box
+              key={cap.key}
+              sx={{
+                mt: 1.5,
+                p: 1.25,
+                border: `1px solid ${BRAND.border}`,
+                borderRadius: 1.5,
+                bgcolor: "#ffffff",
+                opacity: cap.enforcer ? 1 : 0.85,
+              }}
+            >
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 1 }}>
+                <Box sx={{ flex: 1 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BRAND.dark }}>
+                      {cap.label}
+                    </Typography>
+                    {cap.osTags.map((t) => (
+                      <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: 10, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
+                    ))}
+                    {!cap.enforcer && (
+                      <Chip
+                        label="auto coming soon"
+                        size="small"
+                        sx={{ height: 18, fontSize: 10, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
+                      />
+                    )}
+                  </Box>
+                  <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.5 }}>
+                    {cap.description}
+                  </Typography>
+                </Box>
+
+                <TextField
+                  select
+                  size="small"
+                  label="Mode"
+                  value={entry.mode ?? ""}
+                  onChange={(e) => onModeChange(e.target.value || null)}
+                  disabled={readOnly}
+                  sx={{ minWidth: 150 }}
+                  helperText={entry.mode == null ? "Inherits default" : ""}
+                >
+                  <MenuItem value="">(inherit default)</MenuItem>
+                  {SECURITY_MODES.map((m) => (
+                    <MenuItem
+                      key={m.value}
+                      value={m.value}
+                      disabled={!cap.enforcer && m.value === "auto"}
+                    >
+                      {m.label}
+                      {!cap.enforcer && m.value === "auto" ? " (coming soon)" : ""}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+
+              {/* Capability-specific fields. Each field renders to a
+                  control matching its declared type — boolean → switch,
+                  enum → select, number → numeric TextField. */}
+              {cap.fields.length > 0 && (
+                <Box sx={{ mt: 1.25, display: "flex", flexDirection: "column", gap: 0.75 }}>
+                  {cap.fields.map((field) => {
+                    const current = entry.values?.[field.key];
+                    if (field.type === "boolean") {
+                      const checked = typeof current === "boolean" ? current : field.default;
+                      return (
+                        <FormControlLabel
+                          key={field.key}
+                          control={
+                            <Switch
+                              size="small"
+                              checked={checked}
+                              onChange={(e) => onValueChange(field.key, e.target.checked)}
+                              disabled={readOnly}
+                            />
+                          }
+                          label={
+                            <Typography variant="body2">
+                              {field.label}:{" "}
+                              <strong>
+                                {checked ? (field.trueLabel || "Yes") : (field.falseLabel || "No")}
+                              </strong>
+                            </Typography>
+                          }
+                          sx={{ mx: 0 }}
+                        />
+                      );
+                    }
+                    if (field.type === "enum") {
+                      const value = current ?? field.default;
+                      return (
+                        <TextField
+                          key={field.key}
+                          select
+                          size="small"
+                          label={field.label}
+                          value={value}
+                          onChange={(e) => onValueChange(field.key, e.target.value)}
+                          disabled={readOnly}
+                          sx={{ maxWidth: 320 }}
+                        >
+                          {field.options.map((opt) => (
+                            <MenuItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      );
+                    }
+                    if (field.type === "number") {
+                      const value =
+                        current === undefined || current === null ? "" : String(current);
+                      return (
+                        <TextField
+                          key={field.key}
+                          type="number"
+                          size="small"
+                          label={field.label}
+                          value={value}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            onValueChange(field.key, raw === "" ? null : Number(raw));
+                          }}
+                          disabled={readOnly}
+                          inputProps={{ min: field.min, max: field.max }}
+                          sx={{ maxWidth: 320 }}
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+                </Box>
+              )}
+            </Box>
+          );
+        })}
+      </Box>
 
       <Box sx={{ mt: 2 }}>
         <Button
