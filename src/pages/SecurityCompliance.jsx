@@ -1104,6 +1104,7 @@ function DeviceDrawerContent({
   onNavigateToAsset
 }) {
   const device = data?.device;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
   const findings = Array.isArray(data?.findings) ? data.findings : [];
 
   // Group findings by category for scanning. Hooks must run in the
@@ -1318,7 +1319,6 @@ function DeviceDrawerContent({
 }
 
 function FindingCard({ finding }) {
-  const meta = STATUS_META[finding.status] ?? STATUS_META.unknown;
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
 

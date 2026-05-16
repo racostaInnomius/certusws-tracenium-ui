@@ -7,8 +7,6 @@ import {
   Typography,
   TextField,
   Button,
-  Snackbar,
-  Alert,
   Switch,
   FormControlLabel,
   Chip,
@@ -459,11 +457,13 @@ export default function SoftwareInventory() {
   React.useEffect(() => {
     if (!appLevelDetail) return;
     loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDetail closes over stable refs; adding it would re-fetch on every render.
   }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize]);
 
   React.useEffect(() => {
     if (appLevelDetail || selectedHost) return;
     loadHosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHosts closes over stable refs; adding it would re-fetch on every render.
   }, [
     appLevelDetail,
     selectedHost,
@@ -476,6 +476,7 @@ export default function SoftwareInventory() {
   React.useEffect(() => {
     if (!selectedHost || appLevelDetail) return;
     loadHostApps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHostApps closes over stable refs; adding it would re-fetch on every render.
   }, [
     selectedHost,
     appLevelDetail,

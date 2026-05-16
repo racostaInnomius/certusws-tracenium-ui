@@ -79,7 +79,7 @@ const ZERO_TOTALS = {
 
 export default function FindingsPanel({
   // Display
-  tabKey,         // "tls" | "smb" | "shares" | "other"  (used only for friendly labels)
+  _tabKey,        // "tls" | "smb" | "shares" | "other"  (used only for friendly labels)
   // Filters passed to /findings
   category,
   checkIdContains,

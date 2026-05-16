@@ -23,6 +23,7 @@ const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"
 const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 const Alerts = React.lazy(() => import("../pages/Alerts"));
 const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
+const Retention = React.lazy(() => import("../pages/Retention"));
 
 function PageFallback() {
   return (
@@ -40,7 +41,7 @@ function PageFallback() {
 }
 
 export default function AppShell() {
-  const [bootstrap, setBootstrap] = React.useState(null);
+  const [_bootstrap, setBootstrap] = React.useState(null);
   // Overview is the canonical landing page — it's the SOC-style dashboard
   // the operator should see when they log in without a deep link. Pages
   // with no special nav (bare `/` or `?page=` missing) resolve here.
@@ -182,6 +183,14 @@ export default function AppShell() {
 
   if (selectedPage === "alerts") {
     content = <Alerts />;
+  }
+
+  // Retention — admin-only drilldown reached from the "Database retention"
+  // card on Settings. Mounted at top level (not nested under settings/*)
+  // because deep linking is one of the operational needs: paste the link
+  // into a maintenance ticket, hit it, see sizes + last-run audit.
+  if (selectedPage === "retention") {
+    content = <Retention onNavigate={setSelectedPage} />;
   }
 
   return (

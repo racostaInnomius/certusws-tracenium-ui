@@ -35,8 +35,6 @@ import {
   Tooltip,
   Checkbox,
   Alert,
-  Tabs,
-  Tab,
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
@@ -45,7 +43,7 @@ import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
-import { BRAND, ROLE, DATAGRID_SX } from "../../theme/brand";
+import { BRAND, DATAGRID_SX } from "../../theme/brand";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   getDevicesAffectedByCheck,

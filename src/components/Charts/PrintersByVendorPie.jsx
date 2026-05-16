@@ -60,7 +60,7 @@ export default function PrintersByVendorPie({ printersByVendor }) {
                 align="right"
                 layout="vertical"
                 iconType="circle"
-                formatter={(value, entry, index) => (
+                formatter={(value, _entry, _index) => (
                     <span style={{ 
                     color: "black", 
                     fontWeight: 500 

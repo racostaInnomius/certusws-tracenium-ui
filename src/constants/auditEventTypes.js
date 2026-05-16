@@ -25,7 +25,7 @@
 // automatically (since the facets endpoint is dynamic) — they just
 // look generic until someone adds a row here.
 
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND } from "../theme/brand";
 
 // Each entry maps an EXACT event_type string to display metadata.
 // Keep the list alphabetized within each category for readability.

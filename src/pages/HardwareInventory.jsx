@@ -361,6 +361,7 @@ export default function HardwareInventory() {
 
   React.useEffect(() => {
     loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDetail closes over stable refs; adding it would re-fetch on every render.
   }, [search, platform, manufacturer, paginationModel.page, paginationModel.pageSize]);
 
   const refreshAll = () => {

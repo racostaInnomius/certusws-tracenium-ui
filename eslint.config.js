@@ -34,10 +34,6 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import unusedImports from 'eslint-plugin-unused-imports';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
-// Matches any CSS hex color in a string literal: #RGB, #RGBA, #RRGGBB,
-// #RRGGBBAA. Anchored so "foo#aaa" in prose isn't caught.
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
-
 // Files where the hex-color guardrail applies. Charts are deliberately
 // excluded: multi-series chart palettes (10+ perceptually-distinct
 // colors per chart) are a legitimate per-chart design concern and live

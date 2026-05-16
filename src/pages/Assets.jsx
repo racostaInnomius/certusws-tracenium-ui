@@ -3,7 +3,6 @@ import {
   Box,
   Tabs,
   Tab,
-  Typography,
 } from "@mui/material";
 
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
@@ -46,44 +45,6 @@ function a11yProps(index) {
     id: `assets-tab-${index}`,
     "aria-controls": `assets-tabpanel-${index}`,
   };
-}
-
-// Empty-state card used when an inventory tab has no data yet.
-// Uses the shared `panel` variant so the elevation/border match the
-// rest of the app (previously it was a custom borderRadius 3 + a
-// black-alpha shadow that didn't exist anywhere else).
-function InventoryPlaceholder({ title, description }) {
-  return (
-    <SectionPaper
-      variant="panel"
-      sx={{
-        p: { xs: 3, sm: 4 },
-        minHeight: 280,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        textAlign: "center",
-      }}
-    >
-      <Typography
-        variant="h5"
-        sx={{ fontWeight: 700, color: BRAND.dark, mb: 1.5 }}
-      >
-        {title}
-      </Typography>
-
-      <Typography
-        sx={{
-          maxWidth: 620,
-          color: "text.secondary",
-          lineHeight: 1.7,
-        }}
-      >
-        {description}
-      </Typography>
-    </SectionPaper>
-  );
 }
 
 // Shared sx for the four Tab labels. Keeping it in one place so the
