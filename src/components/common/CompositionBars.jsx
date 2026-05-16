@@ -77,7 +77,7 @@ export default function CompositionBars({
   maxItems = 8,
   headerExtra = null,
   minHeight = 260,
-  _sx = null,
+  sx = null,
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
@@ -107,17 +107,17 @@ export default function CompositionBars({
       elevation={0}
       sx={{
         p: 2,
-        borderRadius: 3,
+        borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        bgcolor: BRAND.surface || "#fff",
-        width: "100%",
-        minHeight,
-        maxHeight: minHeight,
-        minWidth: 0,
+        height: "100%",
         display: "flex",
         flexDirection: "column",
+        minHeight,
+        height: minHeight,
+        maxHeight: minHeight,
+        minWidth: 0,
         overflow: "hidden",
+        ...(sx || {}),
       }}
     >
       <Box
@@ -276,12 +276,54 @@ export default function CompositionBars({
                       : undefined,
                   }}
                 >
+                  <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <Typography
+                      sx={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: BRAND.dark,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={row.label}
+                    >
+                      {row.label}
+                    </Typography>
+                    {row.sub ? (
+                      <Typography
+                        sx={{
+                          fontSize: 11,
+                          color: "text.secondary",
+                          lineHeight: 1.2,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={row.sub}
+                      >
+                        {row.sub}
+                      </Typography>
+                    ) : null}
+                  </Box>
+
                   <Stack
                     direction="row"
-                    spacing={0.5}
+                    spacing={0.45}
                     alignItems="center"
-                    sx={{ minWidth: 0 }}
+                    justifyContent="flex-end"
+                    sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
                   >
+                    <Typography
+                      sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}
+                    >
+                      {formatRowValue(value)}
+                    </Typography>
+                    <Typography
+                      sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}
+                    >
+                      {pct}%
+                    </Typography>
                     {hasChildren ? (
                       <Tooltip title={expanded ? "Hide versions" : "Show grouped versions"} arrow>
                         <IconButton
@@ -294,7 +336,7 @@ export default function CompositionBars({
                           sx={{
                             width: 20,
                             height: 20,
-                            ml: -0.5,
+                            ml: 0.1,
                             color: BRAND.tealText,
                             flexShrink: 0,
                           }}
@@ -306,53 +348,7 @@ export default function CompositionBars({
                           )}
                         </IconButton>
                       </Tooltip>
-                    ) : (
-                      <Box sx={{ width: hasChildren ? 20 : 0, flexShrink: 0 }} />
-                    )}
-
-                    <Box sx={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column" }}>
-                      <Typography
-                        sx={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: BRAND.dark,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                        title={row.label}
-                      >
-                        {row.label}
-                      </Typography>
-                      {row.sub ? (
-                        <Typography
-                          sx={{
-                            fontSize: 11,
-                            color: "text.secondary",
-                            lineHeight: 1.2,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={row.sub}
-                        >
-                          {row.sub}
-                        </Typography>
-                      ) : null}
-                    </Box>
-                  </Stack>
-
-                  <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexShrink: 0, whiteSpace: "nowrap" }}>
-                    <Typography
-                      sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}
-                    >
-                      {formatRowValue(value)}
-                    </Typography>
-                    <Typography
-                      sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}
-                    >
-                      {pct}%
-                    </Typography>
+                    ) : null}
                   </Stack>
                 </Box>
 
