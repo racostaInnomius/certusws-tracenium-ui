@@ -109,12 +109,10 @@ export default function CompositionBars({
         p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        minHeight,
         height: minHeight,
         maxHeight: minHeight,
+        display: "flex",
+        flexDirection: "column",
         minWidth: 0,
         overflow: "hidden",
         ...(sx || {}),
@@ -255,7 +253,7 @@ export default function CompositionBars({
                   }
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
                     alignItems: "center",
                     columnGap: 1,
                     fontSize: 12.5,
@@ -307,6 +305,32 @@ export default function CompositionBars({
                     ) : null}
                   </Box>
 
+                  {hasChildren ? (
+                    <Tooltip title={expanded ? "Hide versions" : "Show grouped versions"} arrow>
+                      <IconButton
+                        size="small"
+                        aria-label={expanded ? "Hide grouped versions" : "Show grouped versions"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleRow(rowKey);
+                        }}
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          color: BRAND.tealText,
+                          flexShrink: 0,
+                          justifySelf: "center",
+                        }}
+                      >
+                        {expanded ? (
+                          <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18 }} />
+                        ) : (
+                          <KeyboardArrowRightRoundedIcon sx={{ fontSize: 18 }} />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+
                   <Stack
                     direction="row"
                     spacing={0.45}
@@ -324,31 +348,6 @@ export default function CompositionBars({
                     >
                       {pct}%
                     </Typography>
-                    {hasChildren ? (
-                      <Tooltip title={expanded ? "Hide versions" : "Show grouped versions"} arrow>
-                        <IconButton
-                          size="small"
-                          aria-label={expanded ? "Hide grouped versions" : "Show grouped versions"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleRow(rowKey);
-                          }}
-                          sx={{
-                            width: 20,
-                            height: 20,
-                            ml: 0.1,
-                            color: BRAND.tealText,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {expanded ? (
-                            <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18 }} />
-                          ) : (
-                            <KeyboardArrowRightRoundedIcon sx={{ fontSize: 18 }} />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    ) : null}
                   </Stack>
                 </Box>
 
@@ -404,7 +403,7 @@ export default function CompositionBars({
                             <Box
                               sx={{
                                 display: "grid",
-                                gridTemplateColumns: "minmax(0, 1fr) auto",
+                                gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
                                 alignItems: "center",
                                 columnGap: 0.75,
                                 minWidth: 0,

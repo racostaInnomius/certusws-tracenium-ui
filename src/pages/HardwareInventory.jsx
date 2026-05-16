@@ -14,6 +14,7 @@ import {
   DialogActions,
   Divider,
   IconButton,
+  InputAdornment,
   Stack,
   Tooltip,
   useMediaQuery,
@@ -21,6 +22,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import CloseIcon from "@mui/icons-material/Close";
 
@@ -234,6 +236,41 @@ const enterpriseDataGridSx = {
   },
 };
 
+
+const integratedFilterFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    minHeight: 40,
+    borderRadius: 2,
+    bgcolor: "#fff",
+    transition: "border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
+    "& fieldset": {
+      borderColor: BRAND.border,
+    },
+    "&:hover fieldset": {
+      borderColor: BRAND.teal,
+    },
+    "&.Mui-focused": {
+      boxShadow: "0 0 0 3px rgba(27, 166, 166, 0.10)",
+    },
+    "&.Mui-focused fieldset": {
+      borderColor: `${BRAND.teal} !important`,
+      borderWidth: "1px !important",
+    },
+    "&.Mui-disabled": {
+      bgcolor: "rgba(15, 23, 42, 0.025)",
+    },
+  },
+  "& .MuiInputBase-input": {
+    py: 1.05,
+    fontSize: 13.5,
+    color: BRAND.dark,
+  },
+  "& .MuiInputBase-input::placeholder": {
+    color: BRAND.gray,
+    opacity: 0.82,
+  },
+};
+
 function RankingViewAllButton({ disabled = false, onClick }) {
   return (
     <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
@@ -361,7 +398,6 @@ export default function HardwareInventory() {
 
   React.useEffect(() => {
     loadDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDetail closes over stable refs; adding it would re-fetch on every render.
   }, [search, platform, manufacturer, paginationModel.page, paginationModel.pageSize]);
 
   const refreshAll = () => {
@@ -707,72 +743,92 @@ export default function HardwareInventory() {
         </Grid>
       </Box>
 
-<Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
+
+      <SectionCard title="Hardware Inventory Detail">
         <Box
           sx={{
+            mb: 1.5,
+            p: { xs: 1, sm: 1.25 },
+            borderRadius: 2.5,
+            border: `1px solid ${BRAND.border}`,
+            bgcolor: BRAND.surfaceMuted,
             display: "grid",
-            gap: 2,
+            gap: 1,
             gridTemplateColumns: {
               xs: "1fr",
               sm: "repeat(2, minmax(0, 1fr))",
               lg: "2fr 1fr 1fr auto",
             },
+            alignItems: "center",
           }}
         >
           <TextField
-            label="Search devices"
             size="small"
+            placeholder="Search devices"
             value={search}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
               setSearch(e.target.value);
             }}
             fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={integratedFilterFieldSx}
           />
 
           <TextField
-            label="Platform"
             size="small"
+            placeholder="Platform"
             value={platform}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
               setPlatform(e.target.value);
             }}
             fullWidth
+            sx={integratedFilterFieldSx}
           />
 
           <TextField
-            label="Manufacturer"
             size="small"
+            placeholder="Manufacturer"
             value={manufacturer}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
               setManufacturer(e.target.value);
             }}
             fullWidth
+            sx={integratedFilterFieldSx}
           />
 
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={refreshAll}
-            sx={{ minHeight: 40 }}
+            sx={{
+              minHeight: 40,
+              px: 2,
+              borderRadius: 2,
+              borderColor: BRAND.teal,
+              color: BRAND.tealText,
+              fontWeight: 800,
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              bgcolor: "#fff",
+              "&:hover": {
+                borderColor: BRAND.tealHover,
+                bgcolor: BRAND.tealSoft,
+              },
+            }}
           >
             Refresh
           </Button>
         </Box>
-      </Paper>
 
-      <SectionCard title="Hardware Inventory Detail">
         <Box sx={{ height: { xs: 420, md: 560 }, width: "100%" }}>
           <DataGrid
             rows={detailRows}

@@ -7,10 +7,13 @@ import {
   Typography,
   TextField,
   Button,
+  Snackbar,
+  Alert,
   Switch,
   FormControlLabel,
   Chip,
   IconButton,
+  InputAdornment,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -23,6 +26,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import CloseIcon from "@mui/icons-material/Close";
@@ -242,6 +246,41 @@ const enterpriseDataGridSx = {
   },
 };
 
+
+const integratedFilterFieldSx = {
+  "& .MuiOutlinedInput-root": {
+    minHeight: 40,
+    borderRadius: 2,
+    bgcolor: "#fff",
+    transition: "border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
+    "& fieldset": {
+      borderColor: BRAND.border,
+    },
+    "&:hover fieldset": {
+      borderColor: BRAND.teal,
+    },
+    "&.Mui-focused": {
+      boxShadow: "0 0 0 3px rgba(27, 166, 166, 0.10)",
+    },
+    "&.Mui-focused fieldset": {
+      borderColor: `${BRAND.teal} !important`,
+      borderWidth: "1px !important",
+    },
+    "&.Mui-disabled": {
+      bgcolor: "rgba(15, 23, 42, 0.025)",
+    },
+  },
+  "& .MuiInputBase-input": {
+    py: 1.05,
+    fontSize: 13.5,
+    color: BRAND.dark,
+  },
+  "& .MuiInputBase-input::placeholder": {
+    color: BRAND.gray,
+    opacity: 0.82,
+  },
+};
+
 function RankingViewAllButton({ disabled = false, onClick }) {
   return (
     <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
@@ -457,13 +496,11 @@ export default function SoftwareInventory() {
   React.useEffect(() => {
     if (!appLevelDetail) return;
     loadDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDetail closes over stable refs; adding it would re-fetch on every render.
   }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize]);
 
   React.useEffect(() => {
     if (appLevelDetail || selectedHost) return;
     loadHosts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHosts closes over stable refs; adding it would re-fetch on every render.
   }, [
     appLevelDetail,
     selectedHost,
@@ -476,7 +513,6 @@ export default function SoftwareInventory() {
   React.useEffect(() => {
     if (!selectedHost || appLevelDetail) return;
     loadHostApps();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHostApps closes over stable refs; adding it would re-fetch on every render.
   }, [
     selectedHost,
     appLevelDetail,
@@ -855,86 +891,6 @@ export default function SoftwareInventory() {
         </Grid>
       </Box>
 
-<Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        }}
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "2fr 1fr 1fr auto",
-            },
-          }}
-        >
-          <TextField
-            label={appLevelDetail ? "Search apps" : selectedHost ? "Search apps for selected host" : "Search hosts"}
-            size="small"
-            value={appLevelDetail ? search : selectedHost ? hostAppsSearch : hostSearch}
-            onChange={(e) => {
-              if (appLevelDetail) {
-                setPaginationModel((prev) => ({ ...prev, page: 0 }));
-                setSearch(e.target.value);
-                return;
-              }
-
-              if (selectedHost) {
-                setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
-                setHostAppsSearch(e.target.value);
-                return;
-              }
-
-              setHostPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setHostSearch(e.target.value);
-            }}
-            fullWidth
-          />
-
-          <TextField
-            label="Source"
-            size="small"
-            value={source}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setSource(e.target.value);
-            }}
-            fullWidth
-            disabled={!appLevelDetail && !selectedHost}
-          />
-
-          <TextField
-            label="Publisher"
-            size="small"
-            value={publisher}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setPublisher(e.target.value);
-            }}
-            fullWidth
-            disabled={!appLevelDetail && !selectedHost}
-          />
-
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={refreshAll}
-            sx={{ minHeight: 40 }}
-          >
-            Refresh
-          </Button>
-        </Box>
-      </Paper>
 
       <SectionCard title="">
         <Box
@@ -1017,6 +973,112 @@ export default function SoftwareInventory() {
             }
             label="App-level detail"
           />
+        </Box>
+
+        <Box
+          sx={{
+            mb: 1.5,
+            p: { xs: 1, sm: 1.25 },
+            borderRadius: 2.5,
+            border: `1px solid ${BRAND.border}`,
+            bgcolor: BRAND.surfaceMuted,
+            display: "grid",
+            gap: 1,
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, minmax(0, 1fr))",
+              lg: "2fr 1fr 1fr auto",
+            },
+            alignItems: "center",
+          }}
+        >
+          <TextField
+            size="small"
+            placeholder={
+              appLevelDetail
+                ? "Search apps"
+                : selectedHost
+                ? "Search apps for selected host"
+                : "Search hosts"
+            }
+            value={appLevelDetail ? search : selectedHost ? hostAppsSearch : hostSearch}
+            onChange={(e) => {
+              if (appLevelDetail) {
+                setPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setSearch(e.target.value);
+                return;
+              }
+
+              if (selectedHost) {
+                setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
+                setHostAppsSearch(e.target.value);
+                return;
+              }
+
+              setHostPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostSearch(e.target.value);
+            }}
+            fullWidth
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={integratedFilterFieldSx}
+          />
+
+          <TextField
+            size="small"
+            placeholder="Source"
+            value={source}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setSource(e.target.value);
+            }}
+            fullWidth
+            disabled={!appLevelDetail && !selectedHost}
+            sx={integratedFilterFieldSx}
+          />
+
+          <TextField
+            size="small"
+            placeholder="Publisher"
+            value={publisher}
+            onChange={(e) => {
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setHostAppsPaginationModel((prev) => ({ ...prev, page: 0 }));
+              setPublisher(e.target.value);
+            }}
+            fullWidth
+            disabled={!appLevelDetail && !selectedHost}
+            sx={integratedFilterFieldSx}
+          />
+
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={refreshAll}
+            sx={{
+              minHeight: 40,
+              px: 2,
+              borderRadius: 2,
+              borderColor: BRAND.teal,
+              color: BRAND.tealText,
+              fontWeight: 800,
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              bgcolor: "#fff",
+              "&:hover": {
+                borderColor: BRAND.tealHover,
+                bgcolor: BRAND.tealSoft,
+              },
+            }}
+          >
+            Refresh
+          </Button>
         </Box>
 
         {!appLevelDetail && !selectedHost && (
