@@ -78,6 +78,8 @@ export default function CompositionBars({
   headerExtra = null,
   minHeight = 260,
   sx = null,
+  onClick = null,
+  actionLabel = "Open details",
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
@@ -102,21 +104,50 @@ export default function CompositionBars({
     }));
   }, []);
 
+  const interactive = typeof onClick === "function";
+
   return (
     <Paper
       elevation={0}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? actionLabel : undefined}
+      onClick={interactive ? onClick : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       sx={{
         p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        minHeight,
         height: minHeight,
         maxHeight: minHeight,
+        display: "flex",
+        flexDirection: "column",
         minWidth: 0,
         overflow: "hidden",
+        cursor: interactive ? "pointer" : "default",
+        transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease",
+        "&:hover": interactive
+          ? {
+              borderColor: BRAND.teal,
+              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
+              transform: "translateY(-1px)",
+            }
+          : undefined,
+        "&:focus-visible": interactive
+          ? {
+              outline: `2px solid ${BRAND.teal}`,
+              outlineOffset: 2,
+            }
+          : undefined,
         ...(sx || {}),
       }}
     >
@@ -242,12 +273,20 @@ export default function CompositionBars({
                   role={hasChildren ? "button" : undefined}
                   tabIndex={hasChildren ? 0 : undefined}
                   aria-expanded={hasChildren ? expanded : undefined}
-                  onClick={hasChildren ? () => toggleRow(rowKey) : undefined}
+                  onClick={
+                    hasChildren
+                      ? (event) => {
+                          event.stopPropagation();
+                          toggleRow(rowKey);
+                        }
+                      : undefined
+                  }
                   onKeyDown={
                     hasChildren
                       ? (event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
+                            event.stopPropagation();
                             toggleRow(rowKey);
                           }
                         }
@@ -255,7 +294,7 @@ export default function CompositionBars({
                   }
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) auto",
+                    gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
                     alignItems: "center",
                     columnGap: 1,
                     fontSize: 12.5,
@@ -307,6 +346,32 @@ export default function CompositionBars({
                     ) : null}
                   </Box>
 
+                  {hasChildren ? (
+                    <Tooltip title={expanded ? "Hide versions" : "Show grouped versions"} arrow>
+                      <IconButton
+                        size="small"
+                        aria-label={expanded ? "Hide grouped versions" : "Show grouped versions"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleRow(rowKey);
+                        }}
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          color: BRAND.tealText,
+                          flexShrink: 0,
+                          justifySelf: "center",
+                        }}
+                      >
+                        {expanded ? (
+                          <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18 }} />
+                        ) : (
+                          <KeyboardArrowRightRoundedIcon sx={{ fontSize: 18 }} />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+
                   <Stack
                     direction="row"
                     spacing={0.45}
@@ -324,31 +389,6 @@ export default function CompositionBars({
                     >
                       {pct}%
                     </Typography>
-                    {hasChildren ? (
-                      <Tooltip title={expanded ? "Hide versions" : "Show grouped versions"} arrow>
-                        <IconButton
-                          size="small"
-                          aria-label={expanded ? "Hide grouped versions" : "Show grouped versions"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleRow(rowKey);
-                          }}
-                          sx={{
-                            width: 20,
-                            height: 20,
-                            ml: 0.1,
-                            color: BRAND.tealText,
-                            flexShrink: 0,
-                          }}
-                        >
-                          {expanded ? (
-                            <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18 }} />
-                          ) : (
-                            <KeyboardArrowRightRoundedIcon sx={{ fontSize: 18 }} />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    ) : null}
                   </Stack>
                 </Box>
 
@@ -404,7 +444,7 @@ export default function CompositionBars({
                             <Box
                               sx={{
                                 display: "grid",
-                                gridTemplateColumns: "minmax(0, 1fr) auto",
+                                gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
                                 alignItems: "center",
                                 columnGap: 0.75,
                                 minWidth: 0,

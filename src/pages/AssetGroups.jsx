@@ -333,6 +333,12 @@ function getCatalogOptions(fieldSpec, fieldKey) {
     .filter(Boolean);
 }
 
+function isField(fieldSpec, fieldKey, allowed) {
+  const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
+  const label = normalizeCriteriaKey(fieldSpec?.label);
+  return allowed.includes(key) || allowed.includes(label);
+}
+
 function getSuggestionFieldKey(fieldSpec, fieldKey) {
   const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
   const label = normalizeCriteriaKey(fieldSpec?.label);
@@ -354,6 +360,14 @@ function getSuggestionFieldKey(fieldSpec, fieldKey) {
   if (["ip", "local_ip", "localip", "ip_address", "ipaddress"].includes(candidate)) return "ip";
 
   return fieldSpec?.key || fieldKey || "";
+}
+
+function isPlatformField(fieldSpec, fieldKey) {
+  return getSuggestionFieldKey(fieldSpec, fieldKey) === "platform";
+}
+
+function isPluginEnabledField(fieldSpec, fieldKey) {
+  return getSuggestionFieldKey(fieldSpec, fieldKey) === "pluginEnabled";
 }
 
 function isIpSubnetOperator(opSpec) {
@@ -421,9 +435,9 @@ function getPlaceholder(fieldKey, multiple, partialText) {
   if (fieldKey === "hostname") return partialText ? "e.g. macbook or server" : "Select or type hostname…";
   if (fieldKey === "osRelease") return "Select or type OS release…";
   if (fieldKey === "agentVersion") return "Select or type agent version…";
-  if (fieldKey === "architecture") return "e.g. arm64 or x64";
-  if (fieldKey === "policyVersion") return "e.g. 1777000000004";
-  /* if (fieldKey === "pluginEnabled") return "Select enabled state…"; */
+  if (fieldKey === "architecture") return "Select architecture…";
+  if (fieldKey === "policyVersion") return "Select or type tenant policy version…";
+  if (fieldKey === "pluginEnabled") return "Select enabled state…";
   if (fieldKey === "platform") return "Select platform…";
   return "Value";
 }
@@ -877,16 +891,7 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                   const expectsArray = operatorExpectsArray(newOpSpec);
                   let newValue = pred.value;
                   if (expectsArray && !wasArray) {
-                    // Switching from a single-value op (e.g. `equals`)
-                    // to an array op (`in`) — coerce the existing
-                    // scalar to a CSV split so the user doesn't lose
-                    // their typing. Empty/null → empty array.
-                    newValue = pred.value
-                      ? String(pred.value)
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean)
-                      : [];
+                    newValue = pred.value ? parseCommaSeparatedValues(pred.value) : [];
                   } else if (!expectsArray && wasArray) {
                     newValue = pred.value[0] || "";
                   }
@@ -955,73 +960,13 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
 // different result pages before submitting the group.
 
 function normalizeKnownDevice(d) {
-  const groupCount = Number(d?.groupCount ?? d?.group_count ?? 0);
-  const isGrouped =
-    d?.isGrouped === true ||
-    d?.is_grouped === true ||
-    String(d?.groupCoverage ?? d?.group_coverage ?? "").toLowerCase() === "grouped" ||
-    groupCount > 0;
-
   return {
     deviceId: String(d?.deviceId || "").trim(),
     hostname: String(d?.hostname || "").trim(),
     platform: String(d?.platform || d?.osPlatform || "").trim(),
     agentVersion: String(d?.agentVersion || d?.agent_version || "").trim(),
     connected: d?.connected === true,
-    isGrouped,
-    groupCount,
-    groupCoverage: isGrouped ? "grouped" : "ungrouped",
   };
-}
-
-function DeviceGroupCoverageChip({ device }) {
-  const isGrouped = device?.isGrouped === true || Number(device?.groupCount || 0) > 0;
-  const groupCount = Number(device?.groupCount || 0);
-
-  if (!isGrouped) {
-    return (
-      <Tooltip title="This device is not assigned to any asset group yet." arrow>
-        <Chip
-          size="small"
-          icon={<Inventory2OutlinedIcon sx={{ fontSize: 13 }} />}
-          label="Ungrouped"
-          sx={{
-            height: 20,
-            fontSize: 10.5,
-            bgcolor: ROLE.cautionSoft,
-            color: BRAND.dark,
-            border: `1px solid ${ROLE.caution}88`,
-            fontWeight: 800,
-            "& .MuiChip-icon": {
-              color: ROLE.caution,
-              ml: 0.5,
-              mr: -0.25,
-            },
-          }}
-        />
-      </Tooltip>
-    );
-  }
-
-  return (
-    <Tooltip
-      title={`Assigned to ${groupCount} asset group${groupCount === 1 ? "" : "s"}.`}
-      arrow
-    >
-      <Chip
-        size="small"
-        label={`${groupCount} group${groupCount === 1 ? "" : "s"}`}
-        sx={{
-          height: 20,
-          fontSize: 10.5,
-          bgcolor: BRAND.tealSoft,
-          color: BRAND.tealText,
-          border: `1px solid ${BRAND.teal}55`,
-          fontWeight: 800,
-        }}
-      />
-    </Tooltip>
-  );
 }
 
 function KnownDevicesPicker({
@@ -1228,14 +1173,7 @@ function KnownDevicesPicker({
                   </Typography>
                 </Box>
 
-                <Stack
-                  direction="row"
-                  spacing={0.5}
-                  alignItems="center"
-                  justifyContent="flex-end"
-                  sx={{ flexShrink: 0, flexWrap: "wrap", maxWidth: { xs: 148, sm: 260 } }}
-                >
-                  <DeviceGroupCoverageChip device={d} />
+                <Stack direction="row" spacing={0.5} alignItems="center">
                   {d.platform ? (
                     <Chip
                       size="small"
@@ -1457,6 +1395,7 @@ function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefr
 }
 
 function UngroupedDevicesDrawer({ open, onClose, notify }) {
+  const drawerContentRef = React.useRef(null);
   const [rows, setRows] = React.useState([]);
   const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -1609,7 +1548,7 @@ function UngroupedDevicesDrawer({ open, onClose, notify }) {
         },
       }}
     >
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
+      <Box ref={drawerContentRef} sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
         <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1.5 }}>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center">
@@ -1678,6 +1617,41 @@ function UngroupedDevicesDrawer({ open, onClose, notify }) {
               setPlatform(e.target.value);
             }}
             helperText=" "
+            SelectProps={{
+              MenuProps: {
+                // Keep the menu inside the raised drawer instead of
+                // portaling it back to the page. When this drawer is
+                // launched from the New group dialog, the default Menu
+                // portal can render behind the drawer/dialog stack and
+                // trigger aria-hidden focus warnings.
+                disablePortal: true,
+                disableScrollLock: true,
+                container: () => drawerContentRef.current,
+                PaperProps: {
+                  sx: {
+                    mt: 0.5,
+                    borderRadius: 2,
+                    border: `1px solid ${BRAND.border}`,
+                    boxShadow: BRAND.shadow,
+                    zIndex: (theme) => theme.zIndex.modal + 60,
+                    "& .MuiMenuItem-root": {
+                      fontSize: 13,
+                      minHeight: 38,
+                      "&.Mui-selected": {
+                        bgcolor: BRAND.tealSoft,
+                        color: BRAND.dark,
+                      },
+                      "&.Mui-selected:hover": {
+                        bgcolor: BRAND.tealSoft,
+                      },
+                    },
+                  },
+                },
+                MenuListProps: {
+                  dense: true,
+                },
+              },
+            }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="windows">Windows</MenuItem>
@@ -1743,7 +1717,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
   const [description, setDescription] = React.useState("");
   const [kind, setKind] = React.useState("static");
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
-  const [_search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
@@ -2532,7 +2506,6 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
     setMemberSearch("");
     setMemberPaginationModel({ page: 0, pageSize: 25 });
     setMemberSortModel([{ field: "hostname", sort: "asc" }]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-reset member view when the dialog opens for a different group id; full group object would re-trigger on every parent re-render.
   }, [open, group?.id]);
 
   // Decorate device IDs with hostnames using the known-devices index.
@@ -2986,7 +2959,7 @@ export default function AssetGroups() {
           connected: d?.connected === true,
         })).filter((d) => d.deviceId)
       );
-    } catch {
+    } catch (err) {
       // Devices list isn't critical for the groups page itself; just
       // means the picker / hostname decoration shows IDs only.
       notify("error", "Failed to load device list");

@@ -28,8 +28,10 @@ import Grid from "@mui/material/Grid";
 import {
   Backdrop,
   Box,
+  Button,
   Chip,
   CircularProgress,
+  Divider,
   Fade,
   IconButton,
   MenuItem,
@@ -41,6 +43,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   Tabs,
   TextField,
@@ -54,6 +57,7 @@ import WifiTetheringOutlinedIcon from "@mui/icons-material/WifiTetheringOutlined
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import MemoryRoundedIcon from "@mui/icons-material/MemoryRounded";
 import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 
 import { dashboardApi } from "../api/dashboard";
@@ -407,6 +411,9 @@ function AgentDetailWorkbench({
   hardware,
   softwareRows,
   softwareTotal,
+  softwareLoading = false,
+  softwarePaginationModel,
+  onSoftwarePaginationModelChange,
   tab,
   onTabChange,
   onBack,
@@ -416,6 +423,8 @@ function AgentDetailWorkbench({
   const platform = formatDetailValue(profile?.platform || hardware?.platform);
   const agentVersion = formatDetailValue(profile?.agentVersion || selectedHost?.agent_version);
   const softwareCount = Number.isFinite(Number(softwareTotal)) ? Number(softwareTotal) : softwareRows.length;
+  const softwarePage = Number(softwarePaginationModel?.page || 0);
+  const softwarePageSize = Number(softwarePaginationModel?.pageSize || 8);
 
   return (
     <Box>
@@ -545,40 +554,77 @@ function AgentDetailWorkbench({
           {!loading && tab === 2 ? (
             <Box>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-                  Installed applications
-                </Typography>
-                <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, alignSelf: { xs: "flex-start", sm: "center" } }} />
+                <Box>
+                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
+                    Installed applications
+                  </Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
+                    Paginated software inventory for this device.
+                  </Typography>
+                </Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}>
+                  {softwareLoading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : null}
+                  <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
+                </Stack>
               </Stack>
-              <TableContainer sx={{ maxHeight: 360, border: `1px solid ${BRAND.border}`, borderRadius: 2 }}>
-                <Table stickyHeader size="small" aria-label="agent software table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 800 }}>Application</TableCell>
-                      <TableCell sx={{ fontWeight: 800 }}>Publisher</TableCell>
-                      <TableCell sx={{ fontWeight: 800 }}>Source</TableCell>
-                      <TableCell sx={{ fontWeight: 800 }}>Detected</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {softwareRows.map((app, index) => (
-                      <TableRow key={app.id || `${app.name}-${index}`} hover>
-                        <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
-                        <TableCell>{formatDetailValue(app.publisher)}</TableCell>
-                        <TableCell>{formatDetailValue(app.source)}</TableCell>
-                        <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {softwareRows.length === 0 ? (
+              <Paper elevation={0} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table stickyHeader size="small" aria-label="agent software table">
+                    <TableHead>
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ color: "text.secondary" }}>
-                          No software inventory found for this device.
-                        </TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Application</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Publisher</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Source</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Detected</TableCell>
                       </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {softwareRows.map((app, index) => (
+                        <TableRow key={app.id || `${app.name}-${index}`} hover>
+                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
+                          <TableCell>{formatDetailValue(app.publisher)}</TableCell>
+                          <TableCell>{formatDetailValue(app.source)}</TableCell>
+                          <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {softwareRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
+                            {softwareLoading ? "Loading software inventory…" : "No software inventory found for this device."}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={softwareCount}
+                  page={softwarePage}
+                  rowsPerPage={softwarePageSize}
+                  rowsPerPageOptions={[8, 16, 24, 50]}
+                  onPageChange={(_, nextPage) => {
+                    onSoftwarePaginationModelChange?.({ page: nextPage, pageSize: softwarePageSize });
+                  }}
+                  onRowsPerPageChange={(event) => {
+                    const nextPageSize = Number(event.target.value || 8);
+                    onSoftwarePaginationModelChange?.({ page: 0, pageSize: nextPageSize });
+                  }}
+                  labelRowsPerPage="Rows per page:"
+                  sx={{
+                    borderTop: `1px solid ${BRAND.border}`,
+                    bgcolor: BRAND.surface,
+                    "& .MuiTablePagination-toolbar": {
+                      minHeight: 48,
+                      px: { xs: 1, sm: 2 },
+                    },
+                    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+                      fontSize: 12,
+                      color: "text.secondary",
+                    },
+                  }}
+                />
+              </Paper>
             </Box>
           ) : null}
         </Box>
@@ -589,7 +635,7 @@ function AgentDetailWorkbench({
 
 // ---------- component --------------------------------------------------------
 
-export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce = 0 }) {
+export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce = 0, onNavigateToHardwareInventory }) {
   // Set<agent_id> of devices currently connected (has an active
   // gRPC session in the last heartbeat window). Drives the "Online
   // now" KPI and the traffic-light dot on each row in the hosts
@@ -639,6 +685,11 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [agentHardware, setAgentHardware] = React.useState(null);
   const [agentSoftwareRows, setAgentSoftwareRows] = React.useState([]);
   const [agentSoftwareTotal, setAgentSoftwareTotal] = React.useState(0);
+  const [agentSoftwareLoading, setAgentSoftwareLoading] = React.useState(false);
+  const [agentSoftwarePaginationModel, setAgentSoftwarePaginationModel] = React.useState({
+    page: 0,
+    pageSize: 8,
+  });
 
   React.useEffect(() => {
     const id = window.setTimeout(() => {
@@ -893,6 +944,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     setSelectedAgent(host || null);
     setAgentDetailTab(0);
     setAgentDetailError("");
+    setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
 
   const handleCloseAgentDetail = React.useCallback(() => {
@@ -903,6 +955,8 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     setAgentHardware(null);
     setAgentSoftwareRows([]);
     setAgentSoftwareTotal(0);
+    setAgentSoftwareLoading(false);
+    setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
 
   const openInactiveAssetsWorkbench = React.useCallback(() => {
@@ -924,15 +978,12 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     setAgentDetailError("");
     setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
     setAgentHardware(null);
-    setAgentSoftwareRows([]);
-    setAgentSoftwareTotal(0);
 
     Promise.allSettled([
       dashboardApi.getHostDetail(agentId),
       getHardwareInventoryDetail({ search: agentId, page: 1, pageSize: 10 }),
-      getSoftwareInventoryHostApps(agentId, { page: 1, pageSize: 8 }),
     ])
-      .then(([profileRes, hardwareRes, softwareRes]) => {
+      .then(([profileRes, hardwareRes]) => {
         if (cancelled) return;
 
         if (profileRes.status === "fulfilled") {
@@ -945,13 +996,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
           setAgentHardware(normalizeHardwareDetailPayload(hardwareRes.value, agentId));
         }
 
-        if (softwareRes.status === "fulfilled") {
-          const rows = Array.isArray(softwareRes.value?.items) ? softwareRes.value.items : [];
-          setAgentSoftwareRows(rows);
-          setAgentSoftwareTotal(Number(softwareRes.value?.total ?? rows.length));
-        }
-
-        const failed = [profileRes, hardwareRes, softwareRes].some((res) => res.status === "rejected");
+        const failed = [profileRes, hardwareRes].some((res) => res.status === "rejected");
         if (failed) {
           setAgentDetailError("partial");
         }
@@ -969,6 +1014,39 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
       cancelled = true;
     };
   }, [selectedAgent]);
+
+  React.useEffect(() => {
+    const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
+    if (!agentId) return undefined;
+
+    let cancelled = false;
+    setAgentSoftwareLoading(true);
+
+    getSoftwareInventoryHostApps(agentId, {
+      page: agentSoftwarePaginationModel.page + 1,
+      pageSize: agentSoftwarePaginationModel.pageSize,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.items) ? res.items : [];
+        setAgentSoftwareRows(rows);
+        setAgentSoftwareTotal(Number(res?.total ?? rows.length));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("agent software inventory load failed:", err?.message || err);
+        setAgentSoftwareRows([]);
+        setAgentSoftwareTotal(0);
+        setAgentDetailError((prev) => prev || "partial");
+      })
+      .finally(() => {
+        if (!cancelled) setAgentSoftwareLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgent, agentSoftwarePaginationModel.page, agentSoftwarePaginationModel.pageSize]);
 
   const selectedGroup = React.useMemo(
     () => groupCatalog.find((g) => String(g.id) === String(groupFilter)) || null,
@@ -1161,6 +1239,13 @@ const osVersionItems = React.useMemo(() => {
   // from the summary + hosts aggregates.
   const kpis = React.useMemo(() => {
     const activeHosts = Number(summary?.activeHosts ?? hosts.length ?? 0);
+    const platformBuckets = Array.isArray(summary?.osPlatform)
+      ? summary.osPlatform.length
+      : new Set(
+          hosts
+            .map((h) => normalizePlatform(h.os_platform))
+            .filter(Boolean)
+        ).size;
     const versionSet = new Set(
       hosts
         .map((h) => String(h.agent_version || "").trim())
@@ -1277,6 +1362,8 @@ const osVersionItems = React.useMemo(() => {
               emptyLabel="No version data"
               minHeight={280}
               maxItems={6}
+              onClick={onNavigateToHardwareInventory}
+              actionLabel="Open Hardware Inventory"
             />
           </Box>
         </Grid>
@@ -1298,6 +1385,9 @@ const osVersionItems = React.useMemo(() => {
                 hardware={agentHardware}
                 softwareRows={agentSoftwareRows}
                 softwareTotal={agentSoftwareTotal}
+                softwareLoading={agentSoftwareLoading}
+                softwarePaginationModel={agentSoftwarePaginationModel}
+                onSoftwarePaginationModelChange={setAgentSoftwarePaginationModel}
                 tab={agentDetailTab}
                 onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
                 onBack={handleCloseAgentDetail}
