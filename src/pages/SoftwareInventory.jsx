@@ -144,6 +144,29 @@ function formatDate(value) {
   });
 }
 
+
+function getRankingItems(rankings, key) {
+  const section = rankings?.[key];
+
+  if (Array.isArray(section)) {
+    return section;
+  }
+
+  if (Array.isArray(section?.items)) {
+    return section.items;
+  }
+
+  return [];
+}
+
+function getRankingTotal(rankings, key, totalKey) {
+  const section = rankings?.[key];
+  const rawTotal = section?.total ?? section?.totalValue ?? rankings?.[totalKey];
+  const numericTotal = Number(rawTotal);
+
+  return Number.isFinite(numericTotal) && numericTotal > 0 ? numericTotal : null;
+}
+
 function normalizeRankingRows(items = [], fallbackColor = BRAND.teal) {
   return (Array.isArray(items) ? items : [])
     .filter((item) => Number(item?.value || 0) > 0)
@@ -577,24 +600,64 @@ export default function SoftwareInventory() {
     { field: "publishers", headerName: "Publishers", minWidth: 120, flex: 0.5 },
   ];
 
+  const topInstalledAppsItems = React.useMemo(
+    () => getRankingItems(rankings, "topInstalledApps"),
+    [rankings]
+  );
+
+  const topPublishersItems = React.useMemo(
+    () => getRankingItems(rankings, "topPublishers"),
+    [rankings]
+  );
+
+  const topSourcesItems = React.useMemo(
+    () => getRankingItems(rankings, "topSources"),
+    [rankings]
+  );
+
+  const appsPerDeviceItems = React.useMemo(
+    () => getRankingItems(rankings, "appsPerDevice"),
+    [rankings]
+  );
+
+  const topInstalledAppsTotal = React.useMemo(
+    () => getRankingTotal(rankings, "topInstalledApps", "topInstalledAppsTotal"),
+    [rankings]
+  );
+
+  const topPublishersTotal = React.useMemo(
+    () => getRankingTotal(rankings, "topPublishers", "topPublishersTotal"),
+    [rankings]
+  );
+
+  const topSourcesTotal = React.useMemo(
+    () => getRankingTotal(rankings, "topSources", "topSourcesTotal"),
+    [rankings]
+  );
+
+  const appsPerDeviceTotal = React.useMemo(
+    () => getRankingTotal(rankings, "appsPerDevice", "appsPerDeviceTotal"),
+    [rankings]
+  );
+
   const topInstalledAppsRows = React.useMemo(
-    () => normalizeRankingRows(rankings?.topInstalledApps, BRAND.teal),
-    [rankings?.topInstalledApps]
+    () => normalizeRankingRows(topInstalledAppsItems, BRAND.teal),
+    [topInstalledAppsItems]
   );
 
   const topPublishersRows = React.useMemo(
-    () => normalizeRankingRows(rankings?.topPublishers, BRAND.teal),
-    [rankings?.topPublishers]
+    () => normalizeRankingRows(topPublishersItems, BRAND.teal),
+    [topPublishersItems]
   );
 
   const topSourcesRows = React.useMemo(
-    () => normalizeRankingRows(rankings?.topSources, BRAND.dark),
-    [rankings?.topSources]
+    () => normalizeRankingRows(topSourcesItems, BRAND.dark),
+    [topSourcesItems]
   );
 
   const appsPerDeviceRows = React.useMemo(
-    () => normalizeRankingRows(rankings?.appsPerDevice, BRAND.alert.error),
-    [rankings?.appsPerDevice]
+    () => normalizeRankingRows(appsPerDeviceItems, BRAND.alert.error),
+    [appsPerDeviceItems]
   );
 
   const openRankingDialog = React.useCallback((config) => {
@@ -620,10 +683,19 @@ export default function SoftwareInventory() {
     });
   }, [rankingDialog?.items, rankingDialogSearch]);
 
-  const rankingDialogTotal = React.useMemo(
-    () => rankingDialogRows.reduce((acc, row) => acc + Number(row?.value || 0), 0),
-    [rankingDialogRows]
-  );
+  const rankingDialogTotal = React.useMemo(() => {
+    const configuredTotal = Number(rankingDialog?.totalValue);
+
+    if (
+      !rankingDialogSearch.trim() &&
+      Number.isFinite(configuredTotal) &&
+      configuredTotal > 0
+    ) {
+      return configuredTotal;
+    }
+
+    return rankingDialogRows.reduce((acc, row) => acc + Number(row?.value || 0), 0);
+  }, [rankingDialog?.totalValue, rankingDialogRows, rankingDialogSearch]);
 
   const rankingDialogColumns = React.useMemo(
     () => [
@@ -814,10 +886,12 @@ export default function SoftwareInventory() {
                 emptyLabel="No installed apps data"
                 minHeight={260}
                 maxItems={5}
+                totalValue={topInstalledAppsTotal}
                 headerExtra={renderViewAllButton({
                   title: "Top installed apps",
                   subtitle: "Complete application ranking by detected installs.",
                   items: topInstalledAppsRows,
+                  totalValue: topInstalledAppsTotal,
                   totalLabel: "installs",
                   labelHeader: "Application",
                   valueHeader: "Installs",
@@ -835,10 +909,12 @@ export default function SoftwareInventory() {
                 emptyLabel="No publisher data"
                 minHeight={260}
                 maxItems={5}
+                totalValue={topPublishersTotal}
                 headerExtra={renderViewAllButton({
                   title: "Top publishers",
                   subtitle: "Complete publisher ranking by detected applications.",
                   items: topPublishersRows,
+                  totalValue: topPublishersTotal,
                   totalLabel: "apps",
                   labelHeader: "Publisher",
                   valueHeader: "Apps",
@@ -856,10 +932,12 @@ export default function SoftwareInventory() {
                 emptyLabel="No source data"
                 minHeight={260}
                 maxItems={5}
+                totalValue={topSourcesTotal}
                 headerExtra={renderViewAllButton({
                   title: "Top sources",
                   subtitle: "Complete software source ranking.",
                   items: topSourcesRows,
+                  totalValue: topSourcesTotal,
                   totalLabel: "apps",
                   labelHeader: "Source",
                   valueHeader: "Apps",
@@ -877,10 +955,12 @@ export default function SoftwareInventory() {
                 emptyLabel="No device app data"
                 minHeight={260}
                 maxItems={5}
+                totalValue={appsPerDeviceTotal}
                 headerExtra={renderViewAllButton({
                   title: "Apps per device",
                   subtitle: "Complete device ranking by installed applications.",
                   items: appsPerDeviceRows,
+                  totalValue: appsPerDeviceTotal,
                   totalLabel: "apps",
                   labelHeader: "Device",
                   valueHeader: "Apps",

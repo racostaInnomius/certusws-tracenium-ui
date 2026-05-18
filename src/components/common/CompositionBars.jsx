@@ -78,6 +78,8 @@ export default function CompositionBars({
   headerExtra = null,
   minHeight = 260,
   sx = null,
+  onClick = null,
+  actionLabel = "Open details",
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
@@ -102,9 +104,25 @@ export default function CompositionBars({
     }));
   }, []);
 
+  const interactive = typeof onClick === "function";
+
   return (
     <Paper
       elevation={0}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? actionLabel : undefined}
+      onClick={interactive ? onClick : undefined}
+      onKeyDown={
+        interactive
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       sx={{
         p: 2,
         borderRadius: 2,
@@ -115,6 +133,21 @@ export default function CompositionBars({
         flexDirection: "column",
         minWidth: 0,
         overflow: "hidden",
+        cursor: interactive ? "pointer" : "default",
+        transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease",
+        "&:hover": interactive
+          ? {
+              borderColor: BRAND.teal,
+              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
+              transform: "translateY(-1px)",
+            }
+          : undefined,
+        "&:focus-visible": interactive
+          ? {
+              outline: `2px solid ${BRAND.teal}`,
+              outlineOffset: 2,
+            }
+          : undefined,
         ...(sx || {}),
       }}
     >
@@ -240,12 +273,20 @@ export default function CompositionBars({
                   role={hasChildren ? "button" : undefined}
                   tabIndex={hasChildren ? 0 : undefined}
                   aria-expanded={hasChildren ? expanded : undefined}
-                  onClick={hasChildren ? () => toggleRow(rowKey) : undefined}
+                  onClick={
+                    hasChildren
+                      ? (event) => {
+                          event.stopPropagation();
+                          toggleRow(rowKey);
+                        }
+                      : undefined
+                  }
                   onKeyDown={
                     hasChildren
                       ? (event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
+                            event.stopPropagation();
                             toggleRow(rowKey);
                           }
                         }
