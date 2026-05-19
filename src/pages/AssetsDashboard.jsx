@@ -414,6 +414,8 @@ function AgentDetailWorkbench({
   softwareLoading = false,
   softwarePaginationModel,
   onSoftwarePaginationModelChange,
+  printerRows = [],
+  printersLoading = false,
   tab,
   onTabChange,
   onBack,
@@ -511,6 +513,7 @@ function AgentDetailWorkbench({
           <Tab label="Agent" />
           <Tab label="Hardware" />
           <Tab label="Software" />
+          <Tab label="Printers" />
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -627,6 +630,124 @@ function AgentDetailWorkbench({
               </Paper>
             </Box>
           ) : null}
+
+          {!loading && tab === 3 ? (
+            <Box>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                alignItems={{ xs: "stretch", sm: "center" }}
+                justifyContent="space-between"
+                sx={{ mb: 1.5 }}
+              >
+                <Box>
+                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
+                    Configured printers
+                  </Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
+                    Print queues this device knows about, ordered with the
+                    default first, then network printers, then local.
+                  </Typography>
+                </Box>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}
+                >
+                  {printersLoading ? (
+                    <CircularProgress size={16} sx={{ color: BRAND.teal }} />
+                  ) : null}
+                  <Chip
+                    size="small"
+                    label={`${printerRows.length} printer${printerRows.length === 1 ? "" : "s"} detected`}
+                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }}
+                  />
+                </Stack>
+              </Stack>
+              <Paper
+                elevation={0}
+                sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}
+              >
+                <TableContainer sx={{ maxHeight: 360 }}>
+                  <Table stickyHeader size="small" aria-label="agent printers table">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Name</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Driver</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Port</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {printerRows.map((p, index) => (
+                        <TableRow key={p.id || p.installId || `${p.name}-${index}`} hover>
+                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>
+                            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
+                              <span>{formatDetailValue(p.name)}</span>
+                              {p.isDefault ? (
+                                <Chip
+                                  size="small"
+                                  label="Default"
+                                  sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 800, height: 18 }}
+                                />
+                              ) : null}
+                              {p.isShared ? (
+                                <Chip
+                                  size="small"
+                                  label="Shared"
+                                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, height: 18 }}
+                                />
+                              ) : null}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>{formatDetailValue(p.driver)}</TableCell>
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                            {formatDetailValue(p.port)}
+                          </TableCell>
+                          <TableCell>{p.isNetwork ? "Network" : "Local"}</TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={p.status || "unknown"}
+                              sx={{
+                                bgcolor:
+                                  p.status === "online"
+                                    ? ROLE.positiveSoft
+                                    : p.status === "error"
+                                    ? ROLE.criticalSoft || `${ROLE.critical}33`
+                                    : p.status === "offline"
+                                    ? BRAND.surfaceMuted
+                                    : BRAND.surfaceMuted,
+                                color:
+                                  p.status === "online"
+                                    ? ROLE.positive
+                                    : p.status === "error"
+                                    ? ROLE.critical
+                                    : "text.secondary",
+                                fontWeight: 800,
+                                textTransform: "capitalize",
+                              }}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {printerRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
+                            {printersLoading
+                              ? "Loading printers…"
+                              : "No printers configured on this device."}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Box>
+          ) : null}
         </Box>
       </Paper>
     </Box>
@@ -690,6 +811,12 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     page: 0,
     pageSize: 8,
   });
+  // Printers tab state. Single fetch (no pagination — printer counts
+  // per device are typically <10, pathologic <50; the device_printers
+  // table indexes (agent_id) for fast retrieval and we render the
+  // full list).
+  const [agentPrinterRows, setAgentPrinterRows] = React.useState([]);
+  const [agentPrintersLoading, setAgentPrintersLoading] = React.useState(false);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => {
@@ -1048,6 +1175,44 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     };
   }, [selectedAgent, agentSoftwarePaginationModel.page, agentSoftwarePaginationModel.pageSize]);
 
+  // Printers loader. Single fetch when selectedAgent changes (no
+  // pagination needed — small list per device). Failure does NOT
+  // surface as a hard error on the detail view (just keeps empty
+  // array + sets the soft "partial" flag), so a pre-1.1.18 agent or
+  // a tenant whose backend is still mid-deploy don't break the
+  // whole detail experience.
+  React.useEffect(() => {
+    const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
+    if (!agentId) {
+      setAgentPrinterRows([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setAgentPrintersLoading(true);
+
+    dashboardApi
+      .getHostPrinters(agentId)
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res) ? res : [];
+        setAgentPrinterRows(rows);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn("agent printers load failed:", err?.message || err);
+        setAgentPrinterRows([]);
+        setAgentDetailError((prev) => prev || "partial");
+      })
+      .finally(() => {
+        if (!cancelled) setAgentPrintersLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgent]);
+
   const selectedGroup = React.useMemo(
     () => groupCatalog.find((g) => String(g.id) === String(groupFilter)) || null,
     [groupCatalog, groupFilter]
@@ -1388,6 +1553,8 @@ const osVersionItems = React.useMemo(() => {
                 softwareLoading={agentSoftwareLoading}
                 softwarePaginationModel={agentSoftwarePaginationModel}
                 onSoftwarePaginationModelChange={setAgentSoftwarePaginationModel}
+                printerRows={agentPrinterRows}
+                printersLoading={agentPrintersLoading}
                 tab={agentDetailTab}
                 onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
                 onBack={handleCloseAgentDetail}
