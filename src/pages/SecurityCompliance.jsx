@@ -115,6 +115,21 @@ const STATUS_META = {
     icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
     fg: BRAND.gray,
     bg: BRAND.surfaceMuted
+  },
+  // New status (2026-05-20). Distinct from "unknown" so we can tell
+  // operators "we don't have enough evidence to score this device yet"
+  // (a transient enrollment state, or a host whose evaluator hit fewer
+  // than MIN_APPLICABLE_CHECKS_FOR_SCORE applicable rules) vs "the
+  // device reported but every rule errored" (true unknown). Same
+  // neutral gray visual — both states are "no actionable verdict" —
+  // but the label tells the operator what to expect:
+  //   "Unknown"   → there's a problem with the evaluator/evidence.
+  //   "No data"   → wait for the next reporting cycle.
+  insufficient_data: {
+    label: "No data",
+    icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
+    fg: BRAND.gray,
+    bg: BRAND.surfaceMuted
   }
 };
 
@@ -210,7 +225,42 @@ function FrameworkChip({ framework, controlId, controlLevel, controlTitle, refer
 }
 
 function ScoreBar({ value, labelSuffix = "%" }) {
-  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  // Three distinct visual states, not two:
+  //
+  //   - score === null / undefined → "no data" (neutral gray "—",
+  //     no bar). Previously we coerced null → 0 with `Number(value) || 0`,
+  //     which painted a full-width red bar at "0%" for devices that
+  //     had simply not reported a scorable compliance posture yet
+  //     (e.g. enrolled <1h, evidence collector still warming up, or
+  //     the evaluator's MIN_APPLICABLE_CHECKS_FOR_SCORE threshold
+  //     gated the result). That was misleading — "no signal" is not
+  //     "catastrophic failure", and the red bar pulled the operator's
+  //     eye to devices that didn't actually need attention.
+  //
+  //   - score === 0 → legacy "0%" rendering, kept for backward
+  //     compat with rows persisted before the null-gating landed
+  //     (2026-05-20). After ~90 days of snapshot retention this case
+  //     disappears.
+  //
+  //   - score 1..100 → normal progress bar with role-based color.
+  //
+  // We treat the explicit numeric 0 separately from null because
+  // `Number(0) || 0` would otherwise mask a real 0 score behind the
+  // null check — JS truthy/falsy on numbers bites here.
+  const isNumeric = value !== null && value !== undefined && Number.isFinite(Number(value));
+  if (!isNumeric) {
+    return (
+      <Box sx={{ minWidth: 110 }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.gray }}>
+          —
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray }}>
+          no data
+        </Typography>
+      </Box>
+    );
+  }
+  const pct = Math.max(0, Math.min(100, Number(value)));
   const color = pct >= 85 ? ROLE.positive : pct >= 60 ? ROLE.caution : ROLE.critical;
   return (
     <Box sx={{ minWidth: 110 }}>
@@ -821,7 +871,14 @@ export default function SecurityCompliance() {
                         <StatusChip status={d.overallStatus || "unknown"} />
                       </TableCell>
                       <TableCell align="right">
-                        <ScoreBar value={score ?? 0} />
+                        {/* Pass `score` through unchanged — null is now a
+                            meaningful "insufficient_data" signal that
+                            ScoreBar renders as "—" with neutral gray.
+                            The previous `score ?? 0` coerced null → 0
+                            and painted a full red bar for devices that
+                            had simply not reported a scorable posture,
+                            making them look catastrophically broken. */}
+                        <ScoreBar value={score} />
                       </TableCell>
                       {selectedFramework ? (
                         <TableCell align="right">
@@ -1213,7 +1270,10 @@ function DeviceDrawerContent({
                   Weighted score
                 </Typography>
                 <Box sx={{ mt: 0.5 }}>
-                  <ScoreBar value={device.overallScore ?? 0} />
+                  {/* Drawer header score — pass null through so the
+                      "no data" rendering kicks in for insufficient-
+                      data devices instead of showing a fake 0%. */}
+                  <ScoreBar value={device.overallScore} />
                 </Box>
               </Paper>
             </Grid>
