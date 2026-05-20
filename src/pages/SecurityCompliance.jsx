@@ -858,8 +858,31 @@ export default function SecurityCompliance() {
                           {d.hostname || d.agentId}
                         </Typography>
                         {d.hostname ? (
-                          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                          <Typography variant="caption" sx={{ color: BRAND.gray, display: "block" }}>
                             {d.agentId}
+                          </Typography>
+                        ) : null}
+                        {/* Sprint 1 item 3.1 — when a device has
+                            insufficient_data status, show an inline
+                            caption clarifying this is usually a
+                            timing issue (fresh enrollment, partial
+                            evidence) rather than a real problem. Reduces
+                            operator anxiety + sets the right expectation
+                            ("wait, don't escalate"). A future backend
+                            change can replace this heuristic with a
+                            real "Recently enrolled" detector based on
+                            agent.created_at. */}
+                        {d.overallStatus === "insufficient_data" ? (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: BRAND.teal,
+                              fontStyle: "italic",
+                              display: "block",
+                              mt: 0.25
+                            }}
+                          >
+                            Awaiting first full scan
                           </Typography>
                         ) : null}
                       </TableCell>
@@ -889,9 +912,26 @@ export default function SecurityCompliance() {
                         <PatchChip patchSummary={d.patchSummary} />
                       </TableCell>
                       <TableCell>
-                        {d.collectedAtUtc
-                          ? new Date(d.collectedAtUtc).toLocaleString()
-                          : "—"}
+                        {/* Sprint 1 item 3.2 — relative time is more
+                            scannable than the full locale-formatted
+                            timestamp. We keep the full timestamp in a
+                            tooltip so an auditor who wants the exact
+                            time can still get it. */}
+                        {d.collectedAtUtc ? (
+                          <Tooltip
+                            title={new Date(d.collectedAtUtc).toLocaleString()}
+                            arrow
+                            placement="top"
+                          >
+                            <Typography variant="body2" sx={{ color: BRAND.dark }}>
+                              {formatRelativeTime(d.collectedAtUtc) ?? "—"}
+                            </Typography>
+                          </Tooltip>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: BRAND.gray }}>
+                            —
+                          </Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -1170,6 +1210,34 @@ function DeviceDrawerContent({
   // top (as the original code did) made React see a different hook
   // count when the drawer toggled open/closed, which eslint's
   // rules-of-hooks correctly flagged.
+  //
+  // Sprint 1 item 3.3 — within each category, sort by severity
+  // descending (critical → high → medium → low → info) and then by
+  // status (fail before pass/NA) so the cards that need action surface
+  // first. Categories with any fail/critical also bubble up to the
+  // top of the category list.
+  //
+  // The previous version kept the order findings came back from the
+  // API, which was effectively check-id alphabetical → critical
+  // findings could end up scrolled below 20 informational checks in
+  // the drawer.
+  const SEVERITY_RANK = React.useMemo(
+    () => ({ critical: 0, high: 1, medium: 2, low: 3, info: 4 }),
+    []
+  );
+  const STATUS_RANK = React.useMemo(
+    () => ({ fail: 0, error: 1, not_applicable: 2, info: 3, pass: 4 }),
+    []
+  );
+  const findingSortKey = React.useCallback(
+    (f) => [
+      SEVERITY_RANK[f.severity] ?? 99,
+      STATUS_RANK[f.status] ?? 99,
+      f.checkId || ""
+    ],
+    [SEVERITY_RANK, STATUS_RANK]
+  );
+
   const byCategory = React.useMemo(() => {
     const groups = new Map();
     for (const f of findings) {
@@ -1177,8 +1245,30 @@ function DeviceDrawerContent({
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(f);
     }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [findings]);
+    // Sort findings WITHIN each category by (severity, status).
+    for (const arr of groups.values()) {
+      arr.sort((a, b) => {
+        const ka = findingSortKey(a);
+        const kb = findingSortKey(b);
+        for (let i = 0; i < ka.length; i += 1) {
+          if (ka[i] < kb[i]) return -1;
+          if (ka[i] > kb[i]) return 1;
+        }
+        return 0;
+      });
+    }
+    // Sort CATEGORIES by their most-severe finding so a category with
+    // a critical fail floats above one with only info-level checks.
+    return Array.from(groups.entries()).sort(([nameA, arrA], [nameB, arrB]) => {
+      const topA = findingSortKey(arrA[0] ?? { severity: "info", status: "pass" });
+      const topB = findingSortKey(arrB[0] ?? { severity: "info", status: "pass" });
+      for (let i = 0; i < topA.length; i += 1) {
+        if (topA[i] < topB[i]) return -1;
+        if (topA[i] > topB[i]) return 1;
+      }
+      return nameA.localeCompare(nameB);
+    });
+  }, [findings, findingSortKey]);
 
   const statusCounts = React.useMemo(() => {
     const c = { pass: 0, fail: 0, not_applicable: 0, info: 0, error: 0 };
