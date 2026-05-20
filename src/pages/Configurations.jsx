@@ -33,6 +33,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
 import { httpGetJson } from "../api/http";
 import { getRetentionStats } from "../api/retention";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
@@ -169,44 +170,41 @@ export default function Configurations({ onNavigate }) {
   // Note: `tokensSummary` was removed when the Tokens card moved to
   // Device Enrollment. The /api/v1/configurations/summary endpoint
   // still returns `tokens_summary`; we just don't render it here.
-  const [tenantsSummary, setTenantsSummary] = React.useState(null);
-  const [tenantMembersSummary, setTenantMembersSummary] = React.useState(null);
-  const [retentionStats, setRetentionStats] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
+  //
+  // Use stale-while-revalidate cache here so Settings paints from the
+  // last known snapshot immediately, then refreshes quietly when stale.
+  // Retention is admin-scoped and may 401 for non-admin viewers — we
+  // preserve the previous behavior by swallowing that call only, while
+  // still surfacing failures from the primary configurations summary.
+  const {
+    data: settingsSnapshot,
+    loading,
+    error: settingsError,
+  } = useCachedFetch(
+    "settings:configurations:v1",
+    async () => {
+      const [summary, retention] = await Promise.all([
+        httpGetJson("/api/v1/configurations/summary"),
+        getRetentionStats().catch(() => null),
+      ]);
 
-  React.useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-        // Two independent calls in parallel. Retention is admin-scoped
-        // and may 401 for non-admin viewers — we swallow that quietly
-        // so the rest of the page still renders. The other call (config
-        // summary) is the page's primary content; if it fails we show
-        // an error.
-        const [summary, retention] = await Promise.all([
-          httpGetJson("/api/v1/configurations/summary"),
-          getRetentionStats().catch(() => null),
-        ]);
-        if (!alive) return;
-        setTenantsSummary(summary?.tenants_summary ?? null);
-        setTenantMembersSummary(summary?.tenant_members_summary ?? null);
-        setRetentionStats(retention ?? null);
-      } catch (e) {
-        console.error("Configurations summary fetch failed:", e);
-        if (!alive) return;
-        setError("Failed to load configurations summary");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
+      return {
+        tenantsSummary: summary?.tenants_summary ?? null,
+        tenantMembersSummary: summary?.tenant_members_summary ?? null,
+        retentionStats: retention ?? null,
+      };
+    },
+    {
+      staleMs: 60_000,
+      storageMaxAgeMs: 10 * 60_000,
+      revalidateOnMount: "stale",
+    }
+  );
 
+  const tenantsSummary = settingsSnapshot?.tenantsSummary ?? null;
+  const tenantMembersSummary = settingsSnapshot?.tenantMembersSummary ?? null;
+  const retentionStats = settingsSnapshot?.retentionStats ?? null;
+  const error = settingsError ? "Failed to load configurations summary" : "";
   const tenantsTotal     = tenantsSummary?.tenantsCount      ?? 0;
 
   const membersTotal     = tenantMembersSummary?.membersCount         ?? 0;
