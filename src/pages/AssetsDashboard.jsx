@@ -26,16 +26,22 @@
 import * as React from "react";
 import Grid from "@mui/material/Grid";
 import {
+  Alert,
   Backdrop,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Fade,
   IconButton,
   MenuItem,
   Paper,
+  Snackbar,
   Stack,
   Tab,
   Table,
@@ -50,6 +56,8 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
 import ComputerRoundedIcon from "@mui/icons-material/ComputerRounded";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
@@ -68,6 +76,7 @@ import {
 } from "../api/inventoryDashboard";
 import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
+import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
@@ -283,6 +292,241 @@ function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
   params.set("sortDir", sortDir === "desc" ? "desc" : "asc");
 
   return params.toString();
+}
+
+
+function getHostDeviceId(row) {
+  const safeRow = row || {};
+  return coalesceValue(
+    safeRow.agentId,
+    safeRow.agent_id,
+    safeRow.deviceId,
+    safeRow.device_id
+  );
+}
+
+function getHostDisplayName(row) {
+  const safeRow = row || {};
+  return coalesceValue(
+    safeRow.hostname,
+    safeRow.host,
+    safeRow.deviceName,
+    safeRow.device_name,
+    getHostDeviceId(safeRow)
+  );
+}
+
+function normalizeDeviceLifecycleStatus(row) {
+  const safeRow = row || {};
+  return String(
+    safeRow.lifecycleStatus ||
+      safeRow.deviceStatus ||
+      safeRow.status ||
+      safeRow.decommissionStatus ||
+      safeRow.decommission_status ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function isDeviceTerminalOrPendingDeletion(row) {
+  const status = normalizeDeviceLifecycleStatus(row);
+  return [
+    "DELETION_PENDING",
+    "DECOMMISSION_PENDING",
+    "DECOMMISSIONING",
+    "DECOMMISSIONED",
+    "PURGE_PENDING",
+    "PURGED",
+  ].includes(status);
+}
+
+function isDecommissionJobTerminal(status) {
+  return ["COMPLETED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(
+    String(status || "").toUpperCase()
+  );
+}
+
+function getDecommissionErrorMessage(error) {
+  return (
+    error?.body?.message ||
+    error?.body?.error ||
+    error?.message ||
+    "Unable to start device decommission."
+  );
+}
+
+function DeviceDecommissionConfirmDialog({
+  open,
+  device,
+  submitting = false,
+  confirmationText,
+  reason,
+  onConfirmationTextChange,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}) {
+  const safeDevice = device || {};
+  const deviceId = getHostDeviceId(safeDevice);
+  const hostname = getHostDisplayName(safeDevice);
+  const requiredText = String(hostname || deviceId || "").trim();
+  const confirmationMatches =
+    requiredText.length > 0 &&
+    String(confirmationText || "").trim() === requiredText;
+  const canConfirm = Boolean(deviceId && confirmationMatches && !submitting);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={submitting ? undefined : onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          border: `1px solid ${BRAND.border}`,
+          boxShadow: BRAND.shadow,
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          color: BRAND.dark,
+          fontWeight: 800,
+          pb: 1.25,
+        }}
+      >
+        <Box
+          sx={{
+            width: 36,
+            height: 36,
+            borderRadius: 2,
+            bgcolor: BRAND.alert.errorSoft,
+            color: BRAND.alert.error,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          <WarningAmberRoundedIcon fontSize="small" />
+        </Box>
+        Delete device permanently?
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 1 }}>
+        <Stack spacing={2}>
+          <Alert
+            severity="warning"
+            variant="outlined"
+            sx={{
+              borderColor: `${BRAND.alert.warning}55`,
+              bgcolor: BRAND.alert.warningSoft,
+              color: BRAND.dark,
+              "& .MuiAlert-icon": { color: BRAND.alert.warning },
+            }}
+          >
+            This action will decommission the device immediately, revoke all active
+            agent certificates, and remove it from active inventory.
+          </Alert>
+
+          <Typography sx={{ fontSize: 13.5, color: BRAND.dark, lineHeight: 1.65 }}>
+            Collected hardware inventory, software inventory, sessions, compliance
+            data, projections, and related telemetry will be retained only during
+            the configured retention window and then permanently purged. Revoked
+            certificates will not be restored.
+          </Typography>
+
+          <Box
+            sx={{
+              p: 1.25,
+              borderRadius: 2,
+              border: `1px solid ${BRAND.border}`,
+              bgcolor: BRAND.surfaceMuted,
+            }}
+          >
+            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontWeight: 700 }}>
+              Device
+            </Typography>
+            <Typography sx={{ fontSize: 14, color: BRAND.dark, fontWeight: 800 }}>
+              {hostname || "—"}
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontFamily: "monospace" }}>
+              {deviceId || "—"}
+            </Typography>
+          </Box>
+
+          <TextField
+            size="small"
+            label="Reason optional"
+            value={reason}
+            onChange={(event) => onReasonChange?.(event.target.value)}
+            placeholder="e.g. Device retired, replaced, or no longer trusted"
+            disabled={submitting}
+            fullWidth
+          />
+
+          <TextField
+            size="small"
+            label={`Type ${requiredText || "the device name"} to confirm`}
+            value={confirmationText}
+            onChange={(event) => onConfirmationTextChange?.(event.target.value)}
+            disabled={submitting}
+            fullWidth
+            error={Boolean(confirmationText) && !confirmationMatches}
+            helperText={
+              confirmationMatches
+                ? "Confirmation matched."
+                : "This prevents accidental permanent device decommission."
+            }
+          />
+        </Stack>
+      </DialogContent>
+
+      <DialogActions
+        sx={{
+          px: 3,
+          py: 2,
+          gap: 1,
+          borderTop: `1px solid ${BRAND.border}`,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Button
+          onClick={onClose}
+          disabled={submitting}
+          sx={{ textTransform: "none", color: BRAND.dark, fontWeight: 700 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={onConfirm}
+          disabled={!canConfirm}
+          variant="contained"
+          startIcon={
+            submitting ? (
+              <CircularProgress size={14} sx={{ color: "#fff" }} />
+            ) : (
+              <DeleteOutlineRoundedIcon />
+            )
+          }
+          sx={{
+            textTransform: "none",
+            fontWeight: 800,
+            bgcolor: BRAND.alert.error,
+            "&:hover": { bgcolor: "#991b1b" },
+          }}
+        >
+          {submitting ? "Queueing..." : "Delete permanently"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 function normalizeHostDetailPayload(payload, fallbackHost = {}) {
@@ -818,6 +1062,22 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [agentPrinterRows, setAgentPrinterRows] = React.useState([]);
   const [agentPrintersLoading, setAgentPrintersLoading] = React.useState(false);
 
+  const [selectedHostIdsForDecommission, setSelectedHostIdsForDecommission] =
+    React.useState(() => new Set());
+  const [decommissionDialog, setDecommissionDialog] = React.useState({
+    open: false,
+    device: null,
+  });
+  const [decommissionConfirmation, setDecommissionConfirmation] = React.useState("");
+  const [decommissionReason, setDecommissionReason] = React.useState("");
+  const [decommissionSubmitting, setDecommissionSubmitting] = React.useState(false);
+  const [deviceDecommissionJobs, setDeviceDecommissionJobs] = React.useState({});
+  const [deviceActionSnackbar, setDeviceActionSnackbar] = React.useState({
+    open: false,
+    severity: "success",
+    message: "",
+  });
+
   React.useEffect(() => {
     const id = window.setTimeout(() => {
       const normalized = hostsSearchInput.trim();
@@ -966,6 +1226,177 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     if (refreshNonce > 0) refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshNonce]);
+
+  const toggleHostForDecommission = React.useCallback((host) => {
+    const deviceId = getHostDeviceId(host);
+    if (!deviceId || isDeviceTerminalOrPendingDeletion(host)) return;
+
+    setSelectedHostIdsForDecommission((prev) => {
+      const next = new Set(prev);
+      const key = String(deviceId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const openDecommissionDialog = React.useCallback((host) => {
+    const deviceId = getHostDeviceId(host);
+    if (!deviceId) return;
+
+    setDecommissionDialog({ open: true, device: host });
+    setDecommissionConfirmation("");
+    setDecommissionReason("");
+  }, []);
+
+  const closeDecommissionDialog = React.useCallback(() => {
+    if (decommissionSubmitting) return;
+    setDecommissionDialog({ open: false, device: null });
+    setDecommissionConfirmation("");
+    setDecommissionReason("");
+  }, [decommissionSubmitting]);
+
+  const submitDeviceDecommission = React.useCallback(async () => {
+    const device = decommissionDialog.device;
+    const deviceId = getHostDeviceId(device);
+    const hostname = getHostDisplayName(device);
+
+    if (!deviceId) return;
+
+    setDecommissionSubmitting(true);
+
+    try {
+      const res = await createDeviceDecommissionJob(deviceId, {
+        reason: decommissionReason.trim() || undefined,
+        confirmation: decommissionConfirmation.trim(),
+      });
+
+      const jobId = res?.jobId || res?.id;
+      const status = String(res?.status || "QUEUED").toUpperCase();
+
+      setDeviceDecommissionJobs((prev) => ({
+        ...prev,
+        [String(deviceId)]: {
+          jobId,
+          deviceId,
+          hostname,
+          status,
+          progress: Number(res?.progress ?? 0),
+          currentStep: res?.currentStep || res?.message || "Device decommission queued",
+        },
+      }));
+
+      setSelectedHostIdsForDecommission((prev) => {
+        const next = new Set(prev);
+        next.delete(String(deviceId));
+        return next;
+      });
+
+      setDeviceActionSnackbar({
+        open: true,
+        severity: "success",
+        message: `Device decommission has been queued for ${hostname || deviceId}.`,
+      });
+
+      setDecommissionDialog({ open: false, device: null });
+      setDecommissionConfirmation("");
+      setDecommissionReason("");
+      refetch();
+    } catch (error) {
+      setDeviceActionSnackbar({
+        open: true,
+        severity: "error",
+        message: getDecommissionErrorMessage(error),
+      });
+    } finally {
+      setDecommissionSubmitting(false);
+    }
+  }, [
+    decommissionConfirmation,
+    decommissionDialog.device,
+    decommissionReason,
+    refetch,
+  ]);
+
+  React.useEffect(() => {
+    const activeJobs = Object.values(deviceDecommissionJobs).filter(
+      (job) => job?.jobId && !isDecommissionJobTerminal(job.status)
+    );
+
+    if (activeJobs.length === 0) return undefined;
+
+    let cancelled = false;
+
+    const pollJobs = async () => {
+      const updates = await Promise.allSettled(
+        activeJobs.map(async (job) => {
+          const statusPayload = await getDeviceDecommissionJob(job.jobId);
+          return {
+            deviceId: String(statusPayload?.deviceId || job.deviceId),
+            hostname: statusPayload?.hostname || job.hostname,
+            jobId: statusPayload?.jobId || statusPayload?.id || job.jobId,
+            status: String(statusPayload?.status || job.status || "PROCESSING").toUpperCase(),
+            progress: Number(statusPayload?.progress ?? job.progress ?? 0),
+            currentStep:
+              statusPayload?.currentStep ||
+              statusPayload?.message ||
+              job.currentStep ||
+              "Processing device decommission",
+            errorMessage: statusPayload?.errorMessage || null,
+          };
+        })
+      );
+
+      if (cancelled) return;
+
+      let completedAny = false;
+      let failedAny = false;
+
+      setDeviceDecommissionJobs((prev) => {
+        const next = { ...prev };
+
+        updates.forEach((result) => {
+          if (result.status !== "fulfilled") return;
+
+          const job = result.value;
+          next[String(job.deviceId)] = job;
+
+          if (job.status === "COMPLETED") completedAny = true;
+          if (["FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(job.status)) {
+            failedAny = true;
+          }
+        });
+
+        return next;
+      });
+
+      if (completedAny) {
+        setDeviceActionSnackbar({
+          open: true,
+          severity: "success",
+          message: "Device decommission completed. Inventory data is being refreshed.",
+        });
+        refetch();
+      }
+
+      if (failedAny) {
+        setDeviceActionSnackbar({
+          open: true,
+          severity: "error",
+          message: "One device decommission job failed. Review the device lifecycle job details.",
+        });
+      }
+    };
+
+    pollJobs();
+    const intervalId = window.setInterval(pollJobs, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [deviceDecommissionJobs, refetch]);
+
 
   // Connected-devices set (drives the "Online" dot + KPI). Refreshes
   // on a gentle 30s cadence so the table reflects disconnects within
@@ -1744,6 +2175,10 @@ const osVersionItems = React.useMemo(() => {
                   rows={filteredHosts}
                   connectedIds={connectedIds}
                   selectedAgentId={selectedAgent?.agent_id || selectedAgent?.agentId}
+                  selectedForDecommissionIds={selectedHostIdsForDecommission}
+                  decommissionJobs={deviceDecommissionJobs}
+                  onToggleDecommissionSelection={toggleHostForDecommission}
+                  onDeleteDevice={openDecommissionDialog}
                   onRowClick={handleAgentSelect}
                   loading={loading}
                   page={hostsPaginationModel.page}
@@ -1769,6 +2204,38 @@ const osVersionItems = React.useMemo(() => {
           </SectionPaper>
         </Grid>
       </Grid>
+
+      <DeviceDecommissionConfirmDialog
+        open={decommissionDialog.open}
+        device={decommissionDialog.device}
+        submitting={decommissionSubmitting}
+        confirmationText={decommissionConfirmation}
+        reason={decommissionReason}
+        onConfirmationTextChange={setDecommissionConfirmation}
+        onReasonChange={setDecommissionReason}
+        onClose={closeDecommissionDialog}
+        onConfirm={submitDeviceDecommission}
+      />
+
+      <Snackbar
+        open={deviceActionSnackbar.open}
+        autoHideDuration={5500}
+        onClose={() =>
+          setDeviceActionSnackbar((prev) => ({ ...prev, open: false }))
+        }
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          severity={deviceActionSnackbar.severity}
+          variant="filled"
+          onClose={() =>
+            setDeviceActionSnackbar((prev) => ({ ...prev, open: false }))
+          }
+          sx={{ fontWeight: 700 }}
+        >
+          {deviceActionSnackbar.message}
+        </Alert>
+      </Snackbar>
 
       {hasNoAssetsData && (
         <Backdrop
