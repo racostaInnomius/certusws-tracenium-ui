@@ -78,6 +78,8 @@ import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
+// Sprint 5 — settings panel trigger
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 
 import {
   getComplianceSummary,
@@ -100,6 +102,8 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SharedSummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import MttrCard from "../components/Compliance/MttrCard";
+import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
 // ---------- constants --------------------------------------------------------
@@ -663,6 +667,10 @@ export default function SecurityCompliance() {
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
 
+  // Sprint 5 — settings panel open/close. Boolean state; the panel
+  // component owns the form state internally.
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+
   // Framework picker label lookup.
   const frameworkLabels = React.useMemo(() => {
     const map = new Map();
@@ -727,6 +735,22 @@ export default function SecurityCompliance() {
         icon={<GppGoodOutlinedIcon />}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
+            {/* Sprint 5 — tenant compliance settings dialog opener.
+                Compact icon button rather than a full "Settings"
+                label because the header is already crowded with
+                framework picker + export + refresh. */}
+            <Tooltip title="Compliance settings" arrow placement="bottom">
+              <IconButton
+                size="small"
+                onClick={() => setSettingsOpen(true)}
+                sx={{
+                  border: `1px solid ${BRAND.border}`,
+                  borderRadius: 1
+                }}
+              >
+                <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
             {/* Sprint 4 — CSV export. Anchor tag (not a fetch
                 button) so the browser handles the streaming
                 download natively + shows progress in the chrome.
@@ -938,6 +962,13 @@ export default function SecurityCompliance() {
           </Table>
         </TableContainer>
       </SectionPaper>
+
+      {/* Sprint 5 — fleet time-to-close by severity. Mounted between
+          the framework table (top-down "how does the fleet compare to
+          benchmarks") and the device table (drill-down) so an
+          operator's eye lands on it BEFORE they scroll into per-
+          device triage. */}
+      <MttrCard />
 
       {/* Device table ------------------------------------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2 }}>
@@ -1180,6 +1211,15 @@ export default function SecurityCompliance() {
           </Alert>
         ) : undefined}
       </Snackbar>
+
+      {/* Sprint 5 — tenant compliance settings dialog. Triggered
+          from the header icon. Posts to PUT /settings; uses the
+          same showToast surface as the lifecycle actions. */}
+      <ComplianceSettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onToast={showToast}
+      />
     </Box>
   );
 }

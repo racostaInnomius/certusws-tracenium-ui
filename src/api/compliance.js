@@ -149,3 +149,30 @@ export function buildFindingsCsvUrl({
   const qs = buildQuery({ framework, includeClosed, maxRows });
   return `/api/v1/security/compliance/export/findings.csv${qs}`;
 }
+
+// ── Sprint 5 — tenant compliance settings CRUD ────────────────────
+// GET returns { ok, settings: { effective, overrides, systemDefaults,
+// updatedAt } }; PUT accepts a partial patch and returns the post-
+// update view. Null clears an override; undefined leaves a field
+// untouched.
+export async function getComplianceSettings() {
+  return httpGetJson(`${BASE}/settings`);
+}
+
+export async function updateComplianceSettings(patch) {
+  return httpPutJson(`${BASE}/settings`, patch);
+}
+
+// ── Sprint 5 — bulk finding lifecycle op ───────────────────────────
+// op: "acknowledge" | "revoke_acknowledgement" | "change_status".
+// For change_status, supply { newStatus, findingIds, note? }. Server
+// caps the batch at 200 findings; partial failures come back as
+// per-item results in `summary.results[]`.
+export async function bulkFindingOp({ op, findingIds, newStatus, note } = {}) {
+  return httpPostJson(`${BASE}/findings:bulk`, {
+    op,
+    findingIds,
+    newStatus,
+    note: note ?? null
+  });
+}
