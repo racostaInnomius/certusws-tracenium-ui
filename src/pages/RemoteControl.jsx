@@ -14,6 +14,7 @@
 import * as React from "react";
 import {
   Box,
+  Drawer,
   Grid,
   Paper,
   Skeleton,
@@ -39,6 +40,7 @@ import {
 import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
 import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
+import ShellTerminal from "../components/RemoteControl/ShellTerminal";
 
 import PageHeader from "../components/common/PageHeader";
 
@@ -143,27 +145,68 @@ export default function RemoteControl() {
 
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "rcAutoRefresh");
 
+  // RCP M1.S2 — when start succeeds, the backend returns the
+  // session envelope that the ShellTerminal needs. We stash it in
+  // state to mount the terminal in a side drawer. `null` collapses
+  // the drawer. Only one active drawer at a time — operators
+  // wanting parallel sessions open new tabs.
+  const [activeSession, setActiveSession] = React.useState(null);
+
   /**
-   * Click handler for Connect buttons in the ConnectablesTable. While
-   * the plugin isn't shipped this always fails with the
-   * RCP_PLUGIN_NOT_AVAILABLE error — we catch it and surface a
-   * targeted toast. When the plugin lands this opens a session drawer
-   * (Phase 2).
+   * Click handler for Connect buttons in the ConnectablesTable.
+   * Calls POST /sessions; on success opens the ShellTerminal in a
+   * right-side drawer. Backend error codes map to friendly toasts:
+   *   - 501 / RCP_PLUGIN_NOT_AVAILABLE — older agents (pre-M1) or
+   *                                       file/screen capabilities
+   *   - 409 / RCP_DEVICE_OFFLINE       — device offline mid-click
+   *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent doesn't have
+   *                                          remoteShell policy on
+   *   - 429 / RCP_TOO_MANY_SESSIONS    — concurrency cap hit
+   *   - 403 / RCP_ADMIN_MASTER_REQUIRED— user isn't admin_master
    */
   const handleConnect = async (device) => {
     try {
-      await startRemoteSession({ deviceId: device.deviceId, type: "shell" });
-      notify("success", "Session started");
+      const res = await startRemoteSession({
+        deviceId: device.deviceId,
+        type: "shell"
+      });
+      if (!res?.ok) {
+        notify("error", res?.message || "Failed to start session");
+        return;
+      }
+      setActiveSession({
+        sessionId: res.sessionId,
+        signalingUrl: res.signalingUrl,
+        turnConfig: res.turnConfig,
+        device
+      });
       load(); // pull history + active count
     } catch (err) {
       const msg = String(err?.message || "");
-      if (msg.includes("501") || msg.includes("RCP_PLUGIN_NOT_AVAILABLE")) {
+      if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
         notify(
           "info",
-          "Remote Control plugin (`rcp`) is not yet available. This device will be connectable once the plugin ships."
+          "Remote Control for this capability isn't shipped yet. Try `shell` — `file` and `screen` arrive in later milestones."
+        );
+      } else if (msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+        notify(
+          "warning",
+          "Remote Control is restricted to admin_master users in this milestone."
+        );
+      } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
+        notify("error", "Device is not currently connected. Try again later.");
+      } else if (msg.includes("RCP_CAPABILITY_NOT_ADVERTISED")) {
+        notify(
+          "warning",
+          "This device hasn't advertised rcp.shell — check the agent's policy.features.remoteShell flag."
+        );
+      } else if (msg.includes("RCP_TOO_MANY_SESSIONS")) {
+        notify(
+          "warning",
+          "Too many concurrent sessions. Close one before starting another."
         );
       } else {
-        notify("error", "Failed to start session");
+        notify("error", `Failed to start session: ${msg || "unknown error"}`);
       }
     }
   };
@@ -276,6 +319,40 @@ export default function RemoteControl() {
         message={snackbar.message}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
       />
+
+      {/* RCP M1.S2 — interactive shell drawer. Opens when a Connect
+          button succeeds; ShellTerminal owns the WebRTC + xterm
+          lifecycle. Closing the drawer triggers a clean session
+          close + refetch so the session history table updates. */}
+      <Drawer
+        anchor="right"
+        open={Boolean(activeSession)}
+        onClose={() => {
+          setActiveSession(null);
+          load();
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", md: 780, lg: 920 },
+            maxWidth: "100%",
+            bgcolor: "transparent",
+            border: "none"
+          }
+        }}
+      >
+        {activeSession ? (
+          <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
+            <ShellTerminal
+              session={activeSession}
+              device={activeSession.device}
+              onClose={() => {
+                setActiveSession(null);
+                load();
+              }}
+            />
+          </Box>
+        ) : null}
+      </Drawer>
     </Box>
   );
 }

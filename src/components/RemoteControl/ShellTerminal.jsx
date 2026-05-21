@@ -1,0 +1,457 @@
+// src/components/RemoteControl/ShellTerminal.jsx
+//
+// RCP M1.S2 — interactive shell terminal in the browser.
+//
+// Shape:
+//   - xterm.js renders the terminal canvas + handles input.
+//   - WebRTC RTCPeerConnection carries the I/O (DataChannel).
+//   - WebSocket carries signaling (SDP offer/answer + ICE).
+//   - Backend's /sessions POST returns {sessionId, signalingUrl,
+//     turnConfig}; this component takes that envelope and runs the
+//     negotiation.
+//
+// Why the browser is the OFFERER:
+//   - DataChannels MUST be created before SDP is generated (the
+//     channel shows up in the offer's m= line). It's simpler to
+//     have the browser own that side; the agent answers.
+//   - Matches the v2 design doc's transport_role convention
+//     ('offerer' for the browser, 'answerer' for the agent).
+//
+// Lifecycle (happy path):
+//   mount → open WS → wait WS open → create RTCPC → create DC →
+//   createOffer → setLocalDescription → send offer via WS → wait
+//   answer → setRemoteDescription → ICE flies both ways → DC opens
+//   → xterm input ⇄ DC.
+//
+// Lifecycle (error paths):
+//   - WS upgrade 401/403 → render unrecoverable error
+//   - signaling timeout → render error + close DC + close WS
+//   - peer "failed" state → render error
+//   - explicit close from agent (peer dispose, shell exit) → render
+//     "session ended" message
+//
+// Performance:
+//   - xterm.js local echo is on by default; we don't enable any
+//     extra echo logic. Backend round-trip latency only affects
+//     when output appears, not when characters render.
+//   - We send each keystroke as a separate {type: "stdin", data}
+//     JSON message. xterm batches multi-character paste so this
+//     doesn't fan out per character on paste.
+
+import * as React from "react";
+import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+
+import { Terminal } from "xterm";
+import { FitAddon } from "xterm-addon-fit";
+import { WebLinksAddon } from "xterm-addon-web-links";
+import "xterm/css/xterm.css";
+
+import { BRAND } from "../../theme/brand";
+
+// State machine — drives the status strip + error rendering.
+const STATE = Object.freeze({
+  CONNECTING: "connecting",         // WS opening / signaling in flight
+  RUNNING: "running",               // DataChannel open + xterm wired
+  ERROR: "error",                   // unrecoverable
+  ENDED: "ended"                    // shell exited cleanly
+});
+
+/**
+ * Props:
+ *   - session: { sessionId, signalingUrl, turnConfig } from
+ *     POST /sessions.
+ *   - device:  { deviceId, hostname, platform } for display.
+ *   - onClose: invoked when the operator clicks the close button
+ *     OR the session terminates. Parent removes the component.
+ */
+export default function ShellTerminal({ session, device, onClose }) {
+  const containerRef = React.useRef(null);
+  const termRef = React.useRef(null);
+  const fitRef = React.useRef(null);
+  const wsRef = React.useRef(null);
+  const pcRef = React.useRef(null);
+  const dcRef = React.useRef(null);
+  const [state, setState] = React.useState(STATE.CONNECTING);
+  const [statusMsg, setStatusMsg] = React.useState("Establishing connection…");
+
+  // ── 1. Mount xterm into the container ───────────────────────────
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily:
+        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 13,
+      // Match the brand-dark surface for visual continuity with the
+      // rest of the dashboard.
+      theme: {
+        background: "#1f2933",
+        foreground: "#e5e7eb",
+        cursor: "#8ffdff"
+      },
+      scrollback: 5000
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.loadAddon(new WebLinksAddon());
+    term.open(containerRef.current);
+    fit.fit();
+    term.writeln("\x1b[2;37mTracenium Remote Shell — establishing connection…\x1b[0m");
+
+    termRef.current = term;
+    fitRef.current = fit;
+
+    // Window resize → terminal resize → notify agent via DC.
+    const onResize = () => {
+      try {
+        fit.fit();
+        sendResize(dcRef.current, term.cols, term.rows);
+      } catch {
+        /* ignore — pre-DC-open or DC closed */
+      }
+    };
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+    };
+  }, []);
+
+  // ── 2. Establish WebRTC + WebSocket signaling ───────────────────
+  React.useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+
+    async function negotiate() {
+      // Connect the signaling WebSocket FIRST so we have somewhere
+      // to send the offer once we generate it. Note: same-origin
+      // ws:// in dev, wss:// in prod — derive from window.location.
+      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${wsProto}//${window.location.host}${session.signalingUrl}`);
+      wsRef.current = ws;
+
+      // Open the PeerConnection with the TURN config the backend
+      // minted. The browser SDK manages NAT traversal internally.
+      const pc = new RTCPeerConnection({
+        iceServers: Array.isArray(session.turnConfig?.iceServers)
+          ? session.turnConfig.iceServers
+          : []
+      });
+      pcRef.current = pc;
+
+      // The DataChannel MUST be created BEFORE the offer so its
+      // m= line ends up in the SDP.
+      const dc = pc.createDataChannel("rcp.shell", {
+        ordered: true
+      });
+      dcRef.current = dc;
+
+      pc.onicecandidate = (e) => {
+        if (!e.candidate) return;
+        if (ws.readyState !== WebSocket.OPEN) return;
+        ws.send(
+          JSON.stringify({
+            type: "ice",
+            sessionId: session.sessionId,
+            candidate: e.candidate.candidate,
+            sdpMid: e.candidate.sdpMid ?? "",
+            sdpMLineIndex: e.candidate.sdpMLineIndex ?? 0
+          })
+        );
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (cancelled) return;
+        if (pc.connectionState === "failed") {
+          setState(STATE.ERROR);
+          setStatusMsg("WebRTC connection failed (ICE negotiation).");
+        }
+      };
+
+      dc.onopen = () => {
+        if (cancelled) return;
+        setState(STATE.RUNNING);
+        setStatusMsg("Connected.");
+        const term = termRef.current;
+        if (term) {
+          // Clear the "establishing" stub line so the prompt lands
+          // at the top of the visible area.
+          term.clear();
+          term.focus();
+          // Initial size sync — the PTY spawned with 80x24
+          // defaults; tell it our actual viewport.
+          sendResize(dc, term.cols, term.rows);
+          // Pipe keystrokes → DC.
+          term.onData((data) => {
+            try {
+              dc.send(JSON.stringify({ type: "stdin", data }));
+            } catch {
+              /* DC closed mid-send — onclose will handle */
+            }
+          });
+          // Pipe resize events from xterm's internal "view" model
+          // (covers font-size changes that don't trigger window
+          // resize).
+          term.onResize(({ cols, rows }) => sendResize(dc, cols, rows));
+        }
+      };
+
+      dc.onmessage = (e) => {
+        if (cancelled) return;
+        let parsed;
+        try {
+          parsed =
+            typeof e.data === "string" ? JSON.parse(e.data) : null;
+        } catch {
+          return;
+        }
+        if (!parsed || typeof parsed !== "object") return;
+        const term = termRef.current;
+        if (!term) return;
+        if (parsed.type === "stdout" && typeof parsed.data === "string") {
+          term.write(parsed.data);
+        } else if (parsed.type === "exit") {
+          setState(STATE.ENDED);
+          setStatusMsg(
+            `Shell exited (code ${parsed.code ?? "?"}). Connection closed.`
+          );
+          // Don't auto-close the UI — let the operator see the
+          // final output. They click the X to dismiss.
+        }
+      };
+
+      dc.onclose = () => {
+        if (cancelled) return;
+        if (state !== STATE.ERROR && state !== STATE.ENDED) {
+          setState(STATE.ENDED);
+          setStatusMsg("Connection closed.");
+        }
+      };
+
+      // WS handlers. We wait for OPEN before sending the offer; we
+      // queue any candidates that fire before then in a small array
+      // so they don't get dropped on slow networks.
+      const pendingIce = [];
+      ws.onopen = async () => {
+        if (cancelled) return;
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: "offer",
+                sessionId: session.sessionId,
+                sdp: offer.sdp
+              })
+            );
+          }
+          // Flush any ICE that arrived during createOffer.
+          for (const cand of pendingIce.splice(0)) {
+            try {
+              await pc.addIceCandidate(cand);
+            } catch {
+              /* late candidate, ignore */
+            }
+          }
+        } catch (err) {
+          setState(STATE.ERROR);
+          setStatusMsg(`Offer creation failed: ${err?.message || err}`);
+        }
+      };
+
+      ws.onmessage = async (e) => {
+        if (cancelled) return;
+        let parsed;
+        try {
+          parsed = JSON.parse(e.data);
+        } catch {
+          return;
+        }
+        if (!parsed || typeof parsed !== "object") return;
+        if (parsed.type === "answer" && typeof parsed.sdp === "string") {
+          try {
+            await pc.setRemoteDescription({
+              type: "answer",
+              sdp: parsed.sdp
+            });
+          } catch (err) {
+            setState(STATE.ERROR);
+            setStatusMsg(`setRemoteDescription failed: ${err?.message}`);
+          }
+        } else if (parsed.type === "ice" && typeof parsed.candidate === "string") {
+          const cand = {
+            candidate: parsed.candidate,
+            sdpMid: parsed.sdpMid,
+            sdpMLineIndex: parsed.sdpMLineIndex
+          };
+          // setRemoteDescription might not have happened yet (race
+          // between offer/answer + early ICE) — queue.
+          if (pc.remoteDescription) {
+            try {
+              await pc.addIceCandidate(cand);
+            } catch {
+              /* ignore */
+            }
+          } else {
+            pendingIce.push(cand);
+          }
+        } else if (parsed.type === "close") {
+          setState(STATE.ENDED);
+          setStatusMsg(`Session closed (${parsed.reason || "remote"}).`);
+        } else if (parsed.type === "error") {
+          setState(STATE.ERROR);
+          setStatusMsg(
+            `${parsed.code || "Error"}: ${parsed.message || "session error"}`
+          );
+        }
+      };
+
+      ws.onerror = () => {
+        if (cancelled) return;
+        setState(STATE.ERROR);
+        setStatusMsg("Signaling WebSocket error.");
+      };
+      ws.onclose = () => {
+        if (cancelled) return;
+        // If we were RUNNING this is unexpected; if we were already
+        // ENDED it's the normal post-close.
+        if (state === STATE.RUNNING) {
+          setState(STATE.ENDED);
+          setStatusMsg("Signaling channel closed unexpectedly.");
+        }
+      };
+    }
+
+    negotiate();
+
+    return () => {
+      cancelled = true;
+      try {
+        dcRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        pcRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        const ws = wsRef.current;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(
+            JSON.stringify({
+              type: "close",
+              sessionId: session.sessionId,
+              reason: "user_closed"
+            })
+          );
+        }
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+      dcRef.current = null;
+      pcRef.current = null;
+      wsRef.current = null;
+    };
+    // `state` is intentionally not a dep: the effect should run
+    // exactly once per session prop change. The handlers read the
+    // latest state via closure; including state would tear down +
+    // re-establish WebRTC on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  const statusColor =
+    state === STATE.RUNNING
+      ? BRAND.teal
+      : state === STATE.ERROR
+      ? "#d9534f"
+      : BRAND.gray;
+
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "#1f2933",
+        borderRadius: 2,
+        overflow: "hidden",
+        border: `1px solid ${BRAND.border}`,
+        minHeight: 420
+      }}
+    >
+      {/* Status bar */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          px: 1.5,
+          py: 0.75,
+          borderBottom: `1px solid #2d3742`,
+          bgcolor: "#161c25"
+        }}
+      >
+        <Box
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            bgcolor: statusColor,
+            flexShrink: 0
+          }}
+        />
+        <Typography
+          variant="caption"
+          sx={{
+            color: "#e5e7eb",
+            fontFamily: "monospace",
+            flex: 1,
+            minWidth: 0,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}
+        >
+          {device?.hostname || device?.deviceId} · {statusMsg}
+        </Typography>
+        <Tooltip title="Close session" arrow placement="left">
+          <IconButton
+            size="small"
+            onClick={onClose}
+            sx={{ color: "#9aa5b1" }}
+          >
+            <CloseOutlinedIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      {/* xterm container — flex:1 so it fills the parent's height. */}
+      <Box
+        ref={containerRef}
+        sx={{
+          flex: 1,
+          minHeight: 380,
+          // Touch the inner xterm screen padding so the bottom row
+          // isn't cropped by the rounded border.
+          "& .xterm-viewport": { padding: "8px" }
+        }}
+      />
+    </Box>
+  );
+}
+
+function sendResize(dc, cols, rows) {
+  if (!dc || dc.readyState !== "open") return;
+  try {
+    dc.send(JSON.stringify({ type: "resize", cols, rows }));
+  } catch {
+    /* ignore */
+  }
+}

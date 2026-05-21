@@ -39,9 +39,14 @@ export async function getRemoteSessions(params = {}) {
   return httpGetJson(`${BASE}/sessions${buildQuery(params)}`);
 }
 
-// Start a session. Returns HTTP 501 + { error: "RCP_PLUGIN_NOT_AVAILABLE" }
-// today — the page surfaces a targeted "Coming soon" toast off that
-// specific error code.
+// Start a session.
+//
+// RCP M1.S2 — returns 200 + { ok, sessionId, signalingUrl, turnConfig }
+// for `type: "shell"` when the device advertises `rcp.shell` AND the
+// caller is admin_master. Other capabilities still 501 until M2/M3.
+//
+// Error envelopes (HTTP 4xx) carry { error, message }. The UI maps
+// them to friendly toasts in pages/RemoteControl.jsx:handleConnect.
 export async function startRemoteSession({ deviceId, type }) {
   return httpPostJson(`${BASE}/sessions`, { deviceId, type });
 }
