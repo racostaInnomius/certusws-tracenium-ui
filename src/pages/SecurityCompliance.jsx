@@ -29,13 +29,20 @@ import {
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Drawer,
   Grid,
   IconButton,
   LinearProgress,
+  Menu,
   MenuItem,
   Paper,
   Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -43,6 +50,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography
 } from "@mui/material";
@@ -60,6 +68,10 @@ import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
+// Sprint 3 — lifecycle controls
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 
 import {
   getComplianceSummary,
@@ -67,7 +79,11 @@ import {
   getFrameworkSummary,
   getDevicePosture,
   getDeviceDetail,
-  getDeviceTimeseries
+  getDeviceTimeseries,
+  acknowledgeFinding,
+  revokeFindingAcknowledgement,
+  updateFindingRemediationStatus,
+  getFindingHistory
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 
@@ -141,6 +157,87 @@ const SEVERITY_META = {
   info:     { fg: BRAND.teal,    bg: BRAND.tealSoft,    label: "Info" }
 };
 
+// ── Sprint 3 — remediation lifecycle ────────────────────────────────
+//
+// Status enum mirrors the backend's CHECK constraint on
+// security_compliance_findings.remediation_status. Labels are
+// operator-facing ("In progress" not "in_progress"); colors echo the
+// finding status colors so a critical/fail finding still stands out
+// visually even when its remediation_status is "in_progress".
+const REMEDIATION_STATUS_META = {
+  open: {
+    label: "Open",
+    fg: ROLE.critical,
+    bg: ROLE.criticalSoft
+  },
+  in_progress: {
+    label: "In progress",
+    fg: ROLE.caution,
+    bg: ROLE.cautionSoft
+  },
+  remediated: {
+    label: "Remediated",
+    fg: ROLE.positive,
+    bg: ROLE.positiveSoft
+  },
+  risk_accepted: {
+    label: "Risk accepted",
+    fg: BRAND.tealText,
+    bg: BRAND.tealSoft
+  },
+  wont_fix: {
+    label: "Won't fix",
+    fg: BRAND.gray,
+    bg: BRAND.surfaceMuted
+  }
+};
+
+// Client-side mirror of the backend's transition matrix
+// (modules/compliance/finding-lifecycle.service.ts:ALLOWED_TRANSITIONS).
+// Used to drive the action menu so the operator only sees valid next
+// states. The backend re-validates and returns the canonical
+// `allowedTransitions` set on 409, so this is purely for UX
+// responsiveness — drift between front and back doesn't break
+// anything, it just shows one more option that gets rejected.
+const REMEDIATION_TRANSITIONS = {
+  open: ["in_progress", "remediated", "risk_accepted", "wont_fix"],
+  in_progress: ["remediated", "risk_accepted", "wont_fix", "open"],
+  remediated: ["open"],
+  risk_accepted: ["open"],
+  wont_fix: ["open"]
+};
+
+// Terminal transitions that should require an operator-provided note
+// (audit-trail quality control — risk-acceptance without a stated
+// reason is the kind of thing auditors flag).
+const TERMINAL_TRANSITIONS_REQUIRING_NOTE = new Set([
+  "risk_accepted",
+  "wont_fix"
+]);
+
+// Relative-time formatter for "open since" / "acknowledged X ago".
+// Reuses the same coarse buckets as formatRelativeTime below — but
+// the latter only handles past times and we need it inline in card
+// metadata. Centralised here so the two callers stay consistent.
+function shortRelativeTime(isoString) {
+  if (!isoString) return null;
+  const then = Date.parse(isoString);
+  if (!Number.isFinite(then)) return null;
+  const deltaMs = Date.now() - then;
+  if (deltaMs < 0) return "future";
+  const mins = Math.round(deltaMs / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo`;
+  const years = Math.round(months / 12);
+  return `${years}y`;
+}
+
 // ---------- small presentational atoms ---------------------------------------
 
 function StatusChip({ status }) {
@@ -156,6 +253,29 @@ function StatusChip({ status }) {
         fontWeight: 700,
         border: `1px solid ${meta.fg}44`,
         "& .MuiChip-icon": { color: meta.fg }
+      }}
+    />
+  );
+}
+
+// Sprint 3 — visually distinct from StatusChip (which conveys the
+// rule outcome). RemediationStatusChip carries the OPERATOR's
+// declared state. Same chip shape so they read at the same visual
+// weight in the finding card; different palette so the dual chips
+// don't get confused at a glance.
+function RemediationStatusChip({ status }) {
+  const meta = REMEDIATION_STATUS_META[status] ?? REMEDIATION_STATUS_META.open;
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      sx={{
+        bgcolor: meta.bg,
+        color: meta.fg,
+        fontWeight: 700,
+        border: `1px solid ${meta.fg}44`,
+        height: 22,
+        fontSize: 11
       }}
     />
   );
@@ -504,11 +624,35 @@ export default function SecurityCompliance() {
     }
   }, []);
 
+  // Sprint 3 — refetch just the drawer (NOT the device table) after a
+  // lifecycle mutation. The device table's overall score is unaffected
+  // by ack / remediation-status changes (those don't touch the score),
+  // so a full page refetch is wasteful. We only re-hit getDeviceDetail
+  // to refresh the findings list + their ack/status fields.
+  const refetchDrawer = React.useCallback(async () => {
+    if (!drawerAgentId) return;
+    try {
+      const detail = await getDeviceDetail(drawerAgentId).catch(() => null);
+      setDrawerData(detail ?? null);
+    } catch {
+      // Silent — the next user action will retry. We don't want to
+      // surface a refetch failure as an error because the underlying
+      // mutation already succeeded; the dashboard is just stale.
+    }
+  }, [drawerAgentId]);
+
   const closeDrawer = () => {
     setDrawerAgentId(null);
     setDrawerData(null);
     setDrawerTimeseries(null);
   };
+
+  // Sprint 3 — page-level Snackbar surface for lifecycle mutations.
+  // Single state object instead of separate severity/message states so
+  // an open-then-open in quick succession atomically replaces both.
+  const [toast, setToast] = React.useState(null);
+  const showToast = React.useCallback((t) => setToast(t), []);
+  const hideToast = React.useCallback(() => setToast(null), []);
 
   // Framework picker label lookup.
   const frameworkLabels = React.useMemo(() => {
@@ -965,8 +1109,34 @@ export default function SecurityCompliance() {
             closeDrawer();
             navigateTo("assets", { agentId: drawerAgentId });
           }}
+          // Sprint 3 — lifecycle wiring
+          onRequestRefetch={refetchDrawer}
+          onToast={showToast}
         />
       </Drawer>
+
+      {/* Sprint 3 — page-level Snackbar for finding lifecycle
+          actions (ack, revoke, status change). Auto-dismisses after
+          4 s on success, 6 s on warning/error so the operator has
+          time to read the structured backend message
+          (INVALID_TRANSITION etc.). */}
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={toast?.severity === "success" ? 4000 : 6000}
+        onClose={hideToast}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        {toast ? (
+          <Alert
+            onClose={hideToast}
+            severity={toast.severity}
+            variant="filled"
+            sx={{ minWidth: 320 }}
+          >
+            {toast.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 }
@@ -1198,7 +1368,13 @@ function DeviceDrawerContent({
   timeseries,
   onClose,
   frameworkLabels,
-  onNavigateToAsset
+  onNavigateToAsset,
+  // Sprint 3 — lifecycle wiring. Provided by the SCP page so the
+  // drawer can trigger a parent-side refetch + snackbar after every
+  // successful mutation, and the snackbar/dialog state stays at one
+  // level instead of being scattered per-card.
+  onRequestRefetch,
+  onToast
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -1278,6 +1454,99 @@ function DeviceDrawerContent({
     }
     return c;
   }, [findings]);
+
+  // ── Sprint 3 — lifecycle mutation state ────────────────────────────
+  //
+  // pendingAction tracks which finding has a mutation in-flight so
+  // FindingCard can disable its buttons + show a spinner without
+  // each card holding its own state. One concurrent mutation per
+  // drawer is a deliberate simplification: a flurry of clicks on
+  // different findings would race against the parent refetch and
+  // make the UI feel sluggish; serializing them is fine for an
+  // operator workflow.
+  const [pendingAction, setPendingAction] = React.useState(null);
+  // statusDialog: { finding, targetStatus } when open, null otherwise.
+  const [statusDialog, setStatusDialog] = React.useState(null);
+  // historyDialog: { finding } when open.
+  const [historyDialog, setHistoryDialog] = React.useState(null);
+
+  /**
+   * Wraps any lifecycle API call with the standard shape:
+   *   - mark pending
+   *   - call the helper
+   *   - branch on res.ok (parsed business-level result, NOT raw fetch)
+   *   - toast + refetch on success, toast on failure
+   *   - clear pending
+   *
+   * Centralised so each mutation site (ack / revoke / status change)
+   * stays a one-liner. The helper is intentionally not memoised —
+   * its deps would invalidate it on every render anyway because of
+   * onRequestRefetch / onToast.
+   */
+  async function runMutation(finding, apiCall, successMessage) {
+    setPendingAction(finding.id);
+    try {
+      const res = await apiCall();
+      if (res?.ok) {
+        onToast?.({ severity: "success", message: successMessage });
+        // The cache helper in api/http.js invalidates GETs that
+        // share the mutation's URL prefix; the drawer's device
+        // detail fetch DOES NOT share that prefix, so we explicitly
+        // ask the parent to refetch.
+        onRequestRefetch?.();
+      } else {
+        // Backend returned a structured failure (INVALID_TRANSITION,
+        // FINDING_CLOSED, FINDING_NOT_FOUND). Surface the human
+        // message rather than a generic error.
+        onToast?.({
+          severity: "warning",
+          message: res?.message || "Action was not allowed."
+        });
+      }
+    } catch (err) {
+      onToast?.({
+        severity: "error",
+        message: err?.message || String(err)
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  function handleAck(finding) {
+    return runMutation(
+      finding,
+      () => acknowledgeFinding(finding.id),
+      "Finding acknowledged."
+    );
+  }
+  function handleRevoke(finding) {
+    return runMutation(
+      finding,
+      () => revokeFindingAcknowledgement(finding.id),
+      "Acknowledgement revoked."
+    );
+  }
+  function handleChangeStatus(finding, next) {
+    // Open the confirmation dialog. Actual API call happens in
+    // confirmStatusChange below after the operator types a note
+    // (and we validate that terminal transitions HAVE a note).
+    setStatusDialog({ finding, targetStatus: next });
+  }
+  async function confirmStatusChange({ note }) {
+    if (!statusDialog) return;
+    const { finding, targetStatus } = statusDialog;
+    setStatusDialog(null);
+    await runMutation(
+      finding,
+      () =>
+        updateFindingRemediationStatus(finding.id, {
+          status: targetStatus,
+          note
+        }),
+      `Status set to ${REMEDIATION_STATUS_META[targetStatus]?.label}.`
+    );
+  }
 
   if (!agentId) return null;
 
@@ -1451,7 +1720,15 @@ function DeviceDrawerContent({
               </Typography>
               <Stack spacing={1}>
                 {items.map((f) => (
-                  <FindingCard key={f.checkId} finding={f} />
+                  <FindingCard
+                    key={f.id ?? f.checkId}
+                    finding={f}
+                    onAck={handleAck}
+                    onRevoke={handleRevoke}
+                    onChangeStatus={handleChangeStatus}
+                    onShowHistory={(finding) => setHistoryDialog({ finding })}
+                    pendingAction={pendingAction}
+                  />
                 ))}
               </Stack>
             </Box>
@@ -1464,13 +1741,71 @@ function DeviceDrawerContent({
           </Box>
         </Box>
       )}
+
+      {/* Sprint 3 — lifecycle dialogs. Mounted unconditionally so the
+          first open is cheap; the components early-return when their
+          props say they're closed. */}
+      <StatusChangeDialog
+        open={Boolean(statusDialog)}
+        finding={statusDialog?.finding ?? null}
+        targetStatus={statusDialog?.targetStatus ?? null}
+        onConfirm={confirmStatusChange}
+        onCancel={() => setStatusDialog(null)}
+      />
+      <FindingHistoryDialog
+        open={Boolean(historyDialog)}
+        finding={historyDialog?.finding ?? null}
+        onClose={() => setHistoryDialog(null)}
+      />
     </Box>
   );
 }
 
-function FindingCard({ finding }) {
+/**
+ * Sprint 3 — FindingCard now carries lifecycle controls (acknowledge,
+ * remediation-status menu, history) in addition to the rule outcome.
+ *
+ * Props beyond `finding`:
+ *   - `onAck` / `onRevoke`     — toggle the acknowledged_at column
+ *   - `onChangeStatus(next)`   — pop the confirmation dialog for the
+ *                                requested transition
+ *   - `pendingAction`          — string id of an in-flight mutation
+ *                                (so we can disable buttons + show
+ *                                a spinner without each card holding
+ *                                its own mutation state)
+ *
+ * The card no longer self-manages mutations — the parent drawer owns
+ * the snackbar + dialog + refetch logic because all of those are
+ * page-level concerns. Cards are kept dumb so they re-render cheaply
+ * when the drawer refetches.
+ */
+function FindingCard({
+  finding,
+  onAck,
+  onRevoke,
+  onChangeStatus,
+  onShowHistory,
+  pendingAction
+}) {
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
+
+  // Anchor for the remediation-status menu. Local state because the
+  // anchor element belongs to a button rendered inside this card.
+  const [statusMenuAnchor, setStatusMenuAnchor] = React.useState(null);
+  const statusMenuOpen = Boolean(statusMenuAnchor);
+
+  const isAcked = Boolean(finding.acknowledgedAt);
+  const remediationStatus = finding.remediationStatus || "open";
+  const nextTransitions = REMEDIATION_TRANSITIONS[remediationStatus] || [];
+
+  // A card-level pending flag covers both the ack toggle AND the
+  // status menu so the operator sees one in-flight indicator at a
+  // time. `pendingAction === finding.id` means THIS card has a
+  // mutation in flight.
+  const isPending = pendingAction === finding.id;
+
+  const firstSeenAgo = shortRelativeTime(finding.firstSeenAtUtc);
 
   return (
     <Paper
@@ -1479,8 +1814,22 @@ function FindingCard({ finding }) {
         p: 1.5,
         borderRadius: 2,
         border: `1px solid ${borderColor}`,
-        bgcolor: finding.status === "fail" ? ROLE.criticalSoft : "transparent",
-        transition: "background-color 120ms ease"
+        bgcolor:
+          isAcked && finding.status === "fail"
+            ? // Acknowledged fail = soft red (still attention-worthy)
+              // but less visually loud than a brand-new fail card.
+              `${ROLE.criticalSoft}88`
+            : finding.status === "fail"
+            ? ROLE.criticalSoft
+            : "transparent",
+        transition: "background-color 120ms ease",
+        // Subtle tint on the right edge to signal "this finding has
+        // an operator declared remediation state". Doesn't replace
+        // the chip — just helps the eye scan a list of cards.
+        boxShadow:
+          remediationStatus !== "open"
+            ? `inset -3px 0 0 0 ${REMEDIATION_STATUS_META[remediationStatus]?.fg ?? BRAND.gray}`
+            : "none"
       }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
@@ -1488,9 +1837,44 @@ function FindingCard({ finding }) {
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5, flexWrap: "wrap" }}>
             <StatusChip status={finding.status} />
             <SeverityChip severity={finding.severity} />
+            {/* Sprint 3 — show remediation state inline with the
+                outcome status so operators can sort/scan by either. */}
+            <RemediationStatusChip status={remediationStatus} />
             <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "monospace" }}>
               {finding.checkId}
             </Typography>
+            {firstSeenAgo ? (
+              <Tooltip
+                title={`First seen at ${finding.firstSeenAtUtc}`}
+                arrow
+                placement="top"
+              >
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  · open {firstSeenAgo}
+                </Typography>
+              </Tooltip>
+            ) : null}
+            {isAcked ? (
+              <Tooltip
+                title={`Acknowledged ${shortRelativeTime(finding.acknowledgedAt) ?? ""} ago${finding.acknowledgedBy ? ` by ${finding.acknowledgedBy}` : ""}`}
+                arrow
+                placement="top"
+              >
+                <Chip
+                  label="Ack"
+                  size="small"
+                  icon={<VisibilityOutlinedIcon sx={{ fontSize: 12 }} />}
+                  sx={{
+                    bgcolor: BRAND.tealSoft,
+                    color: BRAND.tealText,
+                    fontWeight: 700,
+                    height: 22,
+                    fontSize: 11,
+                    "& .MuiChip-icon": { color: BRAND.tealText }
+                  }}
+                />
+              </Tooltip>
+            ) : null}
           </Stack>
           <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
             {finding.title}
@@ -1520,6 +1904,96 @@ function FindingCard({ finding }) {
               ))}
             </Stack>
           ) : null}
+
+          {/* Sprint 3 — action row. Sits between framework chips and
+              the Details collapse so the operator sees:
+                - WHAT this finding is (chips + title above)
+                - WHAT they can do about it (action row)
+                - WHY / EVIDENCE (collapse below)
+              Buttons are size="small" so the card height matches the
+              pre-Sprint-3 look. Disabled while a mutation is in
+              flight. */}
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}
+          >
+            {isAcked ? (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<VisibilityOffOutlinedIcon sx={{ fontSize: 14 }} />}
+                onClick={() => onRevoke(finding)}
+                disabled={isPending}
+                sx={{ textTransform: "none" }}
+              >
+                Revoke ack
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 14 }} />}
+                onClick={() => onAck(finding)}
+                disabled={isPending}
+                sx={{ textTransform: "none" }}
+              >
+                Acknowledge
+              </Button>
+            )}
+            {nextTransitions.length > 0 ? (
+              <>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+                  onClick={(e) => setStatusMenuAnchor(e.currentTarget)}
+                  disabled={isPending}
+                  sx={{ textTransform: "none" }}
+                >
+                  Change status
+                </Button>
+                <Menu
+                  anchorEl={statusMenuAnchor}
+                  open={statusMenuOpen}
+                  onClose={() => setStatusMenuAnchor(null)}
+                  // anchorOrigin defaults to top-left; use bottom-left
+                  // so the menu opens BELOW the trigger, otherwise it
+                  // can clip against the drawer's top edge on the
+                  // first finding.
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                >
+                  {nextTransitions.map((next) => (
+                    <MenuItem
+                      key={next}
+                      onClick={() => {
+                        setStatusMenuAnchor(null);
+                        onChangeStatus(finding, next);
+                      }}
+                    >
+                      <RemediationStatusChip status={next} />
+                      <Typography variant="body2" sx={{ ml: 1 }}>
+                        Mark {REMEDIATION_STATUS_META[next]?.label.toLowerCase()}
+                      </Typography>
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </>
+            ) : null}
+            <Button
+              size="small"
+              variant="text"
+              startIcon={<HistoryOutlinedIcon sx={{ fontSize: 14 }} />}
+              onClick={() => onShowHistory(finding)}
+              disabled={isPending}
+              sx={{ textTransform: "none" }}
+            >
+              History
+            </Button>
+            {isPending ? (
+              <CircularProgress size={16} sx={{ ml: 0.5, alignSelf: "center" }} />
+            ) : null}
+          </Stack>
         </Box>
         <Button
           size="small"
@@ -1571,6 +2045,235 @@ function FindingCard({ finding }) {
         </Box>
       ) : null}
     </Paper>
+  );
+}
+
+// ── Sprint 3 — finding history dialog ─────────────────────────────────
+//
+// Opens from the "History" button on a FindingCard. Loads
+// compliance_finding_events for the finding lazily (only when the
+// dialog opens) so the device drawer's initial render isn't slowed
+// down by an extra request per finding. One outstanding request at
+// a time per dialog — closing while loading just discards the result
+// when it arrives.
+function FindingHistoryDialog({ open, finding, onClose }) {
+  const [events, setEvents] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!open || !finding?.id) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setEvents(null);
+    getFindingHistory(finding.id, { limit: 200 })
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.ok) {
+          setEvents(Array.isArray(res.events) ? res.events : []);
+        } else {
+          setError(res?.message || "Failed to load history.");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err?.message || String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, finding?.id]);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      // Stack ABOVE the device drawer (drawer's MUI z-index is 1200).
+      sx={{ "& .MuiDialog-paper": { borderRadius: 2 } }}
+    >
+      <DialogTitle sx={{ pb: 0.5 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, color: BRAND.dark }}>
+          Finding history
+        </Typography>
+        {finding ? (
+          <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "monospace" }}>
+            {finding.checkId}
+          </Typography>
+        ) : null}
+      </DialogTitle>
+      <DialogContent sx={{ minHeight: 200 }}>
+        {loading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : events && events.length > 0 ? (
+          <Stack spacing={1.25} sx={{ pt: 1 }}>
+            {events.map((evt) => (
+              <Box
+                key={evt.id}
+                sx={{
+                  p: 1.25,
+                  borderRadius: 1,
+                  border: `1px solid ${BRAND.border}`,
+                  bgcolor: BRAND.surfaceMuted
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>
+                    {humanizeEventType(evt.eventType)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    · {new Date(evt.atUtc).toLocaleString()}
+                  </Typography>
+                </Stack>
+                {evt.actorUserId ? (
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    by {evt.actorUserId}
+                  </Typography>
+                ) : (
+                  <Typography variant="caption" sx={{ color: BRAND.gray, fontStyle: "italic" }}>
+                    system
+                  </Typography>
+                )}
+                {evt.previousValue || evt.newValue ? (
+                  <Box
+                    sx={{
+                      mt: 0.5,
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                      color: BRAND.dark
+                    }}
+                  >
+                    {evt.previousValue
+                      ? `from: ${JSON.stringify(evt.previousValue)}`
+                      : null}
+                    {evt.previousValue && evt.newValue ? <br /> : null}
+                    {evt.newValue
+                      ? `to: ${JSON.stringify(evt.newValue)}`
+                      : null}
+                  </Box>
+                ) : null}
+                {evt.note ? (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: BRAND.dark, mt: 0.5, display: "block" }}
+                  >
+                    “{evt.note}”
+                  </Typography>
+                ) : null}
+              </Box>
+            ))}
+          </Stack>
+        ) : (
+          <DialogContentText sx={{ color: BRAND.gray, fontStyle: "italic", pt: 1 }}>
+            No events recorded yet.
+          </DialogContentText>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// Map machine event_type → human label. Kept inline here (not in
+// REMEDIATION_STATUS_META) because event_type isn't the same enum
+// space as remediation_status.
+function humanizeEventType(t) {
+  switch (t) {
+    case "opened":
+      return "Opened";
+    case "closed":
+      return "Closed";
+    case "reopened":
+      return "Reopened";
+    case "acknowledged":
+      return "Acknowledged";
+    case "acknowledgement_revoked":
+      return "Acknowledgement revoked";
+    case "remediation_status_changed":
+      return "Remediation status changed";
+    case "evidence_refreshed":
+      return "Evidence refreshed";
+    default:
+      return t;
+  }
+}
+
+// ── Sprint 3 — status-change confirmation dialog ──────────────────────
+//
+// Pops when the operator picks a transition from the action menu.
+// For terminal states (risk_accepted / wont_fix) we REQUIRE a note
+// so the audit trail captures the rationale. For other transitions
+// the note is optional but still surfaced — risk-accepting WITHOUT
+// a paper trail is one of the things auditors look for.
+function StatusChangeDialog({ open, finding: _finding, targetStatus, onConfirm, onCancel }) {
+  const [note, setNote] = React.useState("");
+  const requiresNote = TERMINAL_TRANSITIONS_REQUIRING_NOTE.has(targetStatus);
+  const canSubmit = !requiresNote || note.trim().length > 0;
+
+  // Reset the note when the dialog reopens for a different
+  // transition. Without this the note text from a previous click
+  // would leak into the next confirmation.
+  React.useEffect(() => {
+    if (open) setNote("");
+  }, [open]);
+
+  if (!targetStatus) return null;
+
+  return (
+    <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        Mark as {REMEDIATION_STATUS_META[targetStatus]?.label.toLowerCase()}?
+      </DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: 2 }}>
+          {requiresNote
+            ? "This is a terminal state. Please provide a brief justification — it will be recorded in the audit log."
+            : "Optionally add a note for the audit log."}
+        </DialogContentText>
+        <TextField
+          autoFocus
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={6}
+          placeholder={
+            requiresNote
+              ? "e.g. Mitigated via network ACL; revisit Q3."
+              : "Optional note"
+          }
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          required={requiresNote}
+          error={requiresNote && note.trim().length === 0}
+          helperText={
+            requiresNote && note.trim().length === 0
+              ? "A note is required for this transition."
+              : " "
+          }
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button
+          variant="contained"
+          disabled={!canSubmit}
+          onClick={() => onConfirm({ note: note.trim() || null })}
+        >
+          Confirm
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
