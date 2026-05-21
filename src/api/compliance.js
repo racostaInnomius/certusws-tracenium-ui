@@ -150,6 +150,17 @@ export function buildFindingsCsvUrl({
   return `/api/v1/security/compliance/export/findings.csv${qs}`;
 }
 
+// Sprint 6 — PDF export URL. Same browser-native download pattern
+// as CSV — backend streams pdfkit output with Content-Disposition.
+export function buildFindingsPdfUrl({
+  framework,
+  includeClosed = false,
+  maxDevices
+} = {}) {
+  const qs = buildQuery({ framework, includeClosed, maxDevices });
+  return `/api/v1/security/compliance/export/findings.pdf${qs}`;
+}
+
 // ── Sprint 5 — tenant compliance settings CRUD ────────────────────
 // GET returns { ok, settings: { effective, overrides, systemDefaults,
 // updatedAt } }; PUT accepts a partial patch and returns the post-
