@@ -41,6 +41,7 @@ import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
 import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
 import ShellTerminal from "../components/RemoteControl/ShellTerminal";
+import TranscriptReplayDialog from "../components/RemoteControl/TranscriptReplayDialog";
 
 import PageHeader from "../components/common/PageHeader";
 
@@ -151,6 +152,12 @@ export default function RemoteControl() {
   // the drawer. Only one active drawer at a time — operators
   // wanting parallel sessions open new tabs.
   const [activeSession, setActiveSession] = React.useState(null);
+
+  // RCP M1.S3 — replay dialog state. Holds the SessionHistory row
+  // selected via the "Replay" action so the dialog can stamp its
+  // header with operator/device metadata while it fetches the
+  // transcript itself.
+  const [replaySession, setReplaySession] = React.useState(null);
 
   /**
    * Click handler for Connect buttons in the ConnectablesTable.
@@ -311,7 +318,12 @@ export default function RemoteControl() {
       </Grid>
 
       {/* Row 3 — Session history */}
-      <SessionHistoryTable sessions={sessions} total={sessionTotal} loading={loading} />
+      <SessionHistoryTable
+        sessions={sessions}
+        total={sessionTotal}
+        loading={loading}
+        onReplay={(s) => setReplaySession(s)}
+      />
 
       <BrandSnackbar
         open={snackbar.open}
@@ -353,6 +365,15 @@ export default function RemoteControl() {
           </Box>
         ) : null}
       </Drawer>
+
+      {/* RCP M1.S3 — transcript replay dialog. Mounted at page
+          level so it overlays the SessionHistoryTable cleanly.
+          Open/close driven by replaySession state. */}
+      <TranscriptReplayDialog
+        open={Boolean(replaySession)}
+        session={replaySession}
+        onClose={() => setReplaySession(null)}
+      />
     </Box>
   );
 }

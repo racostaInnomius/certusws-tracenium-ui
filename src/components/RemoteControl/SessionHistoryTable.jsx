@@ -7,6 +7,7 @@
 
 import {
   Box,
+  Button,
   Chip,
   Paper,
   Stack,
@@ -19,6 +20,7 @@ import {
   Typography
 } from "@mui/material";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
 const TYPE_LABEL = {
@@ -45,7 +47,14 @@ function formatDuration(sec) {
   return `${h}h ${remM}m`;
 }
 
-export default function SessionHistoryTable({ sessions, total, loading }) {
+export default function SessionHistoryTable({
+  sessions,
+  total,
+  loading,
+  // Sprint 3 — invoked when the operator clicks "Replay" on a row.
+  // Parent passes a handler that mounts the TranscriptReplayDialog.
+  onReplay
+}) {
   const items = Array.isArray(sessions) ? sessions : [];
 
   return (
@@ -136,7 +145,32 @@ export default function SessionHistoryTable({ sessions, total, loading }) {
                       />
                     </TableCell>
                     <TableCell>
-                      {s.hasTranscript ? "Available" : "—"}
+                      {/* Sprint 3 — Replay opens TranscriptReplayDialog.
+                          We render the button on EVERY closed session,
+                          letting the backend return 404 if no chunks
+                          were recorded (rather than trusting the
+                          stale hasTranscript flag from the list
+                          payload). Only suppress for active sessions
+                          since the transcript is still being uploaded. */}
+                      {s.status === "active" || !onReplay ? (
+                        <span style={{ color: BRAND.gray }}>
+                          {s.status === "active" ? "In progress" : "—"}
+                        </span>
+                      ) : (
+                        <Button
+                          size="small"
+                          variant="text"
+                          startIcon={
+                            <PlayCircleOutlineOutlinedIcon
+                              sx={{ fontSize: 16 }}
+                            />
+                          }
+                          onClick={() => onReplay(s)}
+                          sx={{ textTransform: "none", color: BRAND.tealText }}
+                        >
+                          Replay
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
