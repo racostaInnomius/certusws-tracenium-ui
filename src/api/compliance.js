@@ -116,3 +116,36 @@ export async function getFindingHistory(findingId, { limit = 200 } = {}) {
 export async function getTimeToCloseSummary({ windowDays = 90 } = {}) {
   return httpGetJson(`${BASE}/time-to-close${buildQuery({ windowDays })}`);
 }
+
+// ── Sprint 4 — diff vs last scan ───────────────────────────────────
+// Returns { ok, diff: { currentSnapshotAt, referenceSnapshotAt,
+// added[], removed[], severityChanged[], statusChanged[] } }.
+// `vs` is optional — omit it to compare against the device's
+// previous snapshot. Pass an ISO 8601 timestamp to compare against
+// an arbitrary reference point.
+export async function getDeviceFindingsDiff(agentId, { vs } = {}) {
+  return httpGetJson(
+    `${BASE}/devices/${encodeURIComponent(agentId)}/diff${buildQuery({ vs })}`
+  );
+}
+
+// ── Sprint 4 — CSV export ──────────────────────────────────────────
+// NOT a fetch JSON helper — it returns the absolute URL the browser
+// can hit directly to trigger a download. The backend streams the
+// CSV and sets Content-Disposition; nothing for us to do client-side
+// beyond opening a tab or assigning to window.location. We return
+// the URL so the calling component can render it as a link / button
+// `href` AND keep the OIDC cookie credentials in flight.
+//
+// Why URL-not-fetch: a 50 MB CSV streamed through fetch() would have
+// to be buffered into a Blob and revoked — fine but pointless when
+// the browser's native download path already handles streaming
+// efficiently and shows a progress indicator in the chrome.
+export function buildFindingsCsvUrl({
+  framework,
+  includeClosed = false,
+  maxRows
+} = {}) {
+  const qs = buildQuery({ framework, includeClosed, maxRows });
+  return `/api/v1/security/compliance/export/findings.csv${qs}`;
+}

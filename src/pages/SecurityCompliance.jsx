@@ -72,6 +72,12 @@ import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+// Sprint 4 — diff + export
+import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
+import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
+import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
+import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 
 import {
   getComplianceSummary,
@@ -83,7 +89,10 @@ import {
   acknowledgeFinding,
   revokeFindingAcknowledgement,
   updateFindingRemediationStatus,
-  getFindingHistory
+  getFindingHistory,
+  // Sprint 4
+  getDeviceFindingsDiff,
+  buildFindingsCsvUrl
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 
@@ -717,12 +726,46 @@ export default function SecurityCompliance() {
         }
         icon={<GppGoodOutlinedIcon />}
         actions={
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={refetch}
-            loading={loading || refreshing}
-          />
+          <Stack direction="row" spacing={1} alignItems="center">
+            {/* Sprint 4 — CSV export. Anchor tag (not a fetch
+                button) so the browser handles the streaming
+                download natively + shows progress in the chrome.
+                The OIDC cookie credential rides along automatically.
+                Filter is the currently selected framework so the
+                operator can "save what they're looking at" without
+                a separate export dialog. */}
+            <Tooltip
+              title={
+                selectedFramework
+                  ? `Export findings for ${selectedFrameworkLabel} as CSV`
+                  : "Export all findings as CSV (every mapped framework)"
+              }
+              arrow
+              placement="bottom"
+            >
+              <Button
+                component="a"
+                href={buildFindingsCsvUrl({
+                  framework: selectedFramework || undefined
+                })}
+                // No target="_blank" — same-tab keeps the OIDC
+                // cookie scope; the browser's download dialog
+                // handles the rest without leaving the page.
+                size="small"
+                variant="outlined"
+                startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ textTransform: "none" }}
+              >
+                Export CSV
+              </Button>
+            </Tooltip>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={refetch}
+              loading={loading || refreshing}
+            />
+          </Stack>
         }
       />
 
@@ -1702,6 +1745,9 @@ function DeviceDrawerContent({
             recentPatches={device.recentPatches}
           />
 
+          {/* Sprint 4 — diff vs last scan -------------------------------- */}
+          <DeviceDiffSection agentId={agentId} />
+
           {/* Findings grouped by category --------------------------------- */}
           {byCategory.map(([category, items]) => (
             <Box key={category} sx={{ mb: 2 }}>
@@ -2274,6 +2320,219 @@ function StatusChangeDialog({ open, finding: _finding, targetStatus, onConfirm, 
         </Button>
       </DialogActions>
     </Dialog>
+  );
+}
+
+// ── Sprint 4 — "what changed since last scan" section ───────────────
+//
+// Collapsed by default — most users land in the drawer to triage the
+// current state of findings, not to do diff analysis. Operators
+// looking for "did my last fix take" expand it and get the three
+// buckets: added, removed (resolved), and severity/status changes.
+//
+// Lazily loads the diff on first expand to avoid spending a request
+// + DB CTE every time the drawer opens. Cancelled cleanly if the
+// drawer closes mid-fetch.
+function DeviceDiffSection({ agentId }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [diff, setDiff] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const [fetched, setFetched] = React.useState(false);
+
+  // Trigger the fetch the first time the section is expanded, AND any
+  // time the agent changes while expanded (e.g. user navigates from
+  // one device to another without closing the drawer — uncommon but
+  // possible).
+  React.useEffect(() => {
+    if (!expanded || !agentId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getDeviceFindingsDiff(agentId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.ok) {
+          setDiff(res.diff ?? null);
+          setFetched(true);
+        } else {
+          setError(res?.message || "Failed to load diff.");
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err?.message || String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, agentId]);
+
+  const hasReference = diff?.referenceSnapshotAt != null;
+  const added = diff?.added ?? [];
+  const removed = diff?.removed ?? [];
+  const severityChanged = diff?.severityChanged ?? [];
+  const statusChanged = diff?.statusChanged ?? [];
+  const totalChanges =
+    added.length + removed.length + severityChanged.length + statusChanged.length;
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.5,
+        mb: 2,
+        borderRadius: 2,
+        border: `1px solid ${BRAND.border}`
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          cursor: "pointer"
+        }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <DifferenceOutlinedIcon sx={{ fontSize: 18, color: BRAND.tealText }} />
+        <Typography
+          variant="caption"
+          sx={{
+            color: BRAND.tealText,
+            fontWeight: 800,
+            textTransform: "uppercase",
+            letterSpacing: 0.8,
+            flex: 1
+          }}
+        >
+          Changes since last scan
+        </Typography>
+        {/* Mini-badge when collapsed so the operator sees there's
+            something worth expanding without opening it. Only
+            renders after the first fetch (`fetched`) so we don't
+            mislead the user with a "0 changes" before we know. */}
+        {fetched && !expanded ? (
+          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+            {totalChanges === 0 ? "no changes" : `${totalChanges} change${totalChanges === 1 ? "" : "s"}`}
+          </Typography>
+        ) : null}
+        <IconButton size="small" sx={{ ml: 0.5 }}>
+          {expanded ? (
+            <ExpandLessOutlinedIcon fontSize="small" />
+          ) : (
+            <ExpandMoreOutlinedIcon fontSize="small" />
+          )}
+        </IconButton>
+      </Box>
+
+      <Collapse in={expanded} unmountOnExit>
+        <Box sx={{ mt: 1.5 }}>
+          {loading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
+              <CircularProgress size={20} />
+            </Box>
+          ) : error ? (
+            <Alert severity="error">{error}</Alert>
+          ) : !hasReference ? (
+            <Typography variant="body2" sx={{ color: BRAND.gray, fontStyle: "italic" }}>
+              No prior scan to compare against. Once this device reports a
+              second snapshot, this section will show the delta.
+            </Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                Comparing{" "}
+                <strong>
+                  {diff.currentSnapshotAt
+                    ? new Date(diff.currentSnapshotAt).toLocaleString()
+                    : "current"}
+                </strong>{" "}
+                vs{" "}
+                <strong>
+                  {new Date(diff.referenceSnapshotAt).toLocaleString()}
+                </strong>
+              </Typography>
+
+              {totalChanges === 0 ? (
+                <Alert severity="success" icon={false} sx={{ py: 0.5 }}>
+                  No changes since the prior scan.
+                </Alert>
+              ) : null}
+
+              <DiffBucket
+                title="New findings"
+                items={added.map((f) => `${f.severity ?? "?"} · ${f.checkId} — ${f.title ?? ""}`)}
+                color={ROLE.critical}
+                icon={<AddCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+              />
+              <DiffBucket
+                title="Resolved"
+                items={removed.map((f) => `${f.severity ?? "?"} · ${f.checkId} — ${f.title ?? ""}`)}
+                color={ROLE.positive}
+                icon={<RemoveCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+              />
+              <DiffBucket
+                title="Severity changed"
+                items={severityChanged.map(
+                  (c) => `${c.checkId}: ${c.before ?? "?"} → ${c.after ?? "?"}`
+                )}
+                color={ROLE.caution}
+                icon={<SwapHorizOutlinedIcon sx={{ fontSize: 14 }} />}
+              />
+              <DiffBucket
+                title="Status changed"
+                items={statusChanged.map(
+                  (c) => `${c.checkId}: ${c.before ?? "?"} → ${c.after ?? "?"}`
+                )}
+                color={ROLE.caution}
+                icon={<SwapHorizOutlinedIcon sx={{ fontSize: 14 }} />}
+              />
+            </Stack>
+          )}
+        </Box>
+      </Collapse>
+    </Paper>
+  );
+}
+
+// Hidden when items array is empty — keeps the diff section compact
+// for the common "only one bucket has content" case.
+function DiffBucket({ title, items, color, icon }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <Box>
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.5 }}>
+        <Box sx={{ color, display: "flex" }}>{icon}</Box>
+        <Typography
+          variant="caption"
+          sx={{ color, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}
+        >
+          {title} ({items.length})
+        </Typography>
+      </Stack>
+      <Box
+        component="ul"
+        sx={{
+          m: 0,
+          pl: 2.5,
+          color: BRAND.dark,
+          fontSize: 13,
+          lineHeight: 1.55
+        }}
+      >
+        {items.map((line, idx) => (
+          <li key={idx}>
+            <Typography variant="body2" component="span">
+              {line}
+            </Typography>
+          </li>
+        ))}
+      </Box>
+    </Box>
   );
 }
 
