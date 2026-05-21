@@ -161,6 +161,16 @@ export function buildFindingsPdfUrl({
   return `/api/v1/security/compliance/export/findings.pdf${qs}`;
 }
 
+// ── Sprint 7 — device fleet ranking ────────────────────────────────
+// Returns { ok, ranking: { score, rank, scoredCount, unscoredCount,
+// topPercentile } } so the drawer header can render
+// "Score 72 · #12 of 45 (top 27%)".
+export async function getDeviceFleetRanking(agentId) {
+  return httpGetJson(
+    `/api/v1/security/compliance/devices/${encodeURIComponent(agentId)}/ranking`
+  );
+}
+
 // ── Sprint 5 — tenant compliance settings CRUD ────────────────────
 // GET returns { ok, settings: { effective, overrides, systemDefaults,
 // updatedAt } }; PUT accepts a partial patch and returns the post-

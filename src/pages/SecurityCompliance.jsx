@@ -101,7 +101,9 @@ import {
   buildFindingsCsvUrl,
   // Sprint 6
   buildFindingsPdfUrl,
-  bulkFindingOp
+  bulkFindingOp,
+  // Sprint 7
+  getDeviceFleetRanking
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 
@@ -256,6 +258,18 @@ function shortRelativeTime(isoString) {
   if (months < 12) return `${months}mo`;
   const years = Math.round(months / 12);
   return `${years}y`;
+}
+
+// Sprint 7 item 3.1 — true if the device was enrolled in the last
+// 24h. Used to render the "Recently enrolled" chip; the threshold
+// matches the typical "give it one scan cycle" window. The data
+// itself comes from `agent.created_at` (exposed via fetchTenantDevicePosture).
+const RECENTLY_ENROLLED_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+function isRecentlyEnrolled(isoString) {
+  if (!isoString) return false;
+  const then = Date.parse(isoString);
+  if (!Number.isFinite(then)) return false;
+  return Date.now() - then < RECENTLY_ENROLLED_THRESHOLD_MS;
 }
 
 // ---------- small presentational atoms ---------------------------------------
@@ -1112,27 +1126,47 @@ export default function SecurityCompliance() {
                             {d.agentId}
                           </Typography>
                         ) : null}
-                        {/* Sprint 1 item 3.1 — when a device has
-                            insufficient_data status, show an inline
-                            caption clarifying this is usually a
-                            timing issue (fresh enrollment, partial
-                            evidence) rather than a real problem. Reduces
-                            operator anxiety + sets the right expectation
-                            ("wait, don't escalate"). A future backend
-                            change can replace this heuristic with a
-                            real "Recently enrolled" detector based on
-                            agent.created_at. */}
-                        {d.overallStatus === "insufficient_data" ? (
+                        {/* Sprint 7 item 3.1 (real detector) — chip
+                            shown when the device was enrolled within
+                            the last 24h. Distinct from
+                            "insufficient_data" which can also fire
+                            for long-standing devices with broken
+                            collectors. We don't gate the chip on
+                            status === insufficient_data because a
+                            freshly-enrolled device that DOES manage
+                            to score quickly should still get the
+                            "new" indicator briefly. */}
+                        {isRecentlyEnrolled(d.agentCreatedAtUtc) ? (
+                          <Chip
+                            label="Recently enrolled"
+                            size="small"
+                            sx={{
+                              mt: 0.25,
+                              bgcolor: BRAND.tealSoft,
+                              color: BRAND.tealText,
+                              fontWeight: 700,
+                              height: 20,
+                              fontSize: 10,
+                              fontStyle: "italic"
+                            }}
+                          />
+                        ) : d.overallStatus === "insufficient_data" ? (
+                          // Older device with insufficient data is a
+                          // different concern — collector is sending
+                          // incomplete evidence. We still show a hint
+                          // but the wording shifts blame off the
+                          // operator ("wait it out") and toward the
+                          // collector ("look into this").
                           <Typography
                             variant="caption"
                             sx={{
-                              color: BRAND.teal,
+                              color: BRAND.gray,
                               fontStyle: "italic",
                               display: "block",
                               mt: 0.25
                             }}
                           >
-                            Awaiting first full scan
+                            Insufficient evidence — check collector
                           </Typography>
                         ) : null}
                       </TableCell>
@@ -1859,6 +1893,12 @@ function DeviceDrawerContent({
                       data devices instead of showing a fake 0%. */}
                   <ScoreBar value={device.overallScore} />
                 </Box>
+                {/* Sprint 7 item 3.6 — fleet ranking. Sits under the
+                    score so an operator immediately sees "this is
+                    72 — top 27% of fleet" without scrolling. The
+                    widget owns its own fetch + states; the parent
+                    just hands it the agent id. */}
+                <FleetRankingLine agentId={agentId} />
               </Paper>
             </Grid>
           </Grid>
@@ -2947,6 +2987,95 @@ function DiffBucket({ title, items, color, icon }) {
         ))}
       </Box>
     </Box>
+  );
+}
+
+// ── Sprint 7 item 3.6 — fleet ranking line ────────────────────────
+//
+// Loads the per-device ranking lazily when the drawer opens for a
+// given agent. Renders a single text line under the score:
+//
+//   "#12 of 45 scored · top 27%"           (scored device)
+//   "Not scored (33 of 45 unscored)"       (insufficient_data)
+//   "Loading…" / hidden on error
+//
+// Doesn't surface its own error UI — a failed ranking request is
+// fine to silently hide. The drawer's main content is still useful
+// without it.
+function FleetRankingLine({ agentId }) {
+  const [ranking, setRanking] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!agentId) return;
+    let cancelled = false;
+    setLoading(true);
+    setRanking(null);
+    getDeviceFleetRanking(agentId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.ok) setRanking(res.ranking ?? null);
+      })
+      .catch(() => {
+        // Silent — see component doc.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId]);
+
+  if (loading) {
+    return (
+      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
+        Loading fleet rank…
+      </Typography>
+    );
+  }
+  if (!ranking) return null;
+
+  const { rank, scoredCount, unscoredCount, topPercentile } = ranking;
+  const fleetSize = scoredCount + unscoredCount;
+
+  // Unscored device — explain what's happening instead of showing
+  // a numeric rank that doesn't apply.
+  if (rank === null) {
+    return (
+      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
+        Not scored · {scoredCount} of {fleetSize} devices scored in this fleet
+      </Typography>
+    );
+  }
+
+  // Lone-device fleets get a slightly different message. "Top 100%
+  // of 1 device" reads weird.
+  if (scoredCount === 1) {
+    return (
+      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
+        Only scored device in this fleet
+      </Typography>
+    );
+  }
+
+  return (
+    <Tooltip
+      title={
+        unscoredCount > 0
+          ? `${unscoredCount} device${unscoredCount === 1 ? "" : "s"} have null score and are excluded from the ranking.`
+          : "Ranked against every scored device in the fleet."
+      }
+      arrow
+      placement="top"
+    >
+      <Typography
+        variant="caption"
+        sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}
+      >
+        #{rank} of {scoredCount} scored · top {topPercentile}%
+      </Typography>
+    </Tooltip>
   );
 }
 
