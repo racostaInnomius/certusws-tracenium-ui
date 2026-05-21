@@ -26,6 +26,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Collapse,
@@ -80,6 +81,9 @@ import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOut
 import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 // Sprint 5 — settings panel trigger
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+// Sprint 6 — PDF export + bulk actions
+import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
+import PlaylistAddCheckOutlinedIcon from "@mui/icons-material/PlaylistAddCheckOutlined";
 
 import {
   getComplianceSummary,
@@ -94,7 +98,10 @@ import {
   getFindingHistory,
   // Sprint 4
   getDeviceFindingsDiff,
-  buildFindingsCsvUrl
+  buildFindingsCsvUrl,
+  // Sprint 6
+  buildFindingsPdfUrl,
+  bulkFindingOp
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 
@@ -781,6 +788,31 @@ export default function SecurityCompliance() {
                 sx={{ textTransform: "none" }}
               >
                 Export CSV
+              </Button>
+            </Tooltip>
+            {/* Sprint 6 — PDF export. Same anchor-tag pattern as
+                CSV; pdfkit emits Content-Disposition so the
+                browser handles the Save dialog. */}
+            <Tooltip
+              title={
+                selectedFramework
+                  ? `Export findings for ${selectedFrameworkLabel} as PDF`
+                  : "Export all findings as PDF"
+              }
+              arrow
+              placement="bottom"
+            >
+              <Button
+                component="a"
+                href={buildFindingsPdfUrl({
+                  framework: selectedFramework || undefined
+                })}
+                size="small"
+                variant="outlined"
+                startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
+                sx={{ textTransform: "none" }}
+              >
+                Export PDF
               </Button>
             </Tooltip>
             <RefreshControl
@@ -1553,6 +1585,43 @@ function DeviceDrawerContent({
   // historyDialog: { finding } when open.
   const [historyDialog, setHistoryDialog] = React.useState(null);
 
+  // ── Sprint 6 — bulk selection state ───────────────────────────────
+  //
+  // Set<findingId> drives the checkboxes' checked state. We keep it
+  // as a Set (not array) so toggle is O(1); the bulk toolbar reads
+  // size to decide whether to show.
+  //
+  // Selection is reset on drawer close (the drawer's open/close
+  // remounts DeviceDrawerContent through React's keying). Switching
+  // BETWEEN devices without closing doesn't reset — we explicitly
+  // clear when agentId changes.
+  const [selectedIds, setSelectedIds] = React.useState(() => new Set());
+  // bulkStatusDialog: { targetStatus } when open.
+  const [bulkStatusDialog, setBulkStatusDialog] = React.useState(null);
+  // Anchor for the bulk action menu.
+  const [bulkMenuAnchor, setBulkMenuAnchor] = React.useState(null);
+  const [bulkPending, setBulkPending] = React.useState(false);
+
+  React.useEffect(() => {
+    // Different device => clear selection so a "Acknowledge all 5
+    // selected" doesn't accidentally target the previous device's
+    // findings after navigation.
+    setSelectedIds(new Set());
+  }, [agentId]);
+
+  const toggleSelected = React.useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const selectAll = React.useCallback(() => {
+    setSelectedIds(new Set(findings.map((f) => f.id).filter(Boolean)));
+  }, [findings]);
+  const clearSelection = React.useCallback(() => setSelectedIds(new Set()), []);
+
   /**
    * Wraps any lifecycle API call with the standard shape:
    *   - mark pending
@@ -1628,6 +1697,79 @@ function DeviceDrawerContent({
           note
         }),
       `Status set to ${REMEDIATION_STATUS_META[targetStatus]?.label}.`
+    );
+  }
+
+  // ── Sprint 6 — bulk operation runners ─────────────────────────────
+  //
+  // Each bulk handler:
+  //   1. computes the finding-id array from the selection
+  //   2. calls `bulkFindingOp` and unpacks the per-item summary
+  //   3. toasts with "X ok, Y failed" so an operator sees partial
+  //      success at a glance (e.g. closed findings that got filtered
+  //      out by the backend's transition guard).
+  //   4. refetches the drawer + clears selection on success
+  function summarizeBulk(label, summary) {
+    const ok = summary?.ok ?? 0;
+    const failed = summary?.failed ?? 0;
+    const total = summary?.total ?? ok + failed;
+    if (failed === 0) {
+      return { severity: "success", message: `${label}: ${ok}/${total} ok` };
+    }
+    return {
+      severity: "warning",
+      message: `${label}: ${ok}/${total} ok, ${failed} failed (check audit log)`
+    };
+  }
+
+  async function runBulk(opPayload, label) {
+    const findingIds = Array.from(selectedIds);
+    if (findingIds.length === 0) return;
+    setBulkPending(true);
+    try {
+      const res = await bulkFindingOp({ ...opPayload, findingIds });
+      if (res?.ok) {
+        onToast?.(summarizeBulk(label, res.summary));
+        clearSelection();
+        onRequestRefetch?.();
+      } else {
+        onToast?.({
+          severity: "error",
+          message: res?.message || "Bulk action failed."
+        });
+      }
+    } catch (err) {
+      onToast?.({
+        severity: "error",
+        message: err?.message || String(err)
+      });
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
+  function handleBulkAck() {
+    setBulkMenuAnchor(null);
+    return runBulk({ op: "acknowledge" }, "Acknowledged");
+  }
+  function handleBulkRevoke() {
+    setBulkMenuAnchor(null);
+    return runBulk({ op: "revoke_acknowledgement" }, "Acknowledgement revoked");
+  }
+  function handleBulkChangeStatus(next) {
+    setBulkMenuAnchor(null);
+    // Same confirmation pattern as the single-finding flow:
+    // terminal states require a note. The bulk dialog reuses
+    // StatusChangeDialog (different `targetStatus`, same component).
+    setBulkStatusDialog({ targetStatus: next });
+  }
+  async function confirmBulkStatusChange({ note }) {
+    if (!bulkStatusDialog) return;
+    const { targetStatus } = bulkStatusDialog;
+    setBulkStatusDialog(null);
+    await runBulk(
+      { op: "change_status", newStatus: targetStatus, note },
+      `Status set to ${REMEDIATION_STATUS_META[targetStatus]?.label}`
     );
   }
 
@@ -1788,6 +1930,53 @@ function DeviceDrawerContent({
           {/* Sprint 4 — diff vs last scan -------------------------------- */}
           <DeviceDiffSection agentId={agentId} />
 
+          {/* Sprint 6 — bulk action toolbar. Renders only when the
+              operator has selected one or more findings. Sticky
+              just under the patch section so a long findings list
+              keeps it visible while scrolling. Selection persists
+              across the categories below — checkboxes per finding
+              + this toolbar are the single bulk surface. */}
+          {findings.length > 0 ? (
+            <BulkFindingToolbar
+              totalCount={findings.length}
+              selectedCount={selectedIds.size}
+              onSelectAll={selectAll}
+              onClear={clearSelection}
+              onOpenMenu={(e) => setBulkMenuAnchor(e.currentTarget)}
+              pending={bulkPending}
+            />
+          ) : null}
+
+          {/* Bulk action menu — same transitions as the per-finding
+              menu, plus "Acknowledge / Revoke ack" at the top. */}
+          <Menu
+            anchorEl={bulkMenuAnchor}
+            open={Boolean(bulkMenuAnchor)}
+            onClose={() => setBulkMenuAnchor(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          >
+            <MenuItem onClick={handleBulkAck}>
+              <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+              <Typography variant="body2">Acknowledge selected</Typography>
+            </MenuItem>
+            <MenuItem onClick={handleBulkRevoke}>
+              <VisibilityOffOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+              <Typography variant="body2">Revoke acknowledgement</Typography>
+            </MenuItem>
+            {/* All transitions surfaced. The backend rejects
+                invalid ones per-item; the toast summary tells the
+                operator how many took. */}
+            {["in_progress", "remediated", "risk_accepted", "wont_fix", "open"].map((next) => (
+              <MenuItem key={next} onClick={() => handleBulkChangeStatus(next)}>
+                <RemediationStatusChip status={next} />
+                <Typography variant="body2" sx={{ ml: 1 }}>
+                  Mark {REMEDIATION_STATUS_META[next]?.label.toLowerCase()}
+                </Typography>
+              </MenuItem>
+            ))}
+          </Menu>
+
           {/* Findings grouped by category --------------------------------- */}
           {byCategory.map(([category, items]) => (
             <Box key={category} sx={{ mb: 2 }}>
@@ -1814,6 +2003,11 @@ function DeviceDrawerContent({
                     onChangeStatus={handleChangeStatus}
                     onShowHistory={(finding) => setHistoryDialog({ finding })}
                     pendingAction={pendingAction}
+                    // Sprint 6 — bulk selection
+                    selected={selectedIds.has(f.id)}
+                    onToggleSelected={
+                      f.id ? () => toggleSelected(f.id) : null
+                    }
                   />
                 ))}
               </Stack>
@@ -1843,6 +2037,17 @@ function DeviceDrawerContent({
         finding={historyDialog?.finding ?? null}
         onClose={() => setHistoryDialog(null)}
       />
+      {/* Sprint 6 — bulk status-change confirmation. Reuses
+          StatusChangeDialog but passes `finding=null` because the
+          dialog body talks about "selected findings" generically;
+          the label only needs targetStatus. */}
+      <StatusChangeDialog
+        open={Boolean(bulkStatusDialog)}
+        finding={null}
+        targetStatus={bulkStatusDialog?.targetStatus ?? null}
+        onConfirm={confirmBulkStatusChange}
+        onCancel={() => setBulkStatusDialog(null)}
+      />
     </Box>
   );
 }
@@ -1871,7 +2076,13 @@ function FindingCard({
   onRevoke,
   onChangeStatus,
   onShowHistory,
-  pendingAction
+  pendingAction,
+  // Sprint 6 — bulk selection. selected: boolean indicates whether
+  // this card is checked; onToggleSelected: fn or null. When null,
+  // the checkbox is hidden (used for findings without a stable id
+  // — shouldn't happen in production, defensive only).
+  selected = false,
+  onToggleSelected = null
 }) {
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
@@ -1919,6 +2130,22 @@ function FindingCard({
       }}
     >
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+        {/* Sprint 6 — bulk selection checkbox. Compact (padding=0)
+            so the card height doesn't grow; aligned to the top so it
+            sits at the same baseline as the status chip row. Hidden
+            when no toggle handler is provided (defensive). */}
+        {onToggleSelected ? (
+          <Checkbox
+            size="small"
+            checked={selected}
+            onChange={onToggleSelected}
+            // Stop propagation so the checkbox click doesn't fall
+            // through and open the Details collapse below it.
+            onClick={(e) => e.stopPropagation()}
+            sx={{ p: 0, mt: 0.25 }}
+            inputProps={{ "aria-label": "Select finding for bulk action" }}
+          />
+        ) : null}
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5, flexWrap: "wrap" }}>
             <StatusChip status={finding.status} />
@@ -2130,6 +2357,95 @@ function FindingCard({
           ) : null}
         </Box>
       ) : null}
+    </Paper>
+  );
+}
+
+// ── Sprint 6 — bulk action toolbar ─────────────────────────────────
+//
+// Compact bar that appears above the findings list. Three modes:
+//   1. selectedCount === 0 → "Select all (N findings)" + nothing else.
+//   2. selectedCount > 0   → "N of M selected" + Clear + Actions menu.
+//   3. pending            → all controls disabled with a spinner.
+//
+// Kept as a Paper rather than a sticky Toolbar so it doesn't fight
+// the Drawer's scroll behavior across viewports. Operators scrolling
+// a long findings list can scroll up to find it — the selection
+// state is preserved.
+function BulkFindingToolbar({
+  totalCount,
+  selectedCount,
+  onSelectAll,
+  onClear,
+  onOpenMenu,
+  pending
+}) {
+  const hasSelection = selectedCount > 0;
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1,
+        mb: 1.5,
+        borderRadius: 2,
+        border: `1px solid ${hasSelection ? BRAND.teal : BRAND.border}`,
+        bgcolor: hasSelection ? BRAND.tealSoft : "transparent",
+        transition: "background-color 120ms ease, border-color 120ms ease"
+      }}
+    >
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Checkbox
+          size="small"
+          checked={hasSelection && selectedCount === totalCount}
+          indeterminate={hasSelection && selectedCount < totalCount}
+          onChange={hasSelection ? onClear : onSelectAll}
+          disabled={pending}
+          sx={{ p: 0.5 }}
+          inputProps={{ "aria-label": "Select all findings" }}
+        />
+        <Typography
+          variant="body2"
+          sx={{
+            color: hasSelection ? BRAND.tealText : BRAND.gray,
+            fontWeight: hasSelection ? 700 : 500,
+            flex: 1
+          }}
+        >
+          {hasSelection
+            ? `${selectedCount} of ${totalCount} selected`
+            : `Select all (${totalCount} findings)`}
+        </Typography>
+        {hasSelection ? (
+          <>
+            <Button
+              size="small"
+              variant="text"
+              onClick={onClear}
+              disabled={pending}
+              sx={{ textTransform: "none" }}
+            >
+              Clear
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={onOpenMenu}
+              disabled={pending}
+              startIcon={
+                pending ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : (
+                  <PlaylistAddCheckOutlinedIcon sx={{ fontSize: 16 }} />
+                )
+              }
+              endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+              sx={{ textTransform: "none" }}
+            >
+              Actions
+            </Button>
+          </>
+        ) : null}
+      </Stack>
     </Paper>
   );
 }
@@ -2380,16 +2696,33 @@ function DeviceDiffSection({ agentId }) {
   const [error, setError] = React.useState(null);
   const [fetched, setFetched] = React.useState(false);
 
+  // Sprint 6 — operator-pickable reference date. null/"" means
+  // "use the prior snapshot" (default behavior). When the operator
+  // picks an arbitrary date, we send it as ?vs=<iso>; the backend
+  // finds the closest open-set at that timestamp.
+  //
+  // <input type="date"> gives us a yyyy-mm-dd string. We translate
+  // to "the start of that day in UTC" so picking 2026-05-01 means
+  // "what was open at 00:00Z on May 1?" — the most intuitive
+  // semantic for daily compliance reviews.
+  const [vsDate, setVsDate] = React.useState("");
+
+  // Bumped on Apply so the effect refetches even when expanded
+  // hasn't toggled. (Pure `vsDate` in the dep array would refetch
+  // on every keystroke before Apply.)
+  const [refetchTick, setRefetchTick] = React.useState(0);
+
   // Trigger the fetch the first time the section is expanded, AND any
   // time the agent changes while expanded (e.g. user navigates from
   // one device to another without closing the drawer — uncommon but
-  // possible).
+  // possible). Also re-triggered by Apply (refetchTick).
   React.useEffect(() => {
     if (!expanded || !agentId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDeviceFindingsDiff(agentId)
+    const vsIso = vsDate ? `${vsDate}T00:00:00Z` : null;
+    getDeviceFindingsDiff(agentId, vsIso ? { vs: vsIso } : {})
       .then((res) => {
         if (cancelled) return;
         if (res?.ok) {
@@ -2409,7 +2742,8 @@ function DeviceDiffSection({ agentId }) {
     return () => {
       cancelled = true;
     };
-  }, [expanded, agentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, agentId, refetchTick]);
 
   const hasReference = diff?.referenceSnapshotAt != null;
   const added = diff?.added ?? [];
@@ -2484,6 +2818,46 @@ function DeviceDiffSection({ agentId }) {
             </Typography>
           ) : (
             <Stack spacing={1.5}>
+              {/* Sprint 6 — reference date picker. Empty = "compare
+                  against the prior snapshot" (the default behavior
+                  shipped in Sprint 4); a date sends ?vs=<iso> so the
+                  backend computes diff vs that point in time. The
+                  Apply button is enabled when the input differs from
+                  the currently rendered reference date. */}
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                <TextField
+                  type="date"
+                  size="small"
+                  label="Reference date"
+                  value={vsDate}
+                  onChange={(e) => setVsDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ minWidth: 160 }}
+                />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setRefetchTick((t) => t + 1)}
+                  disabled={loading}
+                  sx={{ textTransform: "none" }}
+                >
+                  Apply
+                </Button>
+                {vsDate ? (
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => {
+                      setVsDate("");
+                      setRefetchTick((t) => t + 1);
+                    }}
+                    disabled={loading}
+                    sx={{ textTransform: "none", color: BRAND.gray }}
+                  >
+                    Reset to prior snapshot
+                  </Button>
+                ) : null}
+              </Stack>
               <Typography variant="caption" sx={{ color: BRAND.gray }}>
                 Comparing{" "}
                 <strong>
