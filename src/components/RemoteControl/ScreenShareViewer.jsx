@@ -1,6 +1,6 @@
 // src/components/RemoteControl/ScreenShareViewer.jsx
 //
-// RCP M3.S1 — live screen share viewer for rcp.screen sessions.
+// RCP M3.S2 — live screen share viewer (chunked frame transport).
 //
 // Architecture:
 //   - Same WebRTC + WebSocket signaling bootstrap as ShellTerminal /
@@ -8,17 +8,22 @@
 //   - DataChannel "rcp.screen" carries JPEG frames encoded as base64
 //     strings inside a JSON envelope. The backend never sees frame data.
 //   - Agent → Browser protocol (JSON over DataChannel):
-//       { op: "screenInfo",  width, height, fps }    // once at open
-//       { op: "frame",  seq, width, height, data }   // base64 JPEG
+//       { op: "screenInfo",  width, height, fps }      // once at open
+//       { op: "frame",  seq, width, height, data }     // small frame (M3.S1 compat)
+//       { op: "frameStart", seq, width, height, chunks } // large frame header (M3.S2)
+//       { op: "frameChunk", seq, idx, data }           // one chunk
+//       { op: "frameDone",  seq }                      // all chunks sent
 //       { op: "error",  code, message }
 //   - Browser → Agent protocol:
 //       { op: "setQuality",  fps, quality }  // 1-100 JPEG quality
 //       { op: "stop" }                       // graceful close
 //
-// Frames are rendered on a <canvas> element using the data URL shortcut
-// (data:image/jpeg;base64,...). For M3.S1 the agent controls resolution
-// and quality; the UI exposes a quality slider that sends setQuality.
-// Chunked frame transport is deferred to M3.S2.
+// M3.S2 chunking: large frames are split by the agent into up to N
+// chunks of ≤ 48 KB base64 each, staying under the SCTP DataChannel
+// limit. The browser reassembles chunks before rendering. Because the
+// DataChannel is unreliable (ordered:false, maxRetransmits:0), a dropped
+// chunk causes the whole frame to be discarded — the next complete frame
+// renders normally. No head-of-line blocking.
 //
 // Panel layout:
 //   ┌────────────────────────────────────────────┐
@@ -120,6 +125,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const wsRef       = React.useRef(null);   // WebSocket (signaling)
   const fpsTimestamps = React.useRef([]);   // rolling frame-arrival timestamps
   const containerRef  = React.useRef(null);
+  // M3.S2 — chunked frame reassembly buffer.
+  // Shape: { seq: number, expected: number, width: number, height: number,
+  //          parts: Map<idx, string> } | null
+  const assemblyRef = React.useRef(null);
 
   // ── Quality slider — debounced send ──────────────────────────────────
   const qualitySendTimer = React.useRef(null);
@@ -290,50 +299,108 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
   // ── DataChannel message handler ───────────────────────────────────────
 
+  // Shared render path used by both single-message "frame" (M3.S1
+  // small frames) and fully-assembled chunked frames (M3.S2).
+  function renderFrame(data, width, height) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const img = new Image();
+    img.onload = () => {
+      if (canvas.width !== img.width || canvas.height !== img.height) {
+        canvas.width  = img.width;
+        canvas.height = img.height;
+      }
+      ctx.drawImage(img, 0, 0);
+      setLiveSize({ width: img.width, height: img.height });
+    };
+    img.src = `data:image/jpeg;base64,${data}`;
+
+    // FPS counter — stamp on message arrival, not on img.onload, so
+    // the counter reflects network cadence rather than decode latency.
+    const now = performance.now();
+    const ts = fpsTimestamps.current;
+    ts.push(now);
+    if (ts.length > FPS_WINDOW) ts.shift();
+    setLiveFps(computeFps(ts));
+  }
+
   function handleDcMessage(msg) {
     if (!msg?.op) return;
 
     switch (msg.op) {
       case "screenInfo": {
         setScreenInfo({
-          width: Number(msg.width || 0),
+          width:  Number(msg.width  || 0),
           height: Number(msg.height || 0),
-          fps: Number(msg.fps || 15)
+          fps:    Number(msg.fps    || 15)
         });
         break;
       }
+
+      // M3.S1 — small frame delivered as a single DataChannel message.
       case "frame": {
-        // Render JPEG frame to canvas.
-        const canvas = canvasRef.current;
-        if (!canvas) break;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) break;
-
-        const img = new Image();
-        img.onload = () => {
-          // Resize canvas to match incoming frame if needed.
-          if (canvas.width !== img.width || canvas.height !== img.height) {
-            canvas.width  = img.width;
-            canvas.height = img.height;
-          }
-          ctx.drawImage(img, 0, 0);
-          setLiveSize({ width: img.width, height: img.height });
-        };
-        img.src = `data:image/jpeg;base64,${msg.data}`;
-
-        // FPS counter.
-        const now = performance.now();
-        const ts = fpsTimestamps.current;
-        ts.push(now);
-        if (ts.length > FPS_WINDOW) ts.shift();
-        setLiveFps(computeFps(ts));
+        renderFrame(msg.data, msg.width, msg.height);
         break;
       }
+
+      // M3.S2 — large frame split into chunks. ─────────────────────────
+      //
+      // frameStart: allocate a reassembly buffer for this seq. Any
+      // stale in-progress assembly (from a frame whose chunks were
+      // partially dropped by the unreliable transport) is silently
+      // discarded — the new frame takes priority.
+      case "frameStart": {
+        assemblyRef.current = {
+          seq:      Number(msg.seq),
+          expected: Number(msg.chunks),
+          width:    Number(msg.width  || 0),
+          height:   Number(msg.height || 0),
+          parts:    new Map()
+        };
+        break;
+      }
+
+      // frameChunk: accumulate into the current assembly buffer.
+      // Chunks belonging to an older seq (arrived late after a new
+      // frameStart) are dropped — we never render stale frames.
+      case "frameChunk": {
+        const asm = assemblyRef.current;
+        if (!asm || asm.seq !== Number(msg.seq)) break;
+        asm.parts.set(Number(msg.idx), String(msg.data || ""));
+
+        // All chunks received — assemble and render immediately
+        // without waiting for frameDone.
+        if (asm.parts.size === asm.expected) {
+          const assembled = Array.from(
+            { length: asm.expected },
+            (_, i) => asm.parts.get(i) ?? ""
+          ).join("");
+          assemblyRef.current = null;
+          renderFrame(assembled, asm.width, asm.height);
+        }
+        break;
+      }
+
+      // frameDone: the agent finished sending all chunks. If we still
+      // don't have all of them (unreliable transport dropped some),
+      // discard this frame gracefully — the next frameStart resets.
+      case "frameDone": {
+        const asm = assemblyRef.current;
+        if (asm && asm.seq === Number(msg.seq) && asm.parts.size < asm.expected) {
+          assemblyRef.current = null; // drop incomplete frame
+        }
+        break;
+      }
+
       case "error": {
         setErrorMsg(msg.message || "Unknown error from agent");
         setState(STATE.ERROR);
         break;
       }
+
       default:
         break;
     }
