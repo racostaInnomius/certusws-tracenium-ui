@@ -41,12 +41,21 @@ export async function getRemoteSessions(params = {}) {
 
 // Start a session.
 //
-// RCP M1.S2 — returns 200 + { ok, sessionId, signalingUrl, turnConfig }
-// for `type: "shell"` when the device advertises `rcp.shell` AND the
-// caller is admin_master. Other capabilities still 501 until M2/M3.
+// M2.S1 — returns 200 + { ok, sessionId, signalingUrl, turnConfig }
+// for type "shell" (M1.S1+) or "file" (M2.S1) when the device
+// advertises the matching rcp capability AND the caller is
+// admin_master. "screen" still returns 501 until M3.
 //
 // Error envelopes (HTTP 4xx) carry { error, message }. The UI maps
 // them to friendly toasts in pages/RemoteControl.jsx:handleConnect.
 export async function startRemoteSession({ deviceId, type }) {
   return httpPostJson(`${BASE}/sessions`, { deviceId, type });
+}
+
+// M2.S1 — list file transfer audit records for a session.
+// Returns { ok, total, items: FileTransferRecord[] }.
+export async function getSessionFileTransfers(sessionId, params = {}) {
+  return httpGetJson(
+    `${BASE}/sessions/${encodeURIComponent(sessionId)}/transfers${buildQuery(params)}`
+  );
 }

@@ -1,9 +1,14 @@
 // src/components/RemoteControl/ConnectablesTable.jsx
 //
-// Device selector for the Remote Control page. Today every device
-// shows up disabled because no agent reports `rcp`. When the plugin
-// ships, the Connect buttons flip to enabled based on per-device
-// `rcpEnabled` — zero UI changes needed.
+// Device selector for the Remote Control page.
+//
+// Per-capability action buttons (M2.S1):
+//   - Shell (ElectricalServicesIcon): enabled when device advertises rcp.shell
+//   - Files (FolderIcon):             enabled when device advertises rcp.file
+//
+// The `capabilities` array on each device drives which buttons are
+// active. When no rcp.* capability is advertised, both are disabled
+// with an explanatory tooltip.
 
 import * as React from "react";
 import {
@@ -24,6 +29,7 @@ import {
   Typography
 } from "@mui/material";
 import ElectricalServicesOutlinedIcon from "@mui/icons-material/ElectricalServicesOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
@@ -61,6 +67,7 @@ function RcpBadge({ enabled }) {
   );
 }
 
+// onConnect(device, type) where type is "shell" | "file"
 export default function ConnectablesTable({ devices, loading, onConnect }) {
   const [search, setSearch] = React.useState("");
 
@@ -117,7 +124,7 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
               <TableCell sx={{ fontWeight: 700 }}>Agent</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Plugin</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700 }}>Action</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -131,12 +138,25 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
               </TableRow>
             ) : (
               filtered.map((d) => {
-                const canConnect = d.online && d.rcpEnabled;
-                const tooltip = !d.rcpEnabled
-                  ? "Remote Control plugin (`rcp`) is not reported by this agent yet."
-                  : !d.online
-                  ? "Device is offline. Connect is only possible while the device is online."
-                  : "Start a new remote session.";
+                const caps = Array.isArray(d.capabilities) ? d.capabilities : [];
+                const hasShell = caps.includes("rcp.shell");
+                const hasFile = caps.includes("rcp.file");
+                const isOnline = d.online;
+
+                const canShell = isOnline && hasShell;
+                const canFile = isOnline && hasFile;
+
+                const shellTooltip = !isOnline
+                  ? "Device is offline."
+                  : !hasShell
+                  ? "Agent does not advertise rcp.shell. Deploy the rcp plugin with remoteShell enabled."
+                  : "Open a shell session.";
+                const fileTooltip = !isOnline
+                  ? "Device is offline."
+                  : !hasFile
+                  ? "Agent does not advertise rcp.file. Deploy the rcp plugin with remoteFile enabled."
+                  : "Open a file manager session.";
+
                 return (
                   <TableRow key={d.deviceId} hover>
                     <TableCell>
@@ -160,24 +180,42 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                       <RcpBadge enabled={d.rcpEnabled} />
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title={tooltip} arrow>
-                        {/* span wrapper so the tooltip still shows when
-                            the button is disabled (MUI's a11y quirk) */}
-                        <span>
-                          <IconButton
-                            size="small"
-                            disabled={!canConnect}
-                            onClick={() => onConnect?.(d)}
-                            sx={{
-                              color: BRAND.teal,
-                              border: `1px solid ${canConnect ? BRAND.teal : BRAND.border}`,
-                              borderRadius: 1
-                            }}
-                          >
-                            <ElectricalServicesOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
+                      <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                        {/* Shell button */}
+                        <Tooltip title={shellTooltip} arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={!canShell}
+                              onClick={() => onConnect?.(d, "shell")}
+                              sx={{
+                                color: canShell ? BRAND.teal : BRAND.gray,
+                                border: `1px solid ${canShell ? BRAND.teal : BRAND.border}`,
+                                borderRadius: 1
+                              }}
+                            >
+                              <ElectricalServicesOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        {/* File manager button (M2.S1) */}
+                        <Tooltip title={fileTooltip} arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={!canFile}
+                              onClick={() => onConnect?.(d, "file")}
+                              sx={{
+                                color: canFile ? BRAND.teal : BRAND.gray,
+                                border: `1px solid ${canFile ? BRAND.teal : BRAND.border}`,
+                                borderRadius: 1
+                              }}
+                            >
+                              <FolderOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </Stack>
                     </TableCell>
                   </TableRow>
                 );

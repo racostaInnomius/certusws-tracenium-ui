@@ -42,6 +42,7 @@ import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailable
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
 import ShellTerminal from "../components/RemoteControl/ShellTerminal";
 import TranscriptReplayDialog from "../components/RemoteControl/TranscriptReplayDialog";
+import FileBrowserPanel from "../components/RemoteControl/FileBrowserPanel";
 
 import PageHeader from "../components/common/PageHeader";
 
@@ -146,12 +147,11 @@ export default function RemoteControl() {
 
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "rcAutoRefresh");
 
-  // RCP M1.S2 — when start succeeds, the backend returns the
-  // session envelope that the ShellTerminal needs. We stash it in
-  // state to mount the terminal in a side drawer. `null` collapses
-  // the drawer. Only one active drawer at a time — operators
-  // wanting parallel sessions open new tabs.
+  // RCP M1.S2 — shell session envelope (ShellTerminal drawer).
   const [activeSession, setActiveSession] = React.useState(null);
+
+  // RCP M2.S1 — file session envelope (FileBrowserPanel drawer).
+  const [fileSession, setFileSession] = React.useState(null);
 
   // RCP M1.S3 — replay dialog state. Holds the SessionHistory row
   // selected via the "Replay" action so the dialog can stamp its
@@ -161,39 +161,42 @@ export default function RemoteControl() {
 
   /**
    * Click handler for Connect buttons in the ConnectablesTable.
-   * Calls POST /sessions; on success opens the ShellTerminal in a
-   * right-side drawer. Backend error codes map to friendly toasts:
-   *   - 501 / RCP_PLUGIN_NOT_AVAILABLE — older agents (pre-M1) or
-   *                                       file/screen capabilities
-   *   - 409 / RCP_DEVICE_OFFLINE       — device offline mid-click
-   *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent doesn't have
-   *                                          remoteShell policy on
-   *   - 429 / RCP_TOO_MANY_SESSIONS    — concurrency cap hit
-   *   - 403 / RCP_ADMIN_MASTER_REQUIRED— user isn't admin_master
+   * Calls POST /sessions; on success opens the appropriate drawer:
+   *   - type "shell" → ShellTerminal drawer  (M1.S2)
+   *   - type "file"  → FileBrowserPanel drawer (M2.S1)
+   *
+   * Backend error codes map to friendly toasts:
+   *   - 501 / RCP_PLUGIN_NOT_AVAILABLE    — screen cap (M3+)
+   *   - 409 / RCP_DEVICE_OFFLINE          — device offline mid-click
+   *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent missing capability
+   *   - 429 / RCP_TOO_MANY_SESSIONS       — concurrency cap hit
+   *   - 403 / RCP_ADMIN_MASTER_REQUIRED   — user isn't admin_master
    */
-  const handleConnect = async (device) => {
+  const handleConnect = async (device, type = "shell") => {
     try {
-      const res = await startRemoteSession({
-        deviceId: device.deviceId,
-        type: "shell"
-      });
+      const res = await startRemoteSession({ deviceId: device.deviceId, type });
       if (!res?.ok) {
         notify("error", res?.message || "Failed to start session");
         return;
       }
-      setActiveSession({
+      const sessionEnvelope = {
         sessionId: res.sessionId,
         signalingUrl: res.signalingUrl,
         turnConfig: res.turnConfig,
         device
-      });
+      };
+      if (type === "file") {
+        setFileSession(sessionEnvelope);
+      } else {
+        setActiveSession(sessionEnvelope);
+      }
       load(); // pull history + active count
     } catch (err) {
       const msg = String(err?.message || "");
       if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
         notify(
           "info",
-          "Remote Control for this capability isn't shipped yet. Try `shell` — `file` and `screen` arrive in later milestones."
+          "Screen sharing isn't shipped yet — shell and file sessions are available now."
         );
       } else if (msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
         notify(
@@ -205,7 +208,7 @@ export default function RemoteControl() {
       } else if (msg.includes("RCP_CAPABILITY_NOT_ADVERTISED")) {
         notify(
           "warning",
-          "This device hasn't advertised rcp.shell — check the agent's policy.features.remoteShell flag."
+          `This device hasn't advertised rcp.${type} — check the agent's policy configuration.`
         );
       } else if (msg.includes("RCP_TOO_MANY_SESSIONS")) {
         notify(
@@ -309,7 +312,7 @@ export default function RemoteControl() {
           <ConnectablesTable
             devices={devices}
             loading={loading}
-            onConnect={handleConnect}
+            onConnect={(device, type) => handleConnect(device, type)}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -366,14 +369,46 @@ export default function RemoteControl() {
         ) : null}
       </Drawer>
 
-      {/* RCP M1.S3 — transcript replay dialog. Mounted at page
-          level so it overlays the SessionHistoryTable cleanly.
-          Open/close driven by replaySession state. */}
+      {/* RCP M1.S3 — transcript replay dialog. */}
       <TranscriptReplayDialog
         open={Boolean(replaySession)}
         session={replaySession}
         onClose={() => setReplaySession(null)}
       />
+
+      {/* RCP M2.S1 — file manager drawer. Opens when a Files button
+          succeeds; FileBrowserPanel owns the WebRTC + DataChannel
+          lifecycle. Closing the drawer triggers a refetch so the
+          session history table picks up the ended session. */}
+      <Drawer
+        anchor="right"
+        open={Boolean(fileSession)}
+        onClose={() => {
+          setFileSession(null);
+          load();
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", md: 880, lg: 1040 },
+            maxWidth: "100%",
+            bgcolor: "transparent",
+            border: "none"
+          }
+        }}
+      >
+        {fileSession ? (
+          <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
+            <FileBrowserPanel
+              session={fileSession}
+              device={fileSession.device}
+              onClose={() => {
+                setFileSession(null);
+                load();
+              }}
+            />
+          </Box>
+        ) : null}
+      </Drawer>
     </Box>
   );
 }
