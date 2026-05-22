@@ -96,7 +96,8 @@ export default function Topbar({ onMenuClick }) {
         px: { xs: 1.5, sm: 2, md: 3 },
         gap: 1,
         background: `linear-gradient(90deg, ${BRAND.dark} 0%, ${BRAND.teal} 100%)`,
-        borderBottom: `3px solid ${BRAND.teal}`,
+        borderBottom: `3px solid ${BRAND.accentBrightLine}`,
+        boxShadow: `0 1px 0 ${BRAND.accentBrightSoft}`,
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -153,12 +154,15 @@ export default function Topbar({ onMenuClick }) {
           >
             <Box
               component="span"
-              sx={{ color: BRAND.tealSoftStrong, fontWeight: 900, mx: 1 }}
+              sx={{ color: BRAND.accentBright, fontWeight: 900, mx: 1 }}
             >
               |
             </Box>
             Endpoint Intelligence{" "}
-            <Box component="span" sx={{ color: BRAND.tealSoftStrong, px: 0.25 }}>
+            <Box
+              component="span"
+              sx={{ color: BRAND.accentBright, fontWeight: 900, px: 0.25 }}
+            >
               &
             </Box>{" "}
             Compliance Platform

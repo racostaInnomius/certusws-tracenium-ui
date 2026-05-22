@@ -48,7 +48,8 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
         display: "flex",
         flexDirection: "column",
         minHeight: "100dvh",
-        borderRight: `1px solid rgba(143,253,255,0.08)`,
+        borderRight: "1px solid transparent",
+        boxShadow: `1px 0 0 ${BRAND.accentBrightSoft}`,
       }}
     >
       {/* Header: brand wordmark. Same height and bottom-border as the
@@ -61,12 +62,12 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
           alignItems: "center",
           justifyContent: "center",
           px: 1,
-          borderBottom: `3px solid ${BRAND.teal}`,
+          borderBottom: `3px solid ${BRAND.accentBrightLine}`,
         }}
       >
         <Box
           component="img"
-          src="/tracenium.ico"
+          src="/tracenium_metallic_fullcolor_v1_256.png"
           alt="Tracenium"
           sx={{
             height: 40,
