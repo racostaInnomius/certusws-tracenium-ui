@@ -343,15 +343,25 @@ function isDeviceTerminalOrPendingDeletion(row) {
 }
 
 function isDecommissionJobTerminal(status) {
-  return ["COMPLETED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(
+  return ["COMPLETED", "DECOMMISSIONED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(
     String(status || "").toUpperCase()
   );
 }
 
 function getDecommissionErrorMessage(error) {
+  const code = String(error?.body?.error || error?.body?.code || "").toUpperCase();
+
+  const knownMessages = {
+    FORBIDDEN: "You do not have permission to decommission this device.",
+    DEVICE_NOT_FOUND: "Device was not found.",
+    DEVICE_ALREADY_DECOMMISSIONED: "This device is already decommissioned.",
+    DEVICE_DECOMMISSION_IN_PROGRESS: "Device decommission is already in progress.",
+    INVALID_CONFIRMATION: "Confirmation does not match the device hostname or ID.",
+  };
+
   return (
+    knownMessages[code] ||
     error?.body?.message ||
-    error?.body?.error ||
     error?.message ||
     "Unable to start device decommission."
   );
@@ -1072,6 +1082,10 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   const [decommissionReason, setDecommissionReason] = React.useState("");
   const [decommissionSubmitting, setDecommissionSubmitting] = React.useState(false);
   const [deviceDecommissionJobs, setDeviceDecommissionJobs] = React.useState({});
+  const [locallyHiddenDecommissionDeviceIds, setLocallyHiddenDecommissionDeviceIds] =
+    React.useState(() => new Set());
+  const [decommissionFadingDeviceIds, setDecommissionFadingDeviceIds] =
+    React.useState(() => new Set());
   const [deviceActionSnackbar, setDeviceActionSnackbar] = React.useState({
     open: false,
     severity: "success",
@@ -1121,7 +1135,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
 
     const [sumRes, hostsRes, latestRes] = await Promise.allSettled([
       dashboardApi.getSummary(),
-      httpGetJson(`/api/v1/dashboard/hosts?${hostsQuery}`),
+      httpGetJson(`/api/v1/dashboard/hosts?${hostsQuery}`, { cache: "reload" }),
       getLatestAgentVersions(),
     ]);
 
@@ -1292,16 +1306,20 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
         return next;
       });
 
+      // Backend Phase 1.5 queues the decommission quickly and the worker handles
+      // the heavy cleanup asynchronously. Keep the row visible while the job is
+      // QUEUED/PROCESSING so the operator can see status/progress in context.
+      // The row fades out only after the job reaches COMPLETED.
+
       setDeviceActionSnackbar({
         open: true,
         severity: "success",
-        message: `Device decommission has been queued for ${hostname || deviceId}.`,
+        message: res?.message || "Device decommission has been queued.",
       });
 
       setDecommissionDialog({ open: false, device: null });
       setDecommissionConfirmation("");
       setDecommissionReason("");
-      refetch();
     } catch (error) {
       setDeviceActionSnackbar({
         open: true,
@@ -1315,7 +1333,6 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     decommissionConfirmation,
     decommissionDialog.device,
     decommissionReason,
-    refetch,
   ]);
 
   React.useEffect(() => {
@@ -1361,7 +1378,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
           const job = result.value;
           next[String(job.deviceId)] = job;
 
-          if (job.status === "COMPLETED") completedAny = true;
+          if (["COMPLETED", "DECOMMISSIONED"].includes(job.status)) completedAny = true;
           if (["FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(job.status)) {
             failedAny = true;
           }
@@ -1371,19 +1388,70 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
       });
 
       if (completedAny) {
+        const completedDeviceIds = updates
+          .filter((result) => result.status === "fulfilled")
+          .map((result) => result.value)
+          .filter((job) => ["COMPLETED", "DECOMMISSIONED"].includes(job.status))
+          .map((job) => String(job.deviceId));
+
+        if (completedDeviceIds.length > 0) {
+          setDecommissionFadingDeviceIds((prev) => {
+            const next = new Set(prev);
+            completedDeviceIds.forEach((deviceId) => next.add(deviceId));
+            return next;
+          });
+
+          window.setTimeout(() => {
+            setLocallyHiddenDecommissionDeviceIds((prev) => {
+              const next = new Set(prev);
+              completedDeviceIds.forEach((deviceId) => next.add(deviceId));
+              return next;
+            });
+
+            setDecommissionFadingDeviceIds((prev) => {
+              const next = new Set(prev);
+              completedDeviceIds.forEach((deviceId) => next.delete(deviceId));
+              return next;
+            });
+
+            // Refresh only this current Devices view after the user has seen the
+            // terminal status/fade transition. Do not trigger a dashboard-wide
+            // refresh cascade.
+            refetch();
+          }, 1300);
+        }
+
         setDeviceActionSnackbar({
           open: true,
           severity: "success",
-          message: "Device decommission completed. Inventory data is being refreshed.",
+          message: "Device decommission completed.",
         });
-        refetch();
       }
 
       if (failedAny) {
+        const failedDeviceIds = updates
+          .filter((result) => result.status === "fulfilled")
+          .map((result) => result.value)
+          .filter((job) => ["FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(job.status))
+          .map((job) => String(job.deviceId));
+
+        if (failedDeviceIds.length > 0) {
+          setLocallyHiddenDecommissionDeviceIds((prev) => {
+            const next = new Set(prev);
+            failedDeviceIds.forEach((deviceId) => next.delete(deviceId));
+            return next;
+          });
+          setDecommissionFadingDeviceIds((prev) => {
+            const next = new Set(prev);
+            failedDeviceIds.forEach((deviceId) => next.delete(deviceId));
+            return next;
+          });
+        }
+
         setDeviceActionSnackbar({
           open: true,
           severity: "error",
-          message: "One device decommission job failed. Review the device lifecycle job details.",
+          message: "Device decommission failed. Please review the job details.",
         });
       }
     };
@@ -1687,11 +1755,16 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // user can deep-link "Windows devices one-behind" in the future.
   const filteredHosts = React.useMemo(() => {
     const groupFilterActive = !!groupFilter;
-    if (!platformFilter && !versionBucketFilter && !groupFilterActive) return hosts;
+    const hideCompletedDecommissionRows = locallyHiddenDecommissionDeviceIds.size > 0;
+    const baseHosts = hideCompletedDecommissionRows
+      ? hosts.filter((h) => !locallyHiddenDecommissionDeviceIds.has(String(getHostDeviceId(h))))
+      : hosts;
+
+    if (!platformFilter && !versionBucketFilter && !groupFilterActive) return baseHosts;
     // While the member set is still loading, hide rows so the operator
     // doesn't briefly see the unfiltered fleet under an active chip.
     if (groupFilterActive && groupMembers === null) return [];
-    return hosts.filter((h) => {
+    return baseHosts.filter((h) => {
       if (platformFilter) {
         const p = normalizePlatform(h.os_platform);
         if (p !== platformFilter) return false;
@@ -1707,6 +1780,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
     });
   }, [
     hosts,
+    locallyHiddenDecommissionDeviceIds,
     platformFilter,
     versionBucketFilter,
     canonicalLatest,
@@ -2177,6 +2251,7 @@ const osVersionItems = React.useMemo(() => {
                   selectedAgentId={selectedAgent?.agent_id || selectedAgent?.agentId}
                   selectedForDecommissionIds={selectedHostIdsForDecommission}
                   decommissionJobs={deviceDecommissionJobs}
+                  decommissionFadingIds={decommissionFadingDeviceIds}
                   onToggleDecommissionSelection={toggleHostForDecommission}
                   onDeleteDevice={openDecommissionDialog}
                   onRowClick={handleAgentSelect}

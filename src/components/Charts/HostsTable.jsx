@@ -107,6 +107,24 @@ function getJobForDevice(jobs, agentId) {
   return jobs?.[String(agentId)] || null;
 }
 
+function getJobStatus(job) {
+  return String(job?.status || "").trim().toUpperCase();
+}
+
+function isJobActive(job) {
+  return ["QUEUED", "PROCESSING", "DELETION_PENDING", "DECOMMISSIONING"].includes(
+    getJobStatus(job)
+  );
+}
+
+function isJobTerminalSuccess(job) {
+  return ["COMPLETED", "DECOMMISSIONED"].includes(getJobStatus(job));
+}
+
+function isJobTerminalFailure(job) {
+  return ["FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(getJobStatus(job));
+}
+
 function formatJobStatus(status) {
   const value = String(status || "").trim().toUpperCase();
   if (!value) return "";
@@ -124,34 +142,52 @@ function DecommissionStatusChip({ job, row }) {
 
   const isFailed = ["FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(status);
   const isCompleted = ["COMPLETED", "DECOMMISSIONED", "PURGED"].includes(status);
+  const progress = Number(job?.progress);
+  const hasProgress = Number.isFinite(progress) && progress > 0 && progress < 100;
+  const label = hasProgress
+    ? `${formatJobStatus(status)} ${Math.round(progress)}%`
+    : formatJobStatus(status);
 
   return (
-    <Chip
-      size="small"
-      label={formatJobStatus(status)}
-      sx={{
-        height: 20,
-        fontSize: 10.5,
-        fontWeight: 800,
-        bgcolor: isFailed
-          ? BRAND.alert.errorSoft
-          : isCompleted
-          ? BRAND.darkSoft
-          : BRAND.alert.warningSoft,
-        color: isFailed
-          ? BRAND.alert.error
-          : isCompleted
-          ? BRAND.gray
-          : BRAND.alert.warning,
-        border: `1px solid ${
-          isFailed
+    <Tooltip
+      arrow
+      title={
+        job?.currentStep ||
+        job?.errorMessage ||
+        (isCompleted
+          ? "Device decommission completed. The row will be removed from active devices."
+          : isFailed
+          ? "Device decommission did not complete."
+          : "Device decommission is queued or processing.")
+      }
+    >
+      <Chip
+        size="small"
+        label={label}
+        sx={{
+          height: 20,
+          fontSize: 10.5,
+          fontWeight: 800,
+          bgcolor: isFailed
+            ? BRAND.alert.errorSoft
+            : isCompleted
+            ? BRAND.darkSoft
+            : BRAND.alert.warningSoft,
+          color: isFailed
             ? BRAND.alert.error
             : isCompleted
             ? BRAND.gray
-            : BRAND.alert.warning
-        }33`,
-      }}
-    />
+            : BRAND.alert.warning,
+          border: `1px solid ${
+            isFailed
+              ? BRAND.alert.error
+              : isCompleted
+              ? BRAND.gray
+              : BRAND.alert.warning
+          }33`,
+        }}
+      />
+    </Tooltip>
   );
 }
 
@@ -184,6 +220,7 @@ export default function HostsTable({
   selectedAgentId = "",
   selectedForDecommissionIds = new Set(),
   decommissionJobs = {},
+  decommissionFadingIds = new Set(),
   onToggleDecommissionSelection,
   onDeleteDevice,
   onRowClick,
@@ -273,10 +310,14 @@ export default function HostsTable({
               const localIp = firstValue(r.localIp, r.local_ip);
               const job = getJobForDevice(decommissionJobs, agentId);
               const lifecycleLocked = isDeviceLockedForDecommission(r);
-              const jobActive = Boolean(job && !["COMPLETED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(String(job.status || "").toUpperCase()));
-              const rowLocked = lifecycleLocked || jobActive;
+              const jobActive = isJobActive(job);
+              const jobSuccess = isJobTerminalSuccess(job);
+              const jobFailed = isJobTerminalFailure(job);
+              const rowLocked = lifecycleLocked || jobActive || jobSuccess;
               const checked = selectedForDecommissionIds?.has?.(String(agentId)) === true;
               const canDelete = checked && !rowLocked;
+              const isFadingAfterCompletion =
+                decommissionFadingIds?.has?.(String(agentId)) === true;
 
               return (
                 <TableRow
@@ -286,7 +327,9 @@ export default function HostsTable({
                   onClick={() => onRowClick?.(r)}
                   sx={{
                     cursor: onRowClick ? "pointer" : "default",
-                    transition: "background-color 160ms ease, transform 160ms ease",
+                    opacity: isFadingAfterCompletion ? 0.28 : 1,
+                    transform: isFadingAfterCompletion ? "translateX(10px)" : "translateX(0)",
+                    transition: "opacity 900ms ease, transform 900ms ease, background-color 160ms ease",
                     "&:hover": {
                       backgroundColor: BRAND.rowHover,
                     },
@@ -326,22 +369,69 @@ export default function HostsTable({
                   <TableCell>
                     <OnlineDot online={online} />
                   </TableCell>
-                  <TableCell sx={{ fontWeight: 600, color: BRAND.dark, minWidth: 180 }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
-                      <Typography
-                        component="span"
-                        sx={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: BRAND.dark,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {displayText(hostname)}
-                      </Typography>
-                      <DecommissionStatusChip job={job} row={r} />
+                  <TableCell sx={{ fontWeight: 600, color: BRAND.dark, minWidth: 220 }}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+                        <Typography
+                          component="span"
+                          sx={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: BRAND.dark,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {displayText(hostname)}
+                        </Typography>
+                        <DecommissionStatusChip job={job} row={r} />
+                      </Box>
+
+                      {jobActive ? (
+                        <Box sx={{ mt: 0.5, maxWidth: 260 }}>
+                          <Typography
+                            sx={{
+                              fontSize: 10.5,
+                              color: BRAND.gray,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {job.currentStep || "Device decommission is queued."}
+                          </Typography>
+                          {Number.isFinite(Number(job.progress)) && Number(job.progress) > 0 ? (
+                            <LinearProgress
+                              variant="determinate"
+                              value={Math.max(0, Math.min(100, Number(job.progress)))}
+                              sx={{
+                                mt: 0.35,
+                                height: 3,
+                                borderRadius: 999,
+                                bgcolor: BRAND.surfaceMuted,
+                                "& .MuiLinearProgress-bar": { bgcolor: BRAND.alert.warning },
+                              }}
+                            />
+                          ) : null}
+                        </Box>
+                      ) : null}
+
+                      {jobFailed && job?.errorMessage ? (
+                        <Typography
+                          sx={{
+                            mt: 0.4,
+                            fontSize: 10.5,
+                            color: BRAND.alert.error,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: 280,
+                          }}
+                        >
+                          {job.errorMessage}
+                        </Typography>
+                      ) : null}
                     </Box>
                   </TableCell>
                   <TableCell sx={{ minWidth: 110 }}>
@@ -358,7 +448,7 @@ export default function HostsTable({
                     <Tooltip
                       title={
                         rowLocked
-                          ? "Device is already being decommissioned."
+                          ? "Device decommission is in progress. Status is shown on this row."
                           : checked
                           ? "Create a device decommission job."
                           : "Select the checkbox to enable delete."

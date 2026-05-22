@@ -1,8 +1,11 @@
 // src/api/devices.js
 //
-// Device lifecycle/decommission API helpers.
-// Keeps the device decommission workflow isolated from dashboard-specific
-// inventory APIs.
+// Device lifecycle / decommission API helpers.
+//
+// Backend Phase 1.5 behavior:
+// - POST /api/v1/devices/:deviceId/decommission-jobs responds quickly with QUEUED.
+// - Heavy processing is handled by a backend worker.
+// - UI should poll GET /api/v1/device-decommission-jobs/:jobId.
 
 import { httpGetJson, httpPostJson } from "./http";
 
