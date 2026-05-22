@@ -11,6 +11,7 @@ import {
   MenuItem,
   Paper,
   Snackbar,
+  Stack,
   Switch,
   Tab,
   Tabs,
@@ -343,10 +344,13 @@ function readFormFromPolicy(policy) {
       // form we surface `null` (unset) so the operator can distinguish
       // "I haven't touched this" from "I explicitly turned it off".
       selfUpdate: pickFeature(policy, "selfUpdate"),
-      // remoteShell is a placeholder for the future RCP (remote
-      // control plugin). The form reads + writes the flag but the UI
-      // renders it as "coming soon" — not editable yet.
-      remoteShell: pickFeature(policy, "remoteShell"),
+      // Remote Control Plugin (RCP) capability gates. Each enables the
+      // matching `rcp.*` capability the agent advertises in Hello once
+      // it has the M3 plugin code (agent 1.1.19+). Off by default so
+      // legacy agents and tenants opt in explicitly.
+      remoteShell:  pickFeature(policy, "remoteShell"),   // rcp.shell  (M1)
+      remoteFile:   pickFeature(policy, "remoteFile"),    // rcp.file   (M2.S1)
+      remoteScreen: pickFeature(policy, "remoteScreen"),  // rcp.screen (M3.S1)
     },
     // Security Policy v2 — separate sub-form so the security cards
     // can be a sibling section. Stored back into policy.security on
@@ -428,13 +432,21 @@ function formToPolicy(form) {
 
   // ── Feature toggles ──────────────────────────────────────────────
   // Only emit fields the operator explicitly changed (null = unset).
-  // remoteShell is wire-accepted but UI-disabled until RCP ships.
+  // RCP flags (remoteShell/File/Screen) require the agent to advertise
+  // the matching `rcp.*` capability in Hello — they are no-ops on
+  // agents older than 1.1.19, but the backend records the desired state.
   const features = {};
   if (form?.features?.selfUpdate !== null && form?.features?.selfUpdate !== undefined) {
     features.selfUpdate = Boolean(form.features.selfUpdate);
   }
   if (form?.features?.remoteShell !== null && form?.features?.remoteShell !== undefined) {
     features.remoteShell = Boolean(form.features.remoteShell);
+  }
+  if (form?.features?.remoteFile !== null && form?.features?.remoteFile !== undefined) {
+    features.remoteFile = Boolean(form.features.remoteFile);
+  }
+  if (form?.features?.remoteScreen !== null && form?.features?.remoteScreen !== undefined) {
+    features.remoteScreen = Boolean(form.features.remoteScreen);
   }
   if (Object.keys(features).length > 0) {
     policy.features = features;
@@ -1107,10 +1119,15 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         );
       })()}
 
-      {/* Feature toggles — Sprint 1 of Policy v2 surfaces selfUpdate and
-          a placeholder for remoteShell (gated to the future RCP plugin).
-          Previously these only existed in the agent's policy default and
-          could only be flipped via the advanced JSON editor. */}
+      {/* Feature toggles — Sprint 1 of Policy v2 surfaced selfUpdate; the
+          M3 milestone adds the three RCP (Remote Control Plugin) gates:
+          rcp.shell, rcp.file, rcp.screen. Each flag controls whether the
+          agent advertises the matching capability in its next Hello, so
+          flipping these takes effect on the next agent reconnect (typically
+          seconds). The agent itself needs the RCP plugin code (1.1.19+);
+          older agents accept the flag but never advertise the capability.
+          Until any device in the tenant runs 1.1.19+, these toggles are
+          essentially "desired state" with no observable effect. */}
       <Box
         sx={{
           mt: 2,
@@ -1160,28 +1177,137 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
             }
             sx={{ alignItems: "flex-start", mx: 0 }}
           />
+        </Box>
 
-          <FormControlLabel
-            control={
-              <Switch
-                size="small"
-                checked={Boolean(form?.features?.remoteShell)}
-                disabled
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.gray }}>
-                  Remote shell <Chip label="coming soon" size="small" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />
-                </Typography>
-                <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                  Will be governed by the Remote Control Plugin (RCP). Toggle
-                  not editable until the plugin ships.
-                </Typography>
-              </Box>
-            }
-            sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
-          />
+        {/* ── Remote Control (RCP) sub-section ────────────────────────
+            Three capabilities behind their own gates so an operator can
+            roll them out gradually (e.g. shell first, screen later).
+            Requires agent 1.1.19+; older agents ignore the flags. */}
+        <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+            <Typography
+              variant="overline"
+              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+            >
+              Remote Control (RCP)
+            </Typography>
+            <Chip
+              label="agent 1.1.19+"
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: 10,
+                bgcolor: BRAND.tealSoft,
+                color: BRAND.teal,
+                fontWeight: 700,
+              }}
+            />
+          </Stack>
+          <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+            Capability gates for the Remote Control Plugin. Each toggle controls
+            whether agents advertise the matching <code>rcp.*</code> capability
+            in their next Hello. Sessions are admin_master-only and tracked
+            under <strong>Remote Control</strong> in the sidebar.
+          </Typography>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+            {/* rcp.shell — M1 */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={Boolean(form?.features?.remoteShell)}
+                  onChange={(e) =>
+                    onChange({
+                      ...form,
+                      features: {
+                        ...(form.features || {}),
+                        remoteShell: e.target.checked,
+                      },
+                    })
+                  }
+                  disabled={readOnly}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Remote shell <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(rcp.shell)</Typography>
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    Interactive shell sessions over WebRTC (PTY + xterm.js).
+                    Transcripts are recorded for audit replay.
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start", mx: 0 }}
+            />
+
+            {/* rcp.file — M2.S1 */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={Boolean(form?.features?.remoteFile)}
+                  onChange={(e) =>
+                    onChange({
+                      ...form,
+                      features: {
+                        ...(form.features || {}),
+                        remoteFile: e.target.checked,
+                      },
+                    })
+                  }
+                  disabled={readOnly}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Remote file transfer <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(rcp.file)</Typography>
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    File browser + bi-directional transfers over P2P DataChannel.
+                    Every transfer is audited (started → completed/failed/cancelled).
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+            />
+
+            {/* rcp.screen — M3.S1 */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={Boolean(form?.features?.remoteScreen)}
+                  onChange={(e) =>
+                    onChange({
+                      ...form,
+                      features: {
+                        ...(form.features || {}),
+                        remoteScreen: e.target.checked,
+                      },
+                    })
+                  }
+                  disabled={readOnly}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Remote screen share <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(rcp.screen)</Typography>
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    Live screen viewer with optional mouse + keyboard control.
+                    JPEG frames over WebRTC; input forwarded via privileged
+                    SendInput on the device.
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+            />
+          </Box>
         </Box>
       </Box>
 
