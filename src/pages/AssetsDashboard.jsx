@@ -1677,7 +1677,7 @@ export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce
   // Printers loader. Single fetch when selectedAgent changes (no
   // pagination needed — small list per device). Failure does NOT
   // surface as a hard error on the detail view (just keeps empty
-  // array + sets the soft "partial" flag), so a pre-1.1.18 agent or
+  // array + sets the soft "partial" flag), so a pre-1.1.19 agent or
   // a tenant whose backend is still mid-deploy don't break the
   // whole detail experience.
   React.useEffect(() => {

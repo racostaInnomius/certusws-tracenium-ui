@@ -55,6 +55,14 @@ export const PLUGIN_CATALOG = [
     title: "Software Delivery",
     description: "Software deployment and distribution tracking.",
   },
+  {
+    key: "rcp",
+    label: "RCP",
+    title: "Remote Control",
+    description:
+      "Interactive remote sessions (shell / files / screen) over WebRTC. Per-capability gates live in Policies → Features. Requires agent 1.1.19+.",
+    impliesModule: "remoteControl",
+  },
 ];
 
 /**

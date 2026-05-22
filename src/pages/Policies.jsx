@@ -432,21 +432,26 @@ function formToPolicy(form) {
 
   // ── Feature toggles ──────────────────────────────────────────────
   // Only emit fields the operator explicitly changed (null = unset).
-  // RCP flags (remoteShell/File/Screen) require the agent to advertise
-  // the matching `rcp.*` capability in Hello — they are no-ops on
-  // agents older than 1.1.19, but the backend records the desired state.
   const features = {};
   if (form?.features?.selfUpdate !== null && form?.features?.selfUpdate !== undefined) {
     features.selfUpdate = Boolean(form.features.selfUpdate);
   }
-  if (form?.features?.remoteShell !== null && form?.features?.remoteShell !== undefined) {
-    features.remoteShell = Boolean(form.features.remoteShell);
-  }
-  if (form?.features?.remoteFile !== null && form?.features?.remoteFile !== undefined) {
-    features.remoteFile = Boolean(form.features.remoteFile);
-  }
-  if (form?.features?.remoteScreen !== null && form?.features?.remoteScreen !== undefined) {
-    features.remoteScreen = Boolean(form.features.remoteScreen);
+  // RCP flags are dropped when the rcp plugin is disabled in Plugin
+  // Control — same omit-when-plugin-off pattern as the compliance and
+  // patch intervals above. Without this gate, stale `remoteShell: true`
+  // values would persist in the policy and cause the agent to re-
+  // advertise rcp.shell the next time someone re-enables the plugin,
+  // even if the operator explicitly cleared the toggle months earlier.
+  if (modules.remoteControl === true) {
+    if (form?.features?.remoteShell !== null && form?.features?.remoteShell !== undefined) {
+      features.remoteShell = Boolean(form.features.remoteShell);
+    }
+    if (form?.features?.remoteFile !== null && form?.features?.remoteFile !== undefined) {
+      features.remoteFile = Boolean(form.features.remoteFile);
+    }
+    if (form?.features?.remoteScreen !== null && form?.features?.remoteScreen !== undefined) {
+      features.remoteScreen = Boolean(form.features.remoteScreen);
+    }
   }
   if (Object.keys(features).length > 0) {
     policy.features = features;
@@ -1182,15 +1187,25 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         {/* ── Remote Control (RCP) sub-section ────────────────────────
             Three capabilities behind their own gates so an operator can
             roll them out gradually (e.g. shell first, screen later).
-            Requires agent 1.1.19+; older agents ignore the flags. */}
-        <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-            <Typography
-              variant="overline"
-              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
-            >
-              Remote Control (RCP)
-            </Typography>
+            Hidden entirely unless the RCP plugin is enabled in Plugin
+            Control — same gating pattern as the compliance / patch
+            schedule sections above (compliance ← scp, patch ← pmp,
+            remoteControl ← rcp). Requires agent 1.1.19+; older agents
+            ignore the policy flags silently. */}
+        {(() => {
+          const rcpActive = PLUGIN_DESCRIPTORS.some(
+            (p) => p.impliesModule === "remoteControl" && form.plugins[p.key]
+          );
+          if (!rcpActive) return null;
+          return (
+            <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                <Typography
+                  variant="overline"
+                  sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+                >
+                  Remote Control (RCP)
+                </Typography>
             <Chip
               label="agent 1.1.19+"
               size="small"
@@ -1308,7 +1323,9 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
               sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
             />
           </Box>
-        </Box>
+            </Box>
+          );
+        })()}
       </Box>
 
       {/* ── Security Policy section (Sprint 2 of Policy v2) ───────
