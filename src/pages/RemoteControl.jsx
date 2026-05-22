@@ -45,6 +45,7 @@ import FileTransfersAuditTable from "../components/RemoteControl/FileTransfersAu
 import ShellTerminal from "../components/RemoteControl/ShellTerminal";
 import TranscriptReplayDialog from "../components/RemoteControl/TranscriptReplayDialog";
 import FileBrowserPanel from "../components/RemoteControl/FileBrowserPanel";
+import ScreenShareViewer from "../components/RemoteControl/ScreenShareViewer";
 
 import PageHeader from "../components/common/PageHeader";
 
@@ -161,6 +162,9 @@ export default function RemoteControl() {
   // RCP M2.S1 — file session envelope (FileBrowserPanel drawer).
   const [fileSession, setFileSession] = React.useState(null);
 
+  // RCP M3.S1 — screen session envelope (ScreenShareViewer drawer).
+  const [screenSession, setScreenSession] = React.useState(null);
+
   // RCP M1.S3 — replay dialog state. Holds the SessionHistory row
   // selected via the "Replay" action so the dialog can stamp its
   // header with operator/device metadata while it fetches the
@@ -170,8 +174,9 @@ export default function RemoteControl() {
   /**
    * Click handler for Connect buttons in the ConnectablesTable.
    * Calls POST /sessions; on success opens the appropriate drawer:
-   *   - type "shell" → ShellTerminal drawer  (M1.S2)
-   *   - type "file"  → FileBrowserPanel drawer (M2.S1)
+   *   - type "shell"   → ShellTerminal drawer      (M1.S2)
+   *   - type "file"    → FileBrowserPanel drawer   (M2.S1)
+   *   - type "screen"  → ScreenShareViewer drawer  (M3.S1)
    *
    * Backend error codes map to friendly toasts:
    *   - 501 / RCP_PLUGIN_NOT_AVAILABLE    — screen cap (M3+)
@@ -195,6 +200,8 @@ export default function RemoteControl() {
       };
       if (type === "file") {
         setFileSession(sessionEnvelope);
+      } else if (type === "screen") {
+        setScreenSession(sessionEnvelope);
       } else {
         setActiveSession(sessionEnvelope);
       }
@@ -204,7 +211,7 @@ export default function RemoteControl() {
       if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
         notify(
           "info",
-          "Screen sharing isn't shipped yet — shell and file sessions are available now."
+          "This capability is not yet available on the selected agent."
         );
       } else if (msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
         notify(
@@ -420,6 +427,40 @@ export default function RemoteControl() {
               device={fileSession.device}
               onClose={() => {
                 setFileSession(null);
+                load();
+              }}
+            />
+          </Box>
+        ) : null}
+      </Drawer>
+
+      {/* RCP M3.S1 — screen share drawer. Opens when a Screen button
+          succeeds; ScreenShareViewer owns the WebRTC + DataChannel
+          lifecycle. The drawer is full-width to maximise the canvas
+          area; the viewer also supports browser fullscreen mode. */}
+      <Drawer
+        anchor="right"
+        open={Boolean(screenSession)}
+        onClose={() => {
+          setScreenSession(null);
+          load();
+        }}
+        PaperProps={{
+          sx: {
+            width: { xs: "100%", md: "75vw", lg: "65vw" },
+            maxWidth: "100%",
+            bgcolor: "transparent",
+            border: "none"
+          }
+        }}
+      >
+        {screenSession ? (
+          <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
+            <ScreenShareViewer
+              session={screenSession}
+              device={screenSession.device}
+              onClose={() => {
+                setScreenSession(null);
                 load();
               }}
             />

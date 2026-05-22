@@ -2,12 +2,13 @@
 //
 // Device selector for the Remote Control page.
 //
-// Per-capability action buttons (M2.S1):
-//   - Shell (ElectricalServicesIcon): enabled when device advertises rcp.shell
-//   - Files (FolderIcon):             enabled when device advertises rcp.file
+// Per-capability action buttons (M3.S1):
+//   - Shell  (ElectricalServicesIcon): enabled when device advertises rcp.shell
+//   - Files  (FolderIcon):             enabled when device advertises rcp.file
+//   - Screen (DesktopWindowsIcon):     enabled when device advertises rcp.screen
 //
 // The `capabilities` array on each device drives which buttons are
-// active. When no rcp.* capability is advertised, both are disabled
+// active. When no rcp.* capability is advertised, all three are disabled
 // with an explanatory tooltip.
 
 import * as React from "react";
@@ -30,6 +31,7 @@ import {
 } from "@mui/material";
 import ElectricalServicesOutlinedIcon from "@mui/icons-material/ElectricalServicesOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
@@ -67,7 +69,7 @@ function RcpBadge({ enabled }) {
   );
 }
 
-// onConnect(device, type) where type is "shell" | "file"
+// onConnect(device, type) where type is "shell" | "file" | "screen"
 export default function ConnectablesTable({ devices, loading, onConnect }) {
   const [search, setSearch] = React.useState("");
 
@@ -139,12 +141,14 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
             ) : (
               filtered.map((d) => {
                 const caps = Array.isArray(d.capabilities) ? d.capabilities : [];
-                const hasShell = caps.includes("rcp.shell");
-                const hasFile = caps.includes("rcp.file");
-                const isOnline = d.online;
+                const hasShell  = caps.includes("rcp.shell");
+                const hasFile   = caps.includes("rcp.file");
+                const hasScreen = caps.includes("rcp.screen");
+                const isOnline  = d.online;
 
-                const canShell = isOnline && hasShell;
-                const canFile = isOnline && hasFile;
+                const canShell  = isOnline && hasShell;
+                const canFile   = isOnline && hasFile;
+                const canScreen = isOnline && hasScreen;
 
                 const shellTooltip = !isOnline
                   ? "Device is offline."
@@ -156,6 +160,11 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                   : !hasFile
                   ? "Agent does not advertise rcp.file. Deploy the rcp plugin with remoteFile enabled."
                   : "Open a file manager session.";
+                const screenTooltip = !isOnline
+                  ? "Device is offline."
+                  : !hasScreen
+                  ? "Agent does not advertise rcp.screen. Deploy the rcp plugin with remoteScreen enabled."
+                  : "Start a screen share session.";
 
                 return (
                   <TableRow key={d.deviceId} hover>
@@ -212,6 +221,24 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                               }}
                             >
                               <FolderOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+
+                        {/* Screen share button (M3.S1) */}
+                        <Tooltip title={screenTooltip} arrow>
+                          <span>
+                            <IconButton
+                              size="small"
+                              disabled={!canScreen}
+                              onClick={() => onConnect?.(d, "screen")}
+                              sx={{
+                                color: canScreen ? BRAND.teal : BRAND.gray,
+                                border: `1px solid ${canScreen ? BRAND.teal : BRAND.border}`,
+                                borderRadius: 1
+                              }}
+                            >
+                              <DesktopWindowsOutlinedIcon fontSize="small" />
                             </IconButton>
                           </span>
                         </Tooltip>
