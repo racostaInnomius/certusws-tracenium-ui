@@ -59,3 +59,10 @@ export async function getSessionFileTransfers(sessionId, params = {}) {
     `${BASE}/sessions/${encodeURIComponent(sessionId)}/transfers${buildQuery(params)}`
   );
 }
+
+// M2.S2 — tenant-wide file transfer audit view.
+// Filters: direction, status, deviceId, filename, limit.
+// Returns { ok, total, items: FileTransferRecord[] }.
+export async function getAllFileTransfers(params = {}) {
+  return httpGetJson(`${BASE}/file-transfers${buildQuery(params)}`);
+}

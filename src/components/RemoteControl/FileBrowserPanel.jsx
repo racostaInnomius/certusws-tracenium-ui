@@ -1,6 +1,6 @@
 // src/components/RemoteControl/FileBrowserPanel.jsx
 //
-// RCP M2.S1 — file browser panel for rcp.file sessions.
+// RCP M2.S2 — file browser panel for rcp.file sessions (hardened).
 //
 // Architecture:
 //   - WebRTC DataChannel carries all file operations (P2P, like
@@ -44,13 +44,13 @@ import * as React from "react";
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Divider,
   Grid,
   IconButton,
   LinearProgress,
-  Paper,
   Stack,
   Table,
   TableBody,
@@ -62,6 +62,7 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import ArrowUpwardOutlinedIcon from "@mui/icons-material/ArrowUpwardOutlined";
@@ -70,6 +71,7 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import UploadOutlinedIcon from "@mui/icons-material/UploadOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
 
@@ -129,7 +131,7 @@ function StatusChip({ state }) {
   );
 }
 
-function TransferRow({ transfer }) {
+function TransferRow({ transfer, onCancel }) {
   const done =
     transfer.status === "completed" ||
     transfer.status === "failed" ||
@@ -152,29 +154,36 @@ function TransferRow({ transfer }) {
     >
       <Stack direction="row" spacing={1} alignItems="center">
         {transfer.direction === "download" ? (
-          <DownloadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal }} />
+          <DownloadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }} />
         ) : (
-          <UploadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal }} />
+          <UploadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }} />
         )}
-        <Typography
-          variant="caption"
-          sx={{
-            flex: 1,
-            fontWeight: 600,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: BRAND.dark
-          }}
-        >
-          {transfer.name}
-        </Typography>
+        <Tooltip title={transfer.name} placement="top">
+          <Typography
+            variant="caption"
+            sx={{
+              flex: 1,
+              fontWeight: 600,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: BRAND.dark,
+              minWidth: 0
+            }}
+          >
+            {transfer.name}
+          </Typography>
+        </Tooltip>
         {transfer.status === "failed" ? (
-          <ErrorOutlineIcon sx={{ fontSize: 14, color: ROLE.critical }} />
+          <Tooltip title={transfer.errorMsg || "Transfer failed"} placement="top">
+            <ErrorOutlineIcon sx={{ fontSize: 14, color: ROLE.critical, flexShrink: 0 }} />
+          </Tooltip>
         ) : transfer.status === "completed" ? (
-          <CheckCircleOutlineIcon sx={{ fontSize: 14, color: ROLE.positive }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: 14, color: ROLE.positive, flexShrink: 0 }} />
+        ) : transfer.status === "cancelled" ? (
+          <CancelOutlinedIcon sx={{ fontSize: 14, color: BRAND.gray, flexShrink: 0 }} />
         ) : null}
-        <Typography variant="caption" sx={{ color: BRAND.gray, whiteSpace: "nowrap" }}>
+        <Typography variant="caption" sx={{ color: BRAND.gray, whiteSpace: "nowrap", flexShrink: 0 }}>
           {transfer.status === "failed"
             ? "Failed"
             : transfer.status === "cancelled"
@@ -183,6 +192,18 @@ function TransferRow({ transfer }) {
             ? formatBytes(transfer.sizeBytes)
             : `${pct}%`}
         </Typography>
+        {/* Cancel button — only shown while active */}
+        {!done && (
+          <Tooltip title="Cancel transfer" placement="top">
+            <IconButton
+              size="small"
+              onClick={() => onCancel?.(transfer.id)}
+              sx={{ color: BRAND.gray, p: 0.25, flexShrink: 0 }}
+            >
+              <CloseOutlinedIcon sx={{ fontSize: 13 }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Stack>
       {!done && (
         <LinearProgress
@@ -216,6 +237,8 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const [entries, setEntries] = React.useState([]);
   const [listing, setListing] = React.useState(false);
   const [transfers, setTransfers] = React.useState([]);       // { id, name, path, direction, sizeBytes, transferred, status }
+  const [selected, setSelected] = React.useState(new Set());  // M2.S2 multi-select
+  const [dragOver, setDragOver] = React.useState(false);      // M2.S2 drag-and-drop
   const uploadRef = React.useRef(null);
   const dcRef = React.useRef(null);     // RTCDataChannel
   const pcRef = React.useRef(null);     // RTCPeerConnection
@@ -490,33 +513,11 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   }
 
   function handleFileSelected(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
     e.target.value = "";  // reset so same file can be re-selected
-    const transferId = crypto.randomUUID();
-    const destPath = currentPath.replace(/\/$/, "") + "/" + file.name;
-    pendingChunksRef.current[transferId] = { file, transferred: 0 };
-    setTransfers((prev) => [
-      {
-        id: transferId,
-        name: file.name,
-        path: destPath,
-        direction: "upload",
-        sizeBytes: file.size,
-        transferred: 0,
-        status: "active"
-      },
-      ...prev
-    ]);
-    // Send upload intent — agent responds with {op: "ready", transferId}
-    // when it's ready to receive chunks.
-    dcSend({
-      op: "upload",
-      transferId,
-      path: destPath,
-      name: file.name,
-      size: file.size
-    });
+    for (const file of files) {
+      queueUpload(file);
+    }
   }
 
   async function startUploadChunks(transferId, file) {
@@ -569,11 +570,104 @@ export default function FileBrowserPanel({ session, device, onClose }) {
     sendChunk();
   }
 
+  // ── M2.S2 — Cancel in-flight transfer ────────────────────────────────
+
+  function handleCancelTransfer(transferId) {
+    dcSend({ op: "cancel", transferId });
+    delete pendingChunksRef.current[transferId];
+    setTransfers((prev) =>
+      prev.map((t) =>
+        t.id === transferId ? { ...t, status: "cancelled" } : t
+      )
+    );
+  }
+
+  // ── M2.S2 — Multi-select helpers ─────────────────────────────────────
+
+  function toggleSelect(entryName) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryName)) next.delete(entryName);
+      else next.add(entryName);
+      return next;
+    });
+  }
+
+  function handleDownloadSelected() {
+    for (const name of selected) {
+      const entry = entries.find((e) => e.name === name && !e.isDir);
+      if (entry) handleDownload(entry);
+    }
+    setSelected(new Set());
+  }
+
+  // Clear selection whenever we navigate to a new path.
+  // (handled in handleNavigate via setCurrentPath which triggers
+  //  the listing update — we reset on listing change)
+  React.useEffect(() => {
+    setSelected(new Set());
+  }, [currentPath]);
+
+  // ── M2.S2 — Drag-and-drop upload ─────────────────────────────────────
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragOver) setDragOver(true);
+  }
+
+  function handleDragLeave(e) {
+    // Only clear if leaving the container (not a child element).
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOver(false);
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    if (state !== STATE.BROWSING) return;
+    const files = Array.from(e.dataTransfer?.files || []);
+    for (const file of files) {
+      queueUpload(file);
+    }
+  }
+
+  // Shared upload-queue logic used by both file-picker and drag-drop.
+  function queueUpload(file) {
+    const transferId = crypto.randomUUID();
+    const destPath = currentPath.replace(/\/$/, "") + "/" + file.name;
+    pendingChunksRef.current[transferId] = { file, transferred: 0 };
+    setTransfers((prev) => [
+      {
+        id: transferId,
+        name: file.name,
+        path: destPath,
+        direction: "upload",
+        sizeBytes: file.size,
+        transferred: 0,
+        status: "active"
+      },
+      ...prev
+    ]);
+    dcSend({
+      op: "upload",
+      transferId,
+      path: destPath,
+      name: file.name,
+      size: file.size
+    });
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   const devLabel = device?.hostname || device?.deviceId || "device";
   const activeTransfers = transfers.filter((t) => t.status === "active");
   const doneTransfers = transfers.filter((t) => t.status !== "active");
+  const fileEntries = entries.filter((e) => !e.isDir);
+  const allFilesSelected =
+    fileEntries.length > 0 && fileEntries.every((e) => selected.has(e.name));
 
   return (
     <Box
@@ -725,6 +819,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             <input
               ref={uploadRef}
               type="file"
+              multiple
               style={{ display: "none" }}
               onChange={handleFileSelected}
             />
@@ -740,9 +835,79 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               sx={{
                 borderRight: `1px solid ${BRAND.border}`,
                 overflow: "auto",
-                height: "100%"
+                height: "100%",
+                position: "relative"
               }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
+              {/* Drag-and-drop overlay */}
+              {dragOver && (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 10,
+                    bgcolor: `${BRAND.teal}18`,
+                    border: `2px dashed ${BRAND.teal}`,
+                    borderRadius: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 1,
+                    pointerEvents: "none"
+                  }}
+                >
+                  <CloudUploadOutlinedIcon sx={{ fontSize: 36, color: BRAND.teal }} />
+                  <Typography variant="body2" sx={{ color: BRAND.teal, fontWeight: 700 }}>
+                    Drop files to upload to {currentPath}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Multi-select toolbar */}
+              {selected.size > 0 && (
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  sx={{
+                    px: 1.5,
+                    py: 0.75,
+                    bgcolor: BRAND.tealSoft,
+                    borderBottom: `1px solid ${BRAND.border}`
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: BRAND.teal, fontWeight: 700, flex: 1 }}>
+                    {selected.size} file{selected.size > 1 ? "s" : ""} selected
+                  </Typography>
+                  <Button
+                    size="small"
+                    startIcon={<DownloadOutlinedIcon />}
+                    onClick={handleDownloadSelected}
+                    sx={{
+                      textTransform: "none",
+                      fontSize: 12,
+                      color: BRAND.teal,
+                      borderColor: BRAND.teal,
+                      "&:hover": { bgcolor: BRAND.tealSoft }
+                    }}
+                    variant="outlined"
+                  >
+                    Download {selected.size > 1 ? `${selected.size} files` : ""}
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => setSelected(new Set())}
+                    sx={{ textTransform: "none", fontSize: 12, color: BRAND.gray }}
+                  >
+                    Clear
+                  </Button>
+                </Stack>
+              )}
+
               {listing && entries.length === 0 ? (
                 <Box
                   sx={{
@@ -764,7 +929,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                   }}
                 >
                   <Typography variant="body2" sx={{ color: BRAND.gray }}>
-                    Directory is empty.
+                    Directory is empty. Drop files here to upload.
                   </Typography>
                 </Box>
               ) : (
@@ -772,6 +937,22 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
+                        {/* Select-all checkbox for files only */}
+                        <TableCell padding="checkbox" sx={{ width: 42 }}>
+                          <Checkbox
+                            size="small"
+                            indeterminate={selected.size > 0 && !allFilesSelected}
+                            checked={allFilesSelected}
+                            onChange={() => {
+                              if (allFilesSelected) {
+                                setSelected(new Set());
+                              } else {
+                                setSelected(new Set(fileEntries.map((e) => e.name)));
+                              }
+                            }}
+                            sx={{ color: BRAND.gray, "&.Mui-checked": { color: BRAND.teal } }}
+                          />
+                        </TableCell>
                         <TableCell sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12 }}>
                           Name
                         </TableCell>
@@ -782,83 +963,113 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                           Size
                         </TableCell>
                         <TableCell
-                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12, width: 160 }}
+                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12, width: 150 }}
                         >
                           Modified
                         </TableCell>
-                        <TableCell sx={{ width: 56 }} />
+                        <TableCell sx={{ width: 48 }} />
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {entries.map((entry) => (
-                        <TableRow
-                          key={entry.name}
-                          hover
-                          sx={{ cursor: entry.isDir ? "pointer" : "default" }}
-                          onClick={
-                            entry.isDir
-                              ? () =>
-                                  handleNavigate(
-                                    (currentPath === "/"
-                                      ? ""
-                                      : currentPath.replace(/\/$/, "")) +
-                                      "/" +
-                                      entry.name
-                                  )
-                              : undefined
-                          }
-                        >
-                          <TableCell sx={{ fontSize: 12 }}>
-                            <Stack direction="row" spacing={0.75} alignItems="center">
-                              {entry.isDir ? (
-                                <FolderOutlinedIcon
-                                  sx={{ fontSize: 15, color: BRAND.teal }}
-                                />
-                              ) : (
-                                <InsertDriveFileOutlinedIcon
-                                  sx={{ fontSize: 15, color: BRAND.gray }}
+                      {entries.map((entry) => {
+                        const isSelected = !entry.isDir && selected.has(entry.name);
+                        return (
+                          <TableRow
+                            key={entry.name}
+                            hover
+                            selected={isSelected}
+                            sx={{
+                              cursor: entry.isDir ? "pointer" : "default",
+                              "&.Mui-selected": { bgcolor: `${BRAND.teal}10` }
+                            }}
+                            onClick={
+                              entry.isDir
+                                ? () =>
+                                    handleNavigate(
+                                      (currentPath === "/"
+                                        ? ""
+                                        : currentPath.replace(/\/$/, "")) +
+                                        "/" +
+                                        entry.name
+                                    )
+                                : undefined
+                            }
+                          >
+                            <TableCell padding="checkbox">
+                              {!entry.isDir && (
+                                <Checkbox
+                                  size="small"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleSelect(entry.name);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  sx={{ color: BRAND.gray, "&.Mui-checked": { color: BRAND.teal } }}
                                 />
                               )}
-                              <Typography
-                                variant="caption"
-                                sx={{ fontWeight: entry.isDir ? 600 : 400, color: BRAND.dark }}
-                              >
-                                {entry.name}
-                              </Typography>
-                            </Stack>
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontSize: 12, color: BRAND.gray }}>
-                            {entry.isDir ? "—" : formatBytes(entry.size)}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 12, color: BRAND.gray }}>
-                            {entry.modifiedAt
-                              ? new Date(entry.modifiedAt).toLocaleString(undefined, {
-                                  year: "numeric",
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit"
-                                })
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            {!entry.isDir && (
-                              <Tooltip title="Download">
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDownload(entry);
-                                  }}
-                                  sx={{ color: BRAND.teal }}
-                                >
-                                  <DownloadOutlinedIcon sx={{ fontSize: 15 }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 12 }}>
+                              <Stack direction="row" spacing={0.75} alignItems="center">
+                                {entry.isDir ? (
+                                  <FolderOutlinedIcon
+                                    sx={{ fontSize: 15, color: BRAND.teal, flexShrink: 0 }}
+                                  />
+                                ) : (
+                                  <InsertDriveFileOutlinedIcon
+                                    sx={{ fontSize: 15, color: BRAND.gray, flexShrink: 0 }}
+                                  />
+                                )}
+                                <Tooltip title={entry.name} placement="top">
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      fontWeight: entry.isDir ? 600 : 400,
+                                      color: BRAND.dark,
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                      maxWidth: 180
+                                    }}
+                                  >
+                                    {entry.name}
+                                  </Typography>
+                                </Tooltip>
+                              </Stack>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontSize: 12, color: BRAND.gray }}>
+                              {entry.isDir ? "—" : formatBytes(entry.size)}
+                            </TableCell>
+                            <TableCell sx={{ fontSize: 12, color: BRAND.gray }}>
+                              {entry.modifiedAt
+                                ? new Date(entry.modifiedAt).toLocaleString(undefined, {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                  })
+                                : "—"}
+                            </TableCell>
+                            <TableCell>
+                              {!entry.isDir && (
+                                <Tooltip title="Download">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownload(entry);
+                                    }}
+                                    sx={{ color: BRAND.teal }}
+                                  >
+                                    <DownloadOutlinedIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -894,7 +1105,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                         Active ({activeTransfers.length})
                       </Typography>
                       {activeTransfers.map((t) => (
-                        <TransferRow key={t.id} transfer={t} />
+                        <TransferRow key={t.id} transfer={t} onCancel={handleCancelTransfer} />
                       ))}
                     </>
                   )}
@@ -910,7 +1121,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                         Completed ({doneTransfers.length})
                       </Typography>
                       {doneTransfers.map((t) => (
-                        <TransferRow key={t.id} transfer={t} />
+                        <TransferRow key={t.id} transfer={t} onCancel={handleCancelTransfer} />
                       ))}
                     </>
                   )}

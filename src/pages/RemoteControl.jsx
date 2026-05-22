@@ -34,12 +34,14 @@ import {
   getRemoteControlSummary,
   getConnectableDevices,
   getRemoteSessions,
+  getAllFileTransfers,
   startRemoteSession
 } from "../api/remoteControl";
 
 import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
 import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
+import FileTransfersAuditTable from "../components/RemoteControl/FileTransfersAuditTable";
 import ShellTerminal from "../components/RemoteControl/ShellTerminal";
 import TranscriptReplayDialog from "../components/RemoteControl/TranscriptReplayDialog";
 import FileBrowserPanel from "../components/RemoteControl/FileBrowserPanel";
@@ -119,10 +121,11 @@ export default function RemoteControl() {
   // of three independent ones — when the page rehydrates, all three
   // panels fill from the same snapshot atomically.
   const loader = React.useCallback(async () => {
-    const [sumRes, devRes, sesRes] = await Promise.allSettled([
+    const [sumRes, devRes, sesRes, ftRes] = await Promise.allSettled([
       getRemoteControlSummary(),
       getConnectableDevices(),
-      getRemoteSessions({ limit: 50 })
+      getRemoteSessions({ limit: 50 }),
+      getAllFileTransfers({ limit: 200 })
     ]);
     return {
       summary: sumRes.status === "fulfilled" ? (sumRes.value?.summary ?? null) : null,
@@ -131,6 +134,9 @@ export default function RemoteControl() {
       sessions: sesRes.status === "fulfilled" && Array.isArray(sesRes.value?.items)
         ? sesRes.value.items : [],
       sessionTotal: sesRes.status === "fulfilled" ? Number(sesRes.value?.total ?? 0) : 0,
+      fileTransfers: ftRes.status === "fulfilled" && Array.isArray(ftRes.value?.items)
+        ? ftRes.value.items : [],
+      fileTransferTotal: ftRes.status === "fulfilled" ? Number(ftRes.value?.total ?? 0) : 0,
     };
   }, []);
 
@@ -142,6 +148,8 @@ export default function RemoteControl() {
   const devices = data?.devices ?? [];
   const sessions = data?.sessions ?? [];
   const sessionTotal = data?.sessionTotal ?? 0;
+  const fileTransfers = data?.fileTransfers ?? [];
+  const fileTransferTotal = data?.fileTransferTotal ?? 0;
   const refreshedAt = lastUpdatedAt ? new Date(lastUpdatedAt) : null;
   const load = refetch;
 
@@ -327,6 +335,15 @@ export default function RemoteControl() {
         loading={loading}
         onReplay={(s) => setReplaySession(s)}
       />
+
+      {/* Row 4 — M2.S2 File transfer audit (cross-session, tenant-wide) */}
+      <Box sx={{ mt: 2 }}>
+        <FileTransfersAuditTable
+          transfers={fileTransfers}
+          total={fileTransferTotal}
+          loading={loading}
+        />
+      </Box>
 
       <BrandSnackbar
         open={snackbar.open}
