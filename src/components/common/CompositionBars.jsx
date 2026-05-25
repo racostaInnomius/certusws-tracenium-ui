@@ -134,10 +134,11 @@ export default function CompositionBars({
         minWidth: 0,
         overflow: "hidden",
         cursor: interactive ? "pointer" : "default",
-        transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease",
+        transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, background-color 140ms ease",
         "&:hover": interactive
           ? {
               borderColor: BRAND.teal,
+              bgcolor: "rgba(90,159,159,0.035)",
               boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
               transform: "translateY(-1px)",
             }
@@ -264,17 +265,24 @@ export default function CompositionBars({
             const rowKey = getRowKey(row, index);
             const expanded = Boolean(expandedRows[rowKey]);
 
+            // When the whole card is clickable (for example OS versions →
+            // Hardware Inventory), child rows must not hijack the click.
+            // The expand icon still works because it stops propagation on
+            // its own. For non-clickable cards, row click keeps the existing
+            // expand/collapse behavior.
+            const rowCanExpandByClick = hasChildren && !interactive;
+
             return (
               <Box
                 key={rowKey}
                 sx={{ display: "flex", flexDirection: "column", gap: 0.35 }}
               >
                 <Box
-                  role={hasChildren ? "button" : undefined}
-                  tabIndex={hasChildren ? 0 : undefined}
-                  aria-expanded={hasChildren ? expanded : undefined}
+                  role={rowCanExpandByClick ? "button" : undefined}
+                  tabIndex={rowCanExpandByClick ? 0 : undefined}
+                  aria-expanded={rowCanExpandByClick ? expanded : undefined}
                   onClick={
-                    hasChildren
+                    rowCanExpandByClick
                       ? (event) => {
                           event.stopPropagation();
                           toggleRow(rowKey);
@@ -282,7 +290,7 @@ export default function CompositionBars({
                       : undefined
                   }
                   onKeyDown={
-                    hasChildren
+                    rowCanExpandByClick
                       ? (event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
@@ -298,16 +306,16 @@ export default function CompositionBars({
                     alignItems: "center",
                     columnGap: 1,
                     fontSize: 12.5,
-                    cursor: hasChildren ? "pointer" : "default",
+                    cursor: rowCanExpandByClick ? "pointer" : "inherit",
                     borderRadius: 1,
                     mx: hasChildren ? -0.5 : 0,
                     px: hasChildren ? 0.5 : 0,
                     py: hasChildren ? 0.25 : 0,
                     transition: "background-color 140ms ease",
-                    "&:hover": hasChildren
+                    "&:hover": rowCanExpandByClick
                       ? { bgcolor: "rgba(27,166,166,0.06)" }
                       : undefined,
-                    "&:focus-visible": hasChildren
+                    "&:focus-visible": rowCanExpandByClick
                       ? {
                           outline: `2px solid ${BRAND.teal}`,
                           outlineOffset: 2,

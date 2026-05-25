@@ -115,36 +115,20 @@ function getCoverageTone(coverage) {
 }
 
 function getCoveragePalette(tone) {
+  // Keep the coverage notice shell consistent with Tracenium chrome.
+  // Status severity is expressed only by the "X% covered" chip text,
+  // so the card never turns red/yellow and does not visually alarm the
+  // operator unless they read the actual coverage value.
   if (tone === "success") {
-    return {
-      bg: ROLE.positiveSoft,
-      border: `${ROLE.positive}55`,
-      color: ROLE.positive,
-      iconBg: "#fff",
-    };
+    return { color: ROLE.positive };
   }
   if (tone === "critical") {
-    return {
-      bg: ROLE.criticalSoft,
-      border: `${ROLE.critical}55`,
-      color: ROLE.critical,
-      iconBg: "#fff",
-    };
+    return { color: ROLE.critical };
   }
   if (tone === "warning") {
-    return {
-      bg: ROLE.cautionSoft,
-      border: `${ROLE.caution}55`,
-      color: ROLE.caution,
-      iconBg: "#fff",
-    };
+    return { color: ROLE.caution };
   }
-  return {
-    bg: BRAND.tealSoft,
-    border: `${BRAND.teal}55`,
-    color: BRAND.tealText,
-    iconBg: "#fff",
-  };
+  return { color: BRAND.tealText };
 }
 
 function KindChip({ kind }) {
@@ -959,13 +943,86 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
 // maintained locally across pages so operators can add devices from
 // different result pages before submitting the group.
 
+function normalizeKnownDeviceGroupAssignments(d) {
+  const rawCollections = [
+    d?.groups,
+    d?.assetGroups,
+    d?.asset_groups,
+    d?.groupMemberships,
+    d?.group_memberships,
+    d?.memberships,
+  ];
+
+  const names = [];
+
+  rawCollections.forEach((collection) => {
+    if (!Array.isArray(collection)) return;
+    collection.forEach((item) => {
+      const name =
+        typeof item === "string"
+          ? item
+          : item?.name || item?.groupName || item?.group_name || item?.assetGroupName;
+      const trimmed = String(name || "").trim();
+      if (trimmed) names.push(trimmed);
+    });
+  });
+
+  const rawGroupNames = d?.groupNames || d?.group_names || d?.assetGroupNames || d?.asset_group_names;
+  if (Array.isArray(rawGroupNames)) {
+    rawGroupNames.forEach((name) => {
+      const trimmed = String(name || "").trim();
+      if (trimmed) names.push(trimmed);
+    });
+  } else if (typeof rawGroupNames === "string") {
+    rawGroupNames
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .forEach((name) => names.push(name));
+  }
+
+  const singleGroupName = String(d?.groupName || d?.group_name || d?.assetGroup || d?.asset_group || "").trim();
+  if (singleGroupName && singleGroupName !== "—") names.push(singleGroupName);
+
+  const uniqueNames = Array.from(new Set(names));
+  const rawCount = Number(
+    d?.groupCount ??
+      d?.group_count ??
+      d?.groupsCount ??
+      d?.groups_count ??
+      d?.assetGroupCount ??
+      d?.asset_group_count ??
+      uniqueNames.length
+  );
+  const groupCount = Number.isFinite(rawCount) ? rawCount : uniqueNames.length;
+
+  const explicitGrouped =
+    d?.isGrouped === true ||
+    d?.is_grouped === true ||
+    d?.grouped === true ||
+    d?.hasGroup === true ||
+    d?.has_group === true;
+
+  const isGrouped = explicitGrouped || groupCount > 0 || uniqueNames.length > 0;
+
+  return {
+    isGrouped,
+    groupCount: isGrouped ? Math.max(groupCount, uniqueNames.length, 1) : 0,
+    groupCoverage: isGrouped ? "grouped" : "ungrouped",
+    groupNames: uniqueNames,
+  };
+}
+
 function normalizeKnownDevice(d) {
+  const groupInfo = normalizeKnownDeviceGroupAssignments(d || {});
+
   return {
     deviceId: String(d?.deviceId || "").trim(),
     hostname: String(d?.hostname || "").trim(),
     platform: String(d?.platform || d?.osPlatform || "").trim(),
     agentVersion: String(d?.agentVersion || d?.agent_version || "").trim(),
     connected: d?.connected === true,
+    ...groupInfo,
   };
 }
 
@@ -1008,6 +1065,7 @@ function KnownDevicesPicker({
           page: page + 1,
           pageSize,
           search: search.trim() || undefined,
+          includeGroups: true,
         });
 
         if (cancelled) return;
@@ -1111,6 +1169,13 @@ function KnownDevicesPicker({
         ) : (
           rows.map((d) => {
             const checked = selectedIds.has(d.deviceId);
+            const groupNamesText = d.groupNames.length > 0 ? d.groupNames.join(", ") : "Assigned to an existing group";
+            const groupChipLabel = d.isGrouped
+              ? d.groupCount > 1
+                ? `${d.groupCount} groups`
+                : "Grouped"
+              : "Ungrouped";
+
             return (
               <Box
                 key={d.deviceId}
@@ -1120,7 +1185,7 @@ function KnownDevicesPicker({
                   alignItems: "center",
                   gap: 1.5,
                   px: 1.5,
-                  py: 0.75,
+                  py: 0.9,
                   cursor: "pointer",
                   bgcolor: checked ? BRAND.tealSoft : "transparent",
                   borderBottom: `1px solid ${BRAND.border}`,
@@ -1147,20 +1212,52 @@ function KnownDevicesPicker({
                 </Box>
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography
-                    sx={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: BRAND.dark,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    alignItems="center"
+                    sx={{ minWidth: 0, flexWrap: "wrap", rowGap: 0.4 }}
                   >
-                    {d.hostname || d.deviceId}
-                  </Typography>
+                    <Typography
+                      sx={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: BRAND.dark,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        maxWidth: { xs: "100%", sm: 320 },
+                      }}
+                    >
+                      {d.hostname || d.deviceId}
+                    </Typography>
+                    <Tooltip
+                      arrow
+                      title={
+                        d.isGrouped
+                          ? `Already in: ${groupNamesText}`
+                          : "This device is not assigned to any asset group yet."
+                      }
+                    >
+                      <Chip
+                        size="small"
+                        label={groupChipLabel}
+                        sx={{
+                          height: 20,
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          border: `1px solid ${d.isGrouped ? `${BRAND.teal}66` : BRAND.border}`,
+                          bgcolor: d.isGrouped ? BRAND.tealSoft : BRAND.surface,
+                          color: d.isGrouped ? BRAND.tealText : BRAND.gray,
+                          "& .MuiChip-label": { px: 0.85 },
+                        }}
+                      />
+                    </Tooltip>
+                  </Stack>
+
                   <Typography
                     sx={{
+                      mt: 0.15,
                       fontSize: 11,
                       color: BRAND.gray,
                       fontFamily: "monospace",
@@ -1171,9 +1268,32 @@ function KnownDevicesPicker({
                   >
                     {d.deviceId}
                   </Typography>
+
+                  {d.isGrouped ? (
+                    <Typography
+                      sx={{
+                        mt: 0.25,
+                        fontSize: 11,
+                        color: BRAND.tealText,
+                        fontWeight: 700,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={groupNamesText}
+                    >
+                      Already in: {groupNamesText}
+                    </Typography>
+                  ) : null}
                 </Box>
 
-                <Stack direction="row" spacing={0.5} alignItems="center">
+                <Stack
+                  direction="row"
+                  spacing={0.5}
+                  alignItems="center"
+                  justifyContent="flex-end"
+                  sx={{ flexShrink: 0, flexWrap: "wrap", maxWidth: { xs: 120, sm: 220 } }}
+                >
                   {d.platform ? (
                     <Chip
                       size="small"
@@ -1279,14 +1399,30 @@ function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefr
   return (
     <Box
       sx={{
+        position: "relative",
         p: compact ? 1.25 : 1.5,
         borderRadius: 2,
-        border: `1px solid ${palette.border}`,
-        bgcolor: palette.bg,
+        border: `1px solid ${BRAND.teal}`,
+        background:
+          "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.94) 58%, rgba(90,159,159,0.09) 100%)",
+        boxShadow: "0 10px 24px rgba(59,64,77,0.06)",
         display: "grid",
         gap: 1.25,
         gridTemplateColumns: { xs: "1fr", md: compact ? "1fr" : "auto 1fr auto" },
         alignItems: "center",
+        overflow: "hidden",
+        "&::before": {
+          content: '""',
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "radial-gradient(circle at 0% 50%, rgba(90,159,159,0.10), transparent 34%), radial-gradient(circle at 100% 50%, rgba(143,253,255,0.09), transparent 30%)",
+        },
+        "& > *": {
+          position: "relative",
+          zIndex: 1,
+        },
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, minWidth: 0 }}>
@@ -1295,13 +1431,13 @@ function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefr
             width: 36,
             height: 36,
             borderRadius: 2,
-            bgcolor: palette.iconBg,
-            color: palette.color,
+            bgcolor: BRAND.tealSoft,
+            color: BRAND.tealText,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            border: `1px solid ${palette.border}`,
+            border: `1px solid ${BRAND.border}`,
           }}
         >
           <Inventory2OutlinedIcon fontSize="small" />
@@ -1336,17 +1472,38 @@ function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefr
         <Chip
           size="small"
           label={`${formatPercent(coveragePercent)} covered`}
-          sx={{ bgcolor: "#fff", color: BRAND.dark, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+          sx={{
+            bgcolor: "rgba(255,255,255,0.92)",
+            color: palette.color,
+            fontWeight: 900,
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: "0 3px 10px rgba(59,64,77,0.05)",
+            "& .MuiChip-label": { px: 1.25 },
+          }}
         />
         <Chip
           size="small"
           label={`${formatNumber(groupedDevices)} grouped`}
-          sx={{ bgcolor: "#fff", color: BRAND.tealText, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+          sx={{
+            bgcolor: "rgba(255,255,255,0.92)",
+            color: BRAND.tealText,
+            fontWeight: 800,
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: "0 3px 10px rgba(59,64,77,0.04)",
+            "& .MuiChip-label": { px: 1.25 },
+          }}
         />
         <Chip
           size="small"
           label={`${formatNumber(totalDevices)} total`}
-          sx={{ bgcolor: "#fff", color: BRAND.gray, fontWeight: 800, border: `1px solid ${BRAND.border}` }}
+          sx={{
+            bgcolor: "rgba(255,255,255,0.92)",
+            color: BRAND.gray,
+            fontWeight: 800,
+            border: `1px solid ${BRAND.border}`,
+            boxShadow: "0 3px 10px rgba(59,64,77,0.04)",
+            "& .MuiChip-label": { px: 1.25 },
+          }}
         />
       </Stack>
 
@@ -2950,7 +3107,7 @@ export default function AssetGroups() {
       // Lightweight lookup cache for decorating existing group members.
       // Device pickers themselves use server-side search/pagination and
       // do not depend on this page-level list.
-      const res = await listKnownDevices({ page: 1, pageSize: 100 });
+      const res = await listKnownDevices({ page: 1, pageSize: 100, includeGroups: true });
       const items = Array.isArray(res?.items) ? res.items : [];
       setDevices(
         items.map((d) => ({
