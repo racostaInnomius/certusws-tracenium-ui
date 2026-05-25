@@ -1,21 +1,14 @@
 // src/api/http.js
 //
-// Tracenium HTTP helpers with a small enterprise-grade GET cache.
+// Tracenium HTTP helpers with enterprise-grade GET cache and temporary
+// server error handling.
 //
-// Why this exists:
-// - Many pages fetch dashboards, cards, charts, tables and settings on mount.
-// - Without a shared cache, sidebar navigation can feel slow because every page
-//   waits for the same GETs again.
-// - This helper keeps a short-lived memory + sessionStorage cache for GETs,
-//   deduplicates concurrent requests, and clears cached reads after mutations.
-//
-// Usage stays backward compatible:
-//   httpGetJson('/api/v1/dashboard/summary')
-//
-// Optional controls:
-//   httpGetJson(url, { cache: 'no-store' })  // always network
-//   httpGetJson(url, { cache: 'reload' })    // network + update cache
-//   httpGetJson(url, { staleMs: 120_000 })   // custom fresh window
+// Rules:
+// - 401 / UNAUTHENTICATED remains an auth error. The app may redirect/login.
+// - 503 / TEMPORARY_SERVER_ERROR / retryable=true / network timeout is temporary.
+//   It must NOT logout the user.
+// - GET requests keep and reuse last-known-good data when a temporary refresh
+//   fails, while a global non-blocking warning is emitted.
 
 const API_BASE = import.meta.env.VITE_API_BASE;
 
@@ -25,8 +18,33 @@ const STORAGE_PREFIX = "tnm:http-cache:";
 const DEFAULT_STALE_MS = 60_000;
 const DEFAULT_STORAGE_MAX_AGE_MS = 10 * 60_000;
 
+export const TEMPORARY_ERROR_EVENT = "tracenium:temporary-server-error";
+
 const memCache = new Map();
 const inFlightGets = new Map();
+
+export class AuthError extends Error {
+  constructor(message = "UNAUTHENTICATED", options = {}) {
+    super(message);
+    this.name = "AuthError";
+    this.status = options.status ?? 401;
+    this.body = options.body ?? null;
+    this.code = options.code || "UNAUTHENTICATED";
+  }
+}
+
+export class TemporaryServerError extends Error {
+  constructor(message = "Unable to refresh data. Showing last available data.", options = {}) {
+    super(message);
+    this.name = "TemporaryServerError";
+    this.status = options.status ?? null;
+    this.body = options.body ?? null;
+    this.code = options.code || "TEMPORARY_SERVER_ERROR";
+    this.retryable = true;
+    this.url = options.url || "";
+    this.cause = options.cause;
+  }
+}
 
 function withTimeout(ms = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -65,6 +83,7 @@ function normalizeGetOptions(url, options = {}) {
         profile.storageMaxAgeMs ??
         DEFAULT_STORAGE_MAX_AGE_MS
     ),
+    notifyOnTemporaryError: options.notifyOnTemporaryError !== false,
   };
 }
 
@@ -76,6 +95,14 @@ function getCacheProfileForUrl(url) {
     normalized.includes("/auth/") ||
     normalized.includes("/logout") ||
     normalized.includes("/bootstrap")
+  ) {
+    return { cache: "no-store" };
+  }
+
+  // Health checks are intentionally live probes.
+  if (
+    normalized.includes("/api/v1/health") ||
+    normalized.endsWith("/health")
   ) {
     return { cache: "no-store" };
   }
@@ -94,6 +121,7 @@ function getCacheProfileForUrl(url) {
   // bursts, but do not keep stale data around for long.
   if (
     normalized.includes("/devices-connected") ||
+    normalized.includes("/device-decommission-jobs") ||
     normalized.includes("/device-deletion-jobs") ||
     normalized.includes("/remote-control") ||
     normalized.includes("/jobs") ||
@@ -272,7 +300,69 @@ function invalidateAfterMutation(url) {
   void url;
 }
 
-async function handleResponse(res) {
+function getBodyErrorCode(body) {
+  return String(body?.error || body?.code || "").trim().toUpperCase();
+}
+
+function isRetryableBody(body) {
+  return body?.retryable === true || getBodyErrorCode(body) === "TEMPORARY_SERVER_ERROR";
+}
+
+export function isAuthError(err) {
+  const code = String(err?.code || err?.body?.error || err?.message || "").toUpperCase();
+  return err?.status === 401 || code.includes("UNAUTHENTICATED");
+}
+
+export function isTemporaryApiError(err) {
+  if (!err) return false;
+
+  const message = String(err.message || "").toLowerCase();
+  const code = String(err.code || err.body?.error || "").toUpperCase();
+
+  return (
+    err instanceof TemporaryServerError ||
+    err.retryable === true ||
+    err.status === 503 ||
+    err.status >= 500 ||
+    code === "TEMPORARY_SERVER_ERROR" ||
+    message.includes("etimedout") ||
+    message.includes("econnreset") ||
+    message.includes("failed to fetch") ||
+    message.includes("network error") ||
+    message.includes("request timed out") ||
+    message.includes("connection terminated") ||
+    message.includes("timeout exceeded") ||
+    message.includes("remaining connection slots")
+  );
+}
+
+export function getTemporaryErrorMessage(err) {
+  return (
+    err?.body?.message ||
+    err?.message ||
+    "Unable to refresh data. Showing last available data."
+  );
+}
+
+function emitTemporaryError(err, { url, cacheKey, hasCachedData } = {}) {
+  if (typeof window === "undefined") return;
+
+  const detail = {
+    url,
+    cacheKey,
+    hasCachedData: Boolean(hasCachedData),
+    message: "Unable to refresh data. Showing last available data.",
+    originalMessage: getTemporaryErrorMessage(err),
+    status: err?.status ?? null,
+    code: err?.code || err?.body?.error || "TEMPORARY_SERVER_ERROR",
+    retryable: true,
+    ts: now(),
+  };
+
+  window.dispatchEvent(new CustomEvent(TEMPORARY_ERROR_EVENT, { detail }));
+}
+
+async function handleResponse(res, url = "") {
   if (res.ok) {
     return res.json();
   }
@@ -288,22 +378,60 @@ async function handleResponse(res) {
     }
   }
 
-  if (res.status === 401) {
-    const err = new Error(`UNAUTHENTICATED:${text}`);
-    err.status = 401;
-    err.body = body;
-    throw err;
+  if (res.status === 401 || getBodyErrorCode(body) === "UNAUTHENTICATED") {
+    throw new AuthError(body?.message || `UNAUTHENTICATED:${text}`, {
+      status: 401,
+      body,
+      code: "UNAUTHENTICATED",
+    });
+  }
+
+  if (res.status === 503 || isRetryableBody(body) || res.status >= 500) {
+    throw new TemporaryServerError(
+      body?.message || "Unable to refresh data. Showing last available data.",
+      {
+        status: res.status,
+        body,
+        code: getBodyErrorCode(body) || "TEMPORARY_SERVER_ERROR",
+        url,
+      }
+    );
   }
 
   const err = new Error(`HTTP ${res.status}: ${text}`);
   err.status = res.status;
   err.body = body;
+  err.code = getBodyErrorCode(body) || `HTTP_${res.status}`;
   throw err;
 }
 
-function toHumanError(err) {
+function toHumanError(err, url = "") {
+  if (err instanceof AuthError || err instanceof TemporaryServerError) {
+    return err;
+  }
+
   if (err?.name === "AbortError") {
-    return new Error("Request timed out");
+    return new TemporaryServerError("Request timed out", {
+      code: "REQUEST_TIMEOUT",
+      url,
+      cause: err,
+    });
+  }
+
+  const message = String(err?.message || "");
+
+  if (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("Network Error") ||
+    message.includes("ETIMEDOUT") ||
+    message.includes("ECONNRESET")
+  ) {
+    return new TemporaryServerError(message || "Network Error", {
+      code: "NETWORK_ERROR",
+      url,
+      cause: err,
+    });
   }
 
   return err;
@@ -319,9 +447,9 @@ async function fetchGetJson(url, options) {
       signal: timeout.signal,
     });
 
-    return await handleResponse(res);
+    return await handleResponse(res, url);
   } catch (err) {
-    throw toHumanError(err);
+    throw toHumanError(err, url);
   } finally {
     timeout.done();
   }
@@ -353,6 +481,31 @@ export async function httpGetJson(url, options = {}) {
     .then((fresh) => {
       writeGetCache(cacheKey, fresh);
       return fresh;
+    })
+    .catch((err) => {
+      const temp = isTemporaryApiError(err);
+      const cachedEntry = readGetCache(cacheKey, normalizedOptions);
+
+      if (temp && cachedEntry) {
+        if (normalizedOptions.notifyOnTemporaryError) {
+          emitTemporaryError(err, {
+            url,
+            cacheKey,
+            hasCachedData: true,
+          });
+        }
+        return cachedEntry.data;
+      }
+
+      if (temp && normalizedOptions.notifyOnTemporaryError) {
+        emitTemporaryError(err, {
+          url,
+          cacheKey,
+          hasCachedData: false,
+        });
+      }
+
+      throw err;
     })
     .finally(() => {
       inFlightGets.delete(cacheKey);
@@ -404,11 +557,11 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
       signal: timeout.signal,
     });
 
-    const json = await handleResponse(res);
+    const json = await handleResponse(res, url);
     invalidateAfterMutation(url);
     return json;
   } catch (err) {
-    throw toHumanError(err);
+    throw toHumanError(err, url);
   } finally {
     timeout.done();
   }
@@ -426,11 +579,11 @@ export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
       signal: timeout.signal,
     });
 
-    const json = await handleResponse(res);
+    const json = await handleResponse(res, url);
     invalidateAfterMutation(url);
     return json;
   } catch (err) {
-    throw toHumanError(err);
+    throw toHumanError(err, url);
   } finally {
     timeout.done();
   }
@@ -448,11 +601,11 @@ export async function httpPatchJson(url, body, { timeoutMs } = {}) {
       signal: timeout.signal,
     });
 
-    const json = await handleResponse(res);
+    const json = await handleResponse(res, url);
     invalidateAfterMutation(url);
     return json;
   } catch (err) {
-    throw toHumanError(err);
+    throw toHumanError(err, url);
   } finally {
     timeout.done();
   }
@@ -468,11 +621,11 @@ export async function httpDeleteJson(url, { timeoutMs } = {}) {
       signal: timeout.signal,
     });
 
-    const json = await handleResponse(res);
+    const json = await handleResponse(res, url);
     invalidateAfterMutation(url);
     return json;
   } catch (err) {
-    throw toHumanError(err);
+    throw toHumanError(err, url);
   } finally {
     timeout.done();
   }

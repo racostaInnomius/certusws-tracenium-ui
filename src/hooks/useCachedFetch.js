@@ -7,6 +7,7 @@
 // - Show last-known data immediately when available.
 // - Refresh quietly in the background when cache is stale.
 // - Avoid duplicated requests for the same cache key.
+// - Preserve previous data when a refresh fails with a temporary backend/DB/network error.
 // - Keep compatibility with existing usage:
 //
 //   useCachedFetch(cacheKey, loader)
@@ -24,6 +25,7 @@
 // - loading
 // - refreshing
 // - error
+// - temporaryError
 // - refetch
 // - lastUpdatedAt
 // - cacheAgeMs
@@ -31,6 +33,7 @@
 // - hasCache
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTemporaryApiError, TEMPORARY_ERROR_EVENT } from "../api/http";
 
 const memCache = new Map();
 const inFlight = new Map();
@@ -228,6 +231,24 @@ function normalizeOptions(options = {}) {
   };
 }
 
+function emitTemporaryWarning(error, cacheKey) {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent(TEMPORARY_ERROR_EVENT, {
+      detail: {
+        cacheKey,
+        message: "Unable to refresh data. Showing last available data.",
+        originalMessage: error?.body?.message || error?.message || "Temporary server error",
+        status: error?.status ?? null,
+        code: error?.code || error?.body?.error || "TEMPORARY_SERVER_ERROR",
+        retryable: true,
+        ts: now(),
+      },
+    })
+  );
+}
+
 export function useCachedFetch(cacheKey, loader, options = {}) {
   const normalizedOptions = useMemo(
     () => normalizeOptions(options),
@@ -250,6 +271,7 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
   );
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [temporaryError, setTemporaryError] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(initial?.ts ?? null);
 
   const loaderRef = useRef(loader);
@@ -273,6 +295,7 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
     setLoading(normalizedOptions.enabled && nextInitial == null);
     setRefreshing(false);
     setError(null);
+    setTemporaryError(null);
   }, [cacheKey, normalizedOptions.storageMaxAgeMs, normalizedOptions.enabled]);
 
   const hasCache = data !== null && data !== undefined;
@@ -287,7 +310,8 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
     async (reason = "manual") => {
       if (!normalizedOptions.enabled) return null;
 
-      const hadCache = readCache(cacheKey, normalizedOptions) != null;
+      const cacheEntry = readCache(cacheKey, normalizedOptions);
+      const hadCache = cacheEntry != null;
 
       if (hadCache) {
         if (mountedRef.current) setRefreshing(true);
@@ -295,7 +319,10 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
         setLoading(true);
       }
 
-      if (mountedRef.current) setError(null);
+      if (mountedRef.current) {
+        setError(null);
+        setTemporaryError(null);
+      }
 
       try {
         let promise = inFlight.get(cacheKey);
@@ -323,8 +350,29 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
 
         return fresh;
       } catch (e) {
+        const temp = isTemporaryApiError(e);
+        const fallbackEntry = readCache(cacheKey, normalizedOptions);
+
+        if (temp && fallbackEntry) {
+          emitTemporaryWarning(e, cacheKey);
+
+          if (mountedRef.current) {
+            setData(fallbackEntry.data);
+            setLastUpdatedAt(fallbackEntry.ts);
+            setTemporaryError(e);
+            setError(null);
+          }
+
+          return fallbackEntry.data;
+        }
+
         if (mountedRef.current) {
-          setError(e);
+          if (temp) {
+            setTemporaryError(e);
+            emitTemporaryWarning(e, cacheKey);
+          } else {
+            setError(e);
+          }
         }
 
         return null;
@@ -379,6 +427,7 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
     loading,
     refreshing,
     error,
+    temporaryError,
     refetch,
     lastUpdatedAt,
     cacheAgeMs,

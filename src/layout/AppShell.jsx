@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Box, CircularProgress } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Snackbar } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
-import { httpGetJson } from "../api/http";
+import { TEMPORARY_ERROR_EVENT, httpGetJson } from "../api/http";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
@@ -48,6 +48,8 @@ export default function AppShell() {
   const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "overview"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [viewReloadToken, setViewReloadToken] = React.useState(0);
+  const [temporaryWarning, setTemporaryWarning] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -65,6 +67,29 @@ export default function AppShell() {
     return () => {
       alive = false;
     };
+  }, []);
+
+
+  React.useEffect(() => {
+    const handleTemporaryError = (event) => {
+      setTemporaryWarning({
+        message:
+          event?.detail?.message ||
+          "Unable to refresh data. Showing last available data.",
+        originalMessage: event?.detail?.originalMessage || "",
+        ts: Date.now(),
+      });
+    };
+
+    window.addEventListener(TEMPORARY_ERROR_EVENT, handleTemporaryError);
+    return () => {
+      window.removeEventListener(TEMPORARY_ERROR_EVENT, handleTemporaryError);
+    };
+  }, []);
+
+  const handleRetryCurrentView = React.useCallback(() => {
+    setTemporaryWarning(null);
+    setViewReloadToken((prev) => prev + 1);
   }, []);
 
   React.useEffect(() => {
@@ -85,6 +110,7 @@ export default function AppShell() {
   const handleSelect = React.useCallback((key) => {
     setSelectedPage(key);
     setMobileOpen(false); // auto-close drawer when a page is picked on mobile
+    setTemporaryWarning(null);
   }, []);
 
   // Default → Overview. Any unrecognized ?page= key also falls through
@@ -244,10 +270,39 @@ export default function AppShell() {
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
-            <Box sx={{ minWidth: 0, width: "100%" }}>{content}</Box>
+            <Box key={`${selectedPage}-${viewReloadToken}`} sx={{ minWidth: 0, width: "100%" }}>{content}</Box>
           </React.Suspense>
         </Box>
       </Box>
+
+      <Snackbar
+        open={Boolean(temporaryWarning)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        autoHideDuration={8000}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") return;
+          setTemporaryWarning(null);
+        }}
+      >
+        <Alert
+          severity="warning"
+          variant="filled"
+          onClose={() => setTemporaryWarning(null)}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={handleRetryCurrentView}
+              sx={{ fontWeight: 800, textTransform: "none" }}
+            >
+              Retry
+            </Button>
+          }
+          sx={{ alignItems: "center", boxShadow: "0 10px 28px rgba(15,23,42,0.22)" }}
+        >
+          {temporaryWarning?.message || "Unable to refresh data. Showing last available data."}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
