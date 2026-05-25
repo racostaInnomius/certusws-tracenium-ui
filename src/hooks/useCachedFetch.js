@@ -33,7 +33,7 @@
 // - hasCache
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isTemporaryApiError, TEMPORARY_ERROR_EVENT } from "../api/http";
+import { isAuthError, isTemporaryApiError, TEMPORARY_ERROR_EVENT } from "../api/http";
 
 const memCache = new Map();
 const inFlight = new Map();
@@ -350,6 +350,17 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
 
         return fresh;
       } catch (e) {
+        // 401 is not a refresh problem and must never be downgraded to stale data.
+        // http.js already emits the global auth-required event and has a redirect
+        // fallback. Keep existing data untouched while the shell redirects.
+        if (isAuthError(e)) {
+          if (mountedRef.current) {
+            setError(e);
+            setTemporaryError(null);
+          }
+          return null;
+        }
+
         const temp = isTemporaryApiError(e);
         const fallbackEntry = readCache(cacheKey, normalizedOptions);
 

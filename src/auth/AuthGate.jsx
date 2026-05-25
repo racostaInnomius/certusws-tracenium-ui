@@ -13,6 +13,7 @@ import {
 export const API = {
   BASE: import.meta.env.VITE_API_BASE,
   BOOTSTRAP: "/api/bootstrap",
+  HEALTH: "/api/v1/health",
   LOGIN: "/auth/login",
 };
 import Logo from "../assets/T.png";
@@ -20,6 +21,7 @@ import Logo from "../assets/T.png";
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
 const BOOTSTRAP_MAX_ATTEMPTS = 8;
+const HEALTH_TIMEOUT_MS = 4_000;
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -54,20 +56,63 @@ function isRetriableBootstrapError(errorOrStatus) {
   return [408, 425, 429, 500, 502, 503, 504].includes(status);
 }
 
-function getBootstrapErrorMessage(error) {
+function getBootstrapErrorMessage(error, lastConnectivityState = "unknown") {
+  if (lastConnectivityState === "offline") {
+    return "We could not connect to the backend after several attempts. Please try again.";
+  }
+
+  if (lastConnectivityState === "online") {
+    return "Workspace setup is taking longer than expected. Please try again in a moment.";
+  }
+
   if (error?.name === "AbortError") {
-    return "Backend bootstrap request timed out";
+    return "Backend bootstrap request timed out.";
   }
 
   if (error instanceof TypeError) {
-    return "Unable to reach backend bootstrap endpoint";
+    return "Unable to reach backend bootstrap endpoint.";
   }
 
   if (error?.status) {
-    return `Bootstrap failed (${error.status})`;
+    return `Bootstrap failed (${error.status}).`;
   }
 
   return "Unable to complete /api/bootstrap.";
+}
+
+function getErrorTitle(connectivityState = "unknown") {
+  if (connectivityState === "online") {
+    return "Workspace setup is taking longer than expected";
+  }
+
+  return "Backend unavailable";
+}
+
+async function checkBackendHealth(signal) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+
+  const abortFromParent = () => controller.abort();
+  signal?.addEventListener("abort", abortFromParent, { once: true });
+
+  try {
+    const res = await fetch(`${API.BASE}${API.HEALTH}`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    // Any HTTP response from the versioned health endpoint means the backend
+    // process is reachable. We only need this probe to distinguish backend-down
+    // from bootstrap taking longer, not to validate the user session.
+    return res.ok || res.status < 500;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener("abort", abortFromParent);
+  }
 }
 
 function AuthShell({
@@ -170,10 +215,77 @@ function AuthShell({
   );
 }
 
+function RetryProgress({ attempt }) {
+  const progress = Math.min(
+    100,
+    Math.round((attempt / BOOTSTRAP_MAX_ATTEMPTS) * 100)
+  );
+
+  return (
+    <Box sx={{ width: "100%", maxWidth: 320, mb: 2 }}>
+      <LinearProgress
+        variant="determinate"
+        value={progress}
+        sx={{
+          height: 7,
+          borderRadius: 999,
+          bgcolor: "rgba(255,255,255,0.10)",
+          "& .MuiLinearProgress-bar": {
+            bgcolor: "rgb(116,249,253)",
+            borderRadius: 999,
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
+function RetryMeta({ attempt }) {
+  return (
+    <Typography
+      sx={{
+        color: "#94a3b8",
+        fontSize: 12,
+        lineHeight: 1.6,
+        mb: 2.5,
+      }}
+    >
+      Attempt {attempt} of {BOOTSTRAP_MAX_ATTEMPTS}. Retrying automatically every{" "}
+      {BOOTSTRAP_RETRY_DELAY_MS / 1000} seconds.
+    </Typography>
+  );
+}
+
+function RetryButton({ disabled, onClick }) {
+  return (
+    <Button
+      variant="outlined"
+      disabled={disabled}
+      onClick={onClick}
+      sx={{
+        textTransform: "none",
+        fontWeight: 700,
+        borderRadius: "12px",
+        py: 1.15,
+        px: 3,
+        color: "rgb(116,249,253)",
+        borderColor: "rgba(116,249,253,0.55)",
+        "&:hover": {
+          borderColor: "rgb(116,249,253)",
+          background: "rgba(116,249,253,0.08)",
+        },
+      }}
+    >
+      {disabled ? "Retrying..." : "Retry now"}
+    </Button>
+  );
+}
+
 export default function AuthGate({ children }) {
-  const [status, setStatus] = React.useState("loading"); // loading | preparing | authed | error
+  const [status, setStatus] = React.useState("loading"); // loading | connecting | preparing | authed | error
   const [isInactive, setIsInactive] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+  const [errorConnectivityState, setErrorConnectivityState] = React.useState("unknown");
   const [attempt, setAttempt] = React.useState(1);
   const [retryNonce, setRetryNonce] = React.useState(0);
   const [isRetryingNow, setIsRetryingNow] = React.useState(false);
@@ -205,6 +317,7 @@ export default function AuthGate({ children }) {
   React.useEffect(() => {
     let cancelled = false;
     const loopController = new AbortController();
+    let lastConnectivityState = "unknown";
 
     async function runBootstrapAttempt(currentAttempt) {
       const controller = new AbortController();
@@ -278,11 +391,16 @@ export default function AuthGate({ children }) {
 
     async function runBootstrapLoop() {
       setErrorMessage("");
+      setErrorConnectivityState("unknown");
       setIsRetryingNow(false);
       setStatus("loading");
       setAttempt(1);
 
-      for (let currentAttempt = 1; currentAttempt <= BOOTSTRAP_MAX_ATTEMPTS; currentAttempt += 1) {
+      for (
+        let currentAttempt = 1;
+        currentAttempt <= BOOTSTRAP_MAX_ATTEMPTS;
+        currentAttempt += 1
+      ) {
         if (cancelled) return;
 
         setAttempt(currentAttempt);
@@ -292,18 +410,29 @@ export default function AuthGate({ children }) {
         if (cancelled || result.done) return;
 
         if (!result.retriable) {
-          setErrorMessage(getBootstrapErrorMessage(result.error));
+          setErrorConnectivityState(lastConnectivityState);
+          setErrorMessage(getBootstrapErrorMessage(result.error, lastConnectivityState));
           setStatus("error");
           return;
         }
+
+        const backendReachable = await checkBackendHealth(loopController.signal);
+        if (cancelled) return;
+
+        lastConnectivityState = backendReachable ? "online" : "offline";
 
         if (currentAttempt >= BOOTSTRAP_MAX_ATTEMPTS) {
-          setErrorMessage(getBootstrapErrorMessage(result.error));
+          setErrorConnectivityState(lastConnectivityState);
+          setErrorMessage(getBootstrapErrorMessage(result.error, lastConnectivityState));
           setStatus("error");
           return;
         }
 
-        setStatus("preparing");
+        // Important distinction:
+        // - Backend unreachable: do not say "Preparing your workspace".
+        // - Backend reachable but bootstrap still failing: likely tenant provisioning,
+        //   DB warm-up, gateway timeout, or another retryable bootstrap condition.
+        setStatus(backendReachable ? "preparing" : "connecting");
 
         try {
           await sleep(BOOTSTRAP_RETRY_DELAY_MS, loopController.signal);
@@ -447,66 +576,30 @@ export default function AuthGate({ children }) {
     );
   }
 
-  if (status === "preparing") {
-    const progress = Math.min(
-      100,
-      Math.round((attempt / BOOTSTRAP_MAX_ATTEMPTS) * 100)
+  if (status === "connecting") {
+    return (
+      <AuthShell
+        title="Connecting to backend"
+        description="We are trying to reach the Tracenium backend. This may take a few moments."
+        minHeight={430}
+      >
+        <RetryProgress attempt={attempt} />
+        <RetryMeta attempt={attempt} />
+        <RetryButton disabled={isRetryingNow} onClick={retryNow} />
+      </AuthShell>
     );
+  }
 
+  if (status === "preparing") {
     return (
       <AuthShell
         title="Preparing your workspace"
         description="We are setting up your tenant database and initial configuration. This usually happens only once and may take a few moments."
         minHeight={430}
       >
-        <Box sx={{ width: "100%", maxWidth: 320, mb: 2 }}>
-          <LinearProgress
-            variant="determinate"
-            value={progress}
-            sx={{
-              height: 7,
-              borderRadius: 999,
-              bgcolor: "rgba(255,255,255,0.10)",
-              "& .MuiLinearProgress-bar": {
-                bgcolor: "rgb(116,249,253)",
-                borderRadius: 999,
-              },
-            }}
-          />
-        </Box>
-
-        <Typography
-          sx={{
-            color: "#94a3b8",
-            fontSize: 12,
-            lineHeight: 1.6,
-            mb: 2.5,
-          }}
-        >
-          Attempt {attempt} of {BOOTSTRAP_MAX_ATTEMPTS}. Retrying automatically
-          every {BOOTSTRAP_RETRY_DELAY_MS / 1000} seconds.
-        </Typography>
-
-        <Button
-          variant="outlined"
-          disabled={isRetryingNow}
-          onClick={retryNow}
-          sx={{
-            textTransform: "none",
-            fontWeight: 700,
-            borderRadius: "12px",
-            py: 1.15,
-            px: 3,
-            color: "rgb(116,249,253)",
-            borderColor: "rgba(116,249,253,0.55)",
-            "&:hover": {
-              borderColor: "rgb(116,249,253)",
-              background: "rgba(116,249,253,0.08)",
-            },
-          }}
-        >
-          {isRetryingNow ? "Retrying..." : "Retry now"}
-        </Button>
+        <RetryProgress attempt={attempt} />
+        <RetryMeta attempt={attempt} />
+        <RetryButton disabled={isRetryingNow} onClick={retryNow} />
       </AuthShell>
     );
   }
@@ -544,19 +637,20 @@ export default function AuthGate({ children }) {
             variant="h6"
             sx={{ color: "#ffffff", fontWeight: 600, mb: 1.5 }}
           >
-            Backend no disponible
+            {getErrorTitle(errorConnectivityState)}
           </Typography>
 
           <Typography
             sx={{ color: "#cbd5e1", fontSize: 15, lineHeight: 1.6, mb: 3 }}
           >
-            {errorMessage || "No fue posible completar /api/bootstrap."}
+            {errorMessage ||
+              "We could not connect to the backend after several attempts. Please try again."}
           </Typography>
 
           <Typography
             sx={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.6, mb: 3 }}
           >
-            Verifica que el backend responda en {`${API.BASE}${API.BOOTSTRAP}`}.
+            Checked {`${API.BASE}${API.BOOTSTRAP}`} and {`${API.BASE}${API.HEALTH}`}.
           </Typography>
 
           <Button

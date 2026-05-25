@@ -2356,7 +2356,7 @@ const osVersionItems = React.useMemo(() => {
                 variant="h6"
                 sx={{ fontWeight: 700, color: BRAND.dark, mb: 1.5 }}
               >
-                Aún no hay información disponible
+                No information is available yet.
               </Typography>
               <Typography
                 sx={{
@@ -2366,7 +2366,7 @@ const osVersionItems = React.useMemo(() => {
                   mb: 3,
                 }}
               >
-                No tienes agentes instalados o tus agentes no han reportado datos todavía.
+                You either don't have any agents installed or your agents haven't reported data yet.
               </Typography>
               <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
                 <Inventory2OutlinedIcon

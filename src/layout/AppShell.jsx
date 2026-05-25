@@ -2,7 +2,8 @@ import * as React from "react";
 import { Alert, Box, Button, CircularProgress, Snackbar } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
-import { TEMPORARY_ERROR_EVENT, httpGetJson } from "../api/http";
+import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson } from "../api/http";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
@@ -84,6 +85,33 @@ export default function AppShell() {
     window.addEventListener(TEMPORARY_ERROR_EVENT, handleTemporaryError);
     return () => {
       window.removeEventListener(TEMPORARY_ERROR_EVENT, handleTemporaryError);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let redirecting = false;
+
+    const handleAuthRequired = (event) => {
+      // Tell http.js the auth event has a dedicated shell-level handler.
+      event?.preventDefault?.();
+
+      if (redirecting) return;
+      redirecting = true;
+
+      setTemporaryWarning(null);
+      clearApiCache();
+      clearCachedFetch();
+
+      try {
+        window.location.assign(getLoginUrl());
+      } catch {
+        window.location.href = getLoginUrl();
+      }
+    };
+
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
     };
   }, []);
 

@@ -19,6 +19,9 @@ const DEFAULT_STALE_MS = 60_000;
 const DEFAULT_STORAGE_MAX_AGE_MS = 10 * 60_000;
 
 export const TEMPORARY_ERROR_EVENT = "tracenium:temporary-server-error";
+export const AUTH_REQUIRED_EVENT = "tracenium:auth-required";
+
+let authRedirectStarted = false;
 
 const memCache = new Map();
 const inFlightGets = new Map();
@@ -43,6 +46,60 @@ export class TemporaryServerError extends Error {
     this.retryable = true;
     this.url = options.url || "";
     this.cause = options.cause;
+  }
+}
+
+
+export function getLoginUrl() {
+  return `${API_BASE}/auth/login`;
+}
+
+function emitAuthRequired(err, { url } = {}) {
+  if (typeof window === "undefined") return;
+
+  if (authRedirectStarted) return;
+  authRedirectStarted = true;
+
+  const detail = {
+    url,
+    status: err?.status ?? 401,
+    code: err?.code || err?.body?.error || "UNAUTHENTICATED",
+    message: err?.body?.message || err?.message || "UNAUTHENTICATED",
+    ts: now(),
+  };
+
+  try {
+    clearApiCache();
+  } catch {
+    // best effort
+  }
+
+  let handled = false;
+
+  try {
+    const event = new CustomEvent(AUTH_REQUIRED_EVENT, {
+      cancelable: true,
+      detail,
+    });
+
+    handled = window.dispatchEvent(event) === false;
+  } catch {
+    handled = false;
+  }
+
+  // Safety fallback: even if no React listener is mounted or a view swallows
+  // the AuthError in a local catch/useCachedFetch, a backend-confirmed 401
+  // must not leave the operator inside protected screens.
+  if (!handled) {
+    window.setTimeout(() => {
+      try {
+        if (window.location.href !== getLoginUrl()) {
+          window.location.assign(getLoginUrl());
+        }
+      } catch {
+        window.location.href = getLoginUrl();
+      }
+    }, 50);
   }
 }
 
@@ -379,11 +436,14 @@ async function handleResponse(res, url = "") {
   }
 
   if (res.status === 401 || getBodyErrorCode(body) === "UNAUTHENTICATED") {
-    throw new AuthError(body?.message || `UNAUTHENTICATED:${text}`, {
+    const err = new AuthError(body?.message || `UNAUTHENTICATED:${text}`, {
       status: 401,
       body,
       code: "UNAUTHENTICATED",
     });
+
+    emitAuthRequired(err, { url });
+    throw err;
   }
 
   if (res.status === 503 || isRetryableBody(body) || res.status >= 500) {
@@ -406,7 +466,18 @@ async function handleResponse(res, url = "") {
 }
 
 function toHumanError(err, url = "") {
-  if (err instanceof AuthError || err instanceof TemporaryServerError) {
+  if (err instanceof AuthError || isAuthError(err)) {
+    emitAuthRequired(err, { url });
+    return err instanceof AuthError
+      ? err
+      : new AuthError(err?.message || "UNAUTHENTICATED", {
+          status: err?.status ?? 401,
+          body: err?.body ?? null,
+          code: "UNAUTHENTICATED",
+        });
+  }
+
+  if (err instanceof TemporaryServerError) {
     return err;
   }
 
