@@ -39,9 +39,19 @@ import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 
 import PageHeader from "../components/common/PageHeader";
 import { BRAND } from "../theme/brand";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 import TokensAdministrator from "./TokensAdministrator";
 import AgentReleases from "./AgentReleases";
+
+function readEnrollmentStepFromUrl() {
+  const rawStep = String(getSearchParam("enrollmentStep", "1") || "1").trim();
+  return rawStep === "2" ? 1 : 0;
+}
+
+function enrollmentStepFromTab(tabIndex) {
+  return tabIndex === 1 ? "2" : "1";
+}
 
 // Compact horizontal "Step 1 → Step 2" guide. The cards now replace
 // the old tabs: clicking each step switches the content below.
@@ -199,7 +209,21 @@ function TabPanel({ children, value, index }) {
 }
 
 export default function DeviceEnrollment() {
-  const [activeTab, setActiveTab] = React.useState(0);
+  const [activeTab, setActiveTab] = React.useState(() => readEnrollmentStepFromUrl());
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(readEnrollmentStepFromUrl());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const handleSelectTab = React.useCallback((nextTab) => {
+    setActiveTab(nextTab);
+    updateSearchParams({ page: "enrollment", enrollmentStep: enrollmentStepFromTab(nextTab) });
+  }, []);
 
   return (
     <Box sx={{ pb: 4 }}>
@@ -209,7 +233,7 @@ export default function DeviceEnrollment() {
         icon={<InstallDesktopOutlinedIcon />}
       />
 
-      <EnrollmentSteps activeTab={activeTab} onSelectTab={setActiveTab} />
+      <EnrollmentSteps activeTab={activeTab} onSelectTab={handleSelectTab} />
 
       <TabPanel value={activeTab} index={0}>
         <TokensAdministrator embedded />

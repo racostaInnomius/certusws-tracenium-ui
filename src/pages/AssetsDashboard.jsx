@@ -1010,7 +1010,12 @@ function AgentDetailWorkbench({
 
 // ---------- component --------------------------------------------------------
 
-export default function AssetsDashboard({ onAssetsEmptyStateChange, refreshNonce = 0, onNavigateToHardwareInventory }) {
+export default function AssetsDashboard({
+  onAssetsEmptyStateChange,
+  refreshNonce = 0,
+  onNavigateToHardwareInventory,
+  suppressEmptyStateOverlay = false,
+}) {
   // Set<agent_id> of devices currently connected (has an active
   // gRPC session in the last heartbeat window). Drives the "Online
   // now" KPI and the traffic-light dot on each row in the hosts
@@ -2312,7 +2317,7 @@ const osVersionItems = React.useMemo(() => {
         </Alert>
       </Snackbar>
 
-      {hasNoAssetsData && (
+      {hasNoAssetsData && !suppressEmptyStateOverlay && (
         <Backdrop
           open
           sx={{

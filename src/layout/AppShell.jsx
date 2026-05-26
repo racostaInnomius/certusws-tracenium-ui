@@ -1,10 +1,13 @@
 import * as React from "react";
-import { Alert, Box, Button, CircularProgress, Snackbar } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Fade, Paper, Snackbar, Typography } from "@mui/material";
 import Sidebar from "./Sidebar";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import Topbar from "./Topbar";
-import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson } from "../api/http";
+import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { BRAND } from "../theme/brand";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Overview = React.lazy(() => import("../pages/Overview"));
@@ -41,6 +44,176 @@ function PageFallback() {
   );
 }
 
+const EMPTY_TENANT_GATED_PAGES = new Set([
+  "overview",
+  "assets",
+  "ad",
+  "patch",
+  "software-delivery",
+  "remote-control",
+  "jobs",
+  "policies",
+  "audit",
+  "alerts",
+  "pki",
+  "plugin-control",
+]);
+
+function readNumber(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function getSummaryInventoryCount(summary) {
+  if (!summary || typeof summary !== "object") return 0;
+
+  return readNumber(
+    summary.devices,
+    summary.totalDevices,
+    summary.total_devices,
+    summary.enrolledDevices,
+    summary.enrolled_devices,
+    summary.activeHosts,
+    summary.active_hosts,
+    summary.totalHosts,
+    summary.total_hosts,
+    summary.hosts,
+    summary.reportingDevices,
+    summary.reporting_devices,
+    summary?.kpis?.devices,
+    summary?.kpis?.totalDevices,
+    summary?.inventory?.devices,
+    summary?.inventory?.totalDevices
+  );
+}
+
+function normalizeHostsTotal(payload) {
+  if (Array.isArray(payload)) return payload.length;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return readNumber(payload?.total, payload?.totalItems, payload?.count, items.length);
+}
+
+function NoInformationOverlay({ onNavigate }) {
+  return (
+    <Box
+      sx={{
+        position: "absolute",
+        inset: 0,
+        zIndex: 30,
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        pt: { xs: "24vh", sm: "22vh", md: "20vh" },
+        px: 2,
+        bgcolor: "rgba(15, 23, 42, 0.18)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+      }}
+    >
+      <Fade in timeout={{ enter: 320, exit: 200 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            width: "100%",
+            maxWidth: 560,
+            px: { xs: 3, sm: 4 },
+            py: { xs: 3, sm: 4 },
+            borderRadius: 3,
+            textAlign: "center",
+            border: `1px solid ${BRAND.border}`,
+            background:
+              "linear-gradient(145deg, rgba(255,255,255,0.98) 0%, rgba(240,252,251,0.96) 100%)",
+            boxShadow: "0 18px 45px rgba(59,64,77,0.20)",
+          }}
+        >
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
+            <Box
+              sx={{
+                width: 58,
+                height: 58,
+                borderRadius: 3,
+                display: "grid",
+                placeItems: "center",
+                bgcolor: BRAND.tealSoft,
+                color: BRAND.tealText,
+                border: `1px solid ${BRAND.tealSoftStrong}`,
+              }}
+            >
+              <Inventory2OutlinedIcon sx={{ fontSize: 34 }} />
+            </Box>
+          </Box>
+
+          <Typography
+            variant="h6"
+            sx={{ fontWeight: 800, color: BRAND.dark, mb: 1.25 }}
+          >
+            No information is available yet.
+          </Typography>
+
+          <Typography
+            sx={{
+              color: "text.secondary",
+              fontSize: 15.5,
+              lineHeight: 1.65,
+              maxWidth: 470,
+              mx: "auto",
+              mb: 3,
+            }}
+          >
+            You either don't have any agents installed or your agents haven't
+            reported data yet. Start by enrolling a device, then come back once
+            telemetry starts flowing into Tracenium.
+          </Typography>
+
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", sm: "row" },
+              justifyContent: "center",
+              gap: 1.25,
+            }}
+          >
+            <Button
+              variant="contained"
+              startIcon={<InstallDesktopOutlinedIcon />}
+              onClick={() => onNavigate?.("enrollment")}
+              sx={{
+                textTransform: "none",
+                fontWeight: 800,
+                borderRadius: 2,
+                bgcolor: BRAND.teal,
+                color: "#fff",
+                px: 2.25,
+                "&:hover": { bgcolor: BRAND.tealHover },
+              }}
+            >
+              Enroll a device
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => onNavigate?.("welcome")}
+              sx={{
+                textTransform: "none",
+                fontWeight: 800,
+                borderRadius: 2,
+                borderColor: BRAND.teal,
+                color: BRAND.tealText,
+                px: 2.25,
+                "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              Open welcome guide
+            </Button>
+          </Box>
+        </Paper>
+      </Fade>
+    </Box>
+  );
+}
+
 export default function AppShell() {
   const [_bootstrap, setBootstrap] = React.useState(null);
   // Overview is the canonical landing page — it's the SOC-style dashboard
@@ -48,6 +221,7 @@ export default function AppShell() {
   // with no special nav (bare `/` or `?page=` missing) resolve here.
   const [selectedPage, setSelectedPage] = React.useState(() => getSearchParam("page", "overview"));
   const [showWelcomeEntry, setShowWelcomeEntry] = React.useState(false);
+  const [tenantInventoryState, setTenantInventoryState] = React.useState("unknown");
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [viewReloadToken, setViewReloadToken] = React.useState(0);
   const [temporaryWarning, setTemporaryWarning] = React.useState(null);
@@ -70,6 +244,78 @@ export default function AppShell() {
     };
   }, []);
 
+
+  const resolveTenantInventoryState = React.useCallback(async () => {
+    setTenantInventoryState((prev) => (prev === "empty" || prev === "has-data" ? prev : "checking"));
+
+    const [summaryRes, hostsRes] = await Promise.allSettled([
+      httpGetJson("/api/v1/dashboard/summary", {
+        cache: "no-store",
+        notifyOnTemporaryError: false,
+      }),
+      httpGetJson("/api/v1/dashboard/hosts?page=1&pageSize=1", {
+        cache: "no-store",
+        notifyOnTemporaryError: false,
+      }),
+    ]);
+
+    const authFailure = [summaryRes, hostsRes].some(
+      (res) => res.status === "rejected" && isAuthError(res.reason)
+    );
+
+    if (authFailure) {
+      setTenantInventoryState("unknown");
+      return;
+    }
+
+    const temporaryFailure = [summaryRes, hostsRes].some(
+      (res) => res.status === "rejected" && isTemporaryApiError(res.reason)
+    );
+
+    const summaryOk = summaryRes.status === "fulfilled";
+    const hostsOk = hostsRes.status === "fulfilled";
+    const summaryCount = summaryOk ? getSummaryInventoryCount(summaryRes.value) : 0;
+    const hostsTotal = hostsOk ? normalizeHostsTotal(hostsRes.value) : 0;
+    const hasInventory = summaryCount > 0 || hostsTotal > 0;
+
+    if (hasInventory) {
+      setTenantInventoryState("has-data");
+      setShowWelcomeEntry(false);
+      return;
+    }
+
+    // The hosts endpoint is the safest source of truth for an empty fleet.
+    // If it failed temporarily, do not infer an empty tenant from partial data.
+    if (hostsOk && !temporaryFailure) {
+      setTenantInventoryState("empty");
+      setShowWelcomeEntry(true);
+      return;
+    }
+
+    setTenantInventoryState("unknown");
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    resolveTenantInventoryState().catch((err) => {
+      if (cancelled) return;
+      if (!isAuthError(err) && !isTemporaryApiError(err)) {
+        console.warn("Tenant inventory empty-state probe failed:", err?.message || err);
+      }
+      setTenantInventoryState("unknown");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolveTenantInventoryState]);
+
+  const handleAssetsEmptyStateChange = React.useCallback((isEmpty) => {
+    const nextEmpty = Boolean(isEmpty);
+    setShowWelcomeEntry(nextEmpty);
+    setTenantInventoryState(nextEmpty ? "empty" : "has-data");
+  }, []);
 
   React.useEffect(() => {
     const handleTemporaryError = (event) => {
@@ -149,7 +395,12 @@ export default function AppShell() {
   if (selectedPage === "assets") {
     // Assets keeps its welcome-state callback because the first-time
     // empty-fleet flow is owned by this page, not by Overview.
-    content = <Assets onAssetsEmptyStateChange={setShowWelcomeEntry} />;
+    content = (
+      <Assets
+        onAssetsEmptyStateChange={handleAssetsEmptyStateChange}
+        suppressEmptyStateOverlay
+      />
+    );
   }
 
   if (selectedPage === "configurations") {
@@ -247,6 +498,9 @@ export default function AppShell() {
     content = <Retention onNavigate={setSelectedPage} />;
   }
 
+  const shouldShowNoInformationOverlay =
+    tenantInventoryState === "empty" && EMPTY_TENANT_GATED_PAGES.has(selectedPage);
+
   return (
     <Box
       sx={{
@@ -295,11 +549,29 @@ export default function AppShell() {
             bgcolor: "#f5f6f8",
             overflowY: "auto",
             overflowX: "hidden",
+            position: "relative",
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
-            <Box key={`${selectedPage}-${viewReloadToken}`} sx={{ minWidth: 0, width: "100%" }}>{content}</Box>
+            <Box
+              key={`${selectedPage}-${viewReloadToken}`}
+              sx={{
+                minWidth: 0,
+                width: "100%",
+                filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
+                transform: "translateZ(0)",
+                transition: "filter 220ms ease",
+                pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
+                userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
+              }}
+            >
+              {content}
+            </Box>
           </React.Suspense>
+
+          {shouldShowNoInformationOverlay ? (
+            <NoInformationOverlay onNavigate={handleSelect} />
+          ) : null}
         </Box>
       </Box>
 

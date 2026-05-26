@@ -97,7 +97,7 @@ const TAB_SX = {
   "&.Mui-selected": { color: BRAND.dark },
 };
 
-export default function Assets({ onAssetsEmptyStateChange }) {
+export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false }) {
   const [activeTab, setActiveTab] = React.useState(0);
 
   const handleChange = (_event, newValue) => {
@@ -219,6 +219,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
           onAssetsEmptyStateChange={onAssetsEmptyStateChange}
           refreshNonce={refreshNonce}
           onNavigateToHardwareInventory={navigateToHardwareInventory}
+          suppressEmptyStateOverlay={suppressEmptyStateOverlay}
         />
       </TabPanel>
 
