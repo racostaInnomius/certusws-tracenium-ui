@@ -4,43 +4,46 @@
 // a colored CSS bar, a label on the left, a count on the right. The
 // widest bar fills the track; everything scales proportionally.
 //
+// Used as a drop-in replacement for the various recharts BarChart +
+// DonutChart combos that felt heavy for the tiny categorical data we
+// actually have ("3 OS versions", "2 manufacturers"). A flat list
+// reads in <200ms and doesn't waste the whole panel on axes + legend.
+//
 // Consumers pass `items` as `[{ label, value, color?, sub?, children? }]`.
-// When an item includes `children`, the row becomes expandable and renders
-// a compact nested breakdown below the parent row.
+// Color defaults to BRAND.teal; `sub` is an optional secondary line.
+// When `children` is provided, an expand/collapse icon appears and the
+// nested breakdown is rendered below the parent row.
+//
+// Optional card navigation:
+// - `onClick` turns the whole card into a keyboard-accessible button.
+// - The expand/collapse icon stops propagation, so expandable rows still
+//   work without triggering the card navigation.
 
 import * as React from "react";
-import { Box, Chip, Collapse, IconButton, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Chip,
+  Collapse,
+  IconButton,
+  Paper,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowRightRoundedIcon from "@mui/icons-material/KeyboardArrowRightRounded";
 import { BRAND } from "../../theme/brand";
 
-function formatTotalValue(value, totalLabel) {
+function formatTotalValue(value) {
   const numericValue = Number(value || 0);
-
-  if (!Number.isFinite(numericValue)) {
-    return "0";
-  }
-
-  if (String(totalLabel || "").includes("%")) {
-    return numericValue.toFixed(2);
-  }
-
-  return numericValue.toLocaleString("en-US", {
-    maximumFractionDigits: 0,
-  });
+  if (!Number.isFinite(numericValue)) return "0";
+  return numericValue.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
 function formatRowValue(value) {
   const numericValue = Number(value || 0);
-
-  if (!Number.isFinite(numericValue)) {
-    return "0";
-  }
-
-  if (Number.isInteger(numericValue)) {
-    return numericValue.toLocaleString("en-US");
-  }
-
+  if (!Number.isFinite(numericValue)) return "0";
+  if (Number.isInteger(numericValue)) return numericValue.toLocaleString("en-US");
   return numericValue.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
@@ -49,15 +52,8 @@ function formatRowValue(value) {
 
 function formatPercentValue(value) {
   const numericValue = Number(value || 0);
-
-  if (!Number.isFinite(numericValue)) {
-    return "0%";
-  }
-
-  if (Number.isInteger(numericValue)) {
-    return `${numericValue}%`;
-  }
-
+  if (!Number.isFinite(numericValue)) return "0%";
+  if (Number.isInteger(numericValue)) return `${numericValue}%`;
   return `${numericValue.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
@@ -76,14 +72,20 @@ export default function CompositionBars({
   sortByValue = true,
   maxItems = 8,
   headerExtra = null,
+  headerExtraPlacement = "inline",
+  reserveHeaderExtraSpace = false,
   minHeight = 260,
   sx = null,
   onClick = null,
   actionLabel = "Open details",
+  totalValue = null,
+  showTotalChip = true,
+  showPercentages = true,
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
-  const total = safeItems.reduce((acc, it) => acc + Number(it?.value || 0), 0);
+  const calculatedTotal = safeItems.reduce((acc, it) => acc + Number(it?.value || 0), 0);
+  const total = Number.isFinite(Number(totalValue)) ? Number(totalValue) : calculatedTotal;
 
   const displayed = (sortByValue
     ? [...safeItems].sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
@@ -97,6 +99,8 @@ export default function CompositionBars({
     0
   ) || 1;
 
+  const interactive = typeof onClick === "function";
+
   const toggleRow = React.useCallback((rowKey) => {
     setExpandedRows((prev) => ({
       ...prev,
@@ -104,7 +108,16 @@ export default function CompositionBars({
     }));
   }, []);
 
-  const interactive = typeof onClick === "function";
+  const handleCardKeyDown = React.useCallback(
+    (event) => {
+      if (!interactive) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onClick();
+      }
+    },
+    [interactive, onClick]
+  );
 
   return (
     <Paper
@@ -113,28 +126,19 @@ export default function CompositionBars({
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? actionLabel : undefined}
       onClick={interactive ? onClick : undefined}
-      onKeyDown={
-        interactive
-          ? (event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onClick();
-              }
-            }
-          : undefined
-      }
+      onKeyDown={handleCardKeyDown}
       sx={{
         p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        height: minHeight,
-        maxHeight: minHeight,
+        height: "100%",
         display: "flex",
         flexDirection: "column",
+        minHeight,
         minWidth: 0,
-        overflow: "hidden",
         cursor: interactive ? "pointer" : "default",
-        transition: "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, background-color 140ms ease",
+        transition:
+          "border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease, background-color 140ms ease",
         "&:hover": interactive
           ? {
               borderColor: BRAND.teal,
@@ -152,67 +156,116 @@ export default function CompositionBars({
         ...(sx || {}),
       }}
     >
-      <Box
-        sx={{
-          mb: 0.85,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-          minWidth: 0,
-        }}
-      >
-        <Typography
-          variant="subtitle2"
+      {headerExtraPlacement === "below" ? (
+        <Stack
           sx={{
-            color: BRAND.dark,
-            fontWeight: 700,
+            mb: 1.25,
+            gap: 0.7,
             minWidth: 0,
-            pr: 0.75,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={title}
-        >
-          {title}
-        </Typography>
-
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-end",
-            gap: 0.75,
-            flexShrink: 0,
-            minWidth: 0,
-            maxWidth: "72%",
-            flexWrap: "wrap",
-            rowGap: 0.35,
           }}
         >
-          {headerExtra}
-
-          <Chip
-            size="small"
-            label={`${formatTotalValue(total, totalLabel)} ${totalLabel}`}
-            sx={{
-              height: 20,
-              maxWidth: { xs: 116, sm: 132 },
-              fontSize: 11,
-              fontWeight: 700,
-              bgcolor: BRAND.tealSoft,
-              color: BRAND.tealText,
-              flexShrink: 0,
-              "& .MuiChip-label": {
-                px: 1,
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={1}
+            sx={{ minWidth: 0 }}
+          >
+            <Typography
+              variant="subtitle2"
+              sx={{
+                color: BRAND.dark,
+                fontWeight: 800,
+                minWidth: 0,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
-              },
+                whiteSpace: "nowrap",
+              }}
+              title={title}
+            >
+              {title}
+            </Typography>
+
+            {showTotalChip ? (
+              <Chip
+                size="small"
+                label={`${formatTotalValue(total)} ${totalLabel}`}
+                sx={{
+                  height: 22,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                  flexShrink: 0,
+                  "& .MuiChip-label": { px: 1 },
+                }}
+              />
+            ) : null}
+          </Stack>
+
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="flex-start"
+            sx={{
+              minHeight: reserveHeaderExtraSpace || headerExtra ? 28 : 0,
+              visibility: headerExtra ? "visible" : "hidden",
             }}
-          />
-        </Box>
-      </Box>
+          >
+            {headerExtra || <Box aria-hidden="true" sx={{ height: 28 }} />}
+          </Stack>
+        </Stack>
+      ) : (
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{
+            mb: 1.25,
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
+          <Typography
+            variant="subtitle2"
+            sx={{
+              color: BRAND.dark,
+              fontWeight: 700,
+              minWidth: 0,
+              flex: "1 1 130px",
+            }}
+            title={title}
+          >
+            {title}
+          </Typography>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            sx={{
+              flex: "0 1 auto",
+              flexWrap: "wrap",
+              rowGap: 0.75,
+              justifyContent: "flex-end",
+            }}
+          >
+            {headerExtra}
+            {showTotalChip ? (
+              <Chip
+                size="small"
+                label={`${formatTotalValue(total)} ${totalLabel}`}
+                sx={{
+                  height: 20,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  bgcolor: BRAND.tealSoft,
+                  color: BRAND.tealText,
+                }}
+              />
+            ) : null}
+          </Stack>
+        </Stack>
+      )}
 
       {displayed.length === 0 ? (
         <Box
@@ -230,27 +283,22 @@ export default function CompositionBars({
       ) : (
         <Box
           sx={{
-            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+            mt: 0.5,
             minHeight: 0,
             overflowY: "auto",
             overflowX: "hidden",
             pr: 0.25,
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.8,
-            mt: 0,
             scrollbarWidth: "thin",
             scrollbarColor: `${BRAND.borderStrong || BRAND.border} transparent`,
-            "&::-webkit-scrollbar": {
-              width: 6,
-            },
+            "&::-webkit-scrollbar": { width: 6 },
             "&::-webkit-scrollbar-thumb": {
               borderRadius: 999,
               backgroundColor: BRAND.borderStrong || BRAND.border,
             },
-            "&::-webkit-scrollbar-track": {
-              backgroundColor: "transparent",
-            },
+            "&::-webkit-scrollbar-track": { backgroundColor: "transparent" },
           }}
         >
           {displayed.map((row, index) => {
@@ -265,11 +313,8 @@ export default function CompositionBars({
             const rowKey = getRowKey(row, index);
             const expanded = Boolean(expandedRows[rowKey]);
 
-            // When the whole card is clickable (for example OS versions →
-            // Hardware Inventory), child rows must not hijack the click.
-            // The expand icon still works because it stops propagation on
-            // its own. For non-clickable cards, row click keeps the existing
-            // expand/collapse behavior.
+            // If the card is clickable, row clicks should navigate with the
+            // card. Only the arrow icon expands/collapses and stops bubbling.
             const rowCanExpandByClick = hasChildren && !interactive;
 
             return (
@@ -302,7 +347,9 @@ export default function CompositionBars({
                   }
                   sx={{
                     display: "grid",
-                    gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
+                    gridTemplateColumns: hasChildren
+                      ? "minmax(0, 1fr) 22px auto"
+                      : "minmax(0, 1fr) auto",
                     alignItems: "center",
                     columnGap: 1,
                     fontSize: 12.5,
@@ -382,21 +429,19 @@ export default function CompositionBars({
 
                   <Stack
                     direction="row"
-                    spacing={0.45}
-                    alignItems="center"
+                    spacing={0.75}
+                    alignItems="baseline"
                     justifyContent="flex-end"
                     sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
                   >
-                    <Typography
-                      sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}
-                    >
+                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
                       {formatRowValue(value)}
                     </Typography>
-                    <Typography
-                      sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}
-                    >
-                      {pct}%
-                    </Typography>
+                    {showPercentages ? (
+                      <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
+                        {pct}%
+                      </Typography>
+                    ) : null}
                   </Stack>
                 </Box>
 
@@ -441,7 +486,10 @@ export default function CompositionBars({
                           : value > 0
                           ? (childValue / value) * 100
                           : 0;
-                        const childBarPct = Math.max(4, Math.min(100, Math.round(childPct)));
+                        const childBarPct = Math.max(
+                          4,
+                          Math.min(100, Math.round(childPct))
+                        );
                         const childKey = getRowKey(child, childIndex);
 
                         return (
@@ -452,13 +500,12 @@ export default function CompositionBars({
                             <Box
                               sx={{
                                 display: "grid",
-                                gridTemplateColumns: hasChildren ? "minmax(0, 1fr) 22px auto" : "minmax(0, 1fr) auto",
+                                gridTemplateColumns: "minmax(0, 1fr) auto",
                                 alignItems: "center",
-                                columnGap: 0.75,
-                                minWidth: 0,
+                                columnGap: 1,
                               }}
                             >
-                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <Box sx={{ minWidth: 0 }}>
                                 <Typography
                                   sx={{
                                     fontSize: 12,
@@ -475,6 +522,7 @@ export default function CompositionBars({
                                 {child.sub ? (
                                   <Typography
                                     sx={{
+                                      mt: 0.1,
                                       fontSize: 10.5,
                                       color: "text.secondary",
                                       lineHeight: 1.15,
@@ -491,9 +539,10 @@ export default function CompositionBars({
 
                               <Stack
                                 direction="row"
-                                spacing={0.65}
+                                spacing={0.45}
                                 alignItems="center"
-                                sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                                justifyContent="flex-end"
+                                sx={{ whiteSpace: "nowrap" }}
                               >
                                 <Typography sx={{ fontSize: 12, fontWeight: 800, color: BRAND.dark }}>
                                   {formatRowValue(childValue)}
@@ -507,7 +556,7 @@ export default function CompositionBars({
                             <Box
                               sx={{
                                 height: 4,
-                                borderRadius: 2,
+                                borderRadius: 999,
                                 bgcolor: BRAND.darkSoft,
                                 overflow: "hidden",
                               }}
@@ -517,8 +566,6 @@ export default function CompositionBars({
                                   width: `${childBarPct}%`,
                                   height: "100%",
                                   bgcolor: child.color || color,
-                                  opacity: 0.88,
-                                  transition: "width 240ms ease",
                                 }}
                               />
                             </Box>
