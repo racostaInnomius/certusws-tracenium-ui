@@ -25,6 +25,7 @@ export async function listKnownDevices(params = {}) {
       page: params.page,
       pageSize: params.pageSize,
       search: params.search,
+      includeGroups: params.includeGroups === true ? "true" : undefined,
     })}`
   );
 }

@@ -16,16 +16,34 @@ import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 
 import { BRAND } from "../theme/brand";
 
+function navigateToPageWithParams(page, extraParams = {}) {
+  if (typeof window === "undefined") return false;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("page", page);
+
+  Object.entries(extraParams).forEach(([key, value]) => {
+    const normalized = value == null ? "" : String(value).trim();
+    if (!normalized) url.searchParams.delete(key);
+    else url.searchParams.set(key, normalized);
+  });
+
+  window.history.pushState({}, "", url);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  return true;
+}
+
 function StepCard({ step, title, description, icon, actionLabel, onAction, hint }) {
   return (
     <Paper
       elevation={0}
       sx={{
         p: 2.5,
-        height: "85%",
+        height: "100%",
         borderRadius: 3,
         border: `1px solid ${BRAND.border}`,
         boxShadow: BRAND.shadow,
+        background: "linear-gradient(135deg, #ffffff 0%, rgba(90,159,159,0.045) 100%)",
         display: "flex",
         flexDirection: "column",
         gap: 1.5,
@@ -78,8 +96,8 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
         </Typography>
       )}
 
-      {actionLabel && onAction && (
-        <Box sx={{ mt: "auto", pt: 1 }}>
+      <Box sx={{ mt: "auto", pt: 1, minHeight: 44, display: "flex", alignItems: "flex-end" }}>
+        {actionLabel && onAction ? (
           <Button
             variant="outlined"
             endIcon={<ArrowForwardOutlinedIcon />}
@@ -97,13 +115,25 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
           >
             {actionLabel}
           </Button>
-        </Box>
-      )}
+        ) : null}
+      </Box>
     </Paper>
   );
 }
 
 export default function Welcome({ onNavigate }) {
+  const handleNavigate = React.useCallback((page, extraParams = {}) => {
+    const navigatedWithParams = navigateToPageWithParams(page, extraParams);
+
+    if (!navigatedWithParams) {
+      onNavigate?.(page);
+    }
+  }, [onNavigate]);
+
+  const goToDeviceEnrollmentStep = React.useCallback((step) => {
+    handleNavigate("enrollment", { enrollmentStep: step });
+  }, [handleNavigate]);
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <Paper
@@ -155,7 +185,7 @@ export default function Welcome({ onNavigate }) {
         </Stack>
       </Paper>
 
-      <Grid container spacing={2} rowSpacing={3} >
+      <Grid container spacing={2} rowSpacing={3} alignItems="stretch">
         <Grid size={{ xs: 12, md: 6 }}>
           <StepCard
             step="1"
@@ -164,7 +194,7 @@ export default function Welcome({ onNavigate }) {
             description="Generate an enrollment token in Settings > Tokens. Define the number of permitted uses based on your rollout plan and store the token securely, as it will be required during agent installation."
             hint="Recommended path: Settings > Tokens"
             actionLabel="Go to Tokens"
-            onAction={() => onNavigate?.("tokens")}
+            onAction={() => goToDeviceEnrollmentStep(1)}
           />
         </Grid>
 
@@ -176,7 +206,7 @@ export default function Welcome({ onNavigate }) {
             description="Open Agent Releases from the left navigation, then select the operating system and version that matches the device you want to onboard."
             hint="Agent Releases hosts the catalog of platform-specific Tracenium agent installer binaries."
             actionLabel="Go to Agent Releases"
-            onAction={() => onNavigate?.("agent-releases")}
+            onAction={() => goToDeviceEnrollmentStep(2)}
           />
         </Grid>
 
@@ -196,7 +226,7 @@ export default function Welcome({ onNavigate }) {
             title="Review data in the portal"
             description="After installation, the Tracenium Agent will automatically send the required telemetry to the platform. No further action is needed from the user. Device, operating system and inventory data will begin appearing in Asset Management once reporting is received."
             actionLabel="Go to Asset Management"
-            onAction={() => onNavigate?.("assets")}
+            onAction={() => handleNavigate("assets", { enrollmentStep: null })}
           />
         </Grid>
       </Grid>

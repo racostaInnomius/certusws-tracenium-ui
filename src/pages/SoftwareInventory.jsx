@@ -42,6 +42,13 @@ import {
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 
+const SOFTWARE_ACCENTS = {
+  installed: "#4F9A96",
+  publishers: "#3E877F",
+  sources: "#536B82",
+  appsPerDevice: "#D7787C",
+};
+
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
     <Paper
@@ -641,22 +648,22 @@ export default function SoftwareInventory() {
   );
 
   const topInstalledAppsRows = React.useMemo(
-    () => normalizeRankingRows(topInstalledAppsItems, BRAND.teal),
+    () => normalizeRankingRows(topInstalledAppsItems, SOFTWARE_ACCENTS.installed),
     [topInstalledAppsItems]
   );
 
   const topPublishersRows = React.useMemo(
-    () => normalizeRankingRows(topPublishersItems, BRAND.teal),
+    () => normalizeRankingRows(topPublishersItems, SOFTWARE_ACCENTS.publishers),
     [topPublishersItems]
   );
 
   const topSourcesRows = React.useMemo(
-    () => normalizeRankingRows(topSourcesItems, BRAND.dark),
+    () => normalizeRankingRows(topSourcesItems, SOFTWARE_ACCENTS.sources),
     [topSourcesItems]
   );
 
   const appsPerDeviceRows = React.useMemo(
-    () => normalizeRankingRows(appsPerDeviceItems, BRAND.alert.error),
+    () => normalizeRankingRows(appsPerDeviceItems, SOFTWARE_ACCENTS.appsPerDevice),
     [appsPerDeviceItems]
   );
 
@@ -841,6 +848,12 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Devices Reporting Software"
               value={loadingSummary ? "..." : Number(summary?.devicesReportingSoftware || 0)}
+              accent={SOFTWARE_ACCENTS.installed}
+              subtitle={
+                loadingSummary
+                  ? ""
+                  : "Devices with software inventory reported"
+              }
             />
           </Grid>
 
@@ -848,7 +861,12 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Installed Apps"
               value={loadingSummary ? "..." : Number(summary?.installedApps || 0)}
-              accent={BRAND.tealText}
+              accent={SOFTWARE_ACCENTS.installed}
+              subtitle={
+                loadingSummary
+                  ? ""
+                  : "Total installed application records"
+              }
             />
           </Grid>
 
@@ -856,7 +874,12 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Unique App Names"
               value={loadingSummary ? "..." : Number(summary?.uniqueAppNames || 0)}
-              accent="#b45309"
+              accent={SOFTWARE_ACCENTS.sources}
+              subtitle={
+                loadingSummary
+                  ? ""
+                  : "Distinct application names detected"
+              }
             />
           </Grid>
 
@@ -864,11 +887,11 @@ export default function SoftwareInventory() {
             <SummaryCard
               title="Publishers"
               value={loadingSummary ? "..." : Number(summary?.publishers || 0)}
-              accent={BRAND.alert.error}
+              accent={SOFTWARE_ACCENTS.publishers}
               subtitle={
                 loadingSummary
                   ? ""
-                  : `${Number(summary?.sources || 0)} software sources detected`
+                  : "Software publishers identified"
               }
             />
           </Grid>
@@ -885,8 +908,12 @@ export default function SoftwareInventory() {
                 totalLabel="installs"
                 emptyLabel="No installed apps data"
                 minHeight={260}
+                headerExtraPlacement="below"
+                reserveHeaderExtraSpace
                 maxItems={5}
                 totalValue={topInstalledAppsTotal}
+                showTotalChip={false}
+                showPercentages={false}
                 headerExtra={renderViewAllButton({
                   title: "Top installed apps",
                   subtitle: "Complete application ranking by detected installs.",
@@ -908,6 +935,8 @@ export default function SoftwareInventory() {
                 totalLabel="apps"
                 emptyLabel="No publisher data"
                 minHeight={260}
+                headerExtraPlacement="below"
+                reserveHeaderExtraSpace
                 maxItems={5}
                 totalValue={topPublishersTotal}
                 headerExtra={renderViewAllButton({
@@ -931,6 +960,8 @@ export default function SoftwareInventory() {
                 totalLabel="apps"
                 emptyLabel="No source data"
                 minHeight={260}
+                headerExtraPlacement="below"
+                reserveHeaderExtraSpace
                 maxItems={5}
                 totalValue={topSourcesTotal}
                 headerExtra={renderViewAllButton({
@@ -954,6 +985,8 @@ export default function SoftwareInventory() {
                 totalLabel="apps"
                 emptyLabel="No device app data"
                 minHeight={260}
+                headerExtraPlacement="below"
+                reserveHeaderExtraSpace
                 maxItems={5}
                 totalValue={appsPerDeviceTotal}
                 headerExtra={renderViewAllButton({

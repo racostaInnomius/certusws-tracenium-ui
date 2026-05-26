@@ -10,6 +10,7 @@ import {
   Chip,
   Divider,
   Typography,
+  Tooltip,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -31,14 +32,128 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 
 import { TOPBAR_HEIGHT } from "./Topbar";
 
 import { BRAND } from "../theme/brand";
+import { getTenantById } from "../api/tenants";
 
 export const SIDEBAR_WIDTH = 210;
 
-function SidebarContent({ items, selected, onSelect, handleLogout }) {
+function firstNonEmptyText(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function getTenantIdFromAuth(auth) {
+  return firstNonEmptyText(
+    auth?.tenantId,
+    auth?.tenant_id,
+    auth?.tenant?.id,
+    auth?.currentTenant?.id,
+    auth?.tenantMember?.tenantId,
+    auth?.tenantMember?.tenant_id,
+    auth?.tenant_member?.tenantId,
+    auth?.tenant_member?.tenant_id
+  );
+}
+
+function getTenantNameFromAuth(auth) {
+  const tenant = auth?.tenant || auth?.currentTenant || auth?.tenantMember?.tenant || auth?.tenant_member?.tenant || {};
+
+  return firstNonEmptyText(
+    auth?.tenantName,
+    auth?.tenant_name,
+    auth?.tenantDisplayName,
+    auth?.tenant_display_name,
+    auth?.organizationName,
+    auth?.orgName,
+    tenant?.name,
+    tenant?.displayName,
+    tenant?.display_name,
+    tenant?.externalIdpTenant,
+    tenant?.external_idp_tenant
+  );
+}
+
+function TenantWorkspaceBadge({ tenantName, tenantId }) {
+  const safeTenantName = firstNonEmptyText(tenantName);
+  const safeTenantId = firstNonEmptyText(tenantId);
+  const displayName = safeTenantName || (safeTenantId ? `Tenant ${safeTenantId}` : "");
+
+  if (!displayName) return null;
+
+  const caption = safeTenantName && safeTenantId ? `Tenant ${safeTenantId}` : "Current workspace";
+
+  return (
+    <Tooltip title={displayName} placement="right" arrow>
+      <Box
+        sx={{
+          mb: 0.65,
+          px: 1,
+          py: 0.72,
+          borderRadius: 2,
+          border: "1px solid rgba(143,253,255,0.14)",
+          background:
+            "linear-gradient(135deg, rgba(90,159,159,0.13), rgba(255,255,255,0.035))",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.9, minWidth: 0 }}>
+          <Box
+            sx={{
+              width: 24,
+              height: 24,
+              borderRadius: 1.5,
+              display: "grid",
+              placeItems: "center",
+              bgcolor: "rgba(90,159,159,0.16)",
+              color: BRAND.teal,
+              flexShrink: 0,
+            }}
+          >
+            <BusinessOutlinedIcon sx={{ fontSize: 16 }} />
+          </Box>
+
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: 10,
+                lineHeight: 1.1,
+                fontWeight: 800,
+                letterSpacing: 0.85,
+                textTransform: "uppercase",
+                color: "rgba(143,253,255,0.58)",
+              }}
+            >
+              Workspace
+            </Typography>
+            <Typography
+              noWrap
+              sx={{
+                mt: 0.15,
+                fontSize: 12.5,
+                lineHeight: 1.25,
+                fontWeight: 700,
+                color: "rgba(255,255,255,0.88)",
+                maxWidth: SIDEBAR_WIDTH - 86,
+              }}
+            >
+              {displayName}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </Tooltip>
+  );
+}
+
+function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, tenantId }) {
   return (
     <Box
       sx={{
@@ -47,7 +162,10 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
         color: "#e7e9ee",
         display: "flex",
         flexDirection: "column",
-        minHeight: "100dvh",
+        height: "100dvh",
+        maxHeight: "100dvh",
+        minHeight: 0,
+        overflow: "hidden",
         borderRight: "1px solid transparent",
         boxShadow: `1px 0 0 ${BRAND.accentBrightSoft}`,
       }}
@@ -77,7 +195,30 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
         />
       </Box>
 
-      <List disablePadding sx={{ flex: 1, px: 1.5, pt: 1.5 }}>
+      <List
+        disablePadding
+        sx={{
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          px: 1.5,
+          pt: 1.5,
+          pb: 1,
+          overscrollBehavior: "contain",
+          scrollbarWidth: "thin",
+          scrollbarColor: "rgba(143,253,255,0.26) transparent",
+          "&::-webkit-scrollbar": { width: 7 },
+          "&::-webkit-scrollbar-track": { backgroundColor: "transparent" },
+          "&::-webkit-scrollbar-thumb": {
+            borderRadius: 999,
+            backgroundColor: "rgba(143,253,255,0.22)",
+          },
+          "&::-webkit-scrollbar-thumb:hover": {
+            backgroundColor: "rgba(143,253,255,0.36)",
+          },
+        }}
+      >
         {items.map((it) => {
           // Divider rows: a faint horizontal rule with a small section
           // label above it. Uses the same teal-on-dark family the rest
@@ -185,7 +326,19 @@ function SidebarContent({ items, selected, onSelect, handleLogout }) {
         })}
       </List>
 
-      <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>
+      <Box
+        sx={{
+          flexShrink: 0,
+          px: 1.5,
+          pb: "max(12px, env(safe-area-inset-bottom))",
+          pt: 1,
+          borderTop: "1px solid rgba(90,159,159,0.18)",
+          background:
+            "linear-gradient(180deg, rgba(59,64,77,0.92), rgba(59,64,77,1))",
+        }}
+      >
+        <TenantWorkspaceBadge tenantName={tenantName} tenantId={tenantId} />
+
         <Button
           onClick={handleLogout}
           startIcon={<LogoutIcon />}
@@ -222,6 +375,45 @@ export default function Sidebar({
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
 
   const { auth } = useAuthContext();
+
+  const authTenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
+  const authTenantName = React.useMemo(() => getTenantNameFromAuth(auth), [auth]);
+  const [resolvedTenantName, setResolvedTenantName] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+
+    if (authTenantName || !authTenantId) {
+      setResolvedTenantName("");
+      return () => {
+        alive = false;
+      };
+    }
+
+    getTenantById(authTenantId)
+      .then((tenant) => {
+        if (!alive) return;
+        setResolvedTenantName(
+          firstNonEmptyText(
+            tenant?.name,
+            tenant?.displayName,
+            tenant?.display_name,
+            tenant?.externalIdpTenant,
+            tenant?.external_idp_tenant
+          )
+        );
+      })
+      .catch(() => {
+        if (!alive) return;
+        setResolvedTenantName("");
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [authTenantId, authTenantName]);
+
+  const tenantDisplayName = authTenantName || resolvedTenantName || "";
 
   const tenantMemberRole = auth?.tenantMember?.role;
   const tenantMemberIsActive = auth?.tenantMember?.isActive;
@@ -320,6 +512,8 @@ export default function Sidebar({
           selected={selected}
           onSelect={onSelect}
           handleLogout={handleLogout}
+          tenantName={tenantDisplayName}
+          tenantId={authTenantId}
         />
       </Box>
     );
@@ -335,8 +529,11 @@ export default function Sidebar({
       sx={{
         "& .MuiDrawer-paper": {
           width: SIDEBAR_WIDTH,
+          height: "100dvh",
+          maxHeight: "100dvh",
           bgcolor: BRAND.dark,
           border: "none",
+          overflow: "hidden",
         },
       }}
     >
@@ -345,6 +542,8 @@ export default function Sidebar({
         selected={selected}
         onSelect={onSelect}
         handleLogout={handleLogout}
+        tenantName={tenantDisplayName}
+        tenantId={authTenantId}
       />
     </Drawer>
   );

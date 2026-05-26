@@ -97,7 +97,7 @@ const TAB_SX = {
   "&.Mui-selected": { color: BRAND.dark },
 };
 
-export default function Assets({ onAssetsEmptyStateChange }) {
+export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false }) {
   const [activeTab, setActiveTab] = React.useState(0);
 
   const handleChange = (_event, newValue) => {
@@ -106,6 +106,14 @@ export default function Assets({ onAssetsEmptyStateChange }) {
 
   const navigateToHardwareInventory = React.useCallback(() => {
     setActiveTab(3);
+
+    // Keep the drill-down feeling intentional: when the user clicks a
+    // dashboard card such as OS versions, move them to the top of the
+    // Hardware Inventory tab instead of leaving the scroll position in
+    // the middle of the dashboard.
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
   }, []);
 
   // Page-level refresh — bumping the nonce signals child tabs to
@@ -211,6 +219,7 @@ export default function Assets({ onAssetsEmptyStateChange }) {
           onAssetsEmptyStateChange={onAssetsEmptyStateChange}
           refreshNonce={refreshNonce}
           onNavigateToHardwareInventory={navigateToHardwareInventory}
+          suppressEmptyStateOverlay={suppressEmptyStateOverlay}
         />
       </TabPanel>
 
