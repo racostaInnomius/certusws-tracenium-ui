@@ -40,31 +40,61 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
       sx={{
         p: 2,
         height: "100%",
-        minHeight: 76,
+        minHeight: 102,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(90,159,159,0.035) 100%)",
+        minWidth: 0,
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600 }}>
+      <Typography
+        sx={{
+          fontSize: 12.5,
+          color: "text.secondary",
+          fontWeight: 800,
+          letterSpacing: 0.35,
+          lineHeight: 1.25,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        noWrap
+        title={String(title || "")}
+      >
         {title}
       </Typography>
 
-      <Box>
+      <Box sx={{ pt: 1.6 }}>
         <Typography
           sx={{
             fontSize: 28,
-            fontWeight: 800,
+            fontWeight: 850,
             color: accent,
-            lineHeight: 1.1,
+            lineHeight: 1.05,
+            letterSpacing: -0.2,
           }}
+          noWrap
+          title={String(value ?? "")}
         >
           {value}
         </Typography>
         {subtitle ? (
-          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
+          <Typography
+            sx={{
+              fontSize: 12,
+              color: "text.secondary",
+              mt: 0.6,
+              lineHeight: 1.35,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={subtitle}
+          >
             {subtitle}
           </Typography>
         ) : null}
@@ -124,57 +154,90 @@ function MetricGroup({ title, subtitle, children, accent = BRAND.teal }) {
   );
 }
 
-// Status chips use brand/role tokens instead of the previous
-// hardcoded `#0f6b72` / `#b3261e` / `#555`. Active = success green,
-// Expired = alert red (expired tokens are a security concern more
-// than a cautionary one), Revoked = neutral gray/dark (terminal but
-// operator-initiated).
+// Token rows can arrive with a backend status that represents only one
+// terminal reason, for example `exhausted`. For the operator table we render a
+// single effective status using this precedence so the UI stays concise:
+// Revoked > Expired > Exhausted > Active.
+function isPastDate(value) {
+  if (!value) return false;
+  const expiresAt = new Date(value);
+  if (Number.isNaN(expiresAt.getTime())) return false;
+  return expiresAt.getTime() <= Date.now();
+}
+
+function resolveTokenStatus(token = {}) {
+  const rawStatus = String(token.status || token.token_status || "").trim().toLowerCase();
+
+  if (rawStatus === "revoked" || token.revoked === true || token.revoked_at) {
+    return "revoked";
+  }
+
+  if (rawStatus === "expired" || isPastDate(token.expires_at || token.expiresAt)) {
+    return "expired";
+  }
+
+  const used = toFiniteNumber(token.used_count ?? token.usedCount ?? token.used, 0);
+  const maxUses = toFiniteNumber(token.max_uses ?? token.maxUses, 0);
+  if (rawStatus === "exhausted" || (maxUses > 0 && used >= maxUses)) {
+    return "exhausted";
+  }
+
+  if (rawStatus === "active" || !rawStatus) {
+    return "active";
+  }
+
+  return rawStatus;
+}
+
+function getStatusChipMeta(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "active":
+      return {
+        label: "Active",
+        bgcolor: BRAND.alert.successSoft,
+        color: BRAND.alert.success,
+      };
+    case "expired":
+      return {
+        label: "Expired",
+        bgcolor: BRAND.alert.warningSoft,
+        color: BRAND.alert.warning,
+      };
+    case "exhausted":
+      return {
+        label: "Exhausted",
+        bgcolor: BRAND.surfaceMuted,
+        color: BRAND.dark,
+      };
+    case "revoked":
+      return {
+        label: "Revoked",
+        bgcolor: BRAND.alert.errorSoft,
+        color: BRAND.alert.error,
+      };
+    default:
+      return {
+        label: status || "Unknown",
+        bgcolor: BRAND.darkSoft,
+        color: BRAND.dark,
+      };
+  }
+}
+
 function renderStatusChip(status) {
-  const value = String(status || "").toLowerCase();
+  const meta = getStatusChipMeta(status);
 
-  if (value === "active") {
-    return (
-      <Chip
-        label="Active"
-        size="small"
-        sx={{
-          bgcolor: BRAND.alert.successSoft,
-          color: BRAND.alert.success,
-          fontWeight: 700,
-        }}
-      />
-    );
-  }
-
-  if (value === "expired") {
-    return (
-      <Chip
-        label="Expired"
-        size="small"
-        sx={{
-          bgcolor: BRAND.alert.errorSoft,
-          color: BRAND.alert.error,
-          fontWeight: 700,
-        }}
-      />
-    );
-  }
-
-  if (value === "revoked") {
-    return (
-      <Chip
-        label="Revoked"
-        size="small"
-        sx={{
-          bgcolor: BRAND.darkSoft,
-          color: BRAND.dark,
-          fontWeight: 700,
-        }}
-      />
-    );
-  }
-
-  return <Chip label={status || "Unknown"} size="small" />;
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      sx={{
+        bgcolor: meta.bgcolor,
+        color: meta.color,
+        fontWeight: String(status || "").toLowerCase() === "exhausted" ? 500 : 700,
+      }}
+    />
+  );
 }
 
 function toFiniteNumber(value, fallback = 0) {
@@ -405,7 +468,17 @@ export default function TokensAdministrator({ embedded = false } = {}) {
       setLoading(true);
       const data = await listTokens();
       const list = Array.isArray(data) ? data : [];
-      setRows(list);
+      setRows(
+        list.map((token) => {
+          const effectiveStatus = resolveTokenStatus(token);
+          return {
+            ...token,
+            raw_status: token.status,
+            status: effectiveStatus,
+            effective_status: effectiveStatus,
+          };
+        })
+      );
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -451,12 +524,15 @@ const filteredRows = React.useMemo(() => {
     const expired = rows.filter(
       (r) => String(r.status).toLowerCase() === "expired"
     ).length;
+    const exhausted = rows.filter(
+      (r) => String(r.status).toLowerCase() === "exhausted"
+    ).length;
     const revoked = rows.filter(
       (r) => String(r.status).toLowerCase() === "revoked"
     ).length;
 
 
-    return { total, active, expired, revoked};
+    return { total, active, expired, exhausted, revoked};
   }, [rows]);
 
   const quotaSummary = React.useMemo(() => normalizeQuotaResponse(quota), [quota]);
@@ -564,7 +640,7 @@ const filteredRows = React.useMemo(() => {
       headerName: "Status",
       minWidth: 100,
       flex: 0.5,
-      renderCell: (params) => renderStatusChip(params.value),
+      renderCell: (params) => renderStatusChip(params.row?.effective_status || params.value),
     },
     { field: "max_uses", headerName: "Max Uses", minWidth: 83, flex: 0.3 },
     { field: "used_count", headerName: "Used", minWidth: 55, flex: 0.3 },
@@ -601,7 +677,7 @@ const filteredRows = React.useMemo(() => {
         <Button
           size="small"
           color="error"
-          disabled={String(params.row?.status).toLowerCase() !== "active"}
+          disabled={String(params.row?.effective_status || params.row?.status).toLowerCase() !== "active"}
           onClick={() => {
             setSelectedToken(params.row);
             setRevokeOpen(true);
@@ -749,61 +825,68 @@ const filteredRows = React.useMemo(() => {
           safely cap the Max Uses value when creating a new enrollment token. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, xl: 7 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 7 }} sx={{ display: "flex", minWidth: 0 }}>
             <MetricGroup
               title="Token lifecycle"
               subtitle="Operational status of enrollment tokens in this tenant"
               accent={BRAND.teal}
             >
               <Grid container spacing={1.5} alignItems="stretch">
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-                  <SummaryCard title="Total Tokens" value={summary.total} />
+                <Grid size={{ xs: 3 }}>
+                  <SummaryCard
+                    title="Total Tokens"
+                    value={summary.total}
+                    subtitle="Created in this tenant"
+                  />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 3 }}>
                   <SummaryCard
                     title="Active"
                     value={summary.active}
                     accent={BRAND.alert.success}
+                    subtitle="Ready for enrollment"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 3 }}>
                   <SummaryCard
                     title="Expired"
                     value={summary.expired}
                     accent={BRAND.alert.warning}
+                    subtitle="Past validity window"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 3 }}>
                   <SummaryCard
                     title="Revoked"
                     value={summary.revoked}
                     accent={BRAND.alert.error}
+                    subtitle="Disabled from use"
                   />
                 </Grid>
               </Grid>
             </MetricGroup>
           </Grid>
 
-          <Grid size={{ xs: 12, xl: 5 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 5 }} sx={{ display: "flex", minWidth: 0 }}>
             <MetricGroup
               title="Tenant capacity"
               subtitle="Real enrolled devices compared with standard and upper limits"
               accent={quotaStatusMeta.accent}
             >
               <Grid container spacing={1.5} alignItems="stretch">
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 4 }}>
                   <SummaryCard
                     title="Max Devices"
                     value={quotaLoading ? "..." : quotaSummary.maxDevices}
                     accent={BRAND.dark}
-                    subtitle="Subscription limit"
+                    subtitle="Subscription device limit"
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 4 }}>
                   <SummaryCard
                     title="Used Agents"
                     value={quotaLoading ? "..." : quotaSummary.used}
@@ -812,7 +895,7 @@ const filteredRows = React.useMemo(() => {
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+                <Grid size={{ xs: 4 }}>
                   <SummaryCard
                     title="Remaining"
                     value={quotaLoading ? "..." : quotaSummary.remaining}
@@ -820,8 +903,6 @@ const filteredRows = React.useMemo(() => {
                     subtitle="Before subscription limit"
                   />
                 </Grid>
-
-
               </Grid>
             </MetricGroup>
           </Grid>
@@ -864,6 +945,7 @@ const filteredRows = React.useMemo(() => {
             <MenuItem value="all">All</MenuItem>
             <MenuItem value="active">Active</MenuItem>
             <MenuItem value="expired">Expired</MenuItem>
+            <MenuItem value="exhausted">Exhausted</MenuItem>
             <MenuItem value="revoked">Revoked</MenuItem>
           </TextField>
 
