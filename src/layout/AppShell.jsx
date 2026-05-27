@@ -1,8 +1,25 @@
 import * as React from "react";
-import { Alert, Box, Button, CircularProgress, Fade, Paper, Snackbar, Typography } from "@mui/material";
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Fade,
+  LinearProgress,
+  Paper,
+  Snackbar,
+  Stack,
+  Typography,
+} from "@mui/material";
 import Sidebar from "./Sidebar";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
+import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
+import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import Topbar from "./Topbar";
 import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
@@ -43,6 +60,17 @@ function PageFallback() {
     </Box>
   );
 }
+
+const USER_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const USER_IDLE_COUNTDOWN_SECONDS = 15;
+const USER_ACTIVITY_EVENTS = [
+  "mousemove",
+  "mousedown",
+  "keydown",
+  "scroll",
+  "touchstart",
+  "pointerdown",
+];
 
 const EMPTY_TENANT_GATED_PAGES = new Set([
   "overview",
@@ -214,6 +242,150 @@ function NoInformationOverlay({ onNavigate }) {
   );
 }
 
+
+function UserInactivityDialog({
+  open,
+  countdown,
+  loading = false,
+  signingOut = false,
+  error = "",
+  onStayActive,
+  onSignOut,
+}) {
+  const safeCountdown = Math.max(0, Number(countdown || 0));
+  const progress = Math.max(0, Math.min(100, (safeCountdown / USER_IDLE_COUNTDOWN_SECONDS) * 100));
+
+  return (
+    <Dialog
+      open={open}
+      maxWidth="xs"
+      fullWidth
+      disableEscapeKeyDown
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          border: `1px solid ${BRAND.border}`,
+          overflow: "hidden",
+          boxShadow: "0 22px 60px rgba(15,23,42,0.28)",
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          pb: 1.25,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          color: BRAND.dark,
+          fontWeight: 900,
+        }}
+      >
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            borderRadius: 2,
+            display: "grid",
+            placeItems: "center",
+            color: BRAND.tealText,
+            bgcolor: BRAND.tealSoft,
+            border: `1px solid ${BRAND.tealSoftStrong}`,
+            flexShrink: 0,
+          }}
+        >
+          <AccessTimeRoundedIcon fontSize="small" />
+        </Box>
+        Your session is about to expire.
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 0.75 }}>
+        <Stack spacing={2}>
+          <Typography sx={{ color: "text.secondary", fontSize: 14.5, lineHeight: 1.65 }}>
+            We have not detected activity for a while. Stay active to keep working,
+            or sign out to end your session safely.
+          </Typography>
+
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              border: `1px solid ${BRAND.border}`,
+              background:
+                "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(240,252,251,0.88))",
+            }}
+          >
+            <Stack direction="row" alignItems="baseline" justifyContent="space-between" spacing={2}>
+              <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                Auto sign-out in
+              </Typography>
+              <Typography sx={{ fontSize: 28, lineHeight: 1, fontWeight: 900, color: safeCountdown <= 5 ? BRAND.alert.error : BRAND.tealText }}>
+                {safeCountdown}s
+              </Typography>
+            </Stack>
+            <LinearProgress
+              variant="determinate"
+              value={progress}
+              sx={{
+                mt: 1.25,
+                height: 7,
+                borderRadius: 999,
+                bgcolor: BRAND.darkSoft,
+                "& .MuiLinearProgress-bar": {
+                  borderRadius: 999,
+                  bgcolor: safeCountdown <= 5 ? BRAND.alert.error : BRAND.teal,
+                },
+              }}
+            />
+          </Box>
+
+          {error ? (
+            <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+              {error}
+            </Alert>
+          ) : null}
+        </Stack>
+      </DialogContent>
+
+      <DialogActions
+        sx={{
+          px: 3,
+          py: 2,
+          gap: 1,
+          borderTop: `1px solid ${BRAND.border}`,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Button
+          onClick={onSignOut}
+          disabled={loading || signingOut}
+          startIcon={<LogoutRoundedIcon />}
+          sx={{
+            textTransform: "none",
+            fontWeight: 800,
+            color: BRAND.dark,
+          }}
+        >
+          {signingOut ? "Signing out..." : "Sign out"}
+        </Button>
+        <Button
+          onClick={onStayActive}
+          disabled={loading || signingOut}
+          variant="contained"
+          sx={{
+            textTransform: "none",
+            fontWeight: 900,
+            borderRadius: 2,
+            bgcolor: BRAND.teal,
+            "&:hover": { bgcolor: BRAND.tealHover },
+          }}
+        >
+          {loading ? "Checking..." : "Stay active"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function AppShell() {
   const [_bootstrap, setBootstrap] = React.useState(null);
   // Overview is the canonical landing page — it's the SOC-style dashboard
@@ -225,6 +397,16 @@ export default function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [viewReloadToken, setViewReloadToken] = React.useState(0);
   const [temporaryWarning, setTemporaryWarning] = React.useState(null);
+  const [idleDialogOpen, setIdleDialogOpen] = React.useState(false);
+  const [idleCountdown, setIdleCountdown] = React.useState(USER_IDLE_COUNTDOWN_SECONDS);
+  const [idleStayActiveLoading, setIdleStayActiveLoading] = React.useState(false);
+  const [idleSigningOut, setIdleSigningOut] = React.useState(false);
+  const [idleDialogError, setIdleDialogError] = React.useState("");
+
+  const idleTimerRef = React.useRef(null);
+  const activityThrottleRef = React.useRef(0);
+  const idleDialogOpenRef = React.useRef(false);
+  const idleSigningOutRef = React.useRef(false);
 
   React.useEffect(() => {
     let alive = true;
@@ -244,6 +426,153 @@ export default function AppShell() {
     };
   }, []);
 
+
+  React.useEffect(() => {
+    idleDialogOpenRef.current = idleDialogOpen;
+  }, [idleDialogOpen]);
+
+  React.useEffect(() => {
+    idleSigningOutRef.current = idleSigningOut;
+  }, [idleSigningOut]);
+
+  const clearIdleTimer = React.useCallback(() => {
+    if (idleTimerRef.current) {
+      window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
+  const openIdleDialog = React.useCallback(() => {
+    clearIdleTimer();
+    setIdleDialogError("");
+    setIdleStayActiveLoading(false);
+    setIdleCountdown(USER_IDLE_COUNTDOWN_SECONDS);
+    setIdleDialogOpen(true);
+  }, [clearIdleTimer]);
+
+  const resetIdleTimer = React.useCallback(() => {
+    if (idleDialogOpenRef.current || idleSigningOutRef.current) return;
+
+    clearIdleTimer();
+    idleTimerRef.current = window.setTimeout(() => {
+      openIdleDialog();
+    }, USER_IDLE_TIMEOUT_MS);
+  }, [clearIdleTimer, openIdleDialog]);
+
+  const performIdleLogout = React.useCallback(async () => {
+    if (idleSigningOutRef.current) return;
+
+    idleSigningOutRef.current = true;
+    setIdleSigningOut(true);
+    clearIdleTimer();
+    setTemporaryWarning(null);
+
+    try {
+      clearApiCache();
+      clearCachedFetch();
+    } catch {
+      // best effort
+    }
+
+    let logoutUrl = getLoginUrl();
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.logoutUrl) logoutUrl = data.logoutUrl;
+      }
+    } catch (err) {
+      console.warn("Idle logout request failed; redirecting to login/logout fallback.", err);
+    } finally {
+      try {
+        window.location.assign(logoutUrl);
+      } catch {
+        window.location.href = logoutUrl;
+      }
+    }
+  }, [clearIdleTimer]);
+
+  const handleStayActive = React.useCallback(async () => {
+    setIdleDialogError("");
+    setIdleStayActiveLoading(true);
+
+    try {
+      await httpGetJson("/api/bootstrap", {
+        cache: "no-store",
+        timeoutMs: 12_000,
+        notifyOnTemporaryError: false,
+      });
+
+      setIdleDialogOpen(false);
+      setIdleCountdown(USER_IDLE_COUNTDOWN_SECONDS);
+      setIdleStayActiveLoading(false);
+      resetIdleTimer();
+    } catch (err) {
+      if (isAuthError(err)) {
+        return;
+      }
+
+      setIdleStayActiveLoading(false);
+      setIdleDialogError(
+        isTemporaryApiError(err)
+          ? "We could not refresh your session right now. Please try again or sign out."
+          : err?.message || "We could not refresh your session. Please try again or sign out."
+      );
+    }
+  }, [resetIdleTimer]);
+
+  React.useEffect(() => {
+    const handleActivity = () => {
+      const currentTs = Date.now();
+      if (currentTs - activityThrottleRef.current < 750) return;
+      activityThrottleRef.current = currentTs;
+      resetIdleTimer();
+    };
+
+    USER_ACTIVITY_EVENTS.forEach((eventName) => {
+      window.addEventListener(eventName, handleActivity, { passive: true });
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        resetIdleTimer();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    resetIdleTimer();
+
+    return () => {
+      clearIdleTimer();
+      USER_ACTIVITY_EVENTS.forEach((eventName) => {
+        window.removeEventListener(eventName, handleActivity);
+      });
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [clearIdleTimer, resetIdleTimer]);
+
+  React.useEffect(() => {
+    if (!idleDialogOpen || idleStayActiveLoading || idleSigningOut) return undefined;
+
+    const intervalId = window.setInterval(() => {
+      setIdleCountdown((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(intervalId);
+          performIdleLogout();
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [idleDialogOpen, idleStayActiveLoading, idleSigningOut, performIdleLogout]);
 
   const resolveTenantInventoryState = React.useCallback(async () => {
     setTenantInventoryState((prev) => (prev === "empty" || prev === "has-data" ? prev : "checking"));
@@ -574,6 +903,16 @@ export default function AppShell() {
           ) : null}
         </Box>
       </Box>
+
+      <UserInactivityDialog
+        open={idleDialogOpen}
+        countdown={idleCountdown}
+        loading={idleStayActiveLoading}
+        signingOut={idleSigningOut}
+        error={idleDialogError}
+        onStayActive={handleStayActive}
+        onSignOut={performIdleLogout}
+      />
 
       <Snackbar
         open={Boolean(temporaryWarning)}

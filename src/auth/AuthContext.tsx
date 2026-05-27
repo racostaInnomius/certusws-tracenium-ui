@@ -1,5 +1,5 @@
 import * as React from "react";
-const API_BASE = import.meta.env.VITE_API_BASE;
+import { httpGetJson, isAuthError } from "../api/http";
 
 type AuthValue = {
   auth: any;
@@ -17,29 +17,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/bootstrap`, {
-          method: "GET",
-          credentials: "include",
+        const data = await httpGetJson("/api/bootstrap", {
+          cache: "no-store",
+          timeoutMs: 12_000,
+          notifyOnTemporaryError: false,
         });
-
-        if (res.status === 401) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`UNAUTHENTICATED:${text}`);
-        }
-
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-
-        const data = await res.json();
 
         if (!alive) return;
 
         setAuth(data?.user ?? data ?? null);
       } catch (e) {
         console.error("Auth load failed", e);
+
         if (!alive) return;
+
+        // http.js already emits the global auth-required event and redirects
+        // on 401 / UNAUTHENTICATED. Keep local state clean but do not swallow
+        // or reinterpret auth failures as temporary backend errors.
+        if (isAuthError(e)) {
+          setAuth(null);
+          return;
+        }
+
         setAuth(null);
       } finally {
         if (alive) setLoading(false);
