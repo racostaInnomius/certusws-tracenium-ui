@@ -250,8 +250,10 @@ function RetryMeta({ attempt }) {
         mb: 2.5,
       }}
     >
+      {/*
       Attempt {attempt} of {BOOTSTRAP_MAX_ATTEMPTS}. Retrying automatically every{" "}
       {BOOTSTRAP_RETRY_DELAY_MS / 1000} seconds.
+      */}
     </Typography>
   );
 }
@@ -653,23 +655,6 @@ export default function AuthGate({ children }) {
             Checked {`${API.BASE}${API.BOOTSTRAP}`} and {`${API.BASE}${API.HEALTH}`}.
           </Typography>
 
-          <Button
-            variant="contained"
-            onClick={retryNow}
-            sx={{
-              textTransform: "none",
-              fontWeight: 600,
-              borderRadius: "12px",
-              py: 1.25,
-              px: 3,
-              background: "rgb(70,157,159)",
-              "&:hover": {
-                background: "rgb(60,140,142)",
-              },
-            }}
-          >
-            Retry now
-          </Button>
         </Paper>
       </Box>
     );
