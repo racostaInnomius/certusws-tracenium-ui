@@ -81,22 +81,101 @@ function getTenantNameFromAuth(auth) {
   );
 }
 
-function TenantWorkspaceBadge({ tenantName, tenantId }) {
+function looksLikeEmail(value) {
+  const text = String(value || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+function findEmailDeep(value, depth = 0, seen = new Set()) {
+  if (depth > 5 || value === null || value === undefined) return "";
+
+  if (typeof value === "string") {
+    return looksLikeEmail(value) ? value.trim() : "";
+  }
+
+  if (typeof value !== "object") return "";
+  if (seen.has(value)) return "";
+  seen.add(value);
+
+  const preferredKeys = [
+    "email",
+    "mail",
+    "preferredEmail",
+    "preferred_email",
+    "preferred_username",
+    "upn",
+    "userEmail",
+    "user_email",
+  ];
+
+  for (const key of preferredKeys) {
+    const found = findEmailDeep(value?.[key], depth + 1, seen);
+    if (found) return found;
+  }
+
+  for (const nestedKey of [
+    "user",
+    "profile",
+    "account",
+    "claims",
+    "idTokenClaims",
+    "payload",
+    "raw",
+    "tenantMember",
+    "tenant_member",
+    "bootstrap",
+    "auth",
+    "principal",
+  ]) {
+    const found = findEmailDeep(value?.[nestedKey], depth + 1, seen);
+    if (found) return found;
+  }
+
+  // Last-resort compatibility for backend shape changes: scan values, but
+  // still require a real email pattern so we don't accidentally render subject
+  // IDs, usernames, tenant names, or roles as an email line.
+  for (const child of Object.values(value)) {
+    const found = findEmailDeep(child, depth + 1, seen);
+    if (found) return found;
+  }
+
+  return "";
+}
+
+function getUserEmailFromAuth(auth) {
+  return firstNonEmptyText(
+    auth?.email,
+    auth?.user?.email,
+    auth?.profile?.email,
+    auth?.account?.email,
+    auth?.tenantMember?.email,
+    auth?.tenant_member?.email,
+    auth?.payload?.email,
+    auth?.raw?.email,
+    auth?.bootstrap?.email,
+    auth?.bootstrap?.user?.email,
+    findEmailDeep(auth)
+  );
+}
+
+function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
   const safeTenantName = firstNonEmptyText(tenantName);
   const safeTenantId = firstNonEmptyText(tenantId);
   const displayName = safeTenantName || (safeTenantId ? `Tenant ${safeTenantId}` : "");
 
   if (!displayName) return null;
 
+  const safeUserEmail = firstNonEmptyText(userEmail);
   const caption = safeTenantName && safeTenantId ? `Tenant ${safeTenantId}` : "Current workspace";
+  const tooltipTitle = safeUserEmail ? `${displayName} · ${safeUserEmail}` : displayName;
 
   return (
-    <Tooltip title={displayName} placement="right" arrow>
+    <Tooltip title={tooltipTitle} placement="right" arrow>
       <Box
         sx={{
           mb: 0.65,
           px: 1,
-          py: 0.72,
+          py: safeUserEmail ? 0.82 : 0.72,
           borderRadius: 2,
           border: "1px solid rgba(143,253,255,0.14)",
           background:
@@ -140,12 +219,41 @@ function TenantWorkspaceBadge({ tenantName, tenantId }) {
                 fontSize: 12.5,
                 lineHeight: 1.25,
                 fontWeight: 700,
-                color: "rgba(255,255,255,0.88)",
+                color: "rgba(255,255,255,0.90)",
                 maxWidth: SIDEBAR_WIDTH - 86,
               }}
             >
               {displayName}
             </Typography>
+            {safeUserEmail ? (
+              <Typography
+                noWrap
+                sx={{
+                  mt: 0.2,
+                  fontSize: 10.6,
+                  lineHeight: 1.2,
+                  fontWeight: 500,
+                  color: "rgba(231,233,238,0.62)",
+                  maxWidth: SIDEBAR_WIDTH - 86,
+                }}
+              >
+                {safeUserEmail}
+              </Typography>
+            ) : (
+              <Typography
+                noWrap
+                sx={{
+                  mt: 0.2,
+                  fontSize: 10.2,
+                  lineHeight: 1.15,
+                  fontWeight: 500,
+                  color: "rgba(231,233,238,0.42)",
+                  maxWidth: SIDEBAR_WIDTH - 86,
+                }}
+              >
+                {caption}
+              </Typography>
+            )}
           </Box>
         </Box>
       </Box>
@@ -153,7 +261,7 @@ function TenantWorkspaceBadge({ tenantName, tenantId }) {
   );
 }
 
-function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, tenantId }) {
+function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, tenantId, userEmail }) {
   return (
     <Box
       sx={{
@@ -337,7 +445,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
             "linear-gradient(180deg, rgba(59,64,77,0.92), rgba(59,64,77,1))",
         }}
       >
-        <TenantWorkspaceBadge tenantName={tenantName} tenantId={tenantId} />
+        <TenantWorkspaceBadge tenantName={tenantName} tenantId={tenantId} userEmail={userEmail} />
 
         <Button
           onClick={handleLogout}
@@ -378,6 +486,7 @@ export default function Sidebar({
 
   const authTenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const authTenantName = React.useMemo(() => getTenantNameFromAuth(auth), [auth]);
+  const authUserEmail = React.useMemo(() => getUserEmailFromAuth(auth), [auth]);
   const [resolvedTenantName, setResolvedTenantName] = React.useState("");
 
   React.useEffect(() => {
@@ -514,6 +623,7 @@ export default function Sidebar({
           handleLogout={handleLogout}
           tenantName={tenantDisplayName}
           tenantId={authTenantId}
+          userEmail={authUserEmail}
         />
       </Box>
     );
@@ -544,6 +654,7 @@ export default function Sidebar({
         handleLogout={handleLogout}
         tenantName={tenantDisplayName}
         tenantId={authTenantId}
+        userEmail={authUserEmail}
       />
     </Drawer>
   );

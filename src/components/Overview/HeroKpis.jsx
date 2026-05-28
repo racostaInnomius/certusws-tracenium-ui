@@ -183,15 +183,26 @@ export default function HeroKpis({ results, loading, onNavigate }) {
 
   // Card 1: Total devices
   //
-  // `/dashboard/summary` reports this as `activeHosts` (the current
-  // backend contract observed live). Older inline dashboard variants
-  // used `devices` / `total` — we preserve those as fallbacks so the
-  // card keeps working if the backend ever renames again.
+  // Contract confirmed with backend:
+  //   - totalHosts / totalDevices = all known/enrolled devices for tenant
+  //   - activeHosts = online/recent-heartbeat devices only
+  //
+  // Therefore the Devices KPI must never prefer activeHosts, otherwise a
+  // tenant can show Recent hosts while the Devices card stays at 0.
+  const recentHostsPayload = getValue(results?.recentHosts);
+  const recentHostsTotal =
+    Number(recentHostsPayload?.total ?? recentHostsPayload?.pagination?.total ?? NaN);
   const totalDevices =
-    dashboard?.activeHosts ??
-    dashboard?.devices ??
-    dashboard?.total ??
-    0;
+    Number(
+      dashboard?.totalHosts ??
+        dashboard?.totalDevices ??
+        dashboard?.enrolledDevices ??
+        dashboard?.devicesTotal ??
+        dashboard?.hostsTotal ??
+        dashboard?.devices ??
+        (Number.isFinite(recentHostsTotal) ? recentHostsTotal : undefined) ??
+        0
+    ) || 0;
 
   // Card 2: Online now
   //

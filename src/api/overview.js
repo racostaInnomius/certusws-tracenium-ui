@@ -43,9 +43,17 @@ export async function getConnectedDevices() {
 }
 
 export async function getRecentEnrollments(limit = 5) {
-  // Reuses the hosts list — the dashboard/hosts endpoint already sorts
-  // by last enrollment/session timestamps. Overview only needs a head.
-  return httpGetJson(`/api/v1/dashboard/hosts?limit=${limit}&page=0`);
+  // Reuses the paginated hosts contract. Overview only needs the head
+  // for the Recent hosts strip, while the `total` metadata remains a
+  // safe fallback for the Devices KPI if summary is temporarily missing
+  // the totalHosts/totalDevices fields.
+  const params = new URLSearchParams();
+  params.set("page", "1");
+  params.set("pageSize", String(limit));
+  params.set("sortBy", "collectedAtUtc");
+  params.set("sortDir", "desc");
+
+  return httpGetJson(`/api/v1/dashboard/hosts?${params.toString()}`);
 }
 
 export async function getAgentVersionsSummary() {
