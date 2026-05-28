@@ -60,3 +60,16 @@ export async function getEffectivePolicy(deviceId) {
 export async function getDevicePolicyStatus(deviceId) {
   return httpGetJson(`${BASE}/devices/${encodeURIComponent(deviceId)}/policy-status`);
 }
+
+/**
+ * Read the canonical plugin catalog from the backend. Returned shape:
+ *   { ok: true, catalog: PluginCatalogEntry[] }
+ *
+ * Single source of truth — replaces the legacy hardcoded
+ * `src/constants/plugins.js`. Pages should consume this via the
+ * `usePluginCatalog` hook so the call is cached and shared across
+ * the session.
+ */
+export async function getPluginCatalog() {
+  return httpGetJson(`${BASE}/plugins/catalog`);
+}

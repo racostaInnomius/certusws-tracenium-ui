@@ -62,14 +62,17 @@ import OnlineDot from "../components/common/OnlineDot";
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import { PLUGIN_CATALOG } from "../constants/plugins";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
-// Plugin catalog now lives in src/constants/plugins.js so the new
-// Plugin Control page and this page render the same metadata. Aliased
-// to PLUGIN_DESCRIPTORS locally because that's the name the rest of
-// this file already uses; renaming everywhere would balloon this diff
-// without changing behavior.
-const PLUGIN_DESCRIPTORS = PLUGIN_CATALOG;
+// The plugin catalog now lives in the BACKEND
+// (modules/policies/plugin-catalog.ts) and is fetched via the
+// usePluginCatalog hook. Pure helpers `readFormFromPolicy()` and
+// `formToPolicy()` take the catalog as a second argument so they
+// stay testable and don't import any module-level constants.
+//
+// The shape returned matches what the legacy constants/plugins.js
+// PLUGIN_CATALOG exported — same key/label/title/description/required/
+// impliesModule fields — so the rest of this file's logic is unchanged.
 
 // Interval bounds — mirror the server-side validator
 // (modules/policies/policies.service.ts) AND the agent's
@@ -301,7 +304,7 @@ function securityFormToPolicy(securityForm) {
   return Object.keys(out).length > 0 ? out : null;
 }
 
-function readFormFromPolicy(policy) {
+function readFormFromPolicy(policy, catalog = []) {
   const enabled = Array.isArray(policy?.plugins?.enabled)
     ? policy.plugins.enabled
     : Array.isArray(policy?.agent?.plugins?.enabled)
@@ -315,7 +318,7 @@ function readFormFromPolicy(policy) {
 
   return {
     plugins: Object.fromEntries(
-      PLUGIN_DESCRIPTORS.map((p) => [
+      catalog.map((p) => [
         p.key,
         p.required ? true : enabled.includes(p.key),
       ])
@@ -360,14 +363,14 @@ function readFormFromPolicy(policy) {
   };
 }
 
-function formToPolicy(form) {
-  const pluginsEnabled = PLUGIN_DESCRIPTORS
+function formToPolicy(form, catalog = []) {
+  const pluginsEnabled = catalog
     .filter((p) => p.required || form.plugins[p.key])
     .map((p) => p.key);
 
   // Derive modules from plugins that imply one (e.g. scp → compliance).
   const modules = {};
-  PLUGIN_DESCRIPTORS.forEach((p) => {
+  catalog.forEach((p) => {
     if (p.impliesModule && pluginsEnabled.includes(p.key)) {
       modules[p.impliesModule] = true;
     }
@@ -785,13 +788,18 @@ function JsonBlock({ value, maxHeight = 260 }) {
 function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false }) {
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
 
+  // Hook is cheap to re-call — useCachedFetch returns the in-memory
+  // cached catalog without a new network request. This avoids prop-
+  // drilling `catalog` through TenantTab/DeviceTab into PolicyForm.
+  const { catalog } = usePluginCatalog();
+
   const handleJsonChange = (e) => {
     const value = e.target.value;
     setJsonDraft(value);
     try {
       const parsed = JSON.parse(value);
       setJsonError(null);
-      onChange(readFormFromPolicy(parsed));
+      onChange(readFormFromPolicy(parsed, catalog));
     } catch (err) {
       setJsonError(String(err?.message || err));
     }
@@ -802,7 +810,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
   // the form so the operator can see at a glance what configuration
   // panels apply ("compliance shows because SCP is on") without having
   // to bounce to Plugin Control to check.
-  const enabledPluginsSummary = PLUGIN_DESCRIPTORS.filter(
+  const enabledPluginsSummary = catalog.filter(
     (p) => p.required || Boolean(form.plugins?.[p.key])
   );
 
@@ -922,7 +930,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
           settings (retention, skip-on-battery, etc.) they drop in here
           without restructuring the form. */}
       {(() => {
-        const complianceActive = PLUGIN_DESCRIPTORS.some(
+        const complianceActive = catalog.some(
           (p) => p.impliesModule === "compliance" && form.plugins[p.key]
         );
         if (!complianceActive) return null;
@@ -992,7 +1000,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
       })()}
 
       {(() => {
-        const patchActive = PLUGIN_DESCRIPTORS.some(
+        const patchActive = catalog.some(
           (p) => p.impliesModule === "patch" && form.plugins[p.key]
         );
         if (!patchActive) return null;
@@ -1193,7 +1201,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
             remoteControl ← rcp). Requires agent 1.1.19+; older agents
             ignore the policy flags silently. */}
         {(() => {
-          const rcpActive = PLUGIN_DESCRIPTORS.some(
+          const rcpActive = catalog.some(
             (p) => p.impliesModule === "remoteControl" && form.plugins[p.key]
           );
           if (!rcpActive) return null;
@@ -1578,6 +1586,17 @@ export default function Policies() {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
 
+  // Plugin catalog is fetched from the backend (single source of truth).
+  // While it's loading the array is empty — form initializers gracefully
+  // produce empty `plugins.{}` maps, and an effect below re-runs
+  // readFormFromPolicy() once the catalog arrives. Save buttons disable
+  // while loading so we never PUT a partial enabled list.
+  const {
+    catalog: pluginCatalog,
+    loading: catalogLoading,
+    error: catalogError,
+  } = usePluginCatalog();
+
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
@@ -1591,7 +1610,7 @@ export default function Policies() {
 
   // Tenant state
   const [tenantPolicy, setTenantPolicy] = React.useState(null);
-  const [tenantForm, setTenantForm] = React.useState(readFormFromPolicy({}));
+  const [tenantForm, setTenantForm] = React.useState(() => readFormFromPolicy({}, []));
   const [tenantJsonDraft, setTenantJsonDraft] = React.useState("{}");
   const [tenantJsonError, setTenantJsonError] = React.useState(null);
   const [tenantStatus, setTenantStatus] = React.useState([]);
@@ -1608,7 +1627,7 @@ export default function Policies() {
   // Device state
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
   const [devicePolicy, setDevicePolicy] = React.useState(null); // raw override or null
-  const [deviceForm, setDeviceForm] = React.useState(readFormFromPolicy({}));
+  const [deviceForm, setDeviceForm] = React.useState(() => readFormFromPolicy({}, []));
   const [deviceJsonDraft, setDeviceJsonDraft] = React.useState("{}");
   const [deviceJsonError, setDeviceJsonError] = React.useState(null);
   const [effective, setEffective] = React.useState(null);
@@ -1646,7 +1665,7 @@ export default function Policies() {
       const tenantEnv = extractPolicyEnvelope(policyRes);
       const policy = tenantEnv.raw ?? {};
       setTenantPolicy(policyRes ?? null);
-      setTenantForm(readFormFromPolicy(policy));
+      setTenantForm(readFormFromPolicy(policy, pluginCatalog));
       setTenantJsonDraft(formatJson(policy));
       setTenantJsonError(null);
 
@@ -1699,7 +1718,7 @@ export default function Policies() {
       const overrideEnv = extractPolicyEnvelope(overrideRes);
       const overridePolicy = overrideEnv.raw;
       setDevicePolicy(overrideRes ?? null);
-      setDeviceForm(readFormFromPolicy(overridePolicy || {}));
+      setDeviceForm(readFormFromPolicy(overridePolicy || {}, pluginCatalog));
       setDeviceJsonDraft(formatJson(overridePolicy || {}));
       setDeviceJsonError(null);
       // Effective policy is wrapped as `{ ok, policy: {source, policyJson, ...} }`.
@@ -1743,7 +1762,7 @@ export default function Policies() {
     }
     try {
       setTenantSaving(true);
-      const policy = formToPolicy(tenantForm);
+      const policy = formToPolicy(tenantForm, pluginCatalog);
       // Opt-locking: send the version we loaded the policy at as
       // If-Match. If Plugin Control (or another operator) wrote in the
       // meantime, backend returns 409 and we surface a non-blocking
@@ -1815,7 +1834,7 @@ export default function Policies() {
     }
     try {
       setDeviceSaving(true);
-      const policy = formToPolicy(deviceForm);
+      const policy = formToPolicy(deviceForm, pluginCatalog);
       // Same opt-locking rationale as tenant save above. `devicePolicy`
       // can be null when there's no override yet — extractPolicyEnvelope
       // returns version=null in that case, which becomes "no If-Match

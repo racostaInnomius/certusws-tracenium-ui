@@ -48,7 +48,7 @@ import {
   listDeployments,
 } from "../api/softwareDelivery";
 import { getTenantPolicy } from "../api/policies";
-import { getEnabledPluginSet } from "../constants/plugins";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
 import PackageDialog from "../components/software-delivery/PackageDialog";
 import DeletePackageDialog from "../components/software-delivery/DeletePackageDialog";
@@ -705,6 +705,11 @@ export default function SoftwareDelivery({ onNavigate }) {
   const isAdmin =
     isActive && (String(tenantRole ?? "") === "ADMIN" || String(tenantRole ?? "") === "OWNER");
 
+  // Plugin catalog from the backend — needed for the required-plugin
+  // semantics in getEnabledPluginSet (AMP is always enabled even if
+  // missing from policy.plugins.enabled).
+  const { getEnabledPluginSet } = usePluginCatalog();
+
   // Plugin entitlement gate. SDP is opt-in per tenant — if the
   // tenant's policy doesn't list "sdp" in `plugins.enabled[]`, we
   // render the page in read-only mode with a banner pointing to
@@ -749,7 +754,11 @@ export default function SoftwareDelivery({ onNavigate }) {
     return () => {
       cancelled = true;
     };
-  }, [tenantId]);
+    // getEnabledPluginSet identity changes when the plugin catalog
+    // finally loads — re-run so a Required plugin like AMP that
+    // wasn't yet known when the policy fetched gets resolved
+    // correctly on the second pass.
+  }, [tenantId, getEnabledPluginSet]);
 
   // Effective `canManage` is the AND of admin role + plugin enabled.
   // Reads stay open even when the plugin is disabled (so the operator
