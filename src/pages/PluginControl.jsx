@@ -41,11 +41,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import { useAuthContext } from "../auth/AuthContext";
 import { getTenantPolicy, saveTenantPolicy, pushTenantPolicy } from "../api/policies";
 import { getPluginCoverageSummary } from "../api/overview";
-import {
-  PLUGIN_CATALOG,
-  getEnabledPluginSet,
-  deriveModules,
-} from "../constants/plugins";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
 import { BRAND } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
@@ -82,7 +78,11 @@ function extractPolicyVersion(response) {
 // the user's desired plugin enablement. Preserves every key the loaded
 // policy had EXCEPT the ones we own (plugins, modules) and the
 // configuration blocks for plugins that are now disabled.
-function buildPolicyForSave(loadedPolicy, enabledKeysArray) {
+//
+// `catalog` and `deriveModules` are passed in (from the usePluginCatalog
+// hook) instead of being imported, so the function stays pure and the
+// catalog stays a single source of truth fetched from the backend.
+function buildPolicyForSave(loadedPolicy, enabledKeysArray, catalog, deriveModules) {
   const enabledSet = new Set(enabledKeysArray);
   const original = (loadedPolicy && typeof loadedPolicy === "object") ? loadedPolicy : {};
 
@@ -98,7 +98,7 @@ function buildPolicyForSave(loadedPolicy, enabledKeysArray) {
   // policy stays a faithful reflection of what's actually enabled.
   // Operators can re-enable later and Policies will let them set a
   // fresh interval on top of the backend default.
-  for (const p of PLUGIN_CATALOG) {
+  for (const p of catalog) {
     if (p.impliesModule && !enabledSet.has(p.key)) {
       delete next[p.impliesModule];
     }
@@ -196,6 +196,19 @@ export default function PluginControl() {
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
+  // Plugin catalog comes from the backend now — single source of truth.
+  // While `catalogLoading` is true the catalog array is empty; we
+  // disable Save below so we never PUT a partial `enabled` list that
+  // could drop a required plugin (the required-plugin filter relies on
+  // the catalog).
+  const {
+    catalog,
+    loading: catalogLoading,
+    error: catalogError,
+    getEnabledPluginSet,
+    deriveModules,
+  } = usePluginCatalog();
+
   const tenantId = auth?.tenantId;
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
@@ -277,7 +290,7 @@ export default function PluginControl() {
       // Required plugins can't be turned off — re-add anything the
       // catalog flags as required, so an off-spec checked=false from a
       // bug elsewhere can't strip AMP.
-      for (const p of PLUGIN_CATALOG) {
+      for (const p of catalog) {
         if (p.required) next.add(p.key);
       }
       return next;
@@ -288,10 +301,15 @@ export default function PluginControl() {
     if (!tenantId) return;
     try {
       setSaving(true);
-      const enabledArray = PLUGIN_CATALOG
+      const enabledArray = catalog
         .filter((p) => p.required || draftEnabled.has(p.key))
         .map((p) => p.key);
-      const fullPolicy = buildPolicyForSave(loadedPolicy || {}, enabledArray);
+      const fullPolicy = buildPolicyForSave(
+        loadedPolicy || {},
+        enabledArray,
+        catalog,
+        deriveModules,
+      );
       await saveTenantPolicy(tenantId, fullPolicy, {
         expectedVersion: loadedVersion,
       });
@@ -360,7 +378,7 @@ export default function PluginControl() {
               <Button
                 variant="contained"
                 onClick={handleSave}
-                disabled={!dirty || saving || loading}
+                disabled={!dirty || saving || loading || catalogLoading}
                 startIcon={<SaveOutlinedIcon />}
                 fullWidth={isSmDown}
                 sx={{
@@ -421,17 +439,27 @@ export default function PluginControl() {
 
       <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
         <Stack spacing={1}>
-          {PLUGIN_CATALOG.map((p) => (
+          {catalog.map((p) => (
             <PluginRow
               key={p.key}
               plugin={p}
               enabled={draftEnabled.has(p.key)}
               onToggle={handleToggle}
-              readOnly={!canManage || loading}
+              readOnly={!canManage || loading || catalogLoading}
               coverage={coverage}
               totalDevices={totalDevices}
             />
           ))}
+          {catalogLoading && catalog.length === 0 ? (
+            <Typography variant="body2" sx={{ color: "text.secondary", py: 2 }}>
+              Loading plugin catalog…
+            </Typography>
+          ) : null}
+          {catalogError ? (
+            <Typography variant="body2" sx={{ color: "error.main", py: 1 }}>
+              Failed to load plugin catalog: {String(catalogError?.message || catalogError)}
+            </Typography>
+          ) : null}
         </Stack>
       </SectionPaper>
 
