@@ -61,6 +61,7 @@ function PageFallback() {
   );
 }
 
+
 const USER_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 const USER_IDLE_COUNTDOWN_SECONDS = 15;
 const USER_ACTIVITY_EVENTS = [
@@ -89,39 +90,102 @@ const EMPTY_TENANT_GATED_PAGES = new Set([
 
 function readNumber(...values) {
   for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;
 }
 
-function getSummaryInventoryCount(summary) {
+function normalizeApiPayload(payload) {
+  // Some API helpers return the domain object directly, while a few
+  // endpoints wrap it as { ok, data } or { ok, summary }. The empty-tenant
+  // probe needs to be tolerant because its job is defensive UX, not strict
+  // response validation.
+  if (!payload || typeof payload !== "object") return payload;
+  return payload.data && typeof payload.data === "object" ? payload.data : payload;
+}
+
+function getDashboardKnownDeviceCount(payload) {
+  const summary = normalizeApiPayload(payload);
   if (!summary || typeof summary !== "object") return 0;
 
+  // Critical rule: do NOT use activeHosts / onlineNow / latest_24h here.
+  // Those are recency/online signals, not fleet-existence signals. A tenant
+  // with 13 known devices and 0 online devices must not see the global
+  // "No information" overlay.
   return readNumber(
-    summary.devices,
     summary.totalDevices,
     summary.total_devices,
-    summary.enrolledDevices,
-    summary.enrolled_devices,
-    summary.activeHosts,
-    summary.active_hosts,
     summary.totalHosts,
     summary.total_hosts,
-    summary.hosts,
-    summary.reportingDevices,
-    summary.reporting_devices,
-    summary?.kpis?.devices,
+    summary.enrolledDevices,
+    summary.enrolled_devices,
+    summary.knownDevices,
+    summary.known_devices,
+    summary.hostsTotal,
+    summary.hosts_total,
+    summary.devicesTotal,
+    summary.devices_total,
     summary?.kpis?.totalDevices,
-    summary?.inventory?.devices,
-    summary?.inventory?.totalDevices
+    summary?.kpis?.totalHosts,
+    summary?.inventory?.totalDevices,
+    summary?.inventory?.totalHosts
+  );
+}
+
+function getComplianceKnownDeviceCount(payload) {
+  const data = normalizeApiPayload(payload);
+  const summary = data?.summary && typeof data.summary === "object" ? data.summary : data;
+  if (!summary || typeof summary !== "object") return 0;
+
+  // Example real shape:
+  // { ok: true, summary: { total: 607, unique_devices: 6, latest_24h: 0 } }
+  // latest_24h must NOT drive the global empty state. unique_devices does.
+  return readNumber(
+    summary.unique_devices,
+    summary.uniqueDevices,
+    summary.devices,
+    summary.deviceCount,
+    summary.device_count,
+    summary.hosts,
+    summary.totalDevices,
+    summary.total_hosts
   );
 }
 
 function normalizeHostsTotal(payload) {
-  if (Array.isArray(payload)) return payload.length;
-  const items = Array.isArray(payload?.items) ? payload.items : [];
-  return readNumber(payload?.total, payload?.totalItems, payload?.count, items.length);
+  const data = normalizeApiPayload(payload);
+  if (Array.isArray(data)) return data.length;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return readNumber(data?.total, data?.totalItems, data?.count, data?.totalHosts, items.length);
+}
+
+function getPluginCoverageKnownDeviceCount(payload) {
+  const data = normalizeApiPayload(payload);
+  if (!data || typeof data !== "object") return 0;
+
+  const byPlugin = Array.isArray(data.byPlugin) ? data.byPlugin : [];
+  const maxPluginTotal = byPlugin.reduce((max, row) => {
+    const rowTotal = readNumber(
+      row?.total,
+      row?.enrolled,
+      row?.enrolledCount,
+      row?.coveredCount,
+      row?.covered,
+      row?.count
+    );
+    return Math.max(max, rowTotal);
+  }, 0);
+
+  return readNumber(
+    data.total,
+    data.enrolled,
+    data.enrolledCount,
+    data.totalDevices,
+    data.totalHosts,
+    maxPluginTotal
+  );
 }
 
 function NoInformationOverlay({ onNavigate }) {
@@ -241,7 +305,6 @@ function NoInformationOverlay({ onNavigate }) {
     </Box>
   );
 }
-
 
 function UserInactivityDialog({
   open,
@@ -397,6 +460,7 @@ export default function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [viewReloadToken, setViewReloadToken] = React.useState(0);
   const [temporaryWarning, setTemporaryWarning] = React.useState(null);
+
   const [idleDialogOpen, setIdleDialogOpen] = React.useState(false);
   const [idleCountdown, setIdleCountdown] = React.useState(USER_IDLE_COUNTDOWN_SECONDS);
   const [idleStayActiveLoading, setIdleStayActiveLoading] = React.useState(false);
@@ -407,25 +471,6 @@ export default function AppShell() {
   const activityThrottleRef = React.useRef(0);
   const idleDialogOpenRef = React.useRef(false);
   const idleSigningOutRef = React.useRef(false);
-
-  React.useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      try {
-        const res = await httpGetJson("/api/bootstrap");
-        if (!alive) return;
-        setBootstrap(res);
-      } catch (e) {
-        console.error("Bootstrap fetch failed in AppShell:", e);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
 
   React.useEffect(() => {
     idleDialogOpenRef.current = idleDialogOpen;
@@ -574,21 +619,58 @@ export default function AppShell() {
     return () => window.clearInterval(intervalId);
   }, [idleDialogOpen, idleStayActiveLoading, idleSigningOut, performIdleLogout]);
 
+
+  React.useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const res = await httpGetJson("/api/bootstrap");
+        if (!alive) return;
+        setBootstrap(res);
+      } catch (e) {
+        console.error("Bootstrap fetch failed in AppShell:", e);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+
   const resolveTenantInventoryState = React.useCallback(async () => {
     setTenantInventoryState((prev) => (prev === "empty" || prev === "has-data" ? prev : "checking"));
 
-    const [summaryRes, hostsRes] = await Promise.allSettled([
-      httpGetJson("/api/v1/dashboard/summary", {
+    const requests = {
+      dashboardSummary: httpGetJson("/api/v1/dashboard/summary", {
         cache: "no-store",
         notifyOnTemporaryError: false,
       }),
-      httpGetJson("/api/v1/dashboard/hosts?page=1&pageSize=1", {
+      hosts: httpGetJson("/api/v1/dashboard/hosts?page=1&pageSize=1", {
         cache: "no-store",
         notifyOnTemporaryError: false,
       }),
-    ]);
+      complianceSummary: httpGetJson("/api/v1/security/compliance/summary", {
+        cache: "no-store",
+        notifyOnTemporaryError: false,
+      }),
+      knownDevices: httpGetJson("/api/v1/orchestrator/known-devices?page=1&pageSize=1", {
+        cache: "no-store",
+        notifyOnTemporaryError: false,
+      }),
+      pluginCoverage: httpGetJson("/api/v1/dashboard/plugin-coverage", {
+        cache: "no-store",
+        notifyOnTemporaryError: false,
+      }),
+    };
 
-    const authFailure = [summaryRes, hostsRes].some(
+    const keys = Object.keys(requests);
+    const settled = await Promise.allSettled(keys.map((key) => requests[key]));
+    const results = Object.fromEntries(keys.map((key, index) => [key, settled[index]]));
+    const resultList = Object.values(results);
+
+    const authFailure = resultList.some(
       (res) => res.status === "rejected" && isAuthError(res.reason)
     );
 
@@ -597,15 +679,33 @@ export default function AppShell() {
       return;
     }
 
-    const temporaryFailure = [summaryRes, hostsRes].some(
+    const temporaryFailure = resultList.some(
       (res) => res.status === "rejected" && isTemporaryApiError(res.reason)
     );
 
-    const summaryOk = summaryRes.status === "fulfilled";
-    const hostsOk = hostsRes.status === "fulfilled";
-    const summaryCount = summaryOk ? getSummaryInventoryCount(summaryRes.value) : 0;
-    const hostsTotal = hostsOk ? normalizeHostsTotal(hostsRes.value) : 0;
-    const hasInventory = summaryCount > 0 || hostsTotal > 0;
+    const fulfilledCount = resultList.filter((res) => res.status === "fulfilled").length;
+    const dashboardCount = results.dashboardSummary.status === "fulfilled"
+      ? getDashboardKnownDeviceCount(results.dashboardSummary.value)
+      : 0;
+    const hostsTotal = results.hosts.status === "fulfilled"
+      ? normalizeHostsTotal(results.hosts.value)
+      : 0;
+    const complianceDevices = results.complianceSummary.status === "fulfilled"
+      ? getComplianceKnownDeviceCount(results.complianceSummary.value)
+      : 0;
+    const knownDevicesTotal = results.knownDevices.status === "fulfilled"
+      ? normalizeHostsTotal(results.knownDevices.value)
+      : 0;
+    const pluginDevices = results.pluginCoverage.status === "fulfilled"
+      ? getPluginCoverageKnownDeviceCount(results.pluginCoverage.value)
+      : 0;
+
+    const hasInventory =
+      dashboardCount > 0 ||
+      hostsTotal > 0 ||
+      complianceDevices > 0 ||
+      knownDevicesTotal > 0 ||
+      pluginDevices > 0;
 
     if (hasInventory) {
       setTenantInventoryState("has-data");
@@ -613,9 +713,20 @@ export default function AppShell() {
       return;
     }
 
-    // The hosts endpoint is the safest source of truth for an empty fleet.
-    // If it failed temporarily, do not infer an empty tenant from partial data.
-    if (hostsOk && !temporaryFailure) {
+    // Only show the global empty-tenant overlay when we received successful
+    // evidence that the tenant has no known devices. Never infer an empty
+    // tenant from activeHosts=0, latest_24h=0, a temporary backend failure,
+    // or one empty auxiliary endpoint.
+    const hasReliableEmptyEvidence =
+      fulfilledCount > 0 &&
+      !temporaryFailure &&
+      (
+        results.dashboardSummary.status === "fulfilled" ||
+        results.hosts.status === "fulfilled" ||
+        results.knownDevices.status === "fulfilled"
+      );
+
+    if (hasReliableEmptyEvidence) {
       setTenantInventoryState("empty");
       setShowWelcomeEntry(true);
       return;
@@ -642,9 +753,24 @@ export default function AppShell() {
 
   const handleAssetsEmptyStateChange = React.useCallback((isEmpty) => {
     const nextEmpty = Boolean(isEmpty);
-    setShowWelcomeEntry(nextEmpty);
-    setTenantInventoryState(nextEmpty ? "empty" : "has-data");
-  }, []);
+
+    if (!nextEmpty) {
+      setShowWelcomeEntry(false);
+      setTenantInventoryState("has-data");
+      return;
+    }
+
+    // Asset Management can report an empty local hosts table while other
+    // Overview/compliance/plugin endpoints already prove that the tenant has
+    // data. Re-run the global probe before promoting that local empty state
+    // into the app-wide blur overlay.
+    resolveTenantInventoryState().catch((err) => {
+      if (!isAuthError(err) && !isTemporaryApiError(err)) {
+        console.warn("Tenant inventory empty-state recheck failed:", err?.message || err);
+      }
+      setTenantInventoryState("unknown");
+    });
+  }, [resolveTenantInventoryState]);
 
   React.useEffect(() => {
     const handleTemporaryError = (event) => {
@@ -693,7 +819,8 @@ export default function AppShell() {
   const handleRetryCurrentView = React.useCallback(() => {
     setTemporaryWarning(null);
     setViewReloadToken((prev) => prev + 1);
-  }, []);
+    resolveTenantInventoryState().catch(() => {});
+  }, [resolveTenantInventoryState]);
 
   React.useEffect(() => {
     updateSearchParams({ page: selectedPage });

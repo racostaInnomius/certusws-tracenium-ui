@@ -50,21 +50,111 @@ function firstNonEmptyText(...values) {
   return "";
 }
 
+function firstDefined(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const text = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y", "active"].includes(text)) return true;
+  if (["false", "0", "no", "n", "inactive", "disabled"].includes(text)) return false;
+
+  return fallback;
+}
+
+function firstObject(...values) {
+  for (const value of values) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  }
+  return null;
+}
+
+function getTenantMemberFromAuth(auth) {
+  return firstObject(
+    auth?.tenantMember,
+    auth?.tenant_member,
+    auth?.user?.tenantMember,
+    auth?.user?.tenant_member,
+    auth?.bootstrap?.tenantMember,
+    auth?.bootstrap?.tenant_member,
+    auth?.bootstrap?.user?.tenantMember,
+    auth?.bootstrap?.user?.tenant_member
+  );
+}
+
+function getTenantMemberRoleFromAuth(auth) {
+  const member = getTenantMemberFromAuth(auth);
+  return firstNonEmptyText(
+    member?.role,
+    member?.traceniumRole,
+    member?.tracenium_role,
+    auth?.traceniumRole,
+    auth?.tracenium_role,
+    auth?.user?.traceniumRole,
+    auth?.user?.tracenium_role,
+    auth?.bootstrap?.traceniumRole,
+    auth?.bootstrap?.tracenium_role,
+    auth?.bootstrap?.user?.traceniumRole,
+    auth?.bootstrap?.user?.tracenium_role
+  ).toUpperCase();
+}
+
+function getTenantMemberIsActiveFromAuth(auth) {
+  const member = getTenantMemberFromAuth(auth);
+  const role = getTenantMemberRoleFromAuth(auth);
+  const activeCandidate = firstDefined(
+    member?.isActive,
+    member?.is_active,
+    member?.active,
+    member?.enabled,
+    auth?.tenantMemberIsActive,
+    auth?.tenant_member_is_active,
+    auth?.user?.tenantMemberIsActive,
+    auth?.user?.tenant_member_is_active,
+    auth?.bootstrap?.tenantMemberIsActive,
+    auth?.bootstrap?.tenant_member_is_active,
+    auth?.bootstrap?.user?.tenantMemberIsActive,
+    auth?.bootstrap?.user?.tenant_member_is_active
+  );
+
+  return normalizeBoolean(activeCandidate, Boolean(role));
+}
+
 function getTenantIdFromAuth(auth) {
+  const member = getTenantMemberFromAuth(auth);
+
   return firstNonEmptyText(
     auth?.tenantId,
     auth?.tenant_id,
     auth?.tenant?.id,
     auth?.currentTenant?.id,
-    auth?.tenantMember?.tenantId,
-    auth?.tenantMember?.tenant_id,
-    auth?.tenant_member?.tenantId,
-    auth?.tenant_member?.tenant_id
+    member?.tenantId,
+    member?.tenant_id,
+    auth?.bootstrap?.tenantId,
+    auth?.bootstrap?.tenant_id,
+    auth?.bootstrap?.tenant?.id,
+    auth?.bootstrap?.user?.tenantId,
+    auth?.bootstrap?.user?.tenant_id
   );
 }
 
 function getTenantNameFromAuth(auth) {
-  const tenant = auth?.tenant || auth?.currentTenant || auth?.tenantMember?.tenant || auth?.tenant_member?.tenant || {};
+  const member = getTenantMemberFromAuth(auth);
+  const tenant = firstObject(
+    auth?.tenant,
+    auth?.currentTenant,
+    member?.tenant,
+    auth?.bootstrap?.tenant,
+    auth?.bootstrap?.currentTenant,
+    auth?.bootstrap?.user?.tenant
+  ) || {};
 
   return firstNonEmptyText(
     auth?.tenantName,
@@ -77,7 +167,11 @@ function getTenantNameFromAuth(auth) {
     tenant?.displayName,
     tenant?.display_name,
     tenant?.externalIdpTenant,
-    tenant?.external_idp_tenant
+    tenant?.external_idp_tenant,
+    auth?.bootstrap?.tenantName,
+    auth?.bootstrap?.tenant_name,
+    auth?.bootstrap?.tenantDisplayName,
+    auth?.bootstrap?.tenant_display_name
   );
 }
 
@@ -524,12 +618,11 @@ export default function Sidebar({
 
   const tenantDisplayName = authTenantName || resolvedTenantName || "";
 
-  const tenantMemberRole = auth?.tenantMember?.role;
-  const tenantMemberIsActive = auth?.tenantMember?.isActive;
+  const tenantMemberRole = getTenantMemberRoleFromAuth(auth);
+  const tenantMemberIsActive = getTenantMemberIsActiveFromAuth(auth);
   const isPrivileged =
     tenantMemberIsActive === true &&
-    (String(tenantMemberRole ?? "") === "OWNER" ||
-      String(tenantMemberRole ?? "") === "ADMIN");
+    (tenantMemberRole === "OWNER" || tenantMemberRole === "ADMIN");
 
   // Items render top-to-bottom in the sidebar. The list is split into
   // two functional groups separated by a divider:

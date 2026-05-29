@@ -17,6 +17,7 @@ export const API = {
   LOGIN: "/auth/login",
 };
 import Logo from "../assets/T.png";
+import { useAuthContext } from "./AuthContext";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -42,6 +43,60 @@ function sleep(ms, signal) {
 
 function isUnauthenticatedError(status, text = "") {
   return status === 401 || String(text || "").includes("UNAUTHENTICATED");
+}
+
+function parseBootstrapBody(text = "") {
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function getBootstrapErrorCode(body, text = "") {
+  return String(
+    body?.error ||
+      body?.code ||
+      body?.reason ||
+      body?.status ||
+      text ||
+      ""
+  ).toUpperCase();
+}
+
+function isNoServiceAccessError(status, text = "") {
+  const body = parseBootstrapBody(text);
+  const code = getBootstrapErrorCode(body, text);
+
+  return (
+    status === 403 &&
+    (code.includes("NO_SERVICE_ACCESS") ||
+      code.includes("SERVICE_ACCESS") ||
+      code.includes("SERVICE_NOT_ALLOWED"))
+  );
+}
+
+function normalizeNoServiceAccessInfo(status, text = "") {
+  const body = parseBootstrapBody(text) || {};
+  const detail = body.detail || body.details || body.context || body;
+  const services = Array.isArray(detail?.servicesSummary)
+    ? detail.servicesSummary
+    : Array.isArray(body?.servicesSummary)
+      ? body.servicesSummary
+      : [];
+
+  return {
+    status,
+    code: getBootstrapErrorCode(body, text) || "NO_SERVICE_ACCESS",
+    message:
+      body?.message ||
+      "Your account is authenticated, but it is not enabled for Tracenium in this environment.",
+    expectedServiceKey: detail?.expectedServiceKey || body?.expectedServiceKey || "",
+    externalIdpTenant: detail?.externalIdpTenant || body?.externalIdpTenant || "",
+    servicesSummary: services,
+  };
 }
 
 function isRetriableBootstrapError(errorOrStatus) {
@@ -284,14 +339,16 @@ function RetryButton({ disabled, onClick }) {
 }
 
 export default function AuthGate({ children }) {
-  const [status, setStatus] = React.useState("loading"); // loading | connecting | preparing | authed | error
+  const [status, setStatus] = React.useState("loading"); // loading | connecting | preparing | authed | noServiceAccess | error
   const [isInactive, setIsInactive] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
+  const [accessDeniedInfo, setAccessDeniedInfo] = React.useState(null);
   const [errorConnectivityState, setErrorConnectivityState] = React.useState("unknown");
   const [attempt, setAttempt] = React.useState(1);
   const [retryNonce, setRetryNonce] = React.useState(0);
   const [isRetryingNow, setIsRetryingNow] = React.useState(false);
   const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
+  const { refreshAuth } = useAuthContext();
 
   const handleLogout = async () => {
     try {
@@ -343,6 +400,12 @@ export default function AuthGate({ children }) {
 
         const text = await res.text().catch(() => "");
 
+        if (isNoServiceAccessError(res.status, text)) {
+          setAccessDeniedInfo(normalizeNoServiceAccessInfo(res.status, text));
+          setStatus("noServiceAccess");
+          return { done: true };
+        }
+
         if (isUnauthenticatedError(res.status, text)) {
           if (!redirectedRef.current) {
             redirectedRef.current = true;
@@ -358,9 +421,16 @@ export default function AuthGate({ children }) {
           throw err;
         }
 
-        const data = text ? JSON.parse(text) : null;
+        const data = parseBootstrapBody(text);
 
         if (cancelled) return { done: true };
+
+        // AuthGate is the first place that knows bootstrap has succeeded after
+        // tenant provisioning. Push that exact fresh payload into AuthContext so
+        // Sidebar / role-gated pages do not keep the earlier partial bootstrap
+        // snapshot. Without this, a newly-created OWNER can see the non-admin
+        // menu until a full logout/login refreshes the context.
+        await refreshAuth(data);
 
         if (data?.tenantMember && data.tenantMember.isActive === false) {
           setIsInactive(true);
@@ -393,6 +463,7 @@ export default function AuthGate({ children }) {
 
     async function runBootstrapLoop() {
       setErrorMessage("");
+      setAccessDeniedInfo(null);
       setErrorConnectivityState("unknown");
       setIsRetryingNow(false);
       setStatus("loading");
@@ -450,7 +521,7 @@ export default function AuthGate({ children }) {
       cancelled = true;
       loopController.abort();
     };
-  }, [retryNonce]);
+  }, [retryNonce, refreshAuth]);
 
   const retryNow = () => {
     setIsRetryingNow(true);
@@ -561,6 +632,121 @@ export default function AuthGate({ children }) {
           </Fade>
         </Box>
       </Box>
+    );
+  }
+
+  if (status === "noServiceAccess") {
+    const assignedServices = Array.isArray(accessDeniedInfo?.servicesSummary)
+      ? accessDeniedInfo.servicesSummary
+      : [];
+
+    const assignedServicesText = assignedServices
+      .map((service) => {
+        const key = service?.serviceKey || service?.key || service?.name || "Unknown service";
+        const role = service?.role ? ` · ${service.role}` : "";
+        const enabled = service?.enabled === false ? " · disabled" : "";
+        return `${key}${role}${enabled}`;
+      })
+      .join(", ");
+
+    return (
+      <AuthShell
+        title="Access not enabled"
+        description="Your sign-in was successful, but your account is not currently enabled for Tracenium in this environment. Please contact your administrator to assign Tracenium access and try again."
+        maxWidth={500}
+        minHeight={470}
+      >
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 380,
+            mb: 2.5,
+            px: 2,
+            py: 1.5,
+            borderRadius: "14px",
+            border: "1px solid rgba(248, 181, 52, 0.45)",
+            background: "rgba(248, 181, 52, 0.10)",
+            textAlign: "left",
+          }}
+        >
+          <Typography
+            sx={{
+              color: "#fde68a",
+              fontWeight: 700,
+              fontSize: 13,
+              mb: 0.75,
+            }}
+          >
+            NO_SERVICE_ACCESS
+          </Typography>
+
+          <Typography sx={{ color: "#e5e7eb", fontSize: 13, lineHeight: 1.6 }}>
+            {accessDeniedInfo?.message ||
+              "The user is authenticated, but does not have access to this Tracenium service."}
+          </Typography>
+
+          {accessDeniedInfo?.expectedServiceKey ? (
+            <Typography sx={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, mt: 1 }}>
+              Expected service: {accessDeniedInfo.expectedServiceKey}
+            </Typography>
+          ) : null}
+
+          {assignedServicesText ? (
+            <Typography sx={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, mt: 0.5 }}>
+              Assigned service: {assignedServicesText}
+            </Typography>
+          ) : null}
+        </Box>
+
+        <Box
+          sx={{
+            display: "flex",
+            gap: 1.25,
+            width: "100%",
+            maxWidth: 380,
+            flexDirection: { xs: "column", sm: "row" },
+          }}
+        >
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleLogout}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              borderRadius: "12px",
+              py: 1.25,
+              background: "rgb(70,157,159)",
+              "&:hover": {
+                background: "rgb(60,140,142)",
+              },
+            }}
+          >
+            Sign out
+          </Button>
+
+          <Button
+            variant="outlined"
+            fullWidth
+            onClick={retryNow}
+            disabled={isRetryingNow}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              borderRadius: "12px",
+              py: 1.25,
+              color: "rgb(116,249,253)",
+              borderColor: "rgba(116,249,253,0.55)",
+              "&:hover": {
+                borderColor: "rgb(116,249,253)",
+                background: "rgba(116,249,253,0.08)",
+              },
+            }}
+          >
+            Try again
+          </Button>
+        </Box>
+      </AuthShell>
     );
   }
 

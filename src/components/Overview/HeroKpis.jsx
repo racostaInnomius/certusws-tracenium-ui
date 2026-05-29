@@ -183,26 +183,19 @@ export default function HeroKpis({ results, loading, onNavigate }) {
 
   // Card 1: Total devices
   //
-  // Contract confirmed with backend:
-  //   - totalHosts / totalDevices = all known/enrolled devices for tenant
-  //   - activeHosts = online/recent-heartbeat devices only
-  //
-  // Therefore the Devices KPI must never prefer activeHosts, otherwise a
-  // tenant can show Recent hosts while the Devices card stays at 0.
-  const recentHostsPayload = getValue(results?.recentHosts);
-  const recentHostsTotal =
-    Number(recentHostsPayload?.total ?? recentHostsPayload?.pagination?.total ?? NaN);
+  // Important: this must use the fleet inventory count, not activeHosts.
+  // activeHosts/onlineNow are recency signals and can legitimately be 0
+  // while the tenant still has devices and historical telemetry.
   const totalDevices =
-    Number(
-      dashboard?.totalHosts ??
-        dashboard?.totalDevices ??
-        dashboard?.enrolledDevices ??
-        dashboard?.devicesTotal ??
-        dashboard?.hostsTotal ??
-        dashboard?.devices ??
-        (Number.isFinite(recentHostsTotal) ? recentHostsTotal : undefined) ??
-        0
-    ) || 0;
+    dashboard?.totalDevices ??
+    dashboard?.total_devices ??
+    dashboard?.totalHosts ??
+    dashboard?.total_hosts ??
+    dashboard?.enrolledDevices ??
+    dashboard?.enrolled_devices ??
+    dashboard?.devices ??
+    dashboard?.total ??
+    0;
 
   // Card 2: Online now
   //
