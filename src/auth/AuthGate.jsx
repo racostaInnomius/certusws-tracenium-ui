@@ -295,7 +295,7 @@ function RetryProgress({ attempt }) {
   );
 }
 
-function RetryMeta({ attempt }) {
+function RetryMeta({ attempt: _attempt }) {
   return (
     <Typography
       sx={{

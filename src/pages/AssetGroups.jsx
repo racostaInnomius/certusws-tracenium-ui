@@ -317,12 +317,6 @@ function getCatalogOptions(fieldSpec, fieldKey) {
     .filter(Boolean);
 }
 
-function isField(fieldSpec, fieldKey, allowed) {
-  const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
-  const label = normalizeCriteriaKey(fieldSpec?.label);
-  return allowed.includes(key) || allowed.includes(label);
-}
-
 function getSuggestionFieldKey(fieldSpec, fieldKey) {
   const key = normalizeCriteriaKey(fieldSpec?.key ?? fieldKey);
   const label = normalizeCriteriaKey(fieldSpec?.label);
@@ -344,14 +338,6 @@ function getSuggestionFieldKey(fieldSpec, fieldKey) {
   if (["ip", "local_ip", "localip", "ip_address", "ipaddress"].includes(candidate)) return "ip";
 
   return fieldSpec?.key || fieldKey || "";
-}
-
-function isPlatformField(fieldSpec, fieldKey) {
-  return getSuggestionFieldKey(fieldSpec, fieldKey) === "platform";
-}
-
-function isPluginEnabledField(fieldSpec, fieldKey) {
-  return getSuggestionFieldKey(fieldSpec, fieldKey) === "pluginEnabled";
 }
 
 function isIpSubnetOperator(opSpec) {
@@ -1874,7 +1860,6 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
   const [description, setDescription] = React.useState("");
   const [kind, setKind] = React.useState("static");
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
-  const [search, setSearch] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
@@ -1895,7 +1880,6 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
       setDescription("");
       setKind("static");
       setSelectedIds(new Set());
-      setSearch("");
       setSubmitting(false);
       setErrorMessage("");
       setPredicates([]);
@@ -3116,7 +3100,7 @@ export default function AssetGroups() {
           connected: d?.connected === true,
         })).filter((d) => d.deviceId)
       );
-    } catch (err) {
+    } catch {
       // Devices list isn't critical for the groups page itself; just
       // means the picker / hostname decoration shows IDs only.
       notify("error", "Failed to load device list");

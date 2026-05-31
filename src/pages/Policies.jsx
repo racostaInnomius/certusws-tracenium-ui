@@ -10,7 +10,6 @@ import {
   FormControlLabel,
   MenuItem,
   Paper,
-  Snackbar,
   Stack,
   Switch,
   Tab,
@@ -1593,8 +1592,6 @@ export default function Policies() {
   // while loading so we never PUT a partial enabled list.
   const {
     catalog: pluginCatalog,
-    loading: catalogLoading,
-    error: catalogError,
   } = usePluginCatalog();
 
   const tenantId = auth?.tenantId;

@@ -285,7 +285,6 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     });
   // dcSend is stable (reads from ref); screenInfo.fps included so a
   // pending screenInfo update doesn't ship a stale fps with the quality.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoQuality, rtt, state, screenInfo?.fps]);
 
   // ── M3.S4 — Input forwarding ─────────────────────────────────────────
@@ -390,7 +389,6 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       window.removeEventListener("blur",    onBlur);
     };
   // dcSend is stable via closure over dcRef; safe to omit.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controlEnabled, state]);
 
   // Toggle off → release everything so we never leave a held key /
@@ -538,7 +536,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
   // Shared render path used by both single-message "frame" (M3.S1
   // small frames) and fully-assembled chunked frames (M3.S2).
-  function renderFrame(data, width, height) {
+  function renderFrame(data, _width, _height) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
