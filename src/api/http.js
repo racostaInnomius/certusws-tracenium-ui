@@ -14,6 +14,8 @@ const API_BASE = import.meta.env.VITE_API_BASE;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const STORAGE_PREFIX = "tnm:http-cache:";
+const SESSION_SCOPE_STORAGE_KEY = "tnm:session-cache-scope:v1";
+const DEFAULT_SESSION_SCOPE = "anonymous";
 
 const DEFAULT_STALE_MS = 60_000;
 const DEFAULT_STORAGE_MAX_AGE_MS = 10 * 60_000;
@@ -25,6 +27,19 @@ let authRedirectStarted = false;
 
 const memCache = new Map();
 const inFlightGets = new Map();
+
+function readStoredSessionScope() {
+  if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
+
+  try {
+    const stored = window.sessionStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
+    return stored || DEFAULT_SESSION_SCOPE;
+  } catch {
+    return DEFAULT_SESSION_SCOPE;
+  }
+}
+
+let currentSessionScope = readStoredSessionScope();
 
 export class AuthError extends Error {
   constructor(message = "UNAUTHENTICATED", options = {}) {
@@ -47,6 +62,37 @@ export class TemporaryServerError extends Error {
     this.url = options.url || "";
     this.cause = options.cause;
   }
+}
+
+function normalizeSessionScope(scope) {
+  const normalized = String(scope || "").trim();
+  return normalized || DEFAULT_SESSION_SCOPE;
+}
+
+export function getApiCacheSessionScope() {
+  return currentSessionScope || DEFAULT_SESSION_SCOPE;
+}
+
+export function setApiCacheSessionScope(scope) {
+  const nextScope = normalizeSessionScope(scope);
+  const previousScope = normalizeSessionScope(currentSessionScope);
+
+  currentSessionScope = nextScope;
+  authRedirectStarted = false;
+
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
+    } catch {
+      // best effort
+    }
+  }
+
+  if (nextScope !== previousScope) {
+    clearApiCache();
+  }
+
+  return nextScope;
 }
 
 
@@ -211,7 +257,15 @@ function getCacheProfileForUrl(url) {
 }
 
 function buildCacheKey(url) {
-  return String(url || "");
+  const rawKey = String(url || "");
+  return `${getApiCacheSessionScope()}::${rawKey}`;
+}
+
+function unscopedCacheKey(cacheKey) {
+  const text = String(cacheKey || "");
+  const marker = "::";
+  const markerIndex = text.indexOf(marker);
+  return markerIndex >= 0 ? text.slice(markerIndex + marker.length) : text;
 }
 
 function isExpired(entry, storageMaxAgeMs) {
@@ -296,7 +350,7 @@ export function invalidateApiCachePrefix(prefix) {
   const normalizedPrefix = String(prefix);
 
   Array.from(memCache.keys()).forEach((key) => {
-    if (String(key).startsWith(normalizedPrefix)) {
+    if (unscopedCacheKey(key).startsWith(normalizedPrefix)) {
       memCache.delete(key);
     }
   });
@@ -312,7 +366,7 @@ export function invalidateApiCachePrefix(prefix) {
       if (
         key &&
         key.startsWith(STORAGE_PREFIX) &&
-        key.slice(STORAGE_PREFIX.length).startsWith(normalizedPrefix)
+        unscopedCacheKey(key.slice(STORAGE_PREFIX.length)).startsWith(normalizedPrefix)
       ) {
         keysToRemove.push(key);
       }

@@ -183,12 +183,16 @@ export default function HeroKpis({ results, loading, onNavigate }) {
 
   // Card 1: Total devices
   //
-  // `/dashboard/summary` reports this as `activeHosts` (the current
-  // backend contract observed live). Older inline dashboard variants
-  // used `devices` / `total` — we preserve those as fallbacks so the
-  // card keeps working if the backend ever renames again.
+  // Important: this must use the fleet inventory count, not activeHosts.
+  // activeHosts/onlineNow are recency signals and can legitimately be 0
+  // while the tenant still has devices and historical telemetry.
   const totalDevices =
-    dashboard?.activeHosts ??
+    dashboard?.totalDevices ??
+    dashboard?.total_devices ??
+    dashboard?.totalHosts ??
+    dashboard?.total_hosts ??
+    dashboard?.enrolledDevices ??
+    dashboard?.enrolled_devices ??
     dashboard?.devices ??
     dashboard?.total ??
     0;

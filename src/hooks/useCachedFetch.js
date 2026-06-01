@@ -39,6 +39,61 @@ const memCache = new Map();
 const inFlight = new Map();
 
 const STORAGE_PREFIX = "tnm:cache:";
+const SESSION_SCOPE_STORAGE_KEY = "tnm:cache-scope:v1";
+const DEFAULT_SESSION_SCOPE = "anonymous";
+
+function readStoredSessionScope() {
+  if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
+
+  try {
+    const stored = window.sessionStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
+    return stored || DEFAULT_SESSION_SCOPE;
+  } catch {
+    return DEFAULT_SESSION_SCOPE;
+  }
+}
+
+let currentSessionScope = readStoredSessionScope();
+
+function normalizeSessionScope(scope) {
+  const normalized = String(scope || "").trim();
+  return normalized || DEFAULT_SESSION_SCOPE;
+}
+
+export function getCachedFetchSessionScope() {
+  return currentSessionScope || DEFAULT_SESSION_SCOPE;
+}
+
+export function setCachedFetchSessionScope(scope) {
+  const nextScope = normalizeSessionScope(scope);
+  const previousScope = normalizeSessionScope(currentSessionScope);
+
+  currentSessionScope = nextScope;
+
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
+    } catch {
+      // best effort
+    }
+  }
+
+  if (nextScope !== previousScope) {
+    clearCachedFetch();
+  }
+
+  return nextScope;
+}
+
+function buildScopedCacheKey(key) {
+  return `${getCachedFetchSessionScope()}::${String(key || "")}`;
+}
+
+function unscopedCacheKey(key) {
+  const text = String(key || "");
+  const markerIndex = text.indexOf("::");
+  return markerIndex >= 0 ? text.slice(markerIndex + 2) : text;
+}
 
 const DEFAULT_STALE_MS = 60_000;
 const DEFAULT_STORAGE_MAX_AGE_MS = 10 * 60_000;
@@ -65,33 +120,34 @@ function isEntryExpired(entry, storageMaxAgeMs) {
 }
 
 function readCache(key, options = {}) {
+  const scopedKey = buildScopedCacheKey(key);
   const storageMaxAgeMs =
     Number(options.storageMaxAgeMs ?? DEFAULT_STORAGE_MAX_AGE_MS) ||
     DEFAULT_STORAGE_MAX_AGE_MS;
 
-  if (memCache.has(key)) {
-    const entry = memCache.get(key);
+  if (memCache.has(scopedKey)) {
+    const entry = memCache.get(scopedKey);
 
     if (!isEntryExpired(entry, storageMaxAgeMs)) {
       return entry;
     }
 
-    memCache.delete(key);
+    memCache.delete(scopedKey);
   }
 
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.sessionStorage?.getItem(getStorageKey(key));
+    const raw = window.sessionStorage?.getItem(getStorageKey(scopedKey));
     if (!raw) return null;
 
     const parsed = safeJsonParse(raw);
     if (!parsed || isEntryExpired(parsed, storageMaxAgeMs)) {
-      window.sessionStorage?.removeItem(getStorageKey(key));
+      window.sessionStorage?.removeItem(getStorageKey(scopedKey));
       return null;
     }
 
-    memCache.set(key, parsed);
+    memCache.set(scopedKey, parsed);
     return parsed;
   } catch {
     return null;
@@ -99,17 +155,18 @@ function readCache(key, options = {}) {
 }
 
 function writeCache(key, data) {
+  const scopedKey = buildScopedCacheKey(key);
   const entry = {
     data,
     ts: now(),
   };
 
-  memCache.set(key, entry);
+  memCache.set(scopedKey, entry);
 
   if (typeof window === "undefined") return entry;
 
   try {
-    window.sessionStorage?.setItem(getStorageKey(key), JSON.stringify(entry));
+    window.sessionStorage?.setItem(getStorageKey(scopedKey), JSON.stringify(entry));
   } catch {
     // Non-fatal. Some responses may be too large or not serializable.
     // The in-memory cache still works for the current session.
@@ -121,12 +178,13 @@ function writeCache(key, data) {
 export function invalidateCache(key) {
   if (!key) return;
 
-  memCache.delete(key);
+  const scopedKey = buildScopedCacheKey(key);
+  memCache.delete(scopedKey);
 
   if (typeof window === "undefined") return;
 
   try {
-    window.sessionStorage?.removeItem(getStorageKey(key));
+    window.sessionStorage?.removeItem(getStorageKey(scopedKey));
   } catch {
     // best effort
   }
@@ -136,7 +194,7 @@ export function invalidateCachePrefix(prefix) {
   if (!prefix) return;
 
   Array.from(memCache.keys()).forEach((key) => {
-    if (String(key).startsWith(prefix)) {
+    if (unscopedCacheKey(key).startsWith(prefix)) {
       memCache.delete(key);
     }
   });
@@ -152,7 +210,7 @@ export function invalidateCachePrefix(prefix) {
       if (
         storageKey &&
         storageKey.startsWith(STORAGE_PREFIX) &&
-        storageKey.slice(STORAGE_PREFIX.length).startsWith(prefix)
+        unscopedCacheKey(storageKey.slice(STORAGE_PREFIX.length)).startsWith(prefix)
       ) {
         keysToRemove.push(storageKey);
       }
@@ -168,6 +226,7 @@ export function invalidateCachePrefix(prefix) {
 
 export function clearCachedFetch() {
   memCache.clear();
+  inFlight.clear();
 
   if (typeof window === "undefined") return;
 
@@ -193,8 +252,10 @@ export function clearCachedFetch() {
 export async function prefetchCachedFetch(cacheKey, loader) {
   if (!cacheKey || typeof loader !== "function") return null;
 
-  if (inFlight.has(cacheKey)) {
-    return inFlight.get(cacheKey);
+  const scopedInFlightKey = buildScopedCacheKey(cacheKey);
+
+  if (inFlight.has(scopedInFlightKey)) {
+    return inFlight.get(scopedInFlightKey);
   }
 
   const promise = Promise.resolve()
@@ -204,10 +265,10 @@ export async function prefetchCachedFetch(cacheKey, loader) {
       return fresh;
     })
     .finally(() => {
-      inFlight.delete(cacheKey);
+      inFlight.delete(scopedInFlightKey);
     });
 
-  inFlight.set(cacheKey, promise);
+  inFlight.set(scopedInFlightKey, promise);
 
   return promise;
 }
@@ -325,7 +386,8 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
       }
 
       try {
-        let promise = inFlight.get(cacheKey);
+        const scopedInFlightKey = buildScopedCacheKey(cacheKey);
+        let promise = inFlight.get(scopedInFlightKey);
 
         if (!promise) {
           promise = Promise.resolve()
@@ -335,10 +397,10 @@ export function useCachedFetch(cacheKey, loader, options = {}) {
               return fresh;
             })
             .finally(() => {
-              inFlight.delete(cacheKey);
+              inFlight.delete(scopedInFlightKey);
             });
 
-          inFlight.set(cacheKey, promise);
+          inFlight.set(scopedInFlightKey, promise);
         }
 
         const fresh = await promise;

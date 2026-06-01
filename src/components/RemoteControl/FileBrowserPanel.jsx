@@ -94,10 +94,6 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function basename(path) {
-  return path.replace(/^.*\//, "") || path;
-}
-
 function parentPath(path) {
   if (!path || path === "/") return "/";
   const trimmed = path.replace(/\/$/, "");
