@@ -18,6 +18,8 @@ export const API = {
 };
 import Logo from "../assets/T.png";
 import { useAuthContext } from "./AuthContext";
+import { clearApiCache, setApiCacheSessionScope } from "../api/http";
+import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -295,7 +297,7 @@ function RetryProgress({ attempt }) {
   );
 }
 
-function RetryMeta({ attempt: _attempt }) {
+function RetryMeta({ attempt }) {
   return (
     <Typography
       sx={{
@@ -351,6 +353,11 @@ export default function AuthGate({ children }) {
   const { refreshAuth } = useAuthContext();
 
   const handleLogout = async () => {
+    clearApiCache();
+    clearCachedFetch();
+    setApiCacheSessionScope("signed-out");
+    setCachedFetchSessionScope("signed-out");
+
     try {
       const res = await fetch(`${API.BASE}/api/logout`, {
         method: "POST",

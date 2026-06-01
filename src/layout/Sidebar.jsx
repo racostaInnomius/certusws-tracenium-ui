@@ -15,6 +15,8 @@ import {
   useTheme,
 } from "@mui/material";
 import { useAuthContext } from "../auth/AuthContext";
+import { clearApiCache, setApiCacheSessionScope } from "../api/http";
+import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 
 import LogoutIcon from "@mui/icons-material/Logout";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
@@ -682,6 +684,11 @@ export default function Sidebar({
   ];
 
   const handleLogout = async () => {
+    clearApiCache();
+    clearCachedFetch();
+    setApiCacheSessionScope("signed-out");
+    setCachedFetchSessionScope("signed-out");
+
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/logout`, {
         method: "POST",

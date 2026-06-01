@@ -1,5 +1,6 @@
 import * as React from "react";
-import { httpGetJson, isAuthError } from "../api/http";
+import { httpGetJson, isAuthError, setApiCacheSessionScope } from "../api/http";
+import { setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 
 type AuthValue = {
   auth: any;
@@ -172,6 +173,68 @@ function normalizeBootstrapAuth(data: any) {
   };
 }
 
+function buildSessionCacheScope(auth: any) {
+  if (!isObject(auth)) return "signed-out";
+
+  const tenantMember = isObject(auth.tenantMember)
+    ? auth.tenantMember
+    : isObject(auth.tenant_member)
+      ? auth.tenant_member
+      : null;
+
+  const tenantId = firstNonEmptyText(
+    auth.tenantId,
+    auth.tenant_id,
+    tenantMember?.tenantId,
+    tenantMember?.tenant_id,
+    auth.bootstrap?.tenantId,
+    auth.bootstrap?.tenant_id
+  );
+
+  const subject = firstNonEmptyText(
+    auth.subject,
+    auth.sub,
+    auth.user?.subject,
+    auth.user?.sub,
+    auth.bootstrap?.subject,
+    auth.bootstrap?.sub
+  );
+
+  const memberId = firstNonEmptyText(
+    tenantMember?.id,
+    tenantMember?.memberId,
+    tenantMember?.member_id,
+    auth.bootstrap?.tenantMember?.id,
+    auth.bootstrap?.tenant_member?.id
+  );
+
+  const email = firstNonEmptyText(
+    auth.email,
+    auth.user?.email,
+    tenantMember?.email,
+    auth.bootstrap?.email,
+    auth.bootstrap?.tenantMember?.email,
+    auth.bootstrap?.tenant_member?.email
+  ).toLowerCase();
+
+  // Include tenant + subject as the primary boundary. Member/email are extra
+  // discriminators for environments where subject can be provider-local or
+  // where the same principal can switch tenants.
+  return [
+    tenantId || "no-tenant",
+    subject || "no-subject",
+    memberId || "no-member",
+    email || "no-email",
+  ].join(":");
+}
+
+function applySessionCacheScope(auth: any) {
+  const scope = buildSessionCacheScope(auth);
+  setApiCacheSessionScope(scope);
+  setCachedFetchSessionScope(scope);
+  return scope;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -187,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
 
     const normalized = normalizeBootstrapAuth(data);
+    applySessionCacheScope(normalized);
     setAuth(normalized);
     return normalized;
   }, []);
@@ -208,6 +272,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!alive) return;
+        applySessionCacheScope(null);
         setAuth(null);
       } finally {
         if (alive) setLoading(false);
