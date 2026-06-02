@@ -48,6 +48,7 @@ import { WebLinksAddon } from "xterm-addon-web-links";
 import "xterm/css/xterm.css";
 
 import { BRAND } from "../../theme/brand";
+import { getApiWsUrl } from "../../api/http";
 
 // State machine — drives the status strip + error rendering.
 const STATE = Object.freeze({
@@ -128,11 +129,11 @@ export default function ShellTerminal({ session, device, onClose }) {
     let cancelled = false;
 
     async function negotiate() {
-      // Connect the signaling WebSocket FIRST so we have somewhere
-      // to send the offer once we generate it. Note: same-origin
-      // ws:// in dev, wss:// in prod — derive from window.location.
-      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${wsProto}//${window.location.host}${session.signalingUrl}`);
+      // Connect the signaling WebSocket FIRST so we have somewhere to send the
+      // offer once we generate it. The WS lives on the API origin
+      // (api.tracenium.com), NOT the SPA origin (portal.tracenium.com) —
+      // getApiWsUrl resolves against VITE_API_BASE just like every REST call.
+      const ws = new WebSocket(getApiWsUrl(session.signalingUrl));
       wsRef.current = ws;
 
       // Open the PeerConnection with the TURN config the backend
