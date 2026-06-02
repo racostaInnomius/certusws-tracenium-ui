@@ -100,6 +100,41 @@ export function getLoginUrl() {
   return `${API_BASE}/auth/login`;
 }
 
+/**
+ * Build an absolute WebSocket URL for an API path (e.g. the RCP signaling
+ * endpoint). The signaling WS lives on the BACKEND origin (api.tracenium.com),
+ * NOT the SPA origin (portal.tracenium.com) — resolving against
+ * `window.location` connected the browser to the static-site host, which has
+ * no WS upgrade handler, so every signaling socket failed. We resolve against
+ * `VITE_API_BASE` instead, mirroring how every REST call uses `${API_BASE}`.
+ *
+ * `pathOrUrl` may be an absolute URL (returned as-is, scheme normalized) or a
+ * server-relative path like `/api/v1/remote-control/signaling/<id>`.
+ *
+ * Fallback: if VITE_API_BASE is unset or relative (some local-dev configs use a
+ * Vite proxy with a relative base), resolve against the page origin — correct
+ * there because dev serves API + WS from the same host.
+ */
+export function getApiWsUrl(pathOrUrl) {
+  const toWs = (u) => {
+    const url = new URL(u);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    return url.toString();
+  };
+
+  // Absolute base (prod): https://api.tracenium.com → wss://api.tracenium.com
+  if (API_BASE && /^https?:\/\//i.test(API_BASE)) {
+    return toWs(new URL(pathOrUrl, API_BASE).toString());
+  }
+
+  // Relative/unset base (dev with proxy): resolve against the page origin.
+  if (typeof window !== "undefined") {
+    return toWs(new URL(pathOrUrl, window.location.href).toString());
+  }
+
+  return pathOrUrl;
+}
+
 function emitAuthRequired(err, { url } = {}) {
   if (typeof window === "undefined") return;
 

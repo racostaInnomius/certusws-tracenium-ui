@@ -74,6 +74,7 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
+import { getApiWsUrl } from "../../api/http";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -249,15 +250,9 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
     (async () => {
       try {
-        // 1. Open signaling WebSocket.
-        const wsUrl = (() => {
-          const u = new URL(
-            session.signalingUrl,
-            window.location.href.replace(/^http/, "ws")
-          );
-          u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
-          return u.toString();
-        })();
+        // 1. Open signaling WebSocket on the API origin (api.tracenium.com),
+        // not the SPA origin — see getApiWsUrl.
+        const wsUrl = getApiWsUrl(session.signalingUrl);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
