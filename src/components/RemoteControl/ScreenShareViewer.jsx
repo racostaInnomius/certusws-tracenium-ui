@@ -646,7 +646,32 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       }
 
       case "error": {
-        setErrorMsg(msg.message || "Unknown error from agent");
+        // Map agent error codes to user-friendly messages where possible.
+        //
+        // `no_interactive_desktop` is returned by ScreenCaptureDxgi.cs on
+        // the agent side when the device has no active interactive desktop
+        // — typically a Windows Server with no logged-in user, the lock
+        // screen showing with no recent login, or any state where the
+        // OS hasn't created a visible desktop for any session. This is
+        // an architectural limitation of every screen-capture API on
+        // Windows; a Virtual Display Driver is required for "headless"
+        // capture and that is out of scope for the current milestone.
+        // Surface the situation honestly rather than as a generic
+        // "Connection error" so the operator knows what to try instead.
+        let friendly;
+        if (msg.code === "no_interactive_desktop") {
+          friendly = "This device has no active interactive desktop right now. " +
+            "Screen sharing needs a user to be logged in. " +
+            "For a headless server, use a Shell session (rcp.shell) instead.";
+        } else if (msg.code === "screen_capture_no_frame") {
+          // Transient — the agent didn't observe a new frame within the
+          // timeout, usually because the desktop was idle. The next poll
+          // will pick up a frame. Don't tear down on this; ignore.
+          break;
+        } else {
+          friendly = msg.message || "Unknown error from agent";
+        }
+        setErrorMsg(friendly);
         setState(STATE.ERROR);
         break;
       }

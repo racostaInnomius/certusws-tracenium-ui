@@ -237,6 +237,18 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const [selected, setSelected] = React.useState(new Set());  // M2.S2 multi-select
   const [dragOver, setDragOver] = React.useState(false);      // M2.S2 drag-and-drop
   const uploadRef = React.useRef(null);
+  // Mirror `state` into a ref so the `ws.onclose` / async handlers set up
+  // INSIDE the setup useEffect can see the live value instead of the value
+  // that was current at the time we defined them. Closure capture would
+  // otherwise pin them to `STATE.CONNECTING` forever, which means the
+  // "Signaling WebSocket closed unexpectedly" branch fires even when the
+  // DC opened cleanly and the WS was closed AS PART OF normal teardown.
+  // Reproduced 2026-06-10 ~19:35 on Safari + Chrome incognito (cache-free)
+  // where the user saw the error every time despite the WebRTC connection
+  // technically succeeding end-to-end — the modal showed Establishing →
+  // Error in the same beat.
+  const stateRef = React.useRef(STATE.CONNECTING);
+  React.useEffect(() => { stateRef.current = state; }, [state]);
   const dcRef = React.useRef(null);     // RTCDataChannel
   const pcRef = React.useRef(null);     // RTCPeerConnection
   const wsRef = React.useRef(null);     // WebSocket (signaling)
@@ -358,11 +370,27 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             }
           } catch {/**/ }
         };
-        ws.onclose = () => {
-          if (!destroyed && state !== STATE.BROWSING && state !== STATE.ENDED) {
-            setErrorMsg("Signaling WebSocket closed unexpectedly.");
-            setState(STATE.ERROR);
-          }
+        ws.onclose = (ev) => {
+          // Use the ref instead of `state` (closure-captured value would
+          // forever be CONNECTING, since this handler was defined during
+          // the first render of the effect). The signaling WS is allowed
+          // to close as part of normal teardown once we've entered
+          // BROWSING — at that point the WebRTC DataChannel is the only
+          // transport that matters and the signaling channel is moot.
+          // Suppress the "closed unexpectedly" error in BROWSING / ENDED;
+          // also suppress for clean closes (wasClean=true with code 1000
+          // or 1001 = going away — eg StrictMode double-mount in dev,
+          // operator dismissing the drawer, server-side teardown). Only
+          // surface the error when we're still mid-handshake AND the
+          // close was unclean — that's the only state that actually
+          // means "your session is broken before it ever worked."
+          if (destroyed) return;
+          const s = stateRef.current;
+          if (s === STATE.BROWSING || s === STATE.ENDED) return;
+          // 1000 = normal close, 1001 = going away — both benign here.
+          if (ev?.wasClean && (ev.code === 1000 || ev.code === 1001)) return;
+          setErrorMsg("Signaling WebSocket closed unexpectedly.");
+          setState(STATE.ERROR);
         };
 
         // 6. Generate offer and send.
