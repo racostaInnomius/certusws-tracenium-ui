@@ -272,11 +272,25 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         cleanupFns.push(() => { try { pc.close(); } catch {/**/ } });
 
         // 3. Create DataChannel before offer (so it appears in the
-        //    offer's SDP). Channel name 'rcp.file' is what the agent
-        //    keys on to set up the file-transfer handler.
-        const dc = pc.createDataChannel("rcp.file", {
-          ordered: true  // file transfers need ordered delivery
-        });
+        //    offer's SDP). The agent keys on the offer's `capability`
+        //    field (not the DataChannel label) to set up the file
+        //    transfer handler — see peer-session.ts onDataChannel.
+        //
+        // ⚠️ Do NOT pass `{ ordered: true }` even though file transfers
+        // semantically need ordered delivery. node-datachannel on the
+        // agent (Windows ARM64) has a bug where the SCTP negotiation
+        // silently fails when the offerer's DataChannel INIT carries an
+        // explicit reliability flag. The DC never reaches `open`, the
+        // agent stops trickling ICE after ~3 candidates, the browser
+        // stalls in pc.connectionState='new' forever, and the UI sits
+        // on "Establishing file transfer session…" until timeout.
+        // Empirically reproduced 2026-06-10 19:03 on W11-JPR-Lab01:
+        // passing `{ ordered: true }` → timeout; passing no opts → DC
+        // opens in ~2s and `list` returns 22 entries. WebRTC default
+        // IS ordered=true so semantically identical. Bypasses the bug.
+        // TODO: pass `{ ordered: true }` again once node-datachannel is
+        // upgraded past the version that fixes this.
+        const dc = pc.createDataChannel("rcp.file");
         dcRef.current = dc;
 
         dc.onopen = () => {
