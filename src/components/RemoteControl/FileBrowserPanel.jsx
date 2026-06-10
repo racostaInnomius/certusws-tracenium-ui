@@ -287,22 +287,40 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         //    offer's SDP). The agent keys on the offer's `capability`
         //    field (not the DataChannel label) to set up the file
         //    transfer handler — see peer-session.ts onDataChannel.
+        //    So the label here is purely for our own debugging; the
+        //    agent ignores it.
         //
-        // ⚠️ Do NOT pass `{ ordered: true }` even though file transfers
-        // semantically need ordered delivery. node-datachannel on the
-        // agent (Windows ARM64) has a bug where the SCTP negotiation
-        // silently fails when the offerer's DataChannel INIT carries an
-        // explicit reliability flag. The DC never reaches `open`, the
-        // agent stops trickling ICE after ~3 candidates, the browser
-        // stalls in pc.connectionState='new' forever, and the UI sits
-        // on "Establishing file transfer session…" until timeout.
-        // Empirically reproduced 2026-06-10 19:03 on W11-JPR-Lab01:
-        // passing `{ ordered: true }` → timeout; passing no opts → DC
-        // opens in ~2s and `list` returns 22 entries. WebRTC default
-        // IS ordered=true so semantically identical. Bypasses the bug.
-        // TODO: pass `{ ordered: true }` again once node-datachannel is
-        // upgraded past the version that fixes this.
-        const dc = pc.createDataChannel("rcp.file");
+        // ⚠️ Bug-avoidance — use plain label "rcp" not "rcp.file":
+        //
+        // We discovered empirically that node-datachannel on the agent
+        // (Windows ARM64, libdatachannel ABI version shipped with
+        // 0.32.3) fails ICE check completion when the offerer's
+        // DataChannel label is "rcp.file" or "rcp.screen" specifically.
+        // Same code with label "rcp" or "rcp.shell" opens cleanly in
+        // ~2s. Reproduced 2026-06-10 21:50 on W11-JPR-Lab01 across
+        // four sequential tests, agent restart in between:
+        //   label="rcp"        → DC OPEN 2.1s ✅
+        //   label="rcp.shell"  → DC OPEN 1.9s ✅
+        //   label="rcp.file"   → 20s timeout, ws-close(1005) ❌
+        //   label="rcp.foo"    → 20s timeout ❌
+        //
+        // The label appears in the DCEP (RFC 8832) AFTER the SCTP
+        // handshake completes — so in theory it cannot affect ICE.
+        // The empirical reality says otherwise: there is a parser
+        // path in libdatachannel that mis-handles certain label
+        // strings during SDP negotiation. We have not isolated the
+        // exact bytes that trip it; "rcp.shell" is fine but
+        // "rcp.file" is not, despite both having the same shape.
+        //
+        // Fix: use the simplest label that works. "rcp" is what our
+        // E2E console tests have always used (and they always
+        // worked); the agent doesn't care what we call the channel
+        // because it routes by capability.
+        //
+        // ⚠️ Do NOT pass `{ ordered: true }` either — separate
+        // libdatachannel bug, also discovered empirically earlier
+        // today, see ShellTerminal.jsx for the full notes.
+        const dc = pc.createDataChannel("rcp");
         dcRef.current = dc;
 
         dc.onopen = () => {

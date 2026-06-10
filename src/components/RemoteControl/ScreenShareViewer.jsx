@@ -427,11 +427,18 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         pcRef.current = pc;
         cleanupFns.push(() => { try { pc.close(); } catch {/**/ } });
 
-        // 3. Create DataChannel "rcp.screen" before the offer.
+        // 3. Create DataChannel before the offer.
         //    ordered: false, maxRetransmits: 0 = unreliable delivery —
         //    a dropped frame is preferable to buffering / head-of-line
         //    blocking on subsequent frames.
-        const dc = pc.createDataChannel("rcp.screen", {
+        //
+        // ⚠️ Label is "rcp" (plain), NOT "rcp.screen". See
+        // FileBrowserPanel.jsx for the empirical bug write-up:
+        // node-datachannel on ARM64 fails ICE completion when the
+        // label is "rcp.file" or "rcp.screen" specifically. The
+        // agent routes by capability not by label so "rcp" is
+        // functionally equivalent and avoids the bug.
+        const dc = pc.createDataChannel("rcp", {
           ordered: false,
           maxRetransmits: 0
         });
