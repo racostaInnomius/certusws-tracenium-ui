@@ -147,9 +147,22 @@ export default function ShellTerminal({ session, device, onClose }) {
 
       // The DataChannel MUST be created BEFORE the offer so its
       // m= line ends up in the SDP.
-      const dc = pc.createDataChannel("rcp.shell", {
-        ordered: true
-      });
+      //
+      // ⚠️ Do NOT pass `{ ordered: true }` here even though the WebRTC
+      // spec says it's the default. node-datachannel (libdatachannel
+      // wrapper used by the agent) has a bug on Windows ARM64 where the
+      // SCTP negotiation silently fails when the offerer's DataChannel
+      // INIT carries an explicit reliability flag set to ordered. The
+      // DataChannel never reaches `open` on the agent side, the agent
+      // stops trickling ICE candidates after the first ~3, and the
+      // browser's pc.connectionState stays in 'new' indefinitely.
+      // Empirically reproduced 2026-06-10 19:03 on W11-JPR-Lab01: passing
+      // `{ ordered: true }` → timeout; passing no opts → DataChannel
+      // opens in ~2s. The default is ordered=true anyway, so omitting
+      // the opts is semantically identical AND bypasses the bug.
+      // TODO: when node-datachannel is upgraded past the version that
+      // fixes this, we can pass `{ ordered: true }` again for clarity.
+      const dc = pc.createDataChannel("rcp.shell");
       dcRef.current = dc;
 
       pc.onicecandidate = (e) => {
