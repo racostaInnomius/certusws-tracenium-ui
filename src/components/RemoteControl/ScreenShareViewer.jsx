@@ -82,6 +82,7 @@ import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { attachIceRestart } from "./iceRestart";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -479,12 +480,33 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         };
         pc.onconnectionstatechange = () => {
           if (destroyed) return;
-          const s = pc.connectionState;
-          if (s === "failed" || s === "disconnected") {
-            setErrorMsg("WebRTC connection lost.");
+          // Non-terminal — the ICE restart helper handles recovery
+          // (see iceRestart.js). For screen-share specifically, a
+          // brief reconnect is much better UX than tearing down the
+          // viewer mid-presentation: the JPEG stream just pauses,
+          // resumes after the new ICE pair is selected.
+        };
+
+        // Attach the ICE restart helper. Cap is 2 attempts; after
+        // that the helper invokes onFinalFailure and we surface the
+        // error. The stream continues to render the last received
+        // frame during recovery, so the operator sees a frozen
+        // screenshot rather than a black panel.
+        const detachIceRestart = attachIceRestart({
+          pc,
+          ws,
+          sessionId: session.sessionId,
+          onRestartAttempt: (_attempt) => {
+            if (destroyed) return;
+            setErrorMsg("");
+          },
+          onFinalFailure: () => {
+            if (destroyed) return;
+            setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
           }
-        };
+        });
+        cleanupFns.push(detachIceRestart);
 
         // 5. WS message handler.
         ws.onmessage = ({ data }) => {
@@ -670,6 +692,26 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           friendly = "This device has no active interactive desktop right now. " +
             "Screen sharing needs a user to be logged in. " +
             "For a headless server, use a Shell session (rcp.shell) instead.";
+        } else if (msg.code === "wayland_unsupported") {
+          // Linux X11-only initial release (per Task #8 / sprint plan).
+          // The agent runs on a Wayland session and the X11 helper
+          // (XGetImage on the root window) can't capture the
+          // compositor-managed Wayland surface. Xwayland is also
+          // rejected for native Wayland windows. Telling the operator
+          // to log in via X11 is the only honest workaround until we
+          // wire XDG portal + pipewire (slated for a later milestone).
+          friendly = "This device is running a Wayland session, which " +
+            "isn't supported by screen sharing yet. Ask the user to log " +
+            "out and log back in selecting an X11 / Xorg session, then " +
+            "retry. Shell and file sessions work on Wayland normally.";
+        } else if (msg.code === "screen_capture_failed" ||
+                   msg.code === "screen_capture_init_failed") {
+          // Generic capture failure — surface the agent's own message
+          // so the operator at least sees a hint of what went wrong
+          // (TCC permission denied on macOS, missing libX11/libjpeg on
+          // Linux, GPU driver crash on Windows, etc.). The agent
+          // already crafts a useful message for these paths.
+          friendly = msg.message || "Screen capture failed on the device.";
         } else if (msg.code === "screen_capture_no_frame") {
           // Transient — the agent didn't observe a new frame within the
           // timeout, usually because the desktop was idle. The next poll

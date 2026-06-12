@@ -75,6 +75,7 @@ import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { attachIceRestart } from "./iceRestart";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -361,12 +362,36 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         };
         pc.onconnectionstatechange = () => {
           if (destroyed) return;
-          const s = pc.connectionState;
-          if (s === "failed" || s === "disconnected") {
-            setErrorMsg("WebRTC connection lost.");
+          // No longer terminal-on-failed — the ICE restart helper
+          // attached below gets first crack at recovery. Only after
+          // its retries are exhausted (via onFinalFailure) do we go
+          // to STATE.ERROR. See iceRestart.js for rationale.
+        };
+
+        // Attach the ICE restart helper. Same behaviour as in the
+        // shell terminal: failed/disconnected ICE triggers a new
+        // `pc.createOffer({ iceRestart: true })`, capped at 2 tries.
+        // Without this, a brief WiFi hiccup mid-file-transfer would
+        // kill the session and the user would have to click Files
+        // again and pick the path back; the helper recovers
+        // transparently.
+        const detachIceRestart = attachIceRestart({
+          pc,
+          ws,
+          sessionId: session.sessionId,
+          onRestartAttempt: (attempt) => {
+            if (destroyed) return;
+            setErrorMsg(""); // clear stale message during recovery
+            // We don't transition out of BROWSING — the file table
+            // stays usable as-is during the brief renegotiation.
+          },
+          onFinalFailure: () => {
+            if (destroyed) return;
+            setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
           }
-        };
+        });
+        cleanupFns.push(detachIceRestart);
 
         // 5. WS message handler.
         ws.onmessage = ({ data }) => {
