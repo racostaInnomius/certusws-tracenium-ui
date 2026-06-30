@@ -30,6 +30,7 @@ import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 
 import { httpGetJson } from "../api/http";
 import { getRetentionStats } from "../api/retention";
@@ -204,6 +205,28 @@ export default function Configurations({ onNavigate }) {
   const tenantsSummary = settingsSnapshot?.tenantsSummary ?? null;
   const tenantMembersSummary = settingsSnapshot?.tenantMembersSummary ?? null;
   const retentionStats = settingsSnapshot?.retentionStats ?? null;
+
+  // Per-tenant session security (auto-logout) read separately. Doesn't
+  // need stale-while-revalidate because the value is tiny + cached on
+  // the server. Fail-open: render the card with N/A if the read errors,
+  // but still let the user click through to fix the underlying config.
+  const {
+    data: sessionSettingsSnapshot,
+    loading: sessionSettingsLoading,
+  } = useCachedFetch(
+    "settings:session-settings:v1",
+    async () => httpGetJson("/api/v1/session-settings"),
+    {
+      staleMs: 60_000,
+      storageMaxAgeMs: 5 * 60_000,
+      revalidateOnMount: "stale",
+    }
+  );
+  const sessionSettingsView = sessionSettingsSnapshot?.settings ?? null;
+  const sessionAutoLogoutEnabled =
+    sessionSettingsView?.effective?.autoLogoutEnabled ?? true;
+  const sessionAutoLogoutMinutes =
+    sessionSettingsView?.effective?.autoLogoutMinutes ?? null;
   const error = settingsError ? "Failed to load configurations summary" : "";
   const tenantsTotal     = tenantsSummary?.tenantsCount      ?? 0;
 
@@ -313,6 +336,40 @@ export default function Configurations({ onNavigate }) {
             />
           </Grid>
         ) : null}
+
+        {/* Session security — auto-logout toggle + idle minutes.
+            Always rendered for any authenticated tenant member, but the
+            inner page gates the Save action to OWNER/ADMIN role. */}
+        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+          <SettingsCard
+            title="Session security"
+            valueHint={
+              sessionAutoLogoutEnabled
+                ? "Auto-logout on inactivity"
+                : "Auto-logout disabled"
+            }
+            value={
+              sessionAutoLogoutEnabled && sessionAutoLogoutMinutes
+                ? `${sessionAutoLogoutMinutes} min`
+                : sessionAutoLogoutEnabled
+                  ? "—"
+                  : "Off"
+            }
+            icon={<TimerOutlinedIcon />}
+            accent={sessionAutoLogoutEnabled ? BRAND.teal : BRAND.alert.warning}
+            tint={sessionAutoLogoutEnabled ? BRAND.tealSoft : BRAND.alert.warningSoft}
+            loading={sessionSettingsLoading}
+            onClick={() => onNavigate?.("session-settings")}
+            footer={
+              <StatChip
+                label={sessionAutoLogoutEnabled ? "Enabled" : "Disabled"}
+                count=""
+                variant={sessionAutoLogoutEnabled ? "success" : "warning"}
+                loading={sessionSettingsLoading}
+              />
+            }
+          />
+        </Grid>
 
         {/* Retention card — admin only. The retentionStats fetch quietly
             returns null for non-admin viewers (401), so the card simply

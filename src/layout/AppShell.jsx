@@ -25,6 +25,7 @@ import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl,
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { BRAND } from "../theme/brand";
+import { useAuthContext } from "../auth/AuthContext";
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Overview = React.lazy(() => import("../pages/Overview"));
@@ -45,6 +46,7 @@ const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 const Alerts = React.lazy(() => import("../pages/Alerts"));
 const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 const Retention = React.lazy(() => import("../pages/Retention"));
+const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
 
 function PageFallback() {
   return (
@@ -62,7 +64,18 @@ function PageFallback() {
 }
 
 
-const USER_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+// Fallback values for when /api/bootstrap hasn't loaded yet (very first
+// paint, or backend returned `sessionSettings: null` because of a
+// degraded read in the bootstrap handler). The effective config comes
+// from `auth.sessionSettings` via useAuthContext — see the
+// `idleTimeoutMs` / `idleEnabled` derivation inside the component.
+//
+// The 30-minute default matches the SQL DEFAULT in
+// migrations/20260610_tenant_session_settings.sql (and the value the
+// service falls back to when a tenant has never customised). Keeping
+// the three copies in sync is intentional belt-and-braces — see the
+// LIMITS comment in session-settings.service.ts.
+const DEFAULT_IDLE_MINUTES = 30;
 const USER_IDLE_COUNTDOWN_SECONDS = 15;
 const USER_ACTIVITY_EVENTS = [
   "mousemove",
@@ -450,6 +463,21 @@ function UserInactivityDialog({
 }
 
 export default function AppShell() {
+  // Read tenant-level session settings exposed by /api/bootstrap so the
+  // idle timer matches what the OWNER/ADMIN configured for this tenant.
+  // Falls back to system defaults when bootstrap hasn't loaded yet, or
+  // when the field is missing (older backend without the
+  // tenant_session_settings migration applied — graceful degradation).
+  // See migrations/20260610_tenant_session_settings.sql and
+  // session-settings.service.ts for the source of truth.
+  const { auth } = useAuthContext();
+  const sessionSettings = auth?.sessionSettings ?? null;
+  const idleEnabled = sessionSettings?.autoLogoutEnabled !== false; // default true
+  const idleTimeoutMs =
+    (Number.isFinite(sessionSettings?.autoLogoutMinutes)
+      ? sessionSettings.autoLogoutMinutes
+      : DEFAULT_IDLE_MINUTES) * 60 * 1000;
+
   const [_bootstrap, setBootstrap] = React.useState(null);
   // Overview is the canonical landing page — it's the SOC-style dashboard
   // the operator should see when they log in without a deep link. Pages
@@ -499,10 +527,17 @@ export default function AppShell() {
     if (idleDialogOpenRef.current || idleSigningOutRef.current) return;
 
     clearIdleTimer();
+    // When the tenant has disabled auto-logout, never re-arm the timer.
+    // The activity-event listeners still fire but no-op past this point.
+    // We deliberately keep the listeners attached anyway — the cost is
+    // negligible and toggling `autoLogoutEnabled` back ON should take
+    // effect on the next refresh without re-mounting AppShell.
+    if (!idleEnabled) return;
+
     idleTimerRef.current = window.setTimeout(() => {
       openIdleDialog();
-    }, USER_IDLE_TIMEOUT_MS);
-  }, [clearIdleTimer, openIdleDialog]);
+    }, idleTimeoutMs);
+  }, [clearIdleTimer, openIdleDialog, idleEnabled, idleTimeoutMs]);
 
   const performIdleLogout = React.useCallback(async () => {
     if (idleSigningOutRef.current) return;
@@ -952,6 +987,13 @@ export default function AppShell() {
   // into a maintenance ticket, hit it, see sizes + last-run audit.
   if (selectedPage === "retention") {
     content = <Retention onNavigate={setSelectedPage} />;
+  }
+
+  // Session security — auto-logout toggle + idle minutes. Same
+  // top-level dispatch as the other Settings sub-pages so deep
+  // linking works (?page=session-settings).
+  if (selectedPage === "session-settings") {
+    content = <SessionSettings onNavigate={setSelectedPage} />;
   }
 
   const shouldShowNoInformationOverlay =
