@@ -28,11 +28,7 @@ describe("tenants", () => {
     expect(calls[0].pathname).toBe(BASE);
   });
 
-  it("tenant reads interpolate the id RAW (no encodeURIComponent — inconsistent with sibling modules)", async () => {
-    // Documented hallazgo: tenant ids are backend UUIDs so this works
-    // today, but unlike jobs/policies/certificates this module does not
-    // encode path params. An id containing `/` or `?` would build a
-    // different URL.
+  it("tenant reads interpolate the id normally", async () => {
     const byId = respond("get", `${BASE}/:tenantId`, { ok: true });
     const summary = respond("get", `${BASE}/:tenantId/summary`, { ok: true });
 
@@ -41,6 +37,28 @@ describe("tenants", () => {
 
     expect(byId[0].pathname).toBe(`${BASE}/t-1`);
     expect(summary[0].pathname).toBe(`${BASE}/t-1/summary`);
+  });
+
+  it("encodes special characters in the tenant id path param", async () => {
+    // Consistency with sibling modules (jobs/policies/certificates):
+    // a path id with `/` or spaces must be percent-encoded so it stays a
+    // single path segment instead of building a different URL.
+    const byId = respond("get", /\/api\/v1\/tenants\/.+/, { ok: true });
+    const summary = respond("get", /\/api\/v1\/tenants\/.+\/summary/, { ok: true });
+
+    await getTenantById("a/b c");
+    await getTenantSummary("a/b c");
+
+    expect(byId[0].pathname).toBe(`${BASE}/a%2Fb%20c`);
+    expect(summary[0].pathname).toBe(`${BASE}/a%2Fb%20c/summary`);
+  });
+
+  it("encodes special characters in nested member id path params", async () => {
+    const update = respond("put", /\/api\/v1\/tenants\/.+\/members\/.+/, { ok: true });
+
+    await updateTenantMember("a/b", "m/1", { role: "VIEWER" });
+
+    expect(update[0].pathname).toBe(`${BASE}/a%2Fb/members/m%2F1`);
   });
 
   it("updateTenant PUTs the payload; deleteTenant issues DELETE", async () => {

@@ -97,10 +97,12 @@ describe("startRemoteSession", () => {
     expect(err.body.message).toBe("device does not advertise rcp");
   });
 
-  it("501 (screen type not shipped) is classified as a temporary error — noteworthy for the UI toast path", async () => {
-    // handleResponse treats every 5xx as TemporaryServerError, so the
-    // deliberate 501 NOT_IMPLEMENTED for type "screen" surfaces as a
-    // retryable "temporary" failure, not a distinct feature-gap error.
+  it("501 (screen type not shipped) is a PERMANENT feature-gap error, not a retryable temporary one", async () => {
+    // The deliberate 501 NOT_IMPLEMENTED for type "screen" (feature lands
+    // in M3) is a permanent failure — retrying will never succeed. It must
+    // surface as a plain Error carrying status/code, NOT TemporaryServerError,
+    // so the UI can show a distinct "not available yet" message instead of a
+    // retryable "temporary outage" toast.
     respond(
       "post",
       `${BASE}/sessions`,
@@ -110,8 +112,9 @@ describe("startRemoteSession", () => {
 
     const err = await startRemoteSession({ deviceId: "dev-1", type: "screen" }).catch((e) => e);
 
-    expect(err.name).toBe("TemporaryServerError");
-    expect(err.retryable).toBe(true);
+    expect(err.name).not.toBe("TemporaryServerError");
+    expect(err.retryable).toBeUndefined();
     expect(err.status).toBe(501);
+    expect(err.code).toBe("NOT_IMPLEMENTED");
   });
 });

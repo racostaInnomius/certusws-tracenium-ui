@@ -20,6 +20,11 @@ export default defineConfig({
     env: {
       VITE_API_BASE: "http://tracenium-api.test",
     },
+    // MUI dialog + userEvent interaction tests (PackageDialog, DeployWizard,
+    // ShellTerminal) render heavy component trees in jsdom and can take ~8-10s
+    // under full-suite load — past the 5s default, causing intermittent
+    // timeouts. 15s gives comfortable headroom without masking real hangs.
+    testTimeout: 15000,
     coverage: {
       provider: "v8",
       include: ["src/api/**"],

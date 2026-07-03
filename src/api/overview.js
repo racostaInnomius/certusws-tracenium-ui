@@ -12,7 +12,7 @@
 // still own their own deeper views; this module only serves the Hero +
 // charts + tables on the Overview.
 
-import { httpGetJson } from "./http";
+import { httpGetJson, isTemporaryApiError } from "./http";
 import { getAlertEvents, getAlertsUnreadCount } from "./alerts";
 import { getDevicePosture } from "./compliance";
 
@@ -121,9 +121,19 @@ export async function getLatestAgentVersions() {
         `/api/v1/binaries/agent/metadata?platform=${platform}&arch=${arch}`
       )
         .then((data) => ({ platform, arch, data, ok: true }))
-        // One missing combination (e.g. no x64 macOS build yet) isn't
-        // fatal — we just skip it in the caller.
-        .catch(() => ({ platform, arch, ok: false }))
+        .catch((err) => {
+          // A missing combination (e.g. no x64 macOS build yet) is a
+          // benign 404 — degrade to an empty slot so the caller just
+          // skips it. But a REAL server error (500/503, network,
+          // timeout — anything the http layer flags as temporary/5xx)
+          // must NOT be swallowed: rethrowing lets the caller / UI /
+          // telemetry distinguish "no build published" from "backend
+          // down". Previously both looked identical (silent { ok:false }).
+          if (isTemporaryApiError(err)) {
+            throw err;
+          }
+          return { platform, arch, ok: false };
+        })
     )
   );
 

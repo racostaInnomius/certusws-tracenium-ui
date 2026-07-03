@@ -26,15 +26,28 @@ describe("agent releases", () => {
     expect(calls[0].search).toEqual({ platform: "windows", channel: "stable" });
   });
 
-  it("getAgentReleaseById interpolates the id RAW (no encodeURIComponent — inconsistent with sibling modules)", async () => {
-    // Documented hallazgo: ids here are backend-generated UUIDs so this
-    // is not exploitable today, but the module skips the encoding that
-    // softwareDelivery/assetGroups/etc. apply.
+  it("getAgentReleaseById interpolates the id normally", async () => {
     const calls = respond("get", `${BASE}/:id`, { ok: true });
 
     await getAgentReleaseById("rel-1");
 
     expect(calls[0].pathname).toBe(`${BASE}/rel-1`);
+  });
+
+  it("encodes special characters in the release id path param", async () => {
+    // Consistency with sibling modules (softwareDelivery/assetGroups/etc.):
+    // a path id with `/` or spaces must be percent-encoded.
+    const byId = respond("get", /\/api\/v1\/agent-releases\/.+/, { ok: true });
+    const update = respond("put", /\/api\/v1\/agent-releases\/.+/, { ok: true });
+    const del = respond("delete", /\/api\/v1\/agent-releases\/.+/, { ok: true });
+
+    await getAgentReleaseById("a/b c");
+    await updateAgentRelease("a/b c", { channel: "beta" });
+    await deleteAgentRelease("a/b c");
+
+    expect(byId[0].pathname).toBe(`${BASE}/a%2Fb%20c`);
+    expect(update[0].pathname).toBe(`${BASE}/a%2Fb%20c`);
+    expect(del[0].pathname).toBe(`${BASE}/a%2Fb%20c`);
   });
 
   it("create/update/delete follow the standard REST shape", async () => {

@@ -147,7 +147,7 @@ describe("httpGetJson — error taxonomy", () => {
     expect(err.message).toMatch(/^HTTP 404/);
   });
 
-  it("HTTP 500 → TemporaryServerError (any 5xx is treated as temporary)", async () => {
+  it("HTTP 500 → TemporaryServerError (a transient 5xx is treated as temporary)", async () => {
     respond("get", "/api/v1/broken", { message: "boom" }, { status: 500 });
 
     const err = await httpGetJson("/api/v1/broken").catch((e) => e);
@@ -157,6 +157,38 @@ describe("httpGetJson — error taxonomy", () => {
     expect(err.retryable).toBe(true);
     expect(isTemporaryApiError(err)).toBe(true);
     expect(isAuthError(err)).toBe(false);
+  });
+
+  it("HTTP 501 → PERMANENT plain Error, NOT temporary/retryable", async () => {
+    // 501 Not Implemented is used deliberately by RCP "screen" (an
+    // unreleased feature). It is a permanent failure — retrying will
+    // never succeed — so it must fall into the same permanent-error
+    // path as the 4xx codes, NOT TemporaryServerError.
+    respond("get", "/api/v1/not-implemented", { error: "NOT_IMPLEMENTED", message: "screen not shipped" }, { status: 501 });
+
+    const err = await httpGetJson("/api/v1/not-implemented").catch((e) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(TemporaryServerError);
+    expect(err.status).toBe(501);
+    expect(err.code).toBe("NOT_IMPLEMENTED");
+    expect(err.body).toEqual({ error: "NOT_IMPLEMENTED", message: "screen not shipped" });
+    expect(err.retryable).toBeUndefined();
+    expect(isTemporaryApiError(err)).toBe(false);
+    expect(isAuthError(err)).toBe(false);
+  });
+
+  it("HTTP 505 → PERMANENT plain Error, NOT temporary/retryable", async () => {
+    // 505 HTTP Version Not Supported is likewise a permanent protocol
+    // failure, not a transient outage.
+    respond("get", "/api/v1/bad-version", {}, { status: 505 });
+
+    const err = await httpGetJson("/api/v1/bad-version").catch((e) => e);
+
+    expect(err).not.toBeInstanceOf(TemporaryServerError);
+    expect(err.status).toBe(505);
+    expect(err.code).toBe("HTTP_505");
+    expect(isTemporaryApiError(err)).toBe(false);
   });
 
   it("HTTP 503 → TemporaryServerError with backend message", async () => {

@@ -54,7 +54,9 @@ describe("composed reads", () => {
     }
   });
 
-  it("a missing platform/arch build resolves to { ok:false } instead of rejecting (swallowed by design)", async () => {
+  it("a missing platform/arch build (404) degrades to { ok:false } instead of rejecting", async () => {
+    // 404 is the benign "no build published yet" case — the caller just
+    // skips that combo. Only a NON-server error like this degrades.
     respond("get", "/api/v1/binaries/agent/metadata", { error: "NOT_FOUND" }, { status: 404 });
 
     const results = await getLatestAgentVersions();
@@ -63,9 +65,19 @@ describe("composed reads", () => {
     for (const r of results) {
       expect(r.ok).toBe(false);
       expect(r.data).toBeUndefined();
-      // The original error is discarded entirely — callers cannot tell
-      // a 404 (no build) from a 500 (backend down). Documented hallazgo.
     }
+  });
+
+  it("a real server error (500) is NOT swallowed — it propagates so 'no data' is distinguishable from 'backend down'", async () => {
+    respond("get", "/api/v1/binaries/agent/metadata", { message: "boom" }, { status: 500 });
+
+    const err = await getLatestAgentVersions().catch((e) => e);
+
+    // Previously both 404 and 500 collapsed to a silent { ok:false }.
+    // Now a temporary/5xx failure rejects, letting the UI/telemetry tell
+    // "no build" apart from "server broken".
+    expect(err).toBeInstanceOf(Error);
+    expect(err.status).toBe(500);
   });
 });
 
