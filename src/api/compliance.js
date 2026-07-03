@@ -9,6 +9,13 @@ import { httpGetJson, httpPostJson, httpPutJson } from "./http";
 
 const BASE = "/api/v1/security/compliance";
 
+// Same API origin the rest of http.js resolves fetches against
+// (`${API_BASE}${url}`). Export builders return a raw string used as an
+// anchor `href`, so they MUST bake in this absolute base — otherwise the
+// browser resolves the path against the SPA origin (which has no /api
+// proxy) and downloads index.html instead of the report.
+const API_BASE = import.meta.env.VITE_API_BASE;
+
 function buildQuery(params = {}) {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -147,7 +154,7 @@ export function buildFindingsCsvUrl({
   maxRows
 } = {}) {
   const qs = buildQuery({ framework, includeClosed, maxRows });
-  return `/api/v1/security/compliance/export/findings.csv${qs}`;
+  return `${API_BASE}${BASE}/export/findings.csv${qs}`;
 }
 
 // Sprint 6 — PDF export URL. Same browser-native download pattern
@@ -158,7 +165,7 @@ export function buildFindingsPdfUrl({
   maxDevices
 } = {}) {
   const qs = buildQuery({ framework, includeClosed, maxDevices });
-  return `/api/v1/security/compliance/export/findings.pdf${qs}`;
+  return `${API_BASE}${BASE}/export/findings.pdf${qs}`;
 }
 
 // ── Sprint 7 — device fleet ranking ────────────────────────────────
