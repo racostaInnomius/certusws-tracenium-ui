@@ -126,8 +126,12 @@ export default function PackageDialog({
   const validate = () => {
     if (!form.name.trim()) return "Name is required";
     if (!form.version.trim()) return "Version is required";
-    if (!form.downloadPath.trim()) return "Download path is required";
-    if (!/^https:\/\//i.test(form.downloadPath.trim())) {
+    const dp = form.downloadPath.trim();
+    if (!dp) {
+      // In approve mode a blank download path is allowed: the backend mints a
+      // signed URL over the uploaded blob. In create/edit it's required.
+      if (mode !== "approve") return "Download path is required";
+    } else if (!/^https:\/\//i.test(dp)) {
       return "Download path must be an https URL";
     }
     if (!SHA256_RE.test(form.sha256.trim())) {
@@ -278,11 +282,16 @@ export default function PackageDialog({
             <Stack spacing={1.5} sx={{ mt: 1 }}>
               <TextField
                 size="small"
-                label="Download URL (https)"
+                label={mode === "approve" ? "Download URL (optional)" : "Download URL (https)"}
                 placeholder="https://blob.tracenium.com/foo-1.2.3.msi"
                 value={form.downloadPath}
                 onChange={(e) => update({ downloadPath: e.target.value })}
-                required
+                required={mode !== "approve"}
+                helperText={
+                  mode === "approve"
+                    ? "Leave blank to serve the uploaded file — a signed URL is generated on approve."
+                    : undefined
+                }
               />
               <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "2fr 1fr" }}>
                 <TextField

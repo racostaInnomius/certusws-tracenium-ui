@@ -298,3 +298,39 @@ describe("PackageDialog — edit mode seeding", () => {
     expect(combobox(/^Format/)).toHaveTextContent("deb");
   });
 });
+
+describe("PackageDialog — approve mode (AI intake review)", () => {
+  const approveItem = {
+    name: "7zip",
+    version: "23.01",
+    platform: "windows",
+    arch: "any",
+    format: "msi",
+    downloadPath: "", // intake leaves this blank; backend mints a signed URL
+    sha256: VALID_SHA,
+    silentInstallArgs: "/qn /norestart",
+    expectedExitCodes: [0, 3010],
+    detectionRule: null,
+  };
+
+  it("allows a blank download URL and submits (backend mints the signed URL)", async () => {
+    const user = setupUser();
+    const { onSubmit } = renderDialog({ mode: "approve", item: approveItem });
+
+    await user.click(screen.getByRole("button", { name: /Approve & add to catalog/i }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].downloadPath).toBe("");
+  });
+
+  it("still rejects a non-https download URL when one is typed in approve mode", async () => {
+    const user = setupUser();
+    const { onSubmit } = renderDialog({ mode: "approve", item: approveItem });
+
+    await user.type(textbox(/Download URL/), "ftp://nope/app.msi");
+    await user.click(screen.getByRole("button", { name: /Approve & add to catalog/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/must be an https URL/i)).toBeInTheDocument();
+  });
+});
