@@ -740,6 +740,37 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
   }
 }
 
+// Binary POST — sends a raw body (File / Blob / ArrayBuffer / Uint8Array) as
+// application/octet-stream. Used by the SDP AI-intake upload, where the file's
+// bytes are the body and the metadata rides in the query string. Mirrors
+// httpPostJson's error/cache handling; the default timeout is generous because
+// installer uploads can be large.
+export async function httpPostBinary(
+  url,
+  bytes,
+  { timeoutMs = 120_000, contentType = "application/octet-stream" } = {}
+) {
+  const timeout = withTimeout(timeoutMs);
+
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": contentType },
+      body: bytes,
+      signal: timeout.signal,
+    });
+
+    const json = await handleResponse(res, url);
+    invalidateAfterMutation(url);
+    return json;
+  } catch (err) {
+    throw toHumanError(err, url);
+  } finally {
+    timeout.done();
+  }
+}
+
 export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
 

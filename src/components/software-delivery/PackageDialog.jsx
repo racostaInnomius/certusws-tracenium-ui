@@ -93,8 +93,9 @@ function parseExitCodes(raw) {
 
 export default function PackageDialog({
   open,
-  mode,            // "create" | "edit"
-  item,            // existing dto when editing
+  mode,            // "create" | "edit" | "approve"
+  item,            // existing dto when editing; the AI-proposal item when approving
+  banner,          // optional node rendered at the top (used for the intake verdict)
   submitting,
   onClose,
   onSubmit,
@@ -102,11 +103,12 @@ export default function PackageDialog({
   const [form, setForm] = React.useState(defaultsForCreate);
   const [error, setError] = React.useState(null);
 
-  // Reset whenever the dialog opens.
+  // Reset whenever the dialog opens. Both "edit" and "approve" pre-fill from
+  // `item` — approve passes an item synthesised from the AI proposal.
   React.useEffect(() => {
     if (!open) return;
     setError(null);
-    setForm(mode === "edit" && item ? fromExisting(item) : defaultsForCreate());
+    setForm((mode === "edit" || mode === "approve") && item ? fromExisting(item) : defaultsForCreate());
   }, [open, mode, item]);
 
   // When platform changes, snap to a sensible format default for
@@ -176,11 +178,17 @@ export default function PackageDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
-        {mode === "edit" ? "Edit Software Package" : "Add Software Package"}
+        {mode === "edit"
+          ? "Edit Software Package"
+          : mode === "approve"
+          ? "Review AI Proposal"
+          : "Add Software Package"}
       </DialogTitle>
 
       <DialogContent dividers>
         <Stack spacing={2.5}>
+          {banner ? <Box>{banner}</Box> : null}
+
           {/* ── Identity ──────────────────────────────────────── */}
           <Box>
             <Typography
@@ -418,7 +426,13 @@ export default function PackageDialog({
             "&:hover": { bgcolor: BRAND.tealHover },
           }}
         >
-          {submitting ? "Saving…" : mode === "edit" ? "Save changes" : "Create"}
+          {submitting
+            ? "Saving…"
+            : mode === "edit"
+            ? "Save changes"
+            : mode === "approve"
+            ? "Approve & add to catalog"
+            : "Create"}
         </Button>
       </DialogActions>
     </Dialog>

@@ -17,6 +17,11 @@ import {
   listDeployments,
   listPackages,
   updatePackage,
+  uploadIntake,
+  listIntakes,
+  getIntake,
+  approveIntake,
+  rejectIntake,
 } from "./softwareDelivery";
 
 const BASE = "/api/v1/software-delivery";
@@ -152,5 +157,55 @@ describe("deployments", () => {
     expect(err.status).toBe(422);
     expect(err.code).toBe("NO_DEVICES_IN_TARGET");
     expect(err.body.message).toBe("target resolves to 0 devices");
+  });
+});
+
+describe("AI intake", () => {
+  it("uploadIntake posts the bytes as octet-stream with metadata in the query", async () => {
+    const calls = respond("post", `${BASE}/intake`, { ok: true, intake: { id: 1 } }, { status: 201 });
+
+    const file = new File([new Uint8Array([0x4d, 0x5a, 1, 2, 3])], "app.exe");
+    await uploadIntake(file, { name: "App", version: "1.0", declaredSha256: "abc" });
+
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].search).toEqual({
+      filename: "app.exe",
+      name: "App",
+      version: "1.0",
+      declaredSha256: "abc",
+    });
+    expect(calls[0].headers["content-type"]).toBe("application/octet-stream");
+  });
+
+  it("uploadIntake falls back to the File name when no filename hint is given", async () => {
+    const calls = respond("post", `${BASE}/intake`, { ok: true }, { status: 201 });
+    await uploadIntake(new File(["x"], "setup.msi"));
+    expect(calls[0].search.filename).toBe("setup.msi");
+  });
+
+  it("listIntakes serializes a status filter", async () => {
+    const calls = respond("get", `${BASE}/intake`, { ok: true, items: [] });
+    await listIntakes({ status: "pending_review", limit: 20 });
+    expect(calls[0].search).toEqual({ status: "pending_review", limit: "20" });
+  });
+
+  it("getIntake URL-encodes the id", async () => {
+    const calls = respond("get", `${BASE}/intake/:id`, { ok: true });
+    await getIntake("7");
+    expect(calls[0].pathname).toBe(`${BASE}/intake/7`);
+  });
+
+  it("approveIntake posts the operator overrides as JSON", async () => {
+    const calls = respond("post", `${BASE}/intake/:id/approve`, { ok: true }, { status: 201 });
+    await approveIntake("5", { arch: "x64", downloadPath: "https://cdn/app.exe" });
+    expect(calls[0].pathname).toBe(`${BASE}/intake/5/approve`);
+    expect(calls[0].body).toEqual({ arch: "x64", downloadPath: "https://cdn/app.exe" });
+  });
+
+  it("rejectIntake posts an empty body", async () => {
+    const calls = respond("post", `${BASE}/intake/:id/reject`, { ok: true });
+    await rejectIntake("5");
+    expect(calls[0].pathname).toBe(`${BASE}/intake/5/reject`);
+    expect(calls[0].body).toEqual({});
   });
 });
