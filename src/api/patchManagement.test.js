@@ -18,6 +18,10 @@ import {
   getRemediationResults,
   listRemediations,
   remediate,
+  getThirdPartyFleetFindings,
+  getThirdPartyDeviceFindings,
+  remediateThirdParty,
+  listThirdPartyCatalog,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -108,5 +112,31 @@ describe("PMv2 findings & remediation", () => {
     expect(one[0].pathname).toBe(`${BASE}/remediations/rm1`);
     expect(results[0].pathname).toBe(`${BASE}/remediations/rm1/results`);
     expect(cancel[0].body).toEqual({});
+  });
+});
+
+describe("third-party patching", () => {
+  it("fetches the fleet rollup", async () => {
+    const calls = respond("get", `${BASE}/third-party/findings`, { ok: true, items: [] });
+    await getThirdPartyFleetFindings();
+    expect(calls[0].pathname).toBe(`${BASE}/third-party/findings`);
+  });
+
+  it("fetches per-device findings, URL-encoding the agentId", async () => {
+    const calls = respond("get", `${BASE}/third-party/findings/devices/:agentId`, { ok: true });
+    await getThirdPartyDeviceFindings("agent/42");
+    expect(calls[0].pathname).toBe(`${BASE}/third-party/findings/devices/agent%2F42`);
+  });
+
+  it("posts a remediation with the catalogId", async () => {
+    const calls = respond("post", `${BASE}/third-party/remediate`, { ok: true, deployed: true }, { status: 202 });
+    await remediateThirdParty(7);
+    expect(calls[0].body).toEqual({ catalogId: 7 });
+  });
+
+  it("lists the catalog with a platform filter", async () => {
+    const calls = respond("get", `${BASE}/third-party/catalog`, { ok: true, items: [] });
+    await listThirdPartyCatalog({ platform: "windows", activeOnly: true });
+    expect(calls[0].search).toEqual({ platform: "windows", activeOnly: "true" });
   });
 });

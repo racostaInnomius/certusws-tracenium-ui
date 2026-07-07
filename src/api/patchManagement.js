@@ -103,3 +103,26 @@ export async function cancelRemediation(id) {
     {}
   );
 }
+
+// ── Third-party patching (catalog + outdated-software detection) ──
+
+// Fleet rollup: per catalog entry, how many devices run an outdated version.
+export async function getThirdPartyFleetFindings() {
+  return httpGetJson(`${BASE}/third-party/findings`);
+}
+
+// Outdated third-party apps on a single device.
+export async function getThirdPartyDeviceFindings(agentId) {
+  return httpGetJson(`${BASE}/third-party/findings/devices/${encodeURIComponent(agentId)}`);
+}
+
+// One-click remediation: deploy the entry's linked SDP package to the outdated
+// devices. 202 with a deployment when dispatched; 200 when nothing was outdated.
+export async function remediateThirdParty(catalogId) {
+  return httpPostJson(`${BASE}/third-party/remediate`, { catalogId });
+}
+
+// The tenant's third-party software catalog (latest version + remediation link).
+export async function listThirdPartyCatalog(params = {}) {
+  return httpGetJson(`${BASE}/third-party/catalog${buildQuery(params)}`);
+}
