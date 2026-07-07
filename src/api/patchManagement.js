@@ -4,7 +4,7 @@
 // envelope convention as compliance.js: callers should check
 // `res.ok` before touching the payload.
 
-import { httpGetJson, httpPostJson } from "./http";
+import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
 
 const BASE = "/api/v1/patch-management";
 
@@ -125,4 +125,16 @@ export async function remediateThirdParty(catalogId) {
 // The tenant's third-party software catalog (latest version + remediation link).
 export async function listThirdPartyCatalog(params = {}) {
   return httpGetJson(`${BASE}/third-party/catalog${buildQuery(params)}`);
+}
+
+export async function createThirdPartyCatalog(payload) {
+  return httpPostJson(`${BASE}/third-party/catalog`, payload);
+}
+
+export async function updateThirdPartyCatalog(id, payload) {
+  return httpPatchJson(`${BASE}/third-party/catalog/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteThirdPartyCatalog(id) {
+  return httpDeleteJson(`${BASE}/third-party/catalog/${encodeURIComponent(id)}`);
 }

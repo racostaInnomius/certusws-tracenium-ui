@@ -22,6 +22,9 @@ import {
   getThirdPartyDeviceFindings,
   remediateThirdParty,
   listThirdPartyCatalog,
+  createThirdPartyCatalog,
+  updateThirdPartyCatalog,
+  deleteThirdPartyCatalog,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -138,5 +141,20 @@ describe("third-party patching", () => {
     const calls = respond("get", `${BASE}/third-party/catalog`, { ok: true, items: [] });
     await listThirdPartyCatalog({ platform: "windows", activeOnly: true });
     expect(calls[0].search).toEqual({ platform: "windows", activeOnly: "true" });
+  });
+
+  it("creates / updates / deletes a catalog entry", async () => {
+    const create = respond("post", `${BASE}/third-party/catalog`, { ok: true }, { status: 201 });
+    const update = respond("patch", `${BASE}/third-party/catalog/:id`, { ok: true });
+    const del = respond("delete", `${BASE}/third-party/catalog/:id`, { ok: true });
+
+    await createThirdPartyCatalog({ title: "7-Zip", platform: "windows", latestVersion: "23.01" });
+    await updateThirdPartyCatalog(5, { latestVersion: "23.02" });
+    await deleteThirdPartyCatalog(5);
+
+    expect(create[0].body).toEqual({ title: "7-Zip", platform: "windows", latestVersion: "23.01" });
+    expect(update[0].pathname).toBe(`${BASE}/third-party/catalog/5`);
+    expect(update[0].body).toEqual({ latestVersion: "23.02" });
+    expect(del[0].pathname).toBe(`${BASE}/third-party/catalog/5`);
   });
 });

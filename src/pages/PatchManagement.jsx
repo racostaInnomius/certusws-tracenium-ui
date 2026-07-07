@@ -28,7 +28,7 @@ import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
-import ThirdPartyPanel from "../components/patch-management/ThirdPartyPanel";
+import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
@@ -1137,7 +1137,7 @@ export default function PatchManagement() {
               onRunAction={handleRunCategoryAction}
             />
           ) : tab === "third-party" ? (
-            <ThirdPartyPanel
+            <ThirdPartyTab
               canManage={canManage}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
