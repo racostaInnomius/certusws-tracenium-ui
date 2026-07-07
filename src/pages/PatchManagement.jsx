@@ -27,6 +27,8 @@ import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutli
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
+import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
+import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
@@ -283,6 +285,16 @@ const CATEGORIES = [
         impact: "none",
       },
     ],
+  },
+  {
+    // Third-party patching: rendered by ThirdPartyPanel (not the legacy
+    // CategoryPanel / FindingsPanel), so it carries no `actions`.
+    key: "third-party",
+    label: "Third-party",
+    icon: <ExtensionOutlinedIcon />,
+    blurb:
+      "Detect installed third-party software that is behind its latest catalog version, and deploy the linked package to update it.",
+    actions: [],
   },
 ];
 
@@ -1123,6 +1135,11 @@ export default function PatchManagement() {
               category={activeCategory}
               pmpEnabled={pmpEnabled}
               onRunAction={handleRunCategoryAction}
+            />
+          ) : tab === "third-party" ? (
+            <ThirdPartyTab
+              canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
           ) : (
             <FindingsPanel

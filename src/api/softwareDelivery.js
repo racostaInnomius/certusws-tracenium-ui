@@ -10,6 +10,7 @@ import {
   httpPostJson,
   httpPatchJson,
   httpDeleteJson,
+  httpPostBinary,
 } from "./http";
 
 const BASE = "/api/v1/software-delivery";
@@ -77,4 +78,39 @@ export async function cancelDeployment(id) {
     `${BASE}/deployments/${encodeURIComponent(id)}/cancel`,
     {}
   );
+}
+
+// ── AI Intake (upload → verify → AI proposal → review) ────────────
+
+// Upload an installer binary. The bytes are the body (octet-stream); the
+// filename + operator hints ride in the query string. Returns the persisted
+// intake record (verdict + proposal), 201 even when the verdict is `blocked`.
+export async function uploadIntake(file, hints = {}) {
+  const params = {
+    filename: hints.filename ?? file?.name ?? "package.bin",
+    name: hints.name,
+    vendor: hints.vendor,
+    version: hints.version,
+    declaredSha256: hints.declaredSha256,
+  };
+  return httpPostBinary(`${BASE}/intake${buildQuery(params)}`, file);
+}
+
+export async function listIntakes(params = {}) {
+  return httpGetJson(`${BASE}/intake${buildQuery(params)}`);
+}
+
+export async function getIntake(id) {
+  return httpGetJson(`${BASE}/intake/${encodeURIComponent(id)}`);
+}
+
+// Approve a pending intake — creates the catalog package from the (optionally
+// operator-edited) proposal and marks the intake approved. `overrides` is a
+// partial CreateSoftwarePackageInput.
+export async function approveIntake(id, overrides = {}) {
+  return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/approve`, overrides);
+}
+
+export async function rejectIntake(id) {
+  return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/reject`, {});
 }

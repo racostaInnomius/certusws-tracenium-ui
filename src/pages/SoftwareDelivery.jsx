@@ -32,6 +32,7 @@ import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
+import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 
 import { BRAND, DATAGRID_SX } from "../theme/brand";
@@ -53,6 +54,7 @@ import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import PackageDialog from "../components/software-delivery/PackageDialog";
 import DeletePackageDialog from "../components/software-delivery/DeletePackageDialog";
 import DeployWizardDialog from "../components/software-delivery/DeployWizardDialog";
+import IntakeTab from "../components/software-delivery/IntakeTab";
 import DeploymentDetailDrawer from "../components/software-delivery/DeploymentDetailDrawer";
 
 const TAB_SX = {
@@ -882,6 +884,12 @@ export default function SoftwareDelivery({ onNavigate }) {
             label="Deployments"
             sx={TAB_SX}
           />
+          <Tab
+            icon={<AutoAwesomeOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="AI Intake"
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
@@ -891,13 +899,15 @@ export default function SoftwareDelivery({ onNavigate }) {
           notify={notify}
           onDeployFire={handleDeployFired}
         />
-      ) : (
+      ) : activeTab === 1 ? (
         <DeploymentsTab
           canManage={canManage}
           notify={notify}
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
+      ) : (
+        <IntakeTab canManage={canManage} notify={notify} />
       )}
 
       <BrandSnackbar

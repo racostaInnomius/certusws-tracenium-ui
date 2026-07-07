@@ -364,6 +364,20 @@ function operatorExpectsArray(opSpec) {
   );
 }
 
+// Split a comma-separated string into a clean string[] — trim each token
+// and drop empties so "a, ,b," yields ["a", "b"]. Used when an operator
+// switches from a single-value to an array-value variant and the existing
+// scalar text has to be lifted into the array shape the multi-value input
+// (and backend) expects. Non-string input yields []. Mirrors the inline
+// `.split(",").map(trim).filter(Boolean)` idiom used elsewhere in this file.
+function parseCommaSeparatedValues(value) {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
 function operatorAllowsPartialText(opSpec) {
   const key = normalizeCriteriaKey(opSpec?.key ?? opSpec?.value);
   const label = normalizeCriteriaKey(opSpec?.label ?? opSpec?.name);

@@ -12,33 +12,38 @@ export async function listTenants() {
 }
 
 export async function getTenantById(tenantId) {
-  return httpGetJson(`${BASE}/${tenantId}`);
+  return httpGetJson(`${BASE}/${encodeURIComponent(tenantId)}`);
 }
 
 export async function getTenantSummary(tenantId) {
-  return httpGetJson(`${BASE}/${tenantId}/summary`);
+  return httpGetJson(`${BASE}/${encodeURIComponent(tenantId)}/summary`);
 }
 
 export async function updateTenant(tenantId, payload) {
-  return httpPutJson(`${BASE}/${tenantId}`, payload);
+  return httpPutJson(`${BASE}/${encodeURIComponent(tenantId)}`, payload);
 }
 
 export async function deleteTenant(tenantId) {
-  return httpDeleteJson(`${BASE}/${tenantId}`);
+  return httpDeleteJson(`${BASE}/${encodeURIComponent(tenantId)}`);
 }
 
 export async function listTenantMembers(tenantId) {
-  return httpGetJson(`${BASE}/${tenantId}/members`);
+  return httpGetJson(`${BASE}/${encodeURIComponent(tenantId)}/members`);
 }
 
 export async function createTenantMember(tenantId, payload) {
-  return httpPostJson(`${BASE}/${tenantId}/members`, payload);
+  return httpPostJson(`${BASE}/${encodeURIComponent(tenantId)}/members`, payload);
 }
 
 export async function updateTenantMember(tenantId, memberId, payload) {
-  return httpPutJson(`${BASE}/${tenantId}/members/${memberId}`, payload);
+  return httpPutJson(
+    `${BASE}/${encodeURIComponent(tenantId)}/members/${encodeURIComponent(memberId)}`,
+    payload
+  );
 }
 
 export async function deleteTenantMember(tenantId, memberId) {
-  return httpDeleteJson(`${BASE}/${tenantId}/members/${memberId}`);
+  return httpDeleteJson(
+    `${BASE}/${encodeURIComponent(tenantId)}/members/${encodeURIComponent(memberId)}`
+  );
 }

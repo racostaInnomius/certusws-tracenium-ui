@@ -93,8 +93,9 @@ function parseExitCodes(raw) {
 
 export default function PackageDialog({
   open,
-  mode,            // "create" | "edit"
-  item,            // existing dto when editing
+  mode,            // "create" | "edit" | "approve"
+  item,            // existing dto when editing; the AI-proposal item when approving
+  banner,          // optional node rendered at the top (used for the intake verdict)
   submitting,
   onClose,
   onSubmit,
@@ -102,11 +103,12 @@ export default function PackageDialog({
   const [form, setForm] = React.useState(defaultsForCreate);
   const [error, setError] = React.useState(null);
 
-  // Reset whenever the dialog opens.
+  // Reset whenever the dialog opens. Both "edit" and "approve" pre-fill from
+  // `item` — approve passes an item synthesised from the AI proposal.
   React.useEffect(() => {
     if (!open) return;
     setError(null);
-    setForm(mode === "edit" && item ? fromExisting(item) : defaultsForCreate());
+    setForm((mode === "edit" || mode === "approve") && item ? fromExisting(item) : defaultsForCreate());
   }, [open, mode, item]);
 
   // When platform changes, snap to a sensible format default for
@@ -124,8 +126,12 @@ export default function PackageDialog({
   const validate = () => {
     if (!form.name.trim()) return "Name is required";
     if (!form.version.trim()) return "Version is required";
-    if (!form.downloadPath.trim()) return "Download path is required";
-    if (!/^https:\/\//i.test(form.downloadPath.trim())) {
+    const dp = form.downloadPath.trim();
+    if (!dp) {
+      // In approve mode a blank download path is allowed: the backend mints a
+      // signed URL over the uploaded blob. In create/edit it's required.
+      if (mode !== "approve") return "Download path is required";
+    } else if (!/^https:\/\//i.test(dp)) {
       return "Download path must be an https URL";
     }
     if (!SHA256_RE.test(form.sha256.trim())) {
@@ -176,11 +182,17 @@ export default function PackageDialog({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
-        {mode === "edit" ? "Edit Software Package" : "Add Software Package"}
+        {mode === "edit"
+          ? "Edit Software Package"
+          : mode === "approve"
+          ? "Review AI Proposal"
+          : "Add Software Package"}
       </DialogTitle>
 
       <DialogContent dividers>
         <Stack spacing={2.5}>
+          {banner ? <Box>{banner}</Box> : null}
+
           {/* ── Identity ──────────────────────────────────────── */}
           <Box>
             <Typography
@@ -270,11 +282,16 @@ export default function PackageDialog({
             <Stack spacing={1.5} sx={{ mt: 1 }}>
               <TextField
                 size="small"
-                label="Download URL (https)"
+                label={mode === "approve" ? "Download URL (optional)" : "Download URL (https)"}
                 placeholder="https://blob.tracenium.com/foo-1.2.3.msi"
                 value={form.downloadPath}
                 onChange={(e) => update({ downloadPath: e.target.value })}
-                required
+                required={mode !== "approve"}
+                helperText={
+                  mode === "approve"
+                    ? "Leave blank to serve the uploaded file — a signed URL is generated on approve."
+                    : undefined
+                }
               />
               <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "2fr 1fr" }}>
                 <TextField
@@ -418,7 +435,13 @@ export default function PackageDialog({
             "&:hover": { bgcolor: BRAND.tealHover },
           }}
         >
-          {submitting ? "Saving…" : mode === "edit" ? "Save changes" : "Create"}
+          {submitting
+            ? "Saving…"
+            : mode === "edit"
+            ? "Save changes"
+            : mode === "approve"
+            ? "Approve & add to catalog"
+            : "Create"}
         </Button>
       </DialogActions>
     </Dialog>

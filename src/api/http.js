@@ -459,11 +459,21 @@ export function isAuthError(err) {
   return err?.status === 401 || code.includes("UNAUTHENTICATED");
 }
 
+// 5xx statuses that are PERMANENT, not transient. 501 Not Implemented is
+// used deliberately by RCP "screen" (an unreleased feature) — retrying it
+// will never succeed. 505 HTTP Version Not Supported is likewise a
+// permanent protocol failure. Both must fall into permanent error handling
+// (a plain Error carrying code/status, like the 4xx path) instead of
+// TemporaryServerError / retryable degradation.
+const PERMANENT_5XX_STATUSES = new Set([501, 505]);
+
 export function isTemporaryApiError(err) {
   if (!err) return false;
 
   const message = String(err.message || "").toLowerCase();
   const code = String(err.code || err.body?.error || "").toUpperCase();
+
+  if (PERMANENT_5XX_STATUSES.has(err.status)) return false;
 
   return (
     err instanceof TemporaryServerError ||
@@ -535,7 +545,10 @@ async function handleResponse(res, url = "") {
     throw err;
   }
 
-  if (res.status === 503 || isRetryableBody(body) || res.status >= 500) {
+  if (
+    !PERMANENT_5XX_STATUSES.has(res.status) &&
+    (res.status === 503 || isRetryableBody(body) || res.status >= 500)
+  ) {
     throw new TemporaryServerError(
       body?.message || "Unable to refresh data. Showing last available data.",
       {
@@ -714,6 +727,37 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: timeout.signal,
+    });
+
+    const json = await handleResponse(res, url);
+    invalidateAfterMutation(url);
+    return json;
+  } catch (err) {
+    throw toHumanError(err, url);
+  } finally {
+    timeout.done();
+  }
+}
+
+// Binary POST — sends a raw body (File / Blob / ArrayBuffer / Uint8Array) as
+// application/octet-stream. Used by the SDP AI-intake upload, where the file's
+// bytes are the body and the metadata rides in the query string. Mirrors
+// httpPostJson's error/cache handling; the default timeout is generous because
+// installer uploads can be large.
+export async function httpPostBinary(
+  url,
+  bytes,
+  { timeoutMs = 120_000, contentType = "application/octet-stream" } = {}
+) {
+  const timeout = withTimeout(timeoutMs);
+
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": contentType },
+      body: bytes,
       signal: timeout.signal,
     });
 

@@ -37,7 +37,7 @@ export async function listAgentReleases(params = {}) {
 }
 
 export async function getAgentReleaseById(id) {
-  return httpGetJson(`${BASE}/${id}`);
+  return httpGetJson(`${BASE}/${encodeURIComponent(id)}`);
 }
 
 export async function createAgentRelease(payload) {
@@ -45,11 +45,11 @@ export async function createAgentRelease(payload) {
 }
 
 export async function updateAgentRelease(id, payload) {
-  return httpPutJson(`${BASE}/${id}`, payload);
+  return httpPutJson(`${BASE}/${encodeURIComponent(id)}`, payload);
 }
 
 export async function deleteAgentRelease(id) {
-  return httpDeleteJson(`${BASE}/${id}`);
+  return httpDeleteJson(`${BASE}/${encodeURIComponent(id)}`);
 }
 
 export async function resolveAgentReleaseDownload(downloadPath) {
