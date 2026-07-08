@@ -22,17 +22,20 @@ import {
   Stack,
   TextField,
 } from "@mui/material";
+import { Menu, MenuItem } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import PageHeader from "../components/common/PageHeader";
 import { BRAND } from "../theme/brand";
 import { useMsp } from "./MspContext";
-import { fetchMspClients } from "./mspApi";
+import { fetchMspClients, fetchMyMemberships } from "./mspApi";
 import PortfolioGrid from "./PortfolioGrid";
 import ConsolidatedStrip from "./ConsolidatedStrip";
 import MspAdmin from "./MspAdmin";
+import MspTeamDialog from "./MspTeamDialog";
 
 export default function Portfolio() {
   const { portfolio, loading, error, enterTenant, reloadPortfolio } = useMsp();
@@ -42,6 +45,13 @@ export default function Portfolio() {
   // button in the top-level vendor view; closing it reloads the portfolio
   // so any hierarchy change (new MSP, reassigned client) is reflected.
   const [adminOpen, setAdminOpen] = React.useState(false);
+
+  // Self-service: MSPs the caller OWNs → "Manage team". Fetched only at the
+  // MSP-operator level (empty for the vendor). If they own >1 MSP, a menu
+  // lets them pick which team to manage.
+  const [ownedMsps, setOwnedMsps] = React.useState([]);
+  const [teamMsp, setTeamMsp] = React.useState(null); // { id, name } | null
+  const [teamMenuAnchor, setTeamMenuAnchor] = React.useState(null);
 
   // Vendor drill-down state: which MSP is expanded (null = MSP list).
   const [drilledMsp, setDrilledMsp] = React.useState(null); // { id, name } | null
@@ -72,6 +82,31 @@ export default function Portfolio() {
     setDrillItems([]);
     setFilter("");
   }, []);
+
+  // Load the caller's owned MSPs once we know they're an MSP operator.
+  React.useEffect(() => {
+    let alive = true;
+    if (level !== "msp") { setOwnedMsps([]); return () => { alive = false; }; }
+    (async () => {
+      try {
+        const resp = await fetchMyMemberships();
+        if (alive) setOwnedMsps((resp?.memberships ?? []).filter((m) => m.role === "OWNER"));
+      } catch {
+        if (alive) setOwnedMsps([]);
+      }
+    })();
+    return () => { alive = false; };
+  }, [level]);
+
+  const openTeam = React.useCallback((m) => {
+    setTeamMenuAnchor(null);
+    setTeamMsp({ id: m.mspId, name: m.mspName });
+  }, []);
+
+  const onManageTeamClick = React.useCallback((e) => {
+    if (ownedMsps.length === 1) openTeam(ownedMsps[0]);
+    else setTeamMenuAnchor(e.currentTarget);
+  }, [ownedMsps, openTeam]);
 
   // Decide which items are on screen + how a click behaves.
   let items = [];
@@ -143,8 +178,40 @@ export default function Portfolio() {
             >
               Manage partners
             </Button>
+          ) : level === "msp" && ownedMsps.length > 0 ? (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<GroupsOutlinedIcon />}
+              onClick={onManageTeamClick}
+              sx={{
+                textTransform: "none",
+                fontWeight: 800,
+                borderColor: BRAND.teal,
+                color: BRAND.tealText,
+                "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              Manage team
+            </Button>
           ) : null
         }
+      />
+
+      {/* Owned-MSP picker (only when the caller owns more than one MSP). */}
+      <Menu anchorEl={teamMenuAnchor} open={Boolean(teamMenuAnchor)} onClose={() => setTeamMenuAnchor(null)}>
+        {ownedMsps.map((m) => (
+          <MenuItem key={m.mspId} onClick={() => openTeam(m)}>
+            {m.mspName || `Partner ${m.mspId}`}
+          </MenuItem>
+        ))}
+      </Menu>
+
+      <MspTeamDialog
+        open={Boolean(teamMsp)}
+        mspId={teamMsp?.id}
+        mspName={teamMsp?.name}
+        onClose={() => setTeamMsp(null)}
       />
 
       {/* F2 consolidated summary — shown at the top-level list (not when

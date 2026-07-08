@@ -20,6 +20,7 @@ import {
   getDevicePosture,
   getDeviceTimeseries,
   getFleetComplianceTimeseries,
+  getFrameworkComplianceTimeseries,
   getFindingHistory,
   getFrameworkSummary,
   getFrameworks,
@@ -262,5 +263,12 @@ describe("export URL builders (pure functions)", () => {
     await getFleetComplianceTimeseries(90);
     expect(calls[0].pathname).toBe("/api/v1/security/compliance/fleet-timeseries");
     expect(calls[0].search).toEqual({ windowDays: "90" });
+  });
+
+  it("getFrameworkComplianceTimeseries hits framework-timeseries with the window", async () => {
+    const calls = respond("get", "/api/v1/security/compliance/framework-timeseries", { ok: true, frameworks: [], buckets: [] });
+    await getFrameworkComplianceTimeseries(60);
+    expect(calls[0].pathname).toBe("/api/v1/security/compliance/framework-timeseries");
+    expect(calls[0].search).toEqual({ windowDays: "60" });
   });
 });

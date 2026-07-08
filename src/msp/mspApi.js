@@ -44,6 +44,15 @@ export async function fetchConsolidated(options = {}) {
   return httpGetJson("/api/v1/msp/consolidated", { staleMs: 60_000, ...options });
 }
 
+/**
+ * The caller's own MSP memberships (+ role). Empty for the vendor and
+ * plain single-tenant users. The UI offers "Manage team" for any MSP where
+ * the caller's role is OWNER (self-service).
+ */
+export async function fetchMyMemberships(options = {}) {
+  return httpGetJson("/api/v1/msp/my-memberships", { cache: "no-store", ...options });
+}
+
 // ── F3 vendor admin (hierarchy management) ────────────────────────────
 //
 // Every one of these is vendor-only (admin_master); the backend returns

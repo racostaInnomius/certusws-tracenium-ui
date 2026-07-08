@@ -70,6 +70,13 @@ export async function getFleetComplianceTimeseries(windowDays = 30) {
   return httpGetJson(`${BASE}/fleet-timeseries${buildQuery({ windowDays })}`);
 }
 
+// Per-framework compliance trend: { frameworks: [...], buckets: [{ bucket,
+// scores: { framework: score } }] }. Recorded from 2026-07 forward — older days
+// may be sparse.
+export async function getFrameworkComplianceTimeseries(windowDays = 30) {
+  return httpGetJson(`${BASE}/framework-timeseries${buildQuery({ windowDays })}`);
+}
+
 // ── Sprint 3 — finding lifecycle ───────────────────────────────────
 //
 // Each helper returns the raw `{ok, ...}` envelope or the failure
