@@ -162,3 +162,23 @@ describe("third-party patching", () => {
     expect(del[0].pathname).toBe(`${BASE}/third-party/catalog/5`);
   });
 });
+
+describe("maintenance windows", () => {
+  it("lists / creates / updates / deletes windows", async () => {
+    const list = respond("get", `${BASE}/maintenance-windows`, { ok: true, items: [] });
+    const create = respond("post", `${BASE}/maintenance-windows`, { ok: true }, { status: 201 });
+    const update = respond("patch", `${BASE}/maintenance-windows/:id`, { ok: true });
+    const del = respond("delete", `${BASE}/maintenance-windows/:id`, { ok: true });
+
+    await listMaintenanceWindows();
+    await createMaintenanceWindow({ name: "Overnight", daysOfWeek: [1, 2], startMinute: 120, durationMinutes: 120, timezone: "UTC" });
+    await updateMaintenanceWindow(3, { enabled: false });
+    await deleteMaintenanceWindow(3);
+
+    expect(list[0].pathname).toBe(`${BASE}/maintenance-windows`);
+    expect(create[0].body).toEqual({ name: "Overnight", daysOfWeek: [1, 2], startMinute: 120, durationMinutes: 120, timezone: "UTC" });
+    expect(update[0].pathname).toBe(`${BASE}/maintenance-windows/3`);
+    expect(update[0].body).toEqual({ enabled: false });
+    expect(del[0].pathname).toBe(`${BASE}/maintenance-windows/3`);
+  });
+});

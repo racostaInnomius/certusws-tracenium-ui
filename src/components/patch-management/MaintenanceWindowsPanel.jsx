@@ -28,7 +28,8 @@ import {
   updateMaintenanceWindow,
   deleteMaintenanceWindow,
 } from "../../api/patchManagement";
-import MaintenanceWindowDialog, { minutesToHHMM } from "./MaintenanceWindowDialog";
+import MaintenanceWindowDialog from "./MaintenanceWindowDialog";
+import { minutesToHHMM } from "./maintenanceWindowTime";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

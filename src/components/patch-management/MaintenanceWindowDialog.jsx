@@ -24,6 +24,7 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND } from "../../theme/brand";
+import { minutesToHHMM, hhmmToMinutes, durationFromTimes } from "./maintenanceWindowTime";
 
 const DAYS = [
   { v: 0, l: "Sun" }, { v: 1, l: "Mon" }, { v: 2, l: "Tue" }, { v: 3, l: "Wed" },
@@ -36,23 +37,6 @@ const COMMON_TZ = [
   "America/Los_Angeles", "America/Sao_Paulo", "Europe/Madrid", "Europe/London",
   "Europe/Berlin", "Asia/Tokyo",
 ];
-
-// ── pure time helpers (exported for tests) ──────────────────────────────────
-export function minutesToHHMM(min) {
-  const m = ((min % 1440) + 1440) % 1440;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-}
-export function hhmmToMinutes(hhmm) {
-  const [h, m] = String(hhmm || "").split(":").map((n) => parseInt(n, 10));
-  if (!Number.isInteger(h) || !Number.isInteger(m)) return null;
-  return h * 60 + m;
-}
-/** Duration from start→end, wrapping past midnight. Null if start === end. */
-export function durationFromTimes(startMin, endMin) {
-  if (startMin == null || endMin == null) return null;
-  const d = (((endMin - startMin) % 1440) + 1440) % 1440;
-  return d === 0 ? null : d;
-}
 
 function tzOptions(extra) {
   const set = new Set(COMMON_TZ);

@@ -73,6 +73,53 @@ export function getApiCacheSessionScope() {
   return currentSessionScope || DEFAULT_SESSION_SCOPE;
 }
 
+// ── MSP active tenant (F1) ────────────────────────────────────────────
+//
+// When an MSP operator / vendor selects a client from the portfolio, its
+// internal Tenant.Id is set here and sent as the X-Tenant-Id header on
+// EVERY subsequent API call. The backend's tenantMiddleware authorizes it
+// via the hierarchy and routes the request to that tenant. Null → no
+// header → the backend uses the token's own tenant (single-tenant users).
+//
+// Persisted in sessionStorage so a page refresh keeps the operator in the
+// same client instead of bouncing them back to the portfolio. Cleared on
+// sign-out (setApiCacheSessionScope('signed-out') zeroes it below).
+const ACTIVE_TENANT_STORAGE_KEY = "tr_active_tenant";
+let activeTenantId = (() => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage?.getItem(ACTIVE_TENANT_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+})();
+
+export function setActiveTenantId(id) {
+  activeTenantId = id != null && String(id).trim() ? String(id).trim() : null;
+  if (typeof window !== "undefined") {
+    try {
+      if (activeTenantId) {
+        window.sessionStorage?.setItem(ACTIVE_TENANT_STORAGE_KEY, activeTenantId);
+      } else {
+        window.sessionStorage?.removeItem(ACTIVE_TENANT_STORAGE_KEY);
+      }
+    } catch {
+      // best effort
+    }
+  }
+}
+
+export function getActiveTenantId() {
+  return activeTenantId;
+}
+
+// Merge the X-Tenant-Id header into a base headers object when an active
+// tenant is set. Used at every fetch call site.
+function withTenantHeader(base) {
+  if (!activeTenantId) return base;
+  return { ...(base || {}), "X-Tenant-Id": activeTenantId };
+}
+
 export function setApiCacheSessionScope(scope) {
   const nextScope = normalizeSessionScope(scope);
   const previousScope = normalizeSessionScope(currentSessionScope);
@@ -90,6 +137,10 @@ export function setApiCacheSessionScope(scope) {
 
   if (nextScope !== previousScope) {
     clearApiCache();
+    // A scope change means the identity changed (sign-in / sign-out /
+    // user switch). The previously-selected client no longer applies —
+    // clear it so we don't send a stale X-Tenant-Id under a new identity.
+    setActiveTenantId(null);
   }
 
   return nextScope;
@@ -617,6 +668,7 @@ async function fetchGetJson(url, options) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "GET",
       credentials: "include",
+      headers: withTenantHeader(),
       signal: timeout.signal,
     });
 
@@ -725,7 +777,7 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: withTenantHeader({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -756,7 +808,7 @@ export async function httpPostBinary(
     const res = await fetch(`${API_BASE}${url}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": contentType },
+      headers: withTenantHeader({ "Content-Type": contentType }),
       body: bytes,
       signal: timeout.signal,
     });
@@ -778,7 +830,7 @@ export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PUT",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(headers || {}) },
+      headers: withTenantHeader({ "Content-Type": "application/json", ...(headers || {}) }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -800,7 +852,7 @@ export async function httpPatchJson(url, body, { timeoutMs } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PATCH",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: withTenantHeader({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -822,6 +874,7 @@ export async function httpDeleteJson(url, { timeoutMs } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "DELETE",
       credentials: "include",
+      headers: withTenantHeader(),
       signal: timeout.signal,
     });
 

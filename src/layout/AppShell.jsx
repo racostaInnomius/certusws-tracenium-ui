@@ -26,6 +26,10 @@ import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { BRAND } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
+import { useMsp } from "../msp/MspContext";
+import TenantSwitcher from "../msp/TenantSwitcher";
+import HierarchyBreadcrumb from "../msp/HierarchyBreadcrumb";
+const Portfolio = React.lazy(() => import("../msp/Portfolio"));
 
 const Assets = React.lazy(() => import("../pages/Assets"));
 const Overview = React.lazy(() => import("../pages/Overview"));
@@ -471,6 +475,12 @@ export default function AppShell() {
   // See migrations/20260610_tenant_session_settings.sql and
   // session-settings.service.ts for the source of truth.
   const { auth } = useAuthContext();
+  // MSP navigation. `inPortfolioMode` = the user navigates a portfolio
+  // (MSP operator / vendor) AND hasn't selected a client yet → show the
+  // Portfolio grid instead of the client shell. When a client IS active,
+  // we render the normal shell plus a context bar (breadcrumb + switcher).
+  const { hasPortfolio, activeTenant } = useMsp();
+  const inPortfolioMode = hasPortfolio && !activeTenant;
   const sessionSettings = auth?.sessionSettings ?? null;
   const idleEnabled = sessionSettings?.autoLogoutEnabled !== false; // default true
   const idleTimeoutMs =
@@ -997,6 +1007,7 @@ export default function AppShell() {
   }
 
   const shouldShowNoInformationOverlay =
+    !inPortfolioMode &&
     tenantInventoryState === "empty" && EMPTY_TENANT_GATED_PAGES.has(selectedPage);
 
   return (
@@ -1009,13 +1020,18 @@ export default function AppShell() {
         overflow: "hidden", // the shell is a fixed frame
       }}
     >
-      <Sidebar
-        selected={selectedPage}
-        onSelect={handleSelect}
-        showWelcomeEntry={showWelcomeEntry}
-        mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
+      {/* Client-specific sidebar. Hidden in portfolio mode — its pages
+          (Assets, Compliance, etc.) only make sense once a client is
+          selected. */}
+      {inPortfolioMode ? null : (
+        <Sidebar
+          selected={selectedPage}
+          onSelect={handleSelect}
+          showWelcomeEntry={showWelcomeEntry}
+          mobileOpen={mobileOpen}
+          onMobileClose={() => setMobileOpen(false)}
+        />
+      )}
 
       <Box
         sx={{
@@ -1031,6 +1047,30 @@ export default function AppShell() {
         <Box sx={{ width: "100%", flexShrink: 0 }}>
           <Topbar onMenuClick={() => setMobileOpen(true)} />
         </Box>
+
+        {/* MSP context bar — shown only when a client is active (i.e. an
+            MSP operator / vendor drilled into a client). Gives the
+            breadcrumb back to the portfolio + the fast tenant switcher.
+            Single-tenant users never see it (activeTenant stays null). */}
+        {activeTenant ? (
+          <Box
+            sx={{
+              width: "100%",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              px: { xs: 1.25, sm: 2, md: 2.5 },
+              py: 1,
+              bgcolor: "#fff",
+              borderBottom: `1px solid ${BRAND.border}`,
+            }}
+          >
+            <HierarchyBreadcrumb />
+            <TenantSwitcher />
+          </Box>
+        ) : null}
 
         {/* The single scroll container for everything below the Topbar.
             Vertical scroll is owned here. Horizontal scroll is clamped:
@@ -1063,7 +1103,7 @@ export default function AppShell() {
                 userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
               }}
             >
-              {content}
+              {inPortfolioMode ? <Portfolio /> : content}
             </Box>
           </React.Suspense>
 
