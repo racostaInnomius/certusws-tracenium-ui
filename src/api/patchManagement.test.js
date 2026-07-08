@@ -25,6 +25,10 @@ import {
   createThirdPartyCatalog,
   updateThirdPartyCatalog,
   deleteThirdPartyCatalog,
+  listMaintenanceWindows,
+  createMaintenanceWindow,
+  updateMaintenanceWindow,
+  deleteMaintenanceWindow,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";

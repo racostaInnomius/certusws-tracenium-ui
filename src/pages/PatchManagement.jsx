@@ -1153,6 +1153,11 @@ export default function PatchManagement() {
               canManage={canManage}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
+          ) : tab === "maintenance" ? (
+            <MaintenanceWindowsPanel
+              canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
           ) : (
             <FindingsPanel
               tabKey={tab}
