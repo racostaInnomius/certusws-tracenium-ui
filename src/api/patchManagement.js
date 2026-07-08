@@ -138,3 +138,21 @@ export async function updateThirdPartyCatalog(id, payload) {
 export async function deleteThirdPartyCatalog(id) {
   return httpDeleteJson(`${BASE}/third-party/catalog/${encodeURIComponent(id)}`);
 }
+
+// ── Maintenance windows (when deployments are allowed to dispatch) ─
+
+export async function listMaintenanceWindows() {
+  return httpGetJson(`${BASE}/maintenance-windows`);
+}
+
+export async function createMaintenanceWindow(payload) {
+  return httpPostJson(`${BASE}/maintenance-windows`, payload);
+}
+
+export async function updateMaintenanceWindow(id, payload) {
+  return httpPatchJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteMaintenanceWindow(id) {
+  return httpDeleteJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`);
+}

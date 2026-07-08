@@ -28,7 +28,9 @@ import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
+import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
+import MaintenanceWindowsPanel from "../components/patch-management/MaintenanceWindowsPanel";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
@@ -294,6 +296,16 @@ const CATEGORIES = [
     icon: <ExtensionOutlinedIcon />,
     blurb:
       "Detect installed third-party software that is behind its latest catalog version, and deploy the linked package to update it.",
+    actions: [],
+  },
+  {
+    // Maintenance windows: tenant config for WHEN deployments dispatch.
+    // Rendered by MaintenanceWindowsPanel — no `actions`.
+    key: "maintenance",
+    label: "Maintenance",
+    icon: <ScheduleOutlinedIcon />,
+    blurb:
+      "Restrict when patch and software deployments are allowed to dispatch — e.g. overnight only. No windows means immediate dispatch.",
     actions: [],
   },
 ];
