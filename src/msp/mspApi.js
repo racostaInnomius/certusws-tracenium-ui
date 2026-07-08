@@ -188,3 +188,15 @@ export async function fetchMyPartner(options = {}) {
 export async function redeemClaimCode(code) {
   return httpPostJson("/api/v1/msp/claim-codes/redeem", { code });
 }
+
+// ── MSP-provisioned clients (create + assign admin) ───────────────────
+
+/** Pending clients an MSP created that await their admin's first login. */
+export async function fetchPendingClients(mspId, options = {}) {
+  return httpGetJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/clients`, { cache: "no-store", ...options });
+}
+
+/** Create a client tenant under an MSP + assign an admin (by IDP user id). */
+export async function createManagedClient(mspId, { name, adminSubject, adminEmail } = {}) {
+  return httpPostJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/clients`, { name, adminSubject, adminEmail });
+}

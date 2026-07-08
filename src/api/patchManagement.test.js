@@ -31,6 +31,7 @@ import {
   deleteMaintenanceWindow,
   getVulnerabilityExposure,
   getDeviceVulnerabilities,
+  remediateCveVulnerability,
   listCveCatalog,
   createCveCatalog,
   updateCveCatalog,
@@ -179,6 +180,12 @@ describe("CVE mapping", () => {
 
     expect(fleet[0].pathname).toBe(`${BASE}/vulnerabilities/exposure`);
     expect(device[0].pathname).toBe(`${BASE}/vulnerabilities/exposure/devices/agent%2F42`);
+  });
+
+  it("posts a CVE remediation with the catalogId", async () => {
+    const calls = respond("post", `${BASE}/vulnerabilities/remediate`, { ok: true, deployed: true }, { status: 202 });
+    await remediateCveVulnerability(7);
+    expect(calls[0].body).toEqual({ catalogId: 7 });
   });
 
   it("lists the CVE catalog with a platform filter", async () => {

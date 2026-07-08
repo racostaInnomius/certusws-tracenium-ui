@@ -61,7 +61,9 @@ import {
 import MspBilling from "./MspBilling";
 import ClientReportDialog from "./ClientReportDialog";
 import ClaimCodesPanel from "./ClaimCodesPanel";
+import CreateClientPanel from "./CreateClientPanel";
 import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
+import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 
 const ROLES = ["ADMIN", "OWNER", "USER"];
 
@@ -735,13 +737,22 @@ function MspDetail({ msp, onChanged, onToast }) {
         )}
       </SectionPaper>
 
-      {/* Claim codes — invite clients to self-attach to this partner */}
+      {/* Claim codes — invite an EXISTING client to self-attach */}
       <SectionPaper variant="panel">
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
           <LinkOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
-          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Client claim codes</Typography>
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Invite an existing client</Typography>
         </Stack>
         <ClaimCodesPanel mspId={msp.id} mspName={msp.name} />
+      </SectionPaper>
+
+      {/* Create a NEW client tenant + assign an admin (bind on first login) */}
+      <SectionPaper variant="panel">
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <PersonAddAltOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Create a new client</Typography>
+        </Stack>
+        <CreateClientPanel mspId={msp.id} mspName={msp.name} />
       </SectionPaper>
 
       <ClientReportDialog

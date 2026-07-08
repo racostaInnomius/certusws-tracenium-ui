@@ -130,6 +130,7 @@ export default function CveCatalogManager({ canManage, notify }) {
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Platform</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Severity</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Affected range</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Fix package</TableCell>
                 {canManage ? <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Actions</TableCell> : null}
               </TableRow>
             </TableHead>
@@ -158,6 +159,13 @@ export default function CveCatalogManager({ canManage, notify }) {
                     </TableCell>
                     <TableCell>
                       <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>{rangeLabel(it)}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      {it.packageId == null ? (
+                        <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>none</Typography>
+                      ) : (
+                        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>#{it.packageId}</Typography>
+                      )}
                     </TableCell>
                     {canManage ? (
                       <TableCell align="right">

@@ -36,7 +36,7 @@ export default function VulnerabilitiesTab({ canManage, notify }) {
       </ToggleButtonGroup>
 
       {view === "exposure" ? (
-        <VulnerabilityExposurePanel notify={notify} />
+        <VulnerabilityExposurePanel canManage={canManage} notify={notify} />
       ) : (
         <CveCatalogManager canManage={canManage} notify={notify} />
       )}

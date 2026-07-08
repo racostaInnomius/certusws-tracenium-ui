@@ -39,6 +39,7 @@ function defaults() {
     cvssVector: "",
     summary: "",
     referenceUrl: "",
+    packageId: "",
     isActive: true,
   };
 }
@@ -58,6 +59,7 @@ function fromEntry(e) {
     cvssVector: e.cvssVector ?? "",
     summary: e.summary ?? "",
     referenceUrl: e.referenceUrl ?? "",
+    packageId: e.packageId == null ? "" : String(e.packageId),
     isActive: e.isActive !== false,
   };
 }
@@ -83,6 +85,12 @@ export default function CveCatalogDialog({ open, mode, entry, submitting, onClos
       if (!Number.isFinite(n) || n < 0 || n > 10) return setError("CVSS score must be between 0 and 10 (or blank)");
       cvssScore = n;
     }
+    let packageId = null;
+    if (form.packageId !== "" && form.packageId != null) {
+      const n = Number(form.packageId);
+      if (!Number.isInteger(n) || n <= 0) return setError("Package ID must be a positive integer (or blank)");
+      packageId = n;
+    }
     onSubmit?.({
       cveId: form.cveId.trim(),
       title: form.title.trim(),
@@ -97,6 +105,7 @@ export default function CveCatalogDialog({ open, mode, entry, submitting, onClos
       cvssVector: form.cvssVector.trim() || null,
       summary: form.summary.trim() || null,
       referenceUrl: form.referenceUrl.trim() || null,
+      packageId,
       isActive: form.isActive,
     });
   };
@@ -147,6 +156,14 @@ export default function CveCatalogDialog({ open, mode, entry, submitting, onClos
           </Box>
 
           <TextField size="small" label="Reference URL (optional)" placeholder="https://nvd.nist.gov/vuln/detail/CVE-…" value={form.referenceUrl} onChange={(e) => update({ referenceUrl: e.target.value })} />
+          <TextField
+            size="small"
+            label="Remediation package ID (optional)"
+            type="number"
+            value={form.packageId}
+            onChange={(e) => update({ packageId: e.target.value })}
+            helperText="SDP package that installs the fixed version — enables one-click Remediate"
+          />
           <TextField size="small" label="Summary (optional)" value={form.summary} onChange={(e) => update({ summary: e.target.value })} multiline minRows={2} />
 
           <FormControlLabel

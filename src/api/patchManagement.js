@@ -152,6 +152,13 @@ export async function getDeviceVulnerabilities(agentId) {
   return httpGetJson(`${BASE}/vulnerabilities/exposure/devices/${encodeURIComponent(agentId)}`);
 }
 
+// One-click remediation: deploy the CVE entry's linked SDP package to the
+// vulnerable devices. 202 with a deployment when dispatched; 200 when nothing
+// was vulnerable.
+export async function remediateCveVulnerability(catalogId) {
+  return httpPostJson(`${BASE}/vulnerabilities/remediate`, { catalogId });
+}
+
 // The tenant's CVE catalog (product + affected version range + CVSS).
 export async function listCveCatalog(params = {}) {
   return httpGetJson(`${BASE}/vulnerabilities/catalog${buildQuery(params)}`);
