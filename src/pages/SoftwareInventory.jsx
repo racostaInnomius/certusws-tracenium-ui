@@ -39,6 +39,7 @@ import {
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
+import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 
 const SOFTWARE_ACCENTS = {
   installed: "#4F9A96",
@@ -895,6 +896,12 @@ export default function SoftwareInventory() {
           </Grid>
         </Grid>
       </Box>
+
+      {/* Browser posture — attack-surface lens over the installed-software
+          inventory (Chrome / Edge / Firefox / … versions across the fleet). */}
+      <BrowserInventoryPanel
+        notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+      />
 
       <Box sx={{ mb: 3 }}>
         <Grid container spacing={2} alignItems="stretch">

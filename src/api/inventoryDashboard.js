@@ -60,3 +60,10 @@ export async function getSoftwareInventoryHostApps(agentId, params = {}) {
     `${BASE}/software-inventory/hosts/${encodeURIComponent(agentId)}/apps${buildQuery(params)}`
   );
 }
+
+// Browser inventory — fleet posture per browser family (versions + how many
+// devices are behind the newest version in the fleet). Its own top-level path,
+// not under /dashboard.
+export async function getBrowserInventory() {
+  return httpGetJson("/api/v1/browser-inventory");
+}
