@@ -28,6 +28,7 @@ import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import PageHeader from "../components/common/PageHeader";
 import { BRAND } from "../theme/brand";
 import { useMsp } from "./MspContext";
@@ -36,6 +37,7 @@ import PortfolioGrid from "./PortfolioGrid";
 import ConsolidatedStrip from "./ConsolidatedStrip";
 import MspAdmin from "./MspAdmin";
 import MspTeamDialog from "./MspTeamDialog";
+import ClaimCodesDialog from "./ClaimCodesDialog";
 
 export default function Portfolio() {
   const { portfolio, loading, error, enterTenant, reloadPortfolio } = useMsp();
@@ -46,12 +48,14 @@ export default function Portfolio() {
   // so any hierarchy change (new MSP, reassigned client) is reflected.
   const [adminOpen, setAdminOpen] = React.useState(false);
 
-  // Self-service: MSPs the caller OWNs → "Manage team". Fetched only at the
-  // MSP-operator level (empty for the vendor). If they own >1 MSP, a menu
-  // lets them pick which team to manage.
+  // Self-service: MSPs the caller OWNs → "Manage team" / "Add a client".
+  // Fetched only at the MSP-operator level (empty for the vendor). If they
+  // own >1 MSP, a menu lets them pick which MSP the action targets.
   const [ownedMsps, setOwnedMsps] = React.useState([]);
   const [teamMsp, setTeamMsp] = React.useState(null); // { id, name } | null
-  const [teamMenuAnchor, setTeamMenuAnchor] = React.useState(null);
+  const [codesMsp, setCodesMsp] = React.useState(null); // { id, name } | null
+  const [mspMenuAnchor, setMspMenuAnchor] = React.useState(null);
+  const [mspMenuAction, setMspMenuAction] = React.useState("team"); // 'team' | 'codes'
 
   // Vendor drill-down state: which MSP is expanded (null = MSP list).
   const [drilledMsp, setDrilledMsp] = React.useState(null); // { id, name } | null
@@ -98,15 +102,18 @@ export default function Portfolio() {
     return () => { alive = false; };
   }, [level]);
 
-  const openTeam = React.useCallback((m) => {
-    setTeamMenuAnchor(null);
-    setTeamMsp({ id: m.mspId, name: m.mspName });
+  // Apply the pending menu action (team vs claim codes) to a chosen MSP.
+  const applyMspAction = React.useCallback((m, action) => {
+    setMspMenuAnchor(null);
+    if (action === "codes") setCodesMsp({ id: m.mspId, name: m.mspName });
+    else setTeamMsp({ id: m.mspId, name: m.mspName });
   }, []);
 
-  const onManageTeamClick = React.useCallback((e) => {
-    if (ownedMsps.length === 1) openTeam(ownedMsps[0]);
-    else setTeamMenuAnchor(e.currentTarget);
-  }, [ownedMsps, openTeam]);
+  const onMspActionClick = React.useCallback((action) => (e) => {
+    setMspMenuAction(action);
+    if (ownedMsps.length === 1) applyMspAction(ownedMsps[0], action);
+    else setMspMenuAnchor(e.currentTarget);
+  }, [ownedMsps, applyMspAction]);
 
   // Decide which items are on screen + how a click behaves.
   let items = [];
@@ -179,29 +186,46 @@ export default function Portfolio() {
               Manage partners
             </Button>
           ) : level === "msp" && ownedMsps.length > 0 ? (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<GroupsOutlinedIcon />}
-              onClick={onManageTeamClick}
-              sx={{
-                textTransform: "none",
-                fontWeight: 800,
-                borderColor: BRAND.teal,
-                color: BRAND.tealText,
-                "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              Manage team
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<PersonAddAltOutlinedIcon />}
+                onClick={onMspActionClick("codes")}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: BRAND.teal,
+                  color: BRAND.tealText,
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+                }}
+              >
+                Add a client
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<GroupsOutlinedIcon />}
+                onClick={onMspActionClick("team")}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: BRAND.teal,
+                  color: BRAND.tealText,
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+                }}
+              >
+                Manage team
+              </Button>
+            </Stack>
           ) : null
         }
       />
 
       {/* Owned-MSP picker (only when the caller owns more than one MSP). */}
-      <Menu anchorEl={teamMenuAnchor} open={Boolean(teamMenuAnchor)} onClose={() => setTeamMenuAnchor(null)}>
+      <Menu anchorEl={mspMenuAnchor} open={Boolean(mspMenuAnchor)} onClose={() => setMspMenuAnchor(null)}>
         {ownedMsps.map((m) => (
-          <MenuItem key={m.mspId} onClick={() => openTeam(m)}>
+          <MenuItem key={m.mspId} onClick={() => applyMspAction(m, mspMenuAction)}>
             {m.mspName || `Partner ${m.mspId}`}
           </MenuItem>
         ))}
@@ -212,6 +236,13 @@ export default function Portfolio() {
         mspId={teamMsp?.id}
         mspName={teamMsp?.name}
         onClose={() => setTeamMsp(null)}
+      />
+
+      <ClaimCodesDialog
+        open={Boolean(codesMsp)}
+        mspId={codesMsp?.id}
+        mspName={codesMsp?.name}
+        onClose={() => setCodesMsp(null)}
       />
 
       {/* F2 consolidated summary — shown at the top-level list (not when

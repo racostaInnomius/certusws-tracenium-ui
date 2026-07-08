@@ -60,6 +60,8 @@ import {
 } from "./mspApi";
 import MspBilling from "./MspBilling";
 import ClientReportDialog from "./ClientReportDialog";
+import ClaimCodesPanel from "./ClaimCodesPanel";
+import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
 
 const ROLES = ["ADMIN", "OWNER", "USER"];
 
@@ -731,6 +733,15 @@ function MspDetail({ msp, onChanged, onToast }) {
             </Box>
           </Stack>
         )}
+      </SectionPaper>
+
+      {/* Claim codes — invite clients to self-attach to this partner */}
+      <SectionPaper variant="panel">
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+          <LinkOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Client claim codes</Typography>
+        </Stack>
+        <ClaimCodesPanel mspId={msp.id} mspName={msp.name} />
       </SectionPaper>
 
       <ClientReportDialog

@@ -31,10 +31,13 @@ import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
+import HandshakeOutlinedIcon from "@mui/icons-material/HandshakeOutlined";
 
 import { httpGetJson } from "../api/http";
 import { getRetentionStats } from "../api/retention";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { fetchMyPartner } from "../msp/mspApi";
+import JoinPartnerDialog from "../msp/JoinPartnerDialog";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
@@ -230,6 +233,21 @@ export default function Configurations({ onNavigate }) {
   const error = settingsError ? "Failed to load configurations summary" : "";
   const tenantsTotal     = tenantsSummary?.tenantsCount      ?? 0;
 
+  // Partner (MSP) status — only relevant for a client tenant. Drives the
+  // "Join a partner" card + its redeem dialog (self-service client-attach).
+  const [partner, setPartner] = React.useState(null);
+  const [joinOpen, setJoinOpen] = React.useState(false);
+  const loadPartner = React.useCallback(async () => {
+    try {
+      const resp = await fetchMyPartner();
+      setPartner(resp?.status ?? null);
+    } catch {
+      setPartner(null);
+    }
+  }, []);
+  React.useEffect(() => { loadPartner(); }, [loadPartner]);
+  const showPartnerCard = partner?.tenantType === "client";
+
   const membersTotal     = tenantMembersSummary?.membersCount         ?? 0;
   const membersActive    = tenantMembersSummary?.activeMembersCount   ?? 0;
   const membersInactive  =
@@ -408,7 +426,36 @@ export default function Configurations({ onNavigate }) {
             />
           </Grid>
         ) : null}
+
+        {/* Join a partner — self-service client-attach. Only for client
+            tenants; shows current partner or opens the redeem dialog. */}
+        {showPartnerCard ? (
+          <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+            <SettingsCard
+              title="Partner (MSP)"
+              valueHint={partner?.managed ? "Managed · click for details" : "Click to join with a code"}
+              value={partner?.managed ? (partner.msp?.name || "Managed") : "Independent"}
+              icon={<HandshakeOutlinedIcon />}
+              accent={partner?.managed ? BRAND.teal : BRAND.alert.warning}
+              tint={partner?.managed ? BRAND.tealSoft : BRAND.alert.warningSoft}
+              onClick={() => setJoinOpen(true)}
+              footer={
+                <StatChip
+                  label={partner?.managed ? "Linked" : "Not linked"}
+                  count=""
+                  variant={partner?.managed ? "success" : "warning"}
+                />
+              }
+            />
+          </Grid>
+        ) : null}
       </Grid>
+
+      <JoinPartnerDialog
+        open={joinOpen}
+        onClose={() => setJoinOpen(false)}
+        onJoined={loadPartner}
+      />
     </Box>
   );
 }

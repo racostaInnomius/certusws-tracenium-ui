@@ -161,3 +161,30 @@ export async function downloadBilling({ period, mspId } = {}) {
   const { blob, filename } = await httpGetBlob(`/api/v1/msp/billing/export.csv${suffix}`);
   saveBlob(blob, filename || `tracenium-billing-${period || "current"}.csv`);
 }
+
+// ── Claim codes (self-service client-attach) ──────────────────────────
+
+/** Active claim codes for an MSP (vendor or OWNER of it). */
+export async function fetchClaimCodes(mspId, options = {}) {
+  return httpGetJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/claim-codes`, { cache: "no-store", ...options });
+}
+
+/** Issue a claim code for an MSP. */
+export async function generateClaimCode(mspId, { ttlDays } = {}) {
+  return httpPostJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/claim-codes`, ttlDays ? { ttlDays } : {});
+}
+
+/** Revoke an unused claim code. */
+export async function revokeClaimCode(mspId, code) {
+  return httpDeleteJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/claim-codes/${encodeURIComponent(code)}`);
+}
+
+/** The caller tenant's partner status (managed by X / can join). */
+export async function fetchMyPartner(options = {}) {
+  return httpGetJson("/api/v1/msp/my-partner", { cache: "no-store", ...options });
+}
+
+/** Redeem a claim code for the caller's own (unassigned client) tenant. */
+export async function redeemClaimCode(code) {
+  return httpPostJson("/api/v1/msp/claim-codes/redeem", { code });
+}
