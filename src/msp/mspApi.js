@@ -27,3 +27,11 @@ export async function fetchMspClients(mspId, options = {}) {
     { cache: "no-store", ...options }
   );
 }
+
+/**
+ * Consolidated aggregate across the caller's portfolio (F2): totals +
+ * the "needs attention" exception list. Reads the materialized roll-up.
+ */
+export async function fetchConsolidated(options = {}) {
+  return httpGetJson("/api/v1/msp/consolidated", { staleMs: 60_000, ...options });
+}

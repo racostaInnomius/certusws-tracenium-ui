@@ -163,12 +163,25 @@ class FakeDataChannel {
 class FakeRTCPeerConnection {
   constructor() {
     this.connectionState = "new";
+    // ICE state + an EventTarget-style listener registry: the component's ICE
+    // restart helper (iceRestart.js) attaches via
+    // pc.addEventListener("iceconnectionstatechange", …) and reads
+    // pc.iceConnectionState, so the fake must speak that API — not just the
+    // legacy on* handlers.
+    this.iceConnectionState = "new";
+    this._listeners = {};
     this.remoteDescription = null;
     this.localDescription = null;
     this.onicecandidate = null;
     this.onconnectionstatechange = null;
     this.dc = null;
     peers.push(this);
+  }
+  addEventListener(type, cb) {
+    (this._listeners[type] ||= []).push(cb);
+  }
+  removeEventListener(type, cb) {
+    this._listeners[type] = (this._listeners[type] || []).filter((h) => h !== cb);
   }
   createDataChannel() {
     this.dc = new FakeDataChannel();
@@ -190,6 +203,12 @@ class FakeRTCPeerConnection {
   fireConnectionState(state) {
     this.connectionState = state;
     return act(() => this.onconnectionstatechange?.({}));
+  }
+  fireIceConnectionState(state) {
+    this.iceConnectionState = state;
+    return act(() => {
+      for (const cb of this._listeners.iceconnectionstatechange || []) cb({});
+    });
   }
 }
 
@@ -320,13 +339,25 @@ describe("ShellTerminal — ERROR transitions", () => {
     expect(await screen.findByText(/FORBIDDEN: no shell permission/i)).toBeInTheDocument();
   });
 
-  it("RTCPeerConnection 'failed' → WebRTC connection failed status", async () => {
+  it("RTCPeerConnection 'failed' → shows recovery status (ICE restart handles it, not an immediate error)", async () => {
+    // The component no longer hard-fails on connectionState 'failed'; the ICE
+    // restart helper attempts recovery first, so the user sees a recovering
+    // message. Only the helper's onFinalFailure (retries exhausted) → ERROR.
     renderTerminal();
     const pc = peers[0];
     await pc.fireConnectionState("failed");
-    expect(
-      await screen.findByText(/WebRTC connection failed/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/recovering/i)).toBeInTheDocument();
+  });
+
+  it("ICE restart exhausts its retries → WebRTC connection lost / ERROR", async () => {
+    // Drive onFinalFailure deterministically: with the signaling WS not open,
+    // the first restart attempt can't deliver the offer and gives up.
+    renderTerminal();
+    const pc = peers[0];
+    const ws = sockets[0];
+    ws.readyState = FakeWebSocket.CLOSED; // offer can't be sent → final failure
+    await pc.fireIceConnectionState("failed");
+    expect(await screen.findByText(/WebRTC connection lost|retries exhausted/i)).toBeInTheDocument();
   });
 });
 

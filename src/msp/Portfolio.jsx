@@ -31,6 +31,7 @@ import { BRAND } from "../theme/brand";
 import { useMsp } from "./MspContext";
 import { fetchMspClients } from "./mspApi";
 import PortfolioGrid from "./PortfolioGrid";
+import ConsolidatedStrip from "./ConsolidatedStrip";
 
 export default function Portfolio() {
   const { portfolio, loading, error, enterTenant, reloadPortfolio } = useMsp();
@@ -106,6 +107,15 @@ export default function Portfolio() {
         subtitle={subtitle}
         icon={<BusinessOutlinedIcon />}
       />
+
+      {/* F2 consolidated summary — shown at the top-level list (not when
+          drilled into a specific MSP, where the whole-portfolio total
+          would be out of context). */}
+      {!drilledMsp ? (
+        <ConsolidatedStrip
+          onOpenClient={(id, name) => enterTenant(id, name)}
+        />
+      ) : null}
 
       {/* Vendor drill-down back button */}
       {level === "vendor" && drilledMsp ? (
