@@ -73,6 +73,8 @@ import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
+import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 // Sprint 4 — diff + export
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
@@ -259,6 +261,32 @@ function shortRelativeTime(isoString) {
   if (months < 12) return `${months}mo`;
   const years = Math.round(months / 12);
   return `${years}y`;
+}
+
+// Expiring exceptions — acknowledge-until presets. Auditors want
+// time-boxed exceptions ("ack this for 90 days, then put it back on
+// my radar"). `days: null` = indefinite ack (explicitly clears any
+// prior expiry). We compute the ISO instant at click time so it's
+// always relative to "now".
+const ACK_EXPIRY_PRESETS = [
+  { label: "for 30 days", days: 30 },
+  { label: "for 60 days", days: 60 },
+  { label: "for 90 days", days: 90 },
+  { label: "indefinitely", days: null }
+];
+function ackUntilIso(days) {
+  if (days == null) return null;
+  return new Date(Date.now() + days * 86_400_000).toISOString();
+}
+// Short absolute date for the "Ack until <date>" chip, e.g. "Sep 30".
+function shortDate(isoString) {
+  if (!isoString) return null;
+  const t = Date.parse(isoString);
+  if (!Number.isFinite(t)) return null;
+  return new Date(t).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  });
 }
 
 // Sprint 7 item 3.1 — true if the device was enrolled in the last
@@ -1704,11 +1732,14 @@ function DeviceDrawerContent({
     }
   }
 
-  function handleAck(finding) {
+  function handleAck(finding, acknowledgedUntil = null) {
+    const untilLabel = acknowledgedUntil
+      ? ` until ${shortDate(acknowledgedUntil)}`
+      : "";
     return runMutation(
       finding,
-      () => acknowledgeFinding(finding.id),
-      "Finding acknowledged."
+      () => acknowledgeFinding(finding.id, { acknowledgedUntil }),
+      `Finding acknowledged${untilLabel}.`
     );
   }
   function handleRevoke(finding) {
@@ -1787,9 +1818,15 @@ function DeviceDrawerContent({
     }
   }
 
-  function handleBulkAck() {
+  function handleBulkAck(acknowledgedUntil = null) {
     setBulkMenuAnchor(null);
-    return runBulk({ op: "acknowledge" }, "Acknowledged");
+    const untilLabel = acknowledgedUntil
+      ? ` until ${shortDate(acknowledgedUntil)}`
+      : "";
+    return runBulk(
+      { op: "acknowledge", acknowledgedUntil },
+      `Acknowledged${untilLabel}`
+    );
   }
   function handleBulkRevoke() {
     setBulkMenuAnchor(null);
@@ -2001,10 +2038,24 @@ function DeviceDrawerContent({
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            <MenuItem onClick={handleBulkAck}>
-              <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
-              <Typography variant="body2">Acknowledge selected</Typography>
-            </MenuItem>
+            {/* Expiring exceptions — acknowledge with an optional
+                expiry. Presets keep the menu keyboard-simple; the
+                "indefinitely" row preserves the old behaviour. */}
+            {ACK_EXPIRY_PRESETS.map((preset) => (
+              <MenuItem
+                key={preset.label}
+                onClick={() => handleBulkAck(ackUntilIso(preset.days))}
+              >
+                {preset.days == null ? (
+                  <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                ) : (
+                  <ScheduleOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                )}
+                <Typography variant="body2">
+                  Acknowledge selected {preset.label}
+                </Typography>
+              </MenuItem>
+            ))}
             <MenuItem onClick={handleBulkRevoke}>
               <VisibilityOffOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
               <Typography variant="body2">Revoke acknowledgement</Typography>
@@ -2137,7 +2188,17 @@ function FindingCard({
   const [statusMenuAnchor, setStatusMenuAnchor] = React.useState(null);
   const statusMenuOpen = Boolean(statusMenuAnchor);
 
+  // Acknowledge-with-expiry menu (expiring exceptions).
+  const [ackMenuAnchor, setAckMenuAnchor] = React.useState(null);
+  const ackMenuOpen = Boolean(ackMenuAnchor);
+
   const isAcked = Boolean(finding.acknowledgedAt);
+  // An ack whose expiry lapsed: the backend masks acknowledgedAt to
+  // null (so `isAcked` is false and the finding re-surfaces as open),
+  // but flags `acknowledgementExpired` so we can tell the operator WHY
+  // it's back rather than looking like it was never acknowledged.
+  const ackExpired = Boolean(finding.acknowledgementExpired);
+  const ackUntil = finding.acknowledgedUntil || null;
   const remediationStatus = finding.remediationStatus || "open";
   const nextTransitions = REMEDIATION_TRANSITIONS[remediationStatus] || [];
 
@@ -2214,14 +2275,20 @@ function FindingCard({
             ) : null}
             {isAcked ? (
               <Tooltip
-                title={`Acknowledged ${shortRelativeTime(finding.acknowledgedAt) ?? ""} ago${finding.acknowledgedBy ? ` by ${finding.acknowledgedBy}` : ""}`}
+                title={`Acknowledged ${shortRelativeTime(finding.acknowledgedAt) ?? ""} ago${finding.acknowledgedBy ? ` by ${finding.acknowledgedBy}` : ""}${ackUntil ? ` · exception expires ${new Date(ackUntil).toLocaleString()}` : ""}`}
                 arrow
                 placement="top"
               >
                 <Chip
-                  label="Ack"
+                  label={ackUntil ? `Ack until ${shortDate(ackUntil)}` : "Ack"}
                   size="small"
-                  icon={<VisibilityOutlinedIcon sx={{ fontSize: 12 }} />}
+                  icon={
+                    ackUntil ? (
+                      <ScheduleOutlinedIcon sx={{ fontSize: 12 }} />
+                    ) : (
+                      <VisibilityOutlinedIcon sx={{ fontSize: 12 }} />
+                    )
+                  }
                   sx={{
                     bgcolor: BRAND.tealSoft,
                     color: BRAND.tealText,
@@ -2229,6 +2296,27 @@ function FindingCard({
                     height: 22,
                     fontSize: 11,
                     "& .MuiChip-icon": { color: BRAND.tealText }
+                  }}
+                />
+              </Tooltip>
+            ) : null}
+            {ackExpired ? (
+              <Tooltip
+                title={`This exception expired ${ackUntil ? shortDate(ackUntil) : ""} and the finding is open again. Re-acknowledge to silence it.`}
+                arrow
+                placement="top"
+              >
+                <Chip
+                  label="Exception expired"
+                  size="small"
+                  icon={<EventBusyOutlinedIcon sx={{ fontSize: 12 }} />}
+                  sx={{
+                    bgcolor: ROLE.cautionSoft,
+                    color: ROLE.caution,
+                    fontWeight: 700,
+                    height: 22,
+                    fontSize: 11,
+                    "& .MuiChip-icon": { color: ROLE.caution }
                   }}
                 />
               </Tooltip>
@@ -2288,16 +2376,45 @@ function FindingCard({
                 Revoke ack
               </Button>
             ) : (
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 14 }} />}
-                onClick={() => onAck(finding)}
-                disabled={isPending}
-                sx={{ textTransform: "none" }}
-              >
-                Acknowledge
-              </Button>
+              <>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 14 }} />}
+                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+                  onClick={(e) => setAckMenuAnchor(e.currentTarget)}
+                  disabled={isPending}
+                  sx={{ textTransform: "none" }}
+                >
+                  {ackExpired ? "Re-acknowledge" : "Acknowledge"}
+                </Button>
+                <Menu
+                  anchorEl={ackMenuAnchor}
+                  open={ackMenuOpen}
+                  onClose={() => setAckMenuAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                  transformOrigin={{ vertical: "top", horizontal: "left" }}
+                >
+                  {ACK_EXPIRY_PRESETS.map((preset) => (
+                    <MenuItem
+                      key={preset.label}
+                      onClick={() => {
+                        setAckMenuAnchor(null);
+                        onAck(finding, ackUntilIso(preset.days));
+                      }}
+                    >
+                      {preset.days == null ? (
+                        <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                      ) : (
+                        <ScheduleOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                      )}
+                      <Typography variant="body2">
+                        Acknowledge {preset.label}
+                      </Typography>
+                    </MenuItem>
+                  ))}
+                </Menu>
+              </>
             )}
             {nextTransitions.length > 0 ? (
               <>

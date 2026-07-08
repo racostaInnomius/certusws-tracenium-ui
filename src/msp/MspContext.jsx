@@ -15,7 +15,9 @@ import {
   setActiveTenantId,
   getActiveTenantId,
   isAuthError,
+  clearApiCache,
 } from "../api/http";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 const MspContext = React.createContext(null);
 
@@ -91,7 +93,17 @@ export function MspProvider({ children }) {
   // MSP's clients) — it powers the switcher so the operator can hop to
   // another client without going back to the portfolio.
   const enterTenant = React.useCallback((id, name, siblings) => {
+    const changed = String(getActiveTenantId() ?? "") !== String(id ?? "");
     setActiveTenantId(id);
+    // Switching the active tenant invalidates every cached GET — they were
+    // keyed under the previous tenant context. The cache keys are now
+    // tenant-scoped, but we also wipe on switch so nothing stale (or a
+    // request that was in-flight during the switch) can paint the new
+    // tenant with the old tenant's numbers.
+    if (changed) {
+      clearApiCache();
+      clearCachedFetch();
+    }
     const meta = { id: String(id), name: name ?? null };
     writeJson(ACTIVE_META_KEY, meta);
     setActiveTenantState(meta);
@@ -102,9 +114,16 @@ export function MspProvider({ children }) {
     }
   }, []);
 
-  // Return to the portfolio: clear the active client everywhere.
+  // Return to the portfolio: clear the active client everywhere + wipe the
+  // just-viewed tenant's cached data so the portfolio (and a subsequent
+  // different client) never reads it back.
   const exitTenant = React.useCallback(() => {
+    const had = getActiveTenantId() != null;
     setActiveTenantId(null);
+    if (had) {
+      clearApiCache();
+      clearCachedFetch();
+    }
     writeJson(ACTIVE_META_KEY, null);
     setActiveTenantState(null);
   }, []);

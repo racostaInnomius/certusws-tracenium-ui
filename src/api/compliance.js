@@ -92,10 +92,19 @@ export async function getFrameworkComplianceTimeseries(windowDays = 30) {
 
 // POST /findings/:id/acknowledge — mark a finding as "seen".
 // Optional `note` is recorded in the audit timeline.
-export async function acknowledgeFinding(findingId, { note } = {}) {
+// Optional `acknowledgedUntil` (ISO string) makes the exception expire:
+// once past, the finding re-surfaces as un-acknowledged. Omit the key
+// to leave an existing expiry untouched; pass `null` for an indefinite
+// ack. The backend 400s on a past/invalid date.
+export async function acknowledgeFinding(
+  findingId,
+  { note, acknowledgedUntil } = {}
+) {
+  const body = { note: note ?? null };
+  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
   return httpPostJson(
     `${BASE}/findings/${encodeURIComponent(findingId)}/acknowledge`,
-    { note: note ?? null }
+    body
   );
 }
 
@@ -209,11 +218,16 @@ export async function updateComplianceSettings(patch) {
 // For change_status, supply { newStatus, findingIds, note? }. Server
 // caps the batch at 200 findings; partial failures come back as
 // per-item results in `summary.results[]`.
-export async function bulkFindingOp({ op, findingIds, newStatus, note } = {}) {
-  return httpPostJson(`${BASE}/findings:bulk`, {
-    op,
-    findingIds,
-    newStatus,
-    note: note ?? null
-  });
+export async function bulkFindingOp({
+  op,
+  findingIds,
+  newStatus,
+  note,
+  acknowledgedUntil
+} = {}) {
+  const body = { op, findingIds, newStatus, note: note ?? null };
+  // Only relevant to op=acknowledge; omit the key otherwise so we
+  // don't send noise. `null` = indefinite ack, ISO string = expiry.
+  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
+  return httpPostJson(`${BASE}/findings:bulk`, body);
 }

@@ -120,6 +120,21 @@ describe("finding lifecycle", () => {
     expect(calls[1].body).toEqual({ note: "seen it" });
   });
 
+  it("acknowledgeFinding sends acknowledgedUntil only when provided", async () => {
+    const calls = respond("post", `${BASE}/findings/:id/acknowledge`, { ok: true });
+
+    await acknowledgeFinding("f-1"); // omitted -> key absent
+    await acknowledgeFinding("f-1", { acknowledgedUntil: "2026-09-30T00:00:00.000Z" });
+    await acknowledgeFinding("f-1", { acknowledgedUntil: null }); // explicit indefinite
+
+    expect("acknowledgedUntil" in calls[0].body).toBe(false);
+    expect(calls[1].body).toEqual({
+      note: null,
+      acknowledgedUntil: "2026-09-30T00:00:00.000Z"
+    });
+    expect(calls[2].body).toEqual({ note: null, acknowledgedUntil: null });
+  });
+
   it("revokeFindingAcknowledgement hits the /acknowledge/revoke sub-path", async () => {
     const calls = respond("post", `${BASE}/findings/:id/acknowledge/revoke`, { ok: true });
 
@@ -192,6 +207,20 @@ describe("finding lifecycle", () => {
       newStatus: "risk_accepted",
       note: null,
     });
+  });
+
+  it("bulkFindingOp forwards acknowledgedUntil for a bulk acknowledge", async () => {
+    const calls = respond("post", /\/security\/compliance\/findings:bulk$/, { ok: true, summary: {} });
+
+    await bulkFindingOp({ op: "acknowledge", findingIds: ["f-1"] }); // key absent
+    await bulkFindingOp({
+      op: "acknowledge",
+      findingIds: ["f-1"],
+      acknowledgedUntil: "2026-09-30T00:00:00.000Z",
+    });
+
+    expect("acknowledgedUntil" in calls[0].body).toBe(false);
+    expect(calls[1].body.acknowledgedUntil).toBe("2026-09-30T00:00:00.000Z");
   });
 });
 

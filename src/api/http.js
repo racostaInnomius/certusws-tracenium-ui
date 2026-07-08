@@ -344,14 +344,27 @@ function getCacheProfileForUrl(url) {
 
 function buildCacheKey(url) {
   const rawKey = String(url || "");
-  return `${getApiCacheSessionScope()}::${rawKey}`;
+  // CRITICAL: the cache key MUST include the active tenant. An MSP operator
+  // switches the active tenant (X-Tenant-Id) without a new sign-in, and the
+  // same URL returns DIFFERENT data per tenant. Keying only by session
+  // scope + URL let one tenant's cached response be served for another
+  // (a cross-tenant data leak in the UI). sessionStorage persistence made
+  // it survive reloads too. Scoping by active tenant partitions the cache
+  // so each tenant context has its own entries. `_` = no active tenant
+  // (portfolio mode / single-tenant users → the token tenant).
+  const tenant = activeTenantId || "_";
+  return `${getApiCacheSessionScope()}::${tenant}::${rawKey}`;
 }
 
+// Recover the raw URL from a cache key of the form `scope::tenant::url`.
+// Strips the first TWO `::`-delimited segments (scope + tenant); the URL
+// itself never contains `::`.
 function unscopedCacheKey(cacheKey) {
   const text = String(cacheKey || "");
-  const marker = "::";
-  const markerIndex = text.indexOf(marker);
-  return markerIndex >= 0 ? text.slice(markerIndex + marker.length) : text;
+  const first = text.indexOf("::");
+  if (first < 0) return text;
+  const second = text.indexOf("::", first + 2);
+  return second >= 0 ? text.slice(second + 2) : text.slice(first + 2);
 }
 
 function isExpired(entry, storageMaxAgeMs) {

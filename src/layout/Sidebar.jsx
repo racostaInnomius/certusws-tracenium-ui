@@ -15,8 +15,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { useAuthContext } from "../auth/AuthContext";
-import { clearApiCache, setApiCacheSessionScope } from "../api/http";
-import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
+import { performLogout } from "../auth/logout";
 
 import LogoutIcon from "@mui/icons-material/Logout";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
@@ -683,34 +682,7 @@ export default function Sidebar({
       : []),
   ];
 
-  const handleLogout = async () => {
-    clearApiCache();
-    clearCachedFetch();
-    setApiCacheSessionScope("signed-out");
-    setCachedFetchSessionScope("signed-out");
-
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      let logoutUrl = "https://api.sso.safecertus.com/logout";
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.logoutUrl) {
-          logoutUrl = data.logoutUrl;
-        }
-      }
-
-      window.location.href = logoutUrl;
-    } catch (e) {
-      console.error("Logout failed", e);
-
-      window.location.href = "https://api.sso.safecertus.com/logout";
-    }
-  };
+  const handleLogout = performLogout;
 
   if (isDesktop) {
     // Permanent sidebar for md+ viewports (≥ 900px). Includes iPad landscape.

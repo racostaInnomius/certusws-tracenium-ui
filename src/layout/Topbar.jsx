@@ -2,7 +2,9 @@ import * as React from "react";
 import { Box, IconButton, Typography, Badge, Tooltip } from "@mui/material";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { getAlertsUnreadCount } from "../api/alerts";
+import { performLogout } from "../auth/logout";
 
 import { BRAND } from "../theme/brand";
 
@@ -207,6 +209,24 @@ export default function Topbar({ onMenuClick }) {
             >
               <NotificationsNoneOutlinedIcon fontSize="small" />
             </Badge>
+          </IconButton>
+        </Tooltip>
+
+        {/* Sign out. Lives in the Topbar so it's reachable in EVERY mode —
+            including the MSP portfolio, where the Sidebar (its only other
+            logout) is hidden. */}
+        <Tooltip title="Sign out">
+          <IconButton
+            size="small"
+            aria-label="Sign out"
+            onClick={performLogout}
+            sx={{
+              color: "#ffffff",
+              flexShrink: 0,
+              "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
+            }}
+          >
+            <LogoutIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>

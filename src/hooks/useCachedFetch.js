@@ -33,7 +33,7 @@
 // - hasCache
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isAuthError, isTemporaryApiError, TEMPORARY_ERROR_EVENT } from "../api/http";
+import { isAuthError, isTemporaryApiError, TEMPORARY_ERROR_EVENT, getActiveTenantId } from "../api/http";
 
 const memCache = new Map();
 const inFlight = new Map();
@@ -86,13 +86,24 @@ export function setCachedFetchSessionScope(scope) {
 }
 
 function buildScopedCacheKey(key) {
-  return `${getCachedFetchSessionScope()}::${String(key || "")}`;
+  // Scope by ACTIVE TENANT as well as session — an MSP operator switches the
+  // active tenant without re-signing-in, and these cached reads (settings,
+  // dashboards, …) are per-tenant. Without the tenant in the key, one
+  // tenant's cached data leaked into another after a switch/reload. `_` =
+  // no active tenant (portfolio / single-tenant → token tenant). Mirrors
+  // buildCacheKey in ../api/http.
+  const tenant = getActiveTenantId() || "_";
+  return `${getCachedFetchSessionScope()}::${tenant}::${String(key || "")}`;
 }
 
+// Recover the raw key from `scope::tenant::key` — strip the first two
+// `::`-delimited segments (scope + tenant).
 function unscopedCacheKey(key) {
   const text = String(key || "");
-  const markerIndex = text.indexOf("::");
-  return markerIndex >= 0 ? text.slice(markerIndex + 2) : text;
+  const first = text.indexOf("::");
+  if (first < 0) return text;
+  const second = text.indexOf("::", first + 2);
+  return second >= 0 ? text.slice(second + 2) : text.slice(first + 2);
 }
 
 const DEFAULT_STALE_MS = 60_000;
