@@ -139,6 +139,36 @@ export async function deleteThirdPartyCatalog(id) {
   return httpDeleteJson(`${BASE}/third-party/catalog/${encodeURIComponent(id)}`);
 }
 
+// ── CVE mapping (vulnerable installed software) ──────────────────
+
+// Fleet exposure: severity totals + per-CVE rollup (how many devices run a
+// vulnerable version). Computed on read from the catalog + live inventory.
+export async function getVulnerabilityExposure() {
+  return httpGetJson(`${BASE}/vulnerabilities/exposure`);
+}
+
+// Vulnerable installed software on a single device (drill-in).
+export async function getDeviceVulnerabilities(agentId) {
+  return httpGetJson(`${BASE}/vulnerabilities/exposure/devices/${encodeURIComponent(agentId)}`);
+}
+
+// The tenant's CVE catalog (product + affected version range + CVSS).
+export async function listCveCatalog(params = {}) {
+  return httpGetJson(`${BASE}/vulnerabilities/catalog${buildQuery(params)}`);
+}
+
+export async function createCveCatalog(payload) {
+  return httpPostJson(`${BASE}/vulnerabilities/catalog`, payload);
+}
+
+export async function updateCveCatalog(id, payload) {
+  return httpPatchJson(`${BASE}/vulnerabilities/catalog/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteCveCatalog(id) {
+  return httpDeleteJson(`${BASE}/vulnerabilities/catalog/${encodeURIComponent(id)}`);
+}
+
 // ── Maintenance windows (when deployments are allowed to dispatch) ─
 
 export async function listMaintenanceWindows() {

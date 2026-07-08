@@ -29,8 +29,10 @@ import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
+import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import MaintenanceWindowsPanel from "../components/patch-management/MaintenanceWindowsPanel";
+import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
@@ -296,6 +298,16 @@ const CATEGORIES = [
     icon: <ExtensionOutlinedIcon />,
     blurb:
       "Detect installed third-party software that is behind its latest catalog version, and deploy the linked package to update it.",
+    actions: [],
+  },
+  {
+    // CVE mapping: vulnerable installed software (exposure) + the CVE
+    // catalog. Rendered by VulnerabilitiesTab — no `actions`.
+    key: "vulnerabilities",
+    label: "Vulnerabilities",
+    icon: <BugReportOutlinedIcon />,
+    blurb:
+      "Surface installed software running a version with a known CVE, matched against your CVE catalog, and see how many devices are exposed.",
     actions: [],
   },
   {
@@ -1150,6 +1162,11 @@ export default function PatchManagement() {
             />
           ) : tab === "third-party" ? (
             <ThirdPartyTab
+              canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
+          ) : tab === "vulnerabilities" ? (
+            <VulnerabilitiesTab
               canManage={canManage}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />

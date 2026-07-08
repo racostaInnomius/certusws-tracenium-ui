@@ -29,6 +29,12 @@ import {
   createMaintenanceWindow,
   updateMaintenanceWindow,
   deleteMaintenanceWindow,
+  getVulnerabilityExposure,
+  getDeviceVulnerabilities,
+  listCveCatalog,
+  createCveCatalog,
+  updateCveCatalog,
+  deleteCveCatalog,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -160,6 +166,40 @@ describe("third-party patching", () => {
     expect(update[0].pathname).toBe(`${BASE}/third-party/catalog/5`);
     expect(update[0].body).toEqual({ latestVersion: "23.02" });
     expect(del[0].pathname).toBe(`${BASE}/third-party/catalog/5`);
+  });
+});
+
+describe("CVE mapping", () => {
+  it("fetches fleet exposure and per-device vulnerabilities", async () => {
+    const fleet = respond("get", `${BASE}/vulnerabilities/exposure`, { ok: true, totals: {}, cves: [] });
+    const device = respond("get", `${BASE}/vulnerabilities/exposure/devices/:agentId`, { ok: true, findings: [] });
+
+    await getVulnerabilityExposure();
+    await getDeviceVulnerabilities("agent/42");
+
+    expect(fleet[0].pathname).toBe(`${BASE}/vulnerabilities/exposure`);
+    expect(device[0].pathname).toBe(`${BASE}/vulnerabilities/exposure/devices/agent%2F42`);
+  });
+
+  it("lists the CVE catalog with a platform filter", async () => {
+    const calls = respond("get", `${BASE}/vulnerabilities/catalog`, { ok: true, items: [] });
+    await listCveCatalog({ platform: "windows", activeOnly: true });
+    expect(calls[0].search).toEqual({ platform: "windows", activeOnly: "true" });
+  });
+
+  it("creates / updates / deletes a CVE entry", async () => {
+    const create = respond("post", `${BASE}/vulnerabilities/catalog`, { ok: true }, { status: 201 });
+    const update = respond("patch", `${BASE}/vulnerabilities/catalog/:id`, { ok: true });
+    const del = respond("delete", `${BASE}/vulnerabilities/catalog/:id`, { ok: true });
+
+    await createCveCatalog({ cveId: "CVE-2024-38063", title: "7-Zip", platform: "windows", fixedVersion: "23.00" });
+    await updateCveCatalog(5, { cvssSeverity: "critical" });
+    await deleteCveCatalog(5);
+
+    expect(create[0].body).toEqual({ cveId: "CVE-2024-38063", title: "7-Zip", platform: "windows", fixedVersion: "23.00" });
+    expect(update[0].pathname).toBe(`${BASE}/vulnerabilities/catalog/5`);
+    expect(update[0].body).toEqual({ cvssSeverity: "critical" });
+    expect(del[0].pathname).toBe(`${BASE}/vulnerabilities/catalog/5`);
   });
 });
 

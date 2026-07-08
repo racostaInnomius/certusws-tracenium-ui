@@ -783,6 +783,20 @@ export default function AppShell() {
   React.useEffect(() => {
     let cancelled = false;
 
+    // In portfolio mode there is NO single active tenant: an MSP operator /
+    // vendor is looking at the portfolio, not a client shell. Probing here
+    // would hit the caller's home/token tenant — data that isn't shown in
+    // portfolio mode and only muddies the picture (it's what made the
+    // operator's own home tenant bleed into the experience). Skip it; the
+    // probe re-runs once a client is actually selected (inPortfolioMode →
+    // false re-triggers this effect).
+    if (inPortfolioMode) {
+      setTenantInventoryState("unknown");
+      return () => {
+        cancelled = true;
+      };
+    }
+
     resolveTenantInventoryState().catch((err) => {
       if (cancelled) return;
       if (!isAuthError(err) && !isTemporaryApiError(err)) {
@@ -794,7 +808,7 @@ export default function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [resolveTenantInventoryState]);
+  }, [resolveTenantInventoryState, inPortfolioMode]);
 
   const handleAssetsEmptyStateChange = React.useCallback((isEmpty) => {
     const nextEmpty = Boolean(isEmpty);
