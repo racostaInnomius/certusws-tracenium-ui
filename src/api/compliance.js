@@ -64,6 +64,12 @@ export async function getDeviceTimeseries(agentId, windowDays = 30) {
   );
 }
 
+// Fleet-wide compliance trend: per day, the fleet's average score plus the
+// compliant / non-compliant device counts (latest snapshot per device per day).
+export async function getFleetComplianceTimeseries(windowDays = 30) {
+  return httpGetJson(`${BASE}/fleet-timeseries${buildQuery({ windowDays })}`);
+}
+
 // ── Sprint 3 — finding lifecycle ───────────────────────────────────
 //
 // Each helper returns the raw `{ok, ...}` envelope or the failure

@@ -19,6 +19,7 @@ import {
   getDeviceFleetRanking,
   getDevicePosture,
   getDeviceTimeseries,
+  getFleetComplianceTimeseries,
   getFindingHistory,
   getFrameworkSummary,
   getFrameworks,
@@ -254,5 +255,12 @@ describe("export URL builders (pure functions)", () => {
     expect(pdf.searchParams.get("framework")).toBe("nist-csf");
     expect(pdf.searchParams.get("includeClosed")).toBe("false");
     expect(pdf.searchParams.get("maxDevices")).toBe("10");
+  });
+
+  it("getFleetComplianceTimeseries passes the window in days", async () => {
+    const calls = respond("get", "/api/v1/security/compliance/fleet-timeseries", { ok: true, buckets: [] });
+    await getFleetComplianceTimeseries(90);
+    expect(calls[0].pathname).toBe("/api/v1/security/compliance/fleet-timeseries");
+    expect(calls[0].search).toEqual({ windowDays: "90" });
   });
 });

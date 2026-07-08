@@ -113,6 +113,7 @@ import SharedSummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
+import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
 // ---------- constants --------------------------------------------------------
@@ -914,6 +915,10 @@ export default function SecurityCompliance() {
           </Grid>
         );
       })()}
+
+      {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
+          view. Backed by the fleet-timeseries endpoint. */}
+      <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} />
 
       {/* Framework switcher + per-framework summary ------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>

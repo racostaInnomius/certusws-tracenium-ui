@@ -745,6 +745,39 @@ export async function prefetchApiGetJson(url, options = {}) {
   return httpGetJson(url, options);
 }
 
+/**
+ * GET a binary/text response as a Blob (credentialed, tenant-header aware).
+ * Used for authenticated file downloads (report PDF/CSV) where a plain
+ * <a href> can't carry the session. Returns { blob, filename } — filename
+ * parsed from Content-Disposition when present. Errors flow through the
+ * same auth/temporary handling as JSON GETs.
+ */
+export async function httpGetBlob(url, options = {}) {
+  const timeout = withTimeout(options.timeoutMs ?? 60_000);
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "GET",
+      credentials: "include",
+      headers: withTenantHeader(),
+      signal: timeout.signal,
+    });
+    if (!res.ok) {
+      // Reuse the shared error mapping (throws AuthError / TemporaryServerError /
+      // Error). handleResponse only reads the body on the error path here.
+      await handleResponse(res, url);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    const filename = match ? decodeURIComponent(match[1]) : null;
+    return { blob, filename };
+  } catch (err) {
+    throw toHumanError(err, url);
+  } finally {
+    timeout.done();
+  }
+}
+
 export function getApiCacheSnapshot(url, options = {}) {
   const normalizedOptions = normalizeGetOptions(url, options);
   const entry = readGetCache(buildCacheKey(url), normalizedOptions);
