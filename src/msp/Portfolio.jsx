@@ -21,21 +21,27 @@ import {
   InputAdornment,
   Stack,
   TextField,
-  Typography,
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import PageHeader from "../components/common/PageHeader";
 import { BRAND } from "../theme/brand";
 import { useMsp } from "./MspContext";
 import { fetchMspClients } from "./mspApi";
 import PortfolioGrid from "./PortfolioGrid";
 import ConsolidatedStrip from "./ConsolidatedStrip";
+import MspAdmin from "./MspAdmin";
 
 export default function Portfolio() {
   const { portfolio, loading, error, enterTenant, reloadPortfolio } = useMsp();
   const [filter, setFilter] = React.useState("");
+
+  // Vendor-only "Partner administration" surface (F3). Toggled from a
+  // button in the top-level vendor view; closing it reloads the portfolio
+  // so any hierarchy change (new MSP, reassigned client) is reflected.
+  const [adminOpen, setAdminOpen] = React.useState(false);
 
   // Vendor drill-down state: which MSP is expanded (null = MSP list).
   const [drilledMsp, setDrilledMsp] = React.useState(null); // { id, name } | null
@@ -100,12 +106,45 @@ export default function Portfolio() {
 
   const busy = loading || drillLoading;
 
+  // Vendor opened the admin surface — render it in place of the grid. On
+  // close, refresh the portfolio so a newly created MSP / reassigned
+  // client shows up immediately.
+  if (adminOpen && level === "vendor") {
+    return (
+      <MspAdmin
+        onClose={() => {
+          setAdminOpen(false);
+          reloadPortfolio();
+        }}
+      />
+    );
+  }
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: "auto" }}>
       <PageHeader
         title={title}
         subtitle={subtitle}
         icon={<BusinessOutlinedIcon />}
+        actions={
+          level === "vendor" && !drilledMsp ? (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<SettingsOutlinedIcon />}
+              onClick={() => setAdminOpen(true)}
+              sx={{
+                textTransform: "none",
+                fontWeight: 800,
+                borderColor: BRAND.teal,
+                color: BRAND.tealText,
+                "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+              }}
+            >
+              Manage partners
+            </Button>
+          ) : null
+        }
       />
 
       {/* F2 consolidated summary — shown at the top-level list (not when

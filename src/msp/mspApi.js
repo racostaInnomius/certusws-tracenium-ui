@@ -6,7 +6,12 @@
 //   * MSP operator          → { level: "msp",    items: [client cards] }
 //   * single-tenant user    → { level: "none",   items: [] }
 
-import { httpGetJson } from "../api/http";
+import {
+  httpGetJson,
+  httpPostJson,
+  httpPatchJson,
+  httpDeleteJson,
+} from "../api/http";
 
 /**
  * The logged-in user's portfolio. `cache: "no-store"` on the first load
@@ -34,4 +39,59 @@ export async function fetchMspClients(mspId, options = {}) {
  */
 export async function fetchConsolidated(options = {}) {
   return httpGetJson("/api/v1/msp/consolidated", { staleMs: 60_000, ...options });
+}
+
+// ── F3 vendor admin (hierarchy management) ────────────────────────────
+//
+// Every one of these is vendor-only (admin_master); the backend returns
+// 403 VENDOR_ONLY otherwise. They mutate the tenant tree, so reads use
+// no-store to always reflect the just-made change.
+
+/** All MSPs with their client + operator counts. */
+export async function fetchAdminMsps(options = {}) {
+  return httpGetJson("/api/v1/msp/admin/msps", { cache: "no-store", ...options });
+}
+
+/** Create a structural MSP tenant under the vendor root. */
+export async function createMsp(name) {
+  return httpPostJson("/api/v1/msp/admin/msps", { name });
+}
+
+/** Clients not yet sorted under an MSP (no parent or parented to vendor). */
+export async function fetchUnassignedClients(options = {}) {
+  return httpGetJson("/api/v1/msp/admin/unassigned-clients", { cache: "no-store", ...options });
+}
+
+/**
+ * Attach a client to an MSP (mspId) or detach it (mspId = null → back to
+ * the unassigned pool).
+ */
+export async function assignClient(clientId, mspId) {
+  return httpPatchJson(
+    `/api/v1/msp/admin/clients/${encodeURIComponent(clientId)}/assign`,
+    { mspId: mspId == null ? null : mspId }
+  );
+}
+
+/** Operators (TenantMember rows) on a given MSP. */
+export async function fetchMspOperators(mspId, options = {}) {
+  return httpGetJson(
+    `/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/operators`,
+    { cache: "no-store", ...options }
+  );
+}
+
+/** Add (or reactivate/update) an operator on an MSP. */
+export async function addMspOperator(mspId, { subject, email, role }) {
+  return httpPostJson(
+    `/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/operators`,
+    { subject, email, role }
+  );
+}
+
+/** Remove an operator from an MSP. */
+export async function removeMspOperator(mspId, memberId) {
+  return httpDeleteJson(
+    `/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/operators/${encodeURIComponent(memberId)}`
+  );
 }
