@@ -360,6 +360,17 @@ function readFormFromPolicy(policy, catalog = []) {
     // formToPolicy. Empty policies result in the empty default
     // shape (no capabilities configured).
     security: readSecurityFromPolicy(policy),
+    // AI Intelligence (aip) — entitlement + per-day quota. The backend
+    // (ai-policy.ts) gates AI calls on `ai.enabled` (or the 'aip' plugin)
+    // and enforces ai.maxCallsPerDay / ai.maxTokensPerDay. Blank limit =
+    // unlimited. We surface the numbers as "" (unset) vs a value.
+    ai: {
+      enabled: policy?.ai?.enabled === true,
+      maxCallsPerDay:
+        Number(policy?.ai?.maxCallsPerDay) > 0 ? Number(policy.ai.maxCallsPerDay) : "",
+      maxTokensPerDay:
+        Number(policy?.ai?.maxTokensPerDay) > 0 ? Number(policy.ai.maxTokensPerDay) : "",
+    },
   };
 }
 
@@ -471,6 +482,20 @@ function formToPolicy(form, catalog = []) {
   const securityBlock = securityFormToPolicy(form.security || {});
   if (securityBlock) {
     policy.security = securityBlock;
+  }
+
+  // ── AI Intelligence (aip) quota block ───────────────────────────
+  // Emit `ai` only for fields the operator set. `enabled` unlocks AI
+  // (fail-closed default); the two limits are positive-int caps, blank =
+  // unlimited. Same omit-empty discipline as the rest of formToPolicy.
+  const ai = {};
+  if (form?.ai?.enabled === true) ai.enabled = true;
+  const maxCalls = Number(form?.ai?.maxCallsPerDay);
+  if (Number.isInteger(maxCalls) && maxCalls > 0) ai.maxCallsPerDay = maxCalls;
+  const maxTokens = Number(form?.ai?.maxTokensPerDay);
+  if (Number.isInteger(maxTokens) && maxTokens > 0) ai.maxTokensPerDay = maxTokens;
+  if (Object.keys(ai).length > 0) {
+    policy.ai = ai;
   }
 
   return policy;
@@ -1371,6 +1396,100 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
             </Box>
           );
         })()}
+      </Box>
+
+      {/* ── AI Intelligence (aip) section ─────────────────────────
+          Entitlement toggle + per-day quota. Backend enforcement lives
+          in modules/intelligence/ai-policy.ts (fail-closed default). */}
+      <Box
+        sx={{
+          mt: 4,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          AI Intelligence
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Unlocks AI-assisted features (e.g. the software-intake pipeline that proposes
+          install configs). <strong>Fail-closed</strong>: off unless enabled here. Per-day
+          quotas cap spend — leave a limit blank for unlimited. Every AI call is audited.
+        </Typography>
+
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={Boolean(form?.ai?.enabled)}
+              onChange={(e) =>
+                onChange({ ...form, ai: { ...(form.ai || {}), enabled: e.target.checked } })
+              }
+              disabled={readOnly}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Enable AI features <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(aip entitlement)</Typography>
+              </Typography>
+              <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                Required for the SDP intake pipeline (install-config generation).
+              </Typography>
+            </Box>
+          }
+          sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+        />
+
+        {form?.ai?.enabled ? (
+          <Box sx={{ display: "flex", gap: 2, mt: 1.5, flexWrap: "wrap" }}>
+            <TextField
+              size="small"
+              type="number"
+              label="Max AI calls / day"
+              placeholder="unlimited"
+              value={form?.ai?.maxCallsPerDay ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...form,
+                  ai: {
+                    ...(form.ai || {}),
+                    maxCallsPerDay: e.target.value === "" ? "" : Number(e.target.value),
+                  },
+                })
+              }
+              disabled={readOnly}
+              inputProps={{ min: 1, step: 1 }}
+              helperText="Blank = unlimited"
+              sx={{ width: 180 }}
+            />
+            <TextField
+              size="small"
+              type="number"
+              label="Max AI tokens / day"
+              placeholder="unlimited"
+              value={form?.ai?.maxTokensPerDay ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...form,
+                  ai: {
+                    ...(form.ai || {}),
+                    maxTokensPerDay: e.target.value === "" ? "" : Number(e.target.value),
+                  },
+                })
+              }
+              disabled={readOnly}
+              inputProps={{ min: 1, step: 1000 }}
+              helperText="Blank = unlimited"
+              sx={{ width: 200 }}
+            />
+          </Box>
+        ) : null}
       </Box>
 
       {/* ── Security Policy section (Sprint 2 of Policy v2) ───────
