@@ -353,6 +353,7 @@ function readFormFromPolicy(policy, catalog = []) {
       remoteShell:  pickFeature(policy, "remoteShell"),   // rcp.shell  (M1)
       remoteFile:   pickFeature(policy, "remoteFile"),    // rcp.file   (M2.S1)
       remoteScreen: pickFeature(policy, "remoteScreen"),  // rcp.screen (M3.S1)
+      remoteRequireConsent: pickFeature(policy, "remoteRequireConsent"), // user-attended approval
     },
     // Security Policy v2 — separate sub-form so the security cards
     // can be a sibling section. Stored back into policy.security on
@@ -453,6 +454,9 @@ function formToPolicy(form, catalog = []) {
     }
     if (form?.features?.remoteScreen !== null && form?.features?.remoteScreen !== undefined) {
       features.remoteScreen = Boolean(form.features.remoteScreen);
+    }
+    if (form?.features?.remoteRequireConsent !== null && form?.features?.remoteRequireConsent !== undefined) {
+      features.remoteRequireConsent = Boolean(form.features.remoteRequireConsent);
     }
   }
   if (Object.keys(features).length > 0) {
@@ -1324,6 +1328,40 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
                     Live screen viewer with optional mouse + keyboard control.
                     JPEG frames over WebRTC; input forwarded via privileged
                     SendInput on the device.
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+            />
+
+            {/* User-attended approval — gates ALL rcp.* sessions on
+                end-user consent at the endpoint. */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={Boolean(form?.features?.remoteRequireConsent)}
+                  onChange={(e) =>
+                    onChange({
+                      ...form,
+                      features: {
+                        ...(form.features || {}),
+                        remoteRequireConsent: e.target.checked,
+                      },
+                    })
+                  }
+                  disabled={readOnly}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Require user consent <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(rcp.consent)</Typography>
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                    Prompt the logged-in user to approve before any remote session
+                    (shell / file / screen) opens. If the agent can’t prompt, the
+                    session is refused (fail-closed). Applies to all RCP capabilities.
                   </Typography>
                 </Box>
               }

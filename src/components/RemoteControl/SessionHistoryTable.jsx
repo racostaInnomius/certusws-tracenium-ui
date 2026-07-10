@@ -36,6 +36,29 @@ const STATUS_META = {
   cancelled: { label: "Cancelled", fg: BRAND.gray,    bg: BRAND.surfaceMuted }
 };
 
+// User-attended approval outcome per session. `consentRequired` says the session
+// was gated on end-user consent; `consentOutcome` (from close_reason) says how it
+// went. No outcome on a consent-required session ⇒ the user approved and it
+// proceeded.
+function ConsentCell({ consentRequired, consentOutcome }) {
+  if (!consentRequired) {
+    return <Typography variant="caption" sx={{ color: BRAND.gray }}>—</Typography>;
+  }
+  const meta =
+    consentOutcome === "denied"
+      ? { label: "Denied by user", fg: ROLE.critical, bg: ROLE.criticalSoft }
+      : consentOutcome === "timeout"
+      ? { label: "No response", fg: ROLE.caution, bg: ROLE.cautionSoft }
+      : { label: "Approved", fg: ROLE.positive, bg: ROLE.positiveSoft };
+  return (
+    <Chip
+      size="small"
+      label={meta.label}
+      sx={{ height: 20, fontWeight: 700, fontSize: 11, bgcolor: meta.bg, color: meta.fg, border: `1px solid ${meta.fg}33` }}
+    />
+  );
+}
+
 function formatDuration(sec) {
   if (sec == null) return "—";
   if (sec < 60) return `${sec}s`;
@@ -92,13 +115,14 @@ export default function SessionHistoryTable({
               <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Duration</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700 }}>Consent</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Transcript</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} sx={{ py: 5, border: "none" }}>
+                <TableCell colSpan={8} sx={{ py: 5, border: "none" }}>
                   <Stack
                     alignItems="center"
                     spacing={1}
@@ -142,6 +166,12 @@ export default function SessionHistoryTable({
                           color: status.fg,
                           border: `1px solid ${status.fg}33`
                         }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <ConsentCell
+                        consentRequired={s.consentRequired}
+                        consentOutcome={s.consentOutcome}
                       />
                     </TableCell>
                     <TableCell>
