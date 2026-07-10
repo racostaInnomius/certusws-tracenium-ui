@@ -31,6 +31,7 @@ import {
 import VerdictBadge from "./VerdictBadge";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import IntakeVerdictBanner from "./IntakeVerdictBanner";
+import IntakeProposalBanner from "./IntakeProposalBanner";
 import PackageDialog from "./PackageDialog";
 import { intakeToPackageItem } from "./intakeMapping";
 
@@ -246,7 +247,14 @@ export default function IntakeTab({ canManage, notify }) {
         open={Boolean(reviewIntake)}
         mode="approve"
         item={reviewIntake ? intakeToPackageItem(reviewIntake) : null}
-        banner={reviewIntake ? <IntakeVerdictBanner intake={reviewIntake} /> : null}
+        banner={
+          reviewIntake ? (
+            <>
+              <IntakeVerdictBanner intake={reviewIntake} />
+              <IntakeProposalBanner intake={reviewIntake} />
+            </>
+          ) : null
+        }
         submitting={reviewSubmitting}
         onClose={() => (reviewSubmitting ? null : setReviewIntake(null))}
         onSubmit={handleApprove}
