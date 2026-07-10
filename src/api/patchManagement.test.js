@@ -36,6 +36,8 @@ import {
   createCveCatalog,
   updateCveCatalog,
   deleteCveCatalog,
+  triggerNvdSync,
+  getNvdSyncStatus,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -207,6 +209,18 @@ describe("CVE mapping", () => {
     expect(update[0].pathname).toBe(`${BASE}/vulnerabilities/catalog/5`);
     expect(update[0].body).toEqual({ cvssSeverity: "critical" });
     expect(del[0].pathname).toBe(`${BASE}/vulnerabilities/catalog/5`);
+  });
+
+  it("triggers an NVD sync and reads its status", async () => {
+    const trigger = respond("post", `${BASE}/vulnerabilities/sync`, { ok: true }, { status: 202 });
+    const status = respond("get", `${BASE}/vulnerabilities/sync/status`, { ok: true, status: { status: "idle" } });
+
+    await triggerNvdSync({ maxProducts: 50 });
+    await getNvdSyncStatus();
+
+    expect(trigger[0].pathname).toBe(`${BASE}/vulnerabilities/sync`);
+    expect(trigger[0].body).toEqual({ maxProducts: 50 });
+    expect(status[0].pathname).toBe(`${BASE}/vulnerabilities/sync/status`);
   });
 });
 

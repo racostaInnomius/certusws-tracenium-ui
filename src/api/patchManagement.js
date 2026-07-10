@@ -176,6 +176,16 @@ export async function deleteCveCatalog(id) {
   return httpDeleteJson(`${BASE}/vulnerabilities/catalog/${encodeURIComponent(id)}`);
 }
 
+// NVD sync — ingest CVEs for the fleet's software into the catalog. Trigger is
+// admin-only + fire-and-forget (202); status is a plain read.
+export async function triggerNvdSync(payload = {}) {
+  return httpPostJson(`${BASE}/vulnerabilities/sync`, payload);
+}
+
+export async function getNvdSyncStatus() {
+  return httpGetJson(`${BASE}/vulnerabilities/sync/status`);
+}
+
 // ── Maintenance windows (when deployments are allowed to dispatch) ─
 
 export async function listMaintenanceWindows() {

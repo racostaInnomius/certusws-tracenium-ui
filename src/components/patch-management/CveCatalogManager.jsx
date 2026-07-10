@@ -21,12 +21,15 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import { BRAND } from "../../theme/brand";
 import {
   listCveCatalog,
   createCveCatalog,
   updateCveCatalog,
   deleteCveCatalog,
+  triggerNvdSync,
+  getNvdSyncStatus,
 } from "../../api/patchManagement";
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
@@ -41,11 +44,67 @@ function rangeLabel(it) {
   return `${lo} → ${hi}`;
 }
 
+function timeAgo(iso) {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const mins = Math.round((Date.now() - t) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+// One-line summary of the last/current NVD sync for the toolbar.
+function syncStatusText(s) {
+  if (!s || s.status === "idle") return "Never synced from NVD.";
+  if (s.status === "running") return "NVD sync running…";
+  if (s.status === "failed") return `Last NVD sync failed ${timeAgo(s.finishedAt)}${s.error ? `: ${s.error}` : ""}`;
+  // completed
+  const c = s.summary || {};
+  const parts = [
+    `${c.cvesUpserted ?? 0} CVE${(c.cvesUpserted ?? 0) === 1 ? "" : "s"} from ${c.productsQueried ?? 0} product${(c.productsQueried ?? 0) === 1 ? "" : "s"}`,
+  ];
+  if (c.productsTruncated) parts.push(`(capped at ${c.productsQueried} of ${c.productsInFleet})`);
+  return `Last NVD sync ${timeAgo(s.finishedAt)} · ${parts.join(" ")}`;
+}
+
 export default function CveCatalogManager({ canManage, notify }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [dialog, setDialog] = React.useState(null); // { mode, entry }
   const [submitting, setSubmitting] = React.useState(false);
+  const [syncStatus, setSyncStatus] = React.useState(null);
+  const [syncing, setSyncing] = React.useState(false);
+
+  const loadStatus = React.useCallback(async () => {
+    try {
+      const res = await getNvdSyncStatus();
+      setSyncStatus(res?.status ?? null);
+      return res?.status ?? null;
+    } catch {
+      return null; // status is best-effort; don't nag the operator
+    }
+  }, []);
+
+  // Poll the sync status while a run is in flight so "running" flips to
+  // "completed" without a manual refresh; refetch the catalog when it finishes.
+  React.useEffect(() => {
+    if (syncStatus?.status !== "running") return undefined;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      const s = await loadStatus();
+      if (!cancelled && s && s.status !== "running") {
+        clearInterval(id);
+        load();
+      }
+    }, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [syncStatus?.status, loadStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -61,7 +120,26 @@ export default function CveCatalogManager({ canManage, notify }) {
 
   React.useEffect(() => {
     load();
-  }, [load]);
+    loadStatus();
+  }, [load, loadStatus]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await triggerNvdSync({});
+      notify?.("success", "NVD sync started — this can take a few minutes for a large fleet.");
+      await loadStatus(); // flips the panel to "running" + kicks off polling
+    } catch (err) {
+      if (err?.status === 409 || err?.body?.error === "NVD_SYNC_ALREADY_RUNNING") {
+        notify?.("info", "An NVD sync is already running for this tenant.");
+        await loadStatus();
+      } else {
+        notify?.("error", errMsg(err, "Failed to start NVD sync"));
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleSubmit = async (payload) => {
     setSubmitting(true);
@@ -90,7 +168,7 @@ export default function CveCatalogManager({ canManage, notify }) {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
           Known CVEs this tenant tracks, mapped to a product + affected version range. Detection
           flags installed software whose version falls inside the range.
@@ -101,6 +179,22 @@ export default function CveCatalogManager({ canManage, notify }) {
         </Button>
         {canManage ? (
           <Button
+            onClick={handleSync}
+            disabled={syncing || syncStatus?.status === "running"}
+            startIcon={
+              syncStatus?.status === "running" || syncing ? (
+                <CircularProgress size={16} sx={{ color: BRAND.gray }} />
+              ) : (
+                <CloudSyncOutlinedIcon />
+              )
+            }
+            sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
+          >
+            {syncStatus?.status === "running" ? "Syncing…" : "Sync from NVD"}
+          </Button>
+        ) : null}
+        {canManage ? (
+          <Button
             onClick={() => setDialog({ mode: "create", entry: null })}
             startIcon={<AddOutlinedIcon />}
             variant="contained"
@@ -109,6 +203,14 @@ export default function CveCatalogManager({ canManage, notify }) {
             Add CVE
           </Button>
         ) : null}
+      </Box>
+
+      {/* NVD sync status line */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2 }}>
+        <CloudSyncOutlinedIcon sx={{ fontSize: 14, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
+        <Typography sx={{ fontSize: 12, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
+          {syncStatusText(syncStatus)}
+        </Typography>
       </Box>
 
       {loading ? (
