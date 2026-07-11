@@ -22,6 +22,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import { BRAND } from "../../theme/brand";
 import {
   listCveCatalog,
@@ -30,6 +31,8 @@ import {
   deleteCveCatalog,
   triggerNvdSync,
   getNvdSyncStatus,
+  triggerKevSync,
+  getKevSyncStatus,
 } from "../../api/patchManagement";
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
@@ -70,6 +73,16 @@ function syncStatusText(s) {
   return `Last NVD sync ${timeAgo(s.finishedAt)} · ${parts.join(" ")}`;
 }
 
+// One-line summary of the last/current CISA KEV refresh (global catalog).
+function kevStatusText(s) {
+  if (!s || s.status === "idle") return "KEV catalog not synced yet.";
+  if (s.status === "running") return "Refreshing CISA KEV catalog…";
+  if (s.status === "failed") return `Last KEV refresh failed ${timeAgo(s.finishedAt)}${s.error ? `: ${s.error}` : ""}`;
+  const c = s.summary || {};
+  const ver = c.catalogVersion ? ` (catalog ${c.catalogVersion})` : "";
+  return `KEV catalog refreshed ${timeAgo(s.finishedAt)} · ${c.upserted ?? 0} entries${ver}`;
+}
+
 export default function CveCatalogManager({ canManage, notify }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -77,6 +90,8 @@ export default function CveCatalogManager({ canManage, notify }) {
   const [submitting, setSubmitting] = React.useState(false);
   const [syncStatus, setSyncStatus] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [kevStatus, setKevStatus] = React.useState(null);
+  const [kevSyncing, setKevSyncing] = React.useState(false);
 
   const loadStatus = React.useCallback(async () => {
     try {
@@ -85,6 +100,16 @@ export default function CveCatalogManager({ canManage, notify }) {
       return res?.status ?? null;
     } catch {
       return null; // status is best-effort; don't nag the operator
+    }
+  }, []);
+
+  const loadKevStatus = React.useCallback(async () => {
+    try {
+      const res = await getKevSyncStatus();
+      setKevStatus(res?.status ?? null);
+      return res?.status ?? null;
+    } catch {
+      return null;
     }
   }, []);
 
@@ -106,6 +131,21 @@ export default function CveCatalogManager({ canManage, notify }) {
     };
   }, [syncStatus?.status, loadStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Same polling for the KEV refresh (global catalog); no catalog refetch needed
+  // since KEV enriches exposure, not this catalog list.
+  React.useEffect(() => {
+    if (kevStatus?.status !== "running") return undefined;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      const s = await loadKevStatus();
+      if (!cancelled && s && s.status !== "running") clearInterval(id);
+    }, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [kevStatus?.status, loadKevStatus]);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -121,7 +161,8 @@ export default function CveCatalogManager({ canManage, notify }) {
   React.useEffect(() => {
     load();
     loadStatus();
-  }, [load, loadStatus]);
+    loadKevStatus();
+  }, [load, loadStatus, loadKevStatus]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -138,6 +179,24 @@ export default function CveCatalogManager({ canManage, notify }) {
       }
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleKevSync = async () => {
+    setKevSyncing(true);
+    try {
+      await triggerKevSync();
+      notify?.("success", "CISA KEV catalog refresh started.");
+      await loadKevStatus();
+    } catch (err) {
+      if (err?.status === 409 || err?.body?.error === "KEV_SYNC_ALREADY_RUNNING") {
+        notify?.("info", "A KEV refresh is already running.");
+        await loadKevStatus();
+      } else {
+        notify?.("error", errMsg(err, "Failed to start KEV refresh"));
+      }
+    } finally {
+      setKevSyncing(false);
     }
   };
 
@@ -195,6 +254,22 @@ export default function CveCatalogManager({ canManage, notify }) {
         ) : null}
         {canManage ? (
           <Button
+            onClick={handleKevSync}
+            disabled={kevSyncing || kevStatus?.status === "running"}
+            startIcon={
+              kevStatus?.status === "running" || kevSyncing ? (
+                <CircularProgress size={16} sx={{ color: BRAND.gray }} />
+              ) : (
+                <GppMaybeOutlinedIcon />
+              )
+            }
+            sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
+          >
+            {kevStatus?.status === "running" ? "Refreshing…" : "Refresh KEV"}
+          </Button>
+        ) : null}
+        {canManage ? (
+          <Button
             onClick={() => setDialog({ mode: "create", entry: null })}
             startIcon={<AddOutlinedIcon />}
             variant="contained"
@@ -206,10 +281,18 @@ export default function CveCatalogManager({ canManage, notify }) {
       </Box>
 
       {/* NVD sync status line */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
         <CloudSyncOutlinedIcon sx={{ fontSize: 14, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
         <Typography sx={{ fontSize: 12, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
           {syncStatusText(syncStatus)}
+        </Typography>
+      </Box>
+
+      {/* CISA KEV refresh status line (global catalog) */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2 }}>
+        <GppMaybeOutlinedIcon sx={{ fontSize: 14, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
+        <Typography sx={{ fontSize: 12, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
+          {kevStatusText(kevStatus)}
         </Typography>
       </Box>
 

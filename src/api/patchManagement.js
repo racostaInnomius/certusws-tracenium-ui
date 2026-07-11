@@ -186,6 +186,17 @@ export async function getNvdSyncStatus() {
   return httpGetJson(`${BASE}/vulnerabilities/sync/status`);
 }
 
+// CISA KEV (Known Exploited Vulnerabilities) — the GLOBAL actively-exploited
+// catalog (one CISA feed shared by all tenants). Trigger is admin-only +
+// fire-and-forget (202); status is a plain read.
+export async function triggerKevSync() {
+  return httpPostJson(`${BASE}/vulnerabilities/kev/sync`, {});
+}
+
+export async function getKevSyncStatus() {
+  return httpGetJson(`${BASE}/vulnerabilities/kev/sync/status`);
+}
+
 // ── Maintenance windows (when deployments are allowed to dispatch) ─
 
 export async function listMaintenanceWindows() {

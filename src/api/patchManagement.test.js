@@ -38,6 +38,8 @@ import {
   deleteCveCatalog,
   triggerNvdSync,
   getNvdSyncStatus,
+  triggerKevSync,
+  getKevSyncStatus,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -221,6 +223,18 @@ describe("CVE mapping", () => {
     expect(trigger[0].pathname).toBe(`${BASE}/vulnerabilities/sync`);
     expect(trigger[0].body).toEqual({ maxProducts: 50 });
     expect(status[0].pathname).toBe(`${BASE}/vulnerabilities/sync/status`);
+  });
+
+  it("triggers a KEV refresh and reads its status", async () => {
+    const trigger = respond("post", `${BASE}/vulnerabilities/kev/sync`, { ok: true }, { status: 202 });
+    const status = respond("get", `${BASE}/vulnerabilities/kev/sync/status`, { ok: true, status: { status: "idle" } });
+
+    await triggerKevSync();
+    await getKevSyncStatus();
+
+    expect(trigger[0].pathname).toBe(`${BASE}/vulnerabilities/kev/sync`);
+    expect(trigger[0].body).toEqual({});
+    expect(status[0].pathname).toBe(`${BASE}/vulnerabilities/kev/sync/status`);
   });
 });
 
