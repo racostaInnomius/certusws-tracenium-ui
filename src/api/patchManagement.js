@@ -7,6 +7,7 @@
 import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
 
 const BASE = "/api/v1/patch-management";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 export async function getPatchSummary() {
   return httpGetJson(`${BASE}/summary`);
@@ -150,6 +151,13 @@ export async function getVulnerabilityExposure() {
 // Vulnerable installed software on a single device (drill-in).
 export async function getDeviceVulnerabilities(agentId) {
   return httpGetJson(`${BASE}/vulnerabilities/exposure/devices/${encodeURIComponent(agentId)}`);
+}
+
+// Absolute URL for the auditor-ready exposure PDF. NOT a fetch helper — the
+// browser hits it directly so Content-Disposition drives the download and the
+// OIDC cookie stays in flight (same pattern as the compliance export).
+export function buildCveExposureReportPdfUrl() {
+  return `${API_BASE}${BASE}/vulnerabilities/exposure/report.pdf`;
 }
 
 // One-click remediation: deploy the CVE entry's linked SDP package to the

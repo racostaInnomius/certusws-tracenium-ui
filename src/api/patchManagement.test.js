@@ -40,6 +40,7 @@ import {
   getNvdSyncStatus,
   triggerKevSync,
   getKevSyncStatus,
+  buildCveExposureReportPdfUrl,
 } from "./patchManagement";
 
 const BASE = "/api/v1/patch-management";
@@ -235,6 +236,10 @@ describe("CVE mapping", () => {
     expect(trigger[0].pathname).toBe(`${BASE}/vulnerabilities/kev/sync`);
     expect(trigger[0].body).toEqual({});
     expect(status[0].pathname).toBe(`${BASE}/vulnerabilities/kev/sync/status`);
+  });
+
+  it("builds the exposure PDF report URL against the report endpoint", () => {
+    expect(buildCveExposureReportPdfUrl()).toContain(`${BASE}/vulnerabilities/exposure/report.pdf`);
   });
 });
 
