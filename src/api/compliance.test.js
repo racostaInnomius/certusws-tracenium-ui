@@ -23,6 +23,7 @@ import {
   getFrameworkComplianceTimeseries,
   getFindingHistory,
   getFrameworkSummary,
+  getCategorySummary,
   getFrameworks,
   getTimeToCloseSummary,
   revokeFindingAcknowledgement,
@@ -80,16 +81,19 @@ describe("read endpoints", () => {
     const catalog = respond("get", `${BASE}/catalog`, { ok: true, items: [] });
     const frameworks = respond("get", `${BASE}/frameworks`, { ok: true, items: [] });
     const frameworkSummary = respond("get", `${BASE}/framework-summary`, { ok: true, items: [] });
+    const categorySummary = respond("get", `${BASE}/category-summary`, { ok: true, items: [] });
     const posture = respond("get", `${BASE}/devices`, { ok: true, items: [] });
 
     await getComplianceCatalog({ search: "smb" });
     await getFrameworks();
     await getFrameworkSummary();
+    await getCategorySummary();
     await getDevicePosture({ framework: "cis-win11" });
 
     expect(catalog[0].search).toEqual({ search: "smb" });
     expect(frameworks[0].pathname).toBe(`${BASE}/frameworks`);
     expect(frameworkSummary[0].pathname).toBe(`${BASE}/framework-summary`);
+    expect(categorySummary[0].pathname).toBe(`${BASE}/category-summary`);
     expect(posture[0].search).toEqual({ framework: "cis-win11" });
   });
 

@@ -117,6 +117,7 @@ import RefreshControl, { useAutoRefresh } from "../components/common/RefreshCont
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
 import ComplianceCatalogDialog from "../components/Compliance/ComplianceCatalogDialog";
+import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
@@ -1059,6 +1060,12 @@ export default function SecurityCompliance() {
           </Table>
         </TableContainer>
       </SectionPaper>
+
+      {/* Fleet posture by control category (firewall, crypto, patching, …) —
+          the fleet analogue of the drawer's per-device category grouping.
+          Sits below the framework table (compliance vs benchmarks) and above
+          the MTTR/device views (triage). */}
+      <ComplianceCategoryBreakdown />
 
       {/* Sprint 5 — fleet time-to-close by severity. Mounted between
           the framework table (top-down "how does the fleet compare to

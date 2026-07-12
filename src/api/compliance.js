@@ -42,6 +42,13 @@ export async function getFrameworks() {
   return httpGetJson(`${BASE}/frameworks`);
 }
 
+// Fleet-wide posture aggregated by catalog category (firewall, crypto,
+// network_hardening, patching, …) — one row per category with pass/fail counts,
+// high-severity fails, devices failing, and a pass rate.
+export async function getCategorySummary() {
+  return httpGetJson(`${BASE}/category-summary`);
+}
+
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
 export async function getFrameworkSummary() {
   return httpGetJson(`${BASE}/framework-summary`);
