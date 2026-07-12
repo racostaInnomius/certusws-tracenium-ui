@@ -49,6 +49,12 @@ export async function getCategorySummary() {
   return httpGetJson(`${BASE}/category-summary`);
 }
 
+// Drill-in for a category: devices FAILING at least one check in the category,
+// with the failing checks. Powers the category-breakdown expand-in-place.
+export async function getCategoryDevices(category) {
+  return httpGetJson(`${BASE}/category-summary/${encodeURIComponent(category)}/devices`);
+}
+
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
 export async function getFrameworkSummary() {
   return httpGetJson(`${BASE}/framework-summary`);

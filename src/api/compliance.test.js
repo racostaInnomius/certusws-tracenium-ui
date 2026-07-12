@@ -24,6 +24,7 @@ import {
   getFindingHistory,
   getFrameworkSummary,
   getCategorySummary,
+  getCategoryDevices,
   getFrameworks,
   getTimeToCloseSummary,
   revokeFindingAcknowledgement,
@@ -82,18 +83,21 @@ describe("read endpoints", () => {
     const frameworks = respond("get", `${BASE}/frameworks`, { ok: true, items: [] });
     const frameworkSummary = respond("get", `${BASE}/framework-summary`, { ok: true, items: [] });
     const categorySummary = respond("get", `${BASE}/category-summary`, { ok: true, items: [] });
+    const categoryDevices = respond("get", `${BASE}/category-summary/:category/devices`, { ok: true, items: [] });
     const posture = respond("get", `${BASE}/devices`, { ok: true, items: [] });
 
     await getComplianceCatalog({ search: "smb" });
     await getFrameworks();
     await getFrameworkSummary();
     await getCategorySummary();
+    await getCategoryDevices("network_sharing");
     await getDevicePosture({ framework: "cis-win11" });
 
     expect(catalog[0].search).toEqual({ search: "smb" });
     expect(frameworks[0].pathname).toBe(`${BASE}/frameworks`);
     expect(frameworkSummary[0].pathname).toBe(`${BASE}/framework-summary`);
     expect(categorySummary[0].pathname).toBe(`${BASE}/category-summary`);
+    expect(categoryDevices[0].pathname).toBe(`${BASE}/category-summary/network_sharing/devices`);
     expect(posture[0].search).toEqual({ framework: "cis-win11" });
   });
 

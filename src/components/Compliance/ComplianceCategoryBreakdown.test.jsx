@@ -1,12 +1,13 @@
 // src/components/Compliance/ComplianceCategoryBreakdown.test.jsx
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 
 vi.mock("../../api/compliance", () => ({
   getCategorySummary: vi.fn(),
+  getCategoryDevices: vi.fn(),
 }));
-import { getCategorySummary } from "../../api/compliance";
+import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import ComplianceCategoryBreakdown from "./ComplianceCategoryBreakdown";
 
 const ITEMS = {
@@ -65,5 +66,43 @@ describe("ComplianceCategoryBreakdown", () => {
     getCategorySummary.mockRejectedValue({ body: { message: "boom" } });
     render(<ComplianceCategoryBreakdown />);
     await waitFor(() => expect(screen.getByText("boom")).toBeInTheDocument());
+  });
+
+  it("drills into a failing category to show the failing devices + checks", async () => {
+    getCategorySummary.mockResolvedValue(ITEMS);
+    getCategoryDevices.mockResolvedValue({
+      ok: true,
+      category: "firewall",
+      items: [
+        {
+          agentId: "a1",
+          hostname: "W11-Lab01",
+          platform: "windows",
+          failingChecks: 2,
+          highSeverityFails: 2,
+          checks: [
+            { checkId: "windows.firewall.domain", title: "Domain firewall on", severity: "high" },
+            { checkId: "windows.firewall.public", title: "Public firewall on", severity: "high" },
+          ],
+        },
+      ],
+    });
+    render(<ComplianceCategoryBreakdown />);
+    const firewallCell = await screen.findByText("firewall");
+    const row = firewallCell.closest("tr");
+    // Expand the firewall row (it has failures → expandable).
+    fireEvent.click(within(row).getByRole("button"));
+
+    expect(await screen.findByText("W11-Lab01")).toBeInTheDocument();
+    expect(screen.getByText("Domain firewall on")).toBeInTheDocument();
+    expect(screen.getByText(/1 device failing this category/)).toBeInTheDocument();
+    expect(getCategoryDevices).toHaveBeenCalledWith("firewall");
+  });
+
+  it("does not fetch drill-in devices until a category is expanded", async () => {
+    getCategorySummary.mockResolvedValue(ITEMS);
+    render(<ComplianceCategoryBreakdown />);
+    await screen.findByText("firewall");
+    expect(getCategoryDevices).not.toHaveBeenCalled();
   });
 });
