@@ -83,6 +83,7 @@ import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOut
 import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 // Sprint 5 — settings panel trigger
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 // Sprint 6 — PDF export + bulk actions
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import PlaylistAddCheckOutlinedIcon from "@mui/icons-material/PlaylistAddCheckOutlined";
@@ -115,6 +116,7 @@ import SharedSummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
+import ComplianceCatalogDialog from "../components/Compliance/ComplianceCatalogDialog";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
@@ -720,6 +722,7 @@ export default function SecurityCompliance() {
   // Sprint 5 — settings panel open/close. Boolean state; the panel
   // component owns the form state internally.
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [catalogOpen, setCatalogOpen] = React.useState(false);
 
   // Framework picker label lookup.
   const frameworkLabels = React.useMemo(() => {
@@ -789,6 +792,21 @@ export default function SecurityCompliance() {
                 Compact icon button rather than a full "Settings"
                 label because the header is already crowded with
                 framework picker + export + refresh. */}
+            {/* Checks-catalog browser — surfaces the global control catalog
+                (what Tracenium evaluates) filtered by platform / category /
+                severity / framework. Compact icon button like Settings. */}
+            <Tooltip title="Browse the checks catalog" arrow placement="bottom">
+              <IconButton
+                size="small"
+                onClick={() => setCatalogOpen(true)}
+                sx={{
+                  border: `1px solid ${BRAND.border}`,
+                  borderRadius: 1
+                }}
+              >
+                <MenuBookOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Compliance settings" arrow placement="bottom">
               <IconButton
                 size="small"
@@ -1319,6 +1337,9 @@ export default function SecurityCompliance() {
         onClose={() => setSettingsOpen(false)}
         onToast={showToast}
       />
+
+      {/* Read-only browser over the global control catalog. */}
+      <ComplianceCatalogDialog open={catalogOpen} onClose={() => setCatalogOpen(false)} />
     </Box>
   );
 }
