@@ -366,18 +366,22 @@ function SeverityChip({ severity }) {
 }
 
 function FrameworkChip({ framework, controlId, controlLevel, controlTitle, referenceUrl }) {
-  // Short label: "CIS 9.3.1 · L1" / "NIST SC-7(5)" / "CSF PR.IR-01".
-  // Tooltip carries the full control title if the catalog mapping has one.
+  // Short label: "CIS 9.3.1 · L1" / "NIST SC-7(5)" / "CSF PR.IR-01" /
+  // "STIG V-253xxx · CAT I". Tooltip carries the full control title.
   const fam = framework.startsWith("cis_")
     ? "CIS"
     : framework.startsWith("nist_csf")
     ? "CSF"
     : framework.startsWith("nist_800_53")
     ? "NIST"
+    : framework.startsWith("stig_")
+    ? "STIG"
     : framework;
 
+  // CIS levels (L1/L2) and STIG severities (CAT I/II/III) are meaningful, so we
+  // suffix them; NIST/CSF control levels ("baseline"/"core") are noise here.
   const label =
-    controlLevel && fam === "CIS"
+    controlLevel && (fam === "CIS" || fam === "STIG")
       ? `${fam} ${controlId} · ${controlLevel}`
       : `${fam} ${controlId}`;
 

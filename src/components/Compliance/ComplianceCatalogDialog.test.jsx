@@ -27,6 +27,7 @@ const CHECKS = {
       collectorVersionMin: "1.1.0",
       frameworks: [
         { framework: "nist_800_53_rev5", controlId: "SC-13", controlTitle: "Cryptographic Protection", controlLevel: "baseline", referenceUrl: "https://example/sc-13" },
+        { framework: "stig_ubuntu_22", controlId: "V-260000", controlTitle: "SSH ciphers", controlLevel: "CAT II", referenceUrl: null },
       ],
     },
     {
@@ -60,8 +61,9 @@ describe("ComplianceCatalogDialog", () => {
 
     expect(await screen.findByText("linux.ssh.strong_ciphers_only")).toBeInTheDocument();
     expect(screen.getByText("3 of 3 checks")).toBeInTheDocument();
-    // Framework chip rendered from the mapping.
+    // Framework chips rendered from the mappings — incl. STIG (family + CAT level).
     expect(screen.getByText(/NIST SC-13/)).toBeInTheDocument();
+    expect(screen.getByText(/STIG V-260000 · CAT II/)).toBeInTheDocument();
   });
 
   it("filters by platform", async () => {

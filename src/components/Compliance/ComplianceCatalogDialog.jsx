@@ -66,7 +66,12 @@ function prettyCategory(c) {
 
 function FrameworkChip({ fw }) {
   const fam = frameworkFamily(fw.framework);
-  const label = fw.controlLevel && fam === "CIS" ? `${fam} ${fw.controlId} · ${fw.controlLevel}` : `${fam} ${fw.controlId}`;
+  // CIS levels (L1/L2) and STIG severities (CAT I/II/III) are meaningful; NIST/CSF
+  // control levels are noise here.
+  const label =
+    fw.controlLevel && (fam === "CIS" || fam === "STIG")
+      ? `${fam} ${fw.controlId} · ${fw.controlLevel}`
+      : `${fam} ${fw.controlId}`;
   const chip = (
     <Chip
       label={label}

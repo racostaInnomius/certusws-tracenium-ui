@@ -54,7 +54,7 @@ function shortLabel(iso) {
 function prettyFramework(key) {
   return String(key)
     .replace(/_/g, " ")
-    .replace(/\b(cis|nist|pci|iso|soc2|hipaa|csf)\b/gi, (m) => m.toUpperCase())
+    .replace(/\b(cis|nist|pci|iso|soc2|hipaa|csf|stig)\b/gi, (m) => m.toUpperCase())
     .replace(/\s+/g, " ")
     .trim();
 }
