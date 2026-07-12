@@ -84,6 +84,7 @@ import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 // Sprint 5 — settings panel trigger
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
+import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 // Sprint 6 — PDF export + bulk actions
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 import PlaylistAddCheckOutlinedIcon from "@mui/icons-material/PlaylistAddCheckOutlined";
@@ -109,6 +110,7 @@ import {
   getDeviceFleetRanking
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
+import { updateSearchParams } from "../utils/browserState";
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
@@ -565,6 +567,7 @@ function navigateTo(page, extraQuery = {}) {
 // else on the URL is ignored — we don't trust the query string to set
 // page state beyond what we explicitly support.
 const ALLOWED_SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
+const ALLOWED_STATUSES = new Set(["fail", "pass"]);
 const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
 const ALLOWED_VERSION_BUCKETS = new Set(["current", "one_behind", "older", "unknown"]);
 
@@ -612,11 +615,18 @@ function bucketOfVersion(version, canonicalLatest) {
 function readUrlFilters() {
   if (typeof window === "undefined") return {};
   const params = new URLSearchParams(window.location.search);
-  const severity = (params.get("severity") || "").toLowerCase();
+  const status = (params.get("status") || "").toLowerCase();
+  // Legacy deep-link: the old `severity` filter was a fail-proxy, so any
+  // recognized severity maps to the honest status="fail".
+  const legacySeverity = (params.get("severity") || "").toLowerCase();
   const platform = (params.get("platform") || "").toLowerCase();
   const versionBucket = (params.get("versionBucket") || "").toLowerCase();
   return {
-    severity: ALLOWED_SEVERITIES.has(severity) ? severity : "",
+    status: ALLOWED_STATUSES.has(status)
+      ? status
+      : ALLOWED_SEVERITIES.has(legacySeverity)
+      ? "fail"
+      : "",
     platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
     versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket) ? versionBucket : ""
   };
@@ -630,11 +640,24 @@ export default function SecurityCompliance() {
   // from the backend, so filtering in-memory is cheap and avoids
   // round-tripping for every chip click.
   const initialFilters = React.useMemo(() => readUrlFilters(), []);
-  const [severityFilter, setSeverityFilter] = React.useState(initialFilters.severity || "");
+  const [statusFilter, setStatusFilter] = React.useState(initialFilters.status || "");
   const [platformFilter, setPlatformFilter] = React.useState(initialFilters.platform || "");
   const [versionBucketFilter, setVersionBucketFilter] = React.useState(
     initialFilters.versionBucket || ""
   );
+
+  // Keep the URL in sync with the on-page filters so they persist across
+  // refresh and are shareable (replaceState — no navigation). Empty values are
+  // removed by updateSearchParams; the legacy `severity` param is cleared once
+  // the honest `status` filter takes over.
+  React.useEffect(() => {
+    updateSearchParams({
+      status: statusFilter,
+      platform: platformFilter,
+      versionBucket: versionBucketFilter,
+      severity: "",
+    });
+  }, [statusFilter, platformFilter, versionBucketFilter]);
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);
@@ -751,10 +774,12 @@ export default function SecurityCompliance() {
       if (platformFilter && String(d.platform || "").toLowerCase() !== platformFilter) {
         return false;
       }
-      if (severityFilter) {
-        // Only two states matter for this proxy: "fail" passes, anything
-        // else is hidden. Future: expose per-device severity buckets.
-        if (String(d.overallStatus || "").toLowerCase() !== "fail") return false;
+      if (statusFilter) {
+        const s = String(d.overallStatus || "").toLowerCase();
+        const failing = s === "fail" || s === "non_compliant";
+        const compliant = s === "pass" || s === "compliant";
+        if (statusFilter === "fail" && !failing) return false;
+        if (statusFilter === "pass" && !compliant) return false;
       }
       if (versionBucketFilter) {
         // Map the device's agentVersion into the same buckets the
@@ -772,7 +797,7 @@ export default function SecurityCompliance() {
       }
       return true;
     });
-  }, [devices, platformFilter, severityFilter, versionBucketFilter]);
+  }, [devices, platformFilter, statusFilter, versionBucketFilter]);
 
   return (
     <Box sx={{ pb: 6 }}>
@@ -1088,43 +1113,63 @@ export default function SecurityCompliance() {
           {loading ? <CircularProgress size={18} sx={{ color: BRAND.teal }} /> : null}
         </Stack>
 
-        {/* Deep-link filter chips. Each chip is deletable — clicking
-            the x clears that filter. When there are no active filters
-            nothing renders, so the header stays compact by default. */}
-        {(severityFilter || platformFilter || versionBucketFilter) ? (
-          <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: "wrap", gap: 0.5 }}>
-            <Typography
-              variant="caption"
-              sx={{ color: BRAND.gray, alignSelf: "center", fontWeight: 600, mr: 0.5 }}
+        {/* On-page filter toolbar. Sets the same client-side filters that used
+            to be deep-link-only; changes sync back to the URL so they persist
+            on refresh + are shareable. "All" clears a filter. */}
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ mb: 1.5, flexWrap: "wrap", gap: 1, alignItems: "center" }}
+        >
+          <FilterAltOutlinedIcon sx={{ fontSize: 18, color: BRAND.gray }} />
+          <TextField
+            select size="small" label="Status" value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">All statuses</MenuItem>
+            <MenuItem value="fail">Failing</MenuItem>
+            <MenuItem value="pass">Compliant</MenuItem>
+          </TextField>
+          <TextField
+            select size="small" label="Platform" value={platformFilter}
+            onChange={(e) => setPlatformFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">All platforms</MenuItem>
+            <MenuItem value="windows">Windows</MenuItem>
+            <MenuItem value="macos">macOS</MenuItem>
+            <MenuItem value="linux">Linux</MenuItem>
+          </TextField>
+          <TextField
+            select size="small" label="Agent version" value={versionBucketFilter}
+            onChange={(e) => setVersionBucketFilter(e.target.value)}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">All versions</MenuItem>
+            <MenuItem value="current">Current</MenuItem>
+            <MenuItem value="one_behind">One behind</MenuItem>
+            <MenuItem value="older">Older</MenuItem>
+            <MenuItem value="unknown">Unknown</MenuItem>
+          </TextField>
+          <Box sx={{ flex: 1 }} />
+          <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 600 }}>
+            {filteredDevices.length} of {devices.length} devices
+          </Typography>
+          {statusFilter || platformFilter || versionBucketFilter ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setStatusFilter("");
+                setPlatformFilter("");
+                setVersionBucketFilter("");
+              }}
+              sx={{ textTransform: "none", color: BRAND.gray }}
             >
-              Applied:
-            </Typography>
-            {severityFilter ? (
-              <Chip
-                size="small"
-                label={`Severity ≥ ${severityFilter}`}
-                onDelete={() => setSeverityFilter("")}
-                sx={{ bgcolor: ROLE.criticalSoft, color: ROLE.critical, fontWeight: 600 }}
-              />
-            ) : null}
-            {platformFilter ? (
-              <Chip
-                size="small"
-                label={`Platform: ${platformFilter}`}
-                onDelete={() => setPlatformFilter("")}
-                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
-              />
-            ) : null}
-            {versionBucketFilter ? (
-              <Chip
-                size="small"
-                label={`Version: ${versionBucketFilter.replace("_", " ")}`}
-                onDelete={() => setVersionBucketFilter("")}
-                sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
-              />
-            ) : null}
-          </Stack>
-        ) : null}
+              Clear
+            </Button>
+          ) : null}
+        </Stack>
 
         <TableContainer>
           <Table size="small">
