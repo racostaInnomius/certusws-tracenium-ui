@@ -302,7 +302,9 @@ export default function Portfolio() {
               ? "No matches."
               : level === "vendor" && !drilledMsp
                 ? "No MSPs yet."
-                : "No clients yet."
+                : level === "msp" && !drilledMsp
+                  ? "No clients assigned yet."
+                  : "No clients yet."
           }
         />
       )}
