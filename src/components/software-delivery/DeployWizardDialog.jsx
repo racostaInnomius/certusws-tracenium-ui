@@ -8,10 +8,10 @@
 //              possible) OR enter a manual list of device IDs.
 //   2. Review — package summary, target summary, fire button.
 //
-// Why only two steps for Phase 1: the package is already chosen
-// (the wizard is opened from a row's "Deploy" button, so packageId
-// is known). Mode is install-only in Phase 1, no scheduling — both
-// would add steps that are placeholders today.
+// Why only two steps: the package is already chosen (the wizard is opened
+// from a row's "Deploy" button, so packageId is known). The operator picks a
+// mode (install / reinstall / uninstall) on the Target step; scheduling is a
+// separate future concern.
 
 import * as React from "react";
 import {
@@ -41,6 +41,27 @@ import { listAssetGroups } from "../../api/assetGroups";
 
 const STEPS = ["Target", "Review"];
 
+// Detection-rule types that carry a removable identity the agent can uninstall
+// by (MSI ProductCode / app bundle / pkg receipt / dpkg / rpm). file_exists and
+// command_exit are presence probes with nothing to remove.
+const REMOVABLE_RULE_TYPES = new Set([
+  "registry_uninstall",
+  "bundle_version",
+  "pkg_receipt",
+  "dpkg_installed",
+  "rpm_installed",
+]);
+
+// A package is uninstallable when its detection rule yields a removable
+// identity, or it ships explicit silent uninstall args (Windows EXE path).
+function canUninstall(pkg) {
+  if (!pkg) return false;
+  if (pkg.silentUninstallArgs && String(pkg.silentUninstallArgs).trim()) return true;
+  return Boolean(pkg.detectionRule && REMOVABLE_RULE_TYPES.has(pkg.detectionRule.type));
+}
+
+const MODE_LABELS = { install: "Install", reinstall: "Reinstall", uninstall: "Uninstall" };
+
 export default function DeployWizardDialog({
   open,
   pkg,           // SoftwarePackageDto (the row the operator clicked Deploy on)
@@ -49,6 +70,10 @@ export default function DeployWizardDialog({
   notify,
 }) {
   const [activeStep, setActiveStep] = React.useState(0);
+
+  // ── Deployment mode ───────────────────────────────────────────
+  const [mode, setMode] = React.useState("install");
+  const uninstallable = React.useMemo(() => canUninstall(pkg), [pkg]);
 
   // ── Target state ──────────────────────────────────────────────
   const [targetMode, setTargetMode] = React.useState("asset_group");
@@ -62,6 +87,7 @@ export default function DeployWizardDialog({
   React.useEffect(() => {
     if (!open) return;
     setActiveStep(0);
+    setMode("install");
     setTargetMode("asset_group");
     setGroupId("");
     setDeviceIdsRaw("");
@@ -112,8 +138,8 @@ export default function DeployWizardDialog({
     try {
       const body =
         targetMode === "asset_group"
-          ? { mode: "install", assetGroupId: Number(groupId) }
-          : { mode: "install", deviceIds: parsedDeviceIds };
+          ? { mode, assetGroupId: Number(groupId) }
+          : { mode, deviceIds: parsedDeviceIds };
       await onConfirm?.(body);
       // Parent closes the dialog on success
     } catch (err) {
@@ -188,6 +214,29 @@ export default function DeployWizardDialog({
                 </Typography>
               </Stack>
             </Box>
+
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              helperText={
+                mode === "uninstall"
+                  ? "Removes the package from targeted devices that have it installed."
+                  : mode === "reinstall"
+                  ? "Re-runs the installer even on devices already up to date."
+                  : "Installs on devices that don't already have the package."
+              }
+            >
+              <MenuItem value="install">{MODE_LABELS.install}</MenuItem>
+              <MenuItem value="reinstall">{MODE_LABELS.reinstall}</MenuItem>
+              <MenuItem value="uninstall" disabled={!uninstallable}>
+                {MODE_LABELS.uninstall}
+                {!uninstallable ? " — needs an uninstall identity or args" : ""}
+              </MenuItem>
+            </TextField>
 
             <RadioGroup
               row
@@ -358,10 +407,14 @@ export default function DeployWizardDialog({
               }}
             >
               <Typography sx={{ fontSize: 13 }}>
-                Firing will create one job per device. Pre-install detection
+                Firing will create one <strong>{MODE_LABELS[mode].toLowerCase()}</strong> job per device.
                 {pkg.detectionRule
-                  ? " will skip devices that already have the package."
-                  : " is disabled — installer runs on every device."}
+                  ? mode === "uninstall"
+                    ? " Detection will skip devices that don't have the package."
+                    : mode === "reinstall"
+                    ? " Detection is bypassed — the installer re-runs on every device."
+                    : " Detection will skip devices that already have the package."
+                  : " No detection rule — the action runs on every device."}
                 {" "}Per-device cap is 1000 — split larger groups.
               </Typography>
             </Alert>
@@ -419,7 +472,7 @@ export default function DeployWizardDialog({
               "&:hover": { bgcolor: BRAND.tealHover },
             }}
           >
-            {submitting ? "Dispatching…" : "Deploy"}
+            {submitting ? "Dispatching…" : MODE_LABELS[mode]}
           </Button>
         )}
       </DialogActions>

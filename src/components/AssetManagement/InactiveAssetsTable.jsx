@@ -53,6 +53,8 @@ const PLATFORM_OPTIONS = [
   { value: "windows server", label: "Windows Server" },
   { value: "macos", label: "macOS" },
   { value: "linux", label: "Linux" },
+  { value: "ios", label: "iOS" },
+  { value: "android", label: "Android" },
   { value: "unknown", label: "Unknown" },
 ];
 
@@ -63,6 +65,8 @@ const PLATFORM_STYLE = {
   "windows server": { bg: BRAND.darkSoft, fg: BRAND.dark },
   macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
+  ios: { bg: BRAND.tealSoft, fg: BRAND.tealText },
+  android: { bg: "rgba(61,220,132,0.14)", fg: "#1b7a45" },
   unknown: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
 };
 
@@ -112,15 +116,18 @@ function PlatformChip({ platform }) {
   const normalized = normalizePlatform(platform);
   const style = PLATFORM_STYLE[normalized] || { bg: BRAND.surfaceMuted, fg: BRAND.dark };
 
+  const fixedLabel = normalized === "macos" ? "macOS" : normalized === "ios" ? "iOS" : null;
+  const useFixedCase = fixedLabel !== null;
+
   return (
     <Chip
       size="small"
-      label={normalized === "macos" ? "macOS" : normalized}
+      label={fixedLabel ?? normalized}
       sx={{
         height: 20,
         fontWeight: 800,
         fontSize: 11,
-        textTransform: normalized === "macos" ? "none" : "capitalize",
+        textTransform: useFixedCase ? "none" : "capitalize",
         bgcolor: style.bg,
         color: style.fg,
         border: `1px solid ${style.fg}33`,

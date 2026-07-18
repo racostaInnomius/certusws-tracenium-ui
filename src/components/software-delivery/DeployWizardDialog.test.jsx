@@ -93,7 +93,7 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Deploy/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
     expect(onConfirm.mock.calls[0][0]).toEqual({ mode: "install", assetGroupId: 10 });
@@ -110,13 +110,51 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
       "agent-001, agent-002"
     );
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Deploy/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
     const body = onConfirm.mock.calls[0][0];
     expect(body.mode).toBe("install");
     expect(body.deviceIds).toEqual(["agent-001", "agent-002"]);
     expect(body).not.toHaveProperty("assetGroupId"); // XOR — never both
+  });
+});
+
+describe("DeployWizardDialog — mode selection", () => {
+  it("fires an uninstall body when uninstall mode is picked (removable rule)", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm }); // PKG has a registry_uninstall rule → uninstallable
+
+    await user.click(screen.getByRole("combobox", { name: /Mode/i }));
+    await user.click(await screen.findByRole("option", { name: /^Uninstall/i }));
+
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    // Fire button now reads "Uninstall".
+    await user.click(screen.getByRole("button", { name: /^Uninstall$/i }));
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm.mock.calls[0][0]).toEqual({ mode: "uninstall", assetGroupId: 10 });
+  });
+
+  it("disables the uninstall option when the package has no removable identity", async () => {
+    const user = setupUser();
+    respond("get", "/api/v1/asset-groups", { ok: true, items: GROUPS });
+    render(
+      <DeployWizardDialog
+        open
+        pkg={{ ...PKG, detectionRule: { type: "file_exists", path: "C:/x" }, silentUninstallArgs: null }}
+        onClose={vi.fn()}
+        onConfirm={vi.fn()}
+        notify={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("combobox", { name: /Mode/i }));
+    const uninstallOption = await screen.findByRole("option", { name: /Uninstall/i });
+    expect(uninstallOption).toHaveAttribute("aria-disabled", "true");
   });
 });
 
@@ -182,13 +220,13 @@ describe("DeployWizardDialog — deploy result surfacing", () => {
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Deploy/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() =>
       expect(notify).toHaveBeenCalledWith("error", "Per-device cap exceeded")
     );
-    // Deploy button re-enables so operator can retry (submitting reset).
-    expect(screen.getByRole("button", { name: /Deploy/i })).toBeEnabled();
+    // Fire button re-enables so operator can retry (submitting reset).
+    expect(screen.getByRole("button", { name: /^Install$/i })).toBeEnabled();
   });
 
   it("group-load failure notifies error and leaves an empty catalog", async () => {

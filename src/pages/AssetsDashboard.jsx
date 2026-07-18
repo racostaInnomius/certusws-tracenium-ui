@@ -97,7 +97,7 @@ import { BRAND, ROLE } from "../theme/brand";
 // trust the query string to set arbitrary state beyond the whitelist
 // below.
 
-const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
+const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux", "ios", "android"]);
 const ALLOWED_VERSION_BUCKETS = new Set([
   "current",
   "one_behind",
@@ -164,12 +164,37 @@ function normalizePlatform(raw) {
   if (v === "windows" || v === "win32" || v.startsWith("win")) return "windows";
   if (v === "macos" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
   if (v === "linux") return "linux";
+  if (v === "ios" || v === "ipados") return "ios";
+  if (v === "android") return "android";
   return null;
 }
 
 function toSafeNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+// Human labels for the mobile MDM/MAM operating mode reported in amp.managed.
+function formatOperatingMode(value) {
+  const v = String(value || "").trim();
+  if (!v) return "—";
+  const map = {
+    mdmMam: "MDM + MAM (fully managed)",
+    mdmOnly: "MDM only (device managed)",
+    mamOnly: "MAM only (app managed)",
+    unmanaged: "Unmanaged",
+    standalone: "Standalone",
+  };
+  return map[v] || v;
+}
+
+// Storage-health chip color for the mobile managed panel.
+function storageHealthColor(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "ok" || v === "healthy") return ROLE.positive;
+  if (v === "low" || v === "warning") return "#B07818";
+  if (v === "critical" || v === "full") return ROLE.critical;
+  return BRAND.gray;
 }
 
 function getOsVersionDisplayTitle(row) {
@@ -561,6 +586,11 @@ function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
     localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),
     lastSeenAt: coalesceValue(source.lastSeenAt, source.last_seen_at, source.lastHeartbeat, source.last_heartbeat),
+    // Mobile (MDM/MAM) managed-state — present only for ios/android devices,
+    // surfaced from agent.agent_payload by the detail endpoint.
+    isMobile: coalesceValue(source.mobile, fallbackHost.mobile) === "true" || source.mobile === true,
+    operatingMode: coalesceValue(source.operatingMode, source.operating_mode),
+    storageHealth: coalesceValue(source.storageHealth, source.storage_health),
     raw: source,
   };
 }
@@ -680,6 +710,11 @@ function AgentDetailWorkbench({
   const softwarePage = Number(softwarePaginationModel?.page || 0);
   const softwarePageSize = Number(softwarePaginationModel?.pageSize || 8);
 
+  // Mobile (MDM/MAM) devices get an extra managed-state panel in the Agent tab.
+  const platformKey = normalizePlatform(profile?.platform || hardware?.platform);
+  const isMobileDevice =
+    profile?.isMobile === true || platformKey === "ios" || platformKey === "android";
+
   return (
     <Box>
       <Stack
@@ -777,17 +812,62 @@ function AgentDetailWorkbench({
           ) : null}
 
           {!loading && tab === 0 ? (
-            <FieldGrid>
-              <DetailField label="Hostname" value={hostname} />
-              <DetailField label="Agent ID" value={agentId} mono />
-              <DetailField label="Platform" value={platform} />
-              <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
-              <DetailField label="Agent version" value={agentVersion} mono />
-              <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
-              <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
-              <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
-              <DetailField label="Status" value={connected ? "Online" : "Offline"} />
-            </FieldGrid>
+            <>
+              <FieldGrid>
+                <DetailField label="Hostname" value={hostname} />
+                <DetailField label="Agent ID" value={agentId} mono />
+                <DetailField label="Platform" value={platform} />
+                <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
+                <DetailField label="Agent version" value={agentVersion} mono />
+                <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
+                <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
+                <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
+                <DetailField label="Status" value={connected ? "Online" : "Offline"} />
+              </FieldGrid>
+
+              {isMobileDevice ? (
+                <Box sx={{ mt: 2.5 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "text.secondary",
+                      mb: 1,
+                    }}
+                  >
+                    Managed device
+                  </Typography>
+                  <FieldGrid>
+                    <DetailField label="Operating mode" value={formatOperatingMode(profile?.operatingMode)} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                        Storage health
+                      </Typography>
+                      <Box sx={{ mt: 0.35 }}>
+                        {profile?.storageHealth ? (
+                          <Chip
+                            size="small"
+                            label={String(profile.storageHealth)}
+                            sx={{
+                              height: 20,
+                              fontWeight: 700,
+                              fontSize: 11,
+                              textTransform: "capitalize",
+                              bgcolor: `${storageHealthColor(profile.storageHealth)}1f`,
+                              color: storageHealthColor(profile.storageHealth),
+                            }}
+                          />
+                        ) : (
+                          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>—</Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  </FieldGrid>
+                </Box>
+              ) : null}
+            </>
           ) : null}
 
           {!loading && tab === 1 ? (
@@ -1807,6 +1887,8 @@ export default function AssetsDashboard({
       windows: BRAND.dark,
       macos: BRAND.teal,
       linux: "#ed6c02",
+      ios: BRAND.cyan,
+      android: "#3DDC84",
     }),
     []
   );

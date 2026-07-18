@@ -102,6 +102,31 @@ const FIELDS = [
     min: 1,
     max: 1825,
   },
+  // ── Software Delivery (SDP) — control-DB tables. Blank = never (opt-in). ──
+  {
+    key: "sdpInstallResultsDays",
+    table: "software_install_results",
+    label: "SDP install-result forensics",
+    hint: "Blanks the per-device detection snapshots (before/after) on terminal install results past this age. The result row + deployment rollup stay — only the bulky forensic JSON is dropped. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "sdpIntakesRejectedDays",
+    table: "software_package_intakes",
+    label: "SDP rejected/blocked intakes",
+    hint: "Deletes blocked or rejected AI-intake uploads (and their stored binaries) past this age — they never become catalog entries. Approved/pending uploads are never touched. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "sdpDeploymentSnapshotDays",
+    table: "software_deployments",
+    label: "SDP deployment snapshots",
+    hint: "Trims the frozen package-snapshot JSON on terminal deployments past this age (the live package still lives in the catalog). The deployment + its counts stay. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
 ];
 
 function formatBytes(n) {
