@@ -18,6 +18,7 @@ import { DataGrid } from "@mui/x-data-grid";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import { listTokens, getTokenQuota, createToken, revokeToken } from "../api/tokens";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
@@ -420,11 +421,45 @@ export default function TokensAdministrator({ embedded = false } = {}) {
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const [rows, setRows] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [quota, setQuota] = React.useState(null);
-  const [quotaLoading, setQuotaLoading] = React.useState(true);
-  const [quotaError, setQuotaError] = React.useState("");
+  // Tokens list + quota: parameterless on-mount fetches (filtering is
+  // client-side), routed through useCachedFetch for stale-while-revalidate +
+  // dedup + last-known-good on a transient error. `rows`/`quota`/`quotaError`
+  // are derived from the cached snapshots (all their setters were loader-only).
+  const {
+    data: tokenRows,
+    loading,
+    refetch: reloadData,
+  } = useCachedFetch(
+    "tokens:list:v1",
+    async () => {
+      const data = await listTokens();
+      const list = Array.isArray(data) ? data : [];
+      return list.map((token) => {
+        const effectiveStatus = resolveTokenStatus(token);
+        return {
+          ...token,
+          raw_status: token.status,
+          status: effectiveStatus,
+          effective_status: effectiveStatus,
+        };
+      });
+    },
+    { staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
+  );
+  const rows = React.useMemo(() => tokenRows ?? [], [tokenRows]);
+
+  const {
+    data: quotaData,
+    loading: quotaLoading,
+    error: quotaFetchError,
+    refetch: reloadQuota,
+  } = useCachedFetch(
+    "tokens:quota:v1",
+    async () => (await getTokenQuota()) || null,
+    { staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
+  );
+  const quota = quotaData ?? null;
+  const quotaError = quotaFetchError ? "Failed to load token quota. Refresh the page or try again." : "";
 
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -443,62 +478,9 @@ export default function TokensAdministrator({ embedded = false } = {}) {
     severity: "success",
   });
 
-  const loadQuota = async () => {
-    try {
-      setQuotaLoading(true);
-      setQuotaError("");
-      const data = await getTokenQuota();
-      setQuota(data || null);
-    } catch (e) {
-      console.error(e);
-      setQuota(null);
-      setQuotaError("Failed to load token quota. Refresh the page or try again.");
-      setSnackbar({
-        open: true,
-        message: "Failed to load token quota",
-        severity: "error",
-      });
-    } finally {
-      setQuotaLoading(false);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const data = await listTokens();
-      const list = Array.isArray(data) ? data : [];
-      setRows(
-        list.map((token) => {
-          const effectiveStatus = resolveTokenStatus(token);
-          return {
-            ...token,
-            raw_status: token.status,
-            status: effectiveStatus,
-            effective_status: effectiveStatus,
-          };
-        })
-      );
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load tokens",
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshAll = async () => {
-    await Promise.all([loadData(), loadQuota()]);
-  };
-
-  React.useEffect(() => {
-    refreshAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshAll closes over stable refs; adding it would re-fetch on every render.
-  }, []);
+  const refreshAll = React.useCallback(async () => {
+    await Promise.all([reloadData(), reloadQuota()]);
+  }, [reloadData, reloadQuota]);
 
 const filteredRows = React.useMemo(() => {
   return rows.filter((row) => {

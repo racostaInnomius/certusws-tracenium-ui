@@ -63,6 +63,7 @@ import RemoteControl from "./RemoteControl";
 import Assets from "./Assets";
 import HardwareInventory from "./HardwareInventory";
 import Jobs from "./Jobs";
+import TokensAdministrator from "./TokensAdministrator";
 
 afterEach(() => {
   cleanup();
@@ -117,6 +118,7 @@ const PAGES = [
   ["Assets", Assets],
   ["HardwareInventory", HardwareInventory],
   ["Jobs", Jobs],
+  ["TokensAdministrator", TokensAdministrator],
 ];
 
 describe("page smoke — happy backend (200)", () => {

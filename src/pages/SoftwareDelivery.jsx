@@ -49,6 +49,7 @@ import {
   listDeployments,
 } from "../api/softwareDelivery";
 import { getTenantPolicy } from "../api/policies";
+import { listFrom } from "../api/shape";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
 import PackageDialog from "../components/software-delivery/PackageDialog";
@@ -108,7 +109,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       if (search.trim()) params.search = search.trim();
       if (platform !== "all") params.platform = platform;
       const res = await listPackages(params);
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { keys: ["items"], context: "softwareDelivery.catalog" }));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load packages");
     } finally {
@@ -479,7 +480,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
       const params = { limit: 200 };
       if (statusFilter !== "all") params.status = statusFilter;
       const res = await listDeployments(params);
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { keys: ["items"], context: "softwareDelivery.deployments" }));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load deployments");
     } finally {
