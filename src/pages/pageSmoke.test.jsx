@@ -33,6 +33,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import { server, http, HttpResponse, API_BASE } from "../test/msw/server";
+// ConfirmProvider mounts at the app root (main.tsx) — pages that call
+// useConfirm() (e.g. Jobs) need it in the tree, so mirror that here.
+import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 // ── Auth: hand every page a stable ADMIN identity ─────────────────────
 const MOCK_AUTH = {
@@ -59,6 +62,7 @@ import SoftwareDelivery from "./SoftwareDelivery";
 import RemoteControl from "./RemoteControl";
 import Assets from "./Assets";
 import HardwareInventory from "./HardwareInventory";
+import Jobs from "./Jobs";
 
 afterEach(() => {
   cleanup();
@@ -112,6 +116,7 @@ const PAGES = [
   ["RemoteControl", RemoteControl],
   ["Assets", Assets],
   ["HardwareInventory", HardwareInventory],
+  ["Jobs", Jobs],
 ];
 
 describe("page smoke — happy backend (200)", () => {
@@ -120,7 +125,11 @@ describe("page smoke — happy backend (200)", () => {
   for (const [name, Page] of PAGES) {
     it(`${name} mounts and settles without crashing`, async () => {
       const props = PROPS[name] || {};
-      const { container } = render(<Page {...props} />);
+      const { container } = render(
+        <ConfirmProvider>
+          <Page {...props} />
+        </ConfirmProvider>
+      );
       // Something rendered (the page shell is never an empty fragment).
       expect(container.firstChild).not.toBeNull();
       // Let the on-mount fetches resolve; the tree must still be alive.
@@ -139,7 +148,11 @@ describe("page smoke — backend 500", () => {
   for (const [name, Page] of PAGES) {
     it(`${name} survives a 500 on every endpoint`, async () => {
       const props = PROPS[name] || {};
-      const { container } = render(<Page {...props} />);
+      const { container } = render(
+        <ConfirmProvider>
+          <Page {...props} />
+        </ConfirmProvider>
+      );
       expect(container.firstChild).not.toBeNull();
       // Give the failing fetches a tick to reject + be caught.
       await waitFor(() => expect(container.firstChild).not.toBeNull());
