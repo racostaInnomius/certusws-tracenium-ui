@@ -62,6 +62,7 @@ import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
+import { formatDate } from "../utils/format";
 
 // The plugin catalog now lives in the BACKEND
 // (modules/policies/plugin-catalog.ts) and is fetched via the
@@ -608,19 +609,6 @@ function formatRelativeTime(value) {
   return `${Math.floor(months / 12)}y ago`;
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function shortHash(hash) {
   if (!hash) return "—";

@@ -25,7 +25,6 @@ const isDev = (() => {
 
 function warnDrift(context, expected, got) {
   if (!isDev) return;
-  // eslint-disable-next-line no-console
   console.warn(
     `[api/shape] ${context}: expected ${expected} but got ${got === null ? "null" : Array.isArray(got) ? "array" : typeof got}. Coerced to a safe default — backend contract may have drifted.`
   );

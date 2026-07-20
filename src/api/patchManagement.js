@@ -5,6 +5,7 @@
 // `res.ok` before touching the payload.
 
 import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/patch-management";
 const API_BASE = import.meta.env.VITE_API_BASE;
@@ -50,16 +51,6 @@ export async function bulkScan() {
 // `checkId` to a hardcoded whitelist of remediation handlers (TLS,
 // SMB, firewall, etc.); this client just speaks the REST shape.
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // Aggregated findings for the new tabs (TLS / SMB / Shares / Other).
 // Filters supported: category, checkIdContains, severity, limit.

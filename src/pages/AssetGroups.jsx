@@ -78,20 +78,8 @@ import {
   dispatchAssetGroupJob,
 } from "../api/assetGroups";
 import { listKnownDevices, listJobTypes } from "../api/jobs";
+import { formatDate } from "../utils/format";
 
-function formatDate(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatPercent(value) {
   const n = Number(value);

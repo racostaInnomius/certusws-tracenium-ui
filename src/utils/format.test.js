@@ -31,8 +31,17 @@ describe("formatDate", () => {
     expect(formatDate(null)).toBe(EMPTY);
     expect(formatDate("not-a-date")).toBe(EMPTY);
   });
-  it("formats a valid ISO date", () => {
-    expect(formatDate("2026-05-26T10:00:00.000Z")).toMatch(/2026/);
+  it("formats a valid ISO date in the compact default (2-digit, 24h)", () => {
+    const out = formatDate("2026-05-26T10:00:00.000Z");
+    expect(out).toMatch(/May/);
+    expect(out).toMatch(/26/); // 2-digit year / day
+    expect(out).not.toMatch(/2026/); // not the 4-digit year
+  });
+  it("honors explicit options (e.g. seconds)", () => {
+    const out = formatDate("2026-05-26T10:00:05.000Z", {
+      year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    });
+    expect(out).toMatch(/2026/);
   });
 });
 

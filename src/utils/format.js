@@ -38,14 +38,23 @@ export function formatBytesToGb(value) {
 /**
  * Locale date-time. Invalid/empty → "—".
  */
+// Default matches the compact timestamp ~9 pages already used (2-digit
+// date, 24h clock): e.g. "May 26, 26, 14:30". Pass `options` to override
+// (e.g. Audit adds seconds).
+const DEFAULT_DATE_OPTS = {
+  year: "2-digit",
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+};
+
 export function formatDate(value, options) {
   if (!value) return EMPTY;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return EMPTY;
-  return d.toLocaleString(
-    "en-US",
-    options ?? { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }
-  );
+  return d.toLocaleString("en-US", options ?? DEFAULT_DATE_OPTS);
 }
 
 /**

@@ -6,6 +6,7 @@
 // The SCP page unwraps uniformly via a shared helper.
 
 import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/security/compliance";
 
@@ -16,16 +17,6 @@ const BASE = "/api/v1/security/compliance";
 // proxy) and downloads index.html instead of the report.
 const API_BASE = import.meta.env.VITE_API_BASE;
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // Tenant-wide KPI: scores, status breakdown, open finding counts.
 export async function getComplianceSummary() {

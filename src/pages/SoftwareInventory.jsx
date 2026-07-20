@@ -41,6 +41,7 @@ import { listFrom } from "../api/shape";
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
+import { formatDate } from "../utils/format";
 
 const SOFTWARE_ACCENTS = {
   installed: "#4F9A96",
@@ -138,18 +139,6 @@ function SectionCard({ title, children }) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  return new Date(value).toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h24",
-  });
-}
 
 
 function getRankingItems(rankings, key) {

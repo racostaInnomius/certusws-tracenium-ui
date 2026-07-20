@@ -19,6 +19,7 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import { listTokens, getTokenQuota, createToken, revokeToken } from "../api/tokens";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { formatDate } from "../utils/format";
 import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
@@ -596,21 +597,6 @@ const filteredRows = React.useMemo(() => {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatDate = (value) => {
-    if (!value) return " - ";   // evita null / undefined
-
-    const date = new Date(value);
-    
-    return date.toLocaleString("en-US", {
-      year: "2-digit",
-      month: "short",
-      day: "2-digit",
-      hourCycle: "h24",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const columns = [

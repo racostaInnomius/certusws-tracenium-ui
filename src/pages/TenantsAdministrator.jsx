@@ -39,6 +39,7 @@ import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
+import { formatDate } from "../utils/format";
 
 // Fase 2 — SummaryCard aligned with the Tokens page version. Same
 // shell tokens; `accent` is the semantic color of the big number.
@@ -142,20 +143,6 @@ function renderActiveChip(isActive) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  const date = new Date(value);
-
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h24",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function TenantDialog({
   open,

@@ -57,20 +57,8 @@ import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
+import { formatDate } from "../utils/format";
 
-function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function shortFp(fp) {
   if (!fp) return "—";

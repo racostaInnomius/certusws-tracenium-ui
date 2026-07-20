@@ -35,7 +35,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
-import { formatBytesToGb } from "../utils/format";
+import { formatBytesToGb, formatDate } from "../utils/format";
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
@@ -119,18 +119,6 @@ function formatPercent(value) {
   return `${Number(value).toFixed(1)}%`;
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  return new Date(value).toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h24",
-  });
-}
 
 function normalizeRankingRows(items = [], fallbackColor = BRAND.teal) {
   return (Array.isArray(items) ? items : [])

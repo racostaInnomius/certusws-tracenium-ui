@@ -7,19 +7,10 @@
 // changes here.
 
 import { httpGetJson, httpPostJson } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/remote-control";
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // Tenant-wide KPIs for the Hero strip. Shape:
 //   { ok, summary: { connectableDevices, activeSessions,

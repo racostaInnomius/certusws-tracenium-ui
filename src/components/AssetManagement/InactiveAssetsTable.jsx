@@ -36,6 +36,7 @@ import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined
 import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ROLE } from "../../theme/brand";
 import { normalizePlatform } from "../../utils/platform";
+import { formatDate } from "../../utils/format";
 
 const SORT_FIELDS = new Set([
   "hostname",
@@ -85,19 +86,6 @@ function displayText(value, fallback = "—") {
   return next === undefined ? fallback : String(next);
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatInactiveDays(value) {
   const days = Number(value || 0);

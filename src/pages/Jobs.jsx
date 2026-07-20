@@ -56,6 +56,7 @@ import {
 } from "../api/jobs";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
+import { formatDate } from "../utils/format";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -328,18 +329,6 @@ function renderStatusChip(status) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-  const date = new Date(value);
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h24",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
   if (jobType === "agent_update") {
