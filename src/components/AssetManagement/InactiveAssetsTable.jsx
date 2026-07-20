@@ -35,6 +35,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ROLE } from "../../theme/brand";
+import { normalizePlatform } from "../../utils/platform";
 
 const SORT_FIELDS = new Set([
   "hostname",
@@ -104,16 +105,10 @@ function formatInactiveDays(value) {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-function normalizePlatform(raw) {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value) return "unknown";
-  if (value === "darwin" || value === "osx" || value === "mac os x") return "macos";
-  if (value.startsWith("win") && value !== "windows server") return "windows";
-  return value;
-}
-
 function PlatformChip({ platform }) {
-  const normalized = normalizePlatform(platform);
+  // Canonical normalizePlatform returns null for empty; this table renders
+  // those as the "unknown" filter bucket.
+  const normalized = normalizePlatform(platform) ?? "unknown";
   const style = PLATFORM_STYLE[normalized] || { bg: BRAND.surfaceMuted, fg: BRAND.dark };
 
   const fixedLabel = normalized === "macos" ? "macOS" : normalized === "ios" ? "iOS" : null;

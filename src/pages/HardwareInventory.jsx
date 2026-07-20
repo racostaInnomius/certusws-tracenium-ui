@@ -34,6 +34,7 @@ import {
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
+import { formatBytesToGb } from "../utils/format";
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
@@ -111,10 +112,6 @@ function SectionCard({ title, children, action }) {
   );
 }
 
-function formatBytesToGb(bytes) {
-  if (!bytes) return "0 GB";
-  return `${(Number(bytes) / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
 
 function formatPercent(value) {
   if (value == null || Number.isNaN(Number(value))) return " - ";

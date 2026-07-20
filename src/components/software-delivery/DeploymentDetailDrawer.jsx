@@ -196,6 +196,28 @@ export default function DeploymentDetailDrawer({
         ),
     },
     {
+      // Distribution Phase A/B — which tier served the bytes (dp/cdn/origin).
+      field: "servedBy",
+      headerName: "Source",
+      width: 84,
+      renderCell: (params) =>
+        params.row.servedBy ? (
+          <Chip
+            size="small"
+            label={params.row.servedBy}
+            sx={{
+              fontFamily: "monospace",
+              fontSize: 11,
+              fontWeight: 700,
+              bgcolor: params.row.servedBy === "dp" ? BRAND.tealSoft : BRAND.darkSoft,
+              color: params.row.servedBy === "dp" ? BRAND.tealText : BRAND.dark,
+            }}
+          />
+        ) : (
+          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>
+        ),
+    },
+    {
       field: "startedAt",
       headerName: "Started",
       width: 140,

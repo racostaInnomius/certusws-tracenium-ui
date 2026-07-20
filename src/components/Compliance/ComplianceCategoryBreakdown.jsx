@@ -28,6 +28,7 @@ import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 
 function prettyCategory(c) {
@@ -41,15 +42,9 @@ function rateColor(rate) {
   return ROLE.critical;
 }
 
-const SEV_CHIP = {
-  critical: { bg: BRAND.alert?.errorSoft, fg: BRAND.alert?.error },
-  high: { bg: "rgba(199,121,43,0.16)", fg: "#8b5418" },
-  medium: { bg: BRAND.alert?.warningSoft, fg: "#7a5c00" },
-  low: { bg: BRAND.tealSoft, fg: BRAND.tealText },
-  info: { bg: BRAND.darkSoft, fg: BRAND.gray },
-};
 function sevChip(s) {
-  return SEV_CHIP[String(s || "").toLowerCase()] || SEV_CHIP.info;
+  // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
+  return severityMeta(s);
 }
 
 function PassRateBar({ rate }) {

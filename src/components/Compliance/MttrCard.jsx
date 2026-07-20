@@ -31,7 +31,8 @@ import {
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 
 import { getTimeToCloseSummary } from "../../api/compliance";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 
 // Window options match what we offer in fleet-timeseries — 7d/30d/90d
 // is the standard SaaS spread; auditors typically want 90d so we
@@ -47,11 +48,12 @@ const WINDOW_OPTIONS = [
 // they just understand the number is noisy.
 const SAMPLE_SIZE_NOISY_BELOW = 5;
 
+// Canonical severity scale (theme/severity.js) — was High=amber, Medium=teal.
 const SEVERITY_META = {
-  critical: { label: "Critical", color: ROLE.critical },
-  high:     { label: "High",     color: ROLE.caution },
-  medium:   { label: "Medium",   color: BRAND.tealText },
-  low:      { label: "Low",      color: BRAND.gray }
+  critical: { label: "Critical", color: severityMeta("critical").fg },
+  high:     { label: "High",     color: severityMeta("high").fg },
+  medium:   { label: "Medium",   color: severityMeta("medium").fg },
+  low:      { label: "Low",      color: severityMeta("low").fg }
 };
 
 // Renderer for a percentile value:

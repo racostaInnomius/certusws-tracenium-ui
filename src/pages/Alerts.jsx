@@ -50,6 +50,7 @@ import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 
 import { BRAND, ROLE } from "../theme/brand";
+import { severityMeta } from "../theme/severity";
 import {
   getAlertRules,
   createAlertRule,
@@ -64,11 +65,13 @@ import SectionPaper from "../components/common/SectionPaper";
 
 // ---------- presentational helpers ------------------------------------------
 
+// Canonical severity scale (theme/severity.js) — High was red here (same as
+// Critical); it's now orange, distinct from Critical, and consistent everywhere.
 const SEVERITY_META = {
-  critical: { label: "Critical", color: ROLE.critical, soft: BRAND.alert.errorSoft },
-  high:     { label: "High",     color: ROLE.critical, soft: BRAND.alert.errorSoft },
-  medium:   { label: "Medium",   color: ROLE.caution,  soft: BRAND.alert.warningSoft },
-  low:      { label: "Low",      color: BRAND.teal,    soft: BRAND.tealSoft }
+  critical: { label: "Critical", color: severityMeta("critical").fg, soft: severityMeta("critical").bg },
+  high:     { label: "High",     color: severityMeta("high").fg,     soft: severityMeta("high").bg },
+  medium:   { label: "Medium",   color: severityMeta("medium").fg,   soft: severityMeta("medium").bg },
+  low:      { label: "Low",      color: severityMeta("low").fg,      soft: severityMeta("low").bg }
 };
 
 const SOURCE_LABEL = {

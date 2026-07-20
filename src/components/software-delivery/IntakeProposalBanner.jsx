@@ -15,7 +15,7 @@ import { BRAND } from "../../theme/brand";
 // Low confidence is the loud one — it means "look harder before you publish".
 const CONFIDENCE_META = {
   high: { label: "High confidence", bg: BRAND.alert?.successSoft, fg: BRAND.alert?.success },
-  medium: { label: "Medium confidence", bg: BRAND.alert?.warningSoft, fg: "#7a5c00" },
+  medium: { label: "Medium confidence", bg: BRAND.alert?.warningSoft, fg: BRAND.alert?.warningText },
   low: { label: "Low confidence", bg: BRAND.alert?.errorSoft, fg: BRAND.alert?.error },
 };
 

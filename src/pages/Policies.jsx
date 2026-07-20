@@ -371,6 +371,13 @@ function readFormFromPolicy(policy, catalog = []) {
       maxTokensPerDay:
         Number(policy?.ai?.maxTokensPerDay) > 0 ? Number(policy.ai.maxTokensPerDay) : "",
     },
+    // SDP distribution (Phase D) — per-device download bandwidth cap in
+    // Kbps, applied by the agent's downloader (curl --limit-rate). Blank =
+    // full speed.
+    sdp: {
+      bandwidthLimitKbps:
+        Number(policy?.sdp?.bandwidthLimitKbps) > 0 ? Number(policy.sdp.bandwidthLimitKbps) : "",
+    },
   };
 }
 
@@ -496,6 +503,14 @@ function formToPolicy(form, catalog = []) {
   if (Number.isInteger(maxTokens) && maxTokens > 0) ai.maxTokensPerDay = maxTokens;
   if (Object.keys(ai).length > 0) {
     policy.ai = ai;
+  }
+
+  // ── SDP distribution (Phase D) ──────────────────────────────────
+  // Per-device bandwidth cap for SDP downloads. Omit-empty: blank = no
+  // `sdp` block = full speed.
+  const bw = Number(form?.sdp?.bandwidthLimitKbps);
+  if (Number.isInteger(bw) && bw > 0) {
+    policy.sdp = { bandwidthLimitKbps: bw };
   }
 
   return policy;
@@ -1490,6 +1505,51 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
             />
           </Box>
         ) : null}
+      </Box>
+
+      {/* ── Software Delivery distribution (Phase D) ─────────────────
+          Per-device download bandwidth cap. Applied by the agent's
+          downloader (curl --limit-rate / HttpClient pacing) to installs
+          AND distribution-point prefetches. */}
+      <Box
+        sx={{
+          mt: 4,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Software delivery
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Bandwidth cap for package downloads on each device (installs and
+          distribution-point prefetches). Blank = full speed.
+        </Typography>
+        <TextField
+          size="small"
+          type="number"
+          label="Download limit (KB/s)"
+          placeholder="full speed"
+          value={form?.sdp?.bandwidthLimitKbps ?? ""}
+          onChange={(e) =>
+            onChange({
+              ...form,
+              sdp: {
+                ...(form.sdp || {}),
+                bandwidthLimitKbps: e.target.value === "" ? "" : Number(e.target.value),
+              },
+            })
+          }
+          disabled={readOnly}
+          inputProps={{ min: 1, step: 128 }}
+          helperText="Blank = full speed"
+          sx={{ width: 200 }}
+        />
       </Box>
 
       {/* ── Security Policy section (Sprint 2 of Policy v2) ───────

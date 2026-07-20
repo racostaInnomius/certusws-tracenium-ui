@@ -110,6 +110,7 @@ import {
   getDeviceFleetRanking
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
+import { severityMeta } from "../theme/severity";
 import { updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
@@ -180,12 +181,14 @@ const STATUS_META = {
   }
 };
 
+// Canonical severity scale (theme/severity.js) — was High=amber, Medium=teal
+// here, which disagreed with the Alerts/CVE views. Now single-sourced.
 const SEVERITY_META = {
-  critical: { fg: ROLE.critical, bg: ROLE.criticalSoft, label: "Critical" },
-  high:     { fg: ROLE.caution,  bg: ROLE.cautionSoft,  label: "High" },
-  medium:   { fg: BRAND.tealText, bg: BRAND.tealSoft,   label: "Medium" },
-  low:      { fg: BRAND.gray,    bg: BRAND.surfaceMuted, label: "Low" },
-  info:     { fg: BRAND.teal,    bg: BRAND.tealSoft,    label: "Info" }
+  critical: severityMeta("critical"),
+  high:     severityMeta("high"),
+  medium:   severityMeta("medium"),
+  low:      severityMeta("low"),
+  info:     severityMeta("info"),
 };
 
 // ── Sprint 3 — remediation lifecycle ────────────────────────────────

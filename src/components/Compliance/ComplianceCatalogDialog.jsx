@@ -35,14 +35,16 @@ import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import { BRAND } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 import { getComplianceCatalog } from "../../api/compliance";
 
+// Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
 const SEV_META = {
-  critical: { label: "Critical", bg: BRAND.alert?.errorSoft, fg: BRAND.alert?.error },
-  high: { label: "High", bg: "rgba(199,121,43,0.16)", fg: "#8b5418" },
-  medium: { label: "Medium", bg: BRAND.alert?.warningSoft, fg: "#7a5c00" },
-  low: { label: "Low", bg: BRAND.tealSoft, fg: BRAND.tealText },
-  info: { label: "Info", bg: BRAND.darkSoft, fg: BRAND.gray },
+  critical: severityMeta("critical"),
+  high: severityMeta("high"),
+  medium: severityMeta("medium"),
+  low: severityMeta("low"),
+  info: severityMeta("info"),
 };
 const SEV_ORDER = ["critical", "high", "medium", "low", "info"];
 const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };

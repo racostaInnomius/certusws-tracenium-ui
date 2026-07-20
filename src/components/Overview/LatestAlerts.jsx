@@ -18,15 +18,17 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 
 // Matches the severity palette used inside the Alerts page so the two
 // surfaces agree visually. Kept inline (not imported) so this component
 // can drop into the Overview without pulling the larger Alerts page chunk.
+// Canonical severity scale (theme/severity.js) — matches the Alerts page.
 const SEVERITY_STYLE = {
-  critical: { fg: ROLE.critical, bg: BRAND.alert.errorSoft, label: "Critical" },
-  high:     { fg: ROLE.critical, bg: BRAND.alert.errorSoft, label: "High" },
-  medium:   { fg: ROLE.caution,  bg: BRAND.alert.warningSoft, label: "Medium" },
-  low:      { fg: BRAND.teal,    bg: BRAND.tealSoft, label: "Low" }
+  critical: severityMeta("critical"),
+  high:     severityMeta("high"),
+  medium:   severityMeta("medium"),
+  low:      severityMeta("low")
 };
 
 const SOURCE_LABEL = {

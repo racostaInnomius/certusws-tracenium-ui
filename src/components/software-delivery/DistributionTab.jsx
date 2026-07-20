@@ -1,0 +1,434 @@
+// src/components/software-delivery/DistributionTab.jsx
+//
+// Distribution Phase B — manage LAN sites + distribution points.
+//
+//   Sites: named CIDR sets (+ optional tag override). A device belongs to a
+//   site when its reported IP falls in any of the site's subnets.
+//   Distribution points: an agent designated to cache + serve packages to its
+//   site's peers. Deployments hold a site's installs until its DP prefetch
+//   acks (fail-open to CDN on timeout).
+
+import * as React from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import LanOutlinedIcon from "@mui/icons-material/LanOutlined";
+import { BRAND } from "../../theme/brand";
+import {
+  listSites,
+  createSite,
+  updateSite,
+  deleteSite,
+  listDistributionPoints,
+  upsertDistributionPoint,
+  deleteDistributionPoint,
+} from "../../api/softwareDelivery";
+
+const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+
+function SiteDialog({ open, site, onClose, onSaved, notify }) {
+  const [name, setName] = React.useState("");
+  const [subnetsRaw, setSubnetsRaw] = React.useState("");
+  const [tag, setTag] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setName(site?.name ?? "");
+    setSubnetsRaw((site?.matchSubnets ?? []).join("\n"));
+    setTag(site?.matchTag ?? "");
+    setSaving(false);
+  }, [open, site]);
+
+  const subnets = React.useMemo(
+    () => subnetsRaw.split(/[\s,;\n]+/).map((s) => s.trim()).filter(Boolean),
+    [subnetsRaw]
+  );
+  const badSubnet = subnets.find((s) => !CIDR_RE.test(s));
+  const canSave = !saving && name.trim() && subnets.length > 0 && !badSubnet;
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = { name: name.trim(), matchSubnets: subnets, matchTag: tag.trim() || null };
+      if (site?.id) await updateSite(site.id, payload);
+      else await createSite(payload);
+      onSaved?.();
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Failed to save site");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+        {site?.id ? "Edit site" : "New site"}
+      </DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
+          <TextField
+            size="small"
+            label="Subnets (CIDR)"
+            value={subnetsRaw}
+            onChange={(e) => setSubnetsRaw(e.target.value)}
+            multiline
+            minRows={3}
+            fullWidth
+            error={Boolean(badSubnet)}
+            helperText={
+              badSubnet
+                ? `Invalid CIDR: ${badSubnet}`
+                : "One per line, e.g. 10.1.0.0/16 — devices whose IP falls inside belong to this site."
+            }
+          />
+          <TextField
+            size="small"
+            label="Tag override (optional)"
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            fullWidth
+            helperText="Devices carrying this tag join the site regardless of IP."
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} disabled={saving} sx={{ textTransform: "none", color: BRAND.gray }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={save}
+          disabled={!canSave}
+          variant="contained"
+          sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function DpDialog({ open, sites, onClose, onSaved, notify }) {
+  const [siteId, setSiteId] = React.useState("");
+  const [agentId, setAgentId] = React.useState("");
+  const [lanUrl, setLanUrl] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setSiteId(sites.length > 0 ? String(sites[0].id) : "");
+    setAgentId("");
+    setLanUrl("");
+    setSaving(false);
+  }, [open, sites]);
+
+  const canSave = !saving && siteId && agentId.trim() && (!lanUrl.trim() || /^https:\/\//i.test(lanUrl.trim()));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await upsertDistributionPoint({
+        siteId: Number(siteId),
+        agentId: agentId.trim(),
+        lanUrl: lanUrl.trim() || null,
+      });
+      onSaved?.();
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Failed to save distribution point");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>Designate distribution point</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <TextField select size="small" label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)} fullWidth>
+            {sites.map((s) => (
+              <MenuItem key={s.id} value={String(s.id)}>
+                {s.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            label="Agent ID"
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            fullWidth
+            helperText="Prefer an always-on, wired, disk-roomy device on this site's LAN."
+          />
+          <TextField
+            size="small"
+            label="LAN URL override (optional)"
+            value={lanUrl}
+            onChange={(e) => setLanUrl(e.target.value)}
+            fullWidth
+            error={Boolean(lanUrl.trim()) && !/^https:\/\//i.test(lanUrl.trim())}
+            helperText="Blank = computed from the device's reported IP (https://<ip>:47821)."
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} disabled={saving} sx={{ textTransform: "none", color: BRAND.gray }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={save}
+          disabled={!canSave}
+          variant="contained"
+          sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export default function DistributionTab({ canManage, notify }) {
+  const [loading, setLoading] = React.useState(true);
+  const [sites, setSites] = React.useState([]);
+  const [dps, setDps] = React.useState([]);
+  const [siteDialog, setSiteDialog] = React.useState({ open: false, site: null });
+  const [dpDialogOpen, setDpDialogOpen] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [s, d] = await Promise.all([listSites(), listDistributionPoints()]);
+      setSites(Array.isArray(s?.items) ? s.items : []);
+      setDps(Array.isArray(d?.items) ? d.items : []);
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Failed to load distribution config");
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
+
+  React.useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const removeSite = async (site) => {
+    try {
+      await deleteSite(site.id);
+      notify?.("success", `Site "${site.name}" deleted`);
+      reload();
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Failed to delete site");
+    }
+  };
+
+  const removeDp = async (dp) => {
+    try {
+      await deleteDistributionPoint(dp.id);
+      notify?.("success", `Distribution point ${dp.agentId} removed`);
+      reload();
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Failed to remove distribution point");
+    }
+  };
+
+  const siteName = (id) => sites.find((s) => s.id === id)?.name ?? `#${id}`;
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+        <CircularProgress size={26} sx={{ color: BRAND.teal }} />
+      </Box>
+    );
+  }
+
+  return (
+    <Stack spacing={3}>
+      {/* Sites */}
+      <Box>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <LanOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
+            <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Sites</Typography>
+          </Stack>
+          {canManage ? (
+            <Button
+              size="small"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => setSiteDialog({ open: true, site: null })}
+              sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
+            >
+              Add site
+            </Button>
+          ) : null}
+        </Stack>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Subnets</TableCell>
+              <TableCell>Tag</TableCell>
+              <TableCell align="right" />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sites.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4}>
+                  <Typography sx={{ fontSize: 13, color: BRAND.gray, py: 1 }}>
+                    No sites yet — define one to enable LAN distribution for its devices.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              sites.map((s) => (
+                <TableRow key={s.id} sx={{ opacity: s.isActive ? 1 : 0.5 }}>
+                  <TableCell sx={{ fontWeight: 600 }}>{s.name}</TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={0.5} flexWrap="wrap">
+                      {s.matchSubnets.map((c) => (
+                        <Chip key={c} size="small" label={c} sx={{ fontFamily: "monospace", fontSize: 11 }} />
+                      ))}
+                    </Stack>
+                  </TableCell>
+                  <TableCell>{s.matchTag || "—"}</TableCell>
+                  <TableCell align="right">
+                    {canManage ? (
+                      <>
+                        <Tooltip title="Edit">
+                          <IconButton size="small" onClick={() => setSiteDialog({ open: true, site: s })}>
+                            <EditOutlinedIcon fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete">
+                          <IconButton size="small" onClick={() => removeSite(s)}>
+                            <DeleteOutlineIcon fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Box>
+
+      {/* Distribution points */}
+      <Box>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Distribution points</Typography>
+          {canManage ? (
+            <Button
+              size="small"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => setDpDialogOpen(true)}
+              disabled={sites.length === 0}
+              sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
+            >
+              Designate DP
+            </Button>
+          ) : null}
+        </Stack>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Agent</TableCell>
+              <TableCell>Site</TableCell>
+              <TableCell>LAN URL</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right" />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {dps.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <Typography sx={{ fontSize: 13, color: BRAND.gray, py: 1 }}>
+                    No distribution points. Packages download from CDN/origin on every device.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              dps.map((dp) => (
+                <TableRow key={dp.id}>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{dp.agentId}</TableCell>
+                  <TableCell>{siteName(dp.siteId)}</TableCell>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                    {dp.lanUrl || "auto (device IP:47821)"}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      size="small"
+                      label={dp.status}
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor: dp.status === "active" ? BRAND.tealSoft : BRAND.darkSoft,
+                        color: dp.status === "active" ? BRAND.tealText : BRAND.dark,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell align="right">
+                    {canManage ? (
+                      <Tooltip title="Remove">
+                        <IconButton size="small" onClick={() => removeDp(dp)}>
+                          <DeleteOutlineIcon fontSize="inherit" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Box>
+
+      <SiteDialog
+        open={siteDialog.open}
+        site={siteDialog.site}
+        onClose={() => setSiteDialog({ open: false, site: null })}
+        onSaved={() => {
+          setSiteDialog({ open: false, site: null });
+          notify?.("success", "Site saved");
+          reload();
+        }}
+        notify={notify}
+      />
+      <DpDialog
+        open={dpDialogOpen}
+        sites={sites}
+        onClose={() => setDpDialogOpen(false)}
+        onSaved={() => {
+          setDpDialogOpen(false);
+          notify?.("success", "Distribution point saved");
+          reload();
+        }}
+        notify={notify}
+      />
+    </Stack>
+  );
+}

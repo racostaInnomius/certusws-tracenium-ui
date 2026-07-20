@@ -1,22 +1,14 @@
 // src/components/patch-management/cveSeverity.js
 //
-// Shared CVSS severity presentation for the CVE (vulnerable-software) views.
-// Colors run red→orange→amber→teal→gray so a glance at the chip conveys rank.
+// Re-export of the canonical severity presentation (src/theme/severity.js).
+// This module used to define its own SEVERITY_META with hardcoded oranges;
+// it now forwards the single source of truth so the CVE views stay in lockstep
+// with every other severity surface. Kept as a thin shim so existing imports
+// from patch-management components don't have to change.
 
-import { BRAND } from "../../theme/brand";
-
-export const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, none: 0 };
-
-export const SEVERITY_ORDER = ["critical", "high", "medium", "low"];
-
-export const SEVERITY_META = {
-  critical: { label: "Critical", bg: BRAND.alert?.errorSoft, fg: BRAND.alert?.error },
-  high: { label: "High", bg: "rgba(199,121,43,0.16)", fg: "#8b5418" },
-  medium: { label: "Medium", bg: BRAND.alert?.warningSoft, fg: "#7a5c00" },
-  low: { label: "Low", bg: BRAND.tealSoft, fg: BRAND.tealText },
-  none: { label: "None", bg: BRAND.darkSoft, fg: BRAND.gray },
-};
-
-export function severityMeta(sev) {
-  return SEVERITY_META[sev] || SEVERITY_META.none;
-}
+export {
+  SEVERITY_RANK,
+  SEVERITY_ORDER,
+  SEVERITY_META,
+  severityMeta,
+} from "../../theme/severity";

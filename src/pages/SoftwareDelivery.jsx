@@ -55,6 +55,8 @@ import PackageDialog from "../components/software-delivery/PackageDialog";
 import DeletePackageDialog from "../components/software-delivery/DeletePackageDialog";
 import DeployWizardDialog from "../components/software-delivery/DeployWizardDialog";
 import IntakeTab from "../components/software-delivery/IntakeTab";
+import DistributionTab from "../components/software-delivery/DistributionTab";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import DeploymentDetailDrawer from "../components/software-delivery/DeploymentDetailDrawer";
 
 const TAB_SX = {
@@ -890,6 +892,12 @@ export default function SoftwareDelivery({ onNavigate }) {
             label="AI Intake"
             sx={TAB_SX}
           />
+          <Tab
+            icon={<HubOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Distribution"
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
@@ -906,8 +914,10 @@ export default function SoftwareDelivery({ onNavigate }) {
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
-      ) : (
+      ) : activeTab === 2 ? (
         <IntakeTab canManage={canManage} notify={notify} />
+      ) : (
+        <DistributionTab canManage={canManage} notify={notify} />
       )}
 
       <BrandSnackbar

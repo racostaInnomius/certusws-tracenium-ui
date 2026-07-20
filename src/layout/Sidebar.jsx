@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import { useAuthContext } from "../auth/AuthContext";
 import { performLogout } from "../auth/logout";
+import { useMsp } from "../msp/MspContext";
 
 import LogoutIcon from "@mui/icons-material/Logout";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
@@ -578,6 +579,11 @@ export default function Sidebar({
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
 
   const { auth } = useAuthContext();
+  // When an MSP operator / vendor has drilled into a client (active tenant
+  // set), the workspace badge must reflect THAT client — not the token's
+  // home tenant. The Sidebar only renders inside the client shell, so when
+  // activeTenant is set it is the tenant being viewed.
+  const { activeTenant } = useMsp();
 
   const authTenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const authTenantName = React.useMemo(() => getTenantNameFromAuth(auth), [auth]);
@@ -617,7 +623,11 @@ export default function Sidebar({
     };
   }, [authTenantId, authTenantName]);
 
-  const tenantDisplayName = authTenantName || resolvedTenantName || "";
+  // Active tenant (MSP drill-in) wins over the token's home tenant for the
+  // workspace badge, so the name + id shown match the tenant actually open.
+  const tenantDisplayName =
+    (activeTenant?.name ?? "") || authTenantName || resolvedTenantName || "";
+  const effectiveTenantId = activeTenant?.id ?? authTenantId;
 
   const tenantMemberRole = getTenantMemberRoleFromAuth(auth);
   const tenantMemberIsActive = getTenantMemberIsActiveFromAuth(auth);
@@ -694,7 +704,7 @@ export default function Sidebar({
           onSelect={onSelect}
           handleLogout={handleLogout}
           tenantName={tenantDisplayName}
-          tenantId={authTenantId}
+          tenantId={effectiveTenantId}
           userEmail={authUserEmail}
         />
       </Box>
@@ -725,7 +735,7 @@ export default function Sidebar({
         onSelect={onSelect}
         handleLogout={handleLogout}
         tenantName={tenantDisplayName}
-        tenantId={authTenantId}
+        tenantId={effectiveTenantId}
         userEmail={authUserEmail}
       />
     </Drawer>

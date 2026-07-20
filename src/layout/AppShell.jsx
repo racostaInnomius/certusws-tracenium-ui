@@ -16,6 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import Sidebar from "./Sidebar";
+import ErrorBoundary from "../components/common/ErrorBoundary";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
@@ -479,8 +480,13 @@ export default function AppShell() {
   // (MSP operator / vendor) AND hasn't selected a client yet → show the
   // Portfolio grid instead of the client shell. When a client IS active,
   // we render the normal shell plus a context bar (breadcrumb + switcher).
-  const { hasPortfolio, activeTenant } = useMsp();
+  const { hasPortfolio, activeTenant, loading: mspLoading } = useMsp();
   const inPortfolioMode = hasPortfolio && !activeTenant;
+  // First portfolio load, no client selected yet: we don't KNOW if this user
+  // is an MSP operator/vendor (→ portfolio) or single-tenant (→ shell) until
+  // the portfolio resolves. Render a neutral loader instead of flashing the
+  // single-tenant shell and then snapping to the portfolio a second later.
+  const mspResolving = mspLoading && !hasPortfolio && !activeTenant;
   const sessionSettings = auth?.sessionSettings ?? null;
   const idleEnabled = sessionSettings?.autoLogoutEnabled !== false; // default true
   const idleTimeoutMs =
@@ -1034,10 +1040,10 @@ export default function AppShell() {
         overflow: "hidden", // the shell is a fixed frame
       }}
     >
-      {/* Client-specific sidebar. Hidden in portfolio mode — its pages
-          (Assets, Compliance, etc.) only make sense once a client is
-          selected. */}
-      {inPortfolioMode ? null : (
+      {/* Client-specific sidebar. Hidden in portfolio mode (and while the
+          portfolio is still resolving) — its pages only make sense once a
+          client is selected. */}
+      {inPortfolioMode || mspResolving ? null : (
         <Sidebar
           selected={selectedPage}
           onSelect={handleSelect}
@@ -1105,20 +1111,29 @@ export default function AppShell() {
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
-            <Box
-              key={`${selectedPage}-${viewReloadToken}`}
-              sx={{
-                minWidth: 0,
-                width: "100%",
-                filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
-                transform: "translateZ(0)",
-                transition: "filter 220ms ease",
-                pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
-                userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
-              }}
+            {/* Route-level error boundary: a render throw in one page no longer
+                white-screens the whole SPA. Keyed by page so navigating to a
+                healthy page remounts a fresh boundary. */}
+            <ErrorBoundary
+              key={`eb-${selectedPage}`}
+              label={selectedPage}
+              onReset={() => setViewReloadToken((t) => t + 1)}
             >
-              {inPortfolioMode ? <Portfolio /> : content}
-            </Box>
+              <Box
+                key={`${selectedPage}-${viewReloadToken}`}
+                sx={{
+                  minWidth: 0,
+                  width: "100%",
+                  filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
+                  transform: "translateZ(0)",
+                  transition: "filter 220ms ease",
+                  pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
+                  userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
+                }}
+              >
+                {mspResolving ? <PageFallback /> : inPortfolioMode ? <Portfolio /> : content}
+              </Box>
+            </ErrorBoundary>
           </React.Suspense>
 
           {shouldShowNoInformationOverlay ? (

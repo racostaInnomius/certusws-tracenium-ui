@@ -62,6 +62,16 @@ function canUninstall(pkg) {
 
 const MODE_LABELS = { install: "Install", reinstall: "Reinstall", uninstall: "Uninstall" };
 
+// Phase C — ring rollout presets. "fast" = single 100% wave (no rollout body);
+// "conservative" = 1% canary → 10% early → 100% broad with success gates.
+const CONSERVATIVE_ROLLOUT = {
+  rings: [
+    { percent: 1, minSuccessRate: 0.9, soakMinutes: 30 },
+    { percent: 10, minSuccessRate: 0.9, soakMinutes: 60 },
+    { percent: 100 },
+  ],
+};
+
 export default function DeployWizardDialog({
   open,
   pkg,           // SoftwarePackageDto (the row the operator clicked Deploy on)
@@ -74,6 +84,9 @@ export default function DeployWizardDialog({
   // ── Deployment mode ───────────────────────────────────────────
   const [mode, setMode] = React.useState("install");
   const uninstallable = React.useMemo(() => canUninstall(pkg), [pkg]);
+
+  // ── Rollout preset (Phase C) ──────────────────────────────────
+  const [rolloutPreset, setRolloutPreset] = React.useState("fast");
 
   // ── Target state ──────────────────────────────────────────────
   const [targetMode, setTargetMode] = React.useState("asset_group");
@@ -88,6 +101,7 @@ export default function DeployWizardDialog({
     if (!open) return;
     setActiveStep(0);
     setMode("install");
+    setRolloutPreset("fast");
     setTargetMode("asset_group");
     setGroupId("");
     setDeviceIdsRaw("");
@@ -136,10 +150,11 @@ export default function DeployWizardDialog({
     if (!canFire) return;
     setSubmitting(true);
     try {
+      const rollout = rolloutPreset === "conservative" ? { rollout: CONSERVATIVE_ROLLOUT } : {};
       const body =
         targetMode === "asset_group"
-          ? { mode, assetGroupId: Number(groupId) }
-          : { mode, deviceIds: parsedDeviceIds };
+          ? { mode, assetGroupId: Number(groupId), ...rollout }
+          : { mode, deviceIds: parsedDeviceIds, ...rollout };
       await onConfirm?.(body);
       // Parent closes the dialog on success
     } catch (err) {
@@ -236,6 +251,23 @@ export default function DeployWizardDialog({
                 {MODE_LABELS.uninstall}
                 {!uninstallable ? " — needs an uninstall identity or args" : ""}
               </MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Rollout"
+              value={rolloutPreset}
+              onChange={(e) => setRolloutPreset(e.target.value)}
+              helperText={
+                rolloutPreset === "conservative"
+                  ? "Rings: 1% canary (90% success, 30m soak) → 10% (90%, 60m) → 100%. Auto-halts on a failed gate."
+                  : "Everything dispatches in a single wave."
+              }
+            >
+              <MenuItem value="fast">Fast — single wave</MenuItem>
+              <MenuItem value="conservative">Conservative — canary rings</MenuItem>
             </TextField>
 
             <RadioGroup

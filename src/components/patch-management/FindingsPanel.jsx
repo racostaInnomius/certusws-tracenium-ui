@@ -37,19 +37,16 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 
 import { BRAND, DATAGRID_SX } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 import SectionPaper from "../common/SectionPaper";
 import { getFindings } from "../../api/patchManagement";
 import FindingDetailDrawer from "./FindingDetailDrawer";
 
 function severityChip(severity) {
-  const map = {
-    critical: { bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    high:     { bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    medium:   { bg: BRAND.alert?.warningSoft, color: BRAND.alert?.warning },
-    low:      { bg: BRAND.tealSoft,           color: BRAND.tealText },
-    info:     { bg: BRAND.darkSoft,           color: BRAND.gray },
-  };
-  const e = map[severity] || { bg: BRAND.darkSoft, color: BRAND.gray };
+  // Canonical severity scale (theme/severity.js) — High was red (== Critical);
+  // now orange and consistent with every other severity surface.
+  const m = severityMeta(severity);
+  const e = { bg: m.bg, color: m.fg };
   return (
     <Chip
       size="small"

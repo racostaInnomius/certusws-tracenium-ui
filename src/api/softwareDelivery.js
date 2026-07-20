@@ -100,6 +100,36 @@ export async function listIntakes(params = {}) {
   return httpGetJson(`${BASE}/intake${buildQuery(params)}`);
 }
 
+// ── Distribution (Phase B) — sites + distribution points ──────────
+
+export async function listSites() {
+  return httpGetJson(`${BASE}/distribution/sites`);
+}
+
+export async function createSite(payload) {
+  return httpPostJson(`${BASE}/distribution/sites`, payload);
+}
+
+export async function updateSite(id, payload) {
+  return httpPatchJson(`${BASE}/distribution/sites/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteSite(id) {
+  return httpDeleteJson(`${BASE}/distribution/sites/${encodeURIComponent(id)}`);
+}
+
+export async function listDistributionPoints() {
+  return httpGetJson(`${BASE}/distribution/dps`);
+}
+
+export async function upsertDistributionPoint(payload) {
+  return httpPostJson(`${BASE}/distribution/dps`, payload);
+}
+
+export async function deleteDistributionPoint(id) {
+  return httpDeleteJson(`${BASE}/distribution/dps/${encodeURIComponent(id)}`);
+}
+
 export async function getIntake(id) {
   return httpGetJson(`${BASE}/intake/${encodeURIComponent(id)}`);
 }

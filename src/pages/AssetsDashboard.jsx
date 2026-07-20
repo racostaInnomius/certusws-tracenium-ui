@@ -75,6 +75,8 @@ import {
 import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
+import { normalizePlatform } from "../utils/platform";
+import { formatBytesToGb } from "../utils/format";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
@@ -158,17 +160,6 @@ function bucketOfVersion(version, canonicalLatest) {
   return "older";
 }
 
-function normalizePlatform(raw) {
-  const v = String(raw || "").trim().toLowerCase();
-  if (!v) return null;
-  if (v === "windows" || v === "win32" || v.startsWith("win")) return "windows";
-  if (v === "macos" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
-  if (v === "linux") return "linux";
-  if (v === "ios" || v === "ipados") return "ios";
-  if (v === "android") return "android";
-  return null;
-}
-
 function toSafeNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -233,12 +224,6 @@ function formatDetailDate(value) {
     minute: "2-digit",
     hourCycle: "h24",
   });
-}
-
-function formatBytesToGb(value) {
-  const bytes = Number(value);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
 function formatDetailPercent(value) {
@@ -1916,7 +1901,7 @@ export default function AssetsDashboard({
         return {
           name: formatPlatformLabel(rawName),
           value: Number(r?.host_count ?? r?.count ?? 0),
-          color: normalized ? platformColors[normalized] : cycleColors[i % cycleColors.length],
+          color: platformColors[normalized] || cycleColors[i % cycleColors.length],
         };
       })
       .filter((d) => d.value > 0);
@@ -1928,7 +1913,7 @@ const osVersionItems = React.useMemo(() => {
   return rows.map((r, rowIndex) => {
     const platform = String(r?.os_platform ?? "").toLowerCase();
     const normalized = normalizePlatform(platform);
-    const color = normalized ? platformColors[normalized] : BRAND.gray;
+    const color = platformColors[normalized] || BRAND.gray;
     const parentValue = toSafeNumber(r?.host_count ?? r?.count);
     const children = Array.isArray(r?.children)
       ? r.children
