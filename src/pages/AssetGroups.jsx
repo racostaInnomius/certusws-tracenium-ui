@@ -897,6 +897,7 @@ function CriteriaBuilder({ catalog, predicates, onChange, error }) {
                 onChange={(value) => updatePredicate(idx, { value })}
               />
               <IconButton
+                aria-label="Remove condition"
                 size="small"
                 onClick={() => removePredicate(idx)}
                 sx={{ color: BRAND.gray, "&:hover": { color: ROLE.critical } }}
@@ -1733,7 +1734,7 @@ function UngroupedDevicesDrawer({ open, onClose, notify }) {
               </Box>
             </Stack>
           </Box>
-          <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+          <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -2864,7 +2865,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
                 </Stack>
               </Box>
             </Box>
-            <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+            <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
               <CloseOutlinedIcon fontSize="small" />
             </IconButton>
           </Box>

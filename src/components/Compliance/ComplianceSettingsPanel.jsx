@@ -183,7 +183,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
         <Typography variant="h6" sx={{ flex: 1, fontWeight: 700, color: BRAND.dark }}>
           Compliance settings
         </Typography>
-        <IconButton size="small" onClick={handleCancel}>
+        <IconButton aria-label="Close" size="small" onClick={handleCancel}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

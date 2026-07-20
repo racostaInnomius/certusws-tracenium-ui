@@ -318,12 +318,12 @@ export default function DistributionTab({ canManage, notify }) {
                     {canManage ? (
                       <>
                         <Tooltip title="Edit">
-                          <IconButton size="small" onClick={() => setSiteDialog({ open: true, site: s })}>
+                          <IconButton aria-label="Edit distribution site" size="small" onClick={() => setSiteDialog({ open: true, site: s })}>
                             <EditOutlinedIcon fontSize="inherit" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Delete">
-                          <IconButton size="small" onClick={() => removeSite(s)}>
+                          <IconButton aria-label="Remove site" size="small" onClick={() => removeSite(s)}>
                             <DeleteOutlineIcon fontSize="inherit" />
                           </IconButton>
                         </Tooltip>
@@ -394,7 +394,7 @@ export default function DistributionTab({ canManage, notify }) {
                   <TableCell align="right">
                     {canManage ? (
                       <Tooltip title="Remove">
-                        <IconButton size="small" onClick={() => removeDp(dp)}>
+                        <IconButton aria-label="Remove distribution point" size="small" onClick={() => removeDp(dp)}>
                           <DeleteOutlineIcon fontSize="inherit" />
                         </IconButton>
                       </Tooltip>

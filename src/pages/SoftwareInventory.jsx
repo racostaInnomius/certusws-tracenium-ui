@@ -36,6 +36,7 @@ import {
   getSoftwareInventoryHosts,
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
+import { listFrom } from "../api/shape";
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
@@ -445,7 +446,7 @@ export default function SoftwareInventory() {
         pageSize: paginationModel.pageSize,
       });
 
-      setDetailRows(Array.isArray(res?.items) ? res.items : []);
+      setDetailRows(listFrom(res, { keys: ["items"], context: "softwareInventory.detail" }));
       setTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);
@@ -476,7 +477,7 @@ export default function SoftwareInventory() {
         sortDir: currentSort.sort || "asc",
       });
 
-      setHostRows(Array.isArray(res?.items) ? res.items : []);
+      setHostRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hosts" }));
       setHostTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);
@@ -503,7 +504,7 @@ export default function SoftwareInventory() {
         pageSize: hostAppsPaginationModel.pageSize,
       });
 
-      setHostAppsRows(Array.isArray(res?.items) ? res.items : []);
+      setHostAppsRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hostApps" }));
       setHostAppsTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);

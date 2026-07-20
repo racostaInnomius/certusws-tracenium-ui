@@ -629,10 +629,10 @@ function ManageRulesDrawer({
             Catalog is global. Toggle a template to create an instance for this tenant.
           </Typography>
         </Box>
-        <IconButton onClick={onRefresh} size="small" sx={{ mr: 0.5 }}>
+        <IconButton aria-label="Refresh alerts" onClick={onRefresh} size="small" sx={{ mr: 0.5 }}>
           <RefreshOutlinedIcon fontSize="small" />
         </IconButton>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </Stack>
@@ -756,7 +756,7 @@ function ManageRulesDrawer({
                       onChange={(e) => onToggle(r, e.target.checked)}
                     />
                     <Tooltip title="Delete custom rule">
-                      <IconButton size="small" onClick={() => onDeleteRule(r)}>
+                      <IconButton aria-label="Delete rule" size="small" onClick={() => onDeleteRule(r)}>
                         <CloseOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -800,7 +800,7 @@ function EventDetailDrawer({ event, onClose }) {
             </Typography>
           </Stack>
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </Stack>

@@ -77,6 +77,7 @@ import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
 import { normalizePlatform } from "../utils/platform";
 import { formatBytesToGb } from "../utils/format";
+import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
@@ -1545,15 +1546,10 @@ export default function AssetsDashboard({
       try {
         const res = await getConnectedDevices();
         if (cancelled) return;
-        // The endpoint shape is `{ ok, tenantId, deviceIds: [...],
-        // count }` but we defensively handle `{ items: [...] }` and
-        // a bare array too in case an older deployment is still
-        // returning one of those legacy shapes.
-        const ids =
-          (Array.isArray(res?.deviceIds) && res.deviceIds) ||
-          (Array.isArray(res?.items) && res.items) ||
-          (Array.isArray(res) && res) ||
-          [];
+        // The endpoint shape is `{ ok, tenantId, deviceIds: [...], count }`;
+        // listFrom also tolerates `{ items: [...] }` / a bare array from an
+        // older deployment, and warns in dev if none matched (drift).
+        const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
         setConnectedIds(new Set(ids.map((id) => String(id))));
       } catch (e) {
         if (cancelled) return;

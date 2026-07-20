@@ -330,6 +330,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           {canManage ? (
             <>
               <IconButton
+                aria-label="Edit package"
                 size="small"
                 onClick={() => openEdit(p.row)}
                 sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}

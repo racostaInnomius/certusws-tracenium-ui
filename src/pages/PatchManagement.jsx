@@ -1243,7 +1243,7 @@ export default function PatchManagement() {
                   ) : null}
                 </Typography>
               </Box>
-              <IconButton onClick={closeDrawer} disabled={dispatching} size="small">
+              <IconButton aria-label="Close" onClick={closeDrawer} disabled={dispatching} size="small">
                 <CloseOutlinedIcon />
               </IconButton>
             </Box>

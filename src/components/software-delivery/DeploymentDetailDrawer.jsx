@@ -294,7 +294,7 @@ export default function DeploymentDetailDrawer({
                 </Typography>
               </Stack>
             </Box>
-            <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+            <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
               <CloseOutlinedIcon fontSize="small" />
             </IconButton>
           </Stack>

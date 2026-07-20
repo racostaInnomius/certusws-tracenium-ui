@@ -740,6 +740,7 @@ export default function SecurityCompliance() {
                 severity / framework. Compact icon button like Settings. */}
             <Tooltip title="Browse the checks catalog" arrow placement="bottom">
               <IconButton
+                aria-label="Open compliance catalog"
                 size="small"
                 onClick={() => setCatalogOpen(true)}
                 sx={{
@@ -752,6 +753,7 @@ export default function SecurityCompliance() {
             </Tooltip>
             <Tooltip title="Compliance settings" arrow placement="bottom">
               <IconButton
+                aria-label="Compliance settings"
                 size="small"
                 onClick={() => setSettingsOpen(true)}
                 sx={{
@@ -1869,7 +1871,7 @@ function DeviceDrawerContent({
               : "no report yet"}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon />
         </IconButton>
       </Box>

@@ -249,7 +249,7 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
             Every control Tracenium evaluates, across platforms and frameworks.
           </Typography>
         </Box>
-        <IconButton size="small" onClick={onClose}>
+        <IconButton aria-label="Close" size="small" onClick={onClose}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

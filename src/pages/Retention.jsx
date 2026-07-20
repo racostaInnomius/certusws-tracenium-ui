@@ -290,6 +290,7 @@ export default function Retention({ onNavigate }) {
             <Tooltip title="Refresh stats">
               <span>
                 <IconButton
+                  aria-label="Refresh"
                   onClick={load}
                   disabled={loading}
                   size="small"

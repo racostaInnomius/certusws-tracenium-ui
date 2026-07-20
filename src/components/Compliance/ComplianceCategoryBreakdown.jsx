@@ -144,7 +144,7 @@ function CategoryRow({ row }) {
       >
         <TableCell sx={{ width: 34, pr: 0 }}>
           {expandable ? (
-            <IconButton size="small" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
+            <IconButton aria-label="Toggle category" size="small" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
               {open ? <ExpandLessOutlinedIcon fontSize="small" /> : <ExpandMoreOutlinedIcon fontSize="small" />}
             </IconButton>
           ) : null}
