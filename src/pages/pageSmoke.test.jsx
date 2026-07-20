@@ -58,6 +58,7 @@ import PatchManagement from "./PatchManagement";
 import SoftwareDelivery from "./SoftwareDelivery";
 import RemoteControl from "./RemoteControl";
 import Assets from "./Assets";
+import HardwareInventory from "./HardwareInventory";
 
 afterEach(() => {
   cleanup();
@@ -110,6 +111,7 @@ const PAGES = [
   ["SoftwareDelivery", SoftwareDelivery],
   ["RemoteControl", RemoteControl],
   ["Assets", Assets],
+  ["HardwareInventory", HardwareInventory],
 ];
 
 describe("page smoke — happy backend (200)", () => {

@@ -31,6 +31,7 @@ import {
   getHardwareInventoryRankings,
   getHardwareInventoryDetail,
 } from "../api/inventoryDashboard";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
@@ -303,15 +304,34 @@ export default function HardwareInventory() {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const [summary, setSummary] = React.useState(null);
-  const [rankings, setRankings] = React.useState(null);
+  // Summary + rankings are parameterless on-mount fetches — routed through
+  // useCachedFetch so they get stale-while-revalidate, in-flight dedup, and
+  // last-known-good fallback on a transient backend error (each was a
+  // hand-rolled setLoading/try/catch triple before). The parameterized detail
+  // fetch below stays manual (it keys off search/filter/pagination state).
+  const {
+    data: summary,
+    loading: loadingSummary,
+    refetch: reloadSummary,
+  } = useCachedFetch(
+    "hardware-inventory:summary:v1",
+    async () => (await getHardwareInventorySummary()) || null,
+    { staleMs: 60_000, storageMaxAgeMs: 10 * 60_000, revalidateOnMount: "stale" }
+  );
+  const {
+    data: rankings,
+    loading: loadingRankings,
+    refetch: reloadRankings,
+  } = useCachedFetch(
+    "hardware-inventory:rankings:v1",
+    async () => (await getHardwareInventoryRankings()) || null,
+    { staleMs: 60_000, storageMaxAgeMs: 10 * 60_000, revalidateOnMount: "stale" }
+  );
+
   const [rankingDialog, setRankingDialog] = React.useState(null);
   const [rankingDialogSearch, setRankingDialogSearch] = React.useState("");
   const [detailRows, setDetailRows] = React.useState([]);
   const [totalRows, setTotalRows] = React.useState(0);
-
-  const [loadingSummary, setLoadingSummary] = React.useState(true);
-  const [loadingRankings, setLoadingRankings] = React.useState(true);
   const [loadingDetail, setLoadingDetail] = React.useState(true);
 
   const [search, setSearch] = React.useState("");
@@ -328,40 +348,6 @@ export default function HardwareInventory() {
     message: "",
     severity: "success",
   });
-
-  const loadSummary = async () => {
-    try {
-      setLoadingSummary(true);
-      const res = await getHardwareInventorySummary();
-      setSummary(res || null);
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load hardware summary",
-        severity: "error",
-      });
-    } finally {
-      setLoadingSummary(false);
-    }
-  };
-
-  const loadRankings = async () => {
-    try {
-      setLoadingRankings(true);
-      const res = await getHardwareInventoryRankings();
-      setRankings(res || null);
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load hardware rankings",
-        severity: "error",
-      });
-    } finally {
-      setLoadingRankings(false);
-    }
-  };
 
   const loadDetail = async () => {
     try {
@@ -389,17 +375,12 @@ export default function HardwareInventory() {
   };
 
   React.useEffect(() => {
-    loadSummary();
-    loadRankings();
-  }, []);
-
-  React.useEffect(() => {
     loadDetail();
   }, [search, platform, manufacturer, paginationModel.page, paginationModel.pageSize]);
 
   const refreshAll = () => {
-    loadSummary();
-    loadRankings();
+    reloadSummary();
+    reloadRankings();
     loadDetail();
   };
 

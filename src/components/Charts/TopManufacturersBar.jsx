@@ -40,8 +40,14 @@ function BarShape(props) {
   return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
 }
 
-export default function TopManufacturersBar({ topManufacturers }) {
-  const data = toChartData(topManufacturers);
+// Stable references hoisted out of render (see OsVersionsBar for rationale).
+const CHART_MARGIN = { top: 8, right: 34, left: -32, bottom: 8 };
+const Y_TICK = { fontSize: 12 };
+const tooltipFormatter = (value) => [`${value}`, "Hosts"];
+const tooltipLabelFormatter = (label) => `Manufacturer: ${label}`;
+
+function TopManufacturersBar({ topManufacturers }) {
+  const data = React.useMemo(() => toChartData(topManufacturers), [topManufacturers]);
 
   // Si hay muchos items, el Paper padre puede usar overflow: auto.
   const rowHeight = 44;
@@ -58,7 +64,7 @@ export default function TopManufacturersBar({ topManufacturers }) {
           <BarChart
             data={data}
             layout="vertical"
-            margin={{ top: 8, right: 34, left: -32, bottom: 8 }}
+            margin={CHART_MARGIN}
             barCategoryGap={10}
           >
             <CartesianGrid strokeDasharray="3 3" />
@@ -67,11 +73,11 @@ export default function TopManufacturersBar({ topManufacturers }) {
               type="category"
               dataKey="manufacturer"
               width={160}
-              tick={{ fontSize: 12 }}
+              tick={Y_TICK}
             />
             <Tooltip
-              formatter={(value) => [`${value}`, "Hosts"]}
-              labelFormatter={(label) => `Manufacturer: ${label}`}
+              formatter={tooltipFormatter}
+              labelFormatter={tooltipLabelFormatter}
             />
             <Bar dataKey="hostCount" barSize={14} shape={<BarShape />}>
               <LabelList dataKey="hostCount" position="right" />
@@ -82,3 +88,5 @@ export default function TopManufacturersBar({ topManufacturers }) {
     </Box>
   );
 }
+
+export default React.memo(TopManufacturersBar);

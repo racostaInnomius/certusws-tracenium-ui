@@ -1526,7 +1526,11 @@ export default function AssetsDashboard({
     };
 
     pollJobs();
-    const intervalId = window.setInterval(pollJobs, 3000);
+    // 6s (was 3s): each tick re-renders this large page, so the gentler
+    // cadence halves that churn. Decommission jobs are not time-critical to
+    // 3s. (A fuller fix would isolate this job-status state into a child so
+    // the whole dashboard doesn't re-render on each tick.)
+    const intervalId = window.setInterval(pollJobs, 6000);
 
     return () => {
       cancelled = true;
