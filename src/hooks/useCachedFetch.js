@@ -33,67 +33,41 @@
 // - hasCache
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isAuthError, isTemporaryApiError, TEMPORARY_ERROR_EVENT, getActiveTenantId } from "../api/http";
+import {
+  isAuthError,
+  isTemporaryApiError,
+  TEMPORARY_ERROR_EVENT,
+  getActiveTenantId,
+  getApiCacheSessionScope,
+  setApiCacheSessionScope,
+  registerCacheClearListener,
+} from "../api/http";
 
 const memCache = new Map();
 const inFlight = new Map();
 
 const STORAGE_PREFIX = "tnm:cache:";
-const SESSION_SCOPE_STORAGE_KEY = "tnm:cache-scope:v1";
-const DEFAULT_SESSION_SCOPE = "anonymous";
 
-function readStoredSessionScope() {
-  if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
-
-  try {
-    const stored = window.sessionStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
-    return stored || DEFAULT_SESSION_SCOPE;
-  } catch {
-    return DEFAULT_SESSION_SCOPE;
-  }
-}
-
-let currentSessionScope = readStoredSessionScope();
-
-function normalizeSessionScope(scope) {
-  const normalized = String(scope || "").trim();
-  return normalized || DEFAULT_SESSION_SCOPE;
-}
-
+// Session scope + active tenant are OWNED by ../api/http (the single source of
+// truth). This cache keys by that same scope/tenant, so an identity change
+// makes old-scope entries unreachable automatically; http.js also fires our
+// registered clearer (see bottom of file) to actually free them. These two
+// helpers stay exported for backward compatibility but now delegate to the
+// owner — there is no second session-scope state to keep in sync.
 export function getCachedFetchSessionScope() {
-  return currentSessionScope || DEFAULT_SESSION_SCOPE;
+  return getApiCacheSessionScope();
 }
 
 export function setCachedFetchSessionScope(scope) {
-  const nextScope = normalizeSessionScope(scope);
-  const previousScope = normalizeSessionScope(currentSessionScope);
-
-  currentSessionScope = nextScope;
-
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
-    } catch {
-      // best effort
-    }
-  }
-
-  if (nextScope !== previousScope) {
-    clearCachedFetch();
-  }
-
-  return nextScope;
+  return setApiCacheSessionScope(scope);
 }
 
 function buildScopedCacheKey(key) {
-  // Scope by ACTIVE TENANT as well as session — an MSP operator switches the
-  // active tenant without re-signing-in, and these cached reads (settings,
-  // dashboards, …) are per-tenant. Without the tenant in the key, one
-  // tenant's cached data leaked into another after a switch/reload. `_` =
-  // no active tenant (portfolio / single-tenant → token tenant). Mirrors
-  // buildCacheKey in ../api/http.
+  // Scope by session + ACTIVE TENANT (both from ../api/http). Without the
+  // tenant in the key, an MSP tenant switch would serve one tenant's cached
+  // data to another. `_` = no active tenant (portfolio / single-tenant).
   const tenant = getActiveTenantId() || "_";
-  return `${getCachedFetchSessionScope()}::${tenant}::${String(key || "")}`;
+  return `${getApiCacheSessionScope()}::${tenant}::${String(key || "")}`;
 }
 
 // Recover the raw key from `scope::tenant::key` — strip the first two
@@ -259,6 +233,11 @@ export function clearCachedFetch() {
     // best effort
   }
 }
+
+// Wipe this cache whenever http.js flips the session scope (identity change),
+// so a single setApiCacheSessionScope() call clears BOTH caches. Registered on
+// module load — before that this cache is empty, so nothing is missed.
+registerCacheClearListener(clearCachedFetch);
 
 export async function prefetchCachedFetch(cacheKey, loader) {
   if (!cacheKey || typeof loader !== "function") return null;

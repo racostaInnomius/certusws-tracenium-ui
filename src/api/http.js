@@ -28,6 +28,20 @@ let authRedirectStarted = false;
 const memCache = new Map();
 const inFlightGets = new Map();
 
+// Cross-cache clear hooks. http.js owns the session scope + active tenant (the
+// single source of truth both this cache and hooks/useCachedFetch.js key by).
+// When the identity changes (session scope flips), every registered secondary
+// cache must be cleared too. useCachedFetch registers its clearer here, so a
+// single setApiCacheSessionScope() call wipes both caches — no more manually
+// keeping two scope states in sync at every auth-change site.
+const cacheClearListeners = new Set();
+
+/** Register a callback fired when the session scope changes (identity change). */
+export function registerCacheClearListener(cb) {
+  if (typeof cb === "function") cacheClearListeners.add(cb);
+  return () => cacheClearListeners.delete(cb);
+}
+
 function readStoredSessionScope() {
   if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
 
@@ -141,6 +155,15 @@ export function setApiCacheSessionScope(scope) {
     // user switch). The previously-selected client no longer applies —
     // clear it so we don't send a stale X-Tenant-Id under a new identity.
     setActiveTenantId(null);
+    // Wipe every registered secondary cache (useCachedFetch) so no
+    // previous-identity entry survives the switch.
+    cacheClearListeners.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // A misbehaving listener must not block the scope change.
+      }
+    });
   }
 
   return nextScope;
