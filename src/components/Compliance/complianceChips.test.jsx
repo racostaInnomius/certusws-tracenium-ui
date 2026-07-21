@@ -1,8 +1,41 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import { SeverityChip, FrameworkChip, ScoreBar, Sparkline } from "./complianceChips";
+import {
+  SeverityChip,
+  FrameworkChip,
+  ScoreBar,
+  Sparkline,
+  StatusChip,
+  RemediationStatusChip,
+} from "./complianceChips";
 
 afterEach(cleanup);
+
+describe("StatusChip", () => {
+  it("labels each rule outcome and falls back to Unknown", () => {
+    render(<StatusChip status="pass" />);
+    expect(screen.getByText("Pass")).toBeInTheDocument();
+    cleanup();
+    render(<StatusChip status="insufficient_data" />);
+    expect(screen.getByText("No data")).toBeInTheDocument(); // distinct from Unknown
+    cleanup();
+    render(<StatusChip status="something-else" />);
+    expect(screen.getByText("Unknown")).toBeInTheDocument(); // fallback
+  });
+});
+
+describe("RemediationStatusChip", () => {
+  it("labels operator states and falls back to Open", () => {
+    render(<RemediationStatusChip status="in_progress" />);
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+    cleanup();
+    render(<RemediationStatusChip status="wont_fix" />);
+    expect(screen.getByText("Won't fix")).toBeInTheDocument();
+    cleanup();
+    render(<RemediationStatusChip status="bogus" />);
+    expect(screen.getByText("Open")).toBeInTheDocument(); // fallback
+  });
+});
 
 describe("SeverityChip", () => {
   it("labels each known severity and falls back to Medium for unknown", () => {

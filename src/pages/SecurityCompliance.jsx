@@ -55,11 +55,6 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
-import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
-import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
@@ -108,7 +103,15 @@ import {
   getDeviceFleetRanking
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
-import { SeverityChip, FrameworkChip, ScoreBar, Sparkline } from "../components/Compliance/complianceChips";
+import {
+  SeverityChip,
+  FrameworkChip,
+  ScoreBar,
+  Sparkline,
+  StatusChip,
+  RemediationStatusChip,
+  REMEDIATION_STATUS_META,
+} from "../components/Compliance/complianceChips";
 import { updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
@@ -125,94 +128,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 
 // ---------- constants --------------------------------------------------------
 
-const STATUS_META = {
-  pass: {
-    label: "Pass",
-    icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: ROLE.positive,
-    bg: ROLE.positiveSoft
-  },
-  fail: {
-    label: "Fail",
-    icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: ROLE.critical,
-    bg: ROLE.criticalSoft
-  },
-  not_applicable: {
-    label: "N/A",
-    icon: <BlockOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: BRAND.gray,
-    bg: BRAND.surfaceMuted
-  },
-  info: {
-    label: "Info",
-    icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: BRAND.teal,
-    bg: BRAND.tealSoft
-  },
-  error: {
-    label: "Error",
-    icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: ROLE.caution,
-    bg: ROLE.cautionSoft
-  },
-  unknown: {
-    label: "Unknown",
-    icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: BRAND.gray,
-    bg: BRAND.surfaceMuted
-  },
-  // New status (2026-05-20). Distinct from "unknown" so we can tell
-  // operators "we don't have enough evidence to score this device yet"
-  // (a transient enrollment state, or a host whose evaluator hit fewer
-  // than MIN_APPLICABLE_CHECKS_FOR_SCORE applicable rules) vs "the
-  // device reported but every rule errored" (true unknown). Same
-  // neutral gray visual — both states are "no actionable verdict" —
-  // but the label tells the operator what to expect:
-  //   "Unknown"   → there's a problem with the evaluator/evidence.
-  //   "No data"   → wait for the next reporting cycle.
-  insufficient_data: {
-    label: "No data",
-    icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />,
-    fg: BRAND.gray,
-    bg: BRAND.surfaceMuted
-  }
-};
-
 // ── Sprint 3 — remediation lifecycle ────────────────────────────────
-//
-// Status enum mirrors the backend's CHECK constraint on
-// security_compliance_findings.remediation_status. Labels are
-// operator-facing ("In progress" not "in_progress"); colors echo the
-// finding status colors so a critical/fail finding still stands out
-// visually even when its remediation_status is "in_progress".
-const REMEDIATION_STATUS_META = {
-  open: {
-    label: "Open",
-    fg: ROLE.critical,
-    bg: ROLE.criticalSoft
-  },
-  in_progress: {
-    label: "In progress",
-    fg: ROLE.caution,
-    bg: ROLE.cautionSoft
-  },
-  remediated: {
-    label: "Remediated",
-    fg: ROLE.positive,
-    bg: ROLE.positiveSoft
-  },
-  risk_accepted: {
-    label: "Risk accepted",
-    fg: BRAND.tealText,
-    bg: BRAND.tealSoft
-  },
-  wont_fix: {
-    label: "Won't fix",
-    fg: BRAND.gray,
-    bg: BRAND.surfaceMuted
-  }
-};
 
 // Client-side mirror of the backend's transition matrix
 // (modules/compliance/finding-lifecycle.service.ts:ALLOWED_TRANSITIONS).
@@ -296,49 +212,6 @@ function isRecentlyEnrolled(isoString) {
   const then = Date.parse(isoString);
   if (!Number.isFinite(then)) return false;
   return Date.now() - then < RECENTLY_ENROLLED_THRESHOLD_MS;
-}
-
-// ---------- small presentational atoms ---------------------------------------
-
-function StatusChip({ status }) {
-  const meta = STATUS_META[status] ?? STATUS_META.unknown;
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      icon={meta.icon}
-      sx={{
-        bgcolor: meta.bg,
-        color: meta.fg,
-        fontWeight: 700,
-        border: `1px solid ${meta.fg}44`,
-        "& .MuiChip-icon": { color: meta.fg }
-      }}
-    />
-  );
-}
-
-// Sprint 3 — visually distinct from StatusChip (which conveys the
-// rule outcome). RemediationStatusChip carries the OPERATOR's
-// declared state. Same chip shape so they read at the same visual
-// weight in the finding card; different palette so the dual chips
-// don't get confused at a glance.
-function RemediationStatusChip({ status }) {
-  const meta = REMEDIATION_STATUS_META[status] ?? REMEDIATION_STATUS_META.open;
-  return (
-    <Chip
-      label={meta.label}
-      size="small"
-      sx={{
-        bgcolor: meta.bg,
-        color: meta.fg,
-        fontWeight: 700,
-        border: `1px solid ${meta.fg}44`,
-        height: 22,
-        fontSize: 11
-      }}
-    />
-  );
 }
 
 // ---------- patch-level presentation helpers ---------------------------------

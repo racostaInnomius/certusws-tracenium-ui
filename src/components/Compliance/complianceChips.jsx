@@ -9,8 +9,77 @@
 
 import { Box, Chip, LinearProgress, Tooltip, Typography } from "@mui/material";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
+
+// Rule-outcome status presentation. Exported because non-chip parts of the
+// compliance page key off it too (this was shared module-level state in the
+// old god-component).
+export const STATUS_META = {
+  pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.positive, bg: ROLE.positiveSoft },
+  fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.critical, bg: ROLE.criticalSoft },
+  not_applicable: { label: "N/A", icon: <BlockOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  info: { label: "Info", icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.teal, bg: BRAND.tealSoft },
+  error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.caution, bg: ROLE.cautionSoft },
+  unknown: { label: "Unknown", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  // "No data" (transient: enrolled <1 cycle, or fewer than the scoring
+  // threshold of applicable rules) — distinct from "Unknown" (evaluator/
+  // evidence problem). Same neutral gray; the label tells the operator whether
+  // to wait or investigate.
+  insufficient_data: { label: "No data", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+};
+
+// Operator-declared remediation state (mirrors the backend CHECK constraint on
+// security_compliance_findings.remediation_status). Colors echo the finding
+// status palette so a critical finding still stands out under "in progress".
+export const REMEDIATION_STATUS_META = {
+  open: { label: "Open", fg: ROLE.critical, bg: ROLE.criticalSoft },
+  in_progress: { label: "In progress", fg: ROLE.caution, bg: ROLE.cautionSoft },
+  remediated: { label: "Remediated", fg: ROLE.positive, bg: ROLE.positiveSoft },
+  risk_accepted: { label: "Risk accepted", fg: BRAND.tealText, bg: BRAND.tealSoft },
+  wont_fix: { label: "Won't fix", fg: BRAND.gray, bg: BRAND.surfaceMuted },
+};
+
+export function StatusChip({ status }) {
+  const meta = STATUS_META[status] ?? STATUS_META.unknown;
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      icon={meta.icon}
+      sx={{
+        bgcolor: meta.bg,
+        color: meta.fg,
+        fontWeight: 700,
+        border: `1px solid ${meta.fg}44`,
+        "& .MuiChip-icon": { color: meta.fg },
+      }}
+    />
+  );
+}
+
+export function RemediationStatusChip({ status }) {
+  const meta = REMEDIATION_STATUS_META[status] ?? REMEDIATION_STATUS_META.open;
+  return (
+    <Chip
+      label={meta.label}
+      size="small"
+      sx={{
+        bgcolor: meta.bg,
+        color: meta.fg,
+        fontWeight: 700,
+        border: `1px solid ${meta.fg}44`,
+        height: 22,
+        fontSize: 11,
+      }}
+    />
+  );
+}
 
 // Canonical severity scale (theme/severity.js). Kept as a map (rather than a
 // direct severityMeta() call) to preserve the page's existing "unknown →
