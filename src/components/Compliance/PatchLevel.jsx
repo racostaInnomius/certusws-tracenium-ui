@@ -42,7 +42,7 @@ function daysSince(isoString) {
 // amber, >90d or unknown red). Centralized so the table cell and the
 // drawer mini-card both agree on a single source of truth.
 
-function patchRecencyRole(lastInstalledAtUtc) {
+export function patchRecencyRole(lastInstalledAtUtc) {
   const days = daysSince(lastInstalledAtUtc);
   if (days == null) return { role: "critical", label: "unknown" };
   if (days <= 30) return { role: "positive", label: `${days}d ago` };
