@@ -30,9 +30,9 @@
 // sprint (test-only, additive).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, waitFor } from "@testing-library/react";
 
-import { server, http, HttpResponse, API_BASE } from "../test/msw/server";
+import { server, http, HttpResponse } from "../test/msw/server";
 // ConfirmProvider mounts at the app root (main.tsx) — pages that call
 // useConfirm() (e.g. Jobs) need it in the tree, so mirror that here.
 import { ConfirmProvider } from "../components/common/ConfirmDialog";

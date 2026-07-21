@@ -38,7 +38,7 @@ describe("platformLabel", () => {
 
 describe("isMobilePlatform", () => {
   it("is true only for ios/android", () => {
-    expect(isMobilePlatform("iPhone" && "ios")).toBe(true);
+    expect(isMobilePlatform("ios")).toBe(true);
     expect(isMobilePlatform("android")).toBe(true);
     expect(isMobilePlatform("windows")).toBe(false);
     expect(isMobilePlatform(null)).toBe(false);

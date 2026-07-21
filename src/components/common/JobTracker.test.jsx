@@ -17,7 +17,7 @@
 //   * status normalization: succeeded/completed → ok, timeout/cancelled
 //     → error, unknown → running (never silently dismissed)
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
