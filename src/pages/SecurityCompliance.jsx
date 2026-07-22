@@ -26,7 +26,6 @@ import {
   Alert,
   Box,
   Button,
-  Checkbox,
   Chip,
   CircularProgress,
   Drawer,
@@ -49,7 +48,6 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
@@ -67,7 +65,6 @@ import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 // Sprint 6 — PDF export + bulk actions
 import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
-import PlaylistAddCheckOutlinedIcon from "@mui/icons-material/PlaylistAddCheckOutlined";
 
 import {
   getComplianceSummary,
@@ -83,9 +80,7 @@ import {
   buildFindingsCsvUrl,
   // Sprint 6
   buildFindingsPdfUrl,
-  bulkFindingOp,
-  // Sprint 7
-  getDeviceFleetRanking
+  bulkFindingOp
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 import {
@@ -111,6 +106,8 @@ import FindingCard from "../components/Compliance/FindingCard";
 import StatusChangeDialog from "../components/Compliance/StatusChangeDialog";
 import FindingHistoryDialog from "../components/Compliance/FindingHistoryDialog";
 import DeviceDiffSection from "../components/Compliance/DeviceDiffSection";
+import FleetRankingLine from "../components/Compliance/FleetRankingLine";
+import BulkFindingToolbar from "../components/Compliance/BulkFindingToolbar";
 import { PatchChip, PatchLevelSection, formatRelativeTime } from "../components/Compliance/PatchLevel";
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
@@ -1543,84 +1540,6 @@ function DeviceDrawerContent({
  * when the drawer refetches.
  */
 // FindingCard moved to components/Compliance/FindingCard.jsx (imported at top).
-function BulkFindingToolbar({
-  totalCount,
-  selectedCount,
-  onSelectAll,
-  onClear,
-  onOpenMenu,
-  pending
-}) {
-  const hasSelection = selectedCount > 0;
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 1,
-        mb: 1.5,
-        borderRadius: 2,
-        border: `1px solid ${hasSelection ? BRAND.teal : BRAND.border}`,
-        bgcolor: hasSelection ? BRAND.tealSoft : "transparent",
-        transition: "background-color 120ms ease, border-color 120ms ease"
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <Checkbox
-          size="small"
-          checked={hasSelection && selectedCount === totalCount}
-          indeterminate={hasSelection && selectedCount < totalCount}
-          onChange={hasSelection ? onClear : onSelectAll}
-          disabled={pending}
-          sx={{ p: 0.5 }}
-          inputProps={{ "aria-label": "Select all findings" }}
-        />
-        <Typography
-          variant="body2"
-          sx={{
-            color: hasSelection ? BRAND.tealText : BRAND.gray,
-            fontWeight: hasSelection ? 700 : 500,
-            flex: 1
-          }}
-        >
-          {hasSelection
-            ? `${selectedCount} of ${totalCount} selected`
-            : `Select all (${totalCount} findings)`}
-        </Typography>
-        {hasSelection ? (
-          <>
-            <Button
-              size="small"
-              variant="text"
-              onClick={onClear}
-              disabled={pending}
-              sx={{ textTransform: "none" }}
-            >
-              Clear
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={onOpenMenu}
-              disabled={pending}
-              startIcon={
-                pending ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : (
-                  <PlaylistAddCheckOutlinedIcon sx={{ fontSize: 16 }} />
-                )
-              }
-              endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
-              sx={{ textTransform: "none" }}
-            >
-              Actions
-            </Button>
-          </>
-        ) : null}
-      </Stack>
-    </Paper>
-  );
-}
-
 // ── Sprint 3 — finding history dialog ─────────────────────────────────
 //
 // Opens from the "History" button on a FindingCard. Loads
@@ -1633,83 +1552,6 @@ function BulkFindingToolbar({
 // components/Compliance/FindingHistoryDialog.jsx (imported at top).
 // DeviceDiffSection + DiffBucket moved to
 // components/Compliance/DeviceDiffSection.jsx (imported at top).
-function FleetRankingLine({ agentId }) {
-  const [ranking, setRanking] = React.useState(null);
-  const [loading, setLoading] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!agentId) return;
-    let cancelled = false;
-    setLoading(true);
-    setRanking(null);
-    getDeviceFleetRanking(agentId)
-      .then((res) => {
-        if (cancelled) return;
-        if (res?.ok) setRanking(res.ranking ?? null);
-      })
-      .catch(() => {
-        // Silent — see component doc.
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId]);
-
-  if (loading) {
-    return (
-      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
-        Loading fleet rank…
-      </Typography>
-    );
-  }
-  if (!ranking) return null;
-
-  const { rank, scoredCount, unscoredCount, topPercentile } = ranking;
-  const fleetSize = scoredCount + unscoredCount;
-
-  // Unscored device — explain what's happening instead of showing
-  // a numeric rank that doesn't apply.
-  if (rank === null) {
-    return (
-      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
-        Not scored · {scoredCount} of {fleetSize} devices scored in this fleet
-      </Typography>
-    );
-  }
-
-  // Lone-device fleets get a slightly different message. "Top 100%
-  // of 1 device" reads weird.
-  if (scoredCount === 1) {
-    return (
-      <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}>
-        Only scored device in this fleet
-      </Typography>
-    );
-  }
-
-  return (
-    <Tooltip
-      title={
-        unscoredCount > 0
-          ? `${unscoredCount} device${unscoredCount === 1 ? "" : "s"} have null score and are excluded from the ranking.`
-          : "Ranked against every scored device in the fleet."
-      }
-      arrow
-      placement="top"
-    >
-      <Typography
-        variant="caption"
-        sx={{ color: BRAND.gray, mt: 0.5, display: "block" }}
-      >
-        #{rank} of {scoredCount} scored · top {topPercentile}%
-      </Typography>
-    </Tooltip>
-  );
-}
-
 // Tiny dependency-free sparkline — the page's footprint in vendor
 // bundles is already dominated by MUI/Recharts (loaded for the Overview);
 // pulling Recharts just for a 30-point inline graph on a drawer is
