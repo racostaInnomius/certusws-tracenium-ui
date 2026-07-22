@@ -79,75 +79,13 @@ import {
 } from "../api/assetGroups";
 import { listKnownDevices, listJobTypes } from "../api/jobs";
 import { formatDate } from "../utils/format";
-
-
-function formatPercent(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "0%";
-  return `${Math.round(n)}%`;
-}
-
-function formatNumber(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "0";
-  return new Intl.NumberFormat("en-US").format(n);
-}
-
-function getCoverageTone(coverage) {
-  const ungrouped = Number(coverage?.ungroupedDevices || 0);
-  if (ungrouped <= 0) return "success";
-  const percent = Number(coverage?.coveragePercent || 0);
-  if (percent >= 85) return "info";
-  if (percent >= 60) return "warning";
-  return "critical";
-}
-
-function getCoveragePalette(tone) {
-  // Keep the coverage notice shell consistent with Tracenium chrome.
-  // Status severity is expressed only by the "X% covered" chip text,
-  // so the card never turns red/yellow and does not visually alarm the
-  // operator unless they read the actual coverage value.
-  if (tone === "success") {
-    return { color: ROLE.positive };
-  }
-  if (tone === "critical") {
-    return { color: ROLE.critical };
-  }
-  if (tone === "warning") {
-    return { color: ROLE.caution };
-  }
-  return { color: BRAND.tealText };
-}
-
-function KindChip({ kind }) {
-  if (kind === "dynamic") {
-    return (
-      <Chip
-        size="small"
-        label="Dynamic"
-        sx={{
-          bgcolor: BRAND.cyanSoft,
-          color: BRAND.dark,
-          fontWeight: 700,
-          border: `1px solid ${BRAND.cyan}88`,
-        }}
-      />
-    );
-  }
-  return (
-    <Chip
-      size="small"
-      label="Static"
-      sx={{
-        bgcolor: BRAND.tealSoft,
-        color: BRAND.tealText,
-        fontWeight: 700,
-        border: `1px solid ${BRAND.teal}55`,
-      }}
-    />
-  );
-}
-
+import {
+  formatPercent,
+  formatNumber,
+  getCoverageTone,
+  getCoveragePalette,
+  KindChip,
+} from "../components/AssetGroups/coverageDisplay";
 
 
 const PLATFORM_FALLBACK_OPTIONS = [
