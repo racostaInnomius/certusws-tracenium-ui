@@ -35,6 +35,7 @@ import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlin
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 
 import { TOPBAR_HEIGHT } from "./Topbar";
 
@@ -660,6 +661,11 @@ export default function Sidebar({
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
+    // Crypto Discovery (CDP) — cert inventory ON the devices. Sits next
+    // to Security Compliance because both are posture-monitoring
+    // surfaces (distinct from PKI in Administration, which is the
+    // agent's own mTLS identity certs).
+    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
     // Software Delivery (SDP) — Phase 1. Sits next to Patch Management
     // because they're conceptually adjacent ("the fleet runs these

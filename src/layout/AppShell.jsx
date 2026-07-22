@@ -52,6 +52,7 @@ const Alerts = React.lazy(() => import("../pages/Alerts"));
 const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 const Retention = React.lazy(() => import("../pages/Retention"));
 const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
+const CryptoDiscovery = React.lazy(() => import("../pages/CryptoDiscovery"));
 
 function PageFallback() {
   return (
@@ -104,6 +105,7 @@ const EMPTY_TENANT_GATED_PAGES = new Set([
   "alerts",
   "pki",
   "plugin-control",
+  "cdp",
 ]);
 
 function readNumber(...values) {
@@ -1001,6 +1003,13 @@ export default function AppShell() {
 
   if (selectedPage === "patch") {
     content = <PatchManagement />;
+  }
+
+  // Crypto Discovery (CDP) — certificate inventory discovered ON the
+  // devices by the cdp agent plugin. Distinct from PKI (the agent's
+  // own mTLS identity certs).
+  if (selectedPage === "cdp") {
+    content = <CryptoDiscovery />;
   }
 
   if (selectedPage === "remote-control") {
