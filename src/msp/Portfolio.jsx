@@ -122,10 +122,16 @@ export default function Portfolio() {
   let subtitle = "";
 
   if (level === "vendor" && !drilledMsp) {
+    // Vendor sees a FLAT list of every tenant. Clicking a client opens its
+    // console directly; an MSP container (if any exist) drills into its
+    // clients, preserving the vendor → MSP → client path.
     items = portfolio.items;
-    onSelect = openMsp; // click MSP → drill in
-    title = "Partners";
-    subtitle = "Managed service providers. Select one to see its clients.";
+    onSelect = (t) =>
+      t.tenantType === "msp"
+        ? openMsp(t)
+        : enterTenant(t.tenantId, t.name, portfolio.items);
+    title = "All tenants";
+    subtitle = "Every tenant in Tracenium. Select one to open its console.";
   } else if (level === "vendor" && drilledMsp) {
     items = drillItems;
     onSelect = (client) => enterTenant(client.tenantId, client.name, drillItems);
@@ -301,7 +307,7 @@ export default function Portfolio() {
             filter
               ? "No matches."
               : level === "vendor" && !drilledMsp
-                ? "No MSPs yet."
+                ? "No tenants yet."
                 : level === "msp" && !drilledMsp
                   ? "No clients assigned yet."
                   : "No clients yet."

@@ -304,6 +304,58 @@ function securityFormToPolicy(securityForm) {
   return Object.keys(out).length > 0 ? out : null;
 }
 
+// ── MAM managed-app policy (mobile clients) ─────────────────────────
+// Authors policyJson.mam, consumed by T-iOS + T-Android. Booleans are
+// tri-state: null = "no opinion" (leave the app default), true/false =
+// explicit. idleTimeoutSeconds / minimumAppVersion use "" for unset,
+// mirroring the AI/SDP number fields. Reads either `mam` (canonical) or
+// the iOS alias `managedApp`.
+const MAM_BOOL_KEYS = [
+  "requireUserAuth",
+  "allowOfflineMode",
+  "requireAppPIN",
+  "requireBiometrics",
+  "wipeAppData",
+];
+const MAM_IDLE_MIN = 15;
+const MAM_IDLE_MAX = 86400;
+
+function readManagedAppFromPolicy(policy) {
+  const mam = policy?.mam ?? policy?.managedApp ?? null;
+  const m = mam && typeof mam === "object" ? mam : {};
+  const boolOrNull = (v) => (typeof v === "boolean" ? v : null);
+  const out = {};
+  for (const k of MAM_BOOL_KEYS) out[k] = boolOrNull(m[k]);
+  out.idleTimeoutSeconds = Number(m.idleTimeoutSeconds) > 0 ? Number(m.idleTimeoutSeconds) : "";
+  out.minimumAppVersion = typeof m.minimumAppVersion === "string" ? m.minimumAppVersion : "";
+  return out;
+}
+
+function managedAppFormToPolicy(mamForm) {
+  if (!mamForm || typeof mamForm !== "object") return null;
+  const out = {};
+  for (const k of MAM_BOOL_KEYS) {
+    if (typeof mamForm[k] === "boolean") out[k] = mamForm[k];
+  }
+  const idle = Number(mamForm.idleTimeoutSeconds);
+  if (Number.isFinite(idle) && idle >= MAM_IDLE_MIN && idle <= MAM_IDLE_MAX) {
+    out.idleTimeoutSeconds = idle;
+  }
+  if (typeof mamForm.minimumAppVersion === "string" && mamForm.minimumAppVersion.trim()) {
+    out.minimumAppVersion = mamForm.minimumAppVersion.trim();
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+// Render metadata for the MAM tri-state booleans (order = card order).
+const MAM_BOOL_FIELDS = [
+  { key: "requireUserAuth", label: "Require user auth", hint: "Gate the app behind device authentication.", onLabel: "Require", offLabel: "Don't require" },
+  { key: "requireAppPIN", label: "Require app PIN", hint: "Prompt for an app passcode to open.", onLabel: "Require", offLabel: "Don't require" },
+  { key: "requireBiometrics", label: "Require biometrics", hint: "Face ID / fingerprint to open the app.", onLabel: "Require", offLabel: "Don't require" },
+  { key: "allowOfflineMode", label: "Allow offline use", hint: "Let the app run without reaching the server.", onLabel: "Allow", offLabel: "Block" },
+  { key: "wipeAppData", label: "Selective wipe", hint: "Clears app data + enrolled identity on next check-in.", onLabel: "Wipe", offLabel: "Keep" },
+];
+
 function readFormFromPolicy(policy, catalog = []) {
   const enabled = Array.isArray(policy?.plugins?.enabled)
     ? policy.plugins.enabled
@@ -361,6 +413,9 @@ function readFormFromPolicy(policy, catalog = []) {
     // formToPolicy. Empty policies result in the empty default
     // shape (no capabilities configured).
     security: readSecurityFromPolicy(policy),
+    // MAM managed-app policy for mobile clients (policyJson.mam). Sibling
+    // sub-form like `security`; written back by managedAppFormToPolicy.
+    managedApp: readManagedAppFromPolicy(policy),
     // AI Intelligence (aip) — entitlement + per-day quota. The backend
     // (ai-policy.ts) gates AI calls on `ai.enabled` (or the 'aip' plugin)
     // and enforces ai.maxCallsPerDay / ai.maxTokensPerDay. Blank limit =
@@ -490,6 +545,14 @@ function formToPolicy(form, catalog = []) {
   const securityBlock = securityFormToPolicy(form.security || {});
   if (securityBlock) {
     policy.security = securityBlock;
+  }
+
+  // ── MAM managed-app block (mobile clients) ──────────────────────
+  // Written as `policy.mam` (the canonical key both apps read). Omitted
+  // entirely when the operator configured nothing, same as the rest.
+  const mamBlock = managedAppFormToPolicy(form.managedApp || {});
+  if (mamBlock) {
+    policy.mam = mamBlock;
   }
 
   // ── AI Intelligence (aip) quota block ───────────────────────────
@@ -1538,6 +1601,111 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
           helperText="Blank = full speed"
           sx={{ width: 200 }}
         />
+      </Box>
+
+      {/* ── Mobile app management (MAM) section ───────────────────
+          Authors policyJson.mam, consumed by the T-iOS / T-Android
+          managed clients. Booleans are tri-state: "Unset" leaves the
+          app default; On/Off are explicit. Desktop agents ignore this
+          block entirely — it only reaches ios/android devices. */}
+      <Box
+        sx={{
+          mt: 4,
+          p: 1.5,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          bgcolor: BRAND.surfaceMuted,
+        }}
+      >
+        <Typography
+          variant="overline"
+          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
+        >
+          Mobile app management (MAM)
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Applies to enrolled <strong>iOS &amp; Android</strong> managed clients only —
+          desktop agents ignore it. Leave a control <em>Unset</em> to keep the app
+          default. Devices re-fetch on the next policy push.
+        </Typography>
+
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
+            gap: 2,
+            mt: 1.5,
+          }}
+        >
+          {MAM_BOOL_FIELDS.map((f) => {
+            const cur = form?.managedApp?.[f.key];
+            const val = cur === true ? "on" : cur === false ? "off" : "unset";
+            return (
+              <TextField
+                key={f.key}
+                select
+                size="small"
+                label={f.label}
+                value={val}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const next = v === "on" ? true : v === "off" ? false : null;
+                  onChange({
+                    ...form,
+                    managedApp: { ...(form.managedApp || {}), [f.key]: next },
+                  });
+                }}
+                disabled={readOnly}
+                helperText={f.hint}
+              >
+                <MenuItem value="unset">Unset (app default)</MenuItem>
+                <MenuItem value="on">{f.onLabel}</MenuItem>
+                <MenuItem value="off">{f.offLabel}</MenuItem>
+              </TextField>
+            );
+          })}
+        </Box>
+
+        <Box sx={{ display: "flex", gap: 2, mt: 2, flexWrap: "wrap" }}>
+          <TextField
+            size="small"
+            type="number"
+            label="Idle timeout (s)"
+            placeholder="app default"
+            value={form?.managedApp?.idleTimeoutSeconds ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...form,
+                managedApp: {
+                  ...(form.managedApp || {}),
+                  idleTimeoutSeconds: e.target.value === "" ? "" : Number(e.target.value),
+                },
+              })
+            }
+            disabled={readOnly}
+            inputProps={{ min: 15, max: 86400, step: 15 }}
+            helperText="15–86400s; locks the app after inactivity. Blank = app default."
+            sx={{ width: 230 }}
+          />
+          <TextField
+            size="small"
+            label="Minimum app version"
+            placeholder="any"
+            value={form?.managedApp?.minimumAppVersion ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...form,
+                managedApp: {
+                  ...(form.managedApp || {}),
+                  minimumAppVersion: e.target.value,
+                },
+              })
+            }
+            disabled={readOnly}
+            helperText="Older installs are prompted to update. Blank = any."
+            sx={{ width: 230 }}
+          />
+        </Box>
       </Box>
 
       {/* ── Security Policy section (Sprint 2 of Policy v2) ───────

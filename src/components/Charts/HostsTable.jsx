@@ -31,7 +31,14 @@ const PLATFORM_STYLE = {
   "windows-server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
   macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
+  // Mobile managed clients (MAM). Distinct hues so a mixed fleet reads
+  // at a glance: indigo for iOS, green for Android.
+  ios: { bg: "rgba(99,102,241,0.12)", fg: "#4338ca" },
+  android: { bg: "rgba(16,185,129,0.12)", fg: "#047857" },
 };
+
+// Display overrides where CSS capitalize would mangle the casing.
+const PLATFORM_LABEL = { ios: "iOS" };
 
 function PlatformChip({ platform }) {
   const p = String(platform || "").trim().toLowerCase();
@@ -48,12 +55,13 @@ function PlatformChip({ platform }) {
   return (
     <Chip
       size="small"
-      label={p}
+      label={PLATFORM_LABEL[p] || p}
       sx={{
         height: 20,
         fontWeight: 700,
         fontSize: 11,
-        textTransform: "capitalize",
+        // Keep explicit labels (e.g. "iOS") verbatim; capitalize the rest.
+        textTransform: PLATFORM_LABEL[p] ? "none" : "capitalize",
         bgcolor: style.bg,
         color: style.fg,
         border: `1px solid ${style.fg}33`,

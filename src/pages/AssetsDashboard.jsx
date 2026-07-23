@@ -81,6 +81,7 @@ import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
+import MobileCommandsPanel from "../components/AssetManagement/MobileCommandsPanel";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import CompositionBars from "../components/common/CompositionBars";
@@ -700,6 +701,16 @@ function AgentDetailWorkbench({
   const platformKey = normalizePlatform(profile?.platform || hardware?.platform);
   const isMobileDevice =
     profile?.isMobile === true || platformKey === "ios" || platformKey === "android";
+  // Raw device_id (UUID) for the mobile command API — the mTLS identity
+  // the device enrolled with, distinct from the formatted `agentId` above.
+  const commandDeviceId = coalesceValue(
+    profile?.deviceId,
+    profile?.device_id,
+    selectedHost?.device_id,
+    selectedHost?.deviceId,
+    selectedHost?.agent_id,
+    selectedHost?.agentId
+  );
 
   return (
     <Box>
@@ -812,6 +823,7 @@ function AgentDetailWorkbench({
               </FieldGrid>
 
               {isMobileDevice ? (
+                <>
                 <Box sx={{ mt: 2.5 }}>
                   <Typography
                     sx={{
@@ -852,6 +864,10 @@ function AgentDetailWorkbench({
                     </Box>
                   </FieldGrid>
                 </Box>
+                <Box sx={{ mt: 3 }}>
+                  <MobileCommandsPanel deviceId={commandDeviceId} platform={platformKey} />
+                </Box>
+                </>
               ) : null}
             </>
           ) : null}
