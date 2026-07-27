@@ -88,6 +88,7 @@ import SecurityPolicySection from "../components/Policies/SecurityPolicySection"
 import ManagedAppSection from "../components/Policies/ManagedAppSection";
 import { AiIntelligenceSection, SoftwareDeliverySection } from "../components/Policies/AiSdpSections";
 import FeaturesSection from "../components/Policies/FeaturesSection";
+import IntervalScheduleCard from "../components/Policies/IntervalScheduleCard";
 
 // The plugin catalog now lives in the BACKEND
 // (modules/policies/plugin-catalog.ts) and is fetched via the
@@ -195,279 +196,70 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
         </Typography>
       </Box>
 
-      {/* Inventory schedule (AMP) — Sprint 1 of Policy v2 surfaces the
-          previously-invisible inventory interval. AMP is a required
-          plugin, so this card always renders. The agent's AMP collector
-          rides the unified `inventory` schedule. */}
-      {(() => {
-        const rawValue = form?.inventory?.intervalSeconds;
-        const displayValue =
-          rawValue === null || rawValue === undefined || rawValue === ""
-            ? ""
-            : String(rawValue);
-        const numeric = Number(rawValue);
-        const outOfRange =
-          rawValue !== null &&
-          rawValue !== undefined &&
-          rawValue !== "" &&
-          (!Number.isFinite(numeric) ||
-            numeric < INVENTORY_INTERVAL_MIN ||
-            numeric > INVENTORY_INTERVAL_MAX);
-        return (
-          <Box
-            sx={{
-              mt: 2,
-              p: 1.5,
-              border: `1px solid ${BRAND.border}`,
-              borderRadius: 2,
-              bgcolor: BRAND.surfaceMuted,
-            }}
-          >
-            <Typography
-              variant="overline"
-              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
-            >
-              Inventory schedule (AMP)
-            </Typography>
-            <TextField
-              label="Asset collection interval (seconds)"
-              type="number"
-              size="small"
-              fullWidth
-              value={displayValue}
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Number(raw);
-                onChange({
-                  ...form,
-                  inventory: { ...(form.inventory || {}), intervalSeconds: next },
-                });
-              }}
-              disabled={readOnly}
-              inputProps={{
-                min: INVENTORY_INTERVAL_MIN,
-                max: INVENTORY_INTERVAL_MAX,
-                step: 60,
-              }}
-              error={outOfRange}
-              helperText={
-                outOfRange
-                  ? `Must be between ${INVENTORY_INTERVAL_MIN} and ${INVENTORY_INTERVAL_MAX} seconds`
-                  : "Blank = use backend default (6h / 21600s). Range 60–86400."
-              }
-              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
-            />
-          </Box>
-        );
-      })()}
+      {/* Collection-interval cards — inventory (always, AMP is required),
+          compliance/patch (gated by their implying plugin), and the agent
+          update probe. Deduped into IntervalScheduleCard. */}
+      <IntervalScheduleCard
+        form={form}
+        onChange={onChange}
+        readOnly={readOnly}
+        formKey="inventory"
+        title="Inventory schedule (AMP)"
+        label="Asset collection interval (seconds)"
+        min={INVENTORY_INTERVAL_MIN}
+        max={INVENTORY_INTERVAL_MAX}
+        step={60}
+        bgcolor={BRAND.surfaceMuted}
+        helperText="Blank = use backend default (6h / 21600s). Range 60–86400."
+      />
 
-      {/* Compliance schedule — only surfaces when a plugin that implies
-          the compliance module is active (today: SCP). A dedicated card
-          below keeps this additive: the day we add more compliance-scoped
-          settings (retention, skip-on-battery, etc.) they drop in here
-          without restructuring the form. */}
-      {(() => {
-        const complianceActive = catalog.some(
-          (p) => p.impliesModule === "compliance" && form.plugins[p.key]
-        );
-        if (!complianceActive) return null;
-        const rawValue = form?.compliance?.intervalSeconds;
-        // Empty string (not null) so the TextField shows as unset rather
-        // than forcing a 0 that would then fail validation.
-        const displayValue =
-          rawValue === null || rawValue === undefined || rawValue === ""
-            ? ""
-            : String(rawValue);
-        const numeric = Number(rawValue);
-        const outOfRange =
-          rawValue !== null &&
-          rawValue !== undefined &&
-          rawValue !== "" &&
-          (!Number.isFinite(numeric) ||
-            numeric < COMPLIANCE_INTERVAL_MIN ||
-            numeric > COMPLIANCE_INTERVAL_MAX);
-        return (
-          <Box
-            sx={{
-              mt: 2,
-              p: 1.5,
-              border: `1px solid ${BRAND.border}`,
-              borderRadius: 2,
-              bgcolor: BRAND.tealSoft,
-            }}
-          >
-            <Typography
-              variant="overline"
-              sx={{ color: BRAND.tealText, fontWeight: 800, letterSpacing: 1.2 }}
-            >
-              Compliance schedule
-            </Typography>
-            <TextField
-              label="Collection interval (seconds)"
-              type="number"
-              size="small"
-              fullWidth
-              value={displayValue}
-              onChange={(e) => {
-                const raw = e.target.value;
-                // Empty field → null so formToPolicy omits the compliance
-                // block entirely (backend default 8h takes over).
-                const next = raw === "" ? null : Number(raw);
-                onChange({
-                  ...form,
-                  compliance: { ...(form.compliance || {}), intervalSeconds: next },
-                });
-              }}
-              disabled={readOnly}
-              inputProps={{
-                min: COMPLIANCE_INTERVAL_MIN,
-                max: COMPLIANCE_INTERVAL_MAX,
-                step: 60,
-              }}
-              error={outOfRange}
-              helperText={
-                outOfRange
-                  ? `Must be between ${COMPLIANCE_INTERVAL_MIN} and ${COMPLIANCE_INTERVAL_MAX} seconds`
-                  : "Blank = use backend default (8h / 28800s). Range 300–86400."
-              }
-              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
-            />
-          </Box>
-        );
-      })()}
+      {catalog.some((p) => p.impliesModule === "compliance" && form.plugins[p.key]) ? (
+        <IntervalScheduleCard
+          form={form}
+          onChange={onChange}
+          readOnly={readOnly}
+          formKey="compliance"
+          title="Compliance schedule"
+          label="Collection interval (seconds)"
+          min={COMPLIANCE_INTERVAL_MIN}
+          max={COMPLIANCE_INTERVAL_MAX}
+          step={60}
+          bgcolor={BRAND.tealSoft}
+          titleColor={BRAND.tealText}
+          helperText="Blank = use backend default (8h / 28800s). Range 300–86400."
+        />
+      ) : null}
 
-      {(() => {
-        const patchActive = catalog.some(
-          (p) => p.impliesModule === "patch" && form.plugins[p.key]
-        );
-        if (!patchActive) return null;
-        const rawValue = form?.patch?.intervalSeconds;
-        const displayValue =
-          rawValue === null || rawValue === undefined || rawValue === ""
-            ? ""
-            : String(rawValue);
-        const numeric = Number(rawValue);
-        const outOfRange =
-          rawValue !== null &&
-          rawValue !== undefined &&
-          rawValue !== "" &&
-          (!Number.isFinite(numeric) ||
-            numeric < PATCH_INTERVAL_MIN ||
-            numeric > PATCH_INTERVAL_MAX);
-        return (
-          <Box
-            sx={{
-              mt: 2,
-              p: 1.5,
-              border: `1px solid ${BRAND.border}`,
-              borderRadius: 2,
-              bgcolor: BRAND.cyanSoft,
-            }}
-          >
-            <Typography
-              variant="overline"
-              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
-            >
-              Patch schedule
-            </Typography>
-            <TextField
-              label="Patch scan interval (seconds)"
-              type="number"
-              size="small"
-              fullWidth
-              value={displayValue}
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Number(raw);
-                onChange({
-                  ...form,
-                  patch: { ...(form.patch || {}), intervalSeconds: next },
-                });
-              }}
-              disabled={readOnly}
-              inputProps={{
-                min: PATCH_INTERVAL_MIN,
-                max: PATCH_INTERVAL_MAX,
-                step: 300,
-              }}
-              error={outOfRange}
-              helperText={
-                outOfRange
-                  ? `Must be between ${PATCH_INTERVAL_MIN} and ${PATCH_INTERVAL_MAX} seconds`
-                  : "Blank = use backend default (24h / 86400s). Range 300–604800."
-              }
-              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
-            />
-          </Box>
-        );
-      })()}
+      {catalog.some((p) => p.impliesModule === "patch" && form.plugins[p.key]) ? (
+        <IntervalScheduleCard
+          form={form}
+          onChange={onChange}
+          readOnly={readOnly}
+          formKey="patch"
+          title="Patch schedule"
+          label="Patch scan interval (seconds)"
+          min={PATCH_INTERVAL_MIN}
+          max={PATCH_INTERVAL_MAX}
+          step={300}
+          bgcolor={BRAND.cyanSoft}
+          helperText="Blank = use backend default (24h / 86400s). Range 300–604800."
+        />
+      ) : null}
 
-      {/* Update schedule — controls how often the agent probes the
-          backend for a newer release. Previously hardcoded to 6h in
-          the agent's scheduler.ts; Sprint 1 of Policy v2 made it
-          editable. The actual install path is gated separately by
-          features.selfUpdate below. */}
-      {(() => {
-        const rawValue = form?.update?.intervalSeconds;
-        const displayValue =
-          rawValue === null || rawValue === undefined || rawValue === ""
-            ? ""
-            : String(rawValue);
-        const numeric = Number(rawValue);
-        const outOfRange =
-          rawValue !== null &&
-          rawValue !== undefined &&
-          rawValue !== "" &&
-          (!Number.isFinite(numeric) ||
-            numeric < UPDATE_INTERVAL_MIN ||
-            numeric > UPDATE_INTERVAL_MAX);
-        return (
-          <Box
-            sx={{
-              mt: 2,
-              p: 1.5,
-              border: `1px solid ${BRAND.border}`,
-              borderRadius: 2,
-              bgcolor: BRAND.surfaceMuted,
-            }}
-          >
-            <Typography
-              variant="overline"
-              sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
-            >
-              Agent update schedule
-            </Typography>
-            <TextField
-              label="Update probe interval (seconds)"
-              type="number"
-              size="small"
-              fullWidth
-              value={displayValue}
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Number(raw);
-                onChange({
-                  ...form,
-                  update: { ...(form.update || {}), intervalSeconds: next },
-                });
-              }}
-              disabled={readOnly}
-              inputProps={{
-                min: UPDATE_INTERVAL_MIN,
-                max: UPDATE_INTERVAL_MAX,
-                step: 300,
-              }}
-              error={outOfRange}
-              helperText={
-                outOfRange
-                  ? `Must be between ${UPDATE_INTERVAL_MIN} and ${UPDATE_INTERVAL_MAX} seconds`
-                  : "Blank = use backend default (6h / 21600s). Set higher to slow down auto-update; disable entirely via Self-update toggle below."
-              }
-              sx={{ mt: 1, bgcolor: "#ffffff", borderRadius: 1 }}
-            />
-          </Box>
-        );
-      })()}
+      {/* Update schedule — install path gated separately by features.selfUpdate. */}
+      <IntervalScheduleCard
+        form={form}
+        onChange={onChange}
+        readOnly={readOnly}
+        formKey="update"
+        title="Agent update schedule"
+        label="Update probe interval (seconds)"
+        min={UPDATE_INTERVAL_MIN}
+        max={UPDATE_INTERVAL_MAX}
+        step={300}
+        bgcolor={BRAND.surfaceMuted}
+        helperText="Blank = use backend default (6h / 21600s). Set higher to slow down auto-update; disable entirely via Self-update toggle below."
+      />
 
       <FeaturesSection form={form} onChange={onChange} readOnly={readOnly} catalog={catalog} />
 
