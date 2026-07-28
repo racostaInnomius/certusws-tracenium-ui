@@ -32,27 +32,8 @@ import TenantSwitcher from "../msp/TenantSwitcher";
 import HierarchyBreadcrumb from "../msp/HierarchyBreadcrumb";
 const Portfolio = React.lazy(() => import("../msp/Portfolio"));
 
-const Assets = React.lazy(() => import("../pages/Assets"));
-const Overview = React.lazy(() => import("../pages/Overview"));
-const Configurations = React.lazy(() => import("../pages/Configurations"));
-const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
-const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
-const Welcome = React.lazy(() => import("../pages/Welcome"));
-const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
-const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
-const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
-const PluginControl = React.lazy(() => import("../pages/PluginControl"));
-const Jobs = React.lazy(() => import("../pages/Jobs"));
-const Policies = React.lazy(() => import("../pages/Policies"));
-const Audit = React.lazy(() => import("../pages/Audit"));
-const PKI = React.lazy(() => import("../pages/PKI"));
-const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
-const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
-const Alerts = React.lazy(() => import("../pages/Alerts"));
-const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
-const Retention = React.lazy(() => import("../pages/Retention"));
-const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
-const CryptoDiscovery = React.lazy(() => import("../pages/CryptoDiscovery"));
+import { renderPage } from "./pageRegistry";
+
 
 function PageFallback() {
   return (
@@ -910,130 +891,12 @@ export default function AppShell() {
     setTemporaryWarning(null);
   }, []);
 
-  // Default → Overview. Any unrecognized ?page= key also falls through
-  // to Overview, which is the safer behavior than dropping the user
-  // onto a page they didn't ask for.
-  let content = <Overview />;
-
-  if (selectedPage === "assets") {
-    // Assets keeps its welcome-state callback because the first-time
-    // empty-fleet flow is owned by this page, not by Overview.
-    content = (
-      <Assets
-        onAssetsEmptyStateChange={handleAssetsEmptyStateChange}
-        suppressEmptyStateOverlay
-      />
-    );
-  }
-
-  if (selectedPage === "configurations") {
-    content = <Configurations onNavigate={setSelectedPage} />;
-  }
-
-  // Device Enrollment is the new combined surface — sidebar entry for
-  // operators ("download installer + mint a token in the same flow").
-  if (selectedPage === "enrollment") {
-    content = <DeviceEnrollment />;
-  }
-
-  // Plugin Control — tenant-wide plugin enablement, split out of
-  // Policies so the "what's on" knob is separated from the "how it
-  // behaves" knobs. Admin-scoped at the UI layer; backend hardening
-  // (whitelist + role middleware) is Phase 2.
-  if (selectedPage === "plugin-control") {
-    content = <PluginControl />;
-  }
-
-  // Legacy `tokens` route kept alive so existing bookmarks / deep links
-  // (Settings → Tokens cards from prior releases, automation links)
-  // don't 404. The standalone TokensAdministrator still works; the new
-  // primary entry point is Device Enrollment.
-  if (selectedPage === "tokens") {
-    content = <TokensAdministrator />;
-  }
-
-  if (selectedPage === "tenants") {
-    content = <TenantsAdministrator mode="global" />;
-  }
-
-  if (selectedPage === "tenant-members") {
-    content = <TenantsAdministrator mode="tenant" />;
-  }
-
-  if (selectedPage === "welcome") {
-    content = <Welcome onNavigate={setSelectedPage} />;
-  }
-  // Agent releases — admin catalog of Tracenium agent installer
-  // binaries. The primary user-facing entry is the Device Enrollment
-  // → Agent Downloads tab; this page itself is mostly admin-only CRUD.
-  // Originally mounted at `software-delivery` until the 2026-05-01
-  // rename; the transition alias was dropped in Batch 3.
-  if (selectedPage === "agent-releases") {
-    content = <AgentReleases />;
-  }
-
-  // Software Delivery (SDP) — operator surface for deploying
-  // third-party software to the fleet. Distinct from `agent-releases`
-  // (which catalogs the Tracenium agent's own installer binaries).
-  // Two tabs: Catalog (CRUD packages) and Deployments (history +
-  // per-device results).
-  if (selectedPage === "software-delivery") {
-    content = <SoftwareDelivery onNavigate={setSelectedPage} />;
-  }
-
-  if (selectedPage === "jobs") {
-    content = <Jobs />;
-  }
-
-  if (selectedPage === "policies") {
-    content = <Policies />;
-  }
-
-  if (selectedPage === "audit") {
-    content = <Audit />;
-  }
-
-  if (selectedPage === "pki") {
-    content = <PKI />;
-  }
-
-  if (selectedPage === "ad") {
-    content = <SecurityCompliance />;
-  }
-
-  if (selectedPage === "patch") {
-    content = <PatchManagement />;
-  }
-
-  // Crypto Discovery (CDP) — certificate inventory discovered ON the
-  // devices by the cdp agent plugin. Distinct from PKI (the agent's
-  // own mTLS identity certs).
-  if (selectedPage === "cdp") {
-    content = <CryptoDiscovery />;
-  }
-
-  if (selectedPage === "remote-control") {
-    content = <RemoteControl />;
-  }
-
-  if (selectedPage === "alerts") {
-    content = <Alerts />;
-  }
-
-  // Retention — admin-only drilldown reached from the "Database retention"
-  // card on Settings. Mounted at top level (not nested under settings/*)
-  // because deep linking is one of the operational needs: paste the link
-  // into a maintenance ticket, hit it, see sizes + last-run audit.
-  if (selectedPage === "retention") {
-    content = <Retention onNavigate={setSelectedPage} />;
-  }
-
-  // Session security — auto-logout toggle + idle minutes. Same
-  // top-level dispatch as the other Settings sub-pages so deep
-  // linking works (?page=session-settings).
-  if (selectedPage === "session-settings") {
-    content = <SessionSettings onNavigate={setSelectedPage} />;
-  }
+  // Page dispatch lives in ./pageRegistry — one entry per page instead of a
+  // flat if-ladder that re-evaluated every branch on each render.
+  const content = renderPage(selectedPage, {
+    onNavigate: setSelectedPage,
+    onAssetsEmptyStateChange: handleAssetsEmptyStateChange,
+  });
 
   const shouldShowNoInformationOverlay =
     !inPortfolioMode &&
