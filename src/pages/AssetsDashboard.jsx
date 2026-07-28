@@ -89,6 +89,28 @@ import { AgentVersionDonut, DonutCard } from "../components/Overview/FleetCompos
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
 import { BRAND, ROLE } from "../theme/brand";
+import {
+  HOST_SORT_FIELDS,
+  readUrlFilters,
+  compareVersions,
+  bucketOfVersion,
+  toSafeNumber,
+  formatOperatingMode,
+  storageHealthColor,
+  getOsVersionDisplayTitle,
+  getOsVersionDisplaySubtitle,
+  formatDetailValue,
+  formatDetailDate,
+  formatDetailPercent,
+  coalesceValue,
+  normalizeHostRow,
+  buildHostsQuery,
+  getHostDeviceId,
+  getHostDisplayName,
+  isDeviceTerminalOrPendingDeletion,
+  isDecommissionJobTerminal,
+  getDecommissionErrorMessage,
+} from "../components/AssetsDashboard/hostHelpers";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -100,282 +122,6 @@ import { BRAND, ROLE } from "../theme/brand";
 // Anything the page doesn't recognize is silently ignored — we don't
 // trust the query string to set arbitrary state beyond the whitelist
 // below.
-
-const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux", "ios", "android"]);
-const ALLOWED_VERSION_BUCKETS = new Set([
-  "current",
-  "one_behind",
-  "older",
-  "unknown"
-]);
-
-function readUrlFilters() {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const platform = (params.get("platform") || "").toLowerCase();
-  const versionBucket = (params.get("versionBucket") || "").toLowerCase();
-  // Phase 4: optional `groupId` deep-link from the Asset Groups tab —
-  // operator can click "View devices" on a group and land on the
-  // Dashboard pre-scoped to that group's membership. We coerce to a
-  // positive integer string; anything else falls back to "".
-  const rawGroupId = String(params.get("groupId") || "").trim();
-  const groupIdValid = /^[0-9]+$/.test(rawGroupId) && Number(rawGroupId) > 0;
-  return {
-    platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
-    versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket)
-      ? versionBucket
-      : "",
-    groupId: groupIdValid ? rawGroupId : "",
-  };
-}
-
-// Semver-ish comparison returning a classic -1 / 0 / +1 trichotomy.
-// Non-numeric segments become 0 — matches the tolerance of the
-// classifyAgentVersions helper used by the Overview donut.
-function compareVersions(a, b) {
-  const parse = (v) =>
-    String(v || "").split(".").map((x) => Number(x) || 0);
-  const av = parse(a);
-  const bv = parse(b);
-  const len = Math.max(av.length, bv.length);
-  for (let i = 0; i < len; i += 1) {
-    const ai = av[i] ?? 0;
-    const bi = bv[i] ?? 0;
-    if (ai !== bi) return ai > bi ? 1 : -1;
-  }
-  return 0;
-}
-
-// Mirror of FleetComposition/classifyAgentVersions bucketing. Kept
-// local here because AssetsDashboard is in a different component
-// subtree and pulling a shared util out for 15 lines wasn't worth
-// adding a new shared module.
-function bucketOfVersion(version, canonicalLatest) {
-  if (!version || !canonicalLatest) return "unknown";
-  const cmp = compareVersions(version, canonicalLatest);
-  if (cmp >= 0) return "current";
-  const v = String(version).split(".").map((x) => Number(x) || 0);
-  const l = String(canonicalLatest).split(".").map((x) => Number(x) || 0);
-  if (v[0] === l[0] && v[1] === l[1] && Math.abs((l[2] || 0) - (v[2] || 0)) <= 2) {
-    return "one_behind";
-  }
-  return "older";
-}
-
-function toSafeNumber(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-// Human labels for the mobile MDM/MAM operating mode reported in amp.managed.
-function formatOperatingMode(value) {
-  const v = String(value || "").trim();
-  if (!v) return "—";
-  const map = {
-    mdmMam: "MDM + MAM (fully managed)",
-    mdmOnly: "MDM only (device managed)",
-    mamOnly: "MAM only (app managed)",
-    unmanaged: "Unmanaged",
-    standalone: "Standalone",
-  };
-  return map[v] || v;
-}
-
-// Storage-health chip color for the mobile managed panel.
-function storageHealthColor(value) {
-  const v = String(value || "").trim().toLowerCase();
-  if (v === "ok" || v === "healthy") return ROLE.positive;
-  if (v === "low" || v === "warning") return "#B07818";
-  if (v === "critical" || v === "full") return ROLE.critical;
-  return BRAND.gray;
-}
-
-function getOsVersionDisplayTitle(row) {
-  return (
-    row?.display_title ||
-    row?.commercial_name ||
-    row?.os_label ||
-    "Unknown OS"
-  );
-}
-
-function getOsVersionDisplaySubtitle(row) {
-  return (
-    row?.display_subtitle ||
-    row?.technical_version ||
-    row?.os_version ||
-    ""
-  );
-}
-
-function formatDetailValue(value, fallback = "—") {
-  if (value === null || value === undefined) return fallback;
-  const text = String(value).trim();
-  return text ? text : fallback;
-}
-
-function formatDetailDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h24",
-  });
-}
-
-function formatDetailPercent(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return "—";
-  return `${parsed.toFixed(1)}%`;
-}
-
-function coalesceValue(...values) {
-  for (const value of values) {
-    if (value === null || value === undefined) continue;
-    const text = String(value).trim();
-    if (text) return value;
-  }
-  return undefined;
-}
-
-const HOST_SORT_FIELDS = new Set([
-  "hostname",
-  "agentId",
-  "osPlatform",
-  "osVersion",
-  "manufacturer",
-  "model",
-  "lastLogonUser",
-  "localIp",
-  "agentVersion",
-  "collectedAtUtc",
-]);
-
-function normalizeHostRow(row = {}) {
-  const agentId = coalesceValue(row.agentId, row.agent_id, row.deviceId, row.device_id);
-  const hostname = coalesceValue(row.hostname, row.host, row.deviceName, row.device_name);
-  const osPlatform = coalesceValue(row.osPlatform, row.os_platform, row.platform);
-  const osVersion = coalesceValue(row.osVersion, row.os_version, row.version);
-  const lastLogonUser = coalesceValue(row.lastLogonUser, row.last_logon_user);
-  const localIp = coalesceValue(row.localIp, row.local_ip);
-  const agentVersion = coalesceValue(row.agentVersion, row.agent_version);
-  const collectedAtUtc = coalesceValue(row.collectedAtUtc, row.collected_at_utc);
-
-  return {
-    ...row,
-    agentId,
-    agent_id: agentId,
-    hostname,
-    osPlatform,
-    os_platform: osPlatform,
-    osVersion,
-    os_version: osVersion,
-    lastLogonUser,
-    last_logon_user: lastLogonUser,
-    localIp,
-    local_ip: localIp,
-    agentVersion,
-    agent_version: agentVersion,
-    collectedAtUtc,
-    collected_at_utc: collectedAtUtc,
-    manufacturer: coalesceValue(row.manufacturer),
-    model: coalesceValue(row.model),
-  };
-}
-
-function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
-  const params = new URLSearchParams();
-  params.set("page", String(page + 1));
-  params.set("pageSize", String(pageSize));
-
-  const normalizedSearch = String(search || "").trim();
-  if (normalizedSearch.length >= 3) {
-    params.set("search", normalizedSearch);
-  }
-
-  params.set("sortBy", HOST_SORT_FIELDS.has(sortBy) ? sortBy : "hostname");
-  params.set("sortDir", sortDir === "desc" ? "desc" : "asc");
-
-  return params.toString();
-}
-
-
-function getHostDeviceId(row) {
-  const safeRow = row || {};
-  return coalesceValue(
-    safeRow.agentId,
-    safeRow.agent_id,
-    safeRow.deviceId,
-    safeRow.device_id
-  );
-}
-
-function getHostDisplayName(row) {
-  const safeRow = row || {};
-  return coalesceValue(
-    safeRow.hostname,
-    safeRow.host,
-    safeRow.deviceName,
-    safeRow.device_name,
-    getHostDeviceId(safeRow)
-  );
-}
-
-function normalizeDeviceLifecycleStatus(row) {
-  const safeRow = row || {};
-  return String(
-    safeRow.lifecycleStatus ||
-      safeRow.deviceStatus ||
-      safeRow.status ||
-      safeRow.decommissionStatus ||
-      safeRow.decommission_status ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-}
-
-function isDeviceTerminalOrPendingDeletion(row) {
-  const status = normalizeDeviceLifecycleStatus(row);
-  return [
-    "DELETION_PENDING",
-    "DECOMMISSION_PENDING",
-    "DECOMMISSIONING",
-    "DECOMMISSIONED",
-    "PURGE_PENDING",
-    "PURGED",
-  ].includes(status);
-}
-
-function isDecommissionJobTerminal(status) {
-  return ["COMPLETED", "DECOMMISSIONED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(
-    String(status || "").toUpperCase()
-  );
-}
-
-function getDecommissionErrorMessage(error) {
-  const code = String(error?.body?.error || error?.body?.code || "").toUpperCase();
-
-  const knownMessages = {
-    FORBIDDEN: "You do not have permission to decommission this device.",
-    DEVICE_NOT_FOUND: "Device was not found.",
-    DEVICE_ALREADY_DECOMMISSIONED: "This device is already decommissioned.",
-    DEVICE_DECOMMISSION_IN_PROGRESS: "Device decommission is already in progress.",
-    INVALID_CONFIRMATION: "Confirmation does not match the device hostname or ID.",
-  };
-
-  return (
-    knownMessages[code] ||
-    error?.body?.message ||
-    error?.message ||
-    "Unable to start device decommission."
-  );
-}
 
 function DeviceDecommissionConfirmDialog({
   open,
