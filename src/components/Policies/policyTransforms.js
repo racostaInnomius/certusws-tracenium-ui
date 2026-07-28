@@ -41,6 +41,23 @@ export function pickFeature(policy, key) {
   return null; // unset
 }
 
+/**
+ * Turn a newline-separated textarea into a clean path array.
+ *
+ * Operators paste these lists, so blank lines and stray whitespace are the
+ * norm rather than the exception. Trailing separators are stripped too:
+ * "C:\Users\" and "C:\Users" are the same root, but only one of them
+ * matches what the agent compares against.
+ */
+export function splitPathLines(text) {
+  if (typeof text !== "string") return [];
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => (line.length > 1 ? line.replace(/[\\/]+$/, "") : line));
+}
+
 // ── Security Policy schema mirror (Sprint 2 of Policy v2) ─────────
 // Stays in sync with src/core/policy-runtime.ts:SecurityPolicy in the
 // agent + the validator in modules/policies/policies.service.ts. The
@@ -332,6 +349,14 @@ export function readFormFromPolicy(policy, catalog = []) {
       remoteScreen: pickFeature(policy, "remoteScreen"),  // rcp.screen (M3.S1)
       remoteRequireConsent: pickFeature(policy, "remoteRequireConsent"), // user-attended approval
     },
+    // rcp.file confinement (policyJson.rcp.file). Edited as newline-separated
+    // text because operators paste path lists; converted to/from arrays at
+    // the policy boundary. Empty ⇒ the key is omitted and the agent applies
+    // its own platform defaults, which are already the secure posture.
+    rcpFile: {
+      roots: (policy?.rcp?.file?.roots ?? []).join("\n"),
+      denyPaths: (policy?.rcp?.file?.denyPaths ?? []).join("\n"),
+    },
     // Security Policy v2 — separate sub-form so the security cards
     // can be a sibling section. Stored back into policy.security on
     // formToPolicy. Empty policies result in the empty default
@@ -459,6 +484,23 @@ export function formToPolicy(form, catalog = []) {
   }
   if (Object.keys(features).length > 0) {
     policy.features = features;
+  }
+
+  // ── rcp.file confinement ────────────────────────────────────────
+  // Same omit-when-plugin-off rule as the RCP feature flags above, and
+  // the same omit-when-empty rule as the rest of formToPolicy: an absent
+  // key means "no opinion", which the agent reads as "use my platform
+  // defaults". That is deliberately NOT the same as an empty array, which
+  // would mean "no roots at all" — so we never emit one.
+  if (modules.remoteControl === true) {
+    const rcpFile = {};
+    const roots = splitPathLines(form?.rcpFile?.roots);
+    const denyPaths = splitPathLines(form?.rcpFile?.denyPaths);
+    if (roots.length > 0) rcpFile.roots = roots;
+    if (denyPaths.length > 0) rcpFile.denyPaths = denyPaths;
+    if (Object.keys(rcpFile).length > 0) {
+      policy.rcp = { ...(policy.rcp || {}), file: rcpFile };
+    }
   }
 
   // ── Security policy block (Sprint 2 of Policy v2) ───────────────

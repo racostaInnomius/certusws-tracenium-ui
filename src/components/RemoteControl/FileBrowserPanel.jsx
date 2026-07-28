@@ -62,6 +62,7 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
@@ -101,6 +102,36 @@ function parentPath(path) {
   const trimmed = path.replace(/\/$/, "");
   const idx = trimmed.lastIndexOf("/");
   return idx <= 0 ? "/" : trimmed.slice(0, idx);
+}
+
+// Refusals from the agent's path jail (see plugins/rcp/path-jail.ts). These
+// arrive on a `list` with no transferId, so they aren't transfer failures —
+// they mean "that location is not reachable in this session".
+const PATH_REFUSAL_CODES = new Set([
+  "PATH_OUTSIDE_ROOTS",
+  "PATH_DENIED",
+  "PATH_INVALID",
+  "PATH_UNRESOLVABLE"
+]);
+
+/** Last path component, for the root shortcut chips: "C:\Users" → "Users".
+ *  Falls back to the whole string for a bare drive or "/". */
+function shortRootLabel(root) {
+  const trimmed = String(root || "").replace(/[\\/]+$/, "");
+  const parts = trimmed.split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : trimmed || "/";
+}
+
+/** True when `path` sits inside one of the session's roots. Used to stop the
+ *  Up button before it walks into a refusal. Case-insensitive because a
+ *  Windows agent reports C:\Users while the user may have typed c:\users. */
+function isInsideRoots(path, roots) {
+  if (!Array.isArray(roots) || roots.length === 0) return true; // unconfined agent
+  const p = String(path || "").replace(/[\\/]+$/, "").toLowerCase();
+  return roots.some((r) => {
+    const root = String(r).replace(/[\\/]+$/, "").toLowerCase();
+    return p === root || p.startsWith(root + "/") || p.startsWith(root + "\\");
+  });
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -233,6 +264,16 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [errorMsg, setErrorMsg] = React.useState("");
   const [currentPath, setCurrentPath] = React.useState("/");
+  // Roots the agent will let this session reach. `null` = we haven't heard
+  // back yet (or the agent is too old to answer), `[]` = old agent, treat
+  // the filesystem as unconfined the way we always did.
+  const [roots, setRoots] = React.useState(null);
+  const rootsRef = React.useRef(null);
+  const rootsTimerRef = React.useRef(null);
+  // Inline "that location is off limits" notice. Distinct from `errorMsg`,
+  // which tears the panel down — a refused path leaves the session perfectly
+  // usable, the operator just has to go somewhere else.
+  const [pathNotice, setPathNotice] = React.useState("");
   const [entries, setEntries] = React.useState([]);
   const [listing, setListing] = React.useState(false);
   const [transfers, setTransfers] = React.useState([]);       // { id, name, path, direction, sizeBytes, transferred, status }
@@ -328,7 +369,20 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         dc.onopen = () => {
           if (!destroyed) {
             setState(STATE.BROWSING);
-            sendList("/");
+            // Ask where we're allowed to start. The agent confines the
+            // session to a set of roots, so "/" is normally outside it —
+            // we can't just open there any more.
+            dcSend({ op: "roots" });
+            // Agents older than the confinement change never answer that
+            // op. Fall back to the historical behaviour if nothing arrives,
+            // so a mixed-version fleet keeps working during the rollout.
+            rootsTimerRef.current = setTimeout(() => {
+              if (destroyed) return;
+              if (rootsRef.current === null) {
+                rootsRef.current = [];
+                sendList("/");
+              }
+            }, 1500);
           }
         };
         dc.onclose = () => {
@@ -455,6 +509,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
     return () => {
       destroyed = true;
+      if (rootsTimerRef.current) {
+        clearTimeout(rootsTimerRef.current);
+        rootsTimerRef.current = null;
+      }
       for (const fn of cleanupFns) fn();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,6 +528,8 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         setCurrentPath(msg.path ?? currentPath);
         setEntries(Array.isArray(msg.entries) ? msg.entries : []);
         setListing(false);
+        // A successful listing means we're somewhere legal again.
+        setPathNotice("");
         break;
       }
       case "chunk": {
@@ -519,6 +579,30 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         startUploadChunks(tid, upload.file);
         break;
       }
+      // The agent tells us which subtrees this session may reach. Sent in
+      // reply to { op: "roots" } at channel open.
+      case "roots": {
+        if (rootsTimerRef.current) {
+          clearTimeout(rootsTimerRef.current);
+          rootsTimerRef.current = null;
+        }
+        const list = Array.isArray(msg.roots) ? msg.roots.filter(Boolean) : [];
+        rootsRef.current = list;
+        setRoots(list);
+        if (list.length > 0) {
+          setCurrentPath(list[0]);
+          sendList(list[0]);
+        } else {
+          // Confined to nothing — the operator has an empty roots list in
+          // policy. Say so rather than showing an empty directory.
+          setErrorMsg(
+            "Remote file access is enabled but no allowed locations are configured for this device."
+          );
+          setState(STATE.ERROR);
+        }
+        break;
+      }
+
       case "error": {
         const tid = msg.transferId;
         if (tid) {
@@ -528,6 +612,14 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               t.id === tid ? { ...t, status: "failed", errorMsg: msg.message } : t
             )
           );
+          break;
+        }
+        // Path refusals arrive without a transferId when they come from a
+        // `list`. Surface them inline — the listing simply didn't happen, so
+        // without this the panel would spin on "Loading…" forever.
+        if (PATH_REFUSAL_CODES.has(msg.code)) {
+          setListing(false);
+          setPathNotice(msg.message || "That location is not available.");
         }
         break;
       }
@@ -558,8 +650,16 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
   function handleUp() {
     const p = parentPath(currentPath);
-    if (p !== currentPath) handleNavigate(p);
+    if (p === currentPath) return;
+    // Stop at the root boundary rather than letting the agent refuse — the
+    // operator gets a disabled button instead of an error they can't act on.
+    if (!isInsideRoots(p, roots)) return;
+    handleNavigate(p);
   }
+
+  /** True when Up would leave the jail (or we're already at the top). */
+  const atTopOfJail =
+    currentPath === "/" || !isInsideRoots(parentPath(currentPath), roots);
 
   function handleDownload(entry) {
     const transferId = crypto.randomUUID();
@@ -846,7 +946,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                   aria-label="Go to parent directory"
                   size="small"
                   onClick={handleUp}
-                  disabled={currentPath === "/"}
+                  disabled={atTopOfJail}
                   sx={{ color: BRAND.teal }}
                 >
                   <ArrowUpwardOutlinedIcon fontSize="small" />
@@ -868,6 +968,32 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                 )}
               </IconButton>
             </Tooltip>
+            {/* Root shortcuts. Only worth showing when the agent gave us
+                more than one — with a single root the Up button already
+                clamps there and a lone chip is just noise. */}
+            {Array.isArray(roots) && roots.length > 1 && (
+              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                {roots.map((r) => (
+                  <Tooltip key={r} title={r}>
+                    <Chip
+                      size="small"
+                      label={shortRootLabel(r)}
+                      onClick={() => handleNavigate(r)}
+                      variant={isInsideRoots(currentPath, [r]) ? "filled" : "outlined"}
+                      sx={{
+                        maxWidth: 140,
+                        fontSize: 11,
+                        height: 22,
+                        cursor: "pointer",
+                        ...(isInsideRoots(currentPath, [r])
+                          ? { bgcolor: BRAND.tealSoft, color: BRAND.teal }
+                          : { borderColor: BRAND.border, color: BRAND.gray })
+                      }}
+                    />
+                  </Tooltip>
+                ))}
+              </Stack>
+            )}
             <Typography
               variant="caption"
               sx={{
@@ -903,6 +1029,27 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               onChange={handleFileSelected}
             />
           </Stack>
+
+          {/* Path refused by the agent's confinement policy. Non-fatal: the
+              session is fine, this location just isn't reachable. */}
+          {pathNotice && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{
+                px: 2,
+                py: 1,
+                bgcolor: ROLE.cautionSoft,
+                borderBottom: `1px solid ${BRAND.border}`
+              }}
+            >
+              <LockOutlinedIcon sx={{ fontSize: 16, color: ROLE.caution }} />
+              <Typography variant="caption" sx={{ color: ROLE.caution, fontWeight: 600 }}>
+                {pathNotice}
+              </Typography>
+            </Stack>
+          )}
 
           {/* Split: file list + transfer queue */}
           <Grid container sx={{ flex: 1, overflow: "hidden" }}>

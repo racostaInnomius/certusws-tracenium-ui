@@ -9,7 +9,15 @@
 // writes the whole form back via onChange.
 
 import * as React from "react";
-import { Box, Chip, FormControlLabel, Stack, Switch, Typography } from "@mui/material";
+import {
+  Box,
+  Chip,
+  FormControlLabel,
+  Stack,
+  Switch,
+  TextField,
+  Typography
+} from "@mui/material";
 import { BRAND } from "../../theme/brand";
 
 export default function FeaturesSection({ form, onChange, readOnly = false, catalog = [] }) {
@@ -237,6 +245,71 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
               }
               sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
             />
+
+            {/* ── rcp.file confinement ────────────────────────────────
+                Only meaningful while file transfer is on. The agent
+                enforces a secure default set of roots plus a
+                non-negotiable deny list (its own credential directory,
+                registry hives, /etc secrets) whether or not anything is
+                entered here — these fields NARROW that, they can't widen
+                it past the built-in denies. */}
+            {form?.features?.remoteFile ? (
+              <Box sx={{ mt: 1.5, pl: 0.5, borderLeft: `2px solid ${BRAND.border}`, ml: 0.5 }}>
+                <Box sx={{ pl: 1.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25 }}>
+                    File access confinement
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: BRAND.gray, display: "block", mb: 1.25 }}
+                  >
+                    Remote file sessions run with full system privileges on the
+                    endpoint. Leave these blank to use the agent&apos;s defaults
+                    (user profiles, temp and app-data directories). One absolute
+                    path per line.
+                  </Typography>
+
+                  <TextField
+                    label="Allowed roots"
+                    placeholder={"/home\nC:\\Users"}
+                    multiline
+                    minRows={2}
+                    maxRows={6}
+                    fullWidth
+                    size="small"
+                    disabled={readOnly}
+                    value={form?.rcpFile?.roots ?? ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...form,
+                        rcpFile: { ...(form.rcpFile || {}), roots: e.target.value },
+                      })
+                    }
+                    helperText="Replaces the defaults entirely — it is not added to them."
+                    sx={{ mb: 1.5 }}
+                  />
+
+                  <TextField
+                    label="Additionally blocked paths"
+                    placeholder={"/srv/share/secrets"}
+                    multiline
+                    minRows={2}
+                    maxRows={6}
+                    fullWidth
+                    size="small"
+                    disabled={readOnly}
+                    value={form?.rcpFile?.denyPaths ?? ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...form,
+                        rcpFile: { ...(form.rcpFile || {}), denyPaths: e.target.value },
+                      })
+                    }
+                    helperText="Merged with the agent's built-in blocks. Blocking always beats allowing."
+                  />
+                </Box>
+              </Box>
+            ) : null}
           </Box>
             </Box>
           );

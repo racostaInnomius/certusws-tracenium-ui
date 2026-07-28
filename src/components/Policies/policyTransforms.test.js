@@ -159,3 +159,56 @@ describe("extractPolicyEnvelope", () => {
     expect(extractPolicyEnvelope(null)).toEqual({ raw: null, version: null, hash: null, updatedAt: null });
   });
 });
+
+// ── rcp.file confinement round-trip ──────────────────────────────────
+//
+// The form edits paths as newline-separated text; the policy carries
+// arrays. What matters is that an untouched form never invents a key —
+// an empty `roots: []` would read to the agent as "no roots at all",
+// which is very different from "no opinion, use your defaults".
+describe("policyTransforms — rcp.file confinement", () => {
+  // `modules` in formToPolicy is derived from the plugin catalog, not from
+  // form.modules — so enabling RCP means enabling the rcp PLUGIN.
+  const withRcpOn = (policy = {}) =>
+    readFormFromPolicy({ ...policy, plugins: { enabled: ["rcp"] } }, catalog);
+
+  it("reads roots and denyPaths out of the policy as text", () => {
+    const form = readFormFromPolicy({
+      rcp: { file: { roots: ["/home", "/srv"], denyPaths: ["/srv/secrets"] } },
+    });
+    expect(form.rcpFile.roots).toBe("/home\n/srv");
+    expect(form.rcpFile.denyPaths).toBe("/srv/secrets");
+  });
+
+  it("yields empty strings when the policy has no rcp block", () => {
+    const form = readFormFromPolicy({});
+    expect(form.rcpFile).toEqual({ roots: "", denyPaths: "" });
+  });
+
+  it("writes the arrays back, trimming blanks and trailing separators", () => {
+    const form = withRcpOn();
+    form.rcpFile = { roots: "  /home  \n\n/srv/share/\n", denyPaths: "" };
+    const policy = formToPolicy(form, catalog);
+    expect(policy.rcp.file.roots).toEqual(["/home", "/srv/share"]);
+    // denyPaths was empty → key omitted entirely, not an empty array.
+    expect(policy.rcp.file.denyPaths).toBeUndefined();
+  });
+
+  it("omits the rcp key entirely when both fields are blank", () => {
+    const form = withRcpOn();
+    form.rcpFile = { roots: "", denyPaths: "" };
+    expect(formToPolicy(form, catalog).rcp).toBeUndefined();
+  });
+
+  it("omits the rcp key when the remote control plugin is off", () => {
+    const form = readFormFromPolicy({ plugins: { enabled: [] } }, catalog);
+    form.rcpFile = { roots: "/home" };
+    expect(formToPolicy(form, catalog).rcp).toBeUndefined();
+  });
+
+  it("survives a full read → write round trip", () => {
+    const original = { rcp: { file: { roots: ["/home"], denyPaths: ["/home/x"] } } };
+    const policy = formToPolicy(withRcpOn(original), catalog);
+    expect(policy.rcp.file).toEqual({ roots: ["/home"], denyPaths: ["/home/x"] });
+  });
+});
