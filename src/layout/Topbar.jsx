@@ -5,6 +5,7 @@ import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { getAlertsUnreadCount } from "../api/alerts";
 import { performLogout } from "../auth/logout";
+import { useMsp } from "../msp/MspContext";
 
 import { BRAND } from "../theme/brand";
 
@@ -44,6 +45,13 @@ export default function Topbar({ onMenuClick }) {
 
   const [unreadCount, setUnreadCount] = React.useState(0);
 
+  // Alerts are tenant-scoped, but the Topbar also renders in portfolio mode
+  // (vendor / MSP operator with no client selected), where there is no active
+  // tenant to count alerts for. Polling there asks the backend for a tenant
+  // that isn't set — noise at best. Mirrors AppShell's `inPortfolioMode`.
+  const { hasPortfolio, activeTenant } = useMsp();
+  const inPortfolioMode = hasPortfolio && !activeTenant;
+
   // Poll /alerts/unread-count. Uses setTimeout chained re-arm (not
   // setInterval) so when a request runs long the next tick schedules
   // relative to actual completion, not wall-clock — avoids request
@@ -52,6 +60,15 @@ export default function Topbar({ onMenuClick }) {
   React.useEffect(() => {
     let cancelled = false;
     let timer = null;
+
+    // No tenant context → nothing to count. Re-runs when a client is
+    // selected (inPortfolioMode flips false) and starts polling then.
+    if (inPortfolioMode) {
+      setUnreadCount(0);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const tick = async () => {
       if (cancelled) return;
@@ -88,7 +105,7 @@ export default function Topbar({ onMenuClick }) {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [inPortfolioMode]);
 
   return (
     <Box
