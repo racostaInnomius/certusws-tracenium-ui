@@ -13,6 +13,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+import { createEntryCache } from "./entryCache";
+
 const STORAGE_PREFIX = "tnm:http-cache:";
 const SESSION_SCOPE_STORAGE_KEY = "tnm:session-cache-scope:v1";
 const DEFAULT_SESSION_SCOPE = "anonymous";
@@ -25,7 +27,6 @@ export const AUTH_REQUIRED_EVENT = "tracenium:auth-required";
 
 let authRedirectStarted = false;
 
-const memCache = new Map();
 const inFlightGets = new Map();
 
 // Cross-cache clear hooks. http.js owns the session scope + active tenant (the
@@ -279,9 +280,14 @@ function safeJsonParse(value) {
   }
 }
 
-function storageKey(cacheKey) {
-  return `${STORAGE_PREFIX}${cacheKey}`;
-}
+// Two-tier entry engine shared with ../hooks/useCachedFetch (see entryCache.js).
+// NOTE: read/write here receive an ALREADY-scoped key (buildCacheKey runs at
+// the GET call site), so deriveKey is identity; invalidateApiCache builds the
+// key itself before delegating.
+const entryCache = createEntryCache({
+  storagePrefix: STORAGE_PREFIX,
+  unscopeKey: unscopedCacheKey,
+});
 
 function normalizeGetOptions(url, options = {}) {
   const profile = getCacheProfileForUrl(url);
@@ -401,126 +407,26 @@ function isFresh(entry, staleMs) {
 }
 
 function readGetCache(cacheKey, options) {
-  if (memCache.has(cacheKey)) {
-    const entry = memCache.get(cacheKey);
-
-    if (!isExpired(entry, options.storageMaxAgeMs)) {
-      return entry;
-    }
-
-    memCache.delete(cacheKey);
-  }
-
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.sessionStorage?.getItem(storageKey(cacheKey));
-    if (!raw) return null;
-
-    const parsed = safeJsonParse(raw);
-
-    if (!parsed || isExpired(parsed, options.storageMaxAgeMs)) {
-      window.sessionStorage?.removeItem(storageKey(cacheKey));
-      return null;
-    }
-
-    memCache.set(cacheKey, parsed);
-    return parsed;
-  } catch {
-    return null;
-  }
+  return entryCache.read(cacheKey, options.storageMaxAgeMs);
 }
 
 function writeGetCache(cacheKey, data) {
-  const entry = {
-    data,
-    ts: now(),
-  };
-
-  memCache.set(cacheKey, entry);
-
-  if (typeof window === "undefined") return entry;
-
-  try {
-    window.sessionStorage?.setItem(storageKey(cacheKey), JSON.stringify(entry));
-  } catch {
-    // Non-fatal. Some payloads may be too large for sessionStorage.
-    // Memory cache still helps during the active tab session.
-  }
-
-  return entry;
+  return entryCache.write(cacheKey, data);
 }
 
 export function invalidateApiCache(key) {
   if (!key) return;
-
-  const cacheKey = buildCacheKey(key);
-  memCache.delete(cacheKey);
-
-  if (typeof window === "undefined") return;
-
-  try {
-    window.sessionStorage?.removeItem(storageKey(cacheKey));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidate(buildCacheKey(key));
 }
 
 export function invalidateApiCachePrefix(prefix) {
   if (!prefix) return;
-
-  const normalizedPrefix = String(prefix);
-
-  Array.from(memCache.keys()).forEach((key) => {
-    if (unscopedCacheKey(key).startsWith(normalizedPrefix)) {
-      memCache.delete(key);
-    }
-  });
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const key = window.sessionStorage.key(i);
-
-      if (
-        key &&
-        key.startsWith(STORAGE_PREFIX) &&
-        unscopedCacheKey(key.slice(STORAGE_PREFIX.length)).startsWith(normalizedPrefix)
-      ) {
-        keysToRemove.push(key);
-      }
-    }
-
-    keysToRemove.forEach((key) => window.sessionStorage.removeItem(key));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidatePrefix(String(prefix));
 }
 
 export function clearApiCache() {
-  memCache.clear();
+  entryCache.clear();
   inFlightGets.clear();
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const key = window.sessionStorage.key(i);
-
-      if (key && key.startsWith(STORAGE_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
-
-    keysToRemove.forEach((key) => window.sessionStorage.removeItem(key));
-  } catch {
-    // best effort
-  }
 }
 
 function invalidateAfterMutation(url) {

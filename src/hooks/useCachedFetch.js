@@ -43,8 +43,9 @@ import {
   registerCacheClearListener,
 } from "../api/http";
 
-const memCache = new Map();
 const inFlight = new Map();
+
+import { createEntryCache } from "../api/entryCache";
 
 const STORAGE_PREFIX = "tnm:cache:";
 
@@ -95,143 +96,38 @@ function safeJsonParse(value) {
   }
 }
 
-function getStorageKey(key) {
-  return `${STORAGE_PREFIX}${key}`;
-}
+// Two-tier entry engine shared with ../api/http (see api/entryCache.js).
+// Scoping happens here: every key becomes `session::tenant::key`.
+const entryCache = createEntryCache({
+  storagePrefix: STORAGE_PREFIX,
+  deriveKey: buildScopedCacheKey,
+  unscopeKey: unscopedCacheKey,
+});
 
-function isEntryExpired(entry, storageMaxAgeMs) {
-  if (!entry || !entry.ts) return true;
-  return now() - Number(entry.ts) > storageMaxAgeMs;
-}
+const memCache = entryCache.memCache;
 
 function readCache(key, options = {}) {
-  const scopedKey = buildScopedCacheKey(key);
   const storageMaxAgeMs =
     Number(options.storageMaxAgeMs ?? DEFAULT_STORAGE_MAX_AGE_MS) ||
     DEFAULT_STORAGE_MAX_AGE_MS;
-
-  if (memCache.has(scopedKey)) {
-    const entry = memCache.get(scopedKey);
-
-    if (!isEntryExpired(entry, storageMaxAgeMs)) {
-      return entry;
-    }
-
-    memCache.delete(scopedKey);
-  }
-
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.sessionStorage?.getItem(getStorageKey(scopedKey));
-    if (!raw) return null;
-
-    const parsed = safeJsonParse(raw);
-    if (!parsed || isEntryExpired(parsed, storageMaxAgeMs)) {
-      window.sessionStorage?.removeItem(getStorageKey(scopedKey));
-      return null;
-    }
-
-    memCache.set(scopedKey, parsed);
-    return parsed;
-  } catch {
-    return null;
-  }
+  return entryCache.read(key, storageMaxAgeMs);
 }
 
 function writeCache(key, data) {
-  const scopedKey = buildScopedCacheKey(key);
-  const entry = {
-    data,
-    ts: now(),
-  };
-
-  memCache.set(scopedKey, entry);
-
-  if (typeof window === "undefined") return entry;
-
-  try {
-    window.sessionStorage?.setItem(getStorageKey(scopedKey), JSON.stringify(entry));
-  } catch {
-    // Non-fatal. Some responses may be too large or not serializable.
-    // The in-memory cache still works for the current session.
-  }
-
-  return entry;
+  return entryCache.write(key, data);
 }
 
 export function invalidateCache(key) {
-  if (!key) return;
-
-  const scopedKey = buildScopedCacheKey(key);
-  memCache.delete(scopedKey);
-
-  if (typeof window === "undefined") return;
-
-  try {
-    window.sessionStorage?.removeItem(getStorageKey(scopedKey));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidate(key);
 }
 
 export function invalidateCachePrefix(prefix) {
-  if (!prefix) return;
-
-  Array.from(memCache.keys()).forEach((key) => {
-    if (unscopedCacheKey(key).startsWith(prefix)) {
-      memCache.delete(key);
-    }
-  });
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const storageKey = window.sessionStorage.key(i);
-
-      if (
-        storageKey &&
-        storageKey.startsWith(STORAGE_PREFIX) &&
-        unscopedCacheKey(storageKey.slice(STORAGE_PREFIX.length)).startsWith(prefix)
-      ) {
-        keysToRemove.push(storageKey);
-      }
-    }
-
-    keysToRemove.forEach((storageKey) => {
-      window.sessionStorage.removeItem(storageKey);
-    });
-  } catch {
-    // best effort
-  }
+  entryCache.invalidatePrefix(prefix);
 }
 
 export function clearCachedFetch() {
-  memCache.clear();
+  entryCache.clear();
   inFlight.clear();
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const storageKey = window.sessionStorage.key(i);
-
-      if (storageKey && storageKey.startsWith(STORAGE_PREFIX)) {
-        keysToRemove.push(storageKey);
-      }
-    }
-
-    keysToRemove.forEach((storageKey) => {
-      window.sessionStorage.removeItem(storageKey);
-    });
-  } catch {
-    // best effort
-  }
 }
 
 // Wipe this cache whenever http.js flips the session scope (identity change),

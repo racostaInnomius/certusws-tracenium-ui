@@ -128,6 +128,25 @@ const FIELDS = [
     min: 1,
     max: 3650,
   },
+  // ── Remote Control (RCP) — tenant-DB audit. Blank = never (opt-in). ──
+  // Two windows because the content and the ledger age differently; see
+  // modules/db/migrations/20260728_retention_rcp.sql.
+  {
+    key: "rcpTranscriptDays",
+    table: "remote_session_io",
+    label: "Remote session transcripts",
+    hint: "Recorded terminal output of remote shell sessions — the biggest-growing RCP table, and the one that can contain whatever an operator happened to print on screen. Deleting a transcript keeps its session in the history. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "rcpSessionsDays",
+    table: "remote_sessions",
+    label: "Remote session history",
+    hint: "Who connected to which device, when, and which files moved. A few hundred bytes per session — usually kept far longer than the transcripts. Deleting a session also removes its transcript and file-transfer records. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
 ];
 
 function formatRows(n) {
