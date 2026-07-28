@@ -17,9 +17,9 @@
 //       { op: "frameStart", seq, width, height, chunks, cursorX, cursorY } // large
 //       { op: "frameChunk", seq, idx, data }
 //       { op: "frameDone",  seq }
-//       { op: "error",  code, message }
+//       { op: "error",  code, message, terminal }
 //   - Browser → Agent protocol:
-//       { op: "setQuality",  fps, quality }
+//       { op: "setQuality",  fps, quality }   // fps 1-15, quality 10-90
 //       { op: "stop" }
 //       { op: "mouseMove",  x, y }                  // M3.S4 — native display px
 //       { op: "mouseDown",  button, x, y }
@@ -130,6 +130,68 @@ function rttColor(rttMs, theme) {
   return theme.critical;
 }
 
+// Frame rate bounds. These MUST match MIN_FPS / MAX_FPS in the agent's
+// screen-session.ts — the agent clamps to its own range and echoes the
+// applied value back via `screenInfo`, so a mismatch here just means the
+// slider snaps after the round trip.
+//
+// The default stays at the agent's conservative 5 fps on purpose: a 1080p
+// JPEG at quality 60 is ~150-250 KB, so 5 fps is already ~8-10 Mbit/s over
+// TURN. Raising the ceiling is the operator's call on a LAN; the real fix
+// for bandwidth is dirty-rect capture, not a higher default.
+const MIN_FPS = 1;
+const MAX_FPS = 15;
+const DEFAULT_FPS = 5;
+
+// Operator-facing copy for the capture failures the agent can report. We
+// write these rather than showing the agent's own `message`, which is
+// phrased for whoever is reading the endpoint log.
+//
+// Every key here is a stable code produced by one of the three PrivSvc
+// implementations (ScreenCaptureDxgi.cs on Windows, privsvc/{macos,linux}
+// screen-capture.ts and their native helpers).
+const CAPTURE_ERROR_COPY = {
+  no_interactive_desktop:
+    "This device has no active interactive desktop right now. Screen sharing " +
+    "needs a user to be logged in. For a headless server, use a Shell session instead.",
+  wayland_unsupported:
+    "This device is running a Wayland session, which isn't supported by screen " +
+    "sharing yet. Ask the user to log out and back in selecting an X11 / Xorg " +
+    "session, then retry. Shell and file sessions work on Wayland normally.",
+  no_screen_recording_permission:
+    "macOS has not granted Screen Recording permission to the Tracenium capture " +
+    "helper. This is provisioned fleet-wide by the MDM PPPC profile — check that " +
+    "the profile is installed on this device.",
+  screen_capture_helper_missing:
+    "The screen capture helper isn't installed on this device. Reinstall or " +
+    "upgrade the agent package to deploy it.",
+  screen_capture_no_display:
+    "This device reports no attached display, so there is nothing to capture.",
+  x11_connect_failed:
+    "The capture helper could not reach the device's X server. The user may have " +
+    "logged out since the session started.",
+  screen_capture_init_failed:
+    "The device's screen capture stack failed to initialise. A GPU driver issue " +
+    "or a locked-down Windows build are the usual causes."
+};
+
+// Codes that describe a passing blip rather than a state the operator has to
+// act on. Only consulted for agents old enough not to send the `terminal`
+// flag — anything unrecognised from those is treated as fatal, matching the
+// behaviour before the flag existed.
+const TRANSIENT_CAPTURE_CODES = new Set([
+  "screen_capture_no_frame",
+  "screen_capture_failed",
+  "screen_capture_acquire_failed",
+  "screen_capture_encode_failed",
+  "screen_capture_ipc_error",
+  "screen_capture_spawn_failed",
+  "screen_capture_no_output",
+  "screen_capture_bad_output",
+  "sck_failed",
+  "out_of_memory"
+]);
+
 // ── StatusChip ─────────────────────────────────────────────────────────────
 
 function StatusChip({ state }) {
@@ -171,6 +233,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const [liveSize, setLiveSize]   = React.useState(null);   // last frame { width, height }
   const [liveFps, setLiveFps]     = React.useState(0);
   const [quality, setQuality]     = React.useState(60);     // JPEG quality 1-100
+  const [fps, setFps]             = React.useState(DEFAULT_FPS); // requested capture rate
+  // Non-fatal capture trouble: shown as a banner over the still-live canvas
+  // instead of replacing the viewer with an error page.
+  const [warning, setWarning]     = React.useState("");
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   // M3.S3 — telemetry & cursor overlay state.
   const [rtt, setRtt]             = React.useState(null);   // ms, null until first sample
@@ -190,8 +256,27 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   //          parts: Map<idx, string> } | null
   const assemblyRef = React.useRef(null);
 
-  // ── Quality slider — debounced send ──────────────────────────────────
+  // ── Stream settings (fps + quality) ──────────────────────────────────
+  //
+  // Both travel on the same `setQuality` message, so every send has to carry
+  // the CURRENT value of the other one. `fpsRef` mirrors the fps state so the
+  // auto-quality effect below can read it without taking fps as a dependency
+  // (which would make it re-fire — and re-send — on every fps change).
+  //
+  // This used to send `fps: screenInfo?.fps ?? 15`, i.e. it echoed back
+  // whatever the agent had just reported. The agent reports its own current
+  // rate, so the value was always a no-op and the capture rate was pinned at
+  // the agent's 5 fps default with no way for the operator to change it.
   const qualitySendTimer = React.useRef(null);
+  const fpsSendTimer = React.useRef(null);
+  const fpsRef = React.useRef(DEFAULT_FPS);
+  React.useEffect(() => {
+    fpsRef.current = fps;
+  }, [fps]);
+
+  function sendStreamSettings(nextFps, nextQuality) {
+    dcSend({ op: "setQuality", fps: nextFps, quality: nextQuality });
+  }
 
   function handleQualityChange(_, val) {
     // Moving the slider counts as manual override — disable auto so
@@ -200,11 +285,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     setQuality(val);
     if (qualitySendTimer.current) clearTimeout(qualitySendTimer.current);
     qualitySendTimer.current = setTimeout(() => {
-      dcSend({
-        op: "setQuality",
-        fps: screenInfo?.fps ?? 15,
-        quality: val
-      });
+      sendStreamSettings(fpsRef.current, val);
+    }, 300);
+  }
+
+  function handleFpsChange(_, val) {
+    setFps(val);
+    if (fpsSendTimer.current) clearTimeout(fpsSendTimer.current);
+    fpsSendTimer.current = setTimeout(() => {
+      sendStreamSettings(val, quality);
     }, 300);
   }
 
@@ -280,14 +369,12 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     if (lastAutoQualityRef.current === target) return;
     lastAutoQualityRef.current = target;
     setQuality(target);
-    dcSend({
-      op: "setQuality",
-      fps: screenInfo?.fps ?? 15,
-      quality: target
-    });
-  // dcSend is stable (reads from ref); screenInfo.fps included so a
-  // pending screenInfo update doesn't ship a stale fps with the quality.
-  }, [autoQuality, rtt, state, screenInfo?.fps]);
+    // Auto adapts quality only — the operator's chosen frame rate is
+    // preserved, so we read it from the ref rather than the render closure.
+    sendStreamSettings(fpsRef.current, target);
+  // dcSend is stable (reads from ref); fps rides on fpsRef so changing it
+  // doesn't re-fire this effect.
+  }, [autoQuality, rtt, state]);
 
   // ── M3.S4 — Input forwarding ─────────────────────────────────────────
   //
@@ -577,6 +664,11 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     };
     img.src = `data:image/jpeg;base64,${data}`;
 
+    // A frame arrived, so whatever transient the agent complained about has
+    // passed. Functional update so React bails out when there's no banner up
+    // — otherwise this would re-render the panel on every single frame.
+    setWarning((w) => (w ? "" : w));
+
     // FPS counter — stamp on message arrival, not on img.onload, so
     // the counter reflects network cadence rather than decode latency.
     const now = performance.now();
@@ -603,11 +695,19 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
     switch (msg.op) {
       case "screenInfo": {
+        const appliedFps = Number(msg.fps || DEFAULT_FPS);
         setScreenInfo({
           width:  Number(msg.width  || 0),
           height: Number(msg.height || 0),
-          fps:    Number(msg.fps    || 15)
+          fps:    appliedFps
         });
+        // The agent echoes the rate it actually applied (after its own
+        // clamp) both on the first frame and whenever setQuality changes it.
+        // Snapping the slider to that keeps the control honest instead of
+        // showing a number the device never honoured.
+        if (Number.isFinite(appliedFps) && appliedFps > 0) {
+          setFps(Math.max(MIN_FPS, Math.min(MAX_FPS, Math.round(appliedFps))));
+        }
         break;
       }
 

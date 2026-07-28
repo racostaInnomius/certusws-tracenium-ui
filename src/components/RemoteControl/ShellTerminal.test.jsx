@@ -5,7 +5,7 @@
 // jsdom has no WebRTC and no real xterm canvas, so we isolate the
 // component from all three transports:
 //
-//   * xterm / xterm-addon-fit / xterm-addon-web-links + the css import
+//   * @xterm/xterm / @xterm/addon-fit / @xterm/addon-web-links + the css import
 //     are vi.mock'd with minimal fakes. The Terminal fake records the
 //     onData / onResize callbacks and exposes write/writeln/clear/focus
 //     so we can drive the "stdout" path and assert keystroke piping.
@@ -34,7 +34,7 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 // Hoisted holder so the test body can reach the last Terminal instance.
 const xtermState = vi.hoisted(() => ({ lastTerm: null }));
 
-vi.mock("xterm", () => {
+vi.mock("@xterm/xterm", () => {
   class FakeTerminal {
     constructor() {
       this.cols = 80;
@@ -73,19 +73,19 @@ vi.mock("xterm", () => {
   return { Terminal: FakeTerminal };
 });
 
-vi.mock("xterm-addon-fit", () => ({
+vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
     fit() {}
   },
 }));
 
-vi.mock("xterm-addon-web-links", () => ({
+vi.mock("@xterm/addon-web-links", () => ({
   WebLinksAddon: class {},
 }));
 
 // The component imports the stylesheet for side effects; jsdom can't
 // parse it, so stub it to nothing.
-vi.mock("xterm/css/xterm.css", () => ({}));
+vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 
 import ShellTerminal from "./ShellTerminal";
 
