@@ -38,13 +38,6 @@ import {
   Snackbar,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
   Tabs,
   TextField,
   Typography,
@@ -74,7 +67,6 @@ import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
-import MobileCommandsPanel from "../components/AssetManagement/MobileCommandsPanel";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import CompositionBars from "../components/common/CompositionBars";
@@ -88,12 +80,9 @@ import {
   compareVersions,
   bucketOfVersion,
   toSafeNumber,
-  formatOperatingMode,
-  storageHealthColor,
   getOsVersionDisplayTitle,
   getOsVersionDisplaySubtitle,
   formatDetailValue,
-  formatDetailDate,
   formatDetailPercent,
   coalesceValue,
   normalizeHostRow,
@@ -107,7 +96,8 @@ import {
   normalizeHardwareDetailPayload,
 } from "../components/AssetsDashboard/hostHelpers";
 import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/DeviceDecommissionConfirmDialog";
-import { DetailStatCard, DetailField, FieldGrid } from "../components/AssetsDashboard/detailAtoms";
+import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
+import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -258,278 +248,35 @@ function AgentDetailWorkbench({
           ) : null}
 
           {!loading && tab === 0 ? (
-            <>
-              <FieldGrid>
-                <DetailField label="Hostname" value={hostname} />
-                <DetailField label="Agent ID" value={agentId} mono />
-                <DetailField label="Platform" value={platform} />
-                <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
-                <DetailField label="Agent version" value={agentVersion} mono />
-                <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
-                <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
-                <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
-                <DetailField label="Status" value={connected ? "Online" : "Offline"} />
-              </FieldGrid>
-
-              {isMobileDevice ? (
-                <>
-                <Box sx={{ mt: 2.5 }}>
-                  <Typography
-                    sx={{
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "text.secondary",
-                      mb: 1,
-                    }}
-                  >
-                    Managed device
-                  </Typography>
-                  <FieldGrid>
-                    <DetailField label="Operating mode" value={formatOperatingMode(profile?.operatingMode)} />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                        Storage health
-                      </Typography>
-                      <Box sx={{ mt: 0.35 }}>
-                        {profile?.storageHealth ? (
-                          <Chip
-                            size="small"
-                            label={String(profile.storageHealth)}
-                            sx={{
-                              height: 20,
-                              fontWeight: 700,
-                              fontSize: 11,
-                              textTransform: "capitalize",
-                              bgcolor: `${storageHealthColor(profile.storageHealth)}1f`,
-                              color: storageHealthColor(profile.storageHealth),
-                            }}
-                          />
-                        ) : (
-                          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>—</Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  </FieldGrid>
-                </Box>
-                <Box sx={{ mt: 3 }}>
-                  <MobileCommandsPanel deviceId={commandDeviceId} platform={platformKey} />
-                </Box>
-                </>
-              ) : null}
-            </>
+            <AgentTab
+              hostname={hostname}
+              agentId={agentId}
+              platform={platform}
+              agentVersion={agentVersion}
+              profile={profile}
+              hardware={hardware}
+              connected={connected}
+              isMobileDevice={isMobileDevice}
+              commandDeviceId={commandDeviceId}
+              platformKey={platformKey}
+            />
           ) : null}
 
-          {!loading && tab === 1 ? (
-            <FieldGrid>
-              <DetailField label="Serial" value={formatDetailValue(hardware?.serial)} mono />
-              <DetailField label="Manufacturer" value={formatDetailValue(hardware?.manufacturer)} />
-              <DetailField label="Model" value={formatDetailValue(hardware?.model)} />
-              <DetailField label="CPU" value={formatDetailValue(hardware?.cpuBrand)} />
-              <DetailField label="Physical cores" value={formatDetailValue(hardware?.physicalCores)} />
-              <DetailField label="Memory" value={formatBytesToGb(hardware?.totalMemoryBytes)} />
-              <DetailField label="Disk total" value={formatBytesToGb(hardware?.diskTotalBytes)} />
-              <DetailField label="Disk used" value={formatBytesToGb(hardware?.diskUsedBytes)} />
-              <DetailField label="Disk usage" value={formatDetailPercent(hardware?.diskUsagePct)} />
-              <DetailField label="Battery" value={formatDetailPercent(hardware?.batteryPercent)} />
-              <DetailField label="Collected at" value={formatDetailDate(hardware?.collectedAtUtc)} />
-            </FieldGrid>
-          ) : null}
+          {!loading && tab === 1 ? <HardwareTab hardware={hardware} /> : null}
 
           {!loading && tab === 2 ? (
-            <Box>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-                    Installed applications
-                  </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
-                    Paginated software inventory for this device.
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}>
-                  {softwareLoading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : null}
-                  <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
-                </Stack>
-              </Stack>
-              <Paper elevation={0} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
-                <TableContainer sx={{ maxHeight: 360 }}>
-                  <Table stickyHeader size="small" aria-label="agent software table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Application</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Publisher</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Source</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Detected</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {softwareRows.map((app, index) => (
-                        <TableRow key={app.id || `${app.name}-${index}`} hover>
-                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
-                          <TableCell>{formatDetailValue(app.publisher)}</TableCell>
-                          <TableCell>{formatDetailValue(app.source)}</TableCell>
-                          <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
-                        </TableRow>
-                      ))}
-                      {softwareRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
-                            {softwareLoading ? "Loading software inventory…" : "No software inventory found for this device."}
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <TablePagination
-                  component="div"
-                  count={softwareCount}
-                  page={softwarePage}
-                  rowsPerPage={softwarePageSize}
-                  rowsPerPageOptions={[8, 16, 24, 50]}
-                  onPageChange={(_, nextPage) => {
-                    onSoftwarePaginationModelChange?.({ page: nextPage, pageSize: softwarePageSize });
-                  }}
-                  onRowsPerPageChange={(event) => {
-                    const nextPageSize = Number(event.target.value || 8);
-                    onSoftwarePaginationModelChange?.({ page: 0, pageSize: nextPageSize });
-                  }}
-                  labelRowsPerPage="Rows per page:"
-                  sx={{
-                    borderTop: `1px solid ${BRAND.border}`,
-                    bgcolor: BRAND.surface,
-                    "& .MuiTablePagination-toolbar": {
-                      minHeight: 48,
-                      px: { xs: 1, sm: 2 },
-                    },
-                    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-                      fontSize: 12,
-                      color: "text.secondary",
-                    },
-                  }}
-                />
-              </Paper>
-            </Box>
+            <SoftwareTab
+              softwareRows={softwareRows}
+              softwareLoading={softwareLoading}
+              softwareCount={softwareCount}
+              softwarePage={softwarePage}
+              softwarePageSize={softwarePageSize}
+              onSoftwarePaginationModelChange={onSoftwarePaginationModelChange}
+            />
           ) : null}
 
           {!loading && tab === 3 ? (
-            <Box>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1}
-                alignItems={{ xs: "stretch", sm: "center" }}
-                justifyContent="space-between"
-                sx={{ mb: 1.5 }}
-              >
-                <Box>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-                    Configured printers
-                  </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
-                    Print queues this device knows about, ordered with the
-                    default first, then network printers, then local.
-                  </Typography>
-                </Box>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}
-                >
-                  {printersLoading ? (
-                    <CircularProgress size={16} sx={{ color: BRAND.teal }} />
-                  ) : null}
-                  <Chip
-                    size="small"
-                    label={`${printerRows.length} printer${printerRows.length === 1 ? "" : "s"} detected`}
-                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }}
-                  />
-                </Stack>
-              </Stack>
-              <Paper
-                elevation={0}
-                sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}
-              >
-                <TableContainer sx={{ maxHeight: 360 }}>
-                  <Table stickyHeader size="small" aria-label="agent printers table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Name</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Driver</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Port</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Type</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Status</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {printerRows.map((p, index) => (
-                        <TableRow key={p.id || p.installId || `${p.name}-${index}`} hover>
-                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>
-                            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
-                              <span>{formatDetailValue(p.name)}</span>
-                              {p.isDefault ? (
-                                <Chip
-                                  size="small"
-                                  label="Default"
-                                  sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 800, height: 18 }}
-                                />
-                              ) : null}
-                              {p.isShared ? (
-                                <Chip
-                                  size="small"
-                                  label="Shared"
-                                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, height: 18 }}
-                                />
-                              ) : null}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>{formatDetailValue(p.driver)}</TableCell>
-                          <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
-                            {formatDetailValue(p.port)}
-                          </TableCell>
-                          <TableCell>{p.isNetwork ? "Network" : "Local"}</TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={p.status || "unknown"}
-                              sx={{
-                                bgcolor:
-                                  p.status === "online"
-                                    ? ROLE.positiveSoft
-                                    : p.status === "error"
-                                    ? ROLE.criticalSoft || `${ROLE.critical}33`
-                                    : p.status === "offline"
-                                    ? BRAND.surfaceMuted
-                                    : BRAND.surfaceMuted,
-                                color:
-                                  p.status === "online"
-                                    ? ROLE.positive
-                                    : p.status === "error"
-                                    ? ROLE.critical
-                                    : "text.secondary",
-                                fontWeight: 800,
-                                textTransform: "capitalize",
-                              }}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {printerRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
-                            {printersLoading
-                              ? "Loading printers…"
-                              : "No printers configured on this device."}
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            </Box>
+            <PrintersTab printerRows={printerRows} printersLoading={printersLoading} />
           ) : null}
         </Box>
       </Paper>
