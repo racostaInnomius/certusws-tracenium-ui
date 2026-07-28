@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Label } from "recharts";
+import { BRAND } from "../../theme/brand";
+import { CHART_SERIES_WIDE } from "../../theme/chartPalette";
 
 /**
  * Props:
@@ -18,7 +20,7 @@ export default function OsPlatformDonut({ osPlatform }) {
   }, [osPlatform]);
 
   const total = React.useMemo(() => data.reduce((sum, x) => sum + x.value, 0), [data]);
-  const COLORS = ["#5A9F9F", "#3E7878", "#52B788", "#86C6A8", "#B9E3D0"];
+  const COLORS = CHART_SERIES_WIDE;
 
   return (
     <Paper sx={{ p: 2, borderRadius: 3, height: "100%" }}>
@@ -56,7 +58,7 @@ export default function OsPlatformDonut({ osPlatform }) {
                         <tspan x="50%" dy="-2" fontSize="18" fontWeight="800">
                           {total || "—"}
                         </tspan>
-                        <tspan x="50%" dy="16" fontSize="12" fill="#3E7878">
+                        <tspan x="50%" dy="16" fontSize="12" fill={BRAND.tealText}>
                           hosts
                         </tspan>
                       </text>
@@ -81,7 +83,7 @@ export default function OsPlatformDonut({ osPlatform }) {
                   bgcolor: COLORS[idx % COLORS.length]
                 }}
               />
-              <Typography variant="body2" sx={{ color: "#3B404D" }}>
+              <Typography variant="body2" sx={{ color: BRAND.dark }}>
                 {d.name}
               </Typography>
             </Box>

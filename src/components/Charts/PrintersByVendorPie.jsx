@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
+import { CHART_NEUTRAL } from "../../theme/chartPalette";
 import {
   ResponsiveContainer,
   PieChart,
@@ -48,8 +49,8 @@ const KNOWN_VENDOR_COLORS = {
 // land on the actual brands first because those are actionable
 // (HP fleet refresh, Canon driver standardization, etc.) while
 // Other/Unknown are noise/data-quality issues.
-const OTHER_COLOR   = "#A8B0B5"; // neutral mid-gray, slightly cool
-const UNKNOWN_COLOR = "#D0D5D8"; // lighter — even less attention-grabbing
+const OTHER_COLOR   = CHART_NEUTRAL.other;
+const UNKNOWN_COLOR = CHART_NEUTRAL.unknown;
 
 // Fallback for any future vendor name the backend's CASE WHEN might
 // emit that's not in KNOWN_VENDOR_COLORS yet (e.g., a 16th vendor

@@ -35,13 +35,16 @@ import {
   Legend,
 } from "recharts";
 import { BRAND } from "../../theme/brand";
+import { CHART_CATEGORICAL } from "../../theme/chartPalette";
 import {
   getFleetComplianceTimeseries,
   getFrameworkComplianceTimeseries,
 } from "../../api/compliance";
 
 const WINDOWS = [30, 60, 90];
-const FW_COLORS = [BRAND.teal, "#6B7FD7", "#D78B3E", BRAND.dark, "#52B788", "#C05E9E", "#8FBF3F"];
+// Per-framework line strokes — see theme/chartPalette (needs wider separation
+// than the teal ramp: 7 overlapping lines on one axis).
+const FW_COLORS = CHART_CATEGORICAL;
 
 function shortLabel(iso) {
   const d = new Date(iso);

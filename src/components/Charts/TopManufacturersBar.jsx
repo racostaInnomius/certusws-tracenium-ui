@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Box, Typography } from "@mui/material";
+import { CHART_SERIES } from "../../theme/chartPalette";
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,7 +33,8 @@ function toChartData(topManufacturers) {
 // — eslint's `cannot-create-components-during-render` lo marcó.
 // Evitamos `<Cell/>` (deprecated en recharts 3) pintando por índice
 // con un shape custom estable.
-const BAR_COLORS = ["#5A9F9F", "#3E7878", "#52B788", "#B9E3D0"];
+// Shared categorical ramp — see theme/chartPalette.
+const BAR_COLORS = CHART_SERIES;
 
 function BarShape(props) {
   const { x, y, width, height, index } = props;
