@@ -64,6 +64,7 @@ import {
 } from "../api/patchManagement";
 import { createDeviceJob } from "../api/jobs";
 import FindingsPanel from "../components/patch-management/FindingsPanel";
+import { listFrom } from "../api/shape";
 
 // ── Remediation catalog. Mirrors the Security Compliance categories —
 //    each compliance check has a matching remediation action here. When
@@ -717,7 +718,7 @@ export default function PatchManagement() {
     setDrawerItems([]);
     try {
       const res = await getDeviceScanItems(device.agentId);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = listFrom(res, { context: "patchManagement" });
       setDrawerItems(items);
     } catch (err) {
       console.error("[patch-mgmt] failed to load device items", err);

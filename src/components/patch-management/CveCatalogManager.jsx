@@ -36,6 +36,7 @@ import {
 } from "../../api/patchManagement";
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
+import { listFrom } from "../../api/shape";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
@@ -150,7 +151,7 @@ export default function CveCatalogManager({ canManage, notify }) {
     setLoading(true);
     try {
       const res = await listCveCatalog();
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "cveCatalog" }));
     } catch (err) {
       notify?.("error", errMsg(err, "Failed to load CVE catalog"));
     } finally {

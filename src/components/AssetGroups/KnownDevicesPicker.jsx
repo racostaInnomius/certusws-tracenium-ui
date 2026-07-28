@@ -23,6 +23,7 @@ import {
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { listKnownDevices } from "../../api/jobs";
+import { listFrom } from "../../api/shape";
 
 export function normalizeKnownDeviceGroupAssignments(d) {
   const rawCollections = [
@@ -151,7 +152,7 @@ export default function KnownDevicesPicker({
 
         if (cancelled) return;
 
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "knownDevices" });
         setRows(
           items
             .map(normalizeKnownDevice)

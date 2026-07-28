@@ -41,6 +41,7 @@ import { severityMeta } from "../../theme/severity";
 import SectionPaper from "../common/SectionPaper";
 import { getFindings } from "../../api/patchManagement";
 import FindingDetailDrawer from "./FindingDetailDrawer";
+import { listFrom } from "../../api/shape";
 
 function severityChip(severity) {
   // Canonical severity scale (theme/severity.js) — High was red (== Critical);
@@ -101,7 +102,7 @@ export default function FindingsPanel({
       if (category) params.category = category;
       if (checkIdContains) params.checkIdContains = checkIdContains;
       const res = await getFindings(params);
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "patchFindings" }));
       setTotals(res?.totals ?? ZERO_TOTALS);
     } catch (err) {
       // PMP_PLUGIN_DISABLED → backend 403; the page-level banner

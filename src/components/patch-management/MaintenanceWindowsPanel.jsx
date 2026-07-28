@@ -30,6 +30,7 @@ import {
 } from "../../api/patchManagement";
 import MaintenanceWindowDialog from "./MaintenanceWindowDialog";
 import { minutesToHHMM } from "./maintenanceWindowTime";
+import { listFrom } from "../../api/shape";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -63,7 +64,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
     setLoading(true);
     try {
       const res = await listMaintenanceWindows();
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "maintenanceWindows" }));
     } catch (err) {
       notify?.("error", errMsg(err, "Failed to load maintenance windows"));
     } finally {

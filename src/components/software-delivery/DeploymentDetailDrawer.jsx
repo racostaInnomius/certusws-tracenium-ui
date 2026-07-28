@@ -22,6 +22,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import { BRAND, ROLE, DATAGRID_SX } from "../../theme/brand";
 import { listDeploymentResults, cancelDeployment } from "../../api/softwareDelivery";
+import { listFrom } from "../../api/shape";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "failed"]);
 
@@ -108,7 +109,7 @@ export default function DeploymentDetailDrawer({
     setLoading(true);
     try {
       const res = await listDeploymentResults(deployment.id);
-      setResults(Array.isArray(res?.items) ? res.items : []);
+      setResults(listFrom(res, { context: "deploymentResults" }));
     } catch (err) {
       notify?.("error", err?.body?.message || err?.message || "Failed to load results");
     } finally {

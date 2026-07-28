@@ -37,6 +37,7 @@ import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ROLE } from "../../theme/brand";
 import { normalizePlatform } from "../../utils/platform";
 import { formatDate } from "../../utils/format";
+import { listFrom } from "../../api/shape";
 
 const SORT_FIELDS = new Set([
   "hostname",
@@ -267,7 +268,7 @@ export default function InactiveAssetsTable({
         sortDir,
       });
 
-      const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
+      const items = listFrom(res, { context: "inactiveAssets" });
       setRows(items.map(normalizeInactiveRow));
       setTotalRows(Number(res?.total ?? items.length ?? 0));
     } catch (err) {

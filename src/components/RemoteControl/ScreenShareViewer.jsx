@@ -372,8 +372,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     // Auto adapts quality only — the operator's chosen frame rate is
     // preserved, so we read it from the ref rather than the render closure.
     sendStreamSettings(fpsRef.current, target);
-  // dcSend is stable (reads from ref); fps rides on fpsRef so changing it
-  // doesn't re-fire this effect.
+  // sendStreamSettings only touches refs (dcRef, fpsRef), so it's behaviourally
+  // stable even though it's re-created each render. Listing it would re-fire
+  // this effect on every render and re-send setQuality on each one.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoQuality, rtt, state]);
 
   // ── M3.S4 — Input forwarding ─────────────────────────────────────────
@@ -664,10 +666,19 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     };
     img.src = `data:image/jpeg;base64,${data}`;
 
-    // A frame arrived, so whatever transient the agent complained about has
-    // passed. Functional update so React bails out when there's no banner up
-    // — otherwise this would re-render the panel on every single frame.
+    // A frame arrived, so whatever the agent complained about has passed.
+    // Functional updates throughout: this runs on every frame, and React
+    // bails out when the value is unchanged, so there's no re-render storm.
+    // They also sidestep the stale-closure problem — handleDcMessage is
+    // captured by dc.onmessage on the first render and never refreshed.
     setWarning((w) => (w ? "" : w));
+
+    // Recover from a terminal capture error without making the operator
+    // reconnect. The agent keeps retrying on a slow cadence after reporting
+    // one, so the user logging back in (or the PPPC profile landing) resumes
+    // the stream on its own — but only if we put the canvas back.
+    setState((s) => (s === STATE.ERROR ? STATE.VIEWING : s));
+    setErrorMsg((m) => (m ? "" : m));
 
     // FPS counter — stamp on message arrival, not on img.onload, so
     // the counter reflects network cadence rather than decode latency.
@@ -775,51 +786,44 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       }
 
       case "error": {
-        // Map agent error codes to user-friendly messages where possible.
-        //
-        // `no_interactive_desktop` is returned by ScreenCaptureDxgi.cs on
-        // the agent side when the device has no active interactive desktop
-        // — typically a Windows Server with no logged-in user, the lock
-        // screen showing with no recent login, or any state where the
-        // OS hasn't created a visible desktop for any session. This is
-        // an architectural limitation of every screen-capture API on
-        // Windows; a Virtual Display Driver is required for "headless"
-        // capture and that is out of scope for the current milestone.
-        // Surface the situation honestly rather than as a generic
-        // "Connection error" so the operator knows what to try instead.
-        let friendly;
-        if (msg.code === "no_interactive_desktop") {
-          friendly = "This device has no active interactive desktop right now. " +
-            "Screen sharing needs a user to be logged in. " +
-            "For a headless server, use a Shell session (rcp.shell) instead.";
-        } else if (msg.code === "wayland_unsupported") {
-          // Linux X11-only initial release (per Task #8 / sprint plan).
-          // The agent runs on a Wayland session and the X11 helper
-          // (XGetImage on the root window) can't capture the
-          // compositor-managed Wayland surface. Xwayland is also
-          // rejected for native Wayland windows. Telling the operator
-          // to log in via X11 is the only honest workaround until we
-          // wire XDG portal + pipewire (slated for a later milestone).
-          friendly = "This device is running a Wayland session, which " +
-            "isn't supported by screen sharing yet. Ask the user to log " +
-            "out and log back in selecting an X11 / Xorg session, then " +
-            "retry. Shell and file sessions work on Wayland normally.";
-        } else if (msg.code === "screen_capture_failed" ||
-                   msg.code === "screen_capture_init_failed") {
-          // Generic capture failure — surface the agent's own message
-          // so the operator at least sees a hint of what went wrong
-          // (TCC permission denied on macOS, missing libX11/libjpeg on
-          // Linux, GPU driver crash on Windows, etc.). The agent
-          // already crafts a useful message for these paths.
-          friendly = msg.message || "Screen capture failed on the device.";
-        } else if (msg.code === "screen_capture_no_frame") {
-          // Transient — the agent didn't observe a new frame within the
-          // timeout, usually because the desktop was idle. The next poll
-          // will pick up a frame. Don't tear down on this; ignore.
+        const code = String(msg.code || "");
+
+        // Belt-and-braces: the agent no longer forwards this at all (an idle
+        // desktop is a normal state, not a failure), but an older agent on a
+        // slow upgrade ring might. Never act on it — the canvas already
+        // holds the correct pixels.
+        if (code === "screen_capture_no_frame") break;
+
+        // `terminal` says whether the device can recover on its own. Agents
+        // predating the flag collapsed every failure into one code with no
+        // flag; for those, fall back to the code table so we stay at least
+        // as conservative as the old behaviour.
+        const terminal =
+          typeof msg.terminal === "boolean"
+            ? msg.terminal
+            : !TRANSIENT_CAPTURE_CODES.has(code);
+
+        // Prefer our own copy; fall back to the agent's message, which is
+        // written for a log reader but beats showing nothing.
+        const friendly =
+          CAPTURE_ERROR_COPY[code] ||
+          msg.message ||
+          "Screen capture failed on the device.";
+
+        if (!terminal) {
+          // A blip — a UAC prompt, a fast user switch, a GPU driver reset.
+          // The agent already absorbed several of these before telling us,
+          // and it keeps trying. Warn over the live canvas and let the next
+          // good frame clear it; tearing the viewer down here is exactly
+          // what made screen share look broken on healthy machines.
+          setWarning(friendly);
           break;
-        } else {
-          friendly = msg.message || "Unknown error from agent";
         }
+
+        // Nothing will arrive until something changes on the endpoint
+        // (someone logs in, the PPPC profile lands, the session leaves
+        // Wayland). Say so plainly — the agent is still retrying slowly in
+        // the background, so recovery reopens the stream without a reconnect.
         setErrorMsg(friendly);
         setState(STATE.ERROR);
         break;
@@ -995,6 +999,36 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             position: "relative"
           }}
         >
+          {/* Non-fatal capture warning. Floats over the last good frame so
+              the operator keeps seeing the device while the agent works
+              through a transient (UAC prompt, fast user switch, GPU driver
+              reset). Clears itself on the next frame that arrives. */}
+          {warning && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 8,
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 2,
+                maxWidth: "90%",
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 1,
+                bgcolor: "rgba(0,0,0,0.78)",
+                border: `1px solid ${ROLE.caution}66`,
+                pointerEvents: "none"
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: ROLE.caution, fontWeight: 600 }}
+              >
+                {warning}
+              </Typography>
+            </Box>
+          )}
+
           {/* The canvas+overlay live in an inner wrapper sized exactly
               to the rendered frame so the cursor overlay coordinates
               map 1:1 onto displayed pixels (the canvas honors
@@ -1119,6 +1153,50 @@ export default function ScreenShareViewer({ session, device, onClose }) {
                 border: `1px solid ${rttColor(rtt, ROLE)}55`
               }}
             />
+          </Tooltip>
+
+          {/* Frame rate slider. Separate from Quality because they trade off
+              against each other and the operator needs both knobs: on a LAN
+              you want 15fps at quality 80; over a congested TURN relay you
+              want 2fps at quality 60 rather than a smooth stream of mush. */}
+          <Tooltip title="Capture frame rate. Higher is smoother but costs bandwidth — a 1080p frame is roughly 200 KB, so 15fps is a busy link.">
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{ flex: 1, minWidth: 0 }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: BRAND.gray, whiteSpace: "nowrap", flexShrink: 0 }}
+              >
+                FPS
+              </Typography>
+              <Slider
+                size="small"
+                min={MIN_FPS}
+                max={MAX_FPS}
+                step={1}
+                value={fps}
+                onChange={handleFpsChange}
+                sx={{
+                  color: BRAND.teal,
+                  "& .MuiSlider-thumb": { width: 12, height: 12 },
+                  "& .MuiSlider-rail": { bgcolor: "rgba(255,255,255,0.15)" }
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: BRAND.gray,
+                  minWidth: 18,
+                  textAlign: "right",
+                  flexShrink: 0
+                }}
+              >
+                {fps}
+              </Typography>
+            </Stack>
           </Tooltip>
 
           {/* Quality slider + Auto toggle */}

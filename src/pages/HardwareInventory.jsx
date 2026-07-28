@@ -36,6 +36,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import { formatBytesToGb, formatDate } from "../utils/format";
+import { listFrom } from "../api/shape";
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
@@ -348,7 +349,7 @@ export default function HardwareInventory() {
         pageSize: paginationModel.pageSize,
       });
 
-      setDetailRows(Array.isArray(res?.items) ? res.items : []);
+      setDetailRows(listFrom(res, { context: "hardwareDetail" }));
       setTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);

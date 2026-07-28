@@ -8,20 +8,18 @@
 
 import * as React from "react";
 import {
-  Alert,
   Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
   Stack,
   Typography,
 } from "@mui/material";
 import { BRAND } from "../../theme/brand";
 import { getFindingHistory } from "../../api/compliance";
+import AsyncState from "../common/AsyncState";
 
 // Map machine event_type → human label. Kept here (not in the remediation-status
 // meta) because event_type is a different enum space than remediation_status.
@@ -98,15 +96,18 @@ export default function FindingHistoryDialog({ open, finding, onClose }) {
         ) : null}
       </DialogTitle>
       <DialogContent sx={{ minHeight: 200 }}>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : error ? (
-          <Alert severity="error">{error}</Alert>
-        ) : events && events.length > 0 ? (
+        <AsyncState
+          loading={loading}
+          error={error}
+          isEmpty={!events || events.length === 0}
+          emptyText="No events recorded yet."
+          minHeight={180}
+        >
+          {/* NOTE: JSX children are evaluated eagerly — this runs even while
+              AsyncState is showing the loading/empty branch and `events` is
+              still null, so the list access has to stay null-safe. */}
           <Stack spacing={1.25} sx={{ pt: 1 }}>
-            {events.map((evt) => (
+            {(events ?? []).map((evt) => (
               <Box
                 key={evt.id}
                 sx={{
@@ -155,11 +156,7 @@ export default function FindingHistoryDialog({ open, finding, onClose }) {
               </Box>
             ))}
           </Stack>
-        ) : (
-          <DialogContentText sx={{ color: BRAND.gray, fontStyle: "italic", pt: 1 }}>
-            No events recorded yet.
-          </DialogContentText>
-        )}
+        </AsyncState>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

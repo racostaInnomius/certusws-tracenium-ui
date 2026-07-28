@@ -52,6 +52,7 @@ import {
   getRemediationResults,
   cancelRemediation,
 } from "../../api/patchManagement";
+import { listFrom } from "../../api/shape";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -163,7 +164,7 @@ export default function FindingDetailDrawer({
     setDevicesLoading(true);
     try {
       const res = await getDevicesAffectedByCheck(finding.checkId);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = listFrom(res, { context: "findingDetail" });
       setDevices(items);
       // Default selection: all. Operator can deselect specific
       // ones before firing.
@@ -187,7 +188,7 @@ export default function FindingDetailDrawer({
     setResultsLoading(true);
     try {
       const res = await getRemediationResults(activeRemediationId);
-      setResults(Array.isArray(res?.items) ? res.items : []);
+      setResults(listFrom(res, { context: "findingDetailResults" }));
     } catch (err) {
       notify?.("error", err?.body?.message || err?.message || "Failed to load remediation results");
     } finally {

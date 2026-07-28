@@ -30,6 +30,7 @@ import {
   deleteThirdPartyCatalog,
 } from "../../api/patchManagement";
 import CatalogDialog from "./CatalogDialog";
+import { listFrom } from "../../api/shape";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
@@ -45,7 +46,7 @@ export default function ThirdPartyCatalogManager({ canManage, notify }) {
     setLoading(true);
     try {
       const res = await listThirdPartyCatalog();
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "thirdPartyCatalog" }));
     } catch (err) {
       notify?.("error", errMsg(err, "Failed to load catalog"));
     } finally {

@@ -54,6 +54,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
+import { listFrom } from "../api/shape";
 
 /**
  * Render an event_type cell with a category-tinted chip and the
@@ -292,7 +293,7 @@ export default function Audit() {
     listKnownDevices()
       .then((res) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "auditEvents" });
         const map = new Map();
         items.forEach((it) => {
           const id = String(it?.deviceId || "").trim();

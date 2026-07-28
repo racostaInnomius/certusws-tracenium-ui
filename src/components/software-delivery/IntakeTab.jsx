@@ -34,6 +34,7 @@ import IntakeVerdictBanner from "./IntakeVerdictBanner";
 import IntakeProposalBanner from "./IntakeProposalBanner";
 import PackageDialog from "./PackageDialog";
 import { intakeToPackageItem } from "./intakeMapping";
+import { listFrom } from "../../api/shape";
 
 const STATUS_STYLES = {
   pending_review: { label: "Pending review", bg: BRAND.tealSoft, color: BRAND.tealText },
@@ -66,7 +67,7 @@ export default function IntakeTab({ canManage, notify }) {
     setLoading(true);
     try {
       const res = await listIntakes();
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "sdpIntake" }));
     } catch (err) {
       notify?.("error", errorMessage(err, "Failed to load intake queue"));
     } finally {

@@ -30,6 +30,7 @@ import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
+import { listFrom } from "../../api/shape";
 
 function prettyCategory(c) {
   return String(c || "uncategorized").replace(/_/g, " ");
@@ -70,7 +71,7 @@ function CategoryDrilldown({ category }) {
     let cancelled = false;
     getCategoryDevices(category)
       .then((res) => {
-        if (!cancelled) setState({ loading: false, err: null, devices: Array.isArray(res?.items) ? res.items : [] });
+        if (!cancelled) setState({ loading: false, err: null, devices: listFrom(res, { context: "categoryDevices" }) });
       })
       .catch((e) => {
         if (!cancelled) setState({ loading: false, err: e?.body?.message || e?.message || "Failed to load devices", devices: [] });
@@ -204,7 +205,7 @@ export default function ComplianceCategoryBreakdown({ reloadKey }) {
     setErr(null);
     getCategorySummary()
       .then((res) => {
-        if (!cancelled) setRows(Array.isArray(res?.items) ? res.items : []);
+        if (!cancelled) setRows(listFrom(res, { context: "categoryRows" }));
       })
       .catch((e) => {
         if (!cancelled) setErr(e?.body?.message || e?.message || "Failed to load category posture");

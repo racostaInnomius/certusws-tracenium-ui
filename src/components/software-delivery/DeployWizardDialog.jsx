@@ -38,6 +38,7 @@ import {
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
+import { listFrom } from "../../api/shape";
 
 const STEPS = ["Target", "Review"];
 
@@ -113,7 +114,7 @@ export default function DeployWizardDialog({
     if (!open) return;
     listAssetGroups()
       .then((res) => {
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "deployWizardTargets" });
         setGroupCatalog(items);
       })
       .catch((err) => {

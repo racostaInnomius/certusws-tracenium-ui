@@ -62,6 +62,7 @@ import {
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import { listFrom } from "../api/shape";
 
 // ---------- presentational helpers ------------------------------------------
 
@@ -201,7 +202,7 @@ export default function Alerts() {
       limit: 200,
     });
     return {
-      events: Array.isArray(res?.items) ? res.items : [],
+      events: listFrom(res, { context: "alertEvents" }),
       total: Number(res?.total ?? 0),
       lastSeenAt: res?.lastSeenAt ?? null,
     };

@@ -6,7 +6,7 @@
 // presentational child.
 
 import * as React from "react";
-import { Alert, Box, Button, CircularProgress, Collapse, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Collapse, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
@@ -15,6 +15,7 @@ import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { getDeviceFindingsDiff } from "../../api/compliance";
+import AsyncState from "../common/AsyncState";
 
 export default function DeviceDiffSection({ agentId }) {
   const [expanded, setExpanded] = React.useState(false);
@@ -132,18 +133,16 @@ export default function DeviceDiffSection({ agentId }) {
 
       <Collapse in={expanded} unmountOnExit>
         <Box sx={{ mt: 1.5 }}>
-          {loading ? (
-            <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-              <CircularProgress size={20} />
-            </Box>
-          ) : error ? (
-            <Alert severity="error">{error}</Alert>
-          ) : !hasReference ? (
-            <Typography variant="body2" sx={{ color: BRAND.gray, fontStyle: "italic" }}>
-              No prior scan to compare against. Once this device reports a
-              second snapshot, this section will show the delta.
-            </Typography>
-          ) : (
+          {/* NOTE: JSX children are evaluated eagerly — the block below runs
+              even while AsyncState renders loading/empty and `diff` is still
+              null, so every access to it has to stay null-safe. */}
+          <AsyncState
+            loading={loading}
+            error={error}
+            isEmpty={!hasReference}
+            emptyText="No prior scan to compare against. Once this device reports a second snapshot, this section will show the delta."
+            minHeight={120}
+          >
             <Stack spacing={1.5}>
               {/* Sprint 6 — reference date picker. Empty = "compare
                   against the prior snapshot" (the default behavior
@@ -188,13 +187,15 @@ export default function DeviceDiffSection({ agentId }) {
               <Typography variant="caption" sx={{ color: BRAND.gray }}>
                 Comparing{" "}
                 <strong>
-                  {diff.currentSnapshotAt
+                  {diff?.currentSnapshotAt
                     ? new Date(diff.currentSnapshotAt).toLocaleString()
                     : "current"}
                 </strong>{" "}
                 vs{" "}
                 <strong>
-                  {new Date(diff.referenceSnapshotAt).toLocaleString()}
+                  {diff?.referenceSnapshotAt
+                    ? new Date(diff.referenceSnapshotAt).toLocaleString()
+                    : "—"}
                 </strong>
               </Typography>
 
@@ -233,7 +234,7 @@ export default function DeviceDiffSection({ agentId }) {
                 icon={<SwapHorizOutlinedIcon sx={{ fontSize: 14 }} />}
               />
             </Stack>
-          )}
+          </AsyncState>
         </Box>
       </Collapse>
     </Paper>

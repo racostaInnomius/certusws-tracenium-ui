@@ -81,6 +81,7 @@ import CriteriaBuilder from "../components/AssetGroups/CriteriaBuilder";
 import KnownDevicesPicker from "../components/AssetGroups/KnownDevicesPicker";
 import GroupCoverageNotice from "../components/AssetGroups/GroupCoverageNotice";
 import UngroupedDevicesDrawer from "../components/AssetGroups/UngroupedDevicesDrawer";
+import { listFrom } from "../api/shape";
 
 
 
@@ -655,7 +656,7 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
     setCatalogLoading(true);
     listJobTypes()
       .then((res) => {
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "assetGroupMembers" });
         setJobTypes(items);
       })
       .catch((err) => {
@@ -863,7 +864,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
         sortDir: currentSort.sort || "asc",
       });
 
-      setMembers(Array.isArray(res?.items) ? res.items : []);
+      setMembers(listFrom(res, { context: "groupMembers" }));
       setMembersTotal(Number(res?.total ?? res?.count ?? 0));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load members");
@@ -1326,7 +1327,7 @@ export default function AssetGroups() {
   const loadGroups = React.useCallback(async () => {
     try {
       const res = await listAssetGroups();
-      setGroups(Array.isArray(res?.items) ? res.items : []);
+      setGroups(listFrom(res, { context: "assetGroups" }));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load groups");
     }
@@ -1338,7 +1339,7 @@ export default function AssetGroups() {
       // Device pickers themselves use server-side search/pagination and
       // do not depend on this page-level list.
       const res = await listKnownDevices({ page: 1, pageSize: 100, includeGroups: true });
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = listFrom(res, { context: "assetGroupsList" });
       setDevices(
         items.map((d) => ({
           deviceId: String(d?.deviceId || "").trim(),

@@ -797,7 +797,7 @@ export default function AssetsDashboard({
     listAssetGroups()
       .then((res) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "assetGroupsFilter" });
         setGroupCatalog(items);
       })
       .catch((err) => {
@@ -826,7 +826,7 @@ export default function AssetsDashboard({
     listAssetGroupMembers(groupFilter)
       .then((res) => {
         if (cancelled) return;
-        const ids = Array.isArray(res?.items) ? res.items.map((m) => String(m.deviceId)) : [];
+        const ids = listFrom(res, { context: "groupMemberIds" }).map((m) => String(m.deviceId));
         setGroupMembers(new Set(ids));
       })
       .catch((err) => {
@@ -934,7 +934,7 @@ export default function AssetsDashboard({
     })
       .then((res) => {
         if (cancelled) return;
-        const rows = Array.isArray(res?.items) ? res.items : [];
+        const rows = listFrom(res, { context: "hostRows" });
         setAgentSoftwareRows(rows);
         setAgentSoftwareTotal(Number(res?.total ?? rows.length));
       })

@@ -29,6 +29,7 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import { BRAND, DATAGRID_SX } from "../../theme/brand";
 import { formatDate } from "../../utils/format";
 import { listUngroupedDevices } from "../../api/assetGroups";
+import { listFrom } from "../../api/shape";
 
 export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
   const drawerContentRef = React.useRef(null);
@@ -65,7 +66,7 @@ export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
         sortBy: currentSort.field || "hostname",
         sortDir: currentSort.sort || "asc",
       });
-      setRows(Array.isArray(res?.items) ? res.items : []);
+      setRows(listFrom(res, { context: "ungroupedDevices" }));
       setTotal(Number(res?.total ?? 0));
     } catch (err) {
       const message = err?.body?.message || err?.message || "Failed to load ungrouped devices";

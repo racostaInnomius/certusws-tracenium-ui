@@ -26,6 +26,7 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import UpgradeOutlinedIcon from "@mui/icons-material/UpgradeOutlined";
 import { BRAND } from "../../theme/brand";
 import { getThirdPartyFleetFindings, remediateThirdParty } from "../../api/patchManagement";
+import { listFrom } from "../../api/shape";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
@@ -41,7 +42,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
     setLoading(true);
     try {
       const res = await getThirdPartyFleetFindings();
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { context: "thirdPartyPanel" }));
     } catch (err) {
       notify?.("error", errMsg(err, "Failed to load third-party findings"));
     } finally {

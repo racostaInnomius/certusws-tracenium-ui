@@ -42,6 +42,7 @@ import {
   getPlaceholder,
   getHelperText
 } from "./criteriaHelpers";
+import { listFrom } from "../../api/shape";
 
 export function CriteriaValueEditor({ pred, fieldSpec, opSpec, disabled, onChange }) {
   const fieldKey = getSuggestionFieldKey(fieldSpec, pred?.field);
@@ -109,7 +110,7 @@ export function CriteriaValueEditor({ pred, fieldSpec, opSpec, disabled, onChang
 
         if (requestIdRef.current !== requestId) return;
 
-        const remoteOptions = (Array.isArray(res?.items) ? res.items : [])
+        const remoteOptions = listFrom(res, { context: "criteriaSuggestions" })
           .map((option) => normalizeSuggestionOption(option, fieldKey))
           .filter(Boolean);
 

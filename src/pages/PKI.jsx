@@ -58,6 +58,7 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import { formatDate } from "../utils/format";
+import { listFrom } from "../api/shape";
 
 
 function shortFp(fp) {
@@ -416,7 +417,7 @@ export default function PKI() {
     listKnownDevices()
       .then((res) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "pki" });
         const map = new Map();
         items.forEach((it) => {
           const id = String(it?.deviceId || "").trim();
