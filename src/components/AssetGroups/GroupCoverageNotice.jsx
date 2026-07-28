@@ -193,6 +193,7 @@ export default function GroupCoverageNotice({ coverage, loading, error, compact 
         ) : null}
         {onRefresh ? (
           <IconButton
+            aria-label="Refresh group coverage"
             size="small"
             onClick={onRefresh}
             disabled={loading}

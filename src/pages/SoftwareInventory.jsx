@@ -1015,6 +1015,7 @@ export default function SoftwareInventory() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             {selectedHost && !appLevelDetail && (
               <IconButton
+                aria-label="Back to all hosts"
                 onClick={() => {
                   setSelectedHost(null);
                   setHostAppsSearch("");

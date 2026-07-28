@@ -109,7 +109,11 @@ function CheckRow({ check }) {
     <>
       <TableRow hover sx={{ "& > *": { borderBottom: open ? "none" : undefined } }}>
         <TableCell sx={{ width: 34, pr: 0 }}>
-          <IconButton size="small" onClick={() => setOpen((v) => !v)}>
+          <IconButton
+            aria-label={open ? "Collapse" : "Expand"}
+            size="small"
+            onClick={() => setOpen((v) => !v)}
+          >
             {open ? <ExpandLessOutlinedIcon fontSize="small" /> : <ExpandMoreOutlinedIcon fontSize="small" />}
           </IconButton>
         </TableCell>

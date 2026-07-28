@@ -480,6 +480,7 @@ export default function ShellTerminal({ session, device, onClose }) {
         </Typography>
         <Tooltip title="Close session" arrow placement="left">
           <IconButton
+            aria-label="Close terminal"
             size="small"
             onClick={onClose}
             sx={{ color: "#9aa5b1" }}

@@ -1014,6 +1014,7 @@ export default function Audit() {
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 {renderOutcomeChip(selectedEvent.outcome)}
                 <IconButton
+                  aria-label="Close event details"
                   size="small"
                   onClick={() => {
                     setSelectedEvent(null);

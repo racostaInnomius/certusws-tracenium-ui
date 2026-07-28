@@ -122,7 +122,11 @@ function PatchRow({ patch }) {
             : "—"}
         </Typography>
         {hasDetails ? (
-          <IconButton size="small" sx={{ p: 0.25 }}>
+          <IconButton
+            aria-label={expanded ? "Hide patch details" : "Show patch details"}
+            size="small"
+            sx={{ p: 0.25 }}
+          >
             {expanded ? (
               <ExpandLessOutlinedIcon fontSize="small" />
             ) : (

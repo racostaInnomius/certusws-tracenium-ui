@@ -212,4 +212,34 @@ export default defineConfig([
       ],
     },
   },
+
+  // -----------------------------------------------------------------
+  // Guardrail #3: every <IconButton> needs an accessible name.
+  //
+  // Icon-only buttons render no text, so without `aria-label` a screen
+  // reader announces them as just "button". A wrapping <Tooltip> does
+  // NOT fix this — its title becomes a description, not the name.
+  //
+  // The codebase was swept to zero violations; this rule keeps it
+  // there. For a toggle, prefer a label that reflects the current
+  // state (`aria-label={open ? "Collapse" : "Expand"}`).
+  //
+  // Escape hatch: if a button genuinely has a visible text label
+  // alongside the icon, disable this rule inline with a comment
+  // explaining why.
+  // -----------------------------------------------------------------
+  {
+    files: ['src/**/*.jsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSXOpeningElement[name.name='IconButton']:not(:has(JSXAttribute[name.name='aria-label']))",
+          message:
+            'Icon-only <IconButton> needs an aria-label — screen readers otherwise announce it as just "button". A Tooltip title is a description, not an accessible name.',
+        },
+      ],
+    },
+  },
 ]);

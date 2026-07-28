@@ -128,14 +128,14 @@ export default function ClaimCodesPanel({ mspId, mspName }) {
               <Typography variant="caption" sx={{ color: BRAND.gray }}>{fmtExpiry(c.expiresAt)}</Typography>
               <Tooltip title={copied === c.code ? "Copied!" : "Copy"}>
                 <span>
-                  <IconButton size="small" onClick={() => copy(c.code)} sx={{ color: copied === c.code ? BRAND.teal : BRAND.gray }}>
+                  <IconButton aria-label="Copy claim code" size="small" onClick={() => copy(c.code)} sx={{ color: copied === c.code ? BRAND.teal : BRAND.gray }}>
                     <ContentCopyOutlinedIcon fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
               <Tooltip title="Revoke">
                 <span>
-                  <IconButton size="small" disabled={busy} onClick={() => doRevoke(c.code)}
+                  <IconButton aria-label="Revoke claim code" size="small" disabled={busy} onClick={() => doRevoke(c.code)}
                     sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}>
                     <DeleteOutlineOutlinedIcon fontSize="small" />
                   </IconButton>

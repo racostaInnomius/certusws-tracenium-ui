@@ -194,6 +194,7 @@ function TransferRow({ transfer, onCancel }) {
         {!done && (
           <Tooltip title="Cancel transfer" placement="top">
             <IconButton
+              aria-label="Cancel transfer"
               size="small"
               onClick={() => onCancel?.(transfer.id)}
               sx={{ color: BRAND.gray, p: 0.25, flexShrink: 0 }}
@@ -772,7 +773,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         </Typography>
         <StatusChip state={state} />
         <Tooltip title="Close">
-          <IconButton size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
+          <IconButton aria-label="Close file browser" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -842,6 +843,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             <Tooltip title="Parent directory">
               <span>
                 <IconButton
+                  aria-label="Go to parent directory"
                   size="small"
                   onClick={handleUp}
                   disabled={currentPath === "/"}
@@ -853,6 +855,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             </Tooltip>
             <Tooltip title="Refresh">
               <IconButton
+                aria-label="Refresh directory listing"
                 size="small"
                 onClick={() => sendList(currentPath)}
                 disabled={listing}
@@ -1131,6 +1134,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                               {!entry.isDir && (
                                 <Tooltip title="Download">
                                   <IconButton
+                                    aria-label={`Download ${entry.name}`}
                                     size="small"
                                     onClick={(e) => {
                                       e.stopPropagation();

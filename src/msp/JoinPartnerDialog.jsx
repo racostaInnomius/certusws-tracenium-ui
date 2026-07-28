@@ -89,7 +89,7 @@ export default function JoinPartnerDialog({ open, onClose, onJoined }) {
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <HandshakeOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
         <Typography sx={{ fontWeight: 800, color: BRAND.dark, flex: 1 }}>Join a partner</Typography>
-        <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

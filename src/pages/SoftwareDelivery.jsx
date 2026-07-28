@@ -317,6 +317,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           {canManage && p.row.isActive ? (
             <Tooltip title="Deploy to fleet">
               <IconButton
+                aria-label="Deploy to fleet"
                 size="small"
                 onClick={() => {
                   setDeployItem(p.row);
@@ -339,6 +340,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
               <IconButton
+                aria-label="Delete package"
                 size="small"
                 onClick={() => {
                   setDeleteItem(p.row);

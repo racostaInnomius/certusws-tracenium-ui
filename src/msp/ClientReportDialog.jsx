@@ -118,7 +118,7 @@ export default function ClientReportDialog({ open, clientId, clientName, onClose
           <ToggleButton value={30} sx={{ textTransform: "none" }}>30d</ToggleButton>
           <ToggleButton value={90} sx={{ textTransform: "none" }}>90d</ToggleButton>
         </ToggleButtonGroup>
-        <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

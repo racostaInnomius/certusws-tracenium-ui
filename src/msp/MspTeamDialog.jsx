@@ -117,7 +117,7 @@ export default function MspTeamDialog({ open, mspId, mspName, onClose }) {
           <Typography sx={{ fontWeight: 800, color: BRAND.dark }} noWrap>Team</Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>{mspName || `Partner ${mspId}`}</Typography>
         </Box>
-        <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -148,7 +148,7 @@ export default function MspTeamDialog({ open, mspId, mspName, onClose }) {
                       {op.isActive ? null : <Chip label="inactive" size="small" sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontSize: 11 }} />}
                       <Tooltip title="Remove operator">
                         <span>
-                          <IconButton size="small" disabled={busy} onClick={() => doRemove(op.id)}
+                          <IconButton aria-label="Remove operator" size="small" disabled={busy} onClick={() => doRemove(op.id)}
                             sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}>
                             <PersonRemoveOutlinedIcon fontSize="small" />
                           </IconButton>

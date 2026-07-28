@@ -564,7 +564,7 @@ function CdpDevicesTab({ refreshNonce }) {
         PaperProps={{ sx: { width: { xs: "100%", sm: 440 } } }}
       >
         <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
-          <IconButton onClick={() => setDrawerDevice(null)} size="small">
+          <IconButton aria-label="Close device details" onClick={() => setDrawerDevice(null)} size="small">
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -595,7 +595,7 @@ export default function CryptoDiscovery() {
         icon={<WorkspacePremiumOutlinedIcon />}
         actions={
           <Tooltip title="Refresh" arrow>
-            <IconButton onClick={() => setRefreshNonce((n) => n + 1)}>
+            <IconButton aria-label="Refresh" onClick={() => setRefreshNonce((n) => n + 1)}>
               <RefreshIcon />
             </IconButton>
           </Tooltip>

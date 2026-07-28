@@ -1039,6 +1039,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
           sortable: false,
           renderCell: (params) => (
             <IconButton
+              aria-label="Remove from group"
               size="small"
               onClick={() => handleRemove(params.row.deviceId)}
               sx={{ color: BRAND.gray, "&:hover": { color: ROLE.critical } }}
@@ -1479,6 +1480,7 @@ export default function AssetGroups() {
           renderCell: (params) => (
             <Stack direction="row" spacing={0.5}>
               <IconButton
+                aria-label="Rename group"
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1490,6 +1492,7 @@ export default function AssetGroups() {
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
               <IconButton
+                aria-label="Delete group"
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();

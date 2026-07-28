@@ -30,7 +30,7 @@ export default function ClaimCodesDialog({ open, mspId, mspName, onClose }) {
           <Typography sx={{ fontWeight: 800, color: BRAND.dark }} noWrap>Add a client</Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>{mspName || `Partner ${mspId}`}</Typography>
         </Box>
-        <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

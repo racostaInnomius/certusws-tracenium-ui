@@ -929,7 +929,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
         <StatusChip state={state} />
         <Tooltip title="Close">
-          <IconButton size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
+          <IconButton aria-label="Close screen share" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -1269,6 +1269,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           {/* Fullscreen toggle */}
           <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
             <IconButton
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               size="small"
               onClick={handleFullscreen}
               sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}

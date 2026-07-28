@@ -122,7 +122,11 @@ export default function DeviceDiffSection({ agentId }) {
             {totalChanges === 0 ? "no changes" : `${totalChanges} change${totalChanges === 1 ? "" : "s"}`}
           </Typography>
         ) : null}
-        <IconButton size="small" sx={{ ml: 0.5 }}>
+        <IconButton
+          aria-label={expanded ? "Collapse changes" : "Expand changes"}
+          size="small"
+          sx={{ ml: 0.5 }}
+        >
           {expanded ? (
             <ExpandLessOutlinedIcon fontSize="small" />
           ) : (

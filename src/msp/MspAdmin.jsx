@@ -495,6 +495,7 @@ function MspDetail({ msp, onChanged, onToast }) {
                     <Tooltip title="Service report">
                       <span>
                         <IconButton
+                          aria-label="View client report"
                           size="small"
                           onClick={() => setReportClient({ id: c.tenantId, name: c.name })}
                           sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}
@@ -508,6 +509,7 @@ function MspDetail({ msp, onChanged, onToast }) {
                         <IconButton
                           size="small"
                           disabled={busy}
+                          aria-label="Unassign client"
                           onClick={() => doUnassign(c.tenantId)}
                           sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}
                         >
@@ -604,6 +606,7 @@ function MspDetail({ msp, onChanged, onToast }) {
                       <IconButton
                         size="small"
                         disabled={busy}
+                        aria-label="Remove operator"
                         onClick={() => doRemoveOperator(op.id)}
                         sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}
                       >
