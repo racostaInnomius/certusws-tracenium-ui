@@ -103,8 +103,11 @@ import {
   isDeviceTerminalOrPendingDeletion,
   isDecommissionJobTerminal,
   getDecommissionErrorMessage,
+  normalizeHostDetailPayload,
+  normalizeHardwareDetailPayload,
 } from "../components/AssetsDashboard/hostHelpers";
 import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/DeviceDecommissionConfirmDialog";
+import { DetailStatCard, DetailField, FieldGrid } from "../components/AssetsDashboard/detailAtoms";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -116,128 +119,6 @@ import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/Devic
 // Anything the page doesn't recognize is silently ignored — we don't
 // trust the query string to set arbitrary state beyond the whitelist
 // below.
-
-function normalizeHostDetailPayload(payload, fallbackHost = {}) {
-  const source = payload?.agent || payload?.host || payload?.item || payload || {};
-  return {
-    agentId: coalesceValue(
-      source.agentId,
-      source.agent_id,
-      source.deviceId,
-      source.device_id,
-      fallbackHost.agent_id,
-      fallbackHost.agentId
-    ),
-    hostname: coalesceValue(
-      source.hostname,
-      source.host,
-      source.deviceName,
-      source.device_name,
-      fallbackHost.hostname
-    ),
-    platform: coalesceValue(source.platform, source.os_platform, fallbackHost.os_platform),
-    os: coalesceValue(source.distro, source.os, source.os_version, fallbackHost.os_version),
-    agentVersion: coalesceValue(source.agentVersion, source.agent_version, fallbackHost.agent_version),
-    lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
-    localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),
-    lastSeenAt: coalesceValue(source.lastSeenAt, source.last_seen_at, source.lastHeartbeat, source.last_heartbeat),
-    // Mobile (MDM/MAM) managed-state — present only for ios/android devices,
-    // surfaced from agent.agent_payload by the detail endpoint.
-    isMobile: coalesceValue(source.mobile, fallbackHost.mobile) === "true" || source.mobile === true,
-    operatingMode: coalesceValue(source.operatingMode, source.operating_mode),
-    storageHealth: coalesceValue(source.storageHealth, source.storage_health),
-    raw: source,
-  };
-}
-
-function normalizeHardwareDetailPayload(payload, agentId) {
-  const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
-  const exact = items.find((item) => String(item?.agentId || item?.agent_id || "") === String(agentId));
-  return exact || items[0] || null;
-}
-
-function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        height: "100%",
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        background: "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(190,190,190,0.07))",
-        boxShadow: "0 6px 18px rgba(59,64,77,0.07)",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.25 }}>
-        <Box
-          sx={{
-            width: 34,
-            height: 34,
-            borderRadius: 2,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: `${accent}22`,
-            color: accent,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
-          {title}
-        </Typography>
-      </Stack>
-      <Typography sx={{ fontSize: 20, fontWeight: 900, color: BRAND.dark, lineHeight: 1.15 }} noWrap title={String(value || "—")}>
-        {value || "—"}
-      </Typography>
-      {helper ? (
-        <Typography sx={{ mt: 0.75, fontSize: 12, color: "text.secondary" }} noWrap title={helper}>
-          {helper}
-        </Typography>
-      ) : null}
-    </Paper>
-  );
-}
-
-function DetailField({ label, value, mono = false }) {
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          mt: 0.35,
-          fontSize: 13,
-          fontWeight: 700,
-          color: BRAND.dark,
-          fontFamily: mono ? "monospace" : "inherit",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={String(value || "—")}
-      >
-        {value || "—"}
-      </Typography>
-    </Box>
-  );
-}
-
-function FieldGrid({ children }) {
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" },
-        gap: 1.5,
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
 
 function AgentDetailWorkbench({
   selectedHost,

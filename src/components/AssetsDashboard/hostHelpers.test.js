@@ -18,6 +18,8 @@ import {
   isDeviceTerminalOrPendingDeletion,
   isDecommissionJobTerminal,
   getDecommissionErrorMessage,
+  normalizeHostDetailPayload,
+  normalizeHardwareDetailPayload,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
 
@@ -142,6 +144,41 @@ describe("device lifecycle", () => {
   it("isDecommissionJobTerminal detects terminal job states", () => {
     expect(isDecommissionJobTerminal("completed")).toBe(true);
     expect(isDecommissionJobTerminal("RUNNING")).toBe(false);
+  });
+});
+
+describe("normalizeHostDetailPayload", () => {
+  it("unwraps the agent/host/item envelope and folds field variants", () => {
+    const out = normalizeHostDetailPayload({ agent: { agent_id: "a1", host: "h1", os_platform: "linux" } });
+    expect(out.agentId).toBe("a1");
+    expect(out.hostname).toBe("h1");
+    expect(out.platform).toBe("linux");
+  });
+  it("falls back to the row already in the table", () => {
+    const out = normalizeHostDetailPayload({}, { agent_id: "fb", hostname: "fbhost", os_version: "22.04" });
+    expect(out.agentId).toBe("fb");
+    expect(out.hostname).toBe("fbhost");
+    expect(out.os).toBe("22.04");
+  });
+  it("detects mobile devices from either the boolean or the 'true' string", () => {
+    expect(normalizeHostDetailPayload({ mobile: true }).isMobile).toBe(true);
+    expect(normalizeHostDetailPayload({ mobile: "true" }).isMobile).toBe(true);
+    expect(normalizeHostDetailPayload({}).isMobile).toBe(false);
+  });
+});
+
+describe("normalizeHardwareDetailPayload", () => {
+  it("prefers the item matching the agent id", () => {
+    const payload = { items: [{ agent_id: "other" }, { agentId: "a1", cpu: "x" }] };
+    expect(normalizeHardwareDetailPayload(payload, "a1")).toEqual({ agentId: "a1", cpu: "x" });
+  });
+  it("falls back to the first item, or null when empty", () => {
+    expect(normalizeHardwareDetailPayload({ items: [{ agent_id: "z" }] }, "nope")).toEqual({ agent_id: "z" });
+    expect(normalizeHardwareDetailPayload({ items: [] }, "a1")).toBeNull();
+    expect(normalizeHardwareDetailPayload(null, "a1")).toBeNull();
+  });
+  it("accepts a bare array payload", () => {
+    expect(normalizeHardwareDetailPayload([{ agentId: "a1" }], "a1")).toEqual({ agentId: "a1" });
   });
 });
 

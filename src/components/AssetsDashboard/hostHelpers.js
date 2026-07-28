@@ -285,3 +285,42 @@ export function getDecommissionErrorMessage(error) {
   );
 }
 
+
+export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
+  const source = payload?.agent || payload?.host || payload?.item || payload || {};
+  return {
+    agentId: coalesceValue(
+      source.agentId,
+      source.agent_id,
+      source.deviceId,
+      source.device_id,
+      fallbackHost.agent_id,
+      fallbackHost.agentId
+    ),
+    hostname: coalesceValue(
+      source.hostname,
+      source.host,
+      source.deviceName,
+      source.device_name,
+      fallbackHost.hostname
+    ),
+    platform: coalesceValue(source.platform, source.os_platform, fallbackHost.os_platform),
+    os: coalesceValue(source.distro, source.os, source.os_version, fallbackHost.os_version),
+    agentVersion: coalesceValue(source.agentVersion, source.agent_version, fallbackHost.agent_version),
+    lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
+    localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),
+    lastSeenAt: coalesceValue(source.lastSeenAt, source.last_seen_at, source.lastHeartbeat, source.last_heartbeat),
+    // Mobile (MDM/MAM) managed-state — present only for ios/android devices,
+    // surfaced from agent.agent_payload by the detail endpoint.
+    isMobile: coalesceValue(source.mobile, fallbackHost.mobile) === "true" || source.mobile === true,
+    operatingMode: coalesceValue(source.operatingMode, source.operating_mode),
+    storageHealth: coalesceValue(source.storageHealth, source.storage_health),
+    raw: source,
+  };
+}
+
+export function normalizeHardwareDetailPayload(payload, agentId) {
+  const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+  const exact = items.find((item) => String(item?.agentId || item?.agent_id || "") === String(agentId));
+  return exact || items[0] || null;
+}
