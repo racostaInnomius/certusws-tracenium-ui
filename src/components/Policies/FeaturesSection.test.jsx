@@ -42,6 +42,53 @@ describe("FeaturesSection", () => {
     expect(onChange.mock.calls[0][0].features.remoteShell).toBe(true);
   });
 
+  // ── Consent gate ────────────────────────────────────────────────
+  //
+  // The whole consent chain exists (policy flag, backend gate, agent
+  // plumbing) except the native prompt itself, so enabling it today just
+  // makes the backend refuse every session. The control therefore has to be
+  // one-way: never switchable ON, always switchable OFF.
+  describe("Require user consent (not yet implementable)", () => {
+    const withConsent = (on) => ({
+      plugins: { rcp: true },
+      features: { remoteRequireConsent: on },
+    });
+
+    it("cannot be switched on", () => {
+      render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
+      expect(screen.getByRole("switch", { name: /Require user consent/i })).toBeDisabled();
+    });
+
+    it("is labelled as unavailable", () => {
+      render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
+      expect(screen.getByText("Not available yet")).toBeInTheDocument();
+    });
+
+    it("stays switchable when already on, so it can be undone", () => {
+      const onChange = vi.fn();
+      render(<FeaturesSection form={withConsent(true)} onChange={onChange} catalog={rcpCatalog} />);
+      const sw = screen.getByRole("switch", { name: /Require user consent/i });
+      expect(sw).toBeEnabled();
+      fireEvent.click(sw);
+      expect(onChange.mock.calls[0][0].features.remoteRequireConsent).toBe(false);
+    });
+
+    it("warns that sessions are being blocked while it is on", () => {
+      render(<FeaturesSection form={withConsent(true)} onChange={() => {}} catalog={rcpCatalog} />);
+      expect(screen.getByText(/Remote control is currently blocked/i)).toBeInTheDocument();
+    });
+
+    it("shows no warning while it is off", () => {
+      render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
+      expect(screen.queryByText(/Remote control is currently blocked/i)).not.toBeInTheDocument();
+    });
+
+    it("readOnly still wins over the on-state exception", () => {
+      render(<FeaturesSection form={withConsent(true)} onChange={() => {}} catalog={rcpCatalog} readOnly />);
+      expect(screen.getByRole("switch", { name: /Require user consent/i })).toBeDisabled();
+    });
+  });
+
   it("disables switches when readOnly", () => {
     render(<FeaturesSection form={rcpEnabledForm} onChange={() => {}} catalog={rcpCatalog} readOnly />);
     expect(screen.getByRole("switch", { name: /Self-update/i })).toBeDisabled();

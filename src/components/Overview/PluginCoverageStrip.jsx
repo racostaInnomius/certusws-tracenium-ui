@@ -43,10 +43,9 @@ import {
   ListItemText,
   Chip,
   Divider,
-  CircularProgress,
-  Alert
 } from "@mui/material";
 import { BRAND, ROLE } from "../../theme/brand";
+import AsyncState from "../common/AsyncState";
 import { getPluginCoverageDevices } from "../../api/overview";
 
 function getValue(result) {
@@ -350,25 +349,17 @@ function PluginCoverageDrillDialog({
       </Tabs>
 
       <DialogContent sx={{ p: 0, minHeight: 220 }}>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : error ? (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="error" variant="outlined">
-              {error}
-            </Alert>
-          </Box>
-        ) : list.length === 0 ? (
-          <Box sx={{ p: 3, textAlign: "center" }}>
-            <Typography variant="body2" sx={{ color: BRAND.gray }}>
-              {tab === 0
-                ? "No devices missing this plugin. 🎉"
-                : "No devices reporting this plugin yet."}
-            </Typography>
-          </Box>
-        ) : (
+        <AsyncState
+          loading={loading}
+          error={error}
+          isEmpty={list.length === 0}
+          emptyText={
+            tab === 0
+              ? "No devices missing this plugin. 🎉"
+              : "No devices reporting this plugin yet."
+          }
+          minHeight={200}
+        >
           <List dense disablePadding>
             {list.map((dev, idx) => (
               <Box key={dev.agentId}>
@@ -425,7 +416,7 @@ function PluginCoverageDrillDialog({
               </Box>
             ))}
           </List>
-        )}
+        </AsyncState>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 1.5 }}>

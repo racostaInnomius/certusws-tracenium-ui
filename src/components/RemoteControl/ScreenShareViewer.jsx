@@ -13,8 +13,10 @@
 //     strings inside a JSON envelope. The backend never sees frame data.
 //   - Agent → Browser protocol (JSON over DataChannel):
 //       { op: "screenInfo",  width, height, fps }
-//       { op: "frame",  seq, width, height, data, cursorX, cursorY }     // small
-//       { op: "frameStart", seq, width, height, chunks, cursorX, cursorY } // large
+//       { op: "frame",  seq, width, height, data, cursorX, cursorY,
+//                       full, x, y, rw, rh }                       // small
+//       { op: "frameStart", seq, width, height, chunks, cursorX, cursorY,
+//                       full, x, y, rw, rh }                       // large
 //       { op: "frameChunk", seq, idx, data }
 //       { op: "frameDone",  seq }
 //       { op: "error",  code, message, terminal }
@@ -47,6 +49,15 @@
 //         held buttons or modifiers on the remote
 //   - Coordinates are translated: clientX/Y → canvas-rect-relative →
 //     scaled to native display pixels using liveSize.
+//
+// Dirty rects:
+//   `width`/`height` are ALWAYS the full desktop size; the canvas is sized
+//   from them and input coordinates map through them. `full:false` means
+//   `data` is only the region at (x,y) that changed, which we blit over the
+//   pixels already on the canvas. That makes frames interdependent over an
+//   unreliable DataChannel, so the agent forces a periodic full frame — a
+//   dropped region self-heals within one keyframe interval instead of
+//   persisting for the whole session.
 //
 // Panel layout:
 //   ┌────────────────────────────────────────────┐
@@ -230,7 +241,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const [state, setState]         = React.useState(STATE.CONNECTING);
   const [errorMsg, setErrorMsg]   = React.useState("");
   const [screenInfo, setScreenInfo] = React.useState(null); // { width, height, fps }
-  const [liveSize, setLiveSize]   = React.useState(null);   // last frame { width, height }
+  const [liveSize, setLiveSize]   = React.useState(null);   // full desktop { width, height }
   const [liveFps, setLiveFps]     = React.useState(0);
   const [quality, setQuality]     = React.useState(60);     // JPEG quality 1-100
   const [fps, setFps]             = React.useState(DEFAULT_FPS); // requested capture rate
@@ -255,6 +266,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // Shape: { seq: number, expected: number, width: number, height: number,
   //          parts: Map<idx, string> } | null
   const assemblyRef = React.useRef(null);
+  // Mirror of liveSize for renderFrame, which lives in the first render's
+  // closure (dc.onmessage is bound once) and would otherwise read a stale
+  // value forever.
+  const liveSizeRef = React.useRef(null);
 
   // ── Stream settings (fps + quality) ──────────────────────────────────
   //
@@ -273,6 +288,9 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   React.useEffect(() => {
     fpsRef.current = fps;
   }, [fps]);
+  React.useEffect(() => {
+    liveSizeRef.current = liveSize;
+  }, [liveSize]);
 
   function sendStreamSettings(nextFps, nextQuality) {
     dcSend({ op: "setQuality", fps: nextFps, quality: nextQuality });
@@ -649,20 +667,57 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
   // Shared render path used by both single-message "frame" (M3.S1
   // small frames) and fully-assembled chunked frames (M3.S2).
-  function renderFrame(data, _width, _height) {
+  /**
+   * Paint one update onto the canvas.
+   *
+   * `meta` describes what `data` actually contains:
+   *   { screenW, screenH } — the FULL desktop size. The canvas is sized from
+   *     these, never from the decoded image, because a partial update's image
+   *     is only the changed region. Getting this wrong also breaks input
+   *     forwarding, which maps clicks through liveSize.
+   *   { full, x, y } — whether this is the whole desktop or a region to blit
+   *     at (x,y) over the pixels already on the canvas.
+   *
+   * Assigning canvas.width/height CLEARS the canvas, so it must happen only
+   * on a real resolution change — otherwise every partial update would wipe
+   * the frame it is supposed to be patching.
+   */
+  function renderFrame(data, meta) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const screenW = Number(meta?.screenW) || 0;
+    const screenH = Number(meta?.screenH) || 0;
+    const isFull = meta?.full !== false;
+    const dx = Number(meta?.x) || 0;
+    const dy = Number(meta?.y) || 0;
+
     const img = new Image();
     img.onload = () => {
-      if (canvas.width !== img.width || canvas.height !== img.height) {
-        canvas.width  = img.width;
-        canvas.height = img.height;
+      // Fall back to the image's own size for a full frame from an agent
+      // that doesn't report screen dimensions.
+      const w = screenW || (isFull ? img.width : canvas.width);
+      const h = screenH || (isFull ? img.height : canvas.height);
+
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        // Resolution change — this wipes the canvas, which is correct here:
+        // any partial we still hold refers to the old geometry.
+        canvas.width = w;
+        canvas.height = h;
+        setLiveSize({ width: w, height: h });
+      } else if (!liveSizeRef.current) {
+        setLiveSize({ width: canvas.width, height: canvas.height });
       }
-      ctx.drawImage(img, 0, 0);
-      setLiveSize({ width: img.width, height: img.height });
+
+      if (isFull) {
+        ctx.drawImage(img, 0, 0);
+      } else {
+        // Blit the changed region in place. Everything else on the canvas is
+        // still valid from earlier frames.
+        ctx.drawImage(img, dx, dy);
+      }
     };
     img.src = `data:image/jpeg;base64,${data}`;
 
@@ -726,7 +781,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       // M3.S3 — cursorX/Y travel on the frame so the overlay stays in
       // sync with the underlying pixels.
       case "frame": {
-        renderFrame(msg.data, msg.width, msg.height);
+        renderFrame(msg.data, {
+          screenW: msg.width,
+          screenH: msg.height,
+          full: msg.full,
+          x: msg.x,
+          y: msg.y
+        });
         updateCursor(msg.cursorX, msg.cursorY);
         break;
       }
@@ -747,6 +808,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           expected: Number(msg.chunks),
           width:    Number(msg.width  || 0),
           height:   Number(msg.height || 0),
+          // Region metadata rides on frameStart; the chunks carry payload only.
+          full:     msg.full,
+          x:        msg.x,
+          y:        msg.y,
           parts:    new Map()
         };
         updateCursor(msg.cursorX, msg.cursorY);
@@ -769,7 +834,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             (_, i) => asm.parts.get(i) ?? ""
           ).join("");
           assemblyRef.current = null;
-          renderFrame(assembled, asm.width, asm.height);
+          renderFrame(assembled, {
+            screenW: asm.width,
+            screenH: asm.height,
+            full: asm.full,
+            x: asm.x,
+            y: asm.y
+          });
         }
         break;
       }

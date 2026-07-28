@@ -18,7 +18,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ROLE } from "../../theme/brand";
 
 export default function FeaturesSection({ form, onChange, readOnly = false, catalog = [] }) {
   return (
@@ -213,38 +213,102 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             />
 
             {/* User-attended approval — gates ALL rcp.* sessions on
-                end-user consent at the endpoint. */}
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={Boolean(form?.features?.remoteRequireConsent)}
-                  onChange={(e) =>
-                    onChange({
-                      ...form,
-                      features: {
-                        ...(form.features || {}),
-                        remoteRequireConsent: e.target.checked,
-                      },
-                    })
-                  }
-                  disabled={readOnly}
-                />
-              }
-              label={
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Require user consent <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>(rcp.consent)</Typography>
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                    Prompt the logged-in user to approve before any remote session
-                    (shell / file / screen) opens. If the agent can’t prompt, the
-                    session is refused (fail-closed). Applies to all RCP capabilities.
-                  </Typography>
+                end-user consent at the endpoint.
+
+                ⚠️ NOT FUNCTIONAL YET. The backend gate, the policy flag and
+                the agent-side plumbing all exist, but no agent build
+                registers a real ConsentPrompter (see
+                agent-w/src/plugins/rcp/consent-prompt.ts — the default fails
+                closed by design). So no agent advertises `rcp.consent`, and
+                the backend refuses every consent-required session with 409.
+                Turning this on today does not add a prompt; it stops remote
+                control working entirely.
+
+                We show it disabled-but-visible rather than hiding it,
+                because hiding solves nothing for a tenant that already has
+                the flag set in policy — the value persists and keeps
+                blocking sessions with no way to see why. For that same
+                reason the switch stays operable while it is ON: an operator
+                must always be able to turn it back off. */}
+            {(() => {
+              const consentOn = Boolean(form?.features?.remoteRequireConsent);
+              return (
+                <Box sx={{ mt: 0.5 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={consentOn}
+                        onChange={(e) =>
+                          onChange({
+                            ...form,
+                            features: {
+                              ...(form.features || {}),
+                              remoteRequireConsent: e.target.checked,
+                            },
+                          })
+                        }
+                        // Can be switched OFF, never ON, until an agent can prompt.
+                        disabled={readOnly || !consentOn}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, color: consentOn ? BRAND.dark : BRAND.gray }}
+                        >
+                          Require user consent{" "}
+                          <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>
+                            (rcp.consent)
+                          </Typography>
+                          <Chip
+                            size="small"
+                            label="Not available yet"
+                            sx={{
+                              ml: 1,
+                              height: 18,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              bgcolor: BRAND.surfaceMuted,
+                              color: BRAND.gray,
+                            }}
+                          />
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                          Would prompt the logged-in user to approve before any remote
+                          session opens. No agent build can show that prompt yet, so
+                          the setting can&apos;t be enabled — with it on, every remote
+                          session is refused rather than prompted.
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ alignItems: "flex-start", mx: 0 }}
+                  />
+
+                  {consentOn && (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        mt: 1,
+                        ml: 0.5,
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: ROLE.criticalSoft,
+                        border: `1px solid ${ROLE.critical}33`,
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: ROLE.critical, fontWeight: 600 }}>
+                        Remote control is currently blocked for the devices this policy
+                        applies to. Every session is being refused because no agent can
+                        obtain the user&apos;s approval. Switch this off to restore access.
+                      </Typography>
+                    </Stack>
+                  )}
                 </Box>
-              }
-              sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
-            />
+              );
+            })()}
 
             {/* ── rcp.file confinement ────────────────────────────────
                 Only meaningful while file transfer is on. The agent

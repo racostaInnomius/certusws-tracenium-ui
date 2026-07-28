@@ -198,7 +198,7 @@ export default function RemoteControl() {
    *   - 409 / RCP_DEVICE_OFFLINE          — device offline mid-click
    *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent missing capability
    *   - 429 / RCP_TOO_MANY_SESSIONS       — concurrency cap hit
-   *   - 403 / RCP_ADMIN_MASTER_REQUIRED   — user isn't admin_master
+   *   - 403 / FORBIDDEN                   — caller lacks ADMIN/OWNER here
    */
   const handleConnect = async (device, type = "shell") => {
     try {
@@ -228,10 +228,14 @@ export default function RemoteControl() {
           "info",
           "This capability is not yet available on the selected agent."
         );
-      } else if (msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+      } else if (msg.includes("FORBIDDEN") || msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+        // M4 moved RCP onto the shared requireRole("ADMIN","OWNER") gate, so
+        // the backend now answers a plain FORBIDDEN. The old code is still
+        // matched because a browser may be talking to a backend that hasn't
+        // been rolled forward yet.
         notify(
           "warning",
-          "Remote Control is restricted to admin_master users in this milestone."
+          "You need the Admin or Owner role on this tenant to start a remote session."
         );
       } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
         notify("error", "Device is not currently connected. Try again later.");
