@@ -479,7 +479,7 @@ export default function HostsTable({
                             ...(canDelete
                               ? {
                                   bgcolor: BRAND.alert.error,
-                                  "&:hover": { bgcolor: "#991b1b" },
+                                  "&:hover": { bgcolor: BRAND.alert.errorHover },
                                 }
                               : {
                                   borderColor: BRAND.border,

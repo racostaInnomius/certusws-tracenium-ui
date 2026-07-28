@@ -40,6 +40,10 @@ export const BRAND = {
   alert: {
     error: "#E37D78",
     errorSoft: "rgba(227,125,120,0.22)",
+    // Pressed/hover shade for solid destructive buttons (Delete, Decommission).
+    // Deliberately much darker than `error`: the resting fill is a soft red, so
+    // a subtle hover would read as no feedback at all on a destructive action.
+    errorHover: "#991b1b",
     // "High" severity — orange, sits between critical-red and medium-amber so
     // the ordered severity scale (see theme/severity.js) reads at a glance.
     high: "#8b5418",

@@ -187,7 +187,7 @@ export default function DeviceDecommissionConfirmDialog({
             textTransform: "none",
             fontWeight: 800,
             bgcolor: BRAND.alert.error,
-            "&:hover": { bgcolor: "#991b1b" },
+            "&:hover": { bgcolor: BRAND.alert.errorHover },
           }}
         >
           {submitting ? "Queueing..." : "Delete permanently"}
