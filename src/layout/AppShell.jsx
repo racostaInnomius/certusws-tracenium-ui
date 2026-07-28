@@ -779,7 +779,15 @@ export default function AppShell() {
     // operator's own home tenant bleed into the experience). Skip it; the
     // probe re-runs once a client is actually selected (inPortfolioMode →
     // false re-triggers this effect).
-    if (inPortfolioMode) {
+    // Also wait while the portfolio is still resolving. On mount `portfolio`
+    // is null, so hasPortfolio (and therefore inPortfolioMode) is false — the
+    // check above alone let this 5-request probe fire BEFORE we knew whether
+    // the user even has a home tenant. For a vendor (admin_master), who has
+    // none until they pick one, every probe request came back tenant-less;
+    // the SPA read those as a dead session and bounced to login, looping.
+    // Nothing here is meaningful without a resolved tenant context, so hold
+    // off until the portfolio answers (this effect re-runs when it does).
+    if (inPortfolioMode || mspLoading) {
       setTenantInventoryState("unknown");
       return () => {
         cancelled = true;
@@ -797,7 +805,7 @@ export default function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [resolveTenantInventoryState, inPortfolioMode]);
+  }, [resolveTenantInventoryState, inPortfolioMode, mspLoading]);
 
   const handleAssetsEmptyStateChange = React.useCallback((isEmpty) => {
     const nextEmpty = Boolean(isEmpty);
