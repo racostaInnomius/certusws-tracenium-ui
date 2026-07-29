@@ -257,7 +257,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
 
 // ── Certificates tab (fleet, deduped by fingerprint) ─────────────────
 
-function CdpCertificatesTab({ refreshNonce }) {
+function CdpCertificatesTab({ refreshNonce, externalFilter }) {
   const [rows, setRows] = React.useState([]);
   const [rowCount, setRowCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -265,6 +265,23 @@ function CdpCertificatesTab({ refreshNonce }) {
   const [search, setSearch] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [includeRoots, setIncludeRoots] = React.useState(false);
+  // Set by dashboard drill-down. The backend has supported these two
+  // filters since Phase A; the grid had no control for them, so they
+  // are surfaced as removable chips rather than yet more dropdowns.
+  const [flag, setFlag] = React.useState("");
+  const [issuer, setIssuer] = React.useState("");
+
+  // Apply a drill-down coming from the Dashboard tab. Keyed on the
+  // filter object identity — the page mints a new one per click, so
+  // clicking the same issuer twice still re-applies.
+  React.useEffect(() => {
+    if (!externalFilter) return;
+    setSearch(externalFilter.search ?? "");
+    setStatus(externalFilter.status ?? "");
+    setFlag(externalFilter.flag ?? "");
+    setIssuer(externalFilter.issuer ?? "");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+  }, [externalFilter]);
 
   React.useEffect(() => {
     let alive = true;
@@ -274,6 +291,8 @@ function CdpCertificatesTab({ refreshNonce }) {
       pageSize: paginationModel.pageSize,
       search: search || undefined,
       status: status || undefined,
+      flag: flag || undefined,
+      issuer: issuer || undefined,
       includeRoots: includeRoots || undefined,
     })
       .then((resp) => {
@@ -295,7 +314,7 @@ function CdpCertificatesTab({ refreshNonce }) {
     return () => {
       alive = false;
     };
-  }, [paginationModel, search, status, includeRoots, refreshNonce]);
+  }, [paginationModel, search, status, flag, issuer, includeRoots, refreshNonce]);
 
   const columns = [
     {
@@ -391,6 +410,30 @@ function CdpCertificatesTab({ refreshNonce }) {
           }
           label={<Typography sx={{ fontSize: 13 }}>Show system roots</Typography>}
         />
+
+        {/* Drill-down filters arriving from the Dashboard tab. */}
+        {flag && (
+          <Chip
+            size="small"
+            label={`Flag: ${FLAG_LABELS[flag] ?? flag}`}
+            onDelete={() => {
+              setFlag("");
+              setPaginationModel((m) => ({ ...m, page: 0 }));
+            }}
+            sx={{ bgcolor: BRAND.alert.highSoft, color: BRAND.alert.high, fontWeight: 700 }}
+          />
+        )}
+        {issuer && (
+          <Chip
+            size="small"
+            label={`Issuer: ${issuer}`}
+            onDelete={() => {
+              setIssuer("");
+              setPaginationModel((m) => ({ ...m, page: 0 }));
+            }}
+            sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+          />
+        )}
       </Stack>
 
       <DataGrid
@@ -646,6 +689,14 @@ function CdpDevicesTab({ refreshNonce }) {
 export default function CryptoDiscovery() {
   const [tab, setTab] = React.useState(0);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
+  // Dashboard → Certificates drill-down. A fresh object per click so
+  // the child re-applies even when the same filter is picked twice.
+  const [certFilter, setCertFilter] = React.useState(null);
+
+  const drillDown = React.useCallback((filter) => {
+    setCertFilter({ ...filter });
+    setTab(1);
+  }, []);
 
   return (
     <Box>
@@ -669,10 +720,14 @@ export default function CryptoDiscovery() {
       </Tabs>
 
       <TabPanel value={tab} index={0}>
-        <CdpDashboard refreshNonce={refreshNonce} />
+        <CdpDashboard
+          refreshNonce={refreshNonce}
+          onDrillDown={drillDown}
+          onOpenDevices={() => setTab(2)}
+        />
       </TabPanel>
       <TabPanel value={tab} index={1}>
-        <CdpCertificatesTab refreshNonce={refreshNonce} />
+        <CdpCertificatesTab refreshNonce={refreshNonce} externalFilter={certFilter} />
       </TabPanel>
       <TabPanel value={tab} index={2}>
         <CdpDevicesTab refreshNonce={refreshNonce} />
