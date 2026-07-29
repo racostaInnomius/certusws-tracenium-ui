@@ -71,6 +71,57 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             }
             sx={{ alignItems: "flex-start", mx: 0 }}
           />
+
+          {/* Device Info flyout — support widget. Windows-only today:
+              the flyout lives in the Windows AgentTray; macOS surfaces
+              the same info via the menubar popover's Device Info tab,
+              which is always available and not gated by this flag. */}
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={Boolean(form?.features?.deviceInfoWidget)}
+                onChange={(e) =>
+                  onChange({
+                    ...form,
+                    features: {
+                      ...(form.features || {}),
+                      deviceInfoWidget: e.target.checked,
+                    },
+                  })
+                }
+                disabled={readOnly}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Device info widget{" "}
+                  <Chip
+                    label="agent 1.1.24+"
+                    size="small"
+                    sx={{
+                      ml: 0.5,
+                      height: 18,
+                      fontSize: 10,
+                      bgcolor: BRAND.tealSoft,
+                      color: BRAND.teal,
+                      fontWeight: 700,
+                    }}
+                  />
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  Shows an always-on-top &quot;Device info&quot; tab at the
+                  top-center of the screen on Windows endpoints. Users click it
+                  to see their user, computer name, IP, serial and more — with
+                  a Copy&nbsp;all button for support tickets. The same info is
+                  always available in the tray status window (and the macOS
+                  menubar) regardless of this setting.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+          />
         </Box>
 
         {/* ── Remote Control (RCP) sub-section ────────────────────────

@@ -348,6 +348,11 @@ export function readFormFromPolicy(policy, catalog = []) {
       remoteFile:   pickFeature(policy, "remoteFile"),    // rcp.file   (M2.S1)
       remoteScreen: pickFeature(policy, "remoteScreen"),  // rcp.screen (M3.S1)
       remoteRequireConsent: pickFeature(policy, "remoteRequireConsent"), // user-attended approval
+      // Device Info flyout (support widget) — the always-visible
+      // top-center tab on Windows endpoints. Off by default; the
+      // Device Info tab inside the tray status window is NOT gated by
+      // this. Requires agent 1.1.24+; older agents ignore the flag.
+      deviceInfoWidget: pickFeature(policy, "deviceInfoWidget"),
     },
     // rcp.file confinement (policyJson.rcp.file). Edited as newline-separated
     // text because operators paste path lists; converted to/from arrays at
@@ -461,6 +466,11 @@ export function formToPolicy(form, catalog = []) {
   const features = {};
   if (form?.features?.selfUpdate !== null && form?.features?.selfUpdate !== undefined) {
     features.selfUpdate = Boolean(form.features.selfUpdate);
+  }
+  // Device Info flyout — no plugin gate: the widget lives in the tray
+  // app, not in a plugin, so it applies to any device this policy hits.
+  if (form?.features?.deviceInfoWidget !== null && form?.features?.deviceInfoWidget !== undefined) {
+    features.deviceInfoWidget = Boolean(form.features.deviceInfoWidget);
   }
   // RCP flags are dropped when the rcp plugin is disabled in Plugin
   // Control — same omit-when-plugin-off pattern as the compliance and

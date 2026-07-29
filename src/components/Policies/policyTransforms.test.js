@@ -122,6 +122,22 @@ describe("formToPolicy", () => {
     noRcp.features.remoteShell = true; // rcp off → dropped
     expect(formToPolicy(noRcp, catalog).features).toBeUndefined();
   });
+  it("round-trips deviceInfoWidget without any plugin gate", () => {
+    // Read: surfaces the flag from the policy (v1 path).
+    const form = readFormFromPolicy(
+      { plugins: { enabled: [] }, features: { deviceInfoWidget: true } },
+      catalog
+    );
+    expect(form.features.deviceInfoWidget).toBe(true);
+    // Write: emitted even with no plugins enabled — the widget lives in
+    // the tray app, not in a plugin.
+    expect(formToPolicy(form, catalog).features).toEqual({ deviceInfoWidget: true });
+
+    // Unset stays omitted (null ⇒ operator never touched it).
+    const untouched = readFormFromPolicy({ plugins: { enabled: [] } }, catalog);
+    expect(untouched.features.deviceInfoWidget).toBeNull();
+    expect(formToPolicy(untouched, catalog).features).toBeUndefined();
+  });
   it("emits AI and SDP blocks only for positive integer values", () => {
     const form = readFormFromPolicy({}, catalog);
     form.ai.enabled = true;
