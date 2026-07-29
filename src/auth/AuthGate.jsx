@@ -18,7 +18,7 @@ export const API = {
 };
 import Logo from "../assets/T.png";
 import { useAuthContext } from "./AuthContext";
-import { clearApiCache, setApiCacheSessionScope } from "../api/http";
+import { clearApiCache, setApiCacheSessionScope, getActiveTenantId } from "../api/http";
 import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
@@ -398,9 +398,19 @@ export default function AuthGate({ children }) {
       });
 
       try {
+        // Must carry the SAME X-Tenant-Id the http layer sends. This is a raw
+        // fetch (it needs the status code before the http helpers throw), so
+        // the header has to be added by hand. Without it, a vendor
+        // (admin_master) — who has no home tenant — bootstraps as "no tenant"
+        // here while AuthProvider's httpGetJson bootstrap resolves the active
+        // one. The two disagree, the session scope flips, and the scope-change
+        // handler clears the active tenant: the user stays in the tenant shell
+        // while every request goes out tenant-less and 403s.
+        const activeTenant = getActiveTenantId();
         const res = await fetch(`${API.BASE}${API.BOOTSTRAP}`, {
           credentials: "include",
           signal: controller.signal,
+          ...(activeTenant ? { headers: { "X-Tenant-Id": activeTenant } } : {}),
         });
 
         if (cancelled) return { done: true };

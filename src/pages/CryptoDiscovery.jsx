@@ -42,9 +42,18 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
+import {
+  ExpiryHorizonPanel,
+  ActionRequiredPanel,
+  HygienePanel,
+  IssuersPanel,
+  DistributionPanel,
+  TopDevicesPanel,
+} from "../components/CryptoDiscovery/CdpDashboardPanels";
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import {
   getCdpSummary,
+  getCdpDashboard,
   listCdpCertificates,
   listCdpDevices,
   listCdpDeviceCertificates,
@@ -112,18 +121,29 @@ function TabPanel({ value, index, children }) {
 
 // ── Dashboard tab ────────────────────────────────────────────────────
 
-function CdpDashboard({ refreshNonce }) {
+function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
   const [summary, setSummary] = React.useState(null);
+  const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
+    // Two calls, not one: /summary is the cheap KPI read shared with
+    // other surfaces; /dashboard runs six aggregates and only the
+    // panels below need it. Failing the panels must not blank the KPIs.
     getCdpSummary()
       .then((resp) => {
         if (alive) setSummary(resp?.summary ?? null);
       })
       .catch((err) => {
         if (alive) setError(err?.message || String(err));
+      });
+    getCdpDashboard()
+      .then((resp) => {
+        if (alive) setDashboard(resp?.dashboard ?? null);
+      })
+      .catch(() => {
+        if (alive) setDashboard(null);
       });
     return () => {
       alive = false;
@@ -176,22 +196,62 @@ function CdpDashboard({ refreshNonce }) {
     },
   ];
 
+  const d = dashboard ?? {};
+
   return (
-    <Grid container spacing={2}>
-      {cards.map((card) => (
-        <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-          <SummaryCard
-            title={card.title}
-            value={card.value}
-            icon={card.icon}
-            accent={card.accent}
-            tint={card.tint}
-            titleHint={card.hint ?? null}
-            stretch
+    <Stack spacing={2}>
+      <Grid container spacing={2}>
+        {cards.map((card) => (
+          <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
+            <SummaryCard
+              title={card.title}
+              value={card.value}
+              icon={card.icon}
+              accent={card.accent}
+              tint={card.tint}
+              titleHint={card.hint ?? null}
+              stretch
+            />
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* Row 1 — when does the fleet break, and what do I do today. */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <ExpiryHorizonPanel data={d.expiryHorizon} noExpiryDate={d.noExpiryDate ?? 0} />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <ActionRequiredPanel
+            items={d.urgent}
+            onSelect={(row) => onDrillDown?.({ search: row.fingerprint256 })}
           />
         </Grid>
-      ))}
-    </Grid>
+      </Grid>
+
+      {/* Row 2 — posture: who signs, what's unhealthy, where they live. */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <IssuersPanel
+            issuers={d.topIssuers}
+            onSelect={(issuer) => onDrillDown?.({ issuer })}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <HygienePanel flags={d.flags} onSelect={(flag) => onDrillDown?.({ flag })} />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+          <DistributionPanel distribution={d.distribution} />
+        </Grid>
+      </Grid>
+
+      {/* Row 3 — worst devices, straight into the Devices tab. */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <TopDevicesPanel devices={d.topDevices} onSelect={() => onOpenDevices?.()} />
+        </Grid>
+      </Grid>
+    </Stack>
   );
 }
 

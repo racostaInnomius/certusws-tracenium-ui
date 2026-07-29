@@ -14,6 +14,12 @@ export async function getCdpSummary() {
   return httpGetJson(`${BASE}/summary`);
 }
 
+// Aggregate panels for the Dashboard tab (expiry horizon, hygiene
+// breakdown, issuers, distribution, worklist) in one round trip.
+export async function getCdpDashboard() {
+  return httpGetJson(`${BASE}/dashboard`);
+}
+
 export async function listCdpCertificates(params = {}) {
   return httpGetJson(`${BASE}/certificates${buildQuery(params)}`);
 }
