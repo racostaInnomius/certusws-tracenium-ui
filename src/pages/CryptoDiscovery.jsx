@@ -84,6 +84,8 @@ const FLAG_LABELS = {
   weak_key: "Weak key (<2048 RSA / <256 EC)",
   self_signed_leaf: "Self-signed leaf",
   long_validity: "Validity > 398 days",
+  nonstandard_root:
+    "Nonstandard root — trusted by only a small minority of comparable devices",
 };
 
 function FlagChips({ flags }) {

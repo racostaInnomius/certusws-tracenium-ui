@@ -86,6 +86,7 @@ import {
 } from "../components/Policies/policyDisplay";
 import SecurityPolicySection from "../components/Policies/SecurityPolicySection";
 import ManagedAppSection from "../components/Policies/ManagedAppSection";
+import CryptoDiscoverySection from "../components/Policies/CryptoDiscoverySection";
 import { AiIntelligenceSection, SoftwareDeliverySection } from "../components/Policies/AiSdpSections";
 import FeaturesSection from "../components/Policies/FeaturesSection";
 import IntervalScheduleCard from "../components/Policies/IntervalScheduleCard";
@@ -268,6 +269,13 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
       <SoftwareDeliverySection form={form} onChange={onChange} readOnly={readOnly} />
 
       <ManagedAppSection form={form} onChange={onChange} readOnly={readOnly} />
+
+      {/* CDP is opt-in and its only settings are meaningless with the
+          plugin off, so the section follows the plugin toggle rather
+          than sitting there inert. */}
+      {form.plugins?.cdp ? (
+        <CryptoDiscoverySection form={form} onChange={onChange} readOnly={readOnly} />
+      ) : null}
 
       <SecurityPolicySection form={form} onChange={onChange} readOnly={readOnly} />
 

@@ -228,3 +228,59 @@ describe("policyTransforms — rcp.file confinement", () => {
     expect(policy.rcp.file).toEqual({ roots: ["/home"], denyPaths: ["/home/x"] });
   });
 });
+
+// ── CDP (Crypto Discovery) ─────────────────────────────────────────
+//
+// Same omit-empty discipline as rcp.file: an untouched form must never
+// invent a `cdp` key, because absent means "agent defaults" (6h cadence,
+// JVM cacerts only) while an empty array would be a different claim.
+describe("policyTransforms — cdp (Crypto Discovery)", () => {
+  const cdpCatalog = [...catalog, { key: "cdp" }];
+  const withCdpOn = (policy = {}) =>
+    readFormFromPolicy({ ...policy, plugins: { enabled: ["cdp"] } }, cdpCatalog);
+
+  it("reads the keystore list out of the policy as newline-separated text", () => {
+    const form = readFormFromPolicy({
+      cdp: { intervalSeconds: 21600, javaKeystorePaths: ["/opt/a.jks", "C:\\App\\b.p12"] },
+    });
+    expect(form.cdp.javaKeystorePaths).toBe("/opt/a.jks\nC:\\App\\b.p12");
+    expect(form.cdp.intervalSeconds).toBe(21600);
+  });
+
+  it("yields blanks when the policy has no cdp block", () => {
+    expect(readFormFromPolicy({}).cdp).toEqual({ intervalSeconds: "", javaKeystorePaths: "" });
+  });
+
+  it("omits the cdp key entirely when nothing is configured", () => {
+    const form = withCdpOn();
+    expect(formToPolicy(form, cdpCatalog).cdp).toBeUndefined();
+  });
+
+  it("omits the cdp key when the plugin is disabled, even if the form has values", () => {
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, cdpCatalog);
+    form.cdp = { intervalSeconds: 3600, javaKeystorePaths: "/opt/a.jks" };
+    expect(formToPolicy(form, cdpCatalog).cdp).toBeUndefined();
+  });
+
+  it("trims, drops blank lines and strips trailing separators", () => {
+    const form = withCdpOn();
+    form.cdp = { intervalSeconds: "", javaKeystorePaths: "  /opt/a.jks  \n\n/srv/ks/\n" };
+    expect(formToPolicy(form, cdpCatalog).cdp).toEqual({
+      javaKeystorePaths: ["/opt/a.jks", "/srv/ks"],
+    });
+  });
+
+  it("drops an out-of-range interval rather than sending it to the agent", () => {
+    const form = withCdpOn();
+    form.cdp = { intervalSeconds: 60, javaKeystorePaths: "/opt/a.jks" };
+    const policy = formToPolicy(form, cdpCatalog);
+    expect(policy.cdp.intervalSeconds).toBeUndefined();
+    expect(policy.cdp.javaKeystorePaths).toEqual(["/opt/a.jks"]);
+  });
+
+  it("round-trips a fully configured block", () => {
+    const original = { cdp: { intervalSeconds: 7200, javaKeystorePaths: ["/opt/a.jks"] } };
+    const policy = formToPolicy(withCdpOn(original), cdpCatalog);
+    expect(policy.cdp).toEqual({ intervalSeconds: 7200, javaKeystorePaths: ["/opt/a.jks"] });
+  });
+});

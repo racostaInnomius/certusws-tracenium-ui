@@ -11,6 +11,7 @@
 
 import * as React from "react";
 import { fetchPortfolio } from "./mspApi";
+import { useAuthContext } from "../auth/AuthContext";
 import {
   setActiveTenantId,
   getActiveTenantId,
@@ -47,6 +48,18 @@ export function MspProvider({ children }) {
   const [portfolio, setPortfolio] = React.useState(null); // { level, items } | null
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+
+  // The auth context is per-TENANT, not just per-user: /api/bootstrap returns
+  // the caller's membership (role, isActive), the resolved tenantId, and that
+  // tenant's session settings — all of which change when the active tenant
+  // changes. Nothing else re-fetches it (AuthGate only runs at mount), so
+  // without this the shell keeps the bootstrap taken in portfolio mode, where
+  // there IS no tenant: `auth.tenantId` stays undefined and `auth.tenantMember`
+  // stays null. Pages key off both (PluginControl, Policies, Jobs,
+  // SoftwareDelivery, PatchManagement, Sidebar…), so they silently render as
+  // "no tenant / no permissions" — data never loads and every control is
+  // disabled, even though the user really is inside a tenant as OWNER.
+  const { refreshAuth } = useAuthContext();
 
   // Active client. Hydrated from sessionStorage so a refresh keeps the
   // operator in the same client (the http layer already restored the id;
@@ -112,7 +125,15 @@ export function MspProvider({ children }) {
       writeJson(SWITCHABLE_KEY, slim);
       setSwitchableClients(slim);
     }
-  }, []);
+    // Re-bootstrap under the tenant we just entered. Runs AFTER
+    // setActiveTenantId so the request carries the new X-Tenant-Id. Not
+    // awaited — navigation shouldn't block on it; the shell re-renders when
+    // the fresh auth lands. A failure here must not strand the user, so it's
+    // swallowed (http.js already surfaces auth/temporary errors globally).
+    if (changed) {
+      refreshAuth().catch(() => {});
+    }
+  }, [refreshAuth]);
 
   // Return to the portfolio: clear the active client everywhere + wipe the
   // just-viewed tenant's cached data so the portfolio (and a subsequent
@@ -126,7 +147,12 @@ export function MspProvider({ children }) {
     }
     writeJson(ACTIVE_META_KEY, null);
     setActiveTenantState(null);
-  }, []);
+    // Same reason as enterTenant: back in portfolio mode the previous
+    // tenant's membership/settings no longer apply.
+    if (had) {
+      refreshAuth().catch(() => {});
+    }
+  }, [refreshAuth]);
 
   const value = React.useMemo(
     () => ({

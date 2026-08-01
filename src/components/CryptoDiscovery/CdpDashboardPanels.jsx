@@ -250,6 +250,11 @@ const FLAG_META = {
   weak_key: { label: "Weak key", hint: "RSA < 2048 bits or EC < 256 bits" },
   self_signed_leaf: { label: "Self-signed leaf", hint: "Self-signed non-CA cert in a machine store" },
   long_validity: { label: "Validity > 398d", hint: "Exceeds the CA/Browser Forum ceiling for leaf TLS certs" },
+  nonstandard_root: {
+    label: "Nonstandard root",
+    hint: "A CA trusted by only a small minority of comparable devices — the signature of an injected proxy CA or malware root. Needs at least 5 comparable devices to compute.",
+    security: true,
+  },
 };
 
 export function HygienePanel({ flags, onSelect }) {
@@ -304,7 +309,15 @@ export function HygienePanel({ flags, onSelect }) {
                   bgcolor: BRAND.surfaceMuted,
                   "& .MuiLinearProgress-bar": {
                     borderRadius: 3,
-                    bgcolor: entry.count > 0 ? BRAND.alert.high : BRAND.gray,
+                    // A nonstandard root is a possible intrusion, not
+                    // hygiene debt — it gets the error tone so it does
+                    // not read as "one more thing to tidy up someday".
+                    bgcolor:
+                      entry.count === 0
+                        ? BRAND.gray
+                        : entry.security
+                          ? BRAND.alert.error
+                          : BRAND.alert.high,
                   },
                 }}
               />

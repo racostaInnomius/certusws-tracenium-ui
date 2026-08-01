@@ -17,6 +17,12 @@ export const PATCH_INTERVAL_MAX = 604800;       // 7d
 export const UPDATE_INTERVAL_MIN = 60;          // 1m   — but useful range is hourly
 export const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable the
                                           //         module instead of cranking it
+// CDP: a full certificate-store scan is not cheap (OS stores + every JVM
+// cacerts), and certificates move on a scale of days — sub-15-minute
+// cadence buys nothing. Mirrors the backend validator + agent bounds.
+export const CDP_INTERVAL_MIN = 900;            // 15m
+export const CDP_INTERVAL_MAX = 86400;          // 24h
+export const CDP_KEYSTORE_PATHS_MAX = 50;
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
@@ -388,6 +394,16 @@ export function readFormFromPolicy(policy, catalog = []) {
       bandwidthLimitKbps:
         Number(policy?.sdp?.bandwidthLimitKbps) > 0 ? Number(policy.sdp.bandwidthLimitKbps) : "",
     },
+    // CDP (Crypto Discovery) — scan cadence plus the application Java
+    // keystores to inventory on top of the JVM cacerts the agent finds by
+    // itself. Paths are edited as newline-separated text (same rationale
+    // as rcpFile: operators paste lists) and converted at the policy
+    // boundary.
+    cdp: {
+      intervalSeconds:
+        Number(policy?.cdp?.intervalSeconds) > 0 ? Number(policy.cdp.intervalSeconds) : "",
+      javaKeystorePaths: (policy?.cdp?.javaKeystorePaths ?? []).join("\n"),
+    },
   };
 }
 
@@ -511,6 +527,21 @@ export function formToPolicy(form, catalog = []) {
     if (Object.keys(rcpFile).length > 0) {
       policy.rcp = { ...(policy.rcp || {}), file: rcpFile };
     }
+  }
+
+  // ── CDP (Crypto Discovery) ──────────────────────────────────────
+  // Gated on the plugin being enabled, and omit-when-empty like the
+  // rest: no key at all means "agent defaults" (6h cadence, JVM cacerts
+  // only). An empty array would be a different, useless statement.
+  if (pluginsEnabled.includes("cdp")) {
+    const cdp = {};
+    const interval = Number(form?.cdp?.intervalSeconds);
+    if (Number.isInteger(interval) && interval >= CDP_INTERVAL_MIN && interval <= CDP_INTERVAL_MAX) {
+      cdp.intervalSeconds = interval;
+    }
+    const keystores = splitPathLines(form?.cdp?.javaKeystorePaths);
+    if (keystores.length > 0) cdp.javaKeystorePaths = keystores;
+    if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }
 
   // ── Security policy block (Sprint 2 of Policy v2) ───────────────
