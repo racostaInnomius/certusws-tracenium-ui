@@ -315,6 +315,23 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     isMobile: coalesceValue(source.mobile, fallbackHost.mobile) === "true" || source.mobile === true,
     operatingMode: coalesceValue(source.operatingMode, source.operating_mode),
     storageHealth: coalesceValue(source.storageHealth, source.storage_health),
+    // Device location (AMP Phase 1). Desktop fixes are site-level: the backend
+    // derives them from the device's local subnet, so `locationSite` is only
+    // populated once a CIDR→site mapping exists and the subnet is the fallback
+    // label until then. `locationHistory` is the bounded ring buffer (max 10
+    // distinct positions, newest first) — always an array.
+    locationKey: coalesceValue(source.locationKey, source.location_key),
+    locationSource: coalesceValue(source.locationSource, source.location_source),
+    locationSite: coalesceValue(source.locationSite, source.location_site),
+    locationSubnet: coalesceValue(source.locationSubnet, source.location_subnet),
+    locationCity: coalesceValue(source.locationCity, source.location_city),
+    locationLastSeenAt: coalesceValue(
+      source.locationLastSeenAt,
+      source.location_last_seen_at
+    ),
+    locationHistory: Array.isArray(source.locationHistory)
+      ? source.locationHistory
+      : [],
     raw: source,
   };
 }
@@ -323,4 +340,25 @@ export function normalizeHardwareDetailPayload(payload, agentId) {
   const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
   const exact = items.find((item) => String(item?.agentId || item?.agent_id || "") === String(agentId));
   return exact || items[0] || null;
+}
+
+/**
+ * Human label for a device location fix.
+ *
+ * Falls back down the chain the backend can populate: a mapped site name is
+ * best, then the city, then the raw subnet. Returns EMPTY-style "—" when the
+ * device has no fix yet — a device that never reported a routable local IP is
+ * a legitimate state, not an error.
+ */
+export function formatLocationLabel(profile) {
+  const site = profile?.locationSite;
+  if (site) return String(site);
+
+  const city = profile?.locationCity;
+  if (city) return String(city);
+
+  const subnet = profile?.locationSubnet;
+  if (subnet) return String(subnet);
+
+  return "—";
 }

@@ -20,6 +20,7 @@ import {
   getDecommissionErrorMessage,
   normalizeHostDetailPayload,
   normalizeHardwareDetailPayload,
+  formatLocationLabel,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
 
@@ -187,5 +188,39 @@ describe("getDecommissionErrorMessage", () => {
     expect(getDecommissionErrorMessage({ body: { error: "FORBIDDEN" } })).toMatch(/permission/i);
     expect(getDecommissionErrorMessage({ body: { message: "boom" } })).toBe("boom");
     expect(getDecommissionErrorMessage({})).toMatch(/Unable to start/);
+  });
+});
+
+describe("device location (AMP Phase 1)", () => {
+  it("folds the location fields and always yields an array history", () => {
+    const out = normalizeHostDetailPayload({
+      locationKey: "subnet:10.20.30.0/24",
+      locationSource: "subnet",
+      locationSubnet: "10.20.30.0/24",
+      locationHistory: [{ locationKey: "subnet:10.20.30.0/24", hitCount: 4 }],
+    });
+    expect(out.locationKey).toBe("subnet:10.20.30.0/24");
+    expect(out.locationSource).toBe("subnet");
+    expect(out.locationSubnet).toBe("10.20.30.0/24");
+    expect(out.locationHistory).toHaveLength(1);
+  });
+
+  it("defaults history to [] when the device has no fix", () => {
+    expect(normalizeHostDetailPayload({}).locationHistory).toEqual([]);
+    // Junk from a drifted backend must not become the history either.
+    expect(normalizeHostDetailPayload({ locationHistory: "nope" }).locationHistory).toEqual([]);
+  });
+
+  it("formatLocationLabel prefers site, then city, then the raw subnet", () => {
+    expect(
+      formatLocationLabel({ locationSite: "Oficina CDMX", locationCity: "CDMX", locationSubnet: "10.20.30.0/24" })
+    ).toBe("Oficina CDMX");
+    expect(formatLocationLabel({ locationCity: "CDMX", locationSubnet: "10.20.30.0/24" })).toBe("CDMX");
+    expect(formatLocationLabel({ locationSubnet: "10.20.30.0/24" })).toBe("10.20.30.0/24");
+  });
+
+  it("formatLocationLabel returns an em-dash when there is no fix", () => {
+    expect(formatLocationLabel({})).toBe("—");
+    expect(formatLocationLabel(null)).toBe("—");
   });
 });

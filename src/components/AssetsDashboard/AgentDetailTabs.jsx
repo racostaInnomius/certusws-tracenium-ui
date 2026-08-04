@@ -33,7 +33,8 @@ import {
   formatDetailDate,
   formatDetailPercent,
   formatOperatingMode,
-  storageHealthColor
+  storageHealthColor,
+  formatLocationLabel
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
 import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
@@ -60,9 +61,54 @@ export function AgentTab({
                 <DetailField label="Agent version" value={agentVersion} mono />
                 <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
                 <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
+                <DetailField label="Location" value={formatLocationLabel(profile)} />
                 <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
                 <DetailField label="Status" value={connected ? "Online" : "Offline"} />
               </FieldGrid>
+
+              {/* Location history — the bounded ring buffer of DISTINCT
+                  positions (max 10). Rendered only when the device has
+                  actually moved: a single entry says nothing the "Location"
+                  field above doesn't already, so showing it would be noise. */}
+              {(profile?.locationHistory?.length ?? 0) > 1 ? (
+                <Box sx={{ mt: 2.5 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      color: "text.secondary",
+                      mb: 1
+                    }}
+                  >
+                    Location history
+                  </Typography>
+                  <Stack spacing={0.75}>
+                    {profile.locationHistory.map((entry) => (
+                      <Stack
+                        key={entry.locationKey}
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        sx={{ flexWrap: "wrap", rowGap: 0.5 }}
+                      >
+                        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                          {entry.siteName || entry.city || entry.subnetCidr || "—"}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label={`${entry.hitCount}\u00d7`}
+                          sx={{ height: 18, fontSize: 10.5, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+                        />
+                        <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
+                          {formatDetailDate(entry.firstSeenAt)} → {formatDetailDate(entry.lastSeenAt)}
+                        </Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                </Box>
+              ) : null}
 
               {isMobileDevice ? (
                 <>

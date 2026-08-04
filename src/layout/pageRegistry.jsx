@@ -36,6 +36,7 @@ const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 const Retention = React.lazy(() => import("../pages/Retention"));
 const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
 const CryptoDiscovery = React.lazy(() => import("../pages/CryptoDiscovery"));
+const LocationSites = React.lazy(() => import("../pages/LocationSites"));
 
 export const PAGE_REGISTRY = {
   // Assets keeps its welcome-state callback because the first-time
@@ -109,6 +110,10 @@ export const PAGE_REGISTRY = {
   // top-level dispatch as the other Settings sub-pages so deep
   // linking works (?page=session-settings).
   "session-settings": (ctx) => <SessionSettings onNavigate={ctx.onNavigate} />,
+
+  // Location sites — the CIDR→site map behind the device drawer's "Location"
+  // field. Reached from Settings; deep-linkable like the other sub-pages.
+  "location-sites": (ctx) => <LocationSites onNavigate={ctx.onNavigate} />,
 };
 
 // Default → Overview. Any unrecognized ?page= key also falls through to

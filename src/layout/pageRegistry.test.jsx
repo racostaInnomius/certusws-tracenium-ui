@@ -29,6 +29,7 @@ describe("PAGE_REGISTRY", () => {
       "alerts",
       "retention",
       "session-settings",
+      "location-sites",
     ];
     for (const key of expected) {
       expect(PAGE_REGISTRY[key], `missing route: ${key}`).toBeTypeOf("function");
@@ -62,7 +63,7 @@ describe("renderPage", () => {
 
   it("wires onNavigate into the pages that take it", () => {
     const onNavigate = vi.fn();
-    for (const key of ["configurations", "welcome", "software-delivery", "retention", "session-settings"]) {
+    for (const key of ["configurations", "welcome", "software-delivery", "retention", "session-settings", "location-sites"]) {
       expect(renderPage(key, { onNavigate }).props.onNavigate, key).toBe(onNavigate);
     }
   });

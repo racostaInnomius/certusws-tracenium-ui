@@ -44,6 +44,56 @@ describe("AgentTab", () => {
     expect(screen.queryByTestId("mobile-commands")).not.toBeInTheDocument();
   });
 
+  it("shows the derived location, preferring the mapped site name", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{ ...base.profile, locationSite: "Oficina CDMX", locationSubnet: "10.20.30.0/24" }}
+      />
+    );
+    expect(screen.getByText("Oficina CDMX")).toBeInTheDocument();
+  });
+
+  it("falls back to the raw subnet when no site mapping exists yet", () => {
+    render(<AgentTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
+    expect(screen.getByText("10.20.30.0/24")).toBeInTheDocument();
+  });
+
+  it("hides location history for a device that has never moved", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationSubnet: "10.20.30.0/24",
+          locationHistory: [{ locationKey: "subnet:10.20.30.0/24", subnetCidr: "10.20.30.0/24", hitCount: 9 }],
+        }}
+      />
+    );
+    // A single position tells the operator nothing the field above doesn't.
+    expect(screen.queryByText("Location history")).not.toBeInTheDocument();
+  });
+
+  it("shows location history once the device has been at more than one site", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationSubnet: "10.20.90.0/24",
+          locationHistory: [
+            { locationKey: "subnet:10.20.90.0/24", subnetCidr: "10.20.90.0/24", hitCount: 2 },
+            { locationKey: "subnet:10.20.30.0/24", siteName: "Oficina CDMX", hitCount: 41 },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("Location history")).toBeInTheDocument();
+    expect(screen.getByText("Oficina CDMX")).toBeInTheDocument();
+    // hit_count is surfaced so "primary site" is distinguishable from "passed through".
+    expect(screen.getByText("41×")).toBeInTheDocument();
+  });
+
   it("shows the managed-device panel + commands for mobile devices", () => {
     render(
       <AgentTab
