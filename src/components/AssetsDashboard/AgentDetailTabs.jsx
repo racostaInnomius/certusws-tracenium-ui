@@ -34,7 +34,8 @@ import {
   formatDetailPercent,
   formatOperatingMode,
   storageHealthColor,
-  formatLocationLabel
+  formatLocationLabel,
+  formatCoordinates
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
 import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
@@ -62,6 +63,11 @@ export function AgentTab({
                 <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
                 <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
                 <DetailField label="Location" value={formatLocationLabel(profile)} />
+                {/* Coordinates only exist for mobile GPS fixes; desktop rows
+                    have none, so the field is omitted rather than dashed. */}
+                {formatCoordinates(profile) ? (
+                  <DetailField label="Coordinates" value={formatCoordinates(profile)} mono />
+                ) : null}
                 <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
                 <DetailField label="Status" value={connected ? "Online" : "Offline"} />
               </FieldGrid>

@@ -263,6 +263,11 @@ export const MAM_BOOL_KEYS = [
   "requireAppPIN",
   "requireBiometrics",
   "wipeAppData",
+  // Phase 2 of device geolocation. The ONLY switch that makes a managed mobile
+  // client collect coordinates; fail-closed, so a tenant that never touches it
+  // never produces location data. Desktop is unaffected — its position is
+  // derived server-side from the subnet and involves no endpoint permission.
+  "locationTracking",
 ];
 export const MAM_IDLE_MIN = 15;
 export const MAM_IDLE_MAX = 86400;
@@ -301,6 +306,15 @@ export const MAM_BOOL_FIELDS = [
   { key: "requireBiometrics", label: "Require biometrics", hint: "Face ID / fingerprint to open the app.", onLabel: "Require", offLabel: "Don't require" },
   { key: "allowOfflineMode", label: "Allow offline use", hint: "Let the app run without reaching the server.", onLabel: "Allow", offLabel: "Block" },
   { key: "wipeAppData", label: "Selective wipe", hint: "Clears app data + enrolled identity on next check-in.", onLabel: "Wipe", offLabel: "Keep" },
+  {
+    key: "locationTracking",
+    label: "Location tracking",
+    // Say plainly what enabling this does: it is personal data, and the
+    // operator should not discover that from a support ticket.
+    hint: "Reports the device's GPS position for recovery. The user is prompted by the OS and can refuse.",
+    onLabel: "Track",
+    offLabel: "Don't track",
+  },
 ];
 
 export function readFormFromPolicy(policy, catalog = []) {

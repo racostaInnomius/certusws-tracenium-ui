@@ -21,6 +21,7 @@ import {
   normalizeHostDetailPayload,
   normalizeHardwareDetailPayload,
   formatLocationLabel,
+  formatCoordinates,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
 
@@ -222,5 +223,27 @@ describe("device location (AMP Phase 1)", () => {
   it("formatLocationLabel returns an em-dash when there is no fix", () => {
     expect(formatLocationLabel({})).toBe("—");
     expect(formatLocationLabel(null)).toBe("—");
+  });
+});
+
+describe("formatCoordinates (Phase 2, mobile GPS)", () => {
+  it("renders a pasteable coordinate pair with accuracy", () => {
+    expect(
+      formatCoordinates({ locationLat: 20.673611, locationLon: -103.343611, locationAccuracyM: 12 })
+    ).toBe("20.67361, -103.34361 ±12 m");
+  });
+
+  it("omits accuracy when it is absent or unusable", () => {
+    expect(formatCoordinates({ locationLat: 20.6736, locationLon: -103.3436 })).toBe("20.67360, -103.34360");
+    expect(
+      formatCoordinates({ locationLat: 20.6736, locationLon: -103.3436, locationAccuracyM: 0 })
+    ).toBe("20.67360, -103.34360");
+  });
+
+  it("returns empty for desktop rows so the field can be omitted entirely", () => {
+    // Desktop fixes never carry coordinates — an em-dash would imply we tried.
+    expect(formatCoordinates({ locationSubnet: "10.20.30.0/24" })).toBe("");
+    expect(formatCoordinates({})).toBe("");
+    expect(formatCoordinates(null)).toBe("");
   });
 });

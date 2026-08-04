@@ -94,6 +94,23 @@ describe("AgentTab", () => {
     expect(screen.getByText("41×")).toBeInTheDocument();
   });
 
+  it("shows coordinates for a mobile GPS fix", () => {
+    render(
+      <AgentTab
+        {...base}
+        isMobileDevice
+        platformKey="ios"
+        profile={{ ...base.profile, locationLat: 20.673611, locationLon: -103.343611, locationAccuracyM: 12 }}
+      />
+    );
+    expect(screen.getByText("20.67361, -103.34361 ±12 m")).toBeInTheDocument();
+  });
+
+  it("omits the Coordinates field entirely on desktop", () => {
+    render(<AgentTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
+    expect(screen.queryByText("Coordinates")).not.toBeInTheDocument();
+  });
+
   it("shows the managed-device panel + commands for mobile devices", () => {
     render(
       <AgentTab

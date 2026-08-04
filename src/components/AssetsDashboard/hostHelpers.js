@@ -329,6 +329,11 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
       source.locationLastSeenAt,
       source.location_last_seen_at
     ),
+    // Coordinates arrive only for `gps` fixes (mobile, Phase 2). Desktop rows
+    // are always null here — we never infer coordinates for them.
+    locationLat: source.locationLat ?? source.location_lat ?? null,
+    locationLon: source.locationLon ?? source.location_lon ?? null,
+    locationAccuracyM: source.locationAccuracyM ?? source.location_accuracy_m ?? null,
     locationHistory: Array.isArray(source.locationHistory)
       ? source.locationHistory
       : [],
@@ -361,4 +366,21 @@ export function formatLocationLabel(profile) {
   if (subnet) return String(subnet);
 
   return "—";
+}
+
+/**
+ * Format a GPS fix for display, or "" when there is none.
+ *
+ * Shown verbatim rather than reverse-geocoded: Phase 2 exists for device
+ * recovery, and an operator chasing a stolen phone needs coordinates they can
+ * paste into a map, not a neighbourhood name.
+ */
+export function formatCoordinates(profile) {
+  const lat = Number(profile?.locationLat);
+  const lon = Number(profile?.locationLon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+
+  const accuracy = Number(profile?.locationAccuracyM);
+  const suffix = Number.isFinite(accuracy) && accuracy > 0 ? ` ±${Math.round(accuracy)} m` : "";
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}${suffix}`;
 }
