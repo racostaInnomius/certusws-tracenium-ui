@@ -19,7 +19,10 @@ describe("PAGE_REGISTRY", () => {
       "agent-releases",
       "software-delivery",
       "jobs",
-      "policies",
+      "agent-settings",
+      "security-baselines",
+      "device-management",
+      "policies", // legacy alias → AgentSettings
       "audit",
       "pki",
       "ad",

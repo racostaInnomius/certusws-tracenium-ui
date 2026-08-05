@@ -820,14 +820,16 @@ export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
   }
 }
 
-export async function httpPatchJson(url, body, { timeoutMs } = {}) {
+export async function httpPatchJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
 
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PATCH",
       credentials: "include",
-      headers: withTenantHeader({ "Content-Type": "application/json" }),
+      // Optional extra headers (e.g. If-Match for the domain-scoped
+      // policy saves) merge on top, same contract as httpPutJson.
+      headers: withTenantHeader({ "Content-Type": "application/json", ...(headers || {}) }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });

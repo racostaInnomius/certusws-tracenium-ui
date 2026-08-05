@@ -82,11 +82,17 @@ const EMPTY_TENANT_GATED_PAGES = new Set([
   "remote-control",
   "jobs",
   "policies",
+  "agent-settings",
+  "security-baselines",
   "audit",
   "alerts",
   "pki",
   "plugin-control",
   "cdp",
+  // NOTE: "device-management" is deliberately NOT gated. With an empty
+  // fleet it's the natural entry point for enrolling the first mobile
+  // device, so blurring it behind the "no information yet" overlay
+  // would hide exactly what a new tenant needs to reach.
 ]);
 
 function readNumber(...values) {

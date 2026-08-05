@@ -24,7 +24,9 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
@@ -672,11 +674,22 @@ export default function Sidebar({
     // bits") and admins often jump between them.
     { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
     { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
+
+    // Device Management (MDM/MAM) sits with the operational surfaces,
+    // not under Administration: it's a product area in its own right
+    // (first-party MDM lands here), not a configuration knob.
+    ...(isPrivileged
+      ? [{ label: "Device Management", key: "device-management", icon: <PhonelinkSetupOutlinedIcon /> }]
+      : []),
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
       : []),
+
+    // Security Baselines = the desired endpoint state + remediation
+    // mode. Deliberately adjacent to Security Compliance (`ad`), which
+    // shows the evidence of that state.
     ...(isPrivileged
-      ? [{ label: "Policies", key: "policies", icon: <PolicyOutlinedIcon /> }]
+      ? [{ label: "Security Baselines", key: "security-baselines", icon: <ShieldOutlinedIcon /> }]
       : []),
     ...(isPrivileged
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
@@ -693,6 +706,10 @@ export default function Sidebar({
           // Inserted between PKI and Settings as agreed; visually
           // groups with the other admin surfaces.
           { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
+          // Agent Settings — HOW the enabled plugins behave (schedules,
+          // feature gates). Next to Plugin Control, which decides WHICH
+          // plugins are on.
+          { label: "Agent Settings", key: "agent-settings", icon: <TuneOutlinedIcon /> },
           { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
         ]
       : []),

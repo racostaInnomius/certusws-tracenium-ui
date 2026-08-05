@@ -65,6 +65,10 @@ import HardwareInventory from "./HardwareInventory";
 import Jobs from "./Jobs";
 import TokensAdministrator from "./TokensAdministrator";
 import TenantsAdministrator from "./TenantsAdministrator";
+// The three surfaces the old Policies page was split into.
+import AgentSettings from "./AgentSettings";
+import SecurityBaselines from "./SecurityBaselines";
+import DeviceManagement from "./DeviceManagement";
 
 afterEach(() => {
   cleanup();
@@ -108,6 +112,8 @@ function mockApi({ status = 200 } = {}) {
 const PROPS = {
   SoftwareDelivery: { onNavigate: vi.fn() },
   Assets: { onAssetsEmptyStateChange: vi.fn(), suppressEmptyStateOverlay: true },
+  SecurityBaselines: { onNavigate: vi.fn() },
+  DeviceManagement: { onNavigate: vi.fn() },
 };
 
 const PAGES = [
@@ -121,6 +127,9 @@ const PAGES = [
   ["Jobs", Jobs],
   ["TokensAdministrator", TokensAdministrator],
   ["TenantsAdministrator", TenantsAdministrator],
+  ["AgentSettings", AgentSettings],
+  ["SecurityBaselines", SecurityBaselines],
+  ["DeviceManagement", DeviceManagement],
 ];
 
 describe("page smoke — happy backend (200)", () => {

@@ -141,6 +141,54 @@ export const SECURITY_CAPABILITIES = [
         default: true, trueLabel: "Disable", falseLabel: "Allow" },
     ],
   },
+  {
+    key: "gatekeeper",
+    label: "Gatekeeper",
+    description: "Require Gatekeeper to be enabled so only signed, notarized software runs. Remediated with spctl; no reboot.",
+    osTags: ["macOS"],
+    enforcer: true,
+    fields: [
+      { key: "required", label: "Required to be enabled", type: "boolean",
+        default: true, trueLabel: "Require", falseLabel: "Allow disabled" },
+    ],
+  },
+  {
+    key: "remoteLogin",
+    label: "Remote Login (SSH)",
+    description: "Turn off the macOS Remote Login service. Remediated with systemsetup; no reboot.",
+    osTags: ["macOS"],
+    enforcer: true,
+    fields: [
+      { key: "disabled", label: "Remote Login disabled", type: "boolean",
+        default: true, trueLabel: "Disable", falseLabel: "Allow" },
+    ],
+  },
+  // Read-only on macOS: the agent reports drift accurately but cannot
+  // remediate — SIP needs the Recovery OS, FileVault needs interactive
+  // user auth. enforcer:false makes the card render "auto coming soon",
+  // and the backend rejects mode=auto outright with an explanation.
+  {
+    key: "sip",
+    label: "System Integrity Protection",
+    description: "Report whether SIP is enabled. Cannot be remediated remotely — enabling SIP requires booting into the Recovery OS.",
+    osTags: ["macOS"],
+    enforcer: false,
+    fields: [
+      { key: "required", label: "Required to be enabled", type: "boolean",
+        default: true, trueLabel: "Require", falseLabel: "Allow disabled" },
+    ],
+  },
+  {
+    key: "filevault",
+    label: "FileVault encryption",
+    description: "Report whether FileVault is on. Cannot be remediated remotely — enabling it prompts the user for their password and a Recovery Key.",
+    osTags: ["macOS"],
+    enforcer: false,
+    fields: [
+      { key: "required", label: "Required to be enabled", type: "boolean",
+        default: true, trueLabel: "Require", falseLabel: "Allow disabled" },
+    ],
+  },
 
   // ── Placeholders below: policy is persisted but the agent has no
   //    enforcer yet. The UI lets the operator pick `mode` and the

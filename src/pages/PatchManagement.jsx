@@ -510,7 +510,8 @@ function navigateToPolicies() {
   // Overview's navigateWithQuery). A direct anchor would full-reload
   // the SPA, which is jarring for a CTA that's strictly in-app.
   const params = new URLSearchParams(window.location.search);
-  params.set("page", "policies");
+  // The patch schedule lives in Agent Settings (formerly Policies).
+  params.set("page", "agent-settings");
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
   window.history.pushState({}, "", `${pathname}?${params.toString()}`);
   window.dispatchEvent(new PopStateEvent("popstate"));

@@ -34,7 +34,6 @@ import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -45,6 +44,7 @@ import {
   getEffectivePolicy,
   getTenantPolicy,
   listTenantPolicyStatus,
+  patchTenantPolicyDomain,
   pushDevicePolicy,
   pushTenantPolicy,
   saveDevicePolicy,
@@ -84,8 +84,6 @@ import {
   DetailRow,
   JsonBlock,
 } from "../components/Policies/policyDisplay";
-import SecurityPolicySection from "../components/Policies/SecurityPolicySection";
-import ManagedAppSection from "../components/Policies/ManagedAppSection";
 import CryptoDiscoverySection from "../components/Policies/CryptoDiscoverySection";
 import { AiIntelligenceSection, SoftwareDeliverySection } from "../components/Policies/AiSdpSections";
 import FeaturesSection from "../components/Policies/FeaturesSection";
@@ -124,7 +122,7 @@ import IntervalScheduleCard from "../components/Policies/IntervalScheduleCard";
 // `readFormFromPolicy()` and only mutates if the operator drops into
 // the advanced JSON editor (power-user mode).
 
-function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false }) {
+function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false, onSaveRawJson = null }) {
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
 
   // Hook is cheap to re-call — useCachedFetch returns the in-memory
@@ -268,7 +266,10 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
 
       <SoftwareDeliverySection form={form} onChange={onChange} readOnly={readOnly} />
 
-      <ManagedAppSection form={form} onChange={onChange} readOnly={readOnly} />
+      {/* MAM moved to Device Management; the security baseline moved to
+          Security Baselines. This page is strictly agent/plugin behavior.
+          The raw JSON editor below still shows those blocks (it edits the
+          WHOLE document) — but the form-level save can't touch them. */}
 
       {/* CDP is opt-in and its only settings are meaningless with the
           plugin off, so the section follows the plugin toggle rather
@@ -276,8 +277,6 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
       {form.plugins?.cdp ? (
         <CryptoDiscoverySection form={form} onChange={onChange} readOnly={readOnly} />
       ) : null}
-
-      <SecurityPolicySection form={form} onChange={onChange} readOnly={readOnly} />
 
       <Box sx={{ mt: 2 }}>
         <Button
@@ -298,7 +297,12 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
             onChange={handleJsonChange}
             disabled={readOnly}
             error={Boolean(jsonError)}
-            helperText={jsonError || "Preserves unknown keys. Saved value replaces the policy on the server."}
+            helperText={
+              jsonError ||
+              (onSaveRawJson
+                ? "Edits the WHOLE policy document, including the Security Baselines and Device Management blocks. Use the button below to save it."
+                : "Preserves unknown keys. Saved value replaces the policy on the server.")
+            }
             sx={{
               mt: 1,
               "& .MuiInputBase-root": {
@@ -308,6 +312,19 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
               },
             }}
           />
+          {onSaveRawJson ? (
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={onSaveRawJson}
+              disabled={readOnly || Boolean(jsonError)}
+              startIcon={<SaveOutlinedIcon />}
+              sx={{ mt: 1, textTransform: "none", fontWeight: 700 }}
+            >
+              Save raw JSON (replaces entire document)
+            </Button>
+          ) : null}
         </Collapse>
       </Box>
     </Box>
@@ -316,7 +333,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
 
 // ── Main component ───────────────────────────────────────────────────────
 
-export default function Policies() {
+export default function AgentSettings() {
   const theme = useTheme();
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
@@ -496,18 +513,28 @@ export default function Policies() {
     }
     try {
       setTenantSaving(true);
-      const policy = formToPolicy(tenantForm, pluginCatalog);
+      // Domain-scoped save: this page owns the agent-config slice ONLY.
+      // formToPolicy still rebuilds the whole document from the form
+      // (including security/mam populated read-only at load), so we strip
+      // the foreign domains before sending — the server preserves its
+      // stored copies of those keys verbatim. This is what stops Agent
+      // Settings from clobbering Security Baselines / Device Management,
+      // the way the old whole-document PUT used to.
+      const slice = formToPolicy(tenantForm, pluginCatalog);
+      delete slice.security;
+      delete slice.mam;
+      delete slice.managedApp;
       // Opt-locking: send the version we loaded the policy at as
       // If-Match. If Plugin Control (or another operator) wrote in the
       // meantime, backend returns 409 and we surface a non-blocking
       // notice + reload so the user can re-apply on top of fresh state.
       const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
-      await saveTenantPolicy(tenantId, policy, { expectedVersion });
-      showSnack("Tenant policy saved", "success");
+      await patchTenantPolicyDomain(tenantId, "agent-config", slice, { expectedVersion });
+      showSnack("Agent settings saved", "success");
       await loadTenant();
     } catch (e) {
       if (e?.status === 409) {
-        console.warn("[policies] tenant save rejected: stale policy", e?.body);
+        console.warn("[agent-settings] tenant save rejected: stale policy", e?.body);
         showSnack(
           "Policy was modified by someone else. Reloaded — review your changes and save again.",
           "warning"
@@ -515,7 +542,55 @@ export default function Policies() {
         await loadTenant();
       } else {
         console.error(e);
-        showSnack("Failed to save tenant policy", "error");
+        showSnack("Failed to save agent settings", "error");
+      }
+    } finally {
+      setTenantSaving(false);
+    }
+  };
+
+  // Raw-JSON escape hatch: replaces the ENTIRE policy document (all
+  // three domains) via the whole-doc PUT. Kept for power users; the
+  // confirm dialog makes the blast radius explicit.
+  const handleSaveTenantRawJson = async () => {
+    if (!canManage || !tenantId) return;
+    if (tenantJsonError) {
+      showSnack("Fix JSON errors before saving", "error");
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(tenantJsonDraft);
+    } catch {
+      showSnack("Fix JSON errors before saving", "error");
+      return;
+    }
+    const ok = await confirm({
+      title: "Replace the entire policy document?",
+      body:
+        "Saving raw JSON overwrites ALL policy domains — including the " +
+        "Security Baselines and Device Management (MAM) blocks, which are " +
+        "normally edited on their own pages.",
+      confirmText: "Replace document",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      setTenantSaving(true);
+      const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
+      await saveTenantPolicy(tenantId, parsed, { expectedVersion });
+      showSnack("Policy document replaced", "success");
+      await loadTenant();
+    } catch (e) {
+      if (e?.status === 409) {
+        showSnack(
+          "Policy was modified by someone else. Reloaded — review your changes and save again.",
+          "warning"
+        );
+        await loadTenant();
+      } else {
+        console.error(e);
+        showSnack("Failed to save policy document", "error");
       }
     } finally {
       setTenantSaving(false);
@@ -897,9 +972,9 @@ export default function Policies() {
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {/* Header */}
       <PageHeader
-        title="Policies"
-        subtitle="Configure plugin behavior — collection intervals and runtime flags. Enable plugins themselves under Plugin Control."
-        icon={<PolicyOutlinedIcon />}
+        title="Agent Settings"
+        subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. Enable plugins under Plugin Control; security remediation lives in Security Baselines; mobile/MAM in Device Management."
+        icon={<TuneOutlinedIcon />}
         actions={
           <RefreshControl
             refreshSeconds={refreshSeconds}
@@ -1013,6 +1088,7 @@ export default function Policies() {
               tenantPushing={tenantPushing}
               onSave={handleSaveTenant}
               onPush={handlePushTenant}
+              onSaveRawJson={handleSaveTenantRawJson}
               tenantStatus={tenantStatus}
               statusColumns={statusColumns}
               columnVisibilityModel={columnVisibilityModel}
@@ -1071,7 +1147,7 @@ function TenantTab(props) {
     tenantJsonDraft, setTenantJsonDraft,
     tenantJsonError, setTenantJsonError,
     tenantVersion, tenantHash, tenantUpdatedAt,
-    tenantSaving, tenantPushing, onSave, onPush,
+    tenantSaving, tenantPushing, onSave, onPush, onSaveRawJson,
     tenantStatus, statusColumns, columnVisibilityModel, onRowClick,
     loading,
     pluginCoverageResult,
@@ -1105,6 +1181,7 @@ function TenantTab(props) {
             setJsonDraft={setTenantJsonDraft}
             jsonError={tenantJsonError}
             setJsonError={setTenantJsonError}
+            onSaveRawJson={onSaveRawJson}
           />
 
           <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>

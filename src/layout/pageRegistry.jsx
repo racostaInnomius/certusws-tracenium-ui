@@ -26,7 +26,9 @@ const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
-const Policies = React.lazy(() => import("../pages/Policies"));
+const AgentSettings = React.lazy(() => import("../pages/AgentSettings"));
+const SecurityBaselines = React.lazy(() => import("../pages/SecurityBaselines"));
+const DeviceManagement = React.lazy(() => import("../pages/DeviceManagement"));
 const Audit = React.lazy(() => import("../pages/Audit"));
 const PKI = React.lazy(() => import("../pages/PKI"));
 const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
@@ -86,7 +88,22 @@ export const PAGE_REGISTRY = {
   "software-delivery": (ctx) => <SoftwareDelivery onNavigate={ctx.onNavigate} />,
 
   jobs: () => <Jobs />,
-  policies: () => <Policies />,
+
+  // The old single "Policies" page was split into three surfaces, one
+  // per audience: agent/plugin behavior (platform operator), security
+  // remediation baselines (security team), and enterprise device
+  // management (MDM/MAM). They edit disjoint slices of the SAME tenant
+  // policy document through domain-scoped PATCH endpoints, so they
+  // can't clobber each other.
+  "agent-settings": () => <AgentSettings />,
+  "security-baselines": (ctx) => <SecurityBaselines onNavigate={ctx.onNavigate} />,
+  "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
+
+  // Permanent alias: bookmarks, deep links and older docs point at
+  // ?page=policies. Agent Settings is the closest successor (it kept
+  // the tenant/device tabs and the raw-JSON editor).
+  policies: () => <AgentSettings />,
+
   audit: () => <Audit />,
   pki: () => <PKI />,
   ad: () => <SecurityCompliance />,
