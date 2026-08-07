@@ -10,6 +10,7 @@ import {
   formToPolicy,
   isEmptyPolicy,
   extractPolicyEnvelope,
+  MAM_BOOL_FIELDS,
 } from "./policyTransforms";
 
 const catalog = [
@@ -282,5 +283,26 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
     const original = { cdp: { intervalSeconds: 7200, javaKeystorePaths: ["/opt/a.jks"] } };
     const policy = formToPolicy(withCdpOn(original), cdpCatalog);
     expect(policy.cdp).toEqual({ intervalSeconds: 7200, javaKeystorePaths: ["/opt/a.jks"] });
+  });
+});
+
+describe("location tracking field metadata", () => {
+  const field = MAM_BOOL_FIELDS.find((f) => f.key === "locationTracking");
+
+  it("is offered as a MAM switch", () => {
+    expect(field).toBeTruthy();
+    expect(field.label).toBe("Location tracking");
+  });
+
+  it("warns that turning it off erases what was already collected", () => {
+    // The backend purges stored coordinates on the OFF write. An operator who
+    // only reads "stop tracking" would not expect the history to disappear.
+    expect(field.hint).toMatch(/erases/i);
+  });
+
+  it("says the end user is asked and may refuse", () => {
+    // Enabling the policy is not consent; the person still gets an OS prompt
+    // and an in-app notice, and declining is a supported outcome.
+    expect(field.hint).toMatch(/refuse/i);
   });
 });

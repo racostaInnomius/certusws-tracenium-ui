@@ -359,7 +359,9 @@ export const MAM_BOOL_FIELDS = [
     label: "Location tracking",
     // Say plainly what enabling this does: it is personal data, and the
     // operator should not discover that from a support ticket.
-    hint: "Reports the device's GPS position for recovery. The user is prompted by the OS and can refuse.",
+    // Turning it off deletes what was collected — an operator who is not told
+    // that would reasonably expect the history to survive the switch.
+    hint: "Reports the device's GPS position for recovery. The user is prompted by the OS and can refuse. Turning this off erases the coordinates already stored.",
     onLabel: "Track",
     offLabel: "Don't track",
   },
