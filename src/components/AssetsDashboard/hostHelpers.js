@@ -375,12 +375,30 @@ export function formatLocationLabel(profile) {
  * recovery, and an operator chasing a stolen phone needs coordinates they can
  * paste into a map, not a neighbourhood name.
  */
-export function formatCoordinates(profile) {
-  const lat = Number(profile?.locationLat);
-  const lon = Number(profile?.locationLon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+/**
+ * Coordinate or null — never a silent zero.
+ *
+ * `Number(null)` is 0 and passes Number.isFinite, so coercing straight from the
+ * payload turns "this device has no GPS fix" into a position off the coast of
+ * Africa. Every desktop row carries null here (Phase 1 derives location from
+ * the subnet and stores no coordinates), so that mistake is the common case,
+ * not the edge case.
+ *
+ * Zero itself is NOT rejected: lat 0 with a real lon is a point on the equator,
+ * and the backend already refuses the (0,0) pair at ingest.
+ */
+function toCoordinate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
-  const accuracy = Number(profile?.locationAccuracyM);
-  const suffix = Number.isFinite(accuracy) && accuracy > 0 ? ` ±${Math.round(accuracy)} m` : "";
+export function formatCoordinates(profile) {
+  const lat = toCoordinate(profile?.locationLat);
+  const lon = toCoordinate(profile?.locationLon);
+  if (lat === null || lon === null) return "";
+
+  const accuracy = toCoordinate(profile?.locationAccuracyM);
+  const suffix = accuracy !== null && accuracy > 0 ? ` ±${Math.round(accuracy)} m` : "";
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}${suffix}`;
 }

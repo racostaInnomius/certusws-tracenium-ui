@@ -111,6 +111,25 @@ describe("AgentTab", () => {
     expect(screen.queryByText("Coordinates")).not.toBeInTheDocument();
   });
 
+  it("omits Coordinates when the payload carries explicit nulls, not just missing keys", () => {
+    // REGRESSION: the API sends locationLat/Lon as null for every desktop
+    // device, and Number(null) is 0 — the drawer showed "0.00000, 0.00000".
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationSubnet: "10.20.30.0/24",
+          locationLat: null,
+          locationLon: null,
+          locationAccuracyM: null,
+        }}
+      />
+    );
+    expect(screen.queryByText("Coordinates")).not.toBeInTheDocument();
+    expect(screen.queryByText(/0\.00000/)).not.toBeInTheDocument();
+  });
+
   it("shows the managed-device panel + commands for mobile devices", () => {
     render(
       <AgentTab

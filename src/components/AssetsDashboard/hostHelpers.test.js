@@ -246,4 +246,34 @@ describe("formatCoordinates (Phase 2, mobile GPS)", () => {
     expect(formatCoordinates({})).toBe("");
     expect(formatCoordinates(null)).toBe("");
   });
+
+  it("treats an explicit null as 'no fix', not as zero", () => {
+    // REGRESSION: Number(null) is 0 and passes Number.isFinite, so coercing
+    // straight from the payload rendered "0.00000, 0.00000" — Null Island —
+    // on every desktop device. The absent-key cases above did not catch it
+    // because Number(undefined) is NaN.
+    expect(formatCoordinates({ locationLat: null, locationLon: null })).toBe("");
+    expect(formatCoordinates({ locationLat: null, locationLon: -103.34 })).toBe("");
+    expect(formatCoordinates({ locationLat: 20.67, locationLon: null })).toBe("");
+    expect(formatCoordinates({ locationLat: "", locationLon: "" })).toBe("");
+  });
+
+  it("returns empty for a normalized desktop payload — the shape the UI actually gets", () => {
+    // normalizeHostDetailPayload coerces every missing location field to null,
+    // so this is the real production input, not the hand-written {} above.
+    const profile = normalizeHostDetailPayload({ profile: { localIp: "10.20.30.41" } })?.profile;
+    expect(formatCoordinates(profile)).toBe("");
+  });
+
+  it("still renders a genuine zero latitude on the equator", () => {
+    // The fix is about null-ness, not about the digit 0: (0, lon) is a real
+    // place. The backend rejects only the (0,0) pair, at ingest.
+    expect(formatCoordinates({ locationLat: 0, locationLon: 32.5 })).toBe("0.00000, 32.50000");
+  });
+
+  it("ignores a null accuracy instead of printing ±0 m", () => {
+    expect(
+      formatCoordinates({ locationLat: 20.6736, locationLon: -103.3436, locationAccuracyM: null })
+    ).toBe("20.67360, -103.34360");
+  });
 });
