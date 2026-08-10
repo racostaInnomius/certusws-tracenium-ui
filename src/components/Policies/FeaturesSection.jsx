@@ -122,6 +122,56 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             }
             sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
           />
+
+          {/* Endpoint positioning. Distinct from the MAM switch that governs
+              phones: consenting to locate company handsets is not consenting
+              to locate employees' laptops. */}
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={Boolean(form?.features?.locationTracking)}
+                onChange={(e) =>
+                  onChange({
+                    ...form,
+                    features: {
+                      ...(form.features || {}),
+                      locationTracking: e.target.checked,
+                    },
+                  })
+                }
+                disabled={readOnly}
+              />
+            }
+            label={
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Location tracking{" "}
+                  <Chip
+                    label="agent 1.1.30+"
+                    size="small"
+                    sx={{
+                      ml: 0.5,
+                      height: 18,
+                      fontSize: 10,
+                      bgcolor: BRAND.tealSoft,
+                      color: BRAND.teal,
+                      fontWeight: 700,
+                    }}
+                  />
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                  Asks Windows for the endpoint&apos;s position and shows it on
+                  the device map. Requires location services to be enabled on
+                  the endpoint; macOS and Linux report nothing for now. Turning
+                  this off erases the coordinates already stored. Coordinates
+                  are personal data — check your local obligations before
+                  enabling it.
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
+          />
         </Box>
 
         {/* ── Remote Control (RCP) sub-section ────────────────────────

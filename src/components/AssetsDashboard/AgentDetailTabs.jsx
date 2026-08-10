@@ -13,6 +13,7 @@
 import * as React from "react";
 import {
   Box,
+  Button,
   Chip,
   CircularProgress,
   Paper,
@@ -35,10 +36,15 @@ import {
   formatOperatingMode,
   storageHealthColor,
   formatLocationLabel,
-  formatCoordinates
+  formatCoordinates,
+  getMapPin
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
 import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
+
+// Own chunk: Leaflet plus its CSS is dead weight on the overwhelming majority
+// of drawer opens, where nobody touches the map.
+const DeviceLocationMap = React.lazy(() => import("./DeviceLocationMap"));
 
 export function AgentTab({
   hostname,
@@ -52,6 +58,9 @@ export function AgentTab({
   commandDeviceId,
   platformKey
 }) {
+  const [mapOpen, setMapOpen] = React.useState(false);
+  const mapPin = React.useMemo(() => getMapPin(profile), [profile]);
+
   return (
             <>
               <FieldGrid>
@@ -71,6 +80,34 @@ export function AgentTab({
                 <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
                 <DetailField label="Status" value={connected ? "Online" : "Offline"} />
               </FieldGrid>
+
+              {/* The map is opt-in: it costs a chunk download and a round of
+                  tile requests to an external host, and most drawer opens are
+                  about software or compliance, not where the box is. */}
+              {mapPin ? (
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setMapOpen((v) => !v)}
+                    sx={{ textTransform: "none" }}
+                    aria-expanded={mapOpen}
+                  >
+                    {mapOpen ? "Hide map" : "View on map"}
+                  </Button>
+                  {mapOpen ? (
+                    <React.Suspense
+                      fallback={
+                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 1 }}>
+                          Loading map…
+                        </Typography>
+                      }
+                    >
+                      <DeviceLocationMap pin={mapPin} />
+                    </React.Suspense>
+                  ) : null}
+                </Box>
+              ) : null}
 
               {/* Location history — the bounded ring buffer of DISTINCT
                   positions (max 10). Rendered only when the device has

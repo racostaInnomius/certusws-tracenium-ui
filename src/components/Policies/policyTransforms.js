@@ -423,6 +423,12 @@ export function readFormFromPolicy(policy, catalog = []) {
       // Device Info tab inside the tray status window is NOT gated by
       // this. Requires agent 1.1.24+; older agents ignore the flag.
       deviceInfoWidget: pickFeature(policy, "deviceInfoWidget"),
+      // Endpoint positioning (agent 1.1.30+). Separate from
+      // mam.locationTracking, which governs the mobile clients: phones and
+      // laptops are different populations and consent for one is not consent
+      // for the other. Off by default, and the backend re-checks it before
+      // storing any coordinate.
+      locationTracking: pickFeature(policy, "locationTracking"),
     },
     // rcp.file confinement (policyJson.rcp.file). Edited as newline-separated
     // text because operators paste path lists; converted to/from arrays at
@@ -549,6 +555,9 @@ export function formToPolicy(form, catalog = []) {
   }
   // Device Info flyout — no plugin gate: the widget lives in the tray
   // app, not in a plugin, so it applies to any device this policy hits.
+  if (form?.features?.locationTracking !== null && form?.features?.locationTracking !== undefined) {
+    features.locationTracking = Boolean(form.features.locationTracking);
+  }
   if (form?.features?.deviceInfoWidget !== null && form?.features?.deviceInfoWidget !== undefined) {
     features.deviceInfoWidget = Boolean(form.features.deviceInfoWidget);
   }

@@ -41,7 +41,7 @@ import {
   deleteLocationSite,
 } from "../api/locationSites";
 
-const EMPTY_DRAFT = { cidr: "", siteName: "", description: "" };
+const EMPTY_DRAFT = { cidr: "", siteName: "", description: "", city: "", lat: "", lon: "" };
 
 export default function LocationSites({ onNavigate }) {
   const confirm = useConfirm();
@@ -89,6 +89,11 @@ export default function LocationSites({ onNavigate }) {
       cidr: row.cidr ?? "",
       siteName: row.siteName ?? "",
       description: row.description ?? "",
+      city: row.city ?? "",
+      // Empty string rather than null: these feed text inputs, and a null would
+      // flip them from controlled to uncontrolled on edit.
+      lat: row.lat ?? "",
+      lon: row.lon ?? "",
     });
     setFieldError({ field: null, message: "" });
     setDialogOpen(true);
@@ -204,6 +209,11 @@ export default function LocationSites({ onNavigate }) {
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
                     {row.siteName}
+                    {row.city ? (
+                      <Typography component="span" sx={{ fontSize: 13, color: "text.secondary", ml: 1 }}>
+                        {row.city}
+                      </Typography>
+                    ) : null}
                   </Typography>
                   {row.description ? (
                     <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
@@ -265,6 +275,42 @@ export default function LocationSites({ onNavigate }) {
               helperText={fieldError.field === "siteName" ? fieldError.message : " "}
               fullWidth
             />
+            <TextField
+              label="City"
+              placeholder="Ciudad de México"
+              value={draft.city}
+              onChange={(e) => setDraft((d) => ({ ...d, city: e.target.value }))}
+              disabled={saving}
+              error={fieldError.field === "city"}
+              helperText={
+                fieldError.field === "city"
+                  ? fieldError.message
+                  : "Shown as the device's location. Declared here on purpose — a device's public IP reports its internet exit (Starlink, VPN), not where it is."
+              }
+              fullWidth
+            />
+            <Stack direction="row" spacing={2}>
+              <TextField
+                label="Latitude (optional)"
+                placeholder="19.432608"
+                value={draft.lat}
+                onChange={(e) => setDraft((d) => ({ ...d, lat: e.target.value }))}
+                disabled={saving}
+                error={fieldError.field === "lat"}
+                helperText={fieldError.field === "lat" ? fieldError.message : "Both or neither — used to pin the site on the map."}
+                fullWidth
+              />
+              <TextField
+                label="Longitude (optional)"
+                placeholder="-99.133209"
+                value={draft.lon}
+                onChange={(e) => setDraft((d) => ({ ...d, lon: e.target.value }))}
+                disabled={saving}
+                error={fieldError.field === "lon"}
+                helperText={fieldError.field === "lon" ? fieldError.message : " "}
+                fullWidth
+              />
+            </Stack>
             <TextField
               label="Description (optional)"
               value={draft.description}

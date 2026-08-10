@@ -39,11 +39,13 @@ import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import LinkOffOutlinedIcon from "@mui/icons-material/LinkOffOutlined";
 import PersonRemoveOutlinedIcon from "@mui/icons-material/PersonRemoveOutlined";
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { Switch, FormControlLabel, InputAdornment } from "@mui/material";
 import PageHeader from "../components/common/PageHeader";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
 import {
@@ -55,6 +57,7 @@ import {
   fetchMspOperators,
   addMspOperator as apiAddOperator,
   removeMspOperator as apiRemoveOperator,
+  deleteMsp as apiDeleteMsp,
   fetchMspSettings,
   saveMspSettings,
 } from "./mspApi";
@@ -74,6 +77,8 @@ function roleColor(role) {
 }
 
 export default function MspAdmin({ onClose }) {
+  const confirm = useConfirm();
+
   // MSP list
   const [msps, setMsps] = React.useState([]);
   const [loadingMsps, setLoadingMsps] = React.useState(true);
@@ -129,6 +134,35 @@ export default function MspAdmin({ onClose }) {
     }
   }, [createName, loadMsps]);
 
+  // Delete a partner. The backend refuses to cascade (409 when the MSP
+  // still has clients or operators), and the button below is disabled in
+  // that case — but we surface the server message anyway, because the
+  // counts we render could be stale relative to another operator's edit.
+  const handleDeleteMsp = React.useCallback(
+    async (msp) => {
+      const ok = await confirm({
+        title: `Delete partner “${msp.name || `MSP ${msp.id}`}”?`,
+        body:
+          "The partner container is removed along with its settings, billing " +
+          "rates and claim codes.\n\nClient tenants and their devices are NOT " +
+          "affected — a partner can only be deleted once it has no clients " +
+          "and no operators.",
+        confirmText: "Delete partner",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await apiDeleteMsp(msp.id);
+        setToast(`Partner “${msp.name || msp.id}” deleted.`);
+        setSelected((cur) => (cur?.id === msp.id ? null : cur));
+        await loadMsps();
+      } catch (err) {
+        setToast(err?.body?.message || err?.message || "Could not delete the partner.");
+      }
+    },
+    [confirm, loadMsps]
+  );
+
   if (billingOpen) {
     return <MspBilling onClose={() => setBillingOpen(false)} />;
   }
@@ -137,7 +171,12 @@ export default function MspAdmin({ onClose }) {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: "auto" }}>
       <PageHeader
         title="Partner administration"
-        subtitle="Create MSP partners, assign client tenants, and manage each partner's operators."
+        // No "Save changes" button by design: this surface has no draft
+        // state — every action (create, assign, add/remove operator,
+        // delete) is applied the moment you confirm it, and each one
+        // reports back with a toast. Saying so up front stops operators
+        // hunting for a save button that would have nothing to commit.
+        subtitle="Create MSP partners, assign client tenants, and manage each partner's operators. Every change here applies immediately — there is nothing to save."
         icon={<BusinessOutlinedIcon />}
         actions={
           <Stack direction="row" spacing={1}>
@@ -208,9 +247,38 @@ export default function MspAdmin({ onClose }) {
                       "&:hover": { bgcolor: active ? BRAND.tealSoft : BRAND.rowHover },
                     }}
                   >
-                    <Typography sx={{ fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
-                      {m.name || `MSP ${m.id}`}
-                    </Typography>
+                    <Stack direction="row" alignItems="flex-start" spacing={1}>
+                      <Typography sx={{ fontWeight: 700, color: BRAND.dark, mb: 0.5, flex: 1, minWidth: 0 }}>
+                        {m.name || `MSP ${m.id}`}
+                      </Typography>
+                      {/* Disabled while the partner holds anything: the
+                          backend refuses to cascade, so showing it enabled
+                          would just produce a 409. The tooltip states the
+                          rule instead of making the operator discover it. */}
+                      <Tooltip
+                        title={
+                          m.clientCount > 0 || m.operatorCount > 0
+                            ? "Unassign every client and remove every operator before deleting"
+                            : "Delete partner"
+                        }
+                      >
+                        <span>
+                          <IconButton
+                            size="small"
+                            aria-label="Delete partner"
+                            disabled={m.clientCount > 0 || m.operatorCount > 0}
+                            onClick={(e) => {
+                              // The row itself selects the partner.
+                              e.stopPropagation();
+                              handleDeleteMsp(m);
+                            }}
+                            sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}
+                          >
+                            <DeleteOutlineOutlinedIcon sx={{ fontSize: 18 }} />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
                     <Stack direction="row" spacing={1.5}>
                       <Stack direction="row" spacing={0.5} alignItems="center">
                         <DevicesOutlinedIcon sx={{ fontSize: 15, color: BRAND.gray }} />

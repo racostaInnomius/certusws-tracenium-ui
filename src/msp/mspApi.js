@@ -108,6 +108,13 @@ export async function removeMspOperator(mspId, memberId) {
   );
 }
 
+// Vendor-only. The backend refuses to cascade: 409 MSP_HAS_CLIENTS /
+// MSP_HAS_OPERATORS if the partner isn't empty, so callers should
+// surface `err.body.message` rather than a generic failure.
+export async function deleteMsp(mspId) {
+  return httpDeleteJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}`);
+}
+
 /** Per-MSP settings (billing rate + report delivery). Vendor only. */
 export async function fetchMspSettings(mspId, options = {}) {
   return httpGetJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/settings`, { cache: "no-store", ...options });

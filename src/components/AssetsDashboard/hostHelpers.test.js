@@ -22,6 +22,7 @@ import {
   normalizeHardwareDetailPayload,
   formatLocationLabel,
   formatCoordinates,
+  getMapPin,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
 
@@ -212,12 +213,39 @@ describe("device location (AMP Phase 1)", () => {
     expect(normalizeHostDetailPayload({ locationHistory: "nope" }).locationHistory).toEqual([]);
   });
 
-  it("formatLocationLabel prefers site, then city, then the raw subnet", () => {
+  it("formatLocationLabel prefers the operator's site, then the raw subnet", () => {
+    // The site name is human-entered and exact; the subnet is at least true.
     expect(
-      formatLocationLabel({ locationSite: "Oficina CDMX", locationCity: "CDMX", locationSubnet: "10.20.30.0/24" })
+      formatLocationLabel({ locationSite: "Oficina CDMX", locationSubnet: "10.20.30.0/24" })
     ).toBe("Oficina CDMX");
-    expect(formatLocationLabel({ locationCity: "CDMX", locationSubnet: "10.20.30.0/24" })).toBe("CDMX");
     expect(formatLocationLabel({ locationSubnet: "10.20.30.0/24" })).toBe("10.20.30.0/24");
+  });
+
+  it("shows the city an operator DECLARED for the range", () => {
+    // locationCity comes from the site mapping — a human who knows the network
+    // wrote it down, so it is exact by construction.
+    expect(formatLocationLabel({ locationCity: "Ciudad de México" })).toBe("Ciudad de México");
+    // The site name still wins: it is more specific than the city.
+    expect(
+      formatLocationLabel({ locationSite: "Oficina Reforma", locationCity: "Ciudad de México" })
+    ).toBe("Oficina Reforma");
+  });
+
+  it("NEVER reports the IP-derived city as the device's location", () => {
+    // Measured on real hosts: a house in Avandaro resolved to Chicago and a
+    // device to Montreal, because both egress through a Starlink gateway. The
+    // IP genuinely belongs to that PoP, so this is not fixable with a fresher
+    // dataset — the city simply is not where the machine is. It travels in its
+    // own field (locationIpCity) precisely so it can never be mistaken for one.
+    expect(formatLocationLabel({ locationIpCity: "Montreal", locationCountry: "CA" })).toBe("\u2014");
+    expect(
+      formatLocationLabel({ locationIpCity: "Chicago", locationSubnet: "10.20.30.0/24" })
+    ).toBe("10.20.30.0/24");
+  });
+
+  it("formatLocationLabel still returns the em-dash when nothing is known", () => {
+    expect(formatLocationLabel({})).toBe("\u2014");
+    expect(formatLocationLabel(null)).toBe("\u2014");
   });
 
   it("formatLocationLabel returns an em-dash when there is no fix", () => {
@@ -275,5 +303,54 @@ describe("formatCoordinates (Phase 2, mobile GPS)", () => {
     expect(
       formatCoordinates({ locationLat: 20.6736, locationLon: -103.3436, locationAccuracyM: null })
     ).toBe("20.67360, -103.34360");
+  });
+});
+
+describe("getMapPin", () => {
+  it("returns a gps pin, with its accuracy radius, when the device reported one", () => {
+    expect(
+      getMapPin({
+        locationMapLat: 20.6736,
+        locationMapLon: -103.3436,
+        locationMapSource: "gps",
+        locationAccuracyM: 25,
+      })
+    ).toMatchObject({ lat: 20.6736, lon: -103.3436, source: "gps", accuracyM: 25 });
+  });
+
+  it("returns a site pin WITHOUT an accuracy radius", () => {
+    // A site pin is a whole network's nominal spot; drawing a radius around it
+    // would imply a measurement nobody took.
+    const pin = getMapPin({
+      locationMapLat: 19.4326,
+      locationMapLon: -99.1332,
+      locationMapSource: "site",
+      locationAccuracyM: 25,
+    });
+    expect(pin.source).toBe("site");
+    expect(pin.accuracyM).toBeNull();
+  });
+
+  it("returns null when there is nothing to plot", () => {
+    // Same null-vs-zero trap as formatCoordinates: the API sends explicit nulls.
+    expect(getMapPin({ locationMapLat: null, locationMapLon: null })).toBeNull();
+    expect(getMapPin({})).toBeNull();
+    expect(getMapPin(null)).toBeNull();
+    expect(getMapPin({ locationMapLat: 20.67, locationMapLon: null })).toBeNull();
+  });
+
+  it("defaults an unknown source to 'site', the weaker claim", () => {
+    const pin = getMapPin({ locationMapLat: 20.67, locationMapLon: -103.34 });
+    expect(pin.source).toBe("site");
+  });
+
+  it("carries the label so the map does not have to re-derive it", () => {
+    const pin = getMapPin({
+      locationMapLat: 19.4326,
+      locationMapLon: -99.1332,
+      locationMapSource: "site",
+      locationSite: "Oficina Reforma",
+    });
+    expect(pin.label).toBe("Oficina Reforma");
   });
 });

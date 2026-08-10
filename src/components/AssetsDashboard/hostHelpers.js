@@ -325,6 +325,11 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     locationSite: coalesceValue(source.locationSite, source.location_site),
     locationSubnet: coalesceValue(source.locationSubnet, source.location_subnet),
     locationCity: coalesceValue(source.locationCity, source.location_city),
+    locationMapLat: source.locationMapLat ?? source.location_map_lat ?? null,
+    locationMapLon: source.locationMapLon ?? source.location_map_lon ?? null,
+    locationMapSource: coalesceValue(source.locationMapSource, source.location_map_source),
+    locationRegion: coalesceValue(source.locationRegion, source.location_region),
+    locationCountry: coalesceValue(source.locationCountry, source.location_country),
     locationLastSeenAt: coalesceValue(
       source.locationLastSeenAt,
       source.location_last_seen_at
@@ -359,8 +364,23 @@ export function formatLocationLabel(profile) {
   const site = profile?.locationSite;
   if (site) return String(site);
 
+  // The city an operator DECLARED for this range, via the site mapping. Safe to
+  // show as the device's location precisely because a human wrote it down.
   const city = profile?.locationCity;
   if (city) return String(city);
+
+  // The IP-derived city (locationIpCity) is deliberately NOT shown here.
+  //
+  // It answers "where does this device's traffic leave the internet", which on
+  // Starlink, satellite or VPN egress is a different city — often a different
+  // country — from where the machine physically is. Measured against known
+  // hosts: a house in Avandaro reported Chicago (Starlink's CHCOILX1 gateway),
+  // and a device reported Montreal. Those are not dataset errors; the IP really
+  // does belong to that PoP, so no amount of dataset freshness fixes it.
+  //
+  // The labels are still collected and still returned by the API — only their
+  // promotion to "this is the device's location" is withdrawn, because a wrong
+  // city that looks authoritative is worse than no city at all.
 
   const subnet = profile?.locationSubnet;
   if (subnet) return String(subnet);
@@ -401,4 +421,30 @@ export function formatCoordinates(profile) {
   const accuracy = toCoordinate(profile?.locationAccuracyM);
   const suffix = accuracy !== null && accuracy > 0 ? ` ±${Math.round(accuracy)} m` : "";
   return `${lat.toFixed(5)}, ${lon.toFixed(5)}${suffix}`;
+}
+
+/**
+ * The pin to plot for this device, or null when there is nothing to plot.
+ *
+ * Two very different things can supply it, so the source travels with the
+ * coordinates: a `gps` pin is where the device actually reported itself, a
+ * `site` pin is only the nominal location of the network it sits on. The map
+ * renders them differently — claiming a laptop is exactly at the office pin
+ * would be the same category of lie the IP city was.
+ */
+export function getMapPin(profile) {
+  const lat = Number(profile?.locationMapLat);
+  const lon = Number(profile?.locationMapLon);
+  if (profile?.locationMapLat === null || profile?.locationMapLat === undefined) return null;
+  if (profile?.locationMapLon === null || profile?.locationMapLon === undefined) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const source = profile?.locationMapSource === "gps" ? "gps" : "site";
+  return {
+    lat,
+    lon,
+    source,
+    accuracyM: source === "gps" ? Number(profile?.locationAccuracyM) || null : null,
+    label: formatLocationLabel(profile),
+  };
 }

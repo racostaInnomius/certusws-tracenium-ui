@@ -306,3 +306,41 @@ describe("location tracking field metadata", () => {
     expect(field.hint).toMatch(/refuse/i);
   });
 });
+
+describe("desktop location tracking feature", () => {
+  it("round-trips through the form", () => {
+    const form = readFormFromPolicy(
+      { plugins: { enabled: [] }, features: { locationTracking: true } },
+      catalog
+    );
+    expect(form.features.locationTracking).toBe(true);
+    expect(formToPolicy(form, catalog).features.locationTracking).toBe(true);
+  });
+
+  it("stays unset when the operator never touched it", () => {
+    // Unset must be distinguishable from an explicit false, so an untouched
+    // policy does not start writing a switch the tenant never chose.
+    const form = readFormFromPolicy({ plugins: { enabled: [] } }, catalog);
+    expect(form.features.locationTracking).toBeNull();
+    // omit-empty: with nothing set, the whole features block is dropped rather
+    // than emitted with an explicit undefined.
+    expect(formToPolicy(form, catalog).features?.locationTracking).toBeUndefined();
+  });
+
+  it("is emitted as an explicit false when switched off", () => {
+    // The backend purge keys on this: an explicit false is what erases the
+    // coordinates already stored.
+    const form = readFormFromPolicy({ plugins: { enabled: [] } }, catalog);
+    form.features.locationTracking = false;
+    expect(formToPolicy(form, catalog).features.locationTracking).toBe(false);
+  });
+
+  it("is independent of the mobile MAM switch", () => {
+    const form = readFormFromPolicy(
+      { plugins: { enabled: [] }, features: { locationTracking: true }, mam: {} },
+      catalog
+    );
+    expect(form.features.locationTracking).toBe(true);
+    expect(form.managedApp?.locationTracking ?? null).toBeNull();
+  });
+});
