@@ -57,10 +57,17 @@ function getValue(result) {
 // it's the compliance-story plugin we surface most, PMP second for
 // patching, AMP third for inventory. A plugin the backend reports
 // that we don't have metadata for still renders (generic label).
+// Covers the whole backend catalog (modules/policies/plugin-catalog.ts):
+// amp, scp, pmp, sdp, cdp, rcp. Any key missing here still renders, but
+// with a bare uppercase key and no hint of what it does — which is what
+// CDP/RCP/SDP looked like before.
 const PLUGIN_META = {
   scp: { label: "SCP · Compliance" },
   pmp: { label: "PMP · Patching" },
-  amp: { label: "AMP · Inventory" }
+  amp: { label: "AMP · Inventory" },
+  sdp: { label: "SDP · Software" },
+  cdp: { label: "CDP · Crypto" },
+  rcp: { label: "RCP · Remote" }
 };
 
 // Enablement rate color. 100% green, >50% teal, <50% amber, 0% red.

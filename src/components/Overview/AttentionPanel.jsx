@@ -106,7 +106,12 @@ export default function AttentionPanel({ results, onNavigate }) {
       label: "critical/high compliance findings open",
       severity: "error",
       icon: ReportProblemOutlinedIcon,
-      navigate: () => onNavigate?.("security", { severity: "high" })
+      // Page key is "ad", not "security" — that's the route Security
+      // Compliance is registered under (see layout/pageRegistry.jsx).
+      // With the wrong key renderPage fell through to its Overview
+      // fallback, so the click silently kept the user where they were
+      // and read as a dead card.
+      navigate: () => onNavigate?.("ad", { severity: "high" })
     },
     {
       key: "failed_jobs",
