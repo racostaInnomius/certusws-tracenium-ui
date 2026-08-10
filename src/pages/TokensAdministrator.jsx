@@ -460,7 +460,18 @@ export default function TokensAdministrator({ embedded = false } = {}) {
     { staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
   );
   const quota = quotaData ?? null;
-  const quotaError = quotaFetchError ? "Failed to load token quota. Refresh the page or try again." : "";
+  // A 403 here is not a failure to load — it's "your role can't manage
+  // enrollment tokens in this tenant" (the endpoint requires ADMIN/OWNER,
+  // or admin_master). Telling that operator to refresh sends them in
+  // circles, since refreshing can never change their role. Distinguish it.
+  const quotaError = React.useMemo(() => {
+    if (!quotaFetchError) return "";
+    if (quotaFetchError.status === 403) {
+      return "You need the ADMIN or OWNER role in this tenant to manage enrollment tokens. Ask a tenant owner to grant it.";
+    }
+    return "Failed to load token quota. Refresh the page or try again.";
+  }, [quotaFetchError]);
+  const quotaForbidden = quotaFetchError?.status === 403;
 
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -749,13 +760,17 @@ const filteredRows = React.useMemo(() => {
 
       {quotaError && (
         <Alert
-          severity="error"
+          // A permissions problem is expected-and-explained, not a fault:
+          // "warning" so it doesn't read as something the operator broke.
+          severity={quotaForbidden ? "warning" : "error"}
           sx={{
             mb: 2,
             borderRadius: 2,
-            bgcolor: BRAND.alert.errorSoft,
+            bgcolor: quotaForbidden ? BRAND.alert.warningSoft : BRAND.alert.errorSoft,
             color: BRAND.dark,
-            "& .MuiAlert-icon": { color: BRAND.alert.error },
+            "& .MuiAlert-icon": {
+              color: quotaForbidden ? BRAND.alert.warning : BRAND.alert.error,
+            },
           }}
         >
           {quotaError}
