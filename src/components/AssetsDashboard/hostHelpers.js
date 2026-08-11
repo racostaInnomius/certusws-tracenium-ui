@@ -328,6 +328,7 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     locationMapLat: source.locationMapLat ?? source.location_map_lat ?? null,
     locationMapLon: source.locationMapLon ?? source.location_map_lon ?? null,
     locationMapSource: coalesceValue(source.locationMapSource, source.location_map_source),
+    locationStatus: coalesceValue(source.locationStatus, source.location_status),
     locationRegion: coalesceValue(source.locationRegion, source.location_region),
     locationCountry: coalesceValue(source.locationCountry, source.location_country),
     locationLastSeenAt: coalesceValue(
@@ -447,4 +448,54 @@ export function getMapPin(profile) {
     accuracyM: source === "gps" ? Number(profile?.locationAccuracyM) || null : null,
     label: formatLocationLabel(profile),
   };
+}
+
+/**
+ * Why the Location field is showing a bare network range.
+ *
+ * A CIDR is not an answer to "where is this machine" — it is what is left when
+ * both real sources are empty. Returning the reason (rather than leaving the
+ * operator to infer it from a string of digits) is what turns a dead end into
+ * something actionable.
+ *
+ * Returns "" whenever the label is already meaningful, so the caller can render
+ * it unconditionally.
+ */
+/**
+ * What the agent said about its own positioning, in plain language.
+ *
+ * Mirrors GeoStatus in the agent (plugins/amp/providers/geo.ts). Unknown values
+ * are passed through rather than swallowed: the agent ships independently and
+ * will report reasons this build has never heard of, and "the agent said
+ * something we do not recognise" is still more useful than silence.
+ */
+const LOCATION_STATUS_TEXT = {
+  ok: "",
+  disabled: "Location tracking is off for this tenant. Enable it in Policies → Features.",
+  unsupported: "This platform has no system location service, so the device cannot report a position.",
+  denied: "The endpoint refused: location services are off, or the user declined the prompt.",
+  unavailable: "Location is enabled, but the device has not produced a fix yet.",
+};
+
+export function getLocationHint(profile) {
+  const status = profile?.locationStatus;
+
+  // A reason the agent actually gave beats anything we can infer from here.
+  if (status && status !== "ok") {
+    return LOCATION_STATUS_TEXT[status] ?? `Agent reported location status "${status}".`;
+  }
+
+  // No reason reported at all — the agent predates the feature. Say that
+  // rather than implying the operator forgot to configure something.
+  if (!status && !profile?.locationSite && !profile?.locationCity) {
+    return profile?.locationSubnet
+      ? "Network range only — this agent is too old to report a position. Upgrade it, or map the range to a site."
+      : "This agent is too old to report a position.";
+  }
+
+  if (profile?.locationSite || profile?.locationCity) return "";
+  if (profile?.locationSubnet) {
+    return "Network range only — map it to a site to show a city here.";
+  }
+  return "";
 }

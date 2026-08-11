@@ -54,7 +54,7 @@ export function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper
   );
 }
 
-export function DetailField({ label, value, mono = false }) {
+export function DetailField({ label, value, mono = false, hint = "" }) {
   return (
     <Box sx={{ minWidth: 0 }}>
       <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
@@ -75,6 +75,14 @@ export function DetailField({ label, value, mono = false }) {
       >
         {value || "—"}
       </Typography>
+      {/* Optional second line explaining a value that is technically correct
+          but not self-explanatory — e.g. a bare CIDR under "Location", which
+          is what is left when no site mapping and no GPS fix exist. */}
+      {hint ? (
+        <Typography sx={{ mt: 0.25, fontSize: 11, color: "text.secondary", whiteSpace: "normal" }}>
+          {hint}
+        </Typography>
+      ) : null}
     </Box>
   );
 }

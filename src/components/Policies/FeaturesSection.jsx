@@ -148,7 +148,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   Location tracking{" "}
                   <Chip
-                    label="agent 1.1.30+"
+                    label="agent 1.1.28+"
                     size="small"
                     sx={{
                       ml: 0.5,

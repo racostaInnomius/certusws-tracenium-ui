@@ -23,6 +23,7 @@ import {
   formatLocationLabel,
   formatCoordinates,
   getMapPin,
+  getLocationHint,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
 
@@ -352,5 +353,49 @@ describe("getMapPin", () => {
       locationSite: "Oficina Reforma",
     });
     expect(pin.label).toBe("Oficina Reforma");
+  });
+});
+
+describe("getLocationHint", () => {
+  it("reports the reason the AGENT gave, not one we inferred", () => {
+    // The whole point for an MSP: four blank Location fields across five
+    // clients' fleets are four different problems, and only some need action.
+    expect(getLocationHint({ locationStatus: "disabled" })).toMatch(/off for this tenant/i);
+    expect(getLocationHint({ locationStatus: "unsupported" })).toMatch(/no system location service/i);
+    expect(getLocationHint({ locationStatus: "denied" })).toMatch(/refused|declined/i);
+    expect(getLocationHint({ locationStatus: "unavailable" })).toMatch(/not produced a fix/i);
+  });
+
+  it("passes through a reason this build has never heard of", () => {
+    // The agent ships independently and will invent new reasons. Showing the
+    // raw value beats showing nothing.
+    expect(getLocationHint({ locationStatus: "airplane_mode" })).toMatch(/airplane_mode/);
+  });
+
+  it("prefers the agent's reason over the subnet fallback text", () => {
+    expect(
+      getLocationHint({ locationStatus: "denied", locationSubnet: "192.168.1.0/24" })
+    ).toMatch(/refused|declined/i);
+  });
+
+  it("says the agent is too old when it reported no status at all", () => {
+    // This is the entire fleet today. Blaming the operator for not configuring
+    // something would send them to the wrong screen.
+    expect(getLocationHint({ locationSubnet: "192.168.1.0/24" })).toMatch(/too old/i);
+    expect(getLocationHint({})).toMatch(/too old/i);
+  });
+
+  it("says nothing once the device actually reported a position", () => {
+    expect(getLocationHint({ locationStatus: "ok", locationCity: "Guadalajara" })).toBe("");
+  });
+
+  it("says nothing when a site or city already answers the question", () => {
+    expect(
+      getLocationHint({ locationStatus: "ok", locationSite: "Oficina CDMX", locationSubnet: "192.168.1.0/24" })
+    ).toBe("");
+  });
+
+  it("survives a null profile", () => {
+    expect(() => getLocationHint(null)).not.toThrow();
   });
 });
