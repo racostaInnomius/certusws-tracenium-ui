@@ -67,9 +67,9 @@ import {
   getDeviceDetail,
   getDeviceTimeseries,
   // Sprint 4
-  buildFindingsCsvUrl,
+  downloadFindingsCsv,
   // Sprint 6
-  buildFindingsPdfUrl
+  downloadFindingsPdf
 } from "../api/compliance";
 import { BRAND, ROLE } from "../theme/brand";
 import {
@@ -253,6 +253,36 @@ export default function SecurityCompliance() {
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
 
+  // Sprint 4/6 — CSV/PDF export. Downloads go through httpGetBlob (see
+  // api/compliance.js) rather than a plain `<a href>` so an MSP operator's
+  // X-Tenant-Id override actually reaches the backend; failures surface
+  // through the same toast as the rest of the page instead of navigating
+  // the tab to a raw error response.
+  const [exportingCsv, setExportingCsv] = React.useState(false);
+  const [exportingPdf, setExportingPdf] = React.useState(false);
+
+  const handleExportCsv = React.useCallback(async () => {
+    setExportingCsv(true);
+    try {
+      await downloadFindingsCsv({ framework: selectedFramework || undefined });
+    } catch (err) {
+      showToast({ severity: "error", message: err?.message || "Could not export CSV." });
+    } finally {
+      setExportingCsv(false);
+    }
+  }, [selectedFramework, showToast]);
+
+  const handleExportPdf = React.useCallback(async () => {
+    setExportingPdf(true);
+    try {
+      await downloadFindingsPdf({ framework: selectedFramework || undefined });
+    } catch (err) {
+      showToast({ severity: "error", message: err?.message || "Could not export PDF." });
+    } finally {
+      setExportingPdf(false);
+    }
+  }, [selectedFramework, showToast]);
+
   // Sprint 5 — settings panel open/close. Boolean state; the panel
   // component owns the form state internally.
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -330,13 +360,12 @@ export default function SecurityCompliance() {
                 <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-            {/* Sprint 4 — CSV export. Anchor tag (not a fetch
-                button) so the browser handles the streaming
-                download natively + shows progress in the chrome.
-                The OIDC cookie credential rides along automatically.
-                Filter is the currently selected framework so the
-                operator can "save what they're looking at" without
-                a separate export dialog. */}
+            {/* Sprint 4 — CSV export. Fetched as an authenticated blob
+                (see handleExportCsv) rather than a plain anchor href, so
+                the X-Tenant-Id header for MSP-drilled sessions actually
+                reaches the backend. Filter is the currently selected
+                framework so the operator can "save what they're looking
+                at" without a separate export dialog. */}
             <Tooltip
               title={
                 selectedFramework
@@ -346,25 +375,22 @@ export default function SecurityCompliance() {
               arrow
               placement="bottom"
             >
-              <Button
-                component="a"
-                href={buildFindingsCsvUrl({
-                  framework: selectedFramework || undefined
-                })}
-                // No target="_blank" — same-tab keeps the OIDC
-                // cookie scope; the browser's download dialog
-                // handles the rest without leaving the page.
-                size="small"
-                variant="outlined"
-                startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                sx={{ textTransform: "none" }}
-              >
-                Export CSV
-              </Button>
+              <span>
+                <Button
+                  onClick={handleExportCsv}
+                  disabled={exportingCsv}
+                  size="small"
+                  variant="outlined"
+                  startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ textTransform: "none" }}
+                >
+                  {exportingCsv ? "Exporting…" : "Export CSV"}
+                </Button>
+              </span>
             </Tooltip>
-            {/* Sprint 6 — PDF export. Same anchor-tag pattern as
-                CSV; pdfkit emits Content-Disposition so the
-                browser handles the Save dialog. */}
+            {/* Sprint 6 — PDF export. Same authenticated-blob pattern as
+                CSV; pdfkit emits Content-Disposition so the filename
+                still comes from the backend. */}
             <Tooltip
               title={
                 selectedFramework
@@ -374,18 +400,18 @@ export default function SecurityCompliance() {
               arrow
               placement="bottom"
             >
-              <Button
-                component="a"
-                href={buildFindingsPdfUrl({
-                  framework: selectedFramework || undefined
-                })}
-                size="small"
-                variant="outlined"
-                startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
-                sx={{ textTransform: "none" }}
-              >
-                Export PDF
-              </Button>
+              <span>
+                <Button
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ textTransform: "none" }}
+                >
+                  {exportingPdf ? "Exporting…" : "Export PDF"}
+                </Button>
+              </span>
             </Tooltip>
             <RefreshControl
               refreshSeconds={refreshSeconds}

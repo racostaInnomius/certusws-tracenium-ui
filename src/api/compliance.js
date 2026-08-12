@@ -5,8 +5,9 @@
 // so callers can check `res.ok` before touching `res.items` etc.
 // The SCP page unwraps uniformly via a shared helper.
 
-import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpGetJson, httpPostJson, httpPutJson, httpGetBlob } from "./http";
 import { buildQuery } from "./query";
+import { saveBlob } from "../utils/browserState";
 
 const BASE = "/api/v1/security/compliance";
 
@@ -192,6 +193,36 @@ export function buildFindingsPdfUrl({
 } = {}) {
   const qs = buildQuery({ framework, includeClosed, maxDevices });
   return `${API_BASE}${BASE}/export/findings.pdf${qs}`;
+}
+
+// The URL builders above are kept for tests / possible external use, but
+// the Security Compliance page must NOT render them as a plain `<a href>`:
+// a browser-initiated navigation can't carry the X-Tenant-Id header an MSP
+// operator's drilled-in session needs (see http.js `withTenantHeader`), so
+// the export would silently reflect the operator's own tenant instead of
+// the client tenant actually being viewed. These download helpers use the
+// same authenticated-blob pattern mspApi.js already relies on for billing
+// and client-report exports.
+export async function downloadFindingsCsv({
+  framework,
+  includeClosed = false,
+  maxRows
+} = {}) {
+  const qs = buildQuery({ framework, includeClosed, maxRows });
+  const { blob, filename } = await httpGetBlob(`${BASE}/export/findings.csv${qs}`);
+  const fwTag = framework ? framework.replace(/[^a-z0-9_-]/gi, "_") : "all";
+  saveBlob(blob, filename || `tracenium-compliance-${fwTag}.csv`);
+}
+
+export async function downloadFindingsPdf({
+  framework,
+  includeClosed = false,
+  maxDevices
+} = {}) {
+  const qs = buildQuery({ framework, includeClosed, maxDevices });
+  const { blob, filename } = await httpGetBlob(`${BASE}/export/findings.pdf${qs}`);
+  const fwTag = framework ? framework.replace(/[^a-z0-9_-]/gi, "_") : "all";
+  saveBlob(blob, filename || `tracenium-compliance-${fwTag}.pdf`);
 }
 
 // ── Sprint 7 — device fleet ranking ────────────────────────────────
