@@ -72,12 +72,17 @@ const EVENT_TYPE_CATALOG = {
 // Per-category appearance — single source of truth for chip color
 // and dropdown header tint. Adding a new category means adding one
 // row here and the rest is picked up automatically.
+//
+// `color` must stay legible as small chip/label text on its `tint`
+// background (and on plain white in the drawer). The raw BRAND accent
+// colors (cyan, warning, gray) are tuned for large surfaces/icons and
+// are too light for text — use their darker *Text counterparts here.
 const CATEGORY_META = {
-  Policies: { color: BRAND.teal,           tint: BRAND.tealSoft  },
-  PKI:      { color: BRAND.alert.warning,  tint: BRAND.alert.warningSoft },
-  gRPC:     { color: BRAND.cyan || BRAND.teal, tint: BRAND.cyanSoft || BRAND.tealSoft },
-  Facts:    { color: BRAND.alert.error,    tint: BRAND.alert.errorSoft },
-  Other:    { color: BRAND.gray,           tint: BRAND.darkSoft  },
+  Policies: { color: BRAND.tealText,        tint: BRAND.tealSoft  },
+  PKI:      { color: BRAND.alert.warningText, tint: BRAND.alert.warningSoft },
+  gRPC:     { color: BRAND.cyanText,        tint: BRAND.cyanSoft || BRAND.tealSoft },
+  Facts:    { color: BRAND.alert.errorText, tint: BRAND.alert.errorSoft },
+  Other:    { color: BRAND.dark,            tint: BRAND.darkSoft  },
 };
 
 // Stable display order for category groupings in the dropdown.
