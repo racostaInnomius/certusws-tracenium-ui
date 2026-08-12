@@ -57,8 +57,22 @@ import DeletePackageDialog from "../components/software-delivery/DeletePackageDi
 import DeployWizardDialog from "../components/software-delivery/DeployWizardDialog";
 import IntakeTab from "../components/software-delivery/IntakeTab";
 import DistributionTab from "../components/software-delivery/DistributionTab";
+import OverviewTab from "../components/software-delivery/OverviewTab";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 import DeploymentDetailDrawer from "../components/software-delivery/DeploymentDetailDrawer";
+
+// Tab order in one place: the Overview tab was inserted at 0, which shifts
+// every other index. Naming them keeps cross-tab navigation (deploy →
+// deployments, KPI card → its tab) from silently pointing at the wrong panel
+// the next time the order changes.
+const TAB_INDEX = {
+  overview: 0,
+  catalog: 1,
+  deployments: 2,
+  intake: 3,
+  distribution: 4,
+};
 
 const TAB_SX = {
   textTransform: "none",
@@ -741,10 +755,15 @@ export default function SoftwareDelivery({ onNavigate }) {
     getTenantPolicy(tenantId)
       .then((res) => {
         if (cancelled) return;
-        // Backend returns 404 → http helper resolves null. The
-        // helper also accepts the policy json directly; both shapes
-        // route through the same getEnabledPluginSet logic.
-        const policyJson = res?.policy_json ?? res?.policyJson ?? null;
+        // The endpoint answers `{ ok, policy: { policy_version,
+        // policy_hash, policy_json } }` — the row is WRAPPED. Reading
+        // `res.policy_json` directly yields undefined, which made
+        // getEnabledPluginSet see an empty policy and the gate report
+        // "plugin disabled" for tenants that actually have SDP enabled.
+        // Unwrap the envelope first, same as PluginControl /
+        // PatchManagement / AgentSettings do. 404 → helper resolves null.
+        const row = res?.policy ?? res;
+        const policyJson = row?.policy_json ?? row?.policyJson ?? null;
         const enabled = getEnabledPluginSet(policyJson);
         setSdpEnabled(enabled.has("sdp"));
         setPolicyError(false);
@@ -788,7 +807,7 @@ export default function SoftwareDelivery({ onNavigate }) {
 
   const handleDeployFired = React.useCallback((id) => {
     setAutoOpenDeploymentId(id);
-    setActiveTab(1);
+    setActiveTab(TAB_INDEX.deployments);
   }, []);
 
   const goToPluginControl = () => {
@@ -879,6 +898,12 @@ export default function SoftwareDelivery({ onNavigate }) {
           }}
         >
           <Tab
+            icon={<SpaceDashboardOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Overview"
+            sx={TAB_SX}
+          />
+          <Tab
             icon={<InventoryOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Catalog"
@@ -906,19 +931,21 @@ export default function SoftwareDelivery({ onNavigate }) {
       </SectionPaper>
 
       {activeTab === 0 ? (
+        <OverviewTab onNavigateTab={(key) => setActiveTab(TAB_INDEX[key] ?? 0)} />
+      ) : activeTab === 1 ? (
         <CatalogTab
           canManage={canManage}
           notify={notify}
           onDeployFire={handleDeployFired}
         />
-      ) : activeTab === 1 ? (
+      ) : activeTab === 2 ? (
         <DeploymentsTab
           canManage={canManage}
           notify={notify}
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
-      ) : activeTab === 2 ? (
+      ) : activeTab === 3 ? (
         <IntakeTab canManage={canManage} notify={notify} />
       ) : (
         <DistributionTab canManage={canManage} notify={notify} />

@@ -91,6 +91,20 @@ export async function listIntakes(params = {}) {
   return httpGetJson(`${BASE}/intake${buildQuery(params)}`);
 }
 
+// ── Overview analytics ────────────────────────────────────────────
+//
+// Server-side aggregates. These exist because listDeployments carries an
+// N+1 (one counts query per row), so charting from the list would cost
+// hundreds of round trips. `window` is an "Nd" string, clamped to 90d.
+
+export async function getDeploymentTimeseries(window = "30d") {
+  return httpGetJson(`${BASE}/analytics/timeseries${buildQuery({ window })}`);
+}
+
+export async function getDownloadTierStats(window = "30d") {
+  return httpGetJson(`${BASE}/analytics/tier-stats${buildQuery({ window })}`);
+}
+
 // ── Distribution (Phase B) — sites + distribution points ──────────
 
 export async function listSites() {

@@ -18,6 +18,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Grid,
   IconButton,
   MenuItem,
   Stack,
@@ -34,7 +35,10 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LanOutlinedIcon from "@mui/icons-material/LanOutlined";
-import { BRAND } from "../../theme/brand";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import SummaryCard from "../common/SummaryCard";
+import { BRAND, ROLE } from "../../theme/brand";
 import {
   listSites,
   createSite,
@@ -256,6 +260,33 @@ export default function DistributionTab({ canManage, notify }) {
 
   const siteName = (id) => sites.find((s) => s.id === id)?.name ?? `#${id}`;
 
+  // Coverage is the number worth surfacing: a site with no active DP has its
+  // devices downloading from CDN/origin instead of the LAN, which is bandwidth
+  // being paid for twice. Both lists are already loaded, so this is a join in
+  // memory — no extra request.
+  const coverage = React.useMemo(() => {
+    const activeDpSiteIds = new Set(
+      dps.filter((dp) => dp.status === "active").map((dp) => dp.siteId)
+    );
+    const activeSites = sites.filter((s) => s.isActive);
+    const covered = activeSites.filter((s) => activeDpSiteIds.has(s.id));
+    const staleCutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const staleDps = dps.filter(
+      (dp) => dp.lastSeenAt && Date.parse(dp.lastSeenAt) < staleCutoff
+    ).length;
+    return {
+      totalSites: sites.length,
+      activeSites: activeSites.length,
+      totalDps: dps.length,
+      activeDps: dps.filter((dp) => dp.status === "active").length,
+      uncovered: activeSites.length - covered.length,
+      staleDps,
+      uncoveredSiteIds: new Set(
+        activeSites.filter((s) => !activeDpSiteIds.has(s.id)).map((s) => s.id)
+      ),
+    };
+  }, [sites, dps]);
+
   if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -266,6 +297,45 @@ export default function DistributionTab({ canManage, notify }) {
 
   return (
     <Stack spacing={3}>
+      {/* Coverage KPIs */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <SummaryCard
+            title="Sites"
+            value={coverage.totalSites}
+            icon={<LanOutlinedIcon fontSize="small" />}
+            titleHint="LAN sites defined by subnet (or tag override)."
+            sx={{ height: "100%" }}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <SummaryCard
+            title="Distribution points"
+            value={coverage.totalDps}
+            icon={<HubOutlinedIcon fontSize="small" />}
+            accent={ROLE.positive}
+            tint={ROLE.positiveSoft}
+            titleHint={
+              coverage.staleDps > 0
+                ? `${coverage.activeDps} active. ${coverage.staleDps} have not reported in over 24h.`
+                : `${coverage.activeDps} active.`
+            }
+            sx={{ height: "100%" }}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <SummaryCard
+            title="Sites without a DP"
+            value={coverage.uncovered}
+            icon={<WarningAmberOutlinedIcon fontSize="small" />}
+            accent={coverage.uncovered > 0 ? ROLE.caution : ROLE.positive}
+            tint={coverage.uncovered > 0 ? ROLE.cautionSoft : ROLE.positiveSoft}
+            titleHint="Devices at these sites download from the CDN or origin instead of the LAN."
+            sx={{ height: "100%" }}
+          />
+        </Grid>
+      </Grid>
+
       {/* Sites */}
       <Box>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -304,7 +374,17 @@ export default function DistributionTab({ canManage, notify }) {
               </TableRow>
             ) : (
               sites.map((s) => (
-                <TableRow key={s.id} sx={{ opacity: s.isActive ? 1 : 0.5 }}>
+                <TableRow
+                  key={s.id}
+                  sx={{
+                    opacity: s.isActive ? 1 : 0.5,
+                    // Flag the actionable case: an active site with no DP is
+                    // bandwidth being spent on the WAN unnecessarily.
+                    bgcolor: coverage.uncoveredSiteIds.has(s.id)
+                      ? BRAND.alert?.warningSoft
+                      : "transparent",
+                  }}
+                >
                   <TableCell sx={{ fontWeight: 600 }}>{s.name}</TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5} flexWrap="wrap">

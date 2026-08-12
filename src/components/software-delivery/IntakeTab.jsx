@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { BRAND } from "../../theme/brand";
 import {
   listIntakes,
@@ -62,6 +63,8 @@ export default function IntakeTab({ canManage, notify }) {
 
   const [reviewIntake, setReviewIntake] = React.useState(null);
   const [reviewSubmitting, setReviewSubmitting] = React.useState(false);
+  // Pipeline stage the operator drilled into; null = show everything.
+  const [stageFilter, setStageFilter] = React.useState(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -123,8 +126,98 @@ export default function IntakeTab({ canManage, notify }) {
     }
   };
 
+  // ── Pipeline stages ────────────────────────────────────────────
+  //
+  // The intake flow is upload → verify → review → catalog, but a flat table
+  // never communicated that. Each stage is a predicate over data the list
+  // already returns; clicking one filters the table below it.
+  const stages = React.useMemo(() => {
+    const verdictOf = (it) => it.verification?.verdict ?? it.verdict;
+    return [
+      { key: "all", label: "Uploaded", match: () => true, tone: "neutral" },
+      { key: "verified", label: "Verified", match: (it) => verdictOf(it) === "verified", tone: "ok" },
+      { key: "warn", label: "Warnings", match: (it) => verdictOf(it) === "warn", tone: "warn" },
+      { key: "blocked", label: "Blocked", match: (it) => verdictOf(it) === "blocked", tone: "crit" },
+      { key: "pending_review", label: "To review", match: (it) => it.status === "pending_review", tone: "neutral" },
+      { key: "approved", label: "In catalog", match: (it) => it.status === "approved", tone: "ok" },
+    ].map((s) => ({ ...s, count: items.filter(s.match).length }));
+  }, [items]);
+
+  const visibleItems = React.useMemo(() => {
+    if (!stageFilter || stageFilter === "all") return items;
+    const stage = stages.find((s) => s.key === stageFilter);
+    return stage ? items.filter(stage.match) : items;
+  }, [items, stageFilter, stages]);
+
+  const STAGE_TONES = {
+    ok: { bg: BRAND.alert?.successSoft, border: BRAND.alert?.success, color: BRAND.alert?.success },
+    warn: { bg: BRAND.alert?.warningSoft, border: BRAND.alert?.warning, color: BRAND.alert?.warning },
+    crit: { bg: BRAND.alert?.errorSoft, border: BRAND.alert?.error, color: BRAND.alert?.error },
+    neutral: { bg: "#fff", border: BRAND.border, color: BRAND.dark },
+  };
+
   return (
     <Box>
+      {/* Pipeline */}
+      {!loading && items.length > 0 ? (
+        <Box
+          sx={{
+            display: "flex",
+            gap: 1,
+            mb: 2,
+            overflowX: "auto",
+            pb: 0.5,
+          }}
+        >
+          {stages.map((stage, idx) => {
+            const tone = STAGE_TONES[stage.tone] || STAGE_TONES.neutral;
+            const selected = (stageFilter ?? "all") === stage.key;
+            return (
+              <React.Fragment key={stage.key}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setStageFilter(stage.key === "all" ? null : stage.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setStageFilter(stage.key === "all" ? null : stage.key);
+                    }
+                  }}
+                  sx={{
+                    flex: "1 1 0",
+                    minWidth: 116,
+                    cursor: "pointer",
+                    borderRadius: 2,
+                    px: 1.5,
+                    py: 1.25,
+                    textAlign: "center",
+                    bgcolor: tone.bg,
+                    border: `1px solid ${selected ? tone.border : BRAND.border}`,
+                    outline: selected ? `1px solid ${tone.border}` : "none",
+                    transition: "transform .12s ease",
+                    "&:hover": { transform: "translateY(-1px)" },
+                    "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
+                  }}
+                >
+                  <Typography sx={{ fontSize: 20, fontWeight: 800, lineHeight: 1, color: tone.color }}>
+                    {stage.count}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: BRAND.gray, mt: 0.5 }}>
+                    {stage.label}
+                  </Typography>
+                </Box>
+                {idx < stages.length - 1 ? (
+                  <Box sx={{ display: "flex", alignItems: "center", color: BRAND.border, flex: "0 0 auto" }}>
+                    <ChevronRightIcon fontSize="small" />
+                  </Box>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
+        </Box>
+      ) : null}
+
       {/* Toolbar */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
         <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
@@ -171,7 +264,7 @@ export default function IntakeTab({ canManage, notify }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {items.map((it) => {
+            {visibleItems.map((it) => {
               const verdict = it.verification?.verdict ?? it.verdict;
               const status = STATUS_STYLES[it.status] || { label: it.status, bg: BRAND.darkSoft, color: BRAND.gray };
               const reasons = it.verification?.reasons;
