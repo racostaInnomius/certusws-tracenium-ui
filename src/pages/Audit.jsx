@@ -338,6 +338,12 @@ export default function Audit() {
         const items = Array.isArray(eventsResponse?.items) ? eventsResponse.items : [];
         setRows(items);
         setTotalRows(Number(eventsResponse?.total ?? 0));
+        // Only auto-select when deep-linked (selectedEventId came from
+        // the URL) or when refreshing keeps the already-open row in
+        // view. Never default to items[0] — that used to auto-open the
+        // Drawer on every page load / filter change / auto-refresh tick,
+        // and re-open it right after the user closed it (closing clears
+        // selectedEventId, which is a dependency of this effect).
         setSelectedEvent((current) => {
           if (selectedEventId && items.some((item) => String(item.id) === String(selectedEventId))) {
             return items.find((item) => String(item.id) === String(selectedEventId)) ?? null;
@@ -347,7 +353,7 @@ export default function Audit() {
             return items.find((item) => item.id === current.id) ?? current;
           }
 
-          return items[0] ?? null;
+          return null;
         });
         setSummary(summaryResponse?.summary ?? null);
         setFacets(facetsResponse?.facets ?? { eventTypes: [], outcomes: [] });
@@ -575,7 +581,7 @@ export default function Audit() {
               that caused it. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
             <SummaryCard
               stretch
               title="Total events"
@@ -585,7 +591,7 @@ export default function Audit() {
               tint={BRAND.darkSoft}
             />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
             {/* Failures = Rejected + Error. Tooltip on the title
                 spells out the breakdown so an operator scanning a
                 non-zero count knows whether to chase rejections
@@ -613,7 +619,7 @@ export default function Audit() {
               );
             })()}
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
             <SummaryCard
               stretch
               title="Last 24h"
@@ -623,7 +629,7 @@ export default function Audit() {
               tint={BRAND.tealSoft}
             />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
             <SummaryCard
               stretch
               title="Devices seen"

@@ -40,13 +40,19 @@ export const BRAND = {
   alert: {
     error: "#E37D78",
     errorSoft: "rgba(227,125,120,0.22)",
+    errorText: "#B23A33",
     warning: "#F4D37D",
     warningSoft: "rgba(244,211,125,0.30)",
+    warningText: "#8A6519",
     success: "#52B788",
     successSoft: "rgba(82,183,136,0.16)",
     info: "#5A9F9F",
     infoSoft: "rgba(90,159,159,0.12)",
   },
+
+  // Darker, text-legible counterpart to `cyan` (#8FFDFF is an accent
+  // color, far too light for small chip/label text on a light surface).
+  cyanText: "#0E7C80",
 };
 
 export const ROLE = {
