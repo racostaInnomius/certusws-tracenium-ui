@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import { patchRecencyRole, formatRelativeTime, PatchChip } from "./PatchLevel";
+import { patchRecencyRole, formatRelativeTime, PatchChip, PatchLevelSection } from "./PatchLevel";
 
 afterEach(cleanup);
 
@@ -43,5 +43,30 @@ describe("PatchChip (render smoke)", () => {
   it("renders the installed count for a device with patches", () => {
     render(<PatchChip patchSummary={{ count: 7, lastInstalledAtUtc: daysAgoIso(5) }} />);
     expect(screen.getByText("7")).toBeInTheDocument();
+  });
+});
+
+describe("PatchLevelSection (render smoke)", () => {
+  // Regression: the Installed/Last patch/Last scan stat row is built with
+  // MUI's Grid, which wasn't imported in this file — a device with any
+  // patch data crashed the drawer in production with "ReferenceError:
+  // Grid is not defined" (only surfaces once patchSummary has data, so
+  // the no-data branch above never caught it).
+  it("renders the stat grid for a device with patch data, without throwing", () => {
+    render(
+      <PatchLevelSection
+        patchSummary={{ count: 12, lastInstalledAtUtc: daysAgoIso(5), lastScanUtc: daysAgoIso(1) }}
+        recentPatches={[]}
+      />
+    );
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("Last patch")).toBeInTheDocument();
+    expect(screen.getByText("Last scan")).toBeInTheDocument();
+  });
+
+  it("renders the no-data fallback when there's no patch summary", () => {
+    render(<PatchLevelSection patchSummary={null} recentPatches={[]} />);
+    expect(screen.getByText("This device hasn't reported installed patches yet.")).toBeInTheDocument();
   });
 });

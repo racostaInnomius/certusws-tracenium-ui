@@ -6,7 +6,7 @@
 // presentation — no data fetching.
 
 import * as React from "react";
-import { Box, Chip, Collapse, IconButton, Paper, Stack, Typography } from "@mui/material";
+import { Box, Chip, Collapse, Grid, IconButton, Paper, Stack, Typography } from "@mui/material";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
