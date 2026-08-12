@@ -10,6 +10,7 @@ import { useMsp } from "../msp/MspContext";
 import { BRAND } from "../theme/brand";
 
 export const TOPBAR_HEIGHT = 56;
+export const CHROME_LINE_WIDTH = 3;
 
 // How often the bell polls for fresh unread count. 60s matches the
 // product decision — fast enough that operators see new alerts within
@@ -116,11 +117,12 @@ export default function Topbar({ onMenuClick }) {
       sx={{
         width: "100%",
         height: TOPBAR_HEIGHT,
+        boxSizing: "border-box",
         px: { xs: 1.5, sm: 2, md: 3 },
         gap: 1,
         background: `linear-gradient(90deg, ${BRAND.dark} 0%, ${BRAND.teal} 100%)`,
-        borderBottom: `3px solid ${BRAND.accentBrightLine}`,
-        boxShadow: `0 1px 0 ${BRAND.accentBrightSoft}`,
+        borderBottom: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`,
+        boxShadow: "none",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
