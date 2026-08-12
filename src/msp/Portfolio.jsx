@@ -267,7 +267,12 @@ export default function Portfolio() {
             size="small"
             startIcon={<ArrowBackOutlinedIcon />}
             onClick={backToMsps}
-            sx={{ color: BRAND.gray }}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              color: BRAND.dark,
+              "&:hover": { bgcolor: BRAND.darkSoft },
+            }}
           >
             Back to partners
           </Button>
@@ -317,7 +322,16 @@ export default function Portfolio() {
 
       {!busy && !error ? (
         <Box sx={{ mt: 3, textAlign: "center" }}>
-          <Button size="small" onClick={reloadPortfolio} sx={{ color: BRAND.gray }}>
+          <Button
+            size="small"
+            onClick={reloadPortfolio}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              color: BRAND.dark,
+              "&:hover": { bgcolor: BRAND.darkSoft },
+            }}
+          >
             Refresh
           </Button>
         </Box>

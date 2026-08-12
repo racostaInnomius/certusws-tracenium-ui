@@ -38,7 +38,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 
-import { TOPBAR_HEIGHT } from "./Topbar";
+import { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 
 import { BRAND } from "../theme/brand";
 import { getTenantById } from "../api/tenants";
@@ -372,8 +372,9 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
         maxHeight: "100dvh",
         minHeight: 0,
         overflow: "hidden",
-        borderRight: "1px solid transparent",
-        boxShadow: `1px 0 0 ${BRAND.accentBrightSoft}`,
+        boxSizing: "border-box",
+        borderRight: "none",
+        boxShadow: "none",
       }}
     >
       {/* Header: brand wordmark. Same height and bottom-border as the
@@ -382,11 +383,12 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
       <Box
         sx={{
           height: TOPBAR_HEIGHT,
+          boxSizing: "border-box",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           px: 1,
-          borderBottom: `3px solid ${BRAND.accentBrightLine}`,
+          borderBottom: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`,
         }}
       >
         <Box
@@ -500,19 +502,22 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
               >
                 {it.icon}
               </ListItemIcon>
-              <ListItemText
-                primary={it.label}
-                slotProps={{
-                  primary: {
-                    sx: {
-                      fontSize: 13.5,
-                      fontWeight: isSelected ? 700 : 500,
-                      lineHeight: 1.2,
-                      letterSpacing: 0.2,
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <ListItemText
+                  primary={it.label}
+                  slotProps={{
+                    primary: {
+                      noWrap: true,
+                      sx: {
+                        fontSize: 13.5,
+                        fontWeight: isSelected ? 700 : 500,
+                        lineHeight: 1.2,
+                        letterSpacing: 0.2,
+                      },
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              </Box>
               {it.highlighted && (
                 <Chip
                   label="Start"
@@ -520,10 +525,34 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                   sx={{
                     ml: 0.5,
                     height: 20,
+                    flexShrink: 0,
                     bgcolor: BRAND.teal,
                     color: BRAND.dark,
                     fontWeight: 800,
                     fontSize: 10,
+                  }}
+                />
+              )}
+              {/* Beta badge — flags product areas that are functionally
+                  live but still stabilizing (early plugin coverage,
+                  UX still settling). Distinct cyan outline (not the
+                  solid teal "Start" chip) so it reads as an FYI, not
+                  a call to action. */}
+              {it.badge && (
+                <Chip
+                  label={it.badge}
+                  size="small"
+                  sx={{
+                    ml: 0.5,
+                    height: 18,
+                    flexShrink: 0,
+                    bgcolor: "rgba(143,253,255,0.14)",
+                    color: BRAND.cyan,
+                    border: "1px solid rgba(143,253,255,0.4)",
+                    fontWeight: 800,
+                    fontSize: 9.5,
+                    letterSpacing: 0.3,
+                    "& .MuiChip-label": { px: 0.7 },
                   }}
                 />
               )}
@@ -666,19 +695,19 @@ export default function Sidebar({
     // to Security Compliance because both are posture-monitoring
     // surfaces (distinct from PKI in Administration, which is the
     // agent's own mTLS identity certs).
-    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon /> },
+    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon />, badge: "Beta" },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
     // Software Delivery (SDP) — Phase 1. Sits next to Patch Management
     // because they're conceptually adjacent ("the fleet runs these
     // bits") and admins often jump between them.
     { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
-    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
+    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon />, badge: "Beta" },
 
     // Device Management (MDM/MAM) sits with the operational surfaces,
     // not under Administration: it's a product area in its own right
     // (first-party MDM lands here), not a configuration knob.
     ...(isPrivileged
-      ? [{ label: "Device Management", key: "device-management", icon: <PhonelinkSetupOutlinedIcon /> }]
+      ? [{ label: "Device Management", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" }]
       : []),
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
@@ -744,6 +773,7 @@ export default function Sidebar({
       sx={{
         "& .MuiDrawer-paper": {
           width: SIDEBAR_WIDTH,
+          boxSizing: "border-box",
           height: "100dvh",
           maxHeight: "100dvh",
           bgcolor: BRAND.dark,
