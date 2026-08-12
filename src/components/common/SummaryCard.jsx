@@ -65,6 +65,7 @@ export default function SummaryCard({
         display: "flex",
         alignItems: "center",
         gap: 1.5,
+        width: "100%",
         height: stretch ? "100%" : undefined,
         minWidth: 0,
         cursor: clickable ? "pointer" : "default",
