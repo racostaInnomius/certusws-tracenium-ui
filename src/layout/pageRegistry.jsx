@@ -26,7 +26,6 @@ const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
-const AgentSettings = React.lazy(() => import("../pages/AgentSettings"));
 const SecurityBaselines = React.lazy(() => import("../pages/SecurityBaselines"));
 const DeviceManagement = React.lazy(() => import("../pages/DeviceManagement"));
 const Audit = React.lazy(() => import("../pages/Audit"));
@@ -95,14 +94,14 @@ export const PAGE_REGISTRY = {
   // management (MDM/MAM). They edit disjoint slices of the SAME tenant
   // policy document through domain-scoped PATCH endpoints, so they
   // can't clobber each other.
-  "agent-settings": () => <AgentSettings />,
+  // Agent Settings was folded into Settings as its second division —
+  // both are tenant-scoped configuration. These two keys stay alive as
+  // aliases so existing deep links (and the Patch Management CTA) keep
+  // working; they just open Settings on the agent tab.
+  "agent-settings": (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
   "security-baselines": (ctx) => <SecurityBaselines onNavigate={ctx.onNavigate} />,
   "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
-
-  // Permanent alias: bookmarks, deep links and older docs point at
-  // ?page=policies. Agent Settings is the closest successor (it kept
-  // the tenant/device tabs and the raw-JSON editor).
-  policies: () => <AgentSettings />,
+  policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 
   audit: () => <Audit />,
   pki: () => <PKI />,

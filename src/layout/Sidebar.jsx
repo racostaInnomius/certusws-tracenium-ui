@@ -24,7 +24,6 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
@@ -706,10 +705,11 @@ export default function Sidebar({
           // Inserted between PKI and Settings as agreed; visually
           // groups with the other admin surfaces.
           { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
-          // Agent Settings — HOW the enabled plugins behave (schedules,
-          // feature gates). Next to Plugin Control, which decides WHICH
-          // plugins are on.
-          { label: "Agent Settings", key: "agent-settings", icon: <TuneOutlinedIcon /> },
+          // Agent Settings is NOT a separate entry: it's the second
+          // division inside Settings (?settingsTab=agent). Both are
+          // tenant-scoped configuration, and splitting them meant
+          // operators had to know that plugin cadence lived somewhere
+          // other than the rest of the tenant's setup.
           { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
         ]
       : []),

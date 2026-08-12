@@ -333,7 +333,14 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
 
 // ── Main component ───────────────────────────────────────────────────────
 
-export default function AgentSettings() {
+/**
+ * `embedded` — rendered as a section inside the Settings page rather than
+ * as a standalone route. Suppresses this page's own PageHeader (Settings
+ * already supplies one; two stacked headers read as a bug) and drops the
+ * outer padding, since the host tab panel provides it. The RefreshControl
+ * still renders, just inline — it's a control, not chrome.
+ */
+export default function AgentSettings({ embedded = false }) {
   const theme = useTheme();
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
@@ -969,21 +976,38 @@ export default function AgentSettings() {
   }
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
+    <Box
+      sx={
+        embedded
+          ? { minWidth: 0 }
+          : { px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }
+      }
+    >
       {/* Header */}
-      <PageHeader
-        title="Agent Settings"
-        subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. Enable plugins under Plugin Control; security remediation lives in Security Baselines; mobile/MAM in Device Management."
-        icon={<TuneOutlinedIcon />}
-        actions={
+      {embedded ? (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
           <RefreshControl
             refreshSeconds={refreshSeconds}
             onRefreshSecondsChange={setRefreshSeconds}
             onRefresh={refreshAll}
             loading={tenantLoading}
           />
-        }
-      />
+        </Box>
+      ) : (
+        <PageHeader
+          title="Agent Settings"
+          subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. Enable plugins under Plugin Control; security remediation lives in Security Baselines; mobile/MAM in Device Management."
+          icon={<TuneOutlinedIcon />}
+          actions={
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={refreshAll}
+              loading={tenantLoading}
+            />
+          }
+        />
+      )}
 
       {/* Summary cards — intentionally complementary, not mutually
           exclusive: a device can show up in both `Devices tracked` and

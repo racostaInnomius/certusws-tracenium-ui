@@ -24,7 +24,10 @@
 
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
+import { Box, Chip, Divider, Stack, Tab, Tabs, Typography } from "@mui/material";
+import CircularProgress from "@mui/material/CircularProgress";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
@@ -170,7 +173,28 @@ function StatChip({ label, count, variant = "teal", loading }) {
   );
 }
 
-export default function Configurations({ onNavigate }) {
+// Agent Settings is a large page (schedules, feature gates, device
+// overrides, rollout table). Lazy so opening Settings doesn't pay for
+// it until the operator actually switches to that tab.
+const AgentSettings = React.lazy(() => import("./AgentSettings"));
+
+// Deep-linkable via ?settingsTab=. Same pattern PKI uses for its tabs.
+const SETTINGS_TABS = ["tenant", "agent"];
+
+export default function Configurations({ onNavigate, initialTab }) {
+  // Seeded once from the prop (set by the `agent-settings` / `policies`
+  // route aliases) or the URL, then kept in the URL so a reload and the
+  // back button both land on the same division.
+  const [tab, setTab] = React.useState(() => {
+    const fromUrl = getSearchParam("settingsTab", "");
+    if (SETTINGS_TABS.includes(initialTab)) return initialTab;
+    return SETTINGS_TABS.includes(fromUrl) ? fromUrl : "tenant";
+  });
+
+  React.useEffect(() => {
+    updateSearchParams({ settingsTab: tab });
+  }, [tab]);
+
   // Note: `tokensSummary` was removed when the Tokens card moved to
   // Device Enrollment. The /api/v1/configurations/summary endpoint
   // still returns `tokens_summary`; we just don't render it here.
@@ -297,9 +321,60 @@ export default function Configurations({ onNavigate }) {
     <Box sx={{ pb: 4 }}>
       <PageHeader
         title="Settings"
-        subtitle="Administrative surfaces for tenants and members."
+        subtitle="Tenant administration and agent behaviour, in one place."
         icon={<SettingsOutlinedIcon />}
       />
+
+      {/* Two divisions. Both are tenant-scoped configuration, which is
+          why they were consolidated: "Agent Settings" used to be its own
+          sidebar entry, and operators had to know that plugin cadence
+          lived somewhere other than the rest of the tenant's setup. */}
+      <Tabs
+        value={tab}
+        onChange={(_e, next) => setTab(next)}
+        sx={{
+          mb: 2,
+          borderBottom: `1px solid ${BRAND.border}`,
+          "& .MuiTab-root": {
+            textTransform: "none",
+            fontWeight: 700,
+            color: BRAND.dark,
+            minHeight: 48,
+            outline: "none",
+            "&:focus, &:focus-visible": { outline: "none", boxShadow: "none" },
+          },
+          "& .Mui-selected": { color: `${BRAND.teal} !important` },
+          "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
+        }}
+      >
+        <Tab
+          value="tenant"
+          label="Tenant Settings"
+          icon={<SettingsOutlinedIcon fontSize="small" />}
+          iconPosition="start"
+          sx={{ gap: 0.75 }}
+        />
+        <Tab
+          value="agent"
+          label="Agent Settings"
+          icon={<TuneOutlinedIcon fontSize="small" />}
+          iconPosition="start"
+          sx={{ gap: 0.75 }}
+        />
+      </Tabs>
+
+      {tab === "agent" ? (
+        <React.Suspense
+          fallback={
+            <Box sx={{ display: "grid", placeItems: "center", minHeight: 240 }}>
+              <CircularProgress size={26} sx={{ color: BRAND.teal }} />
+            </Box>
+          }
+        >
+          <AgentSettings embedded />
+        </React.Suspense>
+      ) : (
+        <>
 
       {error ? (
         <Typography sx={{ color: BRAND.alert.error, mb: 2 }}>
@@ -450,6 +525,8 @@ export default function Configurations({ onNavigate }) {
           </Grid>
         ) : null}
       </Grid>
+        </>
+      )}
 
       <JoinPartnerDialog
         open={joinOpen}
