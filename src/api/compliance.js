@@ -6,6 +6,7 @@
 // The SCP page unwraps uniformly via a shared helper.
 
 import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/security/compliance";
 
@@ -16,16 +17,6 @@ const BASE = "/api/v1/security/compliance";
 // proxy) and downloads index.html instead of the report.
 const API_BASE = import.meta.env.VITE_API_BASE;
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // Tenant-wide KPI: scores, status breakdown, open finding counts.
 export async function getComplianceSummary() {
@@ -40,6 +31,19 @@ export async function getComplianceCatalog(params = {}) {
 // Published framework versions (CIS Win11, CIS macOS, NIST 800-53, NIST CSF).
 export async function getFrameworks() {
   return httpGetJson(`${BASE}/frameworks`);
+}
+
+// Fleet-wide posture aggregated by catalog category (firewall, crypto,
+// network_hardening, patching, …) — one row per category with pass/fail counts,
+// high-severity fails, devices failing, and a pass rate.
+export async function getCategorySummary() {
+  return httpGetJson(`${BASE}/category-summary`);
+}
+
+// Drill-in for a category: devices FAILING at least one check in the category,
+// with the failing checks. Powers the category-breakdown expand-in-place.
+export async function getCategoryDevices(category) {
+  return httpGetJson(`${BASE}/category-summary/${encodeURIComponent(category)}/devices`);
 }
 
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
@@ -64,6 +68,19 @@ export async function getDeviceTimeseries(agentId, windowDays = 30) {
   );
 }
 
+// Fleet-wide compliance trend: per day, the fleet's average score plus the
+// compliant / non-compliant device counts (latest snapshot per device per day).
+export async function getFleetComplianceTimeseries(windowDays = 30) {
+  return httpGetJson(`${BASE}/fleet-timeseries${buildQuery({ windowDays })}`);
+}
+
+// Per-framework compliance trend: { frameworks: [...], buckets: [{ bucket,
+// scores: { framework: score } }] }. Recorded from 2026-07 forward — older days
+// may be sparse.
+export async function getFrameworkComplianceTimeseries(windowDays = 30) {
+  return httpGetJson(`${BASE}/framework-timeseries${buildQuery({ windowDays })}`);
+}
+
 // ── Sprint 3 — finding lifecycle ───────────────────────────────────
 //
 // Each helper returns the raw `{ok, ...}` envelope or the failure
@@ -79,10 +96,19 @@ export async function getDeviceTimeseries(agentId, windowDays = 30) {
 
 // POST /findings/:id/acknowledge — mark a finding as "seen".
 // Optional `note` is recorded in the audit timeline.
-export async function acknowledgeFinding(findingId, { note } = {}) {
+// Optional `acknowledgedUntil` (ISO string) makes the exception expire:
+// once past, the finding re-surfaces as un-acknowledged. Omit the key
+// to leave an existing expiry untouched; pass `null` for an indefinite
+// ack. The backend 400s on a past/invalid date.
+export async function acknowledgeFinding(
+  findingId,
+  { note, acknowledgedUntil } = {}
+) {
+  const body = { note: note ?? null };
+  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
   return httpPostJson(
     `${BASE}/findings/${encodeURIComponent(findingId)}/acknowledge`,
-    { note: note ?? null }
+    body
   );
 }
 
@@ -196,11 +222,16 @@ export async function updateComplianceSettings(patch) {
 // For change_status, supply { newStatus, findingIds, note? }. Server
 // caps the batch at 200 findings; partial failures come back as
 // per-item results in `summary.results[]`.
-export async function bulkFindingOp({ op, findingIds, newStatus, note } = {}) {
-  return httpPostJson(`${BASE}/findings:bulk`, {
-    op,
-    findingIds,
-    newStatus,
-    note: note ?? null
-  });
+export async function bulkFindingOp({
+  op,
+  findingIds,
+  newStatus,
+  note,
+  acknowledgedUntil
+} = {}) {
+  const body = { op, findingIds, newStatus, note: note ?? null };
+  // Only relevant to op=acknowledge; omit the key otherwise so we
+  // don't send noise. `null` = indefinite ack, ISO string = expiry.
+  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
+  return httpPostJson(`${BASE}/findings:bulk`, body);
 }

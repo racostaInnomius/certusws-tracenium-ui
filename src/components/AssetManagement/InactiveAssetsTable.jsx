@@ -35,6 +35,9 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ROLE } from "../../theme/brand";
+import { normalizePlatform } from "../../utils/platform";
+import { formatDate } from "../../utils/format";
+import { listFrom } from "../../api/shape";
 
 const SORT_FIELDS = new Set([
   "hostname",
@@ -53,6 +56,8 @@ const PLATFORM_OPTIONS = [
   { value: "windows server", label: "Windows Server" },
   { value: "macos", label: "macOS" },
   { value: "linux", label: "Linux" },
+  { value: "ios", label: "iOS" },
+  { value: "android", label: "Android" },
   { value: "unknown", label: "Unknown" },
 ];
 
@@ -63,6 +68,8 @@ const PLATFORM_STYLE = {
   "windows server": { bg: BRAND.darkSoft, fg: BRAND.dark },
   macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
+  ios: { bg: BRAND.tealSoft, fg: BRAND.tealText },
+  android: { bg: "rgba(61,220,132,0.14)", fg: "#1b7a45" },
   unknown: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
 };
 
@@ -80,19 +87,6 @@ function displayText(value, fallback = "—") {
   return next === undefined ? fallback : String(next);
 }
 
-function formatDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatInactiveDays(value) {
   const days = Number(value || 0);
@@ -100,27 +94,24 @@ function formatInactiveDays(value) {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-function normalizePlatform(raw) {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value) return "unknown";
-  if (value === "darwin" || value === "osx" || value === "mac os x") return "macos";
-  if (value.startsWith("win") && value !== "windows server") return "windows";
-  return value;
-}
-
 function PlatformChip({ platform }) {
-  const normalized = normalizePlatform(platform);
+  // Canonical normalizePlatform returns null for empty; this table renders
+  // those as the "unknown" filter bucket.
+  const normalized = normalizePlatform(platform) ?? "unknown";
   const style = PLATFORM_STYLE[normalized] || { bg: BRAND.surfaceMuted, fg: BRAND.dark };
+
+  const fixedLabel = normalized === "macos" ? "macOS" : normalized === "ios" ? "iOS" : null;
+  const useFixedCase = fixedLabel !== null;
 
   return (
     <Chip
       size="small"
-      label={normalized === "macos" ? "macOS" : normalized}
+      label={fixedLabel ?? normalized}
       sx={{
         height: 20,
         fontWeight: 800,
         fontSize: 11,
-        textTransform: normalized === "macos" ? "none" : "capitalize",
+        textTransform: useFixedCase ? "none" : "capitalize",
         bgcolor: style.bg,
         color: style.fg,
         border: `1px solid ${style.fg}33`,
@@ -277,7 +268,7 @@ export default function InactiveAssetsTable({
         sortDir,
       });
 
-      const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
+      const items = listFrom(res, { context: "inactiveAssets" });
       setRows(items.map(normalizeInactiveRow));
       setTotalRows(Number(res?.total ?? items.length ?? 0));
     } catch (err) {

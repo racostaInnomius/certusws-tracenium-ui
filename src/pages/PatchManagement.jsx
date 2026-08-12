@@ -28,7 +28,11 @@ import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
+import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
+import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
+import MaintenanceWindowsPanel from "../components/patch-management/MaintenanceWindowsPanel";
+import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
@@ -60,6 +64,7 @@ import {
 } from "../api/patchManagement";
 import { createDeviceJob } from "../api/jobs";
 import FindingsPanel from "../components/patch-management/FindingsPanel";
+import { listFrom } from "../api/shape";
 
 // ── Remediation catalog. Mirrors the Security Compliance categories —
 //    each compliance check has a matching remediation action here. When
@@ -296,6 +301,26 @@ const CATEGORIES = [
       "Detect installed third-party software that is behind its latest catalog version, and deploy the linked package to update it.",
     actions: [],
   },
+  {
+    // CVE mapping: vulnerable installed software (exposure) + the CVE
+    // catalog. Rendered by VulnerabilitiesTab — no `actions`.
+    key: "vulnerabilities",
+    label: "Vulnerabilities",
+    icon: <BugReportOutlinedIcon />,
+    blurb:
+      "Surface installed software running a version with a known CVE, matched against your CVE catalog, and see how many devices are exposed.",
+    actions: [],
+  },
+  {
+    // Maintenance windows: tenant config for WHEN deployments dispatch.
+    // Rendered by MaintenanceWindowsPanel — no `actions`.
+    key: "maintenance",
+    label: "Maintenance",
+    icon: <ScheduleOutlinedIcon />,
+    blurb:
+      "Restrict when patch and software deployments are allowed to dispatch — e.g. overnight only. No windows means immediate dispatch.",
+    actions: [],
+  },
 ];
 
 function IMPACT_CHIP({ impact }) {
@@ -485,7 +510,8 @@ function navigateToPolicies() {
   // Overview's navigateWithQuery). A direct anchor would full-reload
   // the SPA, which is jarring for a CTA that's strictly in-app.
   const params = new URLSearchParams(window.location.search);
-  params.set("page", "policies");
+  // The patch schedule lives in Agent Settings (formerly Policies).
+  params.set("page", "agent-settings");
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
   window.history.pushState({}, "", `${pathname}?${params.toString()}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -693,7 +719,7 @@ export default function PatchManagement() {
     setDrawerItems([]);
     try {
       const res = await getDeviceScanItems(device.agentId);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = listFrom(res, { context: "patchManagement" });
       setDrawerItems(items);
     } catch (err) {
       console.error("[patch-mgmt] failed to load device items", err);
@@ -1141,6 +1167,16 @@ export default function PatchManagement() {
               canManage={canManage}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
+          ) : tab === "vulnerabilities" ? (
+            <VulnerabilitiesTab
+              canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
+          ) : tab === "maintenance" ? (
+            <MaintenanceWindowsPanel
+              canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
           ) : (
             <FindingsPanel
               tabKey={tab}
@@ -1209,7 +1245,7 @@ export default function PatchManagement() {
                   ) : null}
                 </Typography>
               </Box>
-              <IconButton onClick={closeDrawer} disabled={dispatching} size="small">
+              <IconButton aria-label="Close" onClick={closeDrawer} disabled={dispatching} size="small">
                 <CloseOutlinedIcon />
               </IconButton>
             </Box>

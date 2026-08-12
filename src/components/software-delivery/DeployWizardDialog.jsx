@@ -8,10 +8,10 @@
 //              possible) OR enter a manual list of device IDs.
 //   2. Review — package summary, target summary, fire button.
 //
-// Why only two steps for Phase 1: the package is already chosen
-// (the wizard is opened from a row's "Deploy" button, so packageId
-// is known). Mode is install-only in Phase 1, no scheduling — both
-// would add steps that are placeholders today.
+// Why only two steps: the package is already chosen (the wizard is opened
+// from a row's "Deploy" button, so packageId is known). The operator picks a
+// mode (install / reinstall / uninstall) on the Target step; scheduling is a
+// separate future concern.
 
 import * as React from "react";
 import {
@@ -38,8 +38,40 @@ import {
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
+import { listFrom } from "../../api/shape";
 
 const STEPS = ["Target", "Review"];
+
+// Detection-rule types that carry a removable identity the agent can uninstall
+// by (MSI ProductCode / app bundle / pkg receipt / dpkg / rpm). file_exists and
+// command_exit are presence probes with nothing to remove.
+const REMOVABLE_RULE_TYPES = new Set([
+  "registry_uninstall",
+  "bundle_version",
+  "pkg_receipt",
+  "dpkg_installed",
+  "rpm_installed",
+]);
+
+// A package is uninstallable when its detection rule yields a removable
+// identity, or it ships explicit silent uninstall args (Windows EXE path).
+function canUninstall(pkg) {
+  if (!pkg) return false;
+  if (pkg.silentUninstallArgs && String(pkg.silentUninstallArgs).trim()) return true;
+  return Boolean(pkg.detectionRule && REMOVABLE_RULE_TYPES.has(pkg.detectionRule.type));
+}
+
+const MODE_LABELS = { install: "Install", reinstall: "Reinstall", uninstall: "Uninstall" };
+
+// Phase C — ring rollout presets. "fast" = single 100% wave (no rollout body);
+// "conservative" = 1% canary → 10% early → 100% broad with success gates.
+const CONSERVATIVE_ROLLOUT = {
+  rings: [
+    { percent: 1, minSuccessRate: 0.9, soakMinutes: 30 },
+    { percent: 10, minSuccessRate: 0.9, soakMinutes: 60 },
+    { percent: 100 },
+  ],
+};
 
 export default function DeployWizardDialog({
   open,
@@ -49,6 +81,13 @@ export default function DeployWizardDialog({
   notify,
 }) {
   const [activeStep, setActiveStep] = React.useState(0);
+
+  // ── Deployment mode ───────────────────────────────────────────
+  const [mode, setMode] = React.useState("install");
+  const uninstallable = React.useMemo(() => canUninstall(pkg), [pkg]);
+
+  // ── Rollout preset (Phase C) ──────────────────────────────────
+  const [rolloutPreset, setRolloutPreset] = React.useState("fast");
 
   // ── Target state ──────────────────────────────────────────────
   const [targetMode, setTargetMode] = React.useState("asset_group");
@@ -62,6 +101,8 @@ export default function DeployWizardDialog({
   React.useEffect(() => {
     if (!open) return;
     setActiveStep(0);
+    setMode("install");
+    setRolloutPreset("fast");
     setTargetMode("asset_group");
     setGroupId("");
     setDeviceIdsRaw("");
@@ -73,7 +114,7 @@ export default function DeployWizardDialog({
     if (!open) return;
     listAssetGroups()
       .then((res) => {
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "deployWizardTargets" });
         setGroupCatalog(items);
       })
       .catch((err) => {
@@ -110,10 +151,11 @@ export default function DeployWizardDialog({
     if (!canFire) return;
     setSubmitting(true);
     try {
+      const rollout = rolloutPreset === "conservative" ? { rollout: CONSERVATIVE_ROLLOUT } : {};
       const body =
         targetMode === "asset_group"
-          ? { mode: "install", assetGroupId: Number(groupId) }
-          : { mode: "install", deviceIds: parsedDeviceIds };
+          ? { mode, assetGroupId: Number(groupId), ...rollout }
+          : { mode, deviceIds: parsedDeviceIds, ...rollout };
       await onConfirm?.(body);
       // Parent closes the dialog on success
     } catch (err) {
@@ -188,6 +230,46 @@ export default function DeployWizardDialog({
                 </Typography>
               </Stack>
             </Box>
+
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Mode"
+              value={mode}
+              onChange={(e) => setMode(e.target.value)}
+              helperText={
+                mode === "uninstall"
+                  ? "Removes the package from targeted devices that have it installed."
+                  : mode === "reinstall"
+                  ? "Re-runs the installer even on devices already up to date."
+                  : "Installs on devices that don't already have the package."
+              }
+            >
+              <MenuItem value="install">{MODE_LABELS.install}</MenuItem>
+              <MenuItem value="reinstall">{MODE_LABELS.reinstall}</MenuItem>
+              <MenuItem value="uninstall" disabled={!uninstallable}>
+                {MODE_LABELS.uninstall}
+                {!uninstallable ? " — needs an uninstall identity or args" : ""}
+              </MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              fullWidth
+              label="Rollout"
+              value={rolloutPreset}
+              onChange={(e) => setRolloutPreset(e.target.value)}
+              helperText={
+                rolloutPreset === "conservative"
+                  ? "Rings: 1% canary (90% success, 30m soak) → 10% (90%, 60m) → 100%. Auto-halts on a failed gate."
+                  : "Everything dispatches in a single wave."
+              }
+            >
+              <MenuItem value="fast">Fast — single wave</MenuItem>
+              <MenuItem value="conservative">Conservative — canary rings</MenuItem>
+            </TextField>
 
             <RadioGroup
               row
@@ -358,10 +440,14 @@ export default function DeployWizardDialog({
               }}
             >
               <Typography sx={{ fontSize: 13 }}>
-                Firing will create one job per device. Pre-install detection
+                Firing will create one <strong>{MODE_LABELS[mode].toLowerCase()}</strong> job per device.
                 {pkg.detectionRule
-                  ? " will skip devices that already have the package."
-                  : " is disabled — installer runs on every device."}
+                  ? mode === "uninstall"
+                    ? " Detection will skip devices that don't have the package."
+                    : mode === "reinstall"
+                    ? " Detection is bypassed — the installer re-runs on every device."
+                    : " Detection will skip devices that already have the package."
+                  : " No detection rule — the action runs on every device."}
                 {" "}Per-device cap is 1000 — split larger groups.
               </Typography>
             </Alert>
@@ -419,7 +505,7 @@ export default function DeployWizardDialog({
               "&:hover": { bgcolor: BRAND.tealHover },
             }}
           >
-            {submitting ? "Dispatching…" : "Deploy"}
+            {submitting ? "Dispatching…" : MODE_LABELS[mode]}
           </Button>
         )}
       </DialogActions>

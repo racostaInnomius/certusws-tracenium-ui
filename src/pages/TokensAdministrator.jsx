@@ -18,6 +18,8 @@ import { DataGrid } from "@mui/x-data-grid";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import { listTokens, getTokenQuota, createToken, revokeToken } from "../api/tokens";
+import { useCachedFetch } from "../hooks/useCachedFetch";
+import { formatDate } from "../utils/format";
 import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
@@ -420,11 +422,56 @@ export default function TokensAdministrator({ embedded = false } = {}) {
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const [rows, setRows] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [quota, setQuota] = React.useState(null);
-  const [quotaLoading, setQuotaLoading] = React.useState(true);
-  const [quotaError, setQuotaError] = React.useState("");
+  // Tokens list + quota: parameterless on-mount fetches (filtering is
+  // client-side), routed through useCachedFetch for stale-while-revalidate +
+  // dedup + last-known-good on a transient error. `rows`/`quota`/`quotaError`
+  // are derived from the cached snapshots (all their setters were loader-only).
+  const {
+    data: tokenRows,
+    loading,
+    refetch: reloadData,
+  } = useCachedFetch(
+    "tokens:list:v1",
+    async () => {
+      const data = await listTokens();
+      const list = Array.isArray(data) ? data : [];
+      return list.map((token) => {
+        const effectiveStatus = resolveTokenStatus(token);
+        return {
+          ...token,
+          raw_status: token.status,
+          status: effectiveStatus,
+          effective_status: effectiveStatus,
+        };
+      });
+    },
+    { staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
+  );
+  const rows = React.useMemo(() => tokenRows ?? [], [tokenRows]);
+
+  const {
+    data: quotaData,
+    loading: quotaLoading,
+    error: quotaFetchError,
+    refetch: reloadQuota,
+  } = useCachedFetch(
+    "tokens:quota:v1",
+    async () => (await getTokenQuota()) || null,
+    { staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
+  );
+  const quota = quotaData ?? null;
+  // A 403 here is not a failure to load — it's "your role can't manage
+  // enrollment tokens in this tenant" (the endpoint requires ADMIN/OWNER,
+  // or admin_master). Telling that operator to refresh sends them in
+  // circles, since refreshing can never change their role. Distinguish it.
+  const quotaError = React.useMemo(() => {
+    if (!quotaFetchError) return "";
+    if (quotaFetchError.status === 403) {
+      return "You need the ADMIN or OWNER role in this tenant to manage enrollment tokens. Ask a tenant owner to grant it.";
+    }
+    return "Failed to load token quota. Refresh the page or try again.";
+  }, [quotaFetchError]);
+  const quotaForbidden = quotaFetchError?.status === 403;
 
   const [status, setStatus] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -443,62 +490,9 @@ export default function TokensAdministrator({ embedded = false } = {}) {
     severity: "success",
   });
 
-  const loadQuota = async () => {
-    try {
-      setQuotaLoading(true);
-      setQuotaError("");
-      const data = await getTokenQuota();
-      setQuota(data || null);
-    } catch (e) {
-      console.error(e);
-      setQuota(null);
-      setQuotaError("Failed to load token quota. Refresh the page or try again.");
-      setSnackbar({
-        open: true,
-        message: "Failed to load token quota",
-        severity: "error",
-      });
-    } finally {
-      setQuotaLoading(false);
-    }
-  };
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const data = await listTokens();
-      const list = Array.isArray(data) ? data : [];
-      setRows(
-        list.map((token) => {
-          const effectiveStatus = resolveTokenStatus(token);
-          return {
-            ...token,
-            raw_status: token.status,
-            status: effectiveStatus,
-            effective_status: effectiveStatus,
-          };
-        })
-      );
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load tokens",
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const refreshAll = async () => {
-    await Promise.all([loadData(), loadQuota()]);
-  };
-
-  React.useEffect(() => {
-    refreshAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshAll closes over stable refs; adding it would re-fetch on every render.
-  }, []);
+  const refreshAll = React.useCallback(async () => {
+    await Promise.all([reloadData(), reloadQuota()]);
+  }, [reloadData, reloadQuota]);
 
 const filteredRows = React.useMemo(() => {
   return rows.filter((row) => {
@@ -614,21 +608,6 @@ const filteredRows = React.useMemo(() => {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatDate = (value) => {
-    if (!value) return " - ";   // evita null / undefined
-
-    const date = new Date(value);
-    
-    return date.toLocaleString("en-US", {
-      year: "2-digit",
-      month: "short",
-      day: "2-digit",
-      hourCycle: "h24",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   const columns = [
@@ -781,13 +760,17 @@ const filteredRows = React.useMemo(() => {
 
       {quotaError && (
         <Alert
-          severity="error"
+          // A permissions problem is expected-and-explained, not a fault:
+          // "warning" so it doesn't read as something the operator broke.
+          severity={quotaForbidden ? "warning" : "error"}
           sx={{
             mb: 2,
             borderRadius: 2,
-            bgcolor: BRAND.alert.errorSoft,
+            bgcolor: quotaForbidden ? BRAND.alert.warningSoft : BRAND.alert.errorSoft,
             color: BRAND.dark,
-            "& .MuiAlert-icon": { color: BRAND.alert.error },
+            "& .MuiAlert-icon": {
+              color: quotaForbidden ? BRAND.alert.warning : BRAND.alert.error,
+            },
           }}
         >
           {quotaError}

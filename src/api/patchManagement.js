@@ -5,8 +5,10 @@
 // `res.ok` before touching the payload.
 
 import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/patch-management";
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 export async function getPatchSummary() {
   return httpGetJson(`${BASE}/summary`);
@@ -49,16 +51,6 @@ export async function bulkScan() {
 // `checkId` to a hardcoded whitelist of remediation handlers (TLS,
 // SMB, firewall, etc.); this client just speaks the REST shape.
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // Aggregated findings for the new tabs (TLS / SMB / Shares / Other).
 // Filters supported: category, checkIdContains, severity, limit.
@@ -137,4 +129,87 @@ export async function updateThirdPartyCatalog(id, payload) {
 
 export async function deleteThirdPartyCatalog(id) {
   return httpDeleteJson(`${BASE}/third-party/catalog/${encodeURIComponent(id)}`);
+}
+
+// ── CVE mapping (vulnerable installed software) ──────────────────
+
+// Fleet exposure: severity totals + per-CVE rollup (how many devices run a
+// vulnerable version). Computed on read from the catalog + live inventory.
+export async function getVulnerabilityExposure() {
+  return httpGetJson(`${BASE}/vulnerabilities/exposure`);
+}
+
+// Vulnerable installed software on a single device (drill-in).
+export async function getDeviceVulnerabilities(agentId) {
+  return httpGetJson(`${BASE}/vulnerabilities/exposure/devices/${encodeURIComponent(agentId)}`);
+}
+
+// Absolute URL for the auditor-ready exposure PDF. NOT a fetch helper — the
+// browser hits it directly so Content-Disposition drives the download and the
+// OIDC cookie stays in flight (same pattern as the compliance export).
+export function buildCveExposureReportPdfUrl() {
+  return `${API_BASE}${BASE}/vulnerabilities/exposure/report.pdf`;
+}
+
+// One-click remediation: deploy the CVE entry's linked SDP package to the
+// vulnerable devices. 202 with a deployment when dispatched; 200 when nothing
+// was vulnerable.
+export async function remediateCveVulnerability(catalogId) {
+  return httpPostJson(`${BASE}/vulnerabilities/remediate`, { catalogId });
+}
+
+// The tenant's CVE catalog (product + affected version range + CVSS).
+export async function listCveCatalog(params = {}) {
+  return httpGetJson(`${BASE}/vulnerabilities/catalog${buildQuery(params)}`);
+}
+
+export async function createCveCatalog(payload) {
+  return httpPostJson(`${BASE}/vulnerabilities/catalog`, payload);
+}
+
+export async function updateCveCatalog(id, payload) {
+  return httpPatchJson(`${BASE}/vulnerabilities/catalog/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteCveCatalog(id) {
+  return httpDeleteJson(`${BASE}/vulnerabilities/catalog/${encodeURIComponent(id)}`);
+}
+
+// NVD sync — ingest CVEs for the fleet's software into the catalog. Trigger is
+// admin-only + fire-and-forget (202); status is a plain read.
+export async function triggerNvdSync(payload = {}) {
+  return httpPostJson(`${BASE}/vulnerabilities/sync`, payload);
+}
+
+export async function getNvdSyncStatus() {
+  return httpGetJson(`${BASE}/vulnerabilities/sync/status`);
+}
+
+// CISA KEV (Known Exploited Vulnerabilities) — the GLOBAL actively-exploited
+// catalog (one CISA feed shared by all tenants). Trigger is admin-only +
+// fire-and-forget (202); status is a plain read.
+export async function triggerKevSync() {
+  return httpPostJson(`${BASE}/vulnerabilities/kev/sync`, {});
+}
+
+export async function getKevSyncStatus() {
+  return httpGetJson(`${BASE}/vulnerabilities/kev/sync/status`);
+}
+
+// ── Maintenance windows (when deployments are allowed to dispatch) ─
+
+export async function listMaintenanceWindows() {
+  return httpGetJson(`${BASE}/maintenance-windows`);
+}
+
+export async function createMaintenanceWindow(payload) {
+  return httpPostJson(`${BASE}/maintenance-windows`, payload);
+}
+
+export async function updateMaintenanceWindow(id, payload) {
+  return httpPatchJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteMaintenanceWindow(id) {
+  return httpDeleteJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`);
 }

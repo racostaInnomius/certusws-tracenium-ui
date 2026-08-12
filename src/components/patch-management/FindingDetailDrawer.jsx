@@ -44,6 +44,7 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
 import { BRAND, DATAGRID_SX } from "../../theme/brand";
+import { severityMeta } from "../../theme/severity";
 import { DataGrid } from "@mui/x-data-grid";
 import {
   getDevicesAffectedByCheck,
@@ -51,6 +52,7 @@ import {
   getRemediationResults,
   cancelRemediation,
 } from "../../api/patchManagement";
+import { listFrom } from "../../api/shape";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -94,14 +96,9 @@ function outcomeChip(outcome) {
 }
 
 function severityChip(severity) {
-  const map = {
-    critical: { bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    high:     { bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    medium:   { bg: BRAND.alert?.warningSoft, color: BRAND.alert?.warning },
-    low:      { bg: BRAND.tealSoft,           color: BRAND.tealText },
-    info:     { bg: BRAND.darkSoft,           color: BRAND.gray },
-  };
-  const e = map[severity] || { bg: BRAND.darkSoft, color: BRAND.gray };
+  // Canonical severity scale (theme/severity.js) — High was red (== Critical).
+  const m = severityMeta(severity);
+  const e = { bg: m.bg, color: m.fg };
   return (
     <Chip
       size="small"
@@ -167,7 +164,7 @@ export default function FindingDetailDrawer({
     setDevicesLoading(true);
     try {
       const res = await getDevicesAffectedByCheck(finding.checkId);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const items = listFrom(res, { context: "findingDetail" });
       setDevices(items);
       // Default selection: all. Operator can deselect specific
       // ones before firing.
@@ -191,7 +188,7 @@ export default function FindingDetailDrawer({
     setResultsLoading(true);
     try {
       const res = await getRemediationResults(activeRemediationId);
-      setResults(Array.isArray(res?.items) ? res.items : []);
+      setResults(listFrom(res, { context: "findingDetailResults" }));
     } catch (err) {
       notify?.("error", err?.body?.message || err?.message || "Failed to load remediation results");
     } finally {
@@ -397,7 +394,7 @@ export default function FindingDetailDrawer({
                 </Typography>
               ) : null}
             </Box>
-            <IconButton onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
+            <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
               <CloseOutlinedIcon fontSize="small" />
             </IconButton>
           </Stack>

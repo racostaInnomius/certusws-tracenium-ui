@@ -1,4 +1,4 @@
-import { httpDeleteJson, httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpDeleteJson, httpGetJson, httpPatchJson, httpPostJson, httpPutJson } from "./http";
 
 const BASE = "/api/v1/policies";
 
@@ -21,6 +21,20 @@ export async function saveTenantPolicy(tenantId, policy, opts) {
   return httpPutJson(
     `${BASE}/tenants/${encodeURIComponent(tenantId)}/policy`,
     policy,
+    buildPutHeaders(opts)
+  );
+}
+
+// Domain-scoped save. `domain` ∈ agent-config | security | device-management;
+// `slice` is the COMPLETE set of top-level keys the domain owns (a
+// whitelisted key omitted from the slice is REMOVED from the stored
+// policy — replace-slice semantics). The server preserves every key
+// outside the domain verbatim, which is what lets the three authoring
+// pages coexist without clobbering each other.
+export async function patchTenantPolicyDomain(tenantId, domain, slice, opts) {
+  return httpPatchJson(
+    `${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/domains/${encodeURIComponent(domain)}`,
+    slice,
     buildPutHeaders(opts)
   );
 }

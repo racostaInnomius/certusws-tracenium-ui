@@ -45,6 +45,7 @@ import {
   runRetention,
 } from "../api/retention";
 import { BRAND, ROLE } from "../theme/brand";
+import { formatBytes } from "../utils/format";
 
 // Bind each policy field to:
 //   * the matching `sizes.perTable[].table` row (so the editor and the
@@ -102,20 +103,51 @@ const FIELDS = [
     min: 1,
     max: 1825,
   },
+  // ── Software Delivery (SDP) — control-DB tables. Blank = never (opt-in). ──
+  {
+    key: "sdpInstallResultsDays",
+    table: "software_install_results",
+    label: "SDP install-result forensics",
+    hint: "Blanks the per-device detection snapshots (before/after) on terminal install results past this age. The result row + deployment rollup stay — only the bulky forensic JSON is dropped. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "sdpIntakesRejectedDays",
+    table: "software_package_intakes",
+    label: "SDP rejected/blocked intakes",
+    hint: "Deletes blocked or rejected AI-intake uploads (and their stored binaries) past this age — they never become catalog entries. Approved/pending uploads are never touched. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "sdpDeploymentSnapshotDays",
+    table: "software_deployments",
+    label: "SDP deployment snapshots",
+    hint: "Trims the frozen package-snapshot JSON on terminal deployments past this age (the live package still lives in the catalog). The deployment + its counts stay. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  // ── Remote Control (RCP) — tenant-DB audit. Blank = never (opt-in). ──
+  // Two windows because the content and the ledger age differently; see
+  // modules/db/migrations/20260728_retention_rcp.sql.
+  {
+    key: "rcpTranscriptDays",
+    table: "remote_session_io",
+    label: "Remote session transcripts",
+    hint: "Recorded terminal output of remote shell sessions — the biggest-growing RCP table, and the one that can contain whatever an operator happened to print on screen. Deleting a transcript keeps its session in the history. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "rcpSessionsDays",
+    table: "remote_sessions",
+    label: "Remote session history",
+    hint: "Who connected to which device, when, and which files moved. A few hundred bytes per session — usually kept far longer than the transcripts. Deleting a session also removes its transcript and file-transfer records. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
 ];
-
-function formatBytes(n) {
-  if (!Number.isFinite(n) || n < 0) return "—";
-  if (n < 1024) return `${n} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n / 1024;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i += 1;
-  }
-  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[i]}`;
-}
 
 function formatRows(n) {
   if (!Number.isFinite(n) || n < 0) return "—";
@@ -277,6 +309,7 @@ export default function Retention({ onNavigate }) {
             <Tooltip title="Refresh stats">
               <span>
                 <IconButton
+                  aria-label="Refresh"
                   onClick={load}
                   disabled={loading}
                   size="small"

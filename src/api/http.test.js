@@ -36,6 +36,7 @@ import {
   prefetchApiGetJson,
   isTemporaryApiError,
   setApiCacheSessionScope,
+  setActiveTenantId,
 } from "./http";
 
 /** Collect window events of `type` for the duration of `fn()`. */
@@ -378,6 +379,29 @@ describe("httpGetJson — cache semantics", () => {
     await httpGetJson("/api/v1/scoped");
 
     expect(calls).toHaveLength(2);
+  });
+
+  it("partitions the GET cache by ACTIVE TENANT (no cross-tenant leak)", async () => {
+    // Regression: an MSP operator switches the active tenant (X-Tenant-Id)
+    // without re-signing-in; the same URL returns different data per tenant.
+    // A cache keyed only by URL served one tenant's data for another.
+    const calls = respond("get", "/api/v1/tenant-scoped", { ok: true });
+    try {
+      setActiveTenantId("100");
+      await httpGetJson("/api/v1/tenant-scoped"); // cache under tenant 100
+      await httpGetJson("/api/v1/tenant-scoped"); // served from tenant-100 cache
+      expect(calls).toHaveLength(1);
+
+      setActiveTenantId("200"); // switch tenant → must NOT reuse tenant 100's entry
+      await httpGetJson("/api/v1/tenant-scoped");
+      expect(calls).toHaveLength(2);
+
+      setActiveTenantId("100"); // back to 100 → its own partition is still cached
+      await httpGetJson("/api/v1/tenant-scoped");
+      expect(calls).toHaveLength(2);
+    } finally {
+      setActiveTenantId(null); // restore for the other tests
+    }
   });
 
   it("clearApiCache wipes both memory and sessionStorage entries", async () => {

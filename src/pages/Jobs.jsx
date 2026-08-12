@@ -54,7 +54,9 @@ import {
   listTenantJobs,
   retryJob,
 } from "../api/jobs";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
+import { formatDate } from "../utils/format";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -327,18 +329,6 @@ function renderStatusChip(status) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-  const date = new Date(value);
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h24",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
   if (jobType === "agent_update") {
@@ -398,15 +388,58 @@ export default function Jobs() {
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManageJobs = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
 
-  const [jobTypeOptions, setJobTypeOptions] = React.useState([]);
-  const [connectedDeviceIds, setConnectedDeviceIds] = React.useState([]);
-  const [knownDevices, setKnownDevices] = React.useState([]);
+  // Jobs metadata (known devices + job types): a parameterless on-mount fetch,
+  // routed through useCachedFetch for stale-while-revalidate + dedup +
+  // last-known-good on a transient error. The three lists are derived from the
+  // cached snapshot; the selection reconciliation loadMeta used to do inline
+  // now lives in a dedicated effect (idempotent — keeps the current selection
+  // when it's still valid).
+  const {
+    data: jobsMeta,
+    loading: loadingMeta,
+    refetch: reloadMeta,
+  } = useCachedFetch(
+    "jobs:meta:v1",
+    async () => {
+      const [knownResponse, typeResponse] = await Promise.all([
+        listKnownDevices(),
+        listJobTypes(),
+      ]);
+      const known = Array.isArray(knownResponse?.items)
+        ? knownResponse.items
+            .map((item) => ({
+              deviceId: String(item?.deviceId || "").trim(),
+              hostname:
+                String(item?.hostname || "").trim() || String(item?.deviceId || "").trim(),
+              connected: item?.connected === true,
+              enrollmentStatus: item?.enrollmentStatus ?? null,
+              agentVersion: item?.agentVersion ?? null,
+              platform: item?.platform ?? null,
+              arch: item?.arch ?? null,
+              enrolledAt: item?.enrolledAt ?? null,
+              lastSeenAt: item?.lastSeenAt ?? null,
+              connectedAt: item?.connectedAt ?? null,
+              updatedAt: item?.updatedAt ?? null,
+            }))
+            .filter((item) => item.deviceId)
+        : [];
+      const types = Array.isArray(typeResponse?.items) ? typeResponse.items : [];
+      return { known, types };
+    },
+    { enabled: canManageJobs, staleMs: 60_000, storageMaxAgeMs: 10 * 60_000, revalidateOnMount: "stale" }
+  );
+  const knownDevices = React.useMemo(() => jobsMeta?.known ?? [], [jobsMeta]);
+  const jobTypeOptions = React.useMemo(() => jobsMeta?.types ?? [], [jobsMeta]);
+  const connectedDeviceIds = React.useMemo(
+    () => knownDevices.filter((item) => item.connected).map((item) => item.deviceId),
+    [knownDevices]
+  );
+
   const [tenantJobs, setTenantJobs] = React.useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
   const [selectedJobId, setSelectedJobId] = React.useState("");
   const [selectedJob, setSelectedJob] = React.useState(null);
 
-  const [loadingMeta, setLoadingMeta] = React.useState(true);
   const [loadingJobs, setLoadingJobs] = React.useState(false);
   const [loadingJobDetail, setLoadingJobDetail] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -479,67 +512,6 @@ export default function Jobs() {
   });
   const deferredSearch = React.useDeferredValue(search);
 
-  const loadMeta = React.useCallback(async () => {
-    if (!canManageJobs) return;
-
-    try {
-      setLoadingMeta(true);
-      const [knownResponse, typeResponse] = await Promise.all([
-        listKnownDevices(),
-        listJobTypes(),
-      ]);
-
-      const known = Array.isArray(knownResponse?.items) ? knownResponse.items.map((item) => ({
-        deviceId: String(item?.deviceId || "").trim(),
-        hostname: String(item?.hostname || "").trim() || String(item?.deviceId || "").trim(),
-        connected: item?.connected === true,
-        enrollmentStatus: item?.enrollmentStatus ?? null,
-        agentVersion: item?.agentVersion ?? null,
-        // Normalised by the backend (windows | macos | linux | null).
-        // Used to filter /binaries/agent/versions so the dropdown shows
-        // the right version set for the selected host.
-        platform: item?.platform ?? null,
-        // CPU architecture reported by the agent (or inferred from
-        // hardware_inventory server-side when the agent is too old to
-        // ship `agent.arch` directly). Load-bearing for the Agent
-        // Update dropdown — without this the Windows-on-ARM devices
-        // get silently misclassified as x64 and the dropdown hides
-        // the arm64 MSI variants that actually exist in blob.
-        arch: item?.arch ?? null,
-        enrolledAt: item?.enrolledAt ?? null,
-        lastSeenAt: item?.lastSeenAt ?? null,
-        connectedAt: item?.connectedAt ?? null,
-        updatedAt: item?.updatedAt ?? null,
-      })).filter((item) => item.deviceId) : [];
-      const devices = known.filter((item) => item.connected).map((item) => item.deviceId);
-      const types = Array.isArray(typeResponse?.items) ? typeResponse.items : [];
-
-      setConnectedDeviceIds(devices);
-      setKnownDevices(known);
-      setJobTypeOptions(types);
-      setSelectedDeviceId((current) => {
-        if (current && known.some((item) => item.deviceId === current)) return current;
-        return known[0]?.deviceId || devices[0] || "";
-      });
-      setJobType((current) => {
-        if (current && types.some((item) => item.jobType === current)) return current;
-        return types[0]?.jobType || "facts_snapshot";
-      });
-    } catch (e) {
-      console.error(e);
-      setConnectedDeviceIds([]);
-      setKnownDevices([]);
-      setJobTypeOptions([]);
-      setSnackbar({
-        open: true,
-        message: "Failed to load jobs metadata",
-        severity: "error",
-      });
-    } finally {
-      setLoadingMeta(false);
-    }
-  }, [canManageJobs]);
-
   const loadTenantJobs = React.useCallback(async () => {
     if (!canManageJobs || !tenantId) return;
 
@@ -589,9 +561,23 @@ export default function Jobs() {
     }
   }, [canManageJobs]);
 
+  // Reconcile the selected device / job type against the loaded metadata.
+  // Idempotent: keeps the current selection when it's still valid, so it's
+  // safe to re-run on every metadata revalidation. (Was inline in loadMeta.)
   React.useEffect(() => {
-    loadMeta();
-  }, [loadMeta]);
+    if (!jobsMeta) return;
+    const known = jobsMeta.known ?? [];
+    const types = jobsMeta.types ?? [];
+    const devices = known.filter((item) => item.connected).map((item) => item.deviceId);
+    setSelectedDeviceId((current) => {
+      if (current && known.some((item) => item.deviceId === current)) return current;
+      return known[0]?.deviceId || devices[0] || "";
+    });
+    setJobType((current) => {
+      if (current && types.some((item) => item.jobType === current)) return current;
+      return types[0]?.jobType || "facts_snapshot";
+    });
+  }, [jobsMeta]);
 
   // Resolve the (platform, arch) pair to use when fetching agent versions.
   // - targetMode "device": use the selected device's platform when known;
@@ -863,14 +849,14 @@ export default function Jobs() {
     try {
       setRefreshing(true);
       await Promise.all([
-        loadMeta(),
+        reloadMeta(),
         loadTenantJobs(),
         selectedJobId ? loadJobDetail(selectedJobId) : Promise.resolve(),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadJobDetail, loadMeta, loadTenantJobs, selectedJobId]);
+  }, [loadJobDetail, reloadMeta, loadTenantJobs, selectedJobId]);
 
   React.useEffect(() => {
     const intervalSeconds = Number(autoRefreshSeconds || 0);

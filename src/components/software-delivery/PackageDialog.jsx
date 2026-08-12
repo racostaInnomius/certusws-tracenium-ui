@@ -350,7 +350,7 @@ export default function PackageDialog({
                       onChange={(e) => update({ signingRequired: e.target.checked })}
                     />
                   }
-                  label="Signing required (Phase 2)"
+                  label="Signing required"
                 />
               </Box>
             </Stack>

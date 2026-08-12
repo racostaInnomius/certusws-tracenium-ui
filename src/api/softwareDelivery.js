@@ -12,19 +12,10 @@ import {
   httpDeleteJson,
   httpPostBinary,
 } from "./http";
+import { buildQuery } from "./query";
 
 const BASE = "/api/v1/software-delivery";
 
-function buildQuery(params = {}) {
-  const q = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && String(v).trim() !== "") {
-      q.append(k, String(v));
-    }
-  });
-  const s = q.toString();
-  return s ? `?${s}` : "";
-}
 
 // ── Catalog (software_packages) ──────────────────────────────────
 
@@ -98,6 +89,36 @@ export async function uploadIntake(file, hints = {}) {
 
 export async function listIntakes(params = {}) {
   return httpGetJson(`${BASE}/intake${buildQuery(params)}`);
+}
+
+// ── Distribution (Phase B) — sites + distribution points ──────────
+
+export async function listSites() {
+  return httpGetJson(`${BASE}/distribution/sites`);
+}
+
+export async function createSite(payload) {
+  return httpPostJson(`${BASE}/distribution/sites`, payload);
+}
+
+export async function updateSite(id, payload) {
+  return httpPatchJson(`${BASE}/distribution/sites/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteSite(id) {
+  return httpDeleteJson(`${BASE}/distribution/sites/${encodeURIComponent(id)}`);
+}
+
+export async function listDistributionPoints() {
+  return httpGetJson(`${BASE}/distribution/dps`);
+}
+
+export async function upsertDistributionPoint(payload) {
+  return httpPostJson(`${BASE}/distribution/dps`, payload);
+}
+
+export async function deleteDistributionPoint(id) {
+  return httpDeleteJson(`${BASE}/distribution/dps/${encodeURIComponent(id)}`);
 }
 
 export async function getIntake(id) {

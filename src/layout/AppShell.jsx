@@ -16,6 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import Sidebar from "./Sidebar";
+import ErrorBoundary from "../components/common/ErrorBoundary";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
@@ -25,26 +26,14 @@ import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl,
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { BRAND } from "../theme/brand";
+import { useAuthContext } from "../auth/AuthContext";
+import { useMsp } from "../msp/MspContext";
+import TenantSwitcher from "../msp/TenantSwitcher";
+import HierarchyBreadcrumb from "../msp/HierarchyBreadcrumb";
+const Portfolio = React.lazy(() => import("../msp/Portfolio"));
 
-const Assets = React.lazy(() => import("../pages/Assets"));
-const Overview = React.lazy(() => import("../pages/Overview"));
-const Configurations = React.lazy(() => import("../pages/Configurations"));
-const TokensAdministrator = React.lazy(() => import("../pages/TokensAdministrator"));
-const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
-const Welcome = React.lazy(() => import("../pages/Welcome"));
-const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
-const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
-const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
-const PluginControl = React.lazy(() => import("../pages/PluginControl"));
-const Jobs = React.lazy(() => import("../pages/Jobs"));
-const Policies = React.lazy(() => import("../pages/Policies"));
-const Audit = React.lazy(() => import("../pages/Audit"));
-const PKI = React.lazy(() => import("../pages/PKI"));
-const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
-const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
-const Alerts = React.lazy(() => import("../pages/Alerts"));
-const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
-const Retention = React.lazy(() => import("../pages/Retention"));
+import { renderPage } from "./pageRegistry";
+
 
 function PageFallback() {
   return (
@@ -62,7 +51,18 @@ function PageFallback() {
 }
 
 
-const USER_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+// Fallback values for when /api/bootstrap hasn't loaded yet (very first
+// paint, or backend returned `sessionSettings: null` because of a
+// degraded read in the bootstrap handler). The effective config comes
+// from `auth.sessionSettings` via useAuthContext — see the
+// `idleTimeoutMs` / `idleEnabled` derivation inside the component.
+//
+// The 30-minute default matches the SQL DEFAULT in
+// migrations/20260610_tenant_session_settings.sql (and the value the
+// service falls back to when a tenant has never customised). Keeping
+// the three copies in sync is intentional belt-and-braces — see the
+// LIMITS comment in session-settings.service.ts.
+const DEFAULT_IDLE_MINUTES = 30;
 const USER_IDLE_COUNTDOWN_SECONDS = 15;
 const USER_ACTIVITY_EVENTS = [
   "mousemove",
@@ -82,10 +82,17 @@ const EMPTY_TENANT_GATED_PAGES = new Set([
   "remote-control",
   "jobs",
   "policies",
+  "agent-settings",
+  "security-baselines",
   "audit",
   "alerts",
   "pki",
   "plugin-control",
+  "cdp",
+  // NOTE: "device-management" is deliberately NOT gated. With an empty
+  // fleet it's the natural entry point for enrolling the first mobile
+  // device, so blurring it behind the "no information yet" overlay
+  // would hide exactly what a new tenant needs to reach.
 ]);
 
 function readNumber(...values) {
@@ -450,6 +457,32 @@ function UserInactivityDialog({
 }
 
 export default function AppShell() {
+  // Read tenant-level session settings exposed by /api/bootstrap so the
+  // idle timer matches what the OWNER/ADMIN configured for this tenant.
+  // Falls back to system defaults when bootstrap hasn't loaded yet, or
+  // when the field is missing (older backend without the
+  // tenant_session_settings migration applied — graceful degradation).
+  // See migrations/20260610_tenant_session_settings.sql and
+  // session-settings.service.ts for the source of truth.
+  const { auth } = useAuthContext();
+  // MSP navigation. `inPortfolioMode` = the user navigates a portfolio
+  // (MSP operator / vendor) AND hasn't selected a client yet → show the
+  // Portfolio grid instead of the client shell. When a client IS active,
+  // we render the normal shell plus a context bar (breadcrumb + switcher).
+  const { hasPortfolio, activeTenant, loading: mspLoading } = useMsp();
+  const inPortfolioMode = hasPortfolio && !activeTenant;
+  // First portfolio load, no client selected yet: we don't KNOW if this user
+  // is an MSP operator/vendor (→ portfolio) or single-tenant (→ shell) until
+  // the portfolio resolves. Render a neutral loader instead of flashing the
+  // single-tenant shell and then snapping to the portfolio a second later.
+  const mspResolving = mspLoading && !hasPortfolio && !activeTenant;
+  const sessionSettings = auth?.sessionSettings ?? null;
+  const idleEnabled = sessionSettings?.autoLogoutEnabled !== false; // default true
+  const idleTimeoutMs =
+    (Number.isFinite(sessionSettings?.autoLogoutMinutes)
+      ? sessionSettings.autoLogoutMinutes
+      : DEFAULT_IDLE_MINUTES) * 60 * 1000;
+
   const [_bootstrap, setBootstrap] = React.useState(null);
   // Overview is the canonical landing page — it's the SOC-style dashboard
   // the operator should see when they log in without a deep link. Pages
@@ -499,10 +532,17 @@ export default function AppShell() {
     if (idleDialogOpenRef.current || idleSigningOutRef.current) return;
 
     clearIdleTimer();
+    // When the tenant has disabled auto-logout, never re-arm the timer.
+    // The activity-event listeners still fire but no-op past this point.
+    // We deliberately keep the listeners attached anyway — the cost is
+    // negligible and toggling `autoLogoutEnabled` back ON should take
+    // effect on the next refresh without re-mounting AppShell.
+    if (!idleEnabled) return;
+
     idleTimerRef.current = window.setTimeout(() => {
       openIdleDialog();
-    }, USER_IDLE_TIMEOUT_MS);
-  }, [clearIdleTimer, openIdleDialog]);
+    }, idleTimeoutMs);
+  }, [clearIdleTimer, openIdleDialog, idleEnabled, idleTimeoutMs]);
 
   const performIdleLogout = React.useCallback(async () => {
     if (idleSigningOutRef.current) return;
@@ -738,6 +778,28 @@ export default function AppShell() {
   React.useEffect(() => {
     let cancelled = false;
 
+    // In portfolio mode there is NO single active tenant: an MSP operator /
+    // vendor is looking at the portfolio, not a client shell. Probing here
+    // would hit the caller's home/token tenant — data that isn't shown in
+    // portfolio mode and only muddies the picture (it's what made the
+    // operator's own home tenant bleed into the experience). Skip it; the
+    // probe re-runs once a client is actually selected (inPortfolioMode →
+    // false re-triggers this effect).
+    // Also wait while the portfolio is still resolving. On mount `portfolio`
+    // is null, so hasPortfolio (and therefore inPortfolioMode) is false — the
+    // check above alone let this 5-request probe fire BEFORE we knew whether
+    // the user even has a home tenant. For a vendor (admin_master), who has
+    // none until they pick one, every probe request came back tenant-less;
+    // the SPA read those as a dead session and bounced to login, looping.
+    // Nothing here is meaningful without a resolved tenant context, so hold
+    // off until the portfolio answers (this effect re-runs when it does).
+    if (inPortfolioMode || mspLoading) {
+      setTenantInventoryState("unknown");
+      return () => {
+        cancelled = true;
+      };
+    }
+
     resolveTenantInventoryState().catch((err) => {
       if (cancelled) return;
       if (!isAuthError(err) && !isTemporaryApiError(err)) {
@@ -749,7 +811,7 @@ export default function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [resolveTenantInventoryState]);
+  }, [resolveTenantInventoryState, inPortfolioMode, mspLoading]);
 
   const handleAssetsEmptyStateChange = React.useCallback((isEmpty) => {
     const nextEmpty = Boolean(isEmpty);
@@ -843,118 +905,15 @@ export default function AppShell() {
     setTemporaryWarning(null);
   }, []);
 
-  // Default → Overview. Any unrecognized ?page= key also falls through
-  // to Overview, which is the safer behavior than dropping the user
-  // onto a page they didn't ask for.
-  let content = <Overview />;
-
-  if (selectedPage === "assets") {
-    // Assets keeps its welcome-state callback because the first-time
-    // empty-fleet flow is owned by this page, not by Overview.
-    content = (
-      <Assets
-        onAssetsEmptyStateChange={handleAssetsEmptyStateChange}
-        suppressEmptyStateOverlay
-      />
-    );
-  }
-
-  if (selectedPage === "configurations") {
-    content = <Configurations onNavigate={setSelectedPage} />;
-  }
-
-  // Device Enrollment is the new combined surface — sidebar entry for
-  // operators ("download installer + mint a token in the same flow").
-  if (selectedPage === "enrollment") {
-    content = <DeviceEnrollment />;
-  }
-
-  // Plugin Control — tenant-wide plugin enablement, split out of
-  // Policies so the "what's on" knob is separated from the "how it
-  // behaves" knobs. Admin-scoped at the UI layer; backend hardening
-  // (whitelist + role middleware) is Phase 2.
-  if (selectedPage === "plugin-control") {
-    content = <PluginControl />;
-  }
-
-  // Legacy `tokens` route kept alive so existing bookmarks / deep links
-  // (Settings → Tokens cards from prior releases, automation links)
-  // don't 404. The standalone TokensAdministrator still works; the new
-  // primary entry point is Device Enrollment.
-  if (selectedPage === "tokens") {
-    content = <TokensAdministrator />;
-  }
-
-  if (selectedPage === "tenants") {
-    content = <TenantsAdministrator mode="global" />;
-  }
-
-  if (selectedPage === "tenant-members") {
-    content = <TenantsAdministrator mode="tenant" />;
-  }
-
-  if (selectedPage === "welcome") {
-    content = <Welcome onNavigate={setSelectedPage} />;
-  }
-  // Agent releases — admin catalog of Tracenium agent installer
-  // binaries. The primary user-facing entry is the Device Enrollment
-  // → Agent Downloads tab; this page itself is mostly admin-only CRUD.
-  // Originally mounted at `software-delivery` until the 2026-05-01
-  // rename; the transition alias was dropped in Batch 3.
-  if (selectedPage === "agent-releases") {
-    content = <AgentReleases />;
-  }
-
-  // Software Delivery (SDP) — operator surface for deploying
-  // third-party software to the fleet. Distinct from `agent-releases`
-  // (which catalogs the Tracenium agent's own installer binaries).
-  // Two tabs: Catalog (CRUD packages) and Deployments (history +
-  // per-device results).
-  if (selectedPage === "software-delivery") {
-    content = <SoftwareDelivery onNavigate={setSelectedPage} />;
-  }
-
-  if (selectedPage === "jobs") {
-    content = <Jobs />;
-  }
-
-  if (selectedPage === "policies") {
-    content = <Policies />;
-  }
-
-  if (selectedPage === "audit") {
-    content = <Audit />;
-  }
-
-  if (selectedPage === "pki") {
-    content = <PKI />;
-  }
-
-  if (selectedPage === "ad") {
-    content = <SecurityCompliance />;
-  }
-
-  if (selectedPage === "patch") {
-    content = <PatchManagement />;
-  }
-
-  if (selectedPage === "remote-control") {
-    content = <RemoteControl />;
-  }
-
-  if (selectedPage === "alerts") {
-    content = <Alerts />;
-  }
-
-  // Retention — admin-only drilldown reached from the "Database retention"
-  // card on Settings. Mounted at top level (not nested under settings/*)
-  // because deep linking is one of the operational needs: paste the link
-  // into a maintenance ticket, hit it, see sizes + last-run audit.
-  if (selectedPage === "retention") {
-    content = <Retention onNavigate={setSelectedPage} />;
-  }
+  // Page dispatch lives in ./pageRegistry — one entry per page instead of a
+  // flat if-ladder that re-evaluated every branch on each render.
+  const content = renderPage(selectedPage, {
+    onNavigate: setSelectedPage,
+    onAssetsEmptyStateChange: handleAssetsEmptyStateChange,
+  });
 
   const shouldShowNoInformationOverlay =
+    !inPortfolioMode &&
     tenantInventoryState === "empty" && EMPTY_TENANT_GATED_PAGES.has(selectedPage);
 
   return (
@@ -967,13 +926,18 @@ export default function AppShell() {
         overflow: "hidden", // the shell is a fixed frame
       }}
     >
-      <Sidebar
-        selected={selectedPage}
-        onSelect={handleSelect}
-        showWelcomeEntry={showWelcomeEntry}
-        mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
+      {/* Client-specific sidebar. Hidden in portfolio mode (and while the
+          portfolio is still resolving) — its pages only make sense once a
+          client is selected. */}
+      {inPortfolioMode || mspResolving ? null : (
+        <Sidebar
+          selected={selectedPage}
+          onSelect={handleSelect}
+          showWelcomeEntry={showWelcomeEntry}
+          mobileOpen={mobileOpen}
+          onMobileClose={() => setMobileOpen(false)}
+        />
+      )}
 
       <Box
         sx={{
@@ -989,6 +953,30 @@ export default function AppShell() {
         <Box sx={{ width: "100%", flexShrink: 0 }}>
           <Topbar onMenuClick={() => setMobileOpen(true)} />
         </Box>
+
+        {/* MSP context bar — shown only when a client is active (i.e. an
+            MSP operator / vendor drilled into a client). Gives the
+            breadcrumb back to the portfolio + the fast tenant switcher.
+            Single-tenant users never see it (activeTenant stays null). */}
+        {activeTenant ? (
+          <Box
+            sx={{
+              width: "100%",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              px: { xs: 1.25, sm: 2, md: 2.5 },
+              py: 1,
+              bgcolor: "#fff",
+              borderBottom: `1px solid ${BRAND.border}`,
+            }}
+          >
+            <HierarchyBreadcrumb />
+            <TenantSwitcher />
+          </Box>
+        ) : null}
 
         {/* The single scroll container for everything below the Topbar.
             Vertical scroll is owned here. Horizontal scroll is clamped:
@@ -1009,20 +997,29 @@ export default function AppShell() {
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
-            <Box
-              key={`${selectedPage}-${viewReloadToken}`}
-              sx={{
-                minWidth: 0,
-                width: "100%",
-                filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
-                transform: "translateZ(0)",
-                transition: "filter 220ms ease",
-                pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
-                userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
-              }}
+            {/* Route-level error boundary: a render throw in one page no longer
+                white-screens the whole SPA. Keyed by page so navigating to a
+                healthy page remounts a fresh boundary. */}
+            <ErrorBoundary
+              key={`eb-${selectedPage}`}
+              label={selectedPage}
+              onReset={() => setViewReloadToken((t) => t + 1)}
             >
-              {content}
-            </Box>
+              <Box
+                key={`${selectedPage}-${viewReloadToken}`}
+                sx={{
+                  minWidth: 0,
+                  width: "100%",
+                  filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
+                  transform: "translateZ(0)",
+                  transition: "filter 220ms ease",
+                  pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
+                  userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
+                }}
+              >
+                {mspResolving ? <PageFallback /> : inPortfolioMode ? <Portfolio /> : content}
+              </Box>
+            </ErrorBoundary>
           </React.Suspense>
 
           {shouldShowNoInformationOverlay ? (

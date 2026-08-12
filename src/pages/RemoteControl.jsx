@@ -14,6 +14,7 @@
 import * as React from "react";
 import {
   Box,
+  CircularProgress,
   Drawer,
   Grid,
   Paper,
@@ -42,10 +43,24 @@ import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
 import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
 import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
 import FileTransfersAuditTable from "../components/RemoteControl/FileTransfersAuditTable";
-import ShellTerminal from "../components/RemoteControl/ShellTerminal";
-import TranscriptReplayDialog from "../components/RemoteControl/TranscriptReplayDialog";
-import FileBrowserPanel from "../components/RemoteControl/FileBrowserPanel";
-import ScreenShareViewer from "../components/RemoteControl/ScreenShareViewer";
+// Lazy-loaded: these four own the xterm.js + WebRTC/DataChannel stack (~347KB
+// combined). They only render when an operator actually opens a shell/file/
+// screen session, so keep them out of the RemoteControl page's initial chunk
+// — otherwise all of xterm + WebRTC parses on page mount even for an operator
+// who never starts a session.
+const ShellTerminal = React.lazy(() => import("../components/RemoteControl/ShellTerminal"));
+const TranscriptReplayDialog = React.lazy(() => import("../components/RemoteControl/TranscriptReplayDialog"));
+const FileBrowserPanel = React.lazy(() => import("../components/RemoteControl/FileBrowserPanel"));
+const ScreenShareViewer = React.lazy(() => import("../components/RemoteControl/ScreenShareViewer"));
+
+// Centered fallback while a session drawer's heavy body loads.
+function SessionLoading() {
+  return (
+    <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <CircularProgress size={28} sx={{ color: BRAND.teal }} />
+    </Box>
+  );
+}
 
 import PageHeader from "../components/common/PageHeader";
 
@@ -183,7 +198,7 @@ export default function RemoteControl() {
    *   - 409 / RCP_DEVICE_OFFLINE          — device offline mid-click
    *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent missing capability
    *   - 429 / RCP_TOO_MANY_SESSIONS       — concurrency cap hit
-   *   - 403 / RCP_ADMIN_MASTER_REQUIRED   — user isn't admin_master
+   *   - 403 / FORBIDDEN                   — caller lacks ADMIN/OWNER here
    */
   const handleConnect = async (device, type = "shell") => {
     try {
@@ -213,10 +228,14 @@ export default function RemoteControl() {
           "info",
           "This capability is not yet available on the selected agent."
         );
-      } else if (msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+      } else if (msg.includes("FORBIDDEN") || msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+        // M4 moved RCP onto the shared requireRole("ADMIN","OWNER") gate, so
+        // the backend now answers a plain FORBIDDEN. The old code is still
+        // matched because a browser may be talking to a backend that hasn't
+        // been rolled forward yet.
         notify(
           "warning",
-          "Remote Control is restricted to admin_master users in this milestone."
+          "You need the Admin or Owner role on this tenant to start a remote session."
         );
       } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
         notify("error", "Device is not currently connected. Try again later.");
@@ -381,24 +400,31 @@ export default function RemoteControl() {
       >
         {activeSession ? (
           <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
-            <ShellTerminal
-              session={activeSession}
-              device={activeSession.device}
-              onClose={() => {
-                setActiveSession(null);
-                load();
-              }}
-            />
+            <React.Suspense fallback={<SessionLoading />}>
+              <ShellTerminal
+                session={activeSession}
+                device={activeSession.device}
+                onClose={() => {
+                  setActiveSession(null);
+                  load();
+                }}
+              />
+            </React.Suspense>
           </Box>
         ) : null}
       </Drawer>
 
-      {/* RCP M1.S3 — transcript replay dialog. */}
-      <TranscriptReplayDialog
-        open={Boolean(replaySession)}
-        session={replaySession}
-        onClose={() => setReplaySession(null)}
-      />
+      {/* RCP M1.S3 — transcript replay dialog. Mounted only when a replay is
+          selected so its lazy chunk doesn't load on page mount. */}
+      {replaySession ? (
+        <React.Suspense fallback={null}>
+          <TranscriptReplayDialog
+            open={Boolean(replaySession)}
+            session={replaySession}
+            onClose={() => setReplaySession(null)}
+          />
+        </React.Suspense>
+      ) : null}
 
       {/* RCP M2.S1 — file manager drawer. Opens when a Files button
           succeeds; FileBrowserPanel owns the WebRTC + DataChannel
@@ -422,14 +448,16 @@ export default function RemoteControl() {
       >
         {fileSession ? (
           <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
-            <FileBrowserPanel
-              session={fileSession}
-              device={fileSession.device}
-              onClose={() => {
-                setFileSession(null);
-                load();
-              }}
-            />
+            <React.Suspense fallback={<SessionLoading />}>
+              <FileBrowserPanel
+                session={fileSession}
+                device={fileSession.device}
+                onClose={() => {
+                  setFileSession(null);
+                  load();
+                }}
+              />
+            </React.Suspense>
           </Box>
         ) : null}
       </Drawer>
@@ -456,14 +484,16 @@ export default function RemoteControl() {
       >
         {screenSession ? (
           <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
-            <ScreenShareViewer
-              session={screenSession}
-              device={screenSession.device}
-              onClose={() => {
-                setScreenSession(null);
-                load();
-              }}
-            />
+            <React.Suspense fallback={<SessionLoading />}>
+              <ScreenShareViewer
+                session={screenSession}
+                device={screenSession.device}
+                onClose={() => {
+                  setScreenSession(null);
+                  load();
+                }}
+              />
+            </React.Suspense>
           </Box>
         ) : null}
       </Drawer>

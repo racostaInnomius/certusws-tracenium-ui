@@ -19,8 +19,12 @@ import {
   getDeviceFleetRanking,
   getDevicePosture,
   getDeviceTimeseries,
+  getFleetComplianceTimeseries,
+  getFrameworkComplianceTimeseries,
   getFindingHistory,
   getFrameworkSummary,
+  getCategorySummary,
+  getCategoryDevices,
   getFrameworks,
   getTimeToCloseSummary,
   revokeFindingAcknowledgement,
@@ -78,16 +82,22 @@ describe("read endpoints", () => {
     const catalog = respond("get", `${BASE}/catalog`, { ok: true, items: [] });
     const frameworks = respond("get", `${BASE}/frameworks`, { ok: true, items: [] });
     const frameworkSummary = respond("get", `${BASE}/framework-summary`, { ok: true, items: [] });
+    const categorySummary = respond("get", `${BASE}/category-summary`, { ok: true, items: [] });
+    const categoryDevices = respond("get", `${BASE}/category-summary/:category/devices`, { ok: true, items: [] });
     const posture = respond("get", `${BASE}/devices`, { ok: true, items: [] });
 
     await getComplianceCatalog({ search: "smb" });
     await getFrameworks();
     await getFrameworkSummary();
+    await getCategorySummary();
+    await getCategoryDevices("network_sharing");
     await getDevicePosture({ framework: "cis-win11" });
 
     expect(catalog[0].search).toEqual({ search: "smb" });
     expect(frameworks[0].pathname).toBe(`${BASE}/frameworks`);
     expect(frameworkSummary[0].pathname).toBe(`${BASE}/framework-summary`);
+    expect(categorySummary[0].pathname).toBe(`${BASE}/category-summary`);
+    expect(categoryDevices[0].pathname).toBe(`${BASE}/category-summary/network_sharing/devices`);
     expect(posture[0].search).toEqual({ framework: "cis-win11" });
   });
 
@@ -116,6 +126,21 @@ describe("finding lifecycle", () => {
 
     expect(calls[0].body).toEqual({ note: null });
     expect(calls[1].body).toEqual({ note: "seen it" });
+  });
+
+  it("acknowledgeFinding sends acknowledgedUntil only when provided", async () => {
+    const calls = respond("post", `${BASE}/findings/:id/acknowledge`, { ok: true });
+
+    await acknowledgeFinding("f-1"); // omitted -> key absent
+    await acknowledgeFinding("f-1", { acknowledgedUntil: "2026-09-30T00:00:00.000Z" });
+    await acknowledgeFinding("f-1", { acknowledgedUntil: null }); // explicit indefinite
+
+    expect("acknowledgedUntil" in calls[0].body).toBe(false);
+    expect(calls[1].body).toEqual({
+      note: null,
+      acknowledgedUntil: "2026-09-30T00:00:00.000Z"
+    });
+    expect(calls[2].body).toEqual({ note: null, acknowledgedUntil: null });
   });
 
   it("revokeFindingAcknowledgement hits the /acknowledge/revoke sub-path", async () => {
@@ -191,6 +216,20 @@ describe("finding lifecycle", () => {
       note: null,
     });
   });
+
+  it("bulkFindingOp forwards acknowledgedUntil for a bulk acknowledge", async () => {
+    const calls = respond("post", /\/security\/compliance\/findings:bulk$/, { ok: true, summary: {} });
+
+    await bulkFindingOp({ op: "acknowledge", findingIds: ["f-1"] }); // key absent
+    await bulkFindingOp({
+      op: "acknowledge",
+      findingIds: ["f-1"],
+      acknowledgedUntil: "2026-09-30T00:00:00.000Z",
+    });
+
+    expect("acknowledgedUntil" in calls[0].body).toBe(false);
+    expect(calls[1].body.acknowledgedUntil).toBe("2026-09-30T00:00:00.000Z");
+  });
 });
 
 describe("settings", () => {
@@ -254,5 +293,19 @@ describe("export URL builders (pure functions)", () => {
     expect(pdf.searchParams.get("framework")).toBe("nist-csf");
     expect(pdf.searchParams.get("includeClosed")).toBe("false");
     expect(pdf.searchParams.get("maxDevices")).toBe("10");
+  });
+
+  it("getFleetComplianceTimeseries passes the window in days", async () => {
+    const calls = respond("get", "/api/v1/security/compliance/fleet-timeseries", { ok: true, buckets: [] });
+    await getFleetComplianceTimeseries(90);
+    expect(calls[0].pathname).toBe("/api/v1/security/compliance/fleet-timeseries");
+    expect(calls[0].search).toEqual({ windowDays: "90" });
+  });
+
+  it("getFrameworkComplianceTimeseries hits framework-timeseries with the window", async () => {
+    const calls = respond("get", "/api/v1/security/compliance/framework-timeseries", { ok: true, frameworks: [], buckets: [] });
+    await getFrameworkComplianceTimeseries(60);
+    expect(calls[0].pathname).toBe("/api/v1/security/compliance/framework-timeseries");
+    expect(calls[0].search).toEqual({ windowDays: "60" });
   });
 });

@@ -36,9 +36,12 @@ import {
   getSoftwareInventoryHosts,
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
+import { listFrom } from "../api/shape";
 
 import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
+import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
+import { formatDate } from "../utils/format";
 
 const SOFTWARE_ACCENTS = {
   installed: "#4F9A96",
@@ -136,18 +139,6 @@ function SectionCard({ title, children }) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  return new Date(value).toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h24",
-  });
-}
 
 
 function getRankingItems(rankings, key) {
@@ -444,7 +435,7 @@ export default function SoftwareInventory() {
         pageSize: paginationModel.pageSize,
       });
 
-      setDetailRows(Array.isArray(res?.items) ? res.items : []);
+      setDetailRows(listFrom(res, { keys: ["items"], context: "softwareInventory.detail" }));
       setTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);
@@ -475,7 +466,7 @@ export default function SoftwareInventory() {
         sortDir: currentSort.sort || "asc",
       });
 
-      setHostRows(Array.isArray(res?.items) ? res.items : []);
+      setHostRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hosts" }));
       setHostTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);
@@ -502,7 +493,7 @@ export default function SoftwareInventory() {
         pageSize: hostAppsPaginationModel.pageSize,
       });
 
-      setHostAppsRows(Array.isArray(res?.items) ? res.items : []);
+      setHostAppsRows(listFrom(res, { keys: ["items"], context: "softwareInventory.hostApps" }));
       setHostAppsTotalRows(Number(res?.total || 0));
     } catch (e) {
       console.error(e);
@@ -896,6 +887,12 @@ export default function SoftwareInventory() {
         </Grid>
       </Box>
 
+      {/* Browser posture — attack-surface lens over the installed-software
+          inventory (Chrome / Edge / Firefox / … versions across the fleet). */}
+      <BrowserInventoryPanel
+        notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+      />
+
       <Box sx={{ mb: 3 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
@@ -1018,6 +1015,7 @@ export default function SoftwareInventory() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
             {selectedHost && !appLevelDetail && (
               <IconButton
+                aria-label="Back to all hosts"
                 onClick={() => {
                   setSelectedHost(null);
                   setHostAppsSearch("");

@@ -13,13 +13,15 @@
 //     strings inside a JSON envelope. The backend never sees frame data.
 //   - Agent → Browser protocol (JSON over DataChannel):
 //       { op: "screenInfo",  width, height, fps }
-//       { op: "frame",  seq, width, height, data, cursorX, cursorY }     // small
-//       { op: "frameStart", seq, width, height, chunks, cursorX, cursorY } // large
+//       { op: "frame",  seq, width, height, data, cursorX, cursorY,
+//                       full, x, y, rw, rh }                       // small
+//       { op: "frameStart", seq, width, height, chunks, cursorX, cursorY,
+//                       full, x, y, rw, rh }                       // large
 //       { op: "frameChunk", seq, idx, data }
 //       { op: "frameDone",  seq }
-//       { op: "error",  code, message }
+//       { op: "error",  code, message, terminal }
 //   - Browser → Agent protocol:
-//       { op: "setQuality",  fps, quality }
+//       { op: "setQuality",  fps, quality }   // fps 1-15, quality 10-90
 //       { op: "stop" }
 //       { op: "mouseMove",  x, y }                  // M3.S4 — native display px
 //       { op: "mouseDown",  button, x, y }
@@ -47,6 +49,15 @@
 //         held buttons or modifiers on the remote
 //   - Coordinates are translated: clientX/Y → canvas-rect-relative →
 //     scaled to native display pixels using liveSize.
+//
+// Dirty rects:
+//   `width`/`height` are ALWAYS the full desktop size; the canvas is sized
+//   from them and input coordinates map through them. `full:false` means
+//   `data` is only the region at (x,y) that changed, which we blit over the
+//   pixels already on the canvas. That makes frames interdependent over an
+//   unreliable DataChannel, so the agent forces a periodic full frame — a
+//   dropped region self-heals within one keyframe interval instead of
+//   persisting for the whole session.
 //
 // Panel layout:
 //   ┌────────────────────────────────────────────┐
@@ -82,6 +93,7 @@ import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { attachIceRestart } from "./iceRestart";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -129,6 +141,68 @@ function rttColor(rttMs, theme) {
   return theme.critical;
 }
 
+// Frame rate bounds. These MUST match MIN_FPS / MAX_FPS in the agent's
+// screen-session.ts — the agent clamps to its own range and echoes the
+// applied value back via `screenInfo`, so a mismatch here just means the
+// slider snaps after the round trip.
+//
+// The default stays at the agent's conservative 5 fps on purpose: a 1080p
+// JPEG at quality 60 is ~150-250 KB, so 5 fps is already ~8-10 Mbit/s over
+// TURN. Raising the ceiling is the operator's call on a LAN; the real fix
+// for bandwidth is dirty-rect capture, not a higher default.
+const MIN_FPS = 1;
+const MAX_FPS = 15;
+const DEFAULT_FPS = 5;
+
+// Operator-facing copy for the capture failures the agent can report. We
+// write these rather than showing the agent's own `message`, which is
+// phrased for whoever is reading the endpoint log.
+//
+// Every key here is a stable code produced by one of the three PrivSvc
+// implementations (ScreenCaptureDxgi.cs on Windows, privsvc/{macos,linux}
+// screen-capture.ts and their native helpers).
+const CAPTURE_ERROR_COPY = {
+  no_interactive_desktop:
+    "This device has no active interactive desktop right now. Screen sharing " +
+    "needs a user to be logged in. For a headless server, use a Shell session instead.",
+  wayland_unsupported:
+    "This device is running a Wayland session, which isn't supported by screen " +
+    "sharing yet. Ask the user to log out and back in selecting an X11 / Xorg " +
+    "session, then retry. Shell and file sessions work on Wayland normally.",
+  no_screen_recording_permission:
+    "macOS has not granted Screen Recording permission to the Tracenium capture " +
+    "helper. This is provisioned fleet-wide by the MDM PPPC profile — check that " +
+    "the profile is installed on this device.",
+  screen_capture_helper_missing:
+    "The screen capture helper isn't installed on this device. Reinstall or " +
+    "upgrade the agent package to deploy it.",
+  screen_capture_no_display:
+    "This device reports no attached display, so there is nothing to capture.",
+  x11_connect_failed:
+    "The capture helper could not reach the device's X server. The user may have " +
+    "logged out since the session started.",
+  screen_capture_init_failed:
+    "The device's screen capture stack failed to initialise. A GPU driver issue " +
+    "or a locked-down Windows build are the usual causes."
+};
+
+// Codes that describe a passing blip rather than a state the operator has to
+// act on. Only consulted for agents old enough not to send the `terminal`
+// flag — anything unrecognised from those is treated as fatal, matching the
+// behaviour before the flag existed.
+const TRANSIENT_CAPTURE_CODES = new Set([
+  "screen_capture_no_frame",
+  "screen_capture_failed",
+  "screen_capture_acquire_failed",
+  "screen_capture_encode_failed",
+  "screen_capture_ipc_error",
+  "screen_capture_spawn_failed",
+  "screen_capture_no_output",
+  "screen_capture_bad_output",
+  "sck_failed",
+  "out_of_memory"
+]);
+
 // ── StatusChip ─────────────────────────────────────────────────────────────
 
 function StatusChip({ state }) {
@@ -167,9 +241,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const [state, setState]         = React.useState(STATE.CONNECTING);
   const [errorMsg, setErrorMsg]   = React.useState("");
   const [screenInfo, setScreenInfo] = React.useState(null); // { width, height, fps }
-  const [liveSize, setLiveSize]   = React.useState(null);   // last frame { width, height }
+  const [liveSize, setLiveSize]   = React.useState(null);   // full desktop { width, height }
   const [liveFps, setLiveFps]     = React.useState(0);
   const [quality, setQuality]     = React.useState(60);     // JPEG quality 1-100
+  const [fps, setFps]             = React.useState(DEFAULT_FPS); // requested capture rate
+  // Non-fatal capture trouble: shown as a banner over the still-live canvas
+  // instead of replacing the viewer with an error page.
+  const [warning, setWarning]     = React.useState("");
   const [isFullscreen, setIsFullscreen] = React.useState(false);
   // M3.S3 — telemetry & cursor overlay state.
   const [rtt, setRtt]             = React.useState(null);   // ms, null until first sample
@@ -188,9 +266,35 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // Shape: { seq: number, expected: number, width: number, height: number,
   //          parts: Map<idx, string> } | null
   const assemblyRef = React.useRef(null);
+  // Mirror of liveSize for renderFrame, which lives in the first render's
+  // closure (dc.onmessage is bound once) and would otherwise read a stale
+  // value forever.
+  const liveSizeRef = React.useRef(null);
 
-  // ── Quality slider — debounced send ──────────────────────────────────
+  // ── Stream settings (fps + quality) ──────────────────────────────────
+  //
+  // Both travel on the same `setQuality` message, so every send has to carry
+  // the CURRENT value of the other one. `fpsRef` mirrors the fps state so the
+  // auto-quality effect below can read it without taking fps as a dependency
+  // (which would make it re-fire — and re-send — on every fps change).
+  //
+  // This used to send `fps: screenInfo?.fps ?? 15`, i.e. it echoed back
+  // whatever the agent had just reported. The agent reports its own current
+  // rate, so the value was always a no-op and the capture rate was pinned at
+  // the agent's 5 fps default with no way for the operator to change it.
   const qualitySendTimer = React.useRef(null);
+  const fpsSendTimer = React.useRef(null);
+  const fpsRef = React.useRef(DEFAULT_FPS);
+  React.useEffect(() => {
+    fpsRef.current = fps;
+  }, [fps]);
+  React.useEffect(() => {
+    liveSizeRef.current = liveSize;
+  }, [liveSize]);
+
+  function sendStreamSettings(nextFps, nextQuality) {
+    dcSend({ op: "setQuality", fps: nextFps, quality: nextQuality });
+  }
 
   function handleQualityChange(_, val) {
     // Moving the slider counts as manual override — disable auto so
@@ -199,11 +303,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     setQuality(val);
     if (qualitySendTimer.current) clearTimeout(qualitySendTimer.current);
     qualitySendTimer.current = setTimeout(() => {
-      dcSend({
-        op: "setQuality",
-        fps: screenInfo?.fps ?? 15,
-        quality: val
-      });
+      sendStreamSettings(fpsRef.current, val);
+    }, 300);
+  }
+
+  function handleFpsChange(_, val) {
+    setFps(val);
+    if (fpsSendTimer.current) clearTimeout(fpsSendTimer.current);
+    fpsSendTimer.current = setTimeout(() => {
+      sendStreamSettings(val, quality);
     }, 300);
   }
 
@@ -279,14 +387,14 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     if (lastAutoQualityRef.current === target) return;
     lastAutoQualityRef.current = target;
     setQuality(target);
-    dcSend({
-      op: "setQuality",
-      fps: screenInfo?.fps ?? 15,
-      quality: target
-    });
-  // dcSend is stable (reads from ref); screenInfo.fps included so a
-  // pending screenInfo update doesn't ship a stale fps with the quality.
-  }, [autoQuality, rtt, state, screenInfo?.fps]);
+    // Auto adapts quality only — the operator's chosen frame rate is
+    // preserved, so we read it from the ref rather than the render closure.
+    sendStreamSettings(fpsRef.current, target);
+  // sendStreamSettings only touches refs (dcRef, fpsRef), so it's behaviourally
+  // stable even though it's re-created each render. Listing it would re-fire
+  // this effect on every render and re-send setQuality on each one.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoQuality, rtt, state]);
 
   // ── M3.S4 — Input forwarding ─────────────────────────────────────────
   //
@@ -427,11 +535,18 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         pcRef.current = pc;
         cleanupFns.push(() => { try { pc.close(); } catch {/**/ } });
 
-        // 3. Create DataChannel "rcp.screen" before the offer.
+        // 3. Create DataChannel before the offer.
         //    ordered: false, maxRetransmits: 0 = unreliable delivery —
         //    a dropped frame is preferable to buffering / head-of-line
         //    blocking on subsequent frames.
-        const dc = pc.createDataChannel("rcp.screen", {
+        //
+        // ⚠️ Label is "rcp" (plain), NOT "rcp.screen". See
+        // FileBrowserPanel.jsx for the empirical bug write-up:
+        // node-datachannel on ARM64 fails ICE completion when the
+        // label is "rcp.file" or "rcp.screen" specifically. The
+        // agent routes by capability not by label so "rcp" is
+        // functionally equivalent and avoids the bug.
+        const dc = pc.createDataChannel("rcp", {
           ordered: false,
           maxRetransmits: 0
         });
@@ -472,12 +587,33 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         };
         pc.onconnectionstatechange = () => {
           if (destroyed) return;
-          const s = pc.connectionState;
-          if (s === "failed" || s === "disconnected") {
-            setErrorMsg("WebRTC connection lost.");
+          // Non-terminal — the ICE restart helper handles recovery
+          // (see iceRestart.js). For screen-share specifically, a
+          // brief reconnect is much better UX than tearing down the
+          // viewer mid-presentation: the JPEG stream just pauses,
+          // resumes after the new ICE pair is selected.
+        };
+
+        // Attach the ICE restart helper. Cap is 2 attempts; after
+        // that the helper invokes onFinalFailure and we surface the
+        // error. The stream continues to render the last received
+        // frame during recovery, so the operator sees a frozen
+        // screenshot rather than a black panel.
+        const detachIceRestart = attachIceRestart({
+          pc,
+          ws,
+          sessionId: session.sessionId,
+          onRestartAttempt: (_attempt) => {
+            if (destroyed) return;
+            setErrorMsg("");
+          },
+          onFinalFailure: () => {
+            if (destroyed) return;
+            setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
           }
-        };
+        });
+        cleanupFns.push(detachIceRestart);
 
         // 5. WS message handler.
         ws.onmessage = ({ data }) => {
@@ -531,22 +667,73 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
   // Shared render path used by both single-message "frame" (M3.S1
   // small frames) and fully-assembled chunked frames (M3.S2).
-  function renderFrame(data, _width, _height) {
+  /**
+   * Paint one update onto the canvas.
+   *
+   * `meta` describes what `data` actually contains:
+   *   { screenW, screenH } — the FULL desktop size. The canvas is sized from
+   *     these, never from the decoded image, because a partial update's image
+   *     is only the changed region. Getting this wrong also breaks input
+   *     forwarding, which maps clicks through liveSize.
+   *   { full, x, y } — whether this is the whole desktop or a region to blit
+   *     at (x,y) over the pixels already on the canvas.
+   *
+   * Assigning canvas.width/height CLEARS the canvas, so it must happen only
+   * on a real resolution change — otherwise every partial update would wipe
+   * the frame it is supposed to be patching.
+   */
+  function renderFrame(data, meta) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const screenW = Number(meta?.screenW) || 0;
+    const screenH = Number(meta?.screenH) || 0;
+    const isFull = meta?.full !== false;
+    const dx = Number(meta?.x) || 0;
+    const dy = Number(meta?.y) || 0;
+
     const img = new Image();
     img.onload = () => {
-      if (canvas.width !== img.width || canvas.height !== img.height) {
-        canvas.width  = img.width;
-        canvas.height = img.height;
+      // Fall back to the image's own size for a full frame from an agent
+      // that doesn't report screen dimensions.
+      const w = screenW || (isFull ? img.width : canvas.width);
+      const h = screenH || (isFull ? img.height : canvas.height);
+
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        // Resolution change — this wipes the canvas, which is correct here:
+        // any partial we still hold refers to the old geometry.
+        canvas.width = w;
+        canvas.height = h;
+        setLiveSize({ width: w, height: h });
+      } else if (!liveSizeRef.current) {
+        setLiveSize({ width: canvas.width, height: canvas.height });
       }
-      ctx.drawImage(img, 0, 0);
-      setLiveSize({ width: img.width, height: img.height });
+
+      if (isFull) {
+        ctx.drawImage(img, 0, 0);
+      } else {
+        // Blit the changed region in place. Everything else on the canvas is
+        // still valid from earlier frames.
+        ctx.drawImage(img, dx, dy);
+      }
     };
     img.src = `data:image/jpeg;base64,${data}`;
+
+    // A frame arrived, so whatever the agent complained about has passed.
+    // Functional updates throughout: this runs on every frame, and React
+    // bails out when the value is unchanged, so there's no re-render storm.
+    // They also sidestep the stale-closure problem — handleDcMessage is
+    // captured by dc.onmessage on the first render and never refreshed.
+    setWarning((w) => (w ? "" : w));
+
+    // Recover from a terminal capture error without making the operator
+    // reconnect. The agent keeps retrying on a slow cadence after reporting
+    // one, so the user logging back in (or the PPPC profile landing) resumes
+    // the stream on its own — but only if we put the canvas back.
+    setState((s) => (s === STATE.ERROR ? STATE.VIEWING : s));
+    setErrorMsg((m) => (m ? "" : m));
 
     // FPS counter — stamp on message arrival, not on img.onload, so
     // the counter reflects network cadence rather than decode latency.
@@ -574,11 +761,19 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
     switch (msg.op) {
       case "screenInfo": {
+        const appliedFps = Number(msg.fps || DEFAULT_FPS);
         setScreenInfo({
           width:  Number(msg.width  || 0),
           height: Number(msg.height || 0),
-          fps:    Number(msg.fps    || 15)
+          fps:    appliedFps
         });
+        // The agent echoes the rate it actually applied (after its own
+        // clamp) both on the first frame and whenever setQuality changes it.
+        // Snapping the slider to that keeps the control honest instead of
+        // showing a number the device never honoured.
+        if (Number.isFinite(appliedFps) && appliedFps > 0) {
+          setFps(Math.max(MIN_FPS, Math.min(MAX_FPS, Math.round(appliedFps))));
+        }
         break;
       }
 
@@ -586,7 +781,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       // M3.S3 — cursorX/Y travel on the frame so the overlay stays in
       // sync with the underlying pixels.
       case "frame": {
-        renderFrame(msg.data, msg.width, msg.height);
+        renderFrame(msg.data, {
+          screenW: msg.width,
+          screenH: msg.height,
+          full: msg.full,
+          x: msg.x,
+          y: msg.y
+        });
         updateCursor(msg.cursorX, msg.cursorY);
         break;
       }
@@ -607,6 +808,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           expected: Number(msg.chunks),
           width:    Number(msg.width  || 0),
           height:   Number(msg.height || 0),
+          // Region metadata rides on frameStart; the chunks carry payload only.
+          full:     msg.full,
+          x:        msg.x,
+          y:        msg.y,
           parts:    new Map()
         };
         updateCursor(msg.cursorX, msg.cursorY);
@@ -629,7 +834,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             (_, i) => asm.parts.get(i) ?? ""
           ).join("");
           assemblyRef.current = null;
-          renderFrame(assembled, asm.width, asm.height);
+          renderFrame(assembled, {
+            screenW: asm.width,
+            screenH: asm.height,
+            full: asm.full,
+            x: asm.x,
+            y: asm.y
+          });
         }
         break;
       }
@@ -646,7 +857,45 @@ export default function ScreenShareViewer({ session, device, onClose }) {
       }
 
       case "error": {
-        setErrorMsg(msg.message || "Unknown error from agent");
+        const code = String(msg.code || "");
+
+        // Belt-and-braces: the agent no longer forwards this at all (an idle
+        // desktop is a normal state, not a failure), but an older agent on a
+        // slow upgrade ring might. Never act on it — the canvas already
+        // holds the correct pixels.
+        if (code === "screen_capture_no_frame") break;
+
+        // `terminal` says whether the device can recover on its own. Agents
+        // predating the flag collapsed every failure into one code with no
+        // flag; for those, fall back to the code table so we stay at least
+        // as conservative as the old behaviour.
+        const terminal =
+          typeof msg.terminal === "boolean"
+            ? msg.terminal
+            : !TRANSIENT_CAPTURE_CODES.has(code);
+
+        // Prefer our own copy; fall back to the agent's message, which is
+        // written for a log reader but beats showing nothing.
+        const friendly =
+          CAPTURE_ERROR_COPY[code] ||
+          msg.message ||
+          "Screen capture failed on the device.";
+
+        if (!terminal) {
+          // A blip — a UAC prompt, a fast user switch, a GPU driver reset.
+          // The agent already absorbed several of these before telling us,
+          // and it keeps trying. Warn over the live canvas and let the next
+          // good frame clear it; tearing the viewer down here is exactly
+          // what made screen share look broken on healthy machines.
+          setWarning(friendly);
+          break;
+        }
+
+        // Nothing will arrive until something changes on the endpoint
+        // (someone logs in, the PPPC profile lands, the session leaves
+        // Wayland). Say so plainly — the agent is still retrying slowly in
+        // the background, so recovery reopens the stream without a reconnect.
+        setErrorMsg(friendly);
         setState(STATE.ERROR);
         break;
       }
@@ -751,7 +1000,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
 
         <StatusChip state={state} />
         <Tooltip title="Close">
-          <IconButton size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
+          <IconButton aria-label="Close screen share" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -821,6 +1070,36 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             position: "relative"
           }}
         >
+          {/* Non-fatal capture warning. Floats over the last good frame so
+              the operator keeps seeing the device while the agent works
+              through a transient (UAC prompt, fast user switch, GPU driver
+              reset). Clears itself on the next frame that arrives. */}
+          {warning && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: 8,
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 2,
+                maxWidth: "90%",
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 1,
+                bgcolor: "rgba(0,0,0,0.78)",
+                border: `1px solid ${ROLE.caution}66`,
+                pointerEvents: "none"
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: ROLE.caution, fontWeight: 600 }}
+              >
+                {warning}
+              </Typography>
+            </Box>
+          )}
+
           {/* The canvas+overlay live in an inner wrapper sized exactly
               to the rendered frame so the cursor overlay coordinates
               map 1:1 onto displayed pixels (the canvas honors
@@ -947,6 +1226,50 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             />
           </Tooltip>
 
+          {/* Frame rate slider. Separate from Quality because they trade off
+              against each other and the operator needs both knobs: on a LAN
+              you want 15fps at quality 80; over a congested TURN relay you
+              want 2fps at quality 60 rather than a smooth stream of mush. */}
+          <Tooltip title="Capture frame rate. Higher is smoother but costs bandwidth — a 1080p frame is roughly 200 KB, so 15fps is a busy link.">
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{ flex: 1, minWidth: 0 }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ color: BRAND.gray, whiteSpace: "nowrap", flexShrink: 0 }}
+              >
+                FPS
+              </Typography>
+              <Slider
+                size="small"
+                min={MIN_FPS}
+                max={MAX_FPS}
+                step={1}
+                value={fps}
+                onChange={handleFpsChange}
+                sx={{
+                  color: BRAND.teal,
+                  "& .MuiSlider-thumb": { width: 12, height: 12 },
+                  "& .MuiSlider-rail": { bgcolor: "rgba(255,255,255,0.15)" }
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: BRAND.gray,
+                  minWidth: 18,
+                  textAlign: "right",
+                  flexShrink: 0
+                }}
+              >
+                {fps}
+              </Typography>
+            </Stack>
+          </Tooltip>
+
           {/* Quality slider + Auto toggle */}
           <Stack
             direction="row"
@@ -1017,6 +1340,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           {/* Fullscreen toggle */}
           <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
             <IconButton
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               size="small"
               onClick={handleFullscreen}
               sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}

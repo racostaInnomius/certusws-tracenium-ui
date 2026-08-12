@@ -31,12 +31,15 @@ import {
   updateTenantMember,
   deleteTenantMember,
 } from "../api/tenants";
+import { useCachedFetch } from "../hooks/useCachedFetch";
+import { listFrom } from "../api/shape";
 import { useAuthContext } from "../auth/AuthContext";
 
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
+import { formatDate } from "../utils/format";
 
 // Fase 2 — SummaryCard aligned with the Tokens page version. Same
 // shell tokens; `accent` is the semantic color of the big number.
@@ -140,20 +143,6 @@ function renderActiveChip(isActive) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  const date = new Date(value);
-
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h24",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function TenantDialog({
   open,
@@ -385,13 +374,27 @@ export default function TenantsAdministrator({ mode = "global" }) {
   const isTenantMode = mode === "tenant";
   const currentTenantId = auth?.tenantId;
 
-  const [tenants, setTenants] = React.useState([]);
+  // Tenants list (global mode only): a parameterless on-mount fetch, routed
+  // through useCachedFetch for stale-while-revalidate + dedup + last-known-good.
+  // `tenants` is derived from the snapshot (setTenants was loader-only); the
+  // selection reconciliation loadTenants used to do inline now lives in a
+  // guarded effect below. In tenant mode the fetch is disabled.
+  const {
+    data: tenantsData,
+    loading: loadingTenants,
+    refetch: reloadTenants,
+  } = useCachedFetch(
+    "tenants:list:v1",
+    async () => listFrom(await listTenants(), { keys: ["items"], context: "tenants.list" }),
+    { enabled: !isTenantMode, staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
+  );
+  const tenants = React.useMemo(() => tenantsData ?? [], [tenantsData]);
+
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [selectedTenantId, setSelectedTenantId] = React.useState(null);
   const [tenantDetails, setTenantDetails] = React.useState(null);
   const [members, setMembers] = React.useState([]);
 
-  const [loadingTenants, setLoadingTenants] = React.useState(true);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -416,34 +419,22 @@ export default function TenantsAdministrator({ mode = "global" }) {
     severity: "success",
   });
 
-  const loadTenants = async () => {
-    if (isTenantMode) return;
-
-    try {
-      setLoadingTenants(true);
-      const response = await listTenants();
-      const items = Array.isArray(response?.items) ? response.items : [];
-      setTenants(items);
-
-      if (!selectedTenant && items.length > 0) {
-        setSelectedTenant(items[0]);
-        setSelectedTenantId(items[0].id);
-      } else if (selectedTenant) {
-        const refreshed = items.find((t) => t.id === selectedTenant.id) || null;
-        setSelectedTenant(refreshed);
-        setSelectedTenantId(refreshed?.id ?? null);
-      }
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to load tenants",
-        severity: "error",
-      });
-    } finally {
-      setLoadingTenants(false);
+  // Reconcile the selected tenant against the loaded list. Guarded on
+  // `next !== selectedTenant` so it settles in one pass and can't loop:
+  // - no selection yet → pick the first tenant
+  // - existing selection → refresh it to the matching item (or clear if gone)
+  // selectedTenant / selectedTenantId always move together (id follows object).
+  React.useEffect(() => {
+    if (isTenantMode || !tenantsData) return;
+    const items = tenantsData;
+    const next = !selectedTenant
+      ? items[0] ?? null
+      : items.find((t) => t.id === selectedTenant.id) ?? null;
+    if (next !== selectedTenant) {
+      setSelectedTenant(next);
+      setSelectedTenantId(next?.id ?? null);
     }
-  };
+  }, [tenantsData, isTenantMode, selectedTenant]);
 
   const loadTenantDetails = async (tenantId) => {
     if (!tenantId) {
@@ -488,15 +479,6 @@ export default function TenantsAdministrator({ mode = "global" }) {
     }
   };
 
-  React.useEffect(() => {
-    if (!isTenantMode) {
-      loadTenants();
-      return;
-    }
-
-    setLoadingTenants(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTenants closes over stable refs; adding it would re-fetch on every render.
-  }, [isTenantMode]);
 
   React.useEffect(() => {
     if (isTenantMode) {
@@ -589,7 +571,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
       });
 
       setTenantDialogOpen(false);
-      await loadTenants();
+      await reloadTenants();
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -622,7 +604,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
         severity: "success",
       });
 
-      await loadTenants();
+      await reloadTenants();
     } catch (e) {
       console.error(e);
       const errorMessage = String(e?.message || "");
@@ -666,7 +648,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
       await loadMembers(targetTenantId);
 
       if (!isTenantMode) {
-        await loadTenants();
+        await reloadTenants();
       }
     } catch (e) {
       console.error(e);
@@ -698,7 +680,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
       await loadMembers(targetTenantId);
 
       if (!isTenantMode) {
-        await loadTenants();
+        await reloadTenants();
       }
     } catch (e) {
       console.error(e);

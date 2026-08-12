@@ -17,7 +17,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Box,
   Button,
   CircularProgress,
@@ -39,6 +38,7 @@ import {
   updateComplianceSettings
 } from "../../api/compliance";
 import { BRAND } from "../../theme/brand";
+import AsyncState from "../common/AsyncState";
 
 // Setting metadata — drives the form rows without per-row JSX
 // duplication. Add a setting here and it lights up automatically.
@@ -183,18 +183,21 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
         <Typography variant="h6" sx={{ flex: 1, fontWeight: 700, color: BRAND.dark }}>
           Compliance settings
         </Typography>
-        <IconButton size="small" onClick={handleCancel}>
+        <IconButton aria-label="Close" size="small" onClick={handleCancel}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
       <DialogContent>
-        {loading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : error ? (
-          <Alert severity="error">{error}</Alert>
-        ) : settings ? (
+        {/* NOTE: JSX children evaluate eagerly — the block below runs even
+            while AsyncState shows loading/error and `settings` is still null,
+            so every read of it stays optional-chained. */}
+        <AsyncState
+          loading={loading}
+          error={error}
+          isEmpty={!settings}
+          emptyText="No compliance settings available."
+          minHeight={200}
+        >
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             {SETTINGS_DEFS.map((def) => (
               <SettingRow
@@ -210,12 +213,12 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
                     ? def.validate(Number(draft[def.key].value))
                     : null
                 }
-                systemDefault={settings.systemDefaults[def.key]}
-                effective={settings.effective[def.key]}
+                systemDefault={settings?.systemDefaults?.[def.key]}
+                effective={settings?.effective?.[def.key]}
               />
             ))}
           </Stack>
-        ) : null}
+        </AsyncState>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleCancel} disabled={saving}>

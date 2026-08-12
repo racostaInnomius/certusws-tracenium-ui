@@ -183,7 +183,7 @@ export default function JobTracker({ jobs, onAllDone, onDismiss }) {
         <Typography sx={{ flex: 1, fontWeight: 800, color: BRAND.dark, fontSize: 13 }}>
           Jobs ({jobs.length})
         </Typography>
-        <IconButton size="small" onClick={onDismiss}>
+        <IconButton aria-label="Dismiss" size="small" onClick={onDismiss}>
           <CloseOutlinedIcon sx={{ fontSize: 16 }} />
         </IconButton>
       </Box>

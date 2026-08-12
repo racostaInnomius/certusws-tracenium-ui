@@ -15,6 +15,7 @@ import {
   getSoftwareInventoryHosts,
   getSoftwareInventoryRankings,
   getSoftwareInventorySummary,
+  getBrowserInventory,
 } from "./inventoryDashboard";
 
 const BASE = "/api/v1/dashboard";
@@ -70,5 +71,11 @@ describe("inventory dashboard", () => {
     respond("get", `${BASE}/software-inventory/summary`, envelope);
 
     await expect(getSoftwareInventorySummary()).resolves.toEqual(envelope);
+  });
+
+  it("getBrowserInventory hits the top-level browser-inventory path", async () => {
+    const calls = respond("get", "/api/v1/browser-inventory", { ok: true, families: [] });
+    await getBrowserInventory();
+    expect(calls[0].pathname).toBe("/api/v1/browser-inventory");
   });
 });

@@ -15,8 +15,8 @@ import {
   useTheme,
 } from "@mui/material";
 import { useAuthContext } from "../auth/AuthContext";
-import { clearApiCache, setApiCacheSessionScope } from "../api/http";
-import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
+import { performLogout } from "../auth/logout";
+import { useMsp } from "../msp/MspContext";
 
 import LogoutIcon from "@mui/icons-material/Logout";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
@@ -24,7 +24,9 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
@@ -35,6 +37,7 @@ import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlin
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 
 import { TOPBAR_HEIGHT } from "./Topbar";
 
@@ -579,6 +582,11 @@ export default function Sidebar({
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
 
   const { auth } = useAuthContext();
+  // When an MSP operator / vendor has drilled into a client (active tenant
+  // set), the workspace badge must reflect THAT client — not the token's
+  // home tenant. The Sidebar only renders inside the client shell, so when
+  // activeTenant is set it is the tenant being viewed.
+  const { activeTenant } = useMsp();
 
   const authTenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const authTenantName = React.useMemo(() => getTenantNameFromAuth(auth), [auth]);
@@ -618,7 +626,11 @@ export default function Sidebar({
     };
   }, [authTenantId, authTenantName]);
 
-  const tenantDisplayName = authTenantName || resolvedTenantName || "";
+  // Active tenant (MSP drill-in) wins over the token's home tenant for the
+  // workspace badge, so the name + id shown match the tenant actually open.
+  const tenantDisplayName =
+    (activeTenant?.name ?? "") || authTenantName || resolvedTenantName || "";
+  const effectiveTenantId = activeTenant?.id ?? authTenantId;
 
   const tenantMemberRole = getTenantMemberRoleFromAuth(auth);
   const tenantMemberIsActive = getTenantMemberIsActiveFromAuth(auth);
@@ -651,17 +663,33 @@ export default function Sidebar({
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
+    // Crypto Discovery (CDP) — cert inventory ON the devices. Sits next
+    // to Security Compliance because both are posture-monitoring
+    // surfaces (distinct from PKI in Administration, which is the
+    // agent's own mTLS identity certs).
+    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
     // Software Delivery (SDP) — Phase 1. Sits next to Patch Management
     // because they're conceptually adjacent ("the fleet runs these
     // bits") and admins often jump between them.
     { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
     { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
+
+    // Device Management (MDM/MAM) sits with the operational surfaces,
+    // not under Administration: it's a product area in its own right
+    // (first-party MDM lands here), not a configuration knob.
+    ...(isPrivileged
+      ? [{ label: "Device Management", key: "device-management", icon: <PhonelinkSetupOutlinedIcon /> }]
+      : []),
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
       : []),
+
+    // Security Baselines = the desired endpoint state + remediation
+    // mode. Deliberately adjacent to Security Compliance (`ad`), which
+    // shows the evidence of that state.
     ...(isPrivileged
-      ? [{ label: "Policies", key: "policies", icon: <PolicyOutlinedIcon /> }]
+      ? [{ label: "Security Baselines", key: "security-baselines", icon: <ShieldOutlinedIcon /> }]
       : []),
     ...(isPrivileged
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
@@ -678,39 +706,16 @@ export default function Sidebar({
           // Inserted between PKI and Settings as agreed; visually
           // groups with the other admin surfaces.
           { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
+          // Agent Settings — HOW the enabled plugins behave (schedules,
+          // feature gates). Next to Plugin Control, which decides WHICH
+          // plugins are on.
+          { label: "Agent Settings", key: "agent-settings", icon: <TuneOutlinedIcon /> },
           { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
         ]
       : []),
   ];
 
-  const handleLogout = async () => {
-    clearApiCache();
-    clearCachedFetch();
-    setApiCacheSessionScope("signed-out");
-    setCachedFetchSessionScope("signed-out");
-
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE}/api/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-
-      let logoutUrl = "https://api.sso.safecertus.com/logout";
-
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.logoutUrl) {
-          logoutUrl = data.logoutUrl;
-        }
-      }
-
-      window.location.href = logoutUrl;
-    } catch (e) {
-      console.error("Logout failed", e);
-
-      window.location.href = "https://api.sso.safecertus.com/logout";
-    }
-  };
+  const handleLogout = performLogout;
 
   if (isDesktop) {
     // Permanent sidebar for md+ viewports (≥ 900px). Includes iPad landscape.
@@ -722,7 +727,7 @@ export default function Sidebar({
           onSelect={onSelect}
           handleLogout={handleLogout}
           tenantName={tenantDisplayName}
-          tenantId={authTenantId}
+          tenantId={effectiveTenantId}
           userEmail={authUserEmail}
         />
       </Box>
@@ -753,7 +758,7 @@ export default function Sidebar({
         onSelect={onSelect}
         handleLogout={handleLogout}
         tenantName={tenantDisplayName}
-        tenantId={authTenantId}
+        tenantId={effectiveTenantId}
         userEmail={authUserEmail}
       />
     </Drawer>

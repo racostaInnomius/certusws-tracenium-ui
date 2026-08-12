@@ -2,7 +2,10 @@ import * as React from "react";
 import { Box, IconButton, Typography, Badge, Tooltip } from "@mui/material";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { getAlertsUnreadCount } from "../api/alerts";
+import { performLogout } from "../auth/logout";
+import { useMsp } from "../msp/MspContext";
 
 import { BRAND } from "../theme/brand";
 
@@ -42,6 +45,17 @@ export default function Topbar({ onMenuClick }) {
 
   const [unreadCount, setUnreadCount] = React.useState(0);
 
+  // Alerts are tenant-scoped, but the Topbar also renders in portfolio mode
+  // (vendor / MSP operator with no client selected), where there is no active
+  // tenant to count alerts for. Polling there asks the backend for a tenant
+  // that isn't set — noise at best. Mirrors AppShell's `inPortfolioMode`.
+  // `mspLoading` matters as much as the mode itself: on mount the portfolio
+  // hasn't resolved yet, so hasPortfolio is still false and we'd poll before
+  // knowing whether this user has a tenant at all — which for a vendor is a
+  // tenant-less request the SPA reads as a dead session.
+  const { hasPortfolio, activeTenant, loading: mspLoading } = useMsp();
+  const skipPolling = mspLoading || (hasPortfolio && !activeTenant);
+
   // Poll /alerts/unread-count. Uses setTimeout chained re-arm (not
   // setInterval) so when a request runs long the next tick schedules
   // relative to actual completion, not wall-clock — avoids request
@@ -50,6 +64,15 @@ export default function Topbar({ onMenuClick }) {
   React.useEffect(() => {
     let cancelled = false;
     let timer = null;
+
+    // No tenant context → nothing to count. Re-runs once the portfolio
+    // resolves (or a client is selected) and starts polling then.
+    if (skipPolling) {
+      setUnreadCount(0);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const tick = async () => {
       if (cancelled) return;
@@ -86,7 +109,7 @@ export default function Topbar({ onMenuClick }) {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, []);
+  }, [skipPolling]);
 
   return (
     <Box
@@ -207,6 +230,24 @@ export default function Topbar({ onMenuClick }) {
             >
               <NotificationsNoneOutlinedIcon fontSize="small" />
             </Badge>
+          </IconButton>
+        </Tooltip>
+
+        {/* Sign out. Lives in the Topbar so it's reachable in EVERY mode —
+            including the MSP portfolio, where the Sidebar (its only other
+            logout) is hidden. */}
+        <Tooltip title="Sign out">
+          <IconButton
+            size="small"
+            aria-label="Sign out"
+            onClick={performLogout}
+            sx={{
+              color: "#ffffff",
+              flexShrink: 0,
+              "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
+            }}
+          >
+            <LogoutIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>

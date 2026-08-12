@@ -182,15 +182,6 @@ function buildSessionCacheScope(auth: any) {
       ? auth.tenant_member
       : null;
 
-  const tenantId = firstNonEmptyText(
-    auth.tenantId,
-    auth.tenant_id,
-    tenantMember?.tenantId,
-    tenantMember?.tenant_id,
-    auth.bootstrap?.tenantId,
-    auth.bootstrap?.tenant_id
-  );
-
   const subject = firstNonEmptyText(
     auth.subject,
     auth.sub,
@@ -198,14 +189,6 @@ function buildSessionCacheScope(auth: any) {
     auth.user?.sub,
     auth.bootstrap?.subject,
     auth.bootstrap?.sub
-  );
-
-  const memberId = firstNonEmptyText(
-    tenantMember?.id,
-    tenantMember?.memberId,
-    tenantMember?.member_id,
-    auth.bootstrap?.tenantMember?.id,
-    auth.bootstrap?.tenant_member?.id
   );
 
   const email = firstNonEmptyText(
@@ -217,13 +200,21 @@ function buildSessionCacheScope(auth: any) {
     auth.bootstrap?.tenant_member?.email
   ).toLowerCase();
 
-  // Include tenant + subject as the primary boundary. Member/email are extra
-  // discriminators for environments where subject can be provider-local or
-  // where the same principal can switch tenants.
+  // IDENTITY only — deliberately NOT the tenant.
+  //
+  // A scope change means "a different principal is using this browser", and
+  // the handler reacts by wiping the caches AND the selected tenant. Keying
+  // on the tenant made switching tenants (or a vendor selecting one) look
+  // like a sign-in by someone else, so the selection was cleared out from
+  // under the user and every later request went out tenant-less.
+  //
+  // Tenant isolation of cached data does NOT depend on this: both cache
+  // layers already namespace entries as `scope::activeTenant::url` (see
+  // buildCacheKey in api/http.js and buildScopedCacheKey in
+  // hooks/useCachedFetch.js). Subject + email still change on a real user
+  // switch, which is what the wipe is there to catch.
   return [
-    tenantId || "no-tenant",
     subject || "no-subject",
-    memberId || "no-member",
     email || "no-email",
   ].join(":");
 }

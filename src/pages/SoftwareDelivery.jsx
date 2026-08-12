@@ -49,12 +49,15 @@ import {
   listDeployments,
 } from "../api/softwareDelivery";
 import { getTenantPolicy } from "../api/policies";
+import { listFrom } from "../api/shape";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
 import PackageDialog from "../components/software-delivery/PackageDialog";
 import DeletePackageDialog from "../components/software-delivery/DeletePackageDialog";
 import DeployWizardDialog from "../components/software-delivery/DeployWizardDialog";
 import IntakeTab from "../components/software-delivery/IntakeTab";
+import DistributionTab from "../components/software-delivery/DistributionTab";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import DeploymentDetailDrawer from "../components/software-delivery/DeploymentDetailDrawer";
 
 const TAB_SX = {
@@ -106,7 +109,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       if (search.trim()) params.search = search.trim();
       if (platform !== "all") params.platform = platform;
       const res = await listPackages(params);
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { keys: ["items"], context: "softwareDelivery.catalog" }));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load packages");
     } finally {
@@ -314,6 +317,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           {canManage && p.row.isActive ? (
             <Tooltip title="Deploy to fleet">
               <IconButton
+                aria-label="Deploy to fleet"
                 size="small"
                 onClick={() => {
                   setDeployItem(p.row);
@@ -328,6 +332,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           {canManage ? (
             <>
               <IconButton
+                aria-label="Edit package"
                 size="small"
                 onClick={() => openEdit(p.row)}
                 sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
@@ -335,6 +340,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
               <IconButton
+                aria-label="Delete package"
                 size="small"
                 onClick={() => {
                   setDeleteItem(p.row);
@@ -476,7 +482,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
       const params = { limit: 200 };
       if (statusFilter !== "all") params.status = statusFilter;
       const res = await listDeployments(params);
-      setItems(Array.isArray(res?.items) ? res.items : []);
+      setItems(listFrom(res, { keys: ["items"], context: "softwareDelivery.deployments" }));
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Failed to load deployments");
     } finally {
@@ -890,6 +896,12 @@ export default function SoftwareDelivery({ onNavigate }) {
             label="AI Intake"
             sx={TAB_SX}
           />
+          <Tab
+            icon={<HubOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Distribution"
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
@@ -906,8 +918,10 @@ export default function SoftwareDelivery({ onNavigate }) {
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
-      ) : (
+      ) : activeTab === 2 ? (
         <IntakeTab canManage={canManage} notify={notify} />
+      ) : (
+        <DistributionTab canManage={canManage} notify={notify} />
       )}
 
       <BrandSnackbar

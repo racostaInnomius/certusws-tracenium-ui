@@ -51,9 +51,9 @@ import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import PauseOutlinedIcon from "@mui/icons-material/PauseOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import "xterm/css/xterm.css";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
 
 import { BRAND } from "../../theme/brand";
 import { httpGetJson } from "../../api/http";
@@ -270,7 +270,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
               : "—"}
           </Typography>
         </Box>
-        <IconButton size="small" onClick={onClose}>
+        <IconButton aria-label="Close replay" size="small" onClick={onClose}>
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -318,7 +318,12 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
               }}
             >
               <Tooltip title={playing ? "Pause" : "Play"} arrow>
-                <IconButton size="small" onClick={togglePlay} sx={{ color: "#e5e7eb" }}>
+                <IconButton
+                  aria-label={playing ? "Pause replay" : "Play replay"}
+                  size="small"
+                  onClick={togglePlay}
+                  sx={{ color: "#e5e7eb" }}
+                >
                   {playing ? (
                     <PauseOutlinedIcon />
                   ) : (
@@ -327,7 +332,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                 </IconButton>
               </Tooltip>
               <Tooltip title="Restart" arrow>
-                <IconButton size="small" onClick={restart} sx={{ color: "#e5e7eb" }}>
+                <IconButton aria-label="Restart replay" size="small" onClick={restart} sx={{ color: "#e5e7eb" }}>
                   <RestartAltOutlinedIcon />
                 </IconButton>
               </Tooltip>

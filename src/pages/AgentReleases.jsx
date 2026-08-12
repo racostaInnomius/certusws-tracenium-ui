@@ -28,6 +28,7 @@ import AgentReleaseDialog from "../components/agent-releases/AgentReleaseDialog"
 import DeleteAgentReleaseDialog from "../components/agent-releases/DeleteAgentReleaseDialog";
 
 import { BRAND } from "../theme/brand";
+import { formatDate } from "../utils/format";
 
 const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
 const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
@@ -93,20 +94,6 @@ function renderActiveChip(value) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return " - ";
-
-  const date = new Date(value);
-
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hourCycle: "h24",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function AgentReleases({ embedded = false }) {
   const theme = useTheme();

@@ -42,13 +42,14 @@ import * as React from "react";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import { WebLinksAddon } from "xterm-addon-web-links";
-import "xterm/css/xterm.css";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
 
 import { BRAND } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { attachIceRestart } from "./iceRestart";
 
 // State machine — drives the status strip + error rendering.
 const STATE = Object.freeze({
@@ -73,6 +74,11 @@ export default function ShellTerminal({ session, device, onClose }) {
   const wsRef = React.useRef(null);
   const pcRef = React.useRef(null);
   const dcRef = React.useRef(null);
+  // Cleanup handle for the ICE restart listener — set inside negotiate()
+  // and called from the useEffect teardown. Keeping it on a ref instead
+  // of a closure variable is the standard pattern when the producer
+  // (negotiate) and consumer (cleanup return) live in different scopes.
+  const iceRestartDetachRef = React.useRef(null);
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [statusMsg, setStatusMsg] = React.useState("Establishing connection…");
 
@@ -181,11 +187,41 @@ export default function ShellTerminal({ session, device, onClose }) {
 
       pc.onconnectionstatechange = () => {
         if (cancelled) return;
-        if (pc.connectionState === "failed") {
-          setState(STATE.ERROR);
-          setStatusMsg("WebRTC connection failed (ICE negotiation).");
+        // We no longer go straight to STATE.ERROR on `failed` — the ICE
+        // restart helper attached below handles the first round of
+        // recovery automatically. Only flip status text so the user
+        // sees something happening; the helper's onFinalFailure (after
+        // all attempts) is what actually transitions to STATE.ERROR.
+        if (pc.connectionState === "failed" ||
+            pc.connectionState === "disconnected") {
+          setStatusMsg("Connection interrupted — recovering…");
+        } else if (pc.connectionState === "connected") {
+          // Helper resets its retry counter on this transition too.
+          setStatusMsg("Connected.");
         }
       };
+
+      // Attach the ICE restart helper — see iceRestart.js for the full
+      // rationale. Short version: WebRTC ICE breaks for legitimate
+      // reasons (NAT mapping ageing out, WiFi roaming, TURN allocation
+      // expiry on Cloudflare's side) and the standard recovery path is
+      // an ICE restart from the offerer. Without this we hard-failed
+      // every transient drop, which was a worse UX than literally just
+      // retrying.
+      iceRestartDetachRef.current = attachIceRestart({
+        pc,
+        ws,
+        sessionId: session.sessionId,
+        onRestartAttempt: (attempt) => {
+          if (cancelled) return;
+          setStatusMsg(`Reconnecting (attempt ${attempt})…`);
+        },
+        onFinalFailure: () => {
+          if (cancelled) return;
+          setState(STATE.ERROR);
+          setStatusMsg("WebRTC connection lost — retries exhausted.");
+        }
+      });
 
       dc.onopen = () => {
         if (cancelled) return;
@@ -347,6 +383,12 @@ export default function ShellTerminal({ session, device, onClose }) {
     return () => {
       cancelled = true;
       try {
+        iceRestartDetachRef.current?.();
+        iceRestartDetachRef.current = null;
+      } catch {
+        /* ignore */
+      }
+      try {
         dcRef.current?.close();
       } catch {
         /* ignore */
@@ -438,6 +480,7 @@ export default function ShellTerminal({ session, device, onClose }) {
         </Typography>
         <Tooltip title="Close session" arrow placement="left">
           <IconButton
+            aria-label="Close terminal"
             size="small"
             onClick={onClose}
             sx={{ color: "#9aa5b1" }}

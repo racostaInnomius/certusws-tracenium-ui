@@ -194,6 +194,7 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                         <Tooltip title={shellTooltip} arrow>
                           <span>
                             <IconButton
+                              aria-label="Start shell session"
                               size="small"
                               disabled={!canShell}
                               onClick={() => onConnect?.(d, "shell")}
@@ -211,6 +212,7 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                         <Tooltip title={fileTooltip} arrow>
                           <span>
                             <IconButton
+                              aria-label="Open file browser"
                               size="small"
                               disabled={!canFile}
                               onClick={() => onConnect?.(d, "file")}
@@ -229,6 +231,7 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                         <Tooltip title={screenTooltip} arrow>
                           <span>
                             <IconButton
+                              aria-label="Start screen share"
                               size="small"
                               disabled={!canScreen}
                               onClick={() => onConnect?.(d, "screen")}

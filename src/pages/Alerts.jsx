@@ -50,6 +50,7 @@ import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 
 import { BRAND, ROLE } from "../theme/brand";
+import { severityMeta } from "../theme/severity";
 import {
   getAlertRules,
   createAlertRule,
@@ -61,14 +62,17 @@ import {
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import { listFrom } from "../api/shape";
 
 // ---------- presentational helpers ------------------------------------------
 
+// Canonical severity scale (theme/severity.js) — High was red here (same as
+// Critical); it's now orange, distinct from Critical, and consistent everywhere.
 const SEVERITY_META = {
-  critical: { label: "Critical", color: ROLE.critical, soft: BRAND.alert.errorSoft },
-  high:     { label: "High",     color: ROLE.critical, soft: BRAND.alert.errorSoft },
-  medium:   { label: "Medium",   color: ROLE.caution,  soft: BRAND.alert.warningSoft },
-  low:      { label: "Low",      color: BRAND.teal,    soft: BRAND.tealSoft }
+  critical: { label: "Critical", color: severityMeta("critical").fg, soft: severityMeta("critical").bg },
+  high:     { label: "High",     color: severityMeta("high").fg,     soft: severityMeta("high").bg },
+  medium:   { label: "Medium",   color: severityMeta("medium").fg,   soft: severityMeta("medium").bg },
+  low:      { label: "Low",      color: severityMeta("low").fg,      soft: severityMeta("low").bg }
 };
 
 const SOURCE_LABEL = {
@@ -198,7 +202,7 @@ export default function Alerts() {
       limit: 200,
     });
     return {
-      events: Array.isArray(res?.items) ? res.items : [],
+      events: listFrom(res, { context: "alertEvents" }),
       total: Number(res?.total ?? 0),
       lastSeenAt: res?.lastSeenAt ?? null,
     };
@@ -626,10 +630,10 @@ function ManageRulesDrawer({
             Catalog is global. Toggle a template to create an instance for this tenant.
           </Typography>
         </Box>
-        <IconButton onClick={onRefresh} size="small" sx={{ mr: 0.5 }}>
+        <IconButton aria-label="Refresh alerts" onClick={onRefresh} size="small" sx={{ mr: 0.5 }}>
           <RefreshOutlinedIcon fontSize="small" />
         </IconButton>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </Stack>
@@ -753,7 +757,7 @@ function ManageRulesDrawer({
                       onChange={(e) => onToggle(r, e.target.checked)}
                     />
                     <Tooltip title="Delete custom rule">
-                      <IconButton size="small" onClick={() => onDeleteRule(r)}>
+                      <IconButton aria-label="Delete rule" size="small" onClick={() => onDeleteRule(r)}>
                         <CloseOutlinedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -797,7 +801,7 @@ function EventDetailDrawer({ event, onClose }) {
             </Typography>
           </Stack>
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </Stack>

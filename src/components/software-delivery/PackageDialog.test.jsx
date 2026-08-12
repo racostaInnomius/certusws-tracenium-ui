@@ -62,10 +62,24 @@ function renderDialog(props = {}) {
 
 // Fill the always-required identity/distribution fields with valid data
 // so that a submit only fails on the field a given test is exercising.
+// The Download URL is 35 chars, and `user.type` re-renders the whole MUI
+// Dialog once per keystroke. Together with Name/Version that was ~44
+// renders per test across 12 tests, which pushed this file past the 15s
+// testTimeout on a loaded machine (observed: 17s) — a flake with no
+// diagnostic value, since the field has no per-key logic to exercise
+// (the component only reads e.target.value). Same reasoning as setSha
+// above, so it gets the same one-shot treatment.
+//
+// Name and Version stay as real typing: they're short (9 keystrokes
+// total) and keep some genuine user-interaction coverage in the helper.
+function setUrl(value) {
+  fireEvent.change(textbox(/Download URL/), { target: { value } });
+}
+
 async function fillRequiredValid(user) {
   await user.type(textbox(/^Name/), "7zip");
   await user.type(textbox(/^Version/), "23.01");
-  await user.type(textbox(/Download URL/), "https://blob.tracenium.com/7zip.msi");
+  setUrl("https://blob.tracenium.com/7zip.msi");
   setSha(VALID_SHA);
 }
 

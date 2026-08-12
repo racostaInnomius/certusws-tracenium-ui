@@ -29,13 +29,8 @@ import {
   Alert,
   Backdrop,
   Box,
-  Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Fade,
   IconButton,
   MenuItem,
@@ -43,20 +38,11 @@ import {
   Snackbar,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TablePagination,
-  TableRow,
   Tabs,
   TextField,
   Typography,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
-import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
 import ComputerRoundedIcon from "@mui/icons-material/ComputerRounded";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
@@ -75,6 +61,9 @@ import {
 import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
+import { normalizePlatform } from "../utils/platform";
+import { formatBytesToGb } from "../utils/format";
+import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
@@ -85,6 +74,30 @@ import { AgentVersionDonut, DonutCard } from "../components/Overview/FleetCompos
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
 import { BRAND, ROLE } from "../theme/brand";
+import {
+  HOST_SORT_FIELDS,
+  readUrlFilters,
+  compareVersions,
+  bucketOfVersion,
+  toSafeNumber,
+  getOsVersionDisplayTitle,
+  getOsVersionDisplaySubtitle,
+  formatDetailValue,
+  formatDetailPercent,
+  coalesceValue,
+  normalizeHostRow,
+  buildHostsQuery,
+  getHostDeviceId,
+  getHostDisplayName,
+  isDeviceTerminalOrPendingDeletion,
+  isDecommissionJobTerminal,
+  getDecommissionErrorMessage,
+  normalizeHostDetailPayload,
+  normalizeHardwareDetailPayload,
+} from "../components/AssetsDashboard/hostHelpers";
+import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/DeviceDecommissionConfirmDialog";
+import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
+import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -96,563 +109,6 @@ import { BRAND, ROLE } from "../theme/brand";
 // Anything the page doesn't recognize is silently ignored — we don't
 // trust the query string to set arbitrary state beyond the whitelist
 // below.
-
-const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
-const ALLOWED_VERSION_BUCKETS = new Set([
-  "current",
-  "one_behind",
-  "older",
-  "unknown"
-]);
-
-function readUrlFilters() {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const platform = (params.get("platform") || "").toLowerCase();
-  const versionBucket = (params.get("versionBucket") || "").toLowerCase();
-  // Phase 4: optional `groupId` deep-link from the Asset Groups tab —
-  // operator can click "View devices" on a group and land on the
-  // Dashboard pre-scoped to that group's membership. We coerce to a
-  // positive integer string; anything else falls back to "".
-  const rawGroupId = String(params.get("groupId") || "").trim();
-  const groupIdValid = /^[0-9]+$/.test(rawGroupId) && Number(rawGroupId) > 0;
-  return {
-    platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
-    versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket)
-      ? versionBucket
-      : "",
-    groupId: groupIdValid ? rawGroupId : "",
-  };
-}
-
-// Semver-ish comparison returning a classic -1 / 0 / +1 trichotomy.
-// Non-numeric segments become 0 — matches the tolerance of the
-// classifyAgentVersions helper used by the Overview donut.
-function compareVersions(a, b) {
-  const parse = (v) =>
-    String(v || "").split(".").map((x) => Number(x) || 0);
-  const av = parse(a);
-  const bv = parse(b);
-  const len = Math.max(av.length, bv.length);
-  for (let i = 0; i < len; i += 1) {
-    const ai = av[i] ?? 0;
-    const bi = bv[i] ?? 0;
-    if (ai !== bi) return ai > bi ? 1 : -1;
-  }
-  return 0;
-}
-
-// Mirror of FleetComposition/classifyAgentVersions bucketing. Kept
-// local here because AssetsDashboard is in a different component
-// subtree and pulling a shared util out for 15 lines wasn't worth
-// adding a new shared module.
-function bucketOfVersion(version, canonicalLatest) {
-  if (!version || !canonicalLatest) return "unknown";
-  const cmp = compareVersions(version, canonicalLatest);
-  if (cmp >= 0) return "current";
-  const v = String(version).split(".").map((x) => Number(x) || 0);
-  const l = String(canonicalLatest).split(".").map((x) => Number(x) || 0);
-  if (v[0] === l[0] && v[1] === l[1] && Math.abs((l[2] || 0) - (v[2] || 0)) <= 2) {
-    return "one_behind";
-  }
-  return "older";
-}
-
-function normalizePlatform(raw) {
-  const v = String(raw || "").trim().toLowerCase();
-  if (!v) return null;
-  if (v === "windows" || v === "win32" || v.startsWith("win")) return "windows";
-  if (v === "macos" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
-  if (v === "linux") return "linux";
-  return null;
-}
-
-function toSafeNumber(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function getOsVersionDisplayTitle(row) {
-  return (
-    row?.display_title ||
-    row?.commercial_name ||
-    row?.os_label ||
-    "Unknown OS"
-  );
-}
-
-function getOsVersionDisplaySubtitle(row) {
-  return (
-    row?.display_subtitle ||
-    row?.technical_version ||
-    row?.os_version ||
-    ""
-  );
-}
-
-function formatDetailValue(value, fallback = "—") {
-  if (value === null || value === undefined) return fallback;
-  const text = String(value).trim();
-  return text ? text : fallback;
-}
-
-function formatDetailDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString("en-US", {
-    year: "2-digit",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h24",
-  });
-}
-
-function formatBytesToGb(value) {
-  const bytes = Number(value);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-function formatDetailPercent(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return "—";
-  return `${parsed.toFixed(1)}%`;
-}
-
-function coalesceValue(...values) {
-  for (const value of values) {
-    if (value === null || value === undefined) continue;
-    const text = String(value).trim();
-    if (text) return value;
-  }
-  return undefined;
-}
-
-const HOST_SORT_FIELDS = new Set([
-  "hostname",
-  "agentId",
-  "osPlatform",
-  "osVersion",
-  "manufacturer",
-  "model",
-  "lastLogonUser",
-  "localIp",
-  "agentVersion",
-  "collectedAtUtc",
-]);
-
-function normalizeHostRow(row = {}) {
-  const agentId = coalesceValue(row.agentId, row.agent_id, row.deviceId, row.device_id);
-  const hostname = coalesceValue(row.hostname, row.host, row.deviceName, row.device_name);
-  const osPlatform = coalesceValue(row.osPlatform, row.os_platform, row.platform);
-  const osVersion = coalesceValue(row.osVersion, row.os_version, row.version);
-  const lastLogonUser = coalesceValue(row.lastLogonUser, row.last_logon_user);
-  const localIp = coalesceValue(row.localIp, row.local_ip);
-  const agentVersion = coalesceValue(row.agentVersion, row.agent_version);
-  const collectedAtUtc = coalesceValue(row.collectedAtUtc, row.collected_at_utc);
-
-  return {
-    ...row,
-    agentId,
-    agent_id: agentId,
-    hostname,
-    osPlatform,
-    os_platform: osPlatform,
-    osVersion,
-    os_version: osVersion,
-    lastLogonUser,
-    last_logon_user: lastLogonUser,
-    localIp,
-    local_ip: localIp,
-    agentVersion,
-    agent_version: agentVersion,
-    collectedAtUtc,
-    collected_at_utc: collectedAtUtc,
-    manufacturer: coalesceValue(row.manufacturer),
-    model: coalesceValue(row.model),
-  };
-}
-
-function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
-  const params = new URLSearchParams();
-  params.set("page", String(page + 1));
-  params.set("pageSize", String(pageSize));
-
-  const normalizedSearch = String(search || "").trim();
-  if (normalizedSearch.length >= 3) {
-    params.set("search", normalizedSearch);
-  }
-
-  params.set("sortBy", HOST_SORT_FIELDS.has(sortBy) ? sortBy : "hostname");
-  params.set("sortDir", sortDir === "desc" ? "desc" : "asc");
-
-  return params.toString();
-}
-
-
-function getHostDeviceId(row) {
-  const safeRow = row || {};
-  return coalesceValue(
-    safeRow.agentId,
-    safeRow.agent_id,
-    safeRow.deviceId,
-    safeRow.device_id
-  );
-}
-
-function getHostDisplayName(row) {
-  const safeRow = row || {};
-  return coalesceValue(
-    safeRow.hostname,
-    safeRow.host,
-    safeRow.deviceName,
-    safeRow.device_name,
-    getHostDeviceId(safeRow)
-  );
-}
-
-function normalizeDeviceLifecycleStatus(row) {
-  const safeRow = row || {};
-  return String(
-    safeRow.lifecycleStatus ||
-      safeRow.deviceStatus ||
-      safeRow.status ||
-      safeRow.decommissionStatus ||
-      safeRow.decommission_status ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-}
-
-function isDeviceTerminalOrPendingDeletion(row) {
-  const status = normalizeDeviceLifecycleStatus(row);
-  return [
-    "DELETION_PENDING",
-    "DECOMMISSION_PENDING",
-    "DECOMMISSIONING",
-    "DECOMMISSIONED",
-    "PURGE_PENDING",
-    "PURGED",
-  ].includes(status);
-}
-
-function isDecommissionJobTerminal(status) {
-  return ["COMPLETED", "DECOMMISSIONED", "FAILED", "PARTIALLY_FAILED", "CANCELLED"].includes(
-    String(status || "").toUpperCase()
-  );
-}
-
-function getDecommissionErrorMessage(error) {
-  const code = String(error?.body?.error || error?.body?.code || "").toUpperCase();
-
-  const knownMessages = {
-    FORBIDDEN: "You do not have permission to decommission this device.",
-    DEVICE_NOT_FOUND: "Device was not found.",
-    DEVICE_ALREADY_DECOMMISSIONED: "This device is already decommissioned.",
-    DEVICE_DECOMMISSION_IN_PROGRESS: "Device decommission is already in progress.",
-    INVALID_CONFIRMATION: "Confirmation does not match the device hostname or ID.",
-  };
-
-  return (
-    knownMessages[code] ||
-    error?.body?.message ||
-    error?.message ||
-    "Unable to start device decommission."
-  );
-}
-
-function DeviceDecommissionConfirmDialog({
-  open,
-  device,
-  submitting = false,
-  confirmationText,
-  reason,
-  onConfirmationTextChange,
-  onReasonChange,
-  onClose,
-  onConfirm,
-}) {
-  const safeDevice = device || {};
-  const deviceId = getHostDeviceId(safeDevice);
-  const hostname = getHostDisplayName(safeDevice);
-  const requiredText = String(hostname || deviceId || "").trim();
-  const confirmationMatches =
-    requiredText.length > 0 &&
-    String(confirmationText || "").trim() === requiredText;
-  const canConfirm = Boolean(deviceId && confirmationMatches && !submitting);
-
-  return (
-    <Dialog
-      open={open}
-      onClose={submitting ? undefined : onClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 3,
-          border: `1px solid ${BRAND.border}`,
-          boxShadow: BRAND.shadow,
-        },
-      }}
-    >
-      <DialogTitle
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.25,
-          color: BRAND.dark,
-          fontWeight: 800,
-          pb: 1.25,
-        }}
-      >
-        <Box
-          sx={{
-            width: 36,
-            height: 36,
-            borderRadius: 2,
-            bgcolor: BRAND.alert.errorSoft,
-            color: BRAND.alert.error,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          <WarningAmberRoundedIcon fontSize="small" />
-        </Box>
-        Delete device permanently?
-      </DialogTitle>
-
-      <DialogContent sx={{ pt: 1 }}>
-        <Stack spacing={2}>
-          <Alert
-            severity="warning"
-            variant="outlined"
-            sx={{
-              borderColor: `${BRAND.alert.warning}55`,
-              bgcolor: BRAND.alert.warningSoft,
-              color: BRAND.dark,
-              "& .MuiAlert-icon": { color: BRAND.alert.warning },
-            }}
-          >
-            This action will decommission the device immediately, revoke all active
-            agent certificates, and remove it from active inventory.
-          </Alert>
-
-          <Typography sx={{ fontSize: 13.5, color: BRAND.dark, lineHeight: 1.65 }}>
-            Collected hardware inventory, software inventory, sessions, compliance
-            data, projections, and related telemetry will be retained only during
-            the configured retention window and then permanently purged. Revoked
-            certificates will not be restored.
-          </Typography>
-
-          <Box
-            sx={{
-              p: 1.25,
-              borderRadius: 2,
-              border: `1px solid ${BRAND.border}`,
-              bgcolor: BRAND.surfaceMuted,
-            }}
-          >
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontWeight: 700 }}>
-              Device
-            </Typography>
-            <Typography sx={{ fontSize: 14, color: BRAND.dark, fontWeight: 800 }}>
-              {hostname || "—"}
-            </Typography>
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontFamily: "monospace" }}>
-              {deviceId || "—"}
-            </Typography>
-          </Box>
-
-          <TextField
-            size="small"
-            label="Reason optional"
-            value={reason}
-            onChange={(event) => onReasonChange?.(event.target.value)}
-            placeholder="e.g. Device retired, replaced, or no longer trusted"
-            disabled={submitting}
-            fullWidth
-          />
-
-          <TextField
-            size="small"
-            label={`Type ${requiredText || "the device name"} to confirm`}
-            value={confirmationText}
-            onChange={(event) => onConfirmationTextChange?.(event.target.value)}
-            disabled={submitting}
-            fullWidth
-            error={Boolean(confirmationText) && !confirmationMatches}
-            helperText={
-              confirmationMatches
-                ? "Confirmation matched."
-                : "This prevents accidental permanent device decommission."
-            }
-          />
-        </Stack>
-      </DialogContent>
-
-      <DialogActions
-        sx={{
-          px: 3,
-          py: 2,
-          gap: 1,
-          borderTop: `1px solid ${BRAND.border}`,
-          bgcolor: BRAND.surfaceMuted,
-        }}
-      >
-        <Button
-          onClick={onClose}
-          disabled={submitting}
-          sx={{ textTransform: "none", color: BRAND.dark, fontWeight: 700 }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={onConfirm}
-          disabled={!canConfirm}
-          variant="contained"
-          startIcon={
-            submitting ? (
-              <CircularProgress size={14} sx={{ color: "#fff" }} />
-            ) : (
-              <DeleteOutlineRoundedIcon />
-            )
-          }
-          sx={{
-            textTransform: "none",
-            fontWeight: 800,
-            bgcolor: BRAND.alert.error,
-            "&:hover": { bgcolor: "#991b1b" },
-          }}
-        >
-          {submitting ? "Queueing..." : "Delete permanently"}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-function normalizeHostDetailPayload(payload, fallbackHost = {}) {
-  const source = payload?.agent || payload?.host || payload?.item || payload || {};
-  return {
-    agentId: coalesceValue(
-      source.agentId,
-      source.agent_id,
-      source.deviceId,
-      source.device_id,
-      fallbackHost.agent_id,
-      fallbackHost.agentId
-    ),
-    hostname: coalesceValue(
-      source.hostname,
-      source.host,
-      source.deviceName,
-      source.device_name,
-      fallbackHost.hostname
-    ),
-    platform: coalesceValue(source.platform, source.os_platform, fallbackHost.os_platform),
-    os: coalesceValue(source.distro, source.os, source.os_version, fallbackHost.os_version),
-    agentVersion: coalesceValue(source.agentVersion, source.agent_version, fallbackHost.agent_version),
-    lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
-    localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),
-    lastSeenAt: coalesceValue(source.lastSeenAt, source.last_seen_at, source.lastHeartbeat, source.last_heartbeat),
-    raw: source,
-  };
-}
-
-function normalizeHardwareDetailPayload(payload, agentId) {
-  const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
-  const exact = items.find((item) => String(item?.agentId || item?.agent_id || "") === String(agentId));
-  return exact || items[0] || null;
-}
-
-function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper }) {
-  return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        height: "100%",
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        background: "linear-gradient(135deg, rgba(255,255,255,0.98), rgba(190,190,190,0.07))",
-        boxShadow: "0 6px 18px rgba(59,64,77,0.07)",
-      }}
-    >
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.25 }}>
-        <Box
-          sx={{
-            width: 34,
-            height: 34,
-            borderRadius: 2,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: `${accent}22`,
-            color: accent,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
-          {title}
-        </Typography>
-      </Stack>
-      <Typography sx={{ fontSize: 20, fontWeight: 900, color: BRAND.dark, lineHeight: 1.15 }} noWrap title={String(value || "—")}>
-        {value || "—"}
-      </Typography>
-      {helper ? (
-        <Typography sx={{ mt: 0.75, fontSize: 12, color: "text.secondary" }} noWrap title={helper}>
-          {helper}
-        </Typography>
-      ) : null}
-    </Paper>
-  );
-}
-
-function DetailField({ label, value, mono = false }) {
-  return (
-    <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          mt: 0.35,
-          fontSize: 13,
-          fontWeight: 700,
-          color: BRAND.dark,
-          fontFamily: mono ? "monospace" : "inherit",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={String(value || "—")}
-      >
-        {value || "—"}
-      </Typography>
-    </Box>
-  );
-}
-
-function FieldGrid({ children }) {
-  return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" },
-        gap: 1.5,
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
 
 function AgentDetailWorkbench({
   selectedHost,
@@ -679,6 +135,21 @@ function AgentDetailWorkbench({
   const softwareCount = Number.isFinite(Number(softwareTotal)) ? Number(softwareTotal) : softwareRows.length;
   const softwarePage = Number(softwarePaginationModel?.page || 0);
   const softwarePageSize = Number(softwarePaginationModel?.pageSize || 8);
+
+  // Mobile (MDM/MAM) devices get an extra managed-state panel in the Agent tab.
+  const platformKey = normalizePlatform(profile?.platform || hardware?.platform);
+  const isMobileDevice =
+    profile?.isMobile === true || platformKey === "ios" || platformKey === "android";
+  // Raw device_id (UUID) for the mobile command API — the mTLS identity
+  // the device enrolled with, distinct from the formatted `agentId` above.
+  const commandDeviceId = coalesceValue(
+    profile?.deviceId,
+    profile?.device_id,
+    selectedHost?.device_id,
+    selectedHost?.deviceId,
+    selectedHost?.agent_id,
+    selectedHost?.agentId
+  );
 
   return (
     <Box>
@@ -777,228 +248,35 @@ function AgentDetailWorkbench({
           ) : null}
 
           {!loading && tab === 0 ? (
-            <FieldGrid>
-              <DetailField label="Hostname" value={hostname} />
-              <DetailField label="Agent ID" value={agentId} mono />
-              <DetailField label="Platform" value={platform} />
-              <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
-              <DetailField label="Agent version" value={agentVersion} mono />
-              <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />
-              <DetailField label="Local IP" value={formatDetailValue(profile?.localIp)} mono />
-              <DetailField label="Last seen" value={formatDetailDate(profile?.lastSeenAt || hardware?.collectedAtUtc)} />
-              <DetailField label="Status" value={connected ? "Online" : "Offline"} />
-            </FieldGrid>
+            <AgentTab
+              hostname={hostname}
+              agentId={agentId}
+              platform={platform}
+              agentVersion={agentVersion}
+              profile={profile}
+              hardware={hardware}
+              connected={connected}
+              isMobileDevice={isMobileDevice}
+              commandDeviceId={commandDeviceId}
+              platformKey={platformKey}
+            />
           ) : null}
 
-          {!loading && tab === 1 ? (
-            <FieldGrid>
-              <DetailField label="Serial" value={formatDetailValue(hardware?.serial)} mono />
-              <DetailField label="Manufacturer" value={formatDetailValue(hardware?.manufacturer)} />
-              <DetailField label="Model" value={formatDetailValue(hardware?.model)} />
-              <DetailField label="CPU" value={formatDetailValue(hardware?.cpuBrand)} />
-              <DetailField label="Physical cores" value={formatDetailValue(hardware?.physicalCores)} />
-              <DetailField label="Memory" value={formatBytesToGb(hardware?.totalMemoryBytes)} />
-              <DetailField label="Disk total" value={formatBytesToGb(hardware?.diskTotalBytes)} />
-              <DetailField label="Disk used" value={formatBytesToGb(hardware?.diskUsedBytes)} />
-              <DetailField label="Disk usage" value={formatDetailPercent(hardware?.diskUsagePct)} />
-              <DetailField label="Battery" value={formatDetailPercent(hardware?.batteryPercent)} />
-              <DetailField label="Collected at" value={formatDetailDate(hardware?.collectedAtUtc)} />
-            </FieldGrid>
-          ) : null}
+          {!loading && tab === 1 ? <HardwareTab hardware={hardware} /> : null}
 
           {!loading && tab === 2 ? (
-            <Box>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Box>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-                    Installed applications
-                  </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
-                    Paginated software inventory for this device.
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}>
-                  {softwareLoading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : null}
-                  <Chip size="small" label={`${softwareCount} apps detected`} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
-                </Stack>
-              </Stack>
-              <Paper elevation={0} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
-                <TableContainer sx={{ maxHeight: 360 }}>
-                  <Table stickyHeader size="small" aria-label="agent software table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Application</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Publisher</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Source</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Detected</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {softwareRows.map((app, index) => (
-                        <TableRow key={app.id || `${app.name}-${index}`} hover>
-                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
-                          <TableCell>{formatDetailValue(app.publisher)}</TableCell>
-                          <TableCell>{formatDetailValue(app.source)}</TableCell>
-                          <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
-                        </TableRow>
-                      ))}
-                      {softwareRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={4} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
-                            {softwareLoading ? "Loading software inventory…" : "No software inventory found for this device."}
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <TablePagination
-                  component="div"
-                  count={softwareCount}
-                  page={softwarePage}
-                  rowsPerPage={softwarePageSize}
-                  rowsPerPageOptions={[8, 16, 24, 50]}
-                  onPageChange={(_, nextPage) => {
-                    onSoftwarePaginationModelChange?.({ page: nextPage, pageSize: softwarePageSize });
-                  }}
-                  onRowsPerPageChange={(event) => {
-                    const nextPageSize = Number(event.target.value || 8);
-                    onSoftwarePaginationModelChange?.({ page: 0, pageSize: nextPageSize });
-                  }}
-                  labelRowsPerPage="Rows per page:"
-                  sx={{
-                    borderTop: `1px solid ${BRAND.border}`,
-                    bgcolor: BRAND.surface,
-                    "& .MuiTablePagination-toolbar": {
-                      minHeight: 48,
-                      px: { xs: 1, sm: 2 },
-                    },
-                    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-                      fontSize: 12,
-                      color: "text.secondary",
-                    },
-                  }}
-                />
-              </Paper>
-            </Box>
+            <SoftwareTab
+              softwareRows={softwareRows}
+              softwareLoading={softwareLoading}
+              softwareCount={softwareCount}
+              softwarePage={softwarePage}
+              softwarePageSize={softwarePageSize}
+              onSoftwarePaginationModelChange={onSoftwarePaginationModelChange}
+            />
           ) : null}
 
           {!loading && tab === 3 ? (
-            <Box>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                spacing={1}
-                alignItems={{ xs: "stretch", sm: "center" }}
-                justifyContent="space-between"
-                sx={{ mb: 1.5 }}
-              >
-                <Box>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-                    Configured printers
-                  </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
-                    Print queues this device knows about, ordered with the
-                    default first, then network printers, then local.
-                  </Typography>
-                </Box>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ alignSelf: { xs: "flex-start", sm: "center" } }}
-                >
-                  {printersLoading ? (
-                    <CircularProgress size={16} sx={{ color: BRAND.teal }} />
-                  ) : null}
-                  <Chip
-                    size="small"
-                    label={`${printerRows.length} printer${printerRows.length === 1 ? "" : "s"} detected`}
-                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }}
-                  />
-                </Stack>
-              </Stack>
-              <Paper
-                elevation={0}
-                sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}
-              >
-                <TableContainer sx={{ maxHeight: 360 }}>
-                  <Table stickyHeader size="small" aria-label="agent printers table">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Name</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Driver</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Port</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Type</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Status</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {printerRows.map((p, index) => (
-                        <TableRow key={p.id || p.installId || `${p.name}-${index}`} hover>
-                          <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>
-                            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
-                              <span>{formatDetailValue(p.name)}</span>
-                              {p.isDefault ? (
-                                <Chip
-                                  size="small"
-                                  label="Default"
-                                  sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 800, height: 18 }}
-                                />
-                              ) : null}
-                              {p.isShared ? (
-                                <Chip
-                                  size="small"
-                                  label="Shared"
-                                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800, height: 18 }}
-                                />
-                              ) : null}
-                            </Stack>
-                          </TableCell>
-                          <TableCell>{formatDetailValue(p.driver)}</TableCell>
-                          <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
-                            {formatDetailValue(p.port)}
-                          </TableCell>
-                          <TableCell>{p.isNetwork ? "Network" : "Local"}</TableCell>
-                          <TableCell>
-                            <Chip
-                              size="small"
-                              label={p.status || "unknown"}
-                              sx={{
-                                bgcolor:
-                                  p.status === "online"
-                                    ? ROLE.positiveSoft
-                                    : p.status === "error"
-                                    ? ROLE.criticalSoft || `${ROLE.critical}33`
-                                    : p.status === "offline"
-                                    ? BRAND.surfaceMuted
-                                    : BRAND.surfaceMuted,
-                                color:
-                                  p.status === "online"
-                                    ? ROLE.positive
-                                    : p.status === "error"
-                                    ? ROLE.critical
-                                    : "text.secondary",
-                                fontWeight: 800,
-                                textTransform: "capitalize",
-                              }}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {printerRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
-                            {printersLoading
-                              ? "Loading printers…"
-                              : "No printers configured on this device."}
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            </Box>
+            <PrintersTab printerRows={printerRows} printersLoading={printersLoading} />
           ) : null}
         </Box>
       </Paper>
@@ -1460,7 +738,11 @@ export default function AssetsDashboard({
     };
 
     pollJobs();
-    const intervalId = window.setInterval(pollJobs, 3000);
+    // 6s (was 3s): each tick re-renders this large page, so the gentler
+    // cadence halves that churn. Decommission jobs are not time-critical to
+    // 3s. (A fuller fix would isolate this job-status state into a child so
+    // the whole dashboard doesn't re-render on each tick.)
+    const intervalId = window.setInterval(pollJobs, 6000);
 
     return () => {
       cancelled = true;
@@ -1480,15 +762,10 @@ export default function AssetsDashboard({
       try {
         const res = await getConnectedDevices();
         if (cancelled) return;
-        // The endpoint shape is `{ ok, tenantId, deviceIds: [...],
-        // count }` but we defensively handle `{ items: [...] }` and
-        // a bare array too in case an older deployment is still
-        // returning one of those legacy shapes.
-        const ids =
-          (Array.isArray(res?.deviceIds) && res.deviceIds) ||
-          (Array.isArray(res?.items) && res.items) ||
-          (Array.isArray(res) && res) ||
-          [];
+        // The endpoint shape is `{ ok, tenantId, deviceIds: [...], count }`;
+        // listFrom also tolerates `{ items: [...] }` / a bare array from an
+        // older deployment, and warns in dev if none matched (drift).
+        const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
         setConnectedIds(new Set(ids.map((id) => String(id))));
       } catch (e) {
         if (cancelled) return;
@@ -1520,7 +797,7 @@ export default function AssetsDashboard({
     listAssetGroups()
       .then((res) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.items) ? res.items : [];
+        const items = listFrom(res, { context: "assetGroupsFilter" });
         setGroupCatalog(items);
       })
       .catch((err) => {
@@ -1549,7 +826,7 @@ export default function AssetsDashboard({
     listAssetGroupMembers(groupFilter)
       .then((res) => {
         if (cancelled) return;
-        const ids = Array.isArray(res?.items) ? res.items.map((m) => String(m.deviceId)) : [];
+        const ids = listFrom(res, { context: "groupMemberIds" }).map((m) => String(m.deviceId));
         setGroupMembers(new Set(ids));
       })
       .catch((err) => {
@@ -1657,7 +934,7 @@ export default function AssetsDashboard({
     })
       .then((res) => {
         if (cancelled) return;
-        const rows = Array.isArray(res?.items) ? res.items : [];
+        const rows = listFrom(res, { context: "hostRows" });
         setAgentSoftwareRows(rows);
         setAgentSoftwareTotal(Number(res?.total ?? rows.length));
       })
@@ -1807,6 +1084,8 @@ export default function AssetsDashboard({
       windows: BRAND.dark,
       macos: BRAND.teal,
       linux: "#ed6c02",
+      ios: BRAND.cyan,
+      android: "#3DDC84",
     }),
     []
   );
@@ -1834,7 +1113,7 @@ export default function AssetsDashboard({
         return {
           name: formatPlatformLabel(rawName),
           value: Number(r?.host_count ?? r?.count ?? 0),
-          color: normalized ? platformColors[normalized] : cycleColors[i % cycleColors.length],
+          color: platformColors[normalized] || cycleColors[i % cycleColors.length],
         };
       })
       .filter((d) => d.value > 0);
@@ -1846,7 +1125,7 @@ const osVersionItems = React.useMemo(() => {
   return rows.map((r, rowIndex) => {
     const platform = String(r?.os_platform ?? "").toLowerCase();
     const normalized = normalizePlatform(platform);
-    const color = normalized ? platformColors[normalized] : BRAND.gray;
+    const color = platformColors[normalized] || BRAND.gray;
     const parentValue = toSafeNumber(r?.host_count ?? r?.count);
     const children = Array.isArray(r?.children)
       ? r.children

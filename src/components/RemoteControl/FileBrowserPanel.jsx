@@ -62,6 +62,7 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import InsertDriveFileOutlinedIcon from "@mui/icons-material/InsertDriveFileOutlined";
@@ -75,6 +76,7 @@ import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
 import { BRAND, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
+import { attachIceRestart } from "./iceRestart";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -100,6 +102,36 @@ function parentPath(path) {
   const trimmed = path.replace(/\/$/, "");
   const idx = trimmed.lastIndexOf("/");
   return idx <= 0 ? "/" : trimmed.slice(0, idx);
+}
+
+// Refusals from the agent's path jail (see plugins/rcp/path-jail.ts). These
+// arrive on a `list` with no transferId, so they aren't transfer failures —
+// they mean "that location is not reachable in this session".
+const PATH_REFUSAL_CODES = new Set([
+  "PATH_OUTSIDE_ROOTS",
+  "PATH_DENIED",
+  "PATH_INVALID",
+  "PATH_UNRESOLVABLE"
+]);
+
+/** Last path component, for the root shortcut chips: "C:\Users" → "Users".
+ *  Falls back to the whole string for a bare drive or "/". */
+function shortRootLabel(root) {
+  const trimmed = String(root || "").replace(/[\\/]+$/, "");
+  const parts = trimmed.split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : trimmed || "/";
+}
+
+/** True when `path` sits inside one of the session's roots. Used to stop the
+ *  Up button before it walks into a refusal. Case-insensitive because a
+ *  Windows agent reports C:\Users while the user may have typed c:\users. */
+function isInsideRoots(path, roots) {
+  if (!Array.isArray(roots) || roots.length === 0) return true; // unconfined agent
+  const p = String(path || "").replace(/[\\/]+$/, "").toLowerCase();
+  return roots.some((r) => {
+    const root = String(r).replace(/[\\/]+$/, "").toLowerCase();
+    return p === root || p.startsWith(root + "/") || p.startsWith(root + "\\");
+  });
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -193,6 +225,7 @@ function TransferRow({ transfer, onCancel }) {
         {!done && (
           <Tooltip title="Cancel transfer" placement="top">
             <IconButton
+              aria-label="Cancel transfer"
               size="small"
               onClick={() => onCancel?.(transfer.id)}
               sx={{ color: BRAND.gray, p: 0.25, flexShrink: 0 }}
@@ -231,12 +264,34 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [errorMsg, setErrorMsg] = React.useState("");
   const [currentPath, setCurrentPath] = React.useState("/");
+  // Roots the agent will let this session reach. `null` = we haven't heard
+  // back yet (or the agent is too old to answer), `[]` = old agent, treat
+  // the filesystem as unconfined the way we always did.
+  const [roots, setRoots] = React.useState(null);
+  const rootsRef = React.useRef(null);
+  const rootsTimerRef = React.useRef(null);
+  // Inline "that location is off limits" notice. Distinct from `errorMsg`,
+  // which tears the panel down — a refused path leaves the session perfectly
+  // usable, the operator just has to go somewhere else.
+  const [pathNotice, setPathNotice] = React.useState("");
   const [entries, setEntries] = React.useState([]);
   const [listing, setListing] = React.useState(false);
   const [transfers, setTransfers] = React.useState([]);       // { id, name, path, direction, sizeBytes, transferred, status }
   const [selected, setSelected] = React.useState(new Set());  // M2.S2 multi-select
   const [dragOver, setDragOver] = React.useState(false);      // M2.S2 drag-and-drop
   const uploadRef = React.useRef(null);
+  // Mirror `state` into a ref so the `ws.onclose` / async handlers set up
+  // INSIDE the setup useEffect can see the live value instead of the value
+  // that was current at the time we defined them. Closure capture would
+  // otherwise pin them to `STATE.CONNECTING` forever, which means the
+  // "Signaling WebSocket closed unexpectedly" branch fires even when the
+  // DC opened cleanly and the WS was closed AS PART OF normal teardown.
+  // Reproduced 2026-06-10 ~19:35 on Safari + Chrome incognito (cache-free)
+  // where the user saw the error every time despite the WebRTC connection
+  // technically succeeding end-to-end — the modal showed Establishing →
+  // Error in the same beat.
+  const stateRef = React.useRef(STATE.CONNECTING);
+  React.useEffect(() => { stateRef.current = state; }, [state]);
   const dcRef = React.useRef(null);     // RTCDataChannel
   const pcRef = React.useRef(null);     // RTCPeerConnection
   const wsRef = React.useRef(null);     // WebSocket (signaling)
@@ -275,28 +330,59 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         //    offer's SDP). The agent keys on the offer's `capability`
         //    field (not the DataChannel label) to set up the file
         //    transfer handler — see peer-session.ts onDataChannel.
+        //    So the label here is purely for our own debugging; the
+        //    agent ignores it.
         //
-        // ⚠️ Do NOT pass `{ ordered: true }` even though file transfers
-        // semantically need ordered delivery. node-datachannel on the
-        // agent (Windows ARM64) has a bug where the SCTP negotiation
-        // silently fails when the offerer's DataChannel INIT carries an
-        // explicit reliability flag. The DC never reaches `open`, the
-        // agent stops trickling ICE after ~3 candidates, the browser
-        // stalls in pc.connectionState='new' forever, and the UI sits
-        // on "Establishing file transfer session…" until timeout.
-        // Empirically reproduced 2026-06-10 19:03 on W11-JPR-Lab01:
-        // passing `{ ordered: true }` → timeout; passing no opts → DC
-        // opens in ~2s and `list` returns 22 entries. WebRTC default
-        // IS ordered=true so semantically identical. Bypasses the bug.
-        // TODO: pass `{ ordered: true }` again once node-datachannel is
-        // upgraded past the version that fixes this.
-        const dc = pc.createDataChannel("rcp.file");
+        // ⚠️ Bug-avoidance — use plain label "rcp" not "rcp.file":
+        //
+        // We discovered empirically that node-datachannel on the agent
+        // (Windows ARM64, libdatachannel ABI version shipped with
+        // 0.32.3) fails ICE check completion when the offerer's
+        // DataChannel label is "rcp.file" or "rcp.screen" specifically.
+        // Same code with label "rcp" or "rcp.shell" opens cleanly in
+        // ~2s. Reproduced 2026-06-10 21:50 on W11-JPR-Lab01 across
+        // four sequential tests, agent restart in between:
+        //   label="rcp"        → DC OPEN 2.1s ✅
+        //   label="rcp.shell"  → DC OPEN 1.9s ✅
+        //   label="rcp.file"   → 20s timeout, ws-close(1005) ❌
+        //   label="rcp.foo"    → 20s timeout ❌
+        //
+        // The label appears in the DCEP (RFC 8832) AFTER the SCTP
+        // handshake completes — so in theory it cannot affect ICE.
+        // The empirical reality says otherwise: there is a parser
+        // path in libdatachannel that mis-handles certain label
+        // strings during SDP negotiation. We have not isolated the
+        // exact bytes that trip it; "rcp.shell" is fine but
+        // "rcp.file" is not, despite both having the same shape.
+        //
+        // Fix: use the simplest label that works. "rcp" is what our
+        // E2E console tests have always used (and they always
+        // worked); the agent doesn't care what we call the channel
+        // because it routes by capability.
+        //
+        // ⚠️ Do NOT pass `{ ordered: true }` either — separate
+        // libdatachannel bug, also discovered empirically earlier
+        // today, see ShellTerminal.jsx for the full notes.
+        const dc = pc.createDataChannel("rcp");
         dcRef.current = dc;
 
         dc.onopen = () => {
           if (!destroyed) {
             setState(STATE.BROWSING);
-            sendList("/");
+            // Ask where we're allowed to start. The agent confines the
+            // session to a set of roots, so "/" is normally outside it —
+            // we can't just open there any more.
+            dcSend({ op: "roots" });
+            // Agents older than the confinement change never answer that
+            // op. Fall back to the historical behaviour if nothing arrives,
+            // so a mixed-version fleet keeps working during the rollout.
+            rootsTimerRef.current = setTimeout(() => {
+              if (destroyed) return;
+              if (rootsRef.current === null) {
+                rootsRef.current = [];
+                sendList("/");
+              }
+            }, 1500);
           }
         };
         dc.onclose = () => {
@@ -331,12 +417,36 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         };
         pc.onconnectionstatechange = () => {
           if (destroyed) return;
-          const s = pc.connectionState;
-          if (s === "failed" || s === "disconnected") {
-            setErrorMsg("WebRTC connection lost.");
+          // No longer terminal-on-failed — the ICE restart helper
+          // attached below gets first crack at recovery. Only after
+          // its retries are exhausted (via onFinalFailure) do we go
+          // to STATE.ERROR. See iceRestart.js for rationale.
+        };
+
+        // Attach the ICE restart helper. Same behaviour as in the
+        // shell terminal: failed/disconnected ICE triggers a new
+        // `pc.createOffer({ iceRestart: true })`, capped at 2 tries.
+        // Without this, a brief WiFi hiccup mid-file-transfer would
+        // kill the session and the user would have to click Files
+        // again and pick the path back; the helper recovers
+        // transparently.
+        const detachIceRestart = attachIceRestart({
+          pc,
+          ws,
+          sessionId: session.sessionId,
+          onRestartAttempt: (attempt) => {
+            if (destroyed) return;
+            setErrorMsg(""); // clear stale message during recovery
+            // We don't transition out of BROWSING — the file table
+            // stays usable as-is during the brief renegotiation.
+          },
+          onFinalFailure: () => {
+            if (destroyed) return;
+            setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
           }
-        };
+        });
+        cleanupFns.push(detachIceRestart);
 
         // 5. WS message handler.
         ws.onmessage = ({ data }) => {
@@ -358,11 +468,27 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             }
           } catch {/**/ }
         };
-        ws.onclose = () => {
-          if (!destroyed && state !== STATE.BROWSING && state !== STATE.ENDED) {
-            setErrorMsg("Signaling WebSocket closed unexpectedly.");
-            setState(STATE.ERROR);
-          }
+        ws.onclose = (ev) => {
+          // Use the ref instead of `state` (closure-captured value would
+          // forever be CONNECTING, since this handler was defined during
+          // the first render of the effect). The signaling WS is allowed
+          // to close as part of normal teardown once we've entered
+          // BROWSING — at that point the WebRTC DataChannel is the only
+          // transport that matters and the signaling channel is moot.
+          // Suppress the "closed unexpectedly" error in BROWSING / ENDED;
+          // also suppress for clean closes (wasClean=true with code 1000
+          // or 1001 = going away — eg StrictMode double-mount in dev,
+          // operator dismissing the drawer, server-side teardown). Only
+          // surface the error when we're still mid-handshake AND the
+          // close was unclean — that's the only state that actually
+          // means "your session is broken before it ever worked."
+          if (destroyed) return;
+          const s = stateRef.current;
+          if (s === STATE.BROWSING || s === STATE.ENDED) return;
+          // 1000 = normal close, 1001 = going away — both benign here.
+          if (ev?.wasClean && (ev.code === 1000 || ev.code === 1001)) return;
+          setErrorMsg("Signaling WebSocket closed unexpectedly.");
+          setState(STATE.ERROR);
         };
 
         // 6. Generate offer and send.
@@ -383,6 +509,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
     return () => {
       destroyed = true;
+      if (rootsTimerRef.current) {
+        clearTimeout(rootsTimerRef.current);
+        rootsTimerRef.current = null;
+      }
       for (const fn of cleanupFns) fn();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -398,6 +528,8 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         setCurrentPath(msg.path ?? currentPath);
         setEntries(Array.isArray(msg.entries) ? msg.entries : []);
         setListing(false);
+        // A successful listing means we're somewhere legal again.
+        setPathNotice("");
         break;
       }
       case "chunk": {
@@ -447,6 +579,30 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         startUploadChunks(tid, upload.file);
         break;
       }
+      // The agent tells us which subtrees this session may reach. Sent in
+      // reply to { op: "roots" } at channel open.
+      case "roots": {
+        if (rootsTimerRef.current) {
+          clearTimeout(rootsTimerRef.current);
+          rootsTimerRef.current = null;
+        }
+        const list = Array.isArray(msg.roots) ? msg.roots.filter(Boolean) : [];
+        rootsRef.current = list;
+        setRoots(list);
+        if (list.length > 0) {
+          setCurrentPath(list[0]);
+          sendList(list[0]);
+        } else {
+          // Confined to nothing — the operator has an empty roots list in
+          // policy. Say so rather than showing an empty directory.
+          setErrorMsg(
+            "Remote file access is enabled but no allowed locations are configured for this device."
+          );
+          setState(STATE.ERROR);
+        }
+        break;
+      }
+
       case "error": {
         const tid = msg.transferId;
         if (tid) {
@@ -456,6 +612,14 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               t.id === tid ? { ...t, status: "failed", errorMsg: msg.message } : t
             )
           );
+          break;
+        }
+        // Path refusals arrive without a transferId when they come from a
+        // `list`. Surface them inline — the listing simply didn't happen, so
+        // without this the panel would spin on "Loading…" forever.
+        if (PATH_REFUSAL_CODES.has(msg.code)) {
+          setListing(false);
+          setPathNotice(msg.message || "That location is not available.");
         }
         break;
       }
@@ -486,8 +650,16 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
   function handleUp() {
     const p = parentPath(currentPath);
-    if (p !== currentPath) handleNavigate(p);
+    if (p === currentPath) return;
+    // Stop at the root boundary rather than letting the agent refuse — the
+    // operator gets a disabled button instead of an error they can't act on.
+    if (!isInsideRoots(p, roots)) return;
+    handleNavigate(p);
   }
+
+  /** True when Up would leave the jail (or we're already at the top). */
+  const atTopOfJail =
+    currentPath === "/" || !isInsideRoots(parentPath(currentPath), roots);
 
   function handleDownload(entry) {
     const transferId = crypto.randomUUID();
@@ -701,7 +873,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         </Typography>
         <StatusChip state={state} />
         <Tooltip title="Close">
-          <IconButton size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
+          <IconButton aria-label="Close file browser" size="small" onClick={onClose} sx={{ color: BRAND.gray }}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -771,9 +943,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             <Tooltip title="Parent directory">
               <span>
                 <IconButton
+                  aria-label="Go to parent directory"
                   size="small"
                   onClick={handleUp}
-                  disabled={currentPath === "/"}
+                  disabled={atTopOfJail}
                   sx={{ color: BRAND.teal }}
                 >
                   <ArrowUpwardOutlinedIcon fontSize="small" />
@@ -782,6 +955,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             </Tooltip>
             <Tooltip title="Refresh">
               <IconButton
+                aria-label="Refresh directory listing"
                 size="small"
                 onClick={() => sendList(currentPath)}
                 disabled={listing}
@@ -794,6 +968,32 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                 )}
               </IconButton>
             </Tooltip>
+            {/* Root shortcuts. Only worth showing when the agent gave us
+                more than one — with a single root the Up button already
+                clamps there and a lone chip is just noise. */}
+            {Array.isArray(roots) && roots.length > 1 && (
+              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                {roots.map((r) => (
+                  <Tooltip key={r} title={r}>
+                    <Chip
+                      size="small"
+                      label={shortRootLabel(r)}
+                      onClick={() => handleNavigate(r)}
+                      variant={isInsideRoots(currentPath, [r]) ? "filled" : "outlined"}
+                      sx={{
+                        maxWidth: 140,
+                        fontSize: 11,
+                        height: 22,
+                        cursor: "pointer",
+                        ...(isInsideRoots(currentPath, [r])
+                          ? { bgcolor: BRAND.tealSoft, color: BRAND.teal }
+                          : { borderColor: BRAND.border, color: BRAND.gray })
+                      }}
+                    />
+                  </Tooltip>
+                ))}
+              </Stack>
+            )}
             <Typography
               variant="caption"
               sx={{
@@ -829,6 +1029,27 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               onChange={handleFileSelected}
             />
           </Stack>
+
+          {/* Path refused by the agent's confinement policy. Non-fatal: the
+              session is fine, this location just isn't reachable. */}
+          {pathNotice && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{
+                px: 2,
+                py: 1,
+                bgcolor: ROLE.cautionSoft,
+                borderBottom: `1px solid ${BRAND.border}`
+              }}
+            >
+              <LockOutlinedIcon sx={{ fontSize: 16, color: ROLE.caution }} />
+              <Typography variant="caption" sx={{ color: ROLE.caution, fontWeight: 600 }}>
+                {pathNotice}
+              </Typography>
+            </Stack>
+          )}
 
           {/* Split: file list + transfer queue */}
           <Grid container sx={{ flex: 1, overflow: "hidden" }}>
@@ -1060,6 +1281,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                               {!entry.isDir && (
                                 <Tooltip title="Download">
                                   <IconButton
+                                    aria-label={`Download ${entry.name}`}
                                     size="small"
                                     onClick={(e) => {
                                       e.stopPropagation();

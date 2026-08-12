@@ -13,6 +13,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE;
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+import { createEntryCache } from "./entryCache";
+
 const STORAGE_PREFIX = "tnm:http-cache:";
 const SESSION_SCOPE_STORAGE_KEY = "tnm:session-cache-scope:v1";
 const DEFAULT_SESSION_SCOPE = "anonymous";
@@ -25,8 +27,21 @@ export const AUTH_REQUIRED_EVENT = "tracenium:auth-required";
 
 let authRedirectStarted = false;
 
-const memCache = new Map();
 const inFlightGets = new Map();
+
+// Cross-cache clear hooks. http.js owns the session scope + active tenant (the
+// single source of truth both this cache and hooks/useCachedFetch.js key by).
+// When the identity changes (session scope flips), every registered secondary
+// cache must be cleared too. useCachedFetch registers its clearer here, so a
+// single setApiCacheSessionScope() call wipes both caches — no more manually
+// keeping two scope states in sync at every auth-change site.
+const cacheClearListeners = new Set();
+
+/** Register a callback fired when the session scope changes (identity change). */
+export function registerCacheClearListener(cb) {
+  if (typeof cb === "function") cacheClearListeners.add(cb);
+  return () => cacheClearListeners.delete(cb);
+}
 
 function readStoredSessionScope() {
   if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
@@ -73,6 +88,53 @@ export function getApiCacheSessionScope() {
   return currentSessionScope || DEFAULT_SESSION_SCOPE;
 }
 
+// ── MSP active tenant (F1) ────────────────────────────────────────────
+//
+// When an MSP operator / vendor selects a client from the portfolio, its
+// internal Tenant.Id is set here and sent as the X-Tenant-Id header on
+// EVERY subsequent API call. The backend's tenantMiddleware authorizes it
+// via the hierarchy and routes the request to that tenant. Null → no
+// header → the backend uses the token's own tenant (single-tenant users).
+//
+// Persisted in sessionStorage so a page refresh keeps the operator in the
+// same client instead of bouncing them back to the portfolio. Cleared on
+// sign-out (setApiCacheSessionScope('signed-out') zeroes it below).
+const ACTIVE_TENANT_STORAGE_KEY = "tr_active_tenant";
+let activeTenantId = (() => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage?.getItem(ACTIVE_TENANT_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+})();
+
+export function setActiveTenantId(id) {
+  activeTenantId = id != null && String(id).trim() ? String(id).trim() : null;
+  if (typeof window !== "undefined") {
+    try {
+      if (activeTenantId) {
+        window.sessionStorage?.setItem(ACTIVE_TENANT_STORAGE_KEY, activeTenantId);
+      } else {
+        window.sessionStorage?.removeItem(ACTIVE_TENANT_STORAGE_KEY);
+      }
+    } catch {
+      // best effort
+    }
+  }
+}
+
+export function getActiveTenantId() {
+  return activeTenantId;
+}
+
+// Merge the X-Tenant-Id header into a base headers object when an active
+// tenant is set. Used at every fetch call site.
+function withTenantHeader(base) {
+  if (!activeTenantId) return base;
+  return { ...(base || {}), "X-Tenant-Id": activeTenantId };
+}
+
 export function setApiCacheSessionScope(scope) {
   const nextScope = normalizeSessionScope(scope);
   const previousScope = normalizeSessionScope(currentSessionScope);
@@ -90,6 +152,19 @@ export function setApiCacheSessionScope(scope) {
 
   if (nextScope !== previousScope) {
     clearApiCache();
+    // A scope change means the identity changed (sign-in / sign-out /
+    // user switch). The previously-selected client no longer applies —
+    // clear it so we don't send a stale X-Tenant-Id under a new identity.
+    setActiveTenantId(null);
+    // Wipe every registered secondary cache (useCachedFetch) so no
+    // previous-identity entry survives the switch.
+    cacheClearListeners.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // A misbehaving listener must not block the scope change.
+      }
+    });
   }
 
   return nextScope;
@@ -205,9 +280,14 @@ function safeJsonParse(value) {
   }
 }
 
-function storageKey(cacheKey) {
-  return `${STORAGE_PREFIX}${cacheKey}`;
-}
+// Two-tier entry engine shared with ../hooks/useCachedFetch (see entryCache.js).
+// NOTE: read/write here receive an ALREADY-scoped key (buildCacheKey runs at
+// the GET call site), so deriveKey is identity; invalidateApiCache builds the
+// key itself before delegating.
+const entryCache = createEntryCache({
+  storagePrefix: STORAGE_PREFIX,
+  unscopeKey: unscopedCacheKey,
+});
 
 function normalizeGetOptions(url, options = {}) {
   const profile = getCacheProfileForUrl(url);
@@ -293,14 +373,27 @@ function getCacheProfileForUrl(url) {
 
 function buildCacheKey(url) {
   const rawKey = String(url || "");
-  return `${getApiCacheSessionScope()}::${rawKey}`;
+  // CRITICAL: the cache key MUST include the active tenant. An MSP operator
+  // switches the active tenant (X-Tenant-Id) without a new sign-in, and the
+  // same URL returns DIFFERENT data per tenant. Keying only by session
+  // scope + URL let one tenant's cached response be served for another
+  // (a cross-tenant data leak in the UI). sessionStorage persistence made
+  // it survive reloads too. Scoping by active tenant partitions the cache
+  // so each tenant context has its own entries. `_` = no active tenant
+  // (portfolio mode / single-tenant users → the token tenant).
+  const tenant = activeTenantId || "_";
+  return `${getApiCacheSessionScope()}::${tenant}::${rawKey}`;
 }
 
+// Recover the raw URL from a cache key of the form `scope::tenant::url`.
+// Strips the first TWO `::`-delimited segments (scope + tenant); the URL
+// itself never contains `::`.
 function unscopedCacheKey(cacheKey) {
   const text = String(cacheKey || "");
-  const marker = "::";
-  const markerIndex = text.indexOf(marker);
-  return markerIndex >= 0 ? text.slice(markerIndex + marker.length) : text;
+  const first = text.indexOf("::");
+  if (first < 0) return text;
+  const second = text.indexOf("::", first + 2);
+  return second >= 0 ? text.slice(second + 2) : text.slice(first + 2);
 }
 
 function isExpired(entry, storageMaxAgeMs) {
@@ -314,126 +407,26 @@ function isFresh(entry, staleMs) {
 }
 
 function readGetCache(cacheKey, options) {
-  if (memCache.has(cacheKey)) {
-    const entry = memCache.get(cacheKey);
-
-    if (!isExpired(entry, options.storageMaxAgeMs)) {
-      return entry;
-    }
-
-    memCache.delete(cacheKey);
-  }
-
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.sessionStorage?.getItem(storageKey(cacheKey));
-    if (!raw) return null;
-
-    const parsed = safeJsonParse(raw);
-
-    if (!parsed || isExpired(parsed, options.storageMaxAgeMs)) {
-      window.sessionStorage?.removeItem(storageKey(cacheKey));
-      return null;
-    }
-
-    memCache.set(cacheKey, parsed);
-    return parsed;
-  } catch {
-    return null;
-  }
+  return entryCache.read(cacheKey, options.storageMaxAgeMs);
 }
 
 function writeGetCache(cacheKey, data) {
-  const entry = {
-    data,
-    ts: now(),
-  };
-
-  memCache.set(cacheKey, entry);
-
-  if (typeof window === "undefined") return entry;
-
-  try {
-    window.sessionStorage?.setItem(storageKey(cacheKey), JSON.stringify(entry));
-  } catch {
-    // Non-fatal. Some payloads may be too large for sessionStorage.
-    // Memory cache still helps during the active tab session.
-  }
-
-  return entry;
+  return entryCache.write(cacheKey, data);
 }
 
 export function invalidateApiCache(key) {
   if (!key) return;
-
-  const cacheKey = buildCacheKey(key);
-  memCache.delete(cacheKey);
-
-  if (typeof window === "undefined") return;
-
-  try {
-    window.sessionStorage?.removeItem(storageKey(cacheKey));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidate(buildCacheKey(key));
 }
 
 export function invalidateApiCachePrefix(prefix) {
   if (!prefix) return;
-
-  const normalizedPrefix = String(prefix);
-
-  Array.from(memCache.keys()).forEach((key) => {
-    if (unscopedCacheKey(key).startsWith(normalizedPrefix)) {
-      memCache.delete(key);
-    }
-  });
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const key = window.sessionStorage.key(i);
-
-      if (
-        key &&
-        key.startsWith(STORAGE_PREFIX) &&
-        unscopedCacheKey(key.slice(STORAGE_PREFIX.length)).startsWith(normalizedPrefix)
-      ) {
-        keysToRemove.push(key);
-      }
-    }
-
-    keysToRemove.forEach((key) => window.sessionStorage.removeItem(key));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidatePrefix(String(prefix));
 }
 
 export function clearApiCache() {
-  memCache.clear();
+  entryCache.clear();
   inFlightGets.clear();
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const key = window.sessionStorage.key(i);
-
-      if (key && key.startsWith(STORAGE_PREFIX)) {
-        keysToRemove.push(key);
-      }
-    }
-
-    keysToRemove.forEach((key) => window.sessionStorage.removeItem(key));
-  } catch {
-    // best effort
-  }
 }
 
 function invalidateAfterMutation(url) {
@@ -617,6 +610,7 @@ async function fetchGetJson(url, options) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "GET",
       credentials: "include",
+      headers: withTenantHeader(),
       signal: timeout.signal,
     });
 
@@ -693,6 +687,39 @@ export async function prefetchApiGetJson(url, options = {}) {
   return httpGetJson(url, options);
 }
 
+/**
+ * GET a binary/text response as a Blob (credentialed, tenant-header aware).
+ * Used for authenticated file downloads (report PDF/CSV) where a plain
+ * <a href> can't carry the session. Returns { blob, filename } — filename
+ * parsed from Content-Disposition when present. Errors flow through the
+ * same auth/temporary handling as JSON GETs.
+ */
+export async function httpGetBlob(url, options = {}) {
+  const timeout = withTimeout(options.timeoutMs ?? 60_000);
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "GET",
+      credentials: "include",
+      headers: withTenantHeader(),
+      signal: timeout.signal,
+    });
+    if (!res.ok) {
+      // Reuse the shared error mapping (throws AuthError / TemporaryServerError /
+      // Error). handleResponse only reads the body on the error path here.
+      await handleResponse(res, url);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    const filename = match ? decodeURIComponent(match[1]) : null;
+    return { blob, filename };
+  } catch (err) {
+    throw toHumanError(err, url);
+  } finally {
+    timeout.done();
+  }
+}
+
 export function getApiCacheSnapshot(url, options = {}) {
   const normalizedOptions = normalizeGetOptions(url, options);
   const entry = readGetCache(buildCacheKey(url), normalizedOptions);
@@ -725,7 +752,7 @@ export async function httpPostJson(url, body, { timeoutMs } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: withTenantHeader({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -756,7 +783,7 @@ export async function httpPostBinary(
     const res = await fetch(`${API_BASE}${url}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": contentType },
+      headers: withTenantHeader({ "Content-Type": contentType }),
       body: bytes,
       signal: timeout.signal,
     });
@@ -778,7 +805,7 @@ export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PUT",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(headers || {}) },
+      headers: withTenantHeader({ "Content-Type": "application/json", ...(headers || {}) }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -793,14 +820,16 @@ export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
   }
 }
 
-export async function httpPatchJson(url, body, { timeoutMs } = {}) {
+export async function httpPatchJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
 
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "PATCH",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      // Optional extra headers (e.g. If-Match for the domain-scoped
+      // policy saves) merge on top, same contract as httpPutJson.
+      headers: withTenantHeader({ "Content-Type": "application/json", ...(headers || {}) }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });
@@ -822,6 +851,7 @@ export async function httpDeleteJson(url, { timeoutMs } = {}) {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "DELETE",
       credentials: "include",
+      headers: withTenantHeader(),
       signal: timeout.signal,
     });
 

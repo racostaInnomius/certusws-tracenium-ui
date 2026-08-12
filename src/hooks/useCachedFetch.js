@@ -33,66 +33,52 @@
 // - hasCache
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isAuthError, isTemporaryApiError, TEMPORARY_ERROR_EVENT } from "../api/http";
+import {
+  isAuthError,
+  isTemporaryApiError,
+  TEMPORARY_ERROR_EVENT,
+  getActiveTenantId,
+  getApiCacheSessionScope,
+  setApiCacheSessionScope,
+  registerCacheClearListener,
+} from "../api/http";
 
-const memCache = new Map();
 const inFlight = new Map();
 
+import { createEntryCache } from "../api/entryCache";
+
 const STORAGE_PREFIX = "tnm:cache:";
-const SESSION_SCOPE_STORAGE_KEY = "tnm:cache-scope:v1";
-const DEFAULT_SESSION_SCOPE = "anonymous";
 
-function readStoredSessionScope() {
-  if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
-
-  try {
-    const stored = window.sessionStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
-    return stored || DEFAULT_SESSION_SCOPE;
-  } catch {
-    return DEFAULT_SESSION_SCOPE;
-  }
-}
-
-let currentSessionScope = readStoredSessionScope();
-
-function normalizeSessionScope(scope) {
-  const normalized = String(scope || "").trim();
-  return normalized || DEFAULT_SESSION_SCOPE;
-}
-
+// Session scope + active tenant are OWNED by ../api/http (the single source of
+// truth). This cache keys by that same scope/tenant, so an identity change
+// makes old-scope entries unreachable automatically; http.js also fires our
+// registered clearer (see bottom of file) to actually free them. These two
+// helpers stay exported for backward compatibility but now delegate to the
+// owner — there is no second session-scope state to keep in sync.
 export function getCachedFetchSessionScope() {
-  return currentSessionScope || DEFAULT_SESSION_SCOPE;
+  return getApiCacheSessionScope();
 }
 
 export function setCachedFetchSessionScope(scope) {
-  const nextScope = normalizeSessionScope(scope);
-  const previousScope = normalizeSessionScope(currentSessionScope);
-
-  currentSessionScope = nextScope;
-
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
-    } catch {
-      // best effort
-    }
-  }
-
-  if (nextScope !== previousScope) {
-    clearCachedFetch();
-  }
-
-  return nextScope;
+  return setApiCacheSessionScope(scope);
 }
 
 function buildScopedCacheKey(key) {
-  return `${getCachedFetchSessionScope()}::${String(key || "")}`;
+  // Scope by session + ACTIVE TENANT (both from ../api/http). Without the
+  // tenant in the key, an MSP tenant switch would serve one tenant's cached
+  // data to another. `_` = no active tenant (portfolio / single-tenant).
+  const tenant = getActiveTenantId() || "_";
+  return `${getApiCacheSessionScope()}::${tenant}::${String(key || "")}`;
 }
 
+// Recover the raw key from `scope::tenant::key` — strip the first two
+// `::`-delimited segments (scope + tenant).
 function unscopedCacheKey(key) {
   const text = String(key || "");
-  const markerIndex = text.indexOf("::");
-  return markerIndex >= 0 ? text.slice(markerIndex + 2) : text;
+  const first = text.indexOf("::");
+  if (first < 0) return text;
+  const second = text.indexOf("::", first + 2);
+  return second >= 0 ? text.slice(second + 2) : text.slice(first + 2);
 }
 
 const DEFAULT_STALE_MS = 60_000;
@@ -110,144 +96,44 @@ function safeJsonParse(value) {
   }
 }
 
-function getStorageKey(key) {
-  return `${STORAGE_PREFIX}${key}`;
-}
+// Two-tier entry engine shared with ../api/http (see api/entryCache.js).
+// Scoping happens here: every key becomes `session::tenant::key`.
+const entryCache = createEntryCache({
+  storagePrefix: STORAGE_PREFIX,
+  deriveKey: buildScopedCacheKey,
+  unscopeKey: unscopedCacheKey,
+});
 
-function isEntryExpired(entry, storageMaxAgeMs) {
-  if (!entry || !entry.ts) return true;
-  return now() - Number(entry.ts) > storageMaxAgeMs;
-}
+const memCache = entryCache.memCache;
 
 function readCache(key, options = {}) {
-  const scopedKey = buildScopedCacheKey(key);
   const storageMaxAgeMs =
     Number(options.storageMaxAgeMs ?? DEFAULT_STORAGE_MAX_AGE_MS) ||
     DEFAULT_STORAGE_MAX_AGE_MS;
-
-  if (memCache.has(scopedKey)) {
-    const entry = memCache.get(scopedKey);
-
-    if (!isEntryExpired(entry, storageMaxAgeMs)) {
-      return entry;
-    }
-
-    memCache.delete(scopedKey);
-  }
-
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.sessionStorage?.getItem(getStorageKey(scopedKey));
-    if (!raw) return null;
-
-    const parsed = safeJsonParse(raw);
-    if (!parsed || isEntryExpired(parsed, storageMaxAgeMs)) {
-      window.sessionStorage?.removeItem(getStorageKey(scopedKey));
-      return null;
-    }
-
-    memCache.set(scopedKey, parsed);
-    return parsed;
-  } catch {
-    return null;
-  }
+  return entryCache.read(key, storageMaxAgeMs);
 }
 
 function writeCache(key, data) {
-  const scopedKey = buildScopedCacheKey(key);
-  const entry = {
-    data,
-    ts: now(),
-  };
-
-  memCache.set(scopedKey, entry);
-
-  if (typeof window === "undefined") return entry;
-
-  try {
-    window.sessionStorage?.setItem(getStorageKey(scopedKey), JSON.stringify(entry));
-  } catch {
-    // Non-fatal. Some responses may be too large or not serializable.
-    // The in-memory cache still works for the current session.
-  }
-
-  return entry;
+  return entryCache.write(key, data);
 }
 
 export function invalidateCache(key) {
-  if (!key) return;
-
-  const scopedKey = buildScopedCacheKey(key);
-  memCache.delete(scopedKey);
-
-  if (typeof window === "undefined") return;
-
-  try {
-    window.sessionStorage?.removeItem(getStorageKey(scopedKey));
-  } catch {
-    // best effort
-  }
+  entryCache.invalidate(key);
 }
 
 export function invalidateCachePrefix(prefix) {
-  if (!prefix) return;
-
-  Array.from(memCache.keys()).forEach((key) => {
-    if (unscopedCacheKey(key).startsWith(prefix)) {
-      memCache.delete(key);
-    }
-  });
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const storageKey = window.sessionStorage.key(i);
-
-      if (
-        storageKey &&
-        storageKey.startsWith(STORAGE_PREFIX) &&
-        unscopedCacheKey(storageKey.slice(STORAGE_PREFIX.length)).startsWith(prefix)
-      ) {
-        keysToRemove.push(storageKey);
-      }
-    }
-
-    keysToRemove.forEach((storageKey) => {
-      window.sessionStorage.removeItem(storageKey);
-    });
-  } catch {
-    // best effort
-  }
+  entryCache.invalidatePrefix(prefix);
 }
 
 export function clearCachedFetch() {
-  memCache.clear();
+  entryCache.clear();
   inFlight.clear();
-
-  if (typeof window === "undefined") return;
-
-  try {
-    const keysToRemove = [];
-
-    for (let i = 0; i < window.sessionStorage.length; i += 1) {
-      const storageKey = window.sessionStorage.key(i);
-
-      if (storageKey && storageKey.startsWith(STORAGE_PREFIX)) {
-        keysToRemove.push(storageKey);
-      }
-    }
-
-    keysToRemove.forEach((storageKey) => {
-      window.sessionStorage.removeItem(storageKey);
-    });
-  } catch {
-    // best effort
-  }
 }
+
+// Wipe this cache whenever http.js flips the session scope (identity change),
+// so a single setApiCacheSessionScope() call clears BOTH caches. Registered on
+// module load — before that this cache is empty, so nothing is missed.
+registerCacheClearListener(clearCachedFetch);
 
 export async function prefetchCachedFetch(cacheKey, loader) {
   if (!cacheKey || typeof loader !== "function") return null;

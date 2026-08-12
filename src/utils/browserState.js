@@ -41,6 +41,20 @@ export function downloadTextFile(filename, content, mimeType = "text/plain;chars
   URL.revokeObjectURL(url);
 }
 
+// Save an already-fetched Blob (e.g. an authenticated PDF pulled via
+// httpGetBlob) under `filename`. Mirrors downloadTextFile's anchor trick.
+export function saveBlob(blob, filename) {
+  if (typeof window === "undefined" || !blob) return;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename || "download";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
 export function toCsv(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return "";

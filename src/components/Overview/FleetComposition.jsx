@@ -16,6 +16,7 @@
 // Zero surface area backend-side; any time the auto-update shippability
 // threshold changes we adjust the classifier here.
 
+import { useMemo } from "react";
 import { Paper, Grid, Typography, Box, Skeleton } from "@mui/material";
 import {
   ResponsiveContainer,
@@ -336,21 +337,21 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
     dashboard?.platforms ??
     null;
 
-  const osData = Array.isArray(osRaw)
-    ? osRaw
-        .map((row) => ({
-          name: row.os_platform ?? row.name ?? row.platform ?? "Unknown",
-          value: Number(row.host_count ?? row.count ?? row.value ?? 0),
-          color: null
-        }))
-        .filter((x) => x.value > 0)
-    : [];
-
-  const osColors = [BRAND.teal, BRAND.dark, BRAND.cyan, BRAND.gray];
-  const osDataColored = osData.map((d, i) => ({
-    ...d,
-    color: osColors[i % osColors.length]
-  }));
+  // Memoized so the PieChart gets a stable data reference across parent
+  // re-renders (only recomputes when the raw OS aggregate changes).
+  const osDataColored = useMemo(() => {
+    const osColors = [BRAND.teal, BRAND.dark, BRAND.cyan, BRAND.gray];
+    const osData = Array.isArray(osRaw)
+      ? osRaw
+          .map((row) => ({
+            name: row.os_platform ?? row.name ?? row.platform ?? "Unknown",
+            value: Number(row.host_count ?? row.count ?? row.value ?? 0),
+            color: null
+          }))
+          .filter((x) => x.value > 0)
+      : [];
+    return osData.map((d, i) => ({ ...d, color: osColors[i % osColors.length] }));
+  }, [osRaw]);
 
   // Agent version donut is now powered by a dedicated backend aggregate
   // (`/dashboard/agent-versions`), which is the only place this tenant's
