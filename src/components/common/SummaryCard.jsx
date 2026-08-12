@@ -92,8 +92,13 @@ export default function SummaryCard({
           {icon}
         </Box>
       ) : null}
-      <Box sx={{ minWidth: 0 }}>
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        {/* noWrap so an optional titleHint icon never pushes the title
+            onto a second line — that was making sibling cards in the
+            same row report different natural heights before `stretch`
+            evened them back out, which looked inconsistent across rows. */}
         <Typography
+          noWrap
           sx={{
             fontSize: 12,
             color: "text.secondary",
@@ -105,7 +110,7 @@ export default function SummaryCard({
         >
           {titleNode}
         </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.25 }}>
+        <Typography noWrap sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.25 }}>
           {value}
         </Typography>
       </Box>

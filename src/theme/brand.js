@@ -40,6 +40,7 @@ export const BRAND = {
   alert: {
     error: "#E37D78",
     errorSoft: "rgba(227,125,120,0.22)",
+    errorText: "#B23A33",
     // Pressed/hover shade for solid destructive buttons (Delete, Decommission).
     // Deliberately much darker than `error`: the resting fill is a soft red, so
     // a subtle hover would read as no feedback at all on a destructive action.
@@ -57,6 +58,10 @@ export const BRAND = {
     info: "#5A9F9F",
     infoSoft: "rgba(90,159,159,0.12)",
   },
+
+  // Darker, text-legible counterpart to `cyan` (#8FFDFF is an accent
+  // color, far too light for small chip/label text on a light surface).
+  cyanText: "#0E7C80",
 };
 
 export const ROLE = {
