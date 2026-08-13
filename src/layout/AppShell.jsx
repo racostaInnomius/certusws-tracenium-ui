@@ -1011,7 +1011,16 @@ export default function AppShell() {
                   minWidth: 0,
                   width: "100%",
                   filter: shouldShowNoInformationOverlay ? "blur(8px)" : "none",
-                  transform: "translateZ(0)",
+                  // Only promote to its own compositing layer while the blur
+                  // transition is actually running. Applying translateZ(0)
+                  // unconditionally makes this Box a new containing block for
+                  // any position:fixed descendant (per spec, transform !=
+                  // none does that) — which was silently breaking every
+                  // page's fixed-positioned overlays (e.g. JobTracker), since
+                  // "fixed" ended up anchored to the bottom of this
+                  // page-content Box instead of the viewport, requiring a
+                  // scroll to reach it on tall pages.
+                  transform: shouldShowNoInformationOverlay ? "translateZ(0)" : "none",
                   transition: "filter 220ms ease",
                   pointerEvents: shouldShowNoInformationOverlay ? "none" : "auto",
                   userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
