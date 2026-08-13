@@ -69,7 +69,13 @@ export default function DeviceDrawerContent({
   // endpoints with requireTenantAdmin, so without this the buttons
   // would render and then 403). Defaults to true so existing tests
   // and call sites keep the privileged rendering.
-  canManage = true
+  canManage = true,
+  // Fase C — (category) => {mode, capabilities[]} | null. When a failing
+  // finding's category maps to an enforceable baseline capability not
+  // yet in auto, FindingCard shows the "auto-fix available" hint and
+  // onOpenBaselines jumps to the Baselines tab.
+  baselineHintForCategory = null,
+  onOpenBaselines = null
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -613,6 +619,8 @@ export default function DeviceDrawerContent({
                     onShowHistory={(finding) => setHistoryDialog({ finding })}
                     pendingAction={pendingAction}
                     readOnly={!canManage}
+                    baselineHint={baselineHintForCategory ? baselineHintForCategory(f.category) : null}
+                    onOpenBaselines={onOpenBaselines}
                     // Sprint 6 — bulk selection. Checkbox hidden for
                     // read-only members (selection only feeds bulk
                     // mutations, which they can't run).

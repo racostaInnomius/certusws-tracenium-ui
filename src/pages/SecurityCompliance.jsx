@@ -82,6 +82,18 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useConfirm } from "../components/common/ConfirmDialog";
+// Fase C — the posture side of the capability↔category bridge: mode
+// chips on the category breakdown, "auto-fix available" hints on
+// findings, and a set-to-auto quick action that patches the security
+// policy domain without leaving the Posture tab.
+import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
+import {
+  readSecurityFromPolicy,
+  securityFormToPolicy,
+  extractPolicyEnvelope,
+} from "../components/Policies/policyTransforms";
+import { baselineModeForCategory } from "../components/Compliance/capabilityBridge";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SharedSummaryCard from "../components/common/SummaryCard";
@@ -182,6 +194,37 @@ export default function SecurityCompliance({ initialTab }) {
   // Baselines is privileged-only (the page itself hard-blocks USER, but
   // the tab shouldn't even render). Deep links degrade to Posture.
   const effectiveTab = tab === "baselines" && !canManage ? "posture" : tab;
+
+  // ── Fase C — baseline modes on the Posture tab ─────────────────────
+  //
+  // Fail-soft policy read: when it errors (or the viewer is USER) the
+  // Posture tab renders exactly as before the bridge existed — no
+  // chips, no hints. `policyRefresh` bumps after a set-to-auto patch.
+  const confirmDialog = useConfirm();
+  const tenantId = auth?.tenantId;
+  const [securityForm, setSecurityForm] = React.useState(null);
+  const [policyRefresh, setPolicyRefresh] = React.useState(0);
+  React.useEffect(() => {
+    if (!canManage || !tenantId) return undefined;
+    let cancelled = false;
+    getTenantPolicy(tenantId)
+      .then((res) => {
+        if (cancelled) return;
+        const env = extractPolicyEnvelope(res);
+        setSecurityForm(readSecurityFromPolicy(env.raw ?? {}));
+      })
+      .catch(() => {
+        if (!cancelled) setSecurityForm(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManage, tenantId, policyRefresh, tab]);
+
+  const modeForCategory = React.useCallback(
+    (category) => (securityForm ? baselineModeForCategory(securityForm, category) : null),
+    [securityForm]
+  );
 
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
 
@@ -292,6 +335,73 @@ export default function SecurityCompliance({ initialTab }) {
   const [toast, setToast] = React.useState(null);
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
+
+  // Fase C — "Set to auto-remediate" from a category row. Re-reads the
+  // policy immediately before patching (not the cached securityForm) so
+  // the optimistic-lock version is fresh, flips ONLY the enforceable
+  // capabilities mapped to this category, and writes through the same
+  // domain-scoped PATCH the Baselines editor uses — a save here can't
+  // touch anything outside the security block.
+  const handleSetCategoryAuto = React.useCallback(
+    async (category) => {
+      if (!canManage || !tenantId) return;
+      const info = securityForm ? baselineModeForCategory(securityForm, category) : null;
+      const targets = info?.autoUpgradable ?? [];
+      if (!targets.length) return;
+      const labels = targets.map((c) => c.label).join(", ");
+      const ok = await confirmDialog({
+        title: "Enable auto-remediation?",
+        body:
+          `This sets ${labels} to auto — the agent will FIX drift on the ` +
+          "device, not just report it, starting with the next compliance " +
+          "pass after the policy reaches the fleet.\n\nVet in report-only " +
+          "first if you haven't.",
+        confirmText: "Set to auto",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        const res = await getTenantPolicy(tenantId);
+        const env = extractPolicyEnvelope(res);
+        const fresh = readSecurityFromPolicy(env.raw ?? {});
+        const capabilities = { ...fresh.capabilities };
+        for (const cap of targets) {
+          capabilities[cap.key] = {
+            ...(capabilities[cap.key] || { mode: null, values: {} }),
+            mode: "auto",
+          };
+        }
+        const security = securityFormToPolicy({ ...fresh, capabilities });
+        await patchTenantPolicyDomain(tenantId, "security", security ? { security } : {}, {
+          expectedVersion: env.version,
+        });
+        setPolicyRefresh((n) => n + 1);
+        showToast({
+          severity: "success",
+          message: `${labels} set to auto-remediate. Push or wait for the next policy sync to reach devices.`,
+        });
+      } catch (e) {
+        showToast({
+          severity: "error",
+          message:
+            e?.status === 409
+              ? "Policy was modified by someone else — try again."
+              : e?.body?.message || "Failed to update the baseline.",
+        });
+      }
+    },
+    [canManage, tenantId, securityForm, confirmDialog, showToast]
+  );
+
+  // Fase C — bundle handed to the category breakdown (chips + actions).
+  const baselineBridge = React.useMemo(() => {
+    if (!canManage || !securityForm) return null;
+    return {
+      modeForCategory,
+      onSetAuto: handleSetCategoryAuto,
+      onConfigure: () => setTab("baselines"),
+    };
+  }, [canManage, securityForm, modeForCategory, handleSetCategoryAuto]);
 
   // Sprint 4/6 — CSV/PDF export. Downloads go through httpGetBlob (see
   // api/compliance.js) rather than a plain `<a href>` so an MSP operator's
@@ -713,7 +823,7 @@ export default function SecurityCompliance({ initialTab }) {
           the fleet analogue of the drawer's per-device category grouping.
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
-      <ComplianceCategoryBreakdown />
+      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} />
 
       {/* Sprint 5 — fleet time-to-close by severity. Mounted between
           the framework table (top-down "how does the fleet compare to
@@ -979,6 +1089,18 @@ export default function SecurityCompliance({ initialTab }) {
           onRequestRefetch={refetchDrawer}
           onToast={showToast}
           canManage={canManage}
+          // Fase C — "auto-fix available" hints on findings whose
+          // category maps to an enforceable capability not yet in auto.
+          baselineHintForCategory={
+            baselineBridge
+              ? (category) => {
+                  const info = modeForCategory(category);
+                  if (!info || info.mode === "auto" || !info.autoUpgradable.length) return null;
+                  return { mode: info.mode, capabilities: info.autoUpgradable.map((c) => c.label) };
+                }
+              : null
+          }
+          onOpenBaselines={() => setTab("baselines")}
         />
       </Drawer>
 

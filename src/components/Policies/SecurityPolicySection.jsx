@@ -21,7 +21,20 @@ import {
 import { BRAND } from "../../theme/brand";
 import { SECURITY_CAPABILITIES, SECURITY_MODES } from "./policyTransforms";
 
-export default function SecurityPolicySection({ form, onChange, readOnly = false }) {
+// Fase C — `evidenceByCapability` (optional): live posture evidence per
+// capability key, shape { failed, highSeverityFails, devicesFailing,
+// devices } from capabilityBridge.evidenceForCapability. When present,
+// each card shows what the fleet ACTUALLY looks like against this
+// capability right now; clicking the chip jumps to the evidence
+// (onShowEvidence). Absent → cards render exactly as before, so the
+// device-overrides consumer of this section is untouched.
+export default function SecurityPolicySection({
+  form,
+  onChange,
+  readOnly = false,
+  evidenceByCapability = null,
+  onShowEvidence = null,
+}) {
   return (
       <Box
         sx={{
@@ -113,6 +126,32 @@ export default function SecurityPolicySection({ form, onChange, readOnly = false
                         sx={{ height: 18, fontSize: 10, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
                       />
                     )}
+                    {(() => {
+                      // Fase C — live evidence badge. Deliberately last
+                      // in the chip row: intent chips first, then what
+                      // reality says about it.
+                      const ev = evidenceByCapability?.[cap.key];
+                      if (!ev) return null;
+                      const failing = ev.devicesFailing > 0;
+                      const label = failing
+                        ? `${ev.devicesFailing}${ev.devices ? ` of ${ev.devices}` : ""} device${ev.devicesFailing === 1 ? "" : "s"} failing${ev.highSeverityFails ? ` · ${ev.highSeverityFails} high` : ""}`
+                        : "No drift detected";
+                      return (
+                        <Chip
+                          label={label}
+                          size="small"
+                          onClick={failing && onShowEvidence ? () => onShowEvidence(cap.key) : undefined}
+                          clickable={Boolean(failing && onShowEvidence)}
+                          sx={{
+                            height: 18,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            bgcolor: failing ? BRAND.alert?.errorSoft : BRAND.tealSoft,
+                            color: failing ? BRAND.alert?.error : BRAND.tealText,
+                          }}
+                        />
+                      );
+                    })()}
                   </Box>
                   <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.5 }}>
                     {cap.description}

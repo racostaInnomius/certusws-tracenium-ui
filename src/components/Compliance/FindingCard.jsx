@@ -20,6 +20,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -60,7 +61,13 @@ export default function FindingCard({
   // endpoint and any member may audit. Mirrors the backend gate
   // (compliance.routes.ts requireTenantAdmin) so a USER never sees
   // buttons that would 403.
-  readOnly = false
+  readOnly = false,
+  // Fase C — {mode, capabilities[]} when this finding's category maps
+  // to an enforceable baseline capability not yet in auto: the agent
+  // COULD fix this drift but is only reporting it. Clicking jumps to
+  // the Baselines tab (onOpenBaselines).
+  baselineHint = null,
+  onOpenBaselines = null
 }) {
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
@@ -336,6 +343,31 @@ export default function FindingCard({
                   ))}
                 </Menu>
               </>
+            ) : null}
+            {/* Fase C — this drift is auto-fixable but the baseline is
+                only reporting it. Only on failing findings: a pass
+                doesn't need fixing and the chip would be noise. */}
+            {baselineHint && finding.status === "fail" ? (
+              <Tooltip
+                title={`${baselineHint.capabilities.join(", ")} can remediate this automatically — currently ${baselineHint.mode}. Click to configure.`}
+                arrow
+              >
+                <Chip
+                  size="small"
+                  icon={<BuildOutlinedIcon sx={{ fontSize: 13 }} />}
+                  label={`Auto-fix available · ${baselineHint.mode}`}
+                  onClick={onOpenBaselines || undefined}
+                  clickable={Boolean(onOpenBaselines)}
+                  sx={{
+                    height: 24,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    bgcolor: BRAND.tealSoft,
+                    color: BRAND.tealText,
+                    "& .MuiChip-icon": { color: BRAND.tealText },
+                  }}
+                />
+              </Tooltip>
             ) : null}
             <Button
               size="small"

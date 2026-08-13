@@ -31,6 +31,10 @@ import {
   patchTenantPolicyDomain,
   pushTenantPolicy,
 } from "../api/policies";
+// Fase C — live evidence on each capability card + concrete blast
+// radius in the push confirm, both fed by the compliance API.
+import { getCategorySummary, getComplianceSummary } from "../api/compliance";
+import { CAPABILITY_TO_CATEGORIES, evidenceForCapability } from "../components/Compliance/capabilityBridge";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -66,17 +70,29 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     setSnackbar({ open: true, message, severity });
   }, []);
 
+  // Fase C — posture evidence alongside the policy. Both compliance
+  // calls are fail-soft: the editor must stay usable when the
+  // compliance API is down (cards just render without badges).
+  const [categorySummary, setCategorySummary] = React.useState(null);
+  const [fleetSummary, setFleetSummary] = React.useState(null);
+
   const load = React.useCallback(async () => {
     if (!canManage || !tenantId) return;
     try {
       setLoading(true);
-      const res = await getTenantPolicy(tenantId).catch(() => null);
+      const [res, catSum, fleet] = await Promise.all([
+        getTenantPolicy(tenantId).catch(() => null),
+        getCategorySummary().catch(() => null),
+        getComplianceSummary().catch(() => null),
+      ]);
       const env = extractPolicyEnvelope(res);
       const policy = env.raw ?? {};
       setPolicyRow(res ?? null);
       setForm({ security: readSecurityFromPolicy(policy) });
       // Snapshot of what's on the server, for dirty-tracking.
       setLoadedSecurity(JSON.stringify(securityFormToPolicy(readSecurityFromPolicy(policy))));
+      setCategorySummary(Array.isArray(catSum?.items) ? catSum.items : null);
+      setFleetSummary(fleet?.summary ?? null);
     } catch (e) {
       console.error(e);
       showSnack("Failed to load security baseline", "error");
@@ -84,6 +100,16 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
       setLoading(false);
     }
   }, [canManage, tenantId, showSnack]);
+
+  const evidenceByCapability = React.useMemo(() => {
+    if (!categorySummary) return null;
+    const out = {};
+    for (const capKey of Object.keys(CAPABILITY_TO_CATEGORIES)) {
+      const ev = evidenceForCapability(categorySummary, capKey);
+      if (ev) out[capKey] = ev;
+    }
+    return out;
+  }, [categorySummary]);
 
   React.useEffect(() => {
     load();
@@ -130,9 +156,17 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
 
   const handlePush = async () => {
     if (!canManage || !tenantId) return;
+    // Fase C item E — concrete blast radius instead of an abstract
+    // warning: how many devices this reaches and how many are currently
+    // failing, from the same summary that feeds the Posture hero.
+    const reach = fleetSummary
+      ? `Reaches the ${fleetSummary.devicesReporting ?? 0} device${(fleetSummary.devicesReporting ?? 0) === 1 ? "" : "s"} currently reporting` +
+        `${fleetSummary.statusBreakdown?.non_compliant ? ` — ${fleetSummary.statusBreakdown.non_compliant} of them non-compliant right now` : ""}.\n\n`
+      : "";
     const ok = await confirm({
       title: "Push tenant policy?",
       body:
+        reach +
         "This broadcasts the whole tenant policy — not just the security " +
         "baseline — to every device.\n\nAny pre-existing device-level " +
         "overrides will be reset.",
@@ -209,7 +243,15 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
           "coming soon" persist your intent but have no remediator yet.
         </Alert>
 
-        <SecurityPolicySection form={form} onChange={setForm} readOnly={loading} />
+        <SecurityPolicySection
+          form={form}
+          onChange={setForm}
+          readOnly={loading}
+          evidenceByCapability={evidenceByCapability}
+          // "Show me the evidence" — embedded, the host swaps to the
+          // Posture tab; standalone, it navigates to the SCP page.
+          onShowEvidence={() => onNavigate?.("ad")}
+        />
 
         <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
           <Button
