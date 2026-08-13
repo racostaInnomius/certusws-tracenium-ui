@@ -1,5 +1,7 @@
 import * as React from "react";
 import Grid from "@mui/material/Grid";
+import { listGateways } from "../api/patchManagement";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import {
   Alert,
   Box,
@@ -384,6 +386,12 @@ export default function AgentSettings({ embedded = false }) {
 
   // Device state
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
+  // Infrastructure Gateway registrations (ADR-0001). READ-ONLY here: this page
+  // edits the device policy, but the `gateway` block inside it is OWNED by the
+  // Patch Management registration. Someone finding that block here without
+  // explanation would reasonably hand-edit it — and their change would be
+  // silently replaced the next time the gateway is saved.
+  const [gateways, setGateways] = React.useState([]);
   const [devicePolicy, setDevicePolicy] = React.useState(null); // raw override or null
   const [deviceForm, setDeviceForm] = React.useState(() => readFormFromPolicy({}, []));
   const [deviceJsonDraft, setDeviceJsonDraft] = React.useState("{}");
@@ -500,6 +508,19 @@ export default function AgentSettings({ embedded = false }) {
   React.useEffect(() => {
     loadTenant();
   }, [loadTenant]);
+
+  React.useEffect(() => {
+    listGateways()
+      .then((res) => res?.ok && setGateways(res.data?.gateways ?? []))
+      .catch(() => {
+        // Not every tenant has a gateway; this banner is purely informational.
+      });
+  }, []);
+
+  const gatewayForSelected = React.useMemo(
+    () => gateways.find((g) => g.deviceId === selectedDeviceId) || null,
+    [gateways, selectedDeviceId]
+  );
 
   React.useEffect(() => {
     loadDevice(selectedDeviceId);
@@ -1123,6 +1144,7 @@ export default function AgentSettings({ embedded = false }) {
           ) : (
             <DeviceTab
               devices={devices}
+              gatewayForSelected={gatewayForSelected}
               selectedDeviceId={selectedDeviceId}
               setSelectedDeviceId={setSelectedDeviceId}
               deviceMap={deviceMap}
@@ -1296,6 +1318,7 @@ function TenantTab(props) {
 function DeviceTab(props) {
   const {
     devices, selectedDeviceId, setSelectedDeviceId, deviceMap,
+    gatewayForSelected,
     hasOverride,
     deviceForm, setDeviceForm,
     deviceJsonDraft, setDeviceJsonDraft,
@@ -1358,6 +1381,16 @@ function DeviceTab(props) {
         </Paper>
       ) : (
         <Grid container spacing={2}>
+          {gatewayForSelected && (
+            <Grid size={12}>
+              <Alert severity="info" icon={<HubOutlinedIcon />}>
+                This device is the <strong>Infrastructure Gateway</strong> “{gatewayForSelected.name}”.
+                Its <code>gateway</code> policy block is managed from{" "}
+                <strong>Patch Management → Virtual infrastructure</strong> — edit it there,
+                not here, or your change will be replaced the next time the gateway is saved.
+              </Alert>
+            </Grid>
+          )}
           {/* Override editor */}
           <Grid size={{ xs: 12, lg: 6 }}>
             <SectionPaper

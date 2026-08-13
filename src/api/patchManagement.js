@@ -213,3 +213,59 @@ export async function updateMaintenanceWindow(id, payload) {
 export async function deleteMaintenanceWindow(id) {
   return httpDeleteJson(`${BASE}/maintenance-windows/${encodeURIComponent(id)}`);
 }
+
+// ── Infrastructure Gateway (ADR-0001) ────────────────────────────────────────
+// The vCenter snapshot broker. Note what is NOT here: no endpoint ever carries
+// a plaintext vCenter credential. The browser seals it against the gateway's
+// certificate and only the sealed envelope crosses the wire — the control plane
+// holds no key that can open it. See components/patch-management/gateway/.
+
+export async function listGateways() {
+  return httpGetJson(`${BASE}/gateways`);
+}
+
+export async function getGateway(id) {
+  return httpGetJson(`${BASE}/gateways/${encodeURIComponent(id)}`);
+}
+
+export async function createGateway(payload) {
+  return httpPostJson(`${BASE}/gateways`, payload);
+}
+
+export async function updateGateway(id, payload) {
+  return httpPatchJson(`${BASE}/gateways/${encodeURIComponent(id)}`, payload);
+}
+
+export async function deleteGateway(id) {
+  return httpDeleteJson(`${BASE}/gateways/${encodeURIComponent(id)}`);
+}
+
+/**
+ * The gateway's certificate, so we can seal a credential against it in this
+ * browser. Returns { certPem, certFingerprintSha256, envelope, notAfter }.
+ * The fingerprint is shown to the admin for out-of-band comparison against the
+ * gateway host — that is what stops a compromised control plane from handing us
+ * its own key.
+ */
+export async function getGatewayPublicKey(id) {
+  return httpGetJson(`${BASE}/gateways/${encodeURIComponent(id)}/public-key`);
+}
+
+/** Send the SEALED envelope. Never a password. */
+export async function provisionGatewayCredential(id, envelope) {
+  return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/credential`, { envelope });
+}
+
+export async function verifyGateway(id) {
+  return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/verify`, {});
+}
+
+/** Per-device snapshot outcomes for one deployment. */
+export async function listDeploymentSnapshots(deploymentId) {
+  return httpGetJson(`${BASE}/deployments/${encodeURIComponent(deploymentId)}/snapshots`);
+}
+
+/** Operator-initiated rollback. Requires the exact snapshot record. */
+export async function revertSnapshot(snapshotResultId) {
+  return httpPostJson(`${BASE}/snapshots/revert`, { snapshotResultId });
+}

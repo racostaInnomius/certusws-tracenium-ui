@@ -32,6 +32,7 @@ import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import MaintenanceWindowsPanel from "../components/patch-management/MaintenanceWindowsPanel";
+import GatewayPanel from "../components/patch-management/gateway/GatewayPanel";
 import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
@@ -319,6 +320,15 @@ const CATEGORIES = [
     icon: <ScheduleOutlinedIcon />,
     blurb:
       "Restrict when patch and software deployments are allowed to dispatch — e.g. overnight only. No windows means immediate dispatch.",
+    actions: [],
+  },
+  {
+    // Rendered by GatewayPanel — no `actions`.
+    key: "gateway",
+    label: "Virtual infrastructure",
+    icon: <HubOutlinedIcon />,
+    blurb:
+      "Snapshot virtual machines in vCenter before patching them, so a bad patch can be rolled back. Physical hosts and VMs with no gateway patch as usual.",
     actions: [],
   },
 ];
@@ -1175,6 +1185,12 @@ export default function PatchManagement() {
           ) : tab === "maintenance" ? (
             <MaintenanceWindowsPanel
               canManage={canManage}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
+          ) : tab === "gateway" ? (
+            <GatewayPanel
+              canManage={canManage}
+              devices={devices}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
           ) : (
