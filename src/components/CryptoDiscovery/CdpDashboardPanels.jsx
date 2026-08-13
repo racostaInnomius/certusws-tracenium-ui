@@ -260,6 +260,11 @@ const FLAG_META = {
     hint: "The same private key is present on more than one device. A private key should exist on exactly one machine — if two report it, it was copied.",
     security: true,
   },
+  revoked: {
+    label: "Revoked",
+    hint: "The issuer revoked this certificate but it is still installed. Worse than expired: it still looks valid to anything that does not check revocation.",
+    security: true,
+  },
   chain_incomplete: {
     label: "Incomplete chain",
     hint: "The service serves its certificate without the intermediates. It may work on this machine and fail for clients that do not already have them — one of the most common real-world TLS failures.",
