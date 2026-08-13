@@ -168,6 +168,26 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
     if (allDone) onAllDone?.();
   }, [allDone, onAllDone]);
 
+  // Flash newly-added rows. Without this, dispatching a second job
+  // while the card from a first one is still sitting open just quietly
+  // grows the list by one row — nothing draws the eye to it, so it's
+  // easy to genuinely not notice the tracker updated at all (the "pop
+  // in" only happens once, the very first time the card itself mounts
+  // from 0 → 1 jobs).
+  const prevJobIdsRef = React.useRef(new Set());
+  const [flashIds, setFlashIds] = React.useState(() => new Set());
+  React.useEffect(() => {
+    const prevIds = prevJobIdsRef.current;
+    const nextIds = new Set(jobs.map((j) => j.jobId));
+    const added = [...nextIds].filter((id) => !prevIds.has(id));
+    prevJobIdsRef.current = nextIds;
+    if (added.length === 0) return undefined;
+    setFlashIds(new Set(added));
+    const timer = setTimeout(() => setFlashIds(new Set()), 1600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobIdsKey]);
+
   // Deep-links into the Jobs page, pre-selecting and flashing this
   // job's row there (Jobs.jsx reads highlightJobId on mount). Kept
   // optional — onNavigate is only wired up on pages that render this
@@ -197,6 +217,20 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
         borderRadius: 2,
         boxShadow: "0 8px 24px rgba(59,64,77,0.15)",
         zIndex: 1400,
+        // Plays once, on mount — i.e. exactly when the card goes from
+        // not-rendered to rendered (0 → 1 jobs). A dispatch that lands
+        // while the card's already open (2nd+ job) doesn't remount
+        // this Box, so it correctly doesn't replay here — the per-row
+        // flash below is what calls attention to that case instead.
+        animation: "traceniumTrackerIn 0.32s ease-out",
+        "@keyframes traceniumTrackerIn": {
+          "0%": { transform: "translateY(14px)", opacity: 0 },
+          "100%": { transform: "translateY(0)", opacity: 1 }
+        },
+        "@keyframes traceniumTrackerRowFlash": {
+          "0%, 100%": { backgroundColor: "transparent" },
+          "50%": { backgroundColor: BRAND.tealSoft }
+        }
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", px: 1.5, py: 1, borderBottom: `1px solid ${BRAND.border}` }}>
@@ -221,7 +255,10 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
                 px: 1.5,
                 py: 1,
                 borderBottom: `1px solid ${BRAND.border}`,
-                "&:last-child": { borderBottom: "none" }
+                "&:last-child": { borderBottom: "none" },
+                ...(flashIds.has(j.jobId)
+                  ? { animation: "traceniumTrackerRowFlash 0.8s ease-in-out 2" }
+                  : {})
               }}
             >
               <Box sx={{ flex: 1, minWidth: 0 }}>
