@@ -25,6 +25,8 @@ import {
 } from "@mui/material";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import { scoreBandRole } from "../../theme/scoreBands";
+import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
@@ -37,11 +39,13 @@ function prettyCategory(c) {
   return String(c || "uncategorized").replace(/_/g, " ");
 }
 
-function rateColor(rate) {
-  if (rate == null) return BRAND.gray;
-  if (rate >= 90) return ROLE.positive;
-  if (rate >= 70) return ROLE.caution;
-  return ROLE.critical;
+// Sprint 2 item 1 — pass rates use the SAME tenant-configured bands as
+// scores (both are "percent of checks passing"). This was one of the
+// two 90/70 hardcodes that diverged from the 85/60 scale everywhere
+// else on the page.
+function rateColor(rate, bands) {
+  const role = scoreBandRole(rate, bands);
+  return role ?? BRAND.gray;
 }
 
 function sevChip(s) {
@@ -50,7 +54,8 @@ function sevChip(s) {
 }
 
 function PassRateBar({ rate }) {
-  const color = rateColor(rate);
+  const bands = useComplianceBands();
+  const color = rateColor(rate, bands);
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 160 }}>
       <Box sx={{ position: "relative", flex: 1, height: 8, borderRadius: 4, bgcolor: BRAND.surfaceMuted, overflow: "hidden" }}>

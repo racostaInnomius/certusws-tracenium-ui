@@ -66,7 +66,9 @@ function fmtDays(d) {
   return `${Math.round(d)}d`;
 }
 
-export default function MttrCard() {
+// `reloadKey` — see ComplianceTrendChart; lets the page-level refresh
+// reach this widget (Sprint 2 item 4).
+export default function MttrCard({ reloadKey } = {}) {
   const [windowDays, setWindowDays] = useState(90);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -101,7 +103,7 @@ export default function MttrCard() {
     return () => {
       cancelled = true;
     };
-  }, [windowDays]);
+  }, [windowDays, reloadKey]);
 
   // The endpoint returns one row per severity that has closures.
   // We render a FIXED set of buckets (critical/high/medium/low) and
@@ -170,6 +172,7 @@ export default function MttrCard() {
           value={windowDays}
           onChange={(e) => setWindowDays(Number(e.target.value))}
           sx={{ minWidth: 150 }}
+          inputProps={{ "aria-label": "Time-to-close window" }}
         >
           {WINDOW_OPTIONS.map((o) => (
             <MenuItem key={o.value} value={o.value}>

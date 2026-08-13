@@ -16,6 +16,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
+import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
 
 // Rule-outcome status presentation. Exported because non-chip parts of the
 // compliance page key off it too (this was shared module-level state in the
@@ -159,7 +160,7 @@ export function FrameworkChip({ framework, controlId, controlLevel, controlTitle
   );
 }
 
-export function ScoreBar({ value, labelSuffix = "%" }) {
+export function ScoreBar({ value, labelSuffix = "%", bands = DEFAULT_BANDS }) {
   // Three distinct visual states: null/undefined → "no data" (neutral, no
   // bar), an explicit 0 → "0%", and 1..100 → a role-colored bar. We treat 0
   // separately from null because `Number(0) || 0` would mask a real 0 score.
@@ -177,7 +178,10 @@ export function ScoreBar({ value, labelSuffix = "%" }) {
     );
   }
   const pct = Math.max(0, Math.min(100, Number(value)));
-  const color = pct >= 85 ? ROLE.positive : pct >= 60 ? ROLE.caution : ROLE.critical;
+  // Band colors come from the tenant's configured thresholds (Sprint 2
+  // item 1) — callers pass `bands` from useComplianceBands(); the
+  // default is the same 85/60 scale this used to hardcode.
+  const color = scoreBandRole(pct, bands) ?? ROLE.critical;
   return (
     <Box sx={{ minWidth: 110 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5 }}>
@@ -203,7 +207,7 @@ export function ScoreBar({ value, labelSuffix = "%" }) {
   );
 }
 
-export function Sparkline({ points = [] }) {
+export function Sparkline({ points = [], bands = DEFAULT_BANDS }) {
   if (!points.length) return null;
   const width = 300;
   const height = 40;
@@ -218,7 +222,7 @@ export function Sparkline({ points = [] }) {
     .join(" ");
 
   const last = points[points.length - 1] ?? 0;
-  const strokeColor = last >= 85 ? ROLE.positive : last >= 60 ? ROLE.caution : ROLE.critical;
+  const strokeColor = scoreBandRole(last, bands) ?? ROLE.critical;
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">

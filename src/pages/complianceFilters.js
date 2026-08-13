@@ -11,6 +11,9 @@ export const ALLOWED_SEVERITIES = new Set(["critical", "high", "medium", "low", 
 export const ALLOWED_STATUSES = new Set(["fail", "pass"]);
 export const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux"]);
 export const ALLOWED_VERSION_BUCKETS = new Set(["current", "one_behind", "older", "unknown"]);
+// Overview's HealthDistributionCard deep-links with ?score-band= — its
+// buckets, not severities. "unscored" = null score (insufficient data).
+export const ALLOWED_SCORE_BANDS = new Set(["good", "warning", "critical", "unscored"]);
 
 // Semver-ish comparison. Returns > 0 if b > a, matching the shape JS sort
 // expects for descending order (a.sort(cmp) → highest first). Non-numeric
@@ -56,6 +59,10 @@ export function parseUrlFilters(search) {
   const legacySeverity = (params.get("severity") || "").toLowerCase();
   const platform = (params.get("platform") || "").toLowerCase();
   const versionBucket = (params.get("versionBucket") || "").toLowerCase();
+  // Sprint 2 item 8 — ?score-band= from the Overview health card. The
+  // card's header comment promised the SCP page accepted this param
+  // since the day it shipped; this is the first time it's been true.
+  const scoreBand = (params.get("score-band") || "").toLowerCase();
   return {
     status: ALLOWED_STATUSES.has(status)
       ? status
@@ -64,6 +71,7 @@ export function parseUrlFilters(search) {
       : "",
     platform: ALLOWED_PLATFORMS.has(platform) ? platform : "",
     versionBucket: ALLOWED_VERSION_BUCKETS.has(versionBucket) ? versionBucket : "",
+    scoreBand: ALLOWED_SCORE_BANDS.has(scoreBand) ? scoreBand : "",
   };
 }
 
@@ -80,9 +88,32 @@ export function deviceMatchesStatus(device, statusFilter) {
 // Apply the active filters to the device list. Version bucketing needs the
 // fleet's "canonical latest" (highest reported agentVersion), computed once here
 // — matching the previous in-page memo behavior.
-export function filterDevices(devices, filters = {}) {
+// Band membership for the score-band filter. `bands` are the tenant's
+// configured thresholds (theme/scoreBands DEFAULT_BANDS when absent) —
+// the SAME scale the Health Distribution card bucketed with, so the
+// click-through count matches what the card showed.
+export function deviceMatchesScoreBand(device, bandFilter, bands) {
+  if (!bandFilter) return true;
+  const score = device?.overallScore;
+  const goodMin = bands?.goodMin ?? 85;
+  const warningMin = bands?.warningMin ?? 60;
+  if (score === null || score === undefined || !Number.isFinite(Number(score))) {
+    return bandFilter === "unscored";
+  }
+  const s = Number(score);
+  // A scored device can never match "unscored" — without this early
+  // return it fell through to the permissive default and the filter
+  // matched everything.
+  if (bandFilter === "unscored") return false;
+  if (bandFilter === "good") return s >= goodMin;
+  if (bandFilter === "warning") return s >= warningMin && s < goodMin;
+  if (bandFilter === "critical") return s < warningMin;
+  return true;
+}
+
+export function filterDevices(devices, filters = {}, bands = null) {
   if (!Array.isArray(devices)) return [];
-  const { status = "", platform = "", versionBucket = "" } = filters;
+  const { status = "", platform = "", versionBucket = "", scoreBand = "" } = filters;
 
   let canonicalLatest = null;
   if (versionBucket) {
@@ -96,6 +127,7 @@ export function filterDevices(devices, filters = {}) {
     if (versionBucket && bucketOfVersion(d.agentVersion, canonicalLatest) !== versionBucket) {
       return false;
     }
+    if (scoreBand && !deviceMatchesScoreBand(d, scoreBand, bands)) return false;
     return true;
   });
 }

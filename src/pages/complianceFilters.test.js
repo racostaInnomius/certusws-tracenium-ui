@@ -34,6 +34,7 @@ describe("parseUrlFilters", () => {
       status: "fail",
       platform: "linux",
       versionBucket: "older",
+      scoreBand: "",
     });
   });
 
@@ -42,6 +43,7 @@ describe("parseUrlFilters", () => {
       status: "",
       platform: "",
       versionBucket: "",
+      scoreBand: "",
     });
   });
 
@@ -55,7 +57,7 @@ describe("parseUrlFilters", () => {
   });
 
   it("returns empty filters for an empty search", () => {
-    expect(parseUrlFilters("")).toEqual({ status: "", platform: "", versionBucket: "" });
+    expect(parseUrlFilters("")).toEqual({ status: "", platform: "", versionBucket: "", scoreBand: "" });
   });
 });
 
@@ -106,5 +108,47 @@ describe("filterDevices", () => {
 
   it("is safe on non-array input", () => {
     expect(filterDevices(null, { status: "fail" })).toEqual([]);
+  });
+});
+
+describe("score-band filter (Sprint 2 item 8)", () => {
+  const devices = [
+    { agentId: "a", overallScore: 95 },
+    { agentId: "b", overallScore: 70 },
+    { agentId: "c", overallScore: 20 },
+    { agentId: "d", overallScore: null },
+  ];
+
+  it("parses ?score-band= with the health card's bucket vocabulary", () => {
+    expect(parseUrlFilters("?score-band=good").scoreBand).toBe("good");
+    expect(parseUrlFilters("?score-band=unscored").scoreBand).toBe("unscored");
+    expect(parseUrlFilters("?score-band=purple").scoreBand).toBe("");
+    expect(parseUrlFilters("").scoreBand).toBe("");
+  });
+
+  it("filters by band with the default 85/60 scale", () => {
+    const ids = (band) =>
+      filterDevices(devices, { scoreBand: band }).map((d) => d.agentId);
+    expect(ids("good")).toEqual(["a"]);
+    expect(ids("warning")).toEqual(["b"]);
+    expect(ids("critical")).toEqual(["c"]);
+    expect(ids("unscored")).toEqual(["d"]);
+    expect(ids("")).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("honors tenant-configured bands so the click-through matches the card", () => {
+    const bands = { goodMin: 96, warningMin: 60 };
+    const ids = filterDevices(devices, { scoreBand: "warning" }, bands).map((d) => d.agentId);
+    // 95 is 'warning' under goodMin=96 — same bucketing the card used.
+    expect(ids).toEqual(["a", "b"]);
+  });
+
+  it("composes with the other filters", () => {
+    const mixed = [
+      { agentId: "w", overallScore: 95, platform: "windows", overallStatus: "pass" },
+      { agentId: "l", overallScore: 95, platform: "linux", overallStatus: "pass" },
+    ];
+    const ids = filterDevices(mixed, { scoreBand: "good", platform: "linux" }).map((d) => d.agentId);
+    expect(ids).toEqual(["l"]);
   });
 });

@@ -71,7 +71,10 @@ function scoreDelta(buckets) {
   };
 }
 
-export default function ComplianceTrendChart({ notify }) {
+// `reloadKey` — bump from the host page's RefreshControl so one click
+// refreshes this widget too (Sprint 2 item 4); the chart previously
+// only refetched on window/view changes.
+export default function ComplianceTrendChart({ notify, reloadKey }) {
   const [windowDays, setWindowDays] = React.useState(30);
   const [view, setView] = React.useState("score"); // 'score' | 'devices' | 'framework'
   const [fleet, setFleet] = React.useState([]);
@@ -129,7 +132,7 @@ export default function ComplianceTrendChart({ notify }) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, isFramework, notify]);
+  }, [windowDays, isFramework, notify, reloadKey]);
 
   const delta = view === "score" ? scoreDelta(fleet) : null;
   const enoughData = isFramework
@@ -152,12 +155,12 @@ export default function ComplianceTrendChart({ notify }) {
           />
         ) : null}
         <Box sx={{ flex: 1 }} />
-        <ToggleButtonGroup exclusive size="small" value={view} onChange={(_e, v) => v && setView(v)} sx={toggleSx}>
+        <ToggleButtonGroup exclusive size="small" aria-label="Trend view" value={view} onChange={(_e, v) => v && setView(v)} sx={toggleSx}>
           <ToggleButton value="score">Avg score</ToggleButton>
           <ToggleButton value="devices">Devices</ToggleButton>
           <ToggleButton value="framework">By framework</ToggleButton>
         </ToggleButtonGroup>
-        <ToggleButtonGroup exclusive size="small" value={windowDays} onChange={(_e, v) => v && setWindowDays(v)} sx={toggleSx}>
+        <ToggleButtonGroup exclusive size="small" aria-label="Trend window" value={windowDays} onChange={(_e, v) => v && setWindowDays(v)} sx={toggleSx}>
           {WINDOWS.map((w) => (
             <ToggleButton key={w} value={w}>{w}d</ToggleButton>
           ))}

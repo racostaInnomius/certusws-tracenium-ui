@@ -454,6 +454,22 @@ export default function DeviceDrawerContent({
                       data devices instead of showing a fake 0%. */}
                   <ScoreBar value={device.overallScore} />
                 </Box>
+                {/* Sprint 1/2 — exception-adjusted score, shown only
+                    when it diverges from raw: the delta is what the
+                    device's accepted exceptions are worth. */}
+                {device.overallScoreAdjusted != null &&
+                device.overallScore != null &&
+                device.overallScoreAdjusted !== device.overallScore ? (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: BRAND.gray, display: "block", mt: 0.25 }}
+                  >
+                    adjusted for exceptions:{" "}
+                    <Box component="span" sx={{ fontWeight: 700, color: BRAND.dark }}>
+                      {device.overallScoreAdjusted}%
+                    </Box>
+                  </Typography>
+                ) : null}
                 {/* Sprint 7 item 3.6 — fleet ranking. Sits under the
                     score so an operator immediately sees "this is
                     72 — top 27% of fleet" without scrolling. The

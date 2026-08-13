@@ -10,6 +10,7 @@
 // (tenant never swept) renders as "—" rather than a misleading 0.
 
 import * as React from "react";
+import { scoreBandKey } from "../theme/scoreBands";
 import { Box, Chip, Grid, Stack, Typography } from "@mui/material";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -41,11 +42,15 @@ function MetricChip({ label, value, tone = "neutral" }) {
   );
 }
 
-// Compliance tone: green ≥90, amber ≥70, red below.
+// Compliance tone via the shared score-band scale (theme/scoreBands).
+// MSP is cross-tenant, so it uses the DEFAULT bands rather than any one
+// tenant's override — but at least it's the same default scale the rest
+// of the product uses (this was one of the two 90/70 divergences).
 function complianceTone(pct) {
-  if (pct == null) return "neutral";
-  if (pct >= 90) return "good";
-  if (pct >= 70) return "warn";
+  const key = scoreBandKey(pct);
+  if (key === null) return "neutral";
+  if (key === "good") return "good";
+  if (key === "warning") return "warn";
   return "bad";
 }
 // Alerts tone: green 0, amber 1-4, red 5+.

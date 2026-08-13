@@ -79,21 +79,12 @@ export async function getPluginCoverageDevices(plugin) {
 
 // ---- new endpoints for the Overview ----------------------------------
 
-export async function getComplianceSummary() {
-  return httpGetJson("/api/v1/security/compliance/summary");
-}
-
-/**
- * Fleet-wide compliance score trend: one point per day = avg score
- * of each device's latest scored snapshot that day. Backend filters
- * out unscored hosts (score=0) so a fleet of just-enrolled agents
- * doesn't drag the average to zero.
- *
- * Shape: { ok, windowDays, buckets: [{ bucket, avgScore, devicesScored, compliant, nonCompliant }] }
- */
-export async function getFleetComplianceTimeseries(windowDays = 30) {
-  return httpGetJson(`/api/v1/security/compliance/fleet-timeseries?windowDays=${windowDays}`);
-}
+// Sprint 2 item 7 — these two used to be byte-identical copies of the
+// helpers in api/compliance.js (same URLs, drifting doc comments).
+// Imported AND re-exported: fetchOverviewBundle below uses them
+// locally, and Overview components import them from this module.
+import { getComplianceSummary, getFleetComplianceTimeseries } from "./compliance";
+export { getComplianceSummary, getFleetComplianceTimeseries };
 
 export async function getAuditTimeseries(windowDays = 7) {
   return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d`);

@@ -26,24 +26,26 @@ import { useMemo } from "react";
 import { Paper, Box, Typography, Skeleton, Stack } from "@mui/material";
 import HealthAndSafetyOutlinedIcon from "@mui/icons-material/HealthAndSafetyOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
+import { scoreBandKey } from "../../theme/scoreBands";
+import { useComplianceBands } from "../../hooks/useComplianceBands";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
   return result.value ?? null;
 }
 
-function bandOf(score) {
-  if (score == null) return "unscored";
-  if (score >= 85) return "good";
-  if (score >= 60) return "warning";
-  return "critical";
+// Sprint 2 item 1 — thresholds come from the tenant's configured bands
+// (the panel's help text always promised this card obeyed them; now it
+// does). bandOf keeps the "unscored" bucket that scoreBandKey models as
+// null.
+function bandOf(score, bands) {
+  return scoreBandKey(score, bands) ?? "unscored";
 }
 
 const BANDS = [
   {
     key: "good",
     label: "Good",
-    range: "≥85",
     color: ROLE.positive,
     soft: ROLE.positiveSoft,
     filter: "good",
@@ -51,7 +53,6 @@ const BANDS = [
   {
     key: "warning",
     label: "Warning",
-    range: "60–84",
     color: ROLE.caution,
     soft: ROLE.cautionSoft,
     filter: "warning",
@@ -59,7 +60,6 @@ const BANDS = [
   {
     key: "critical",
     label: "Critical",
-    range: "<60",
     color: ROLE.critical,
     soft: ROLE.criticalSoft,
     filter: "critical",
@@ -67,7 +67,6 @@ const BANDS = [
   {
     key: "unscored",
     label: "Unscored",
-    range: "no data",
     color: BRAND.gray,
     soft: BRAND.darkSoft,
     filter: "unscored",
@@ -81,14 +80,23 @@ export default function HealthDistributionCard({
 }) {
   const posture = getValue(result);
   const items = Array.isArray(posture?.items) ? posture.items : [];
+  const bands = useComplianceBands();
 
   const counts = useMemo(() => {
     const c = { good: 0, warning: 0, critical: 0, unscored: 0 };
     for (const row of items) {
-      c[bandOf(row?.overallScore)] += 1;
+      c[bandOf(row?.overallScore, bands)] += 1;
     }
     return c;
-  }, [items]);
+  }, [items, bands]);
+
+  // Range captions follow the configured thresholds.
+  const rangeFor = {
+    good: `\u2265${bands.goodMin}`,
+    warning: `${bands.warningMin}\u2013${bands.goodMin - 1}`,
+    critical: `<${bands.warningMin}`,
+    unscored: "no data",
+  };
 
   const total = items.length;
   const interactive = typeof onNavigate === "function";
@@ -213,7 +221,7 @@ export default function HealthDistributionCard({
                         fontWeight: 500,
                       }}
                     >
-                      ({band.range})
+                      ({rangeFor[band.key]})
                     </Typography>
                   </Typography>
                   <Typography

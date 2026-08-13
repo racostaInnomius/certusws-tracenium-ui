@@ -106,6 +106,8 @@ import { CatalogBrowser } from "../components/Compliance/ComplianceCatalogDialog
 import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { useComplianceBands } from "../hooks/useComplianceBands";
+import { scoreBandRole, scoreBandSoftRole } from "../theme/scoreBands";
 
 // ---------- constants --------------------------------------------------------
 
@@ -152,6 +154,18 @@ function navigateTo(page, extraQuery = {}) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+// Sprint 2 item 2 — clickable table rows must be keyboard-reachable.
+// Enter and Space both activate (Space is what native buttons do);
+// preventDefault stops Space from scrolling the page.
+function rowKeyHandler(activate) {
+  return (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      activate();
+    }
+  };
+}
+
 function readUrlFilters() {
   if (typeof window === "undefined") return {};
   return parseUrlFilters(window.location.search);
@@ -177,6 +191,10 @@ export default function SecurityCompliance({ initialTab }) {
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // Sprint 2 item 1 — tenant-configured score bands (85/60 defaults).
+  // Single cached fetch shared by every band-colored surface below.
+  const bands = useComplianceBands();
 
   // Fase B — tab state. URL param wins over the prop so a reload after
   // switching tabs stays where the operator left it (the prop is only
@@ -238,6 +256,11 @@ export default function SecurityCompliance({ initialTab }) {
   const [versionBucketFilter, setVersionBucketFilter] = React.useState(
     initialFilters.versionBucket || ""
   );
+  // Sprint 2 item 8 — ?score-band= from the Overview health card,
+  // parsed at last (the card promised it since it shipped).
+  const [scoreBandFilter, setScoreBandFilter] = React.useState(
+    initialFilters.scoreBand || ""
+  );
 
   // Keep the URL in sync with the on-page filters so they persist across
   // refresh and are shareable (replaceState — no navigation). Empty values are
@@ -248,9 +271,10 @@ export default function SecurityCompliance({ initialTab }) {
       status: statusFilter,
       platform: platformFilter,
       versionBucket: versionBucketFilter,
+      "score-band": scoreBandFilter,
       severity: "",
     });
-  }, [statusFilter, platformFilter, versionBucketFilter]);
+  }, [statusFilter, platformFilter, versionBucketFilter, scoreBandFilter]);
 
   const [drawerAgentId, setDrawerAgentId] = React.useState(null);
   const [drawerData, setDrawerData] = React.useState(null);
@@ -262,22 +286,55 @@ export default function SecurityCompliance({ initialTab }) {
   // framework rehydrates instantly. Empty framework = "All frameworks
   // (weighted)".
   const loader = React.useCallback(async () => {
-    const [sum, fw, fws, devs] = await Promise.all([
-      getComplianceSummary().catch(() => null),
-      getFrameworks().catch(() => null),
-      getFrameworkSummary().catch(() => null),
-      getDevicePosture(selectedFramework ? { framework: selectedFramework } : {}).catch(() => null),
-    ]);
+    // Sprint 2 item 3 — partial failures used to vanish: four blanket
+    // `.catch(() => null)` meant a dead framework-summary endpoint
+    // rendered as an innocently empty section. allSettled keeps the
+    // page resilient (one failure never blanks the others) but the
+    // failed section NAMES now travel with the data so the page can
+    // say "hero KPIs failed to load" instead of lying with zeros.
+    const requests = [
+      { key: "summary", label: "hero KPIs", run: () => getComplianceSummary() },
+      { key: "frameworks", label: "framework list", run: () => getFrameworks() },
+      { key: "frameworkSummary", label: "framework summary", run: () => getFrameworkSummary() },
+      {
+        key: "devices",
+        label: "device posture",
+        run: () => getDevicePosture(selectedFramework ? { framework: selectedFramework } : {}),
+      },
+    ];
+    const settled = await Promise.allSettled(requests.map((r) => r.run()));
+    const byKey = {};
+    const failedSections = [];
+    settled.forEach((res, i) => {
+      if (res.status === "fulfilled") {
+        byKey[requests[i].key] = res.value;
+      } else {
+        byKey[requests[i].key] = null;
+        failedSections.push(requests[i].label);
+      }
+    });
     return {
-      summary: sum?.summary ?? null,
-      frameworks: Array.isArray(fw?.frameworks) ? fw.frameworks : [],
-      frameworkSummary: Array.isArray(fws?.items) ? fws.items : [],
-      devices: Array.isArray(devs?.items) ? devs.items : [],
+      summary: byKey.summary?.summary ?? null,
+      frameworks: Array.isArray(byKey.frameworks?.frameworks) ? byKey.frameworks.frameworks : [],
+      frameworkSummary: Array.isArray(byKey.frameworkSummary?.items) ? byKey.frameworkSummary.items : [],
+      devices: Array.isArray(byKey.devices?.items) ? byKey.devices.items : [],
+      failedSections,
     };
   }, [selectedFramework]);
 
   const cacheKey = `securityCompliance:${selectedFramework || "all"}`;
   const { data, loading, refreshing, error, refetch } = useCachedFetch(cacheKey, loader);
+
+  // Sprint 2 item 4 — one refresh to rule them all. The header's
+  // RefreshControl used to refetch only the four page-level calls; the
+  // trend chart, MTTR card and category breakdown each own independent
+  // fetch lifecycles it never reached. Bumping this token (threaded as
+  // their reloadKey) makes a single click actually refresh the page.
+  const [refreshToken, setRefreshToken] = React.useState(0);
+  const refreshAll = React.useCallback(() => {
+    setRefreshToken((n) => n + 1);
+    return refetch();
+  }, [refetch]);
   const summary = data?.summary ?? null;
   // Stable fallback identities — see AssetsDashboard for the same
   // pattern. Without these, downstream useMemo deps see a fresh `[]`
@@ -287,7 +344,7 @@ export default function SecurityCompliance({ initialTab }) {
   const devices = React.useMemo(() => data?.devices ?? [], [data]);
   const errorMsg = error ? error?.message || "Failed to load compliance data" : null;
 
-  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "scAutoRefresh");
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "scAutoRefresh");
 
   const openDrawer = React.useCallback(async (agentId) => {
     setDrawerAgentId(agentId);
@@ -455,11 +512,12 @@ export default function SecurityCompliance({ initialTab }) {
   const filteredDevices = React.useMemo(
     () =>
       filterDevices(devices, {
+        scoreBand: scoreBandFilter,
         status: statusFilter,
         platform: platformFilter,
         versionBucket: versionBucketFilter,
-      }),
-    [devices, platformFilter, statusFilter, versionBucketFilter]
+      }, bands),
+    [devices, platformFilter, statusFilter, versionBucketFilter, scoreBandFilter, bands]
   );
 
   return (
@@ -569,7 +627,7 @@ export default function SecurityCompliance({ initialTab }) {
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
-              onRefresh={refetch}
+              onRefresh={refreshAll}
               loading={loading || refreshing}
             />
           </Stack>
@@ -651,6 +709,16 @@ export default function SecurityCompliance({ initialTab }) {
         </Alert>
       ) : null}
 
+      {/* Sprint 2 item 3 — partial-failure banner. The sections below
+          still render (empty) so the page stays navigable; this stops
+          the emptiness from masquerading as "all clear". */}
+      {Array.isArray(data?.failedSections) && data.failedSections.length > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Some sections failed to load: {data.failedSections.join(", ")}. Showing
+          the rest — retry with the refresh control above.
+        </Alert>
+      ) : null}
+
       {/* Hero KPIs — homologated with Overview's Hero. The "Compliance"
           and "Critical findings" cards mirror Overview/HeroKpis exactly
           (same labels, icons, score/severity color buckets) so a user
@@ -660,22 +728,12 @@ export default function SecurityCompliance({ initialTab }) {
           sense as drill-down context here. */}
       {(() => {
         const avgScore = summary?.avgScore;
-        const complianceAccent =
-          avgScore == null
-            ? BRAND.teal
-            : avgScore >= 85
-            ? ROLE.positive
-            : avgScore >= 60
-            ? ROLE.caution
-            : ROLE.critical;
-        const complianceTint =
-          avgScore == null
-            ? BRAND.tealSoft
-            : avgScore >= 85
-            ? ROLE.positiveSoft
-            : avgScore >= 60
-            ? ROLE.cautionSoft
-            : ROLE.criticalSoft;
+        // Sprint 1/2 — the exception-adjusted fleet average. Shown as a
+        // tooltip on the Compliance card whenever it diverges from the
+        // raw score: the delta IS the weight of the vetted exceptions.
+        const avgAdjusted = summary?.avgScoreAdjusted;
+        const complianceAccent = scoreBandRole(avgScore, bands) ?? BRAND.teal;
+        const complianceTint = scoreBandSoftRole(avgScore, bands) ?? BRAND.tealSoft;
         const criticalHigh =
           (summary?.openFindings?.critical ?? 0) +
           (summary?.openFindings?.high ?? 0);
@@ -697,6 +755,11 @@ export default function SecurityCompliance({ initialTab }) {
                 icon={<ShieldOutlinedIcon fontSize="small" />}
                 accent={complianceAccent}
                 tint={complianceTint}
+                titleHint={
+                  avgAdjusted != null && avgScore != null && Math.round(avgAdjusted) !== Math.round(avgScore)
+                    ? `Adjusted for accepted exceptions: ${Math.round(avgAdjusted)}%. The gap vs the raw score is the weight of acknowledged / risk-accepted findings.`
+                    : "Raw evaluator score. When exceptions (acks, risk-accepted) exist, the adjusted average appears here."
+                }
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -723,7 +786,7 @@ export default function SecurityCompliance({ initialTab }) {
 
       {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
           view. Backed by the fleet-timeseries endpoint. */}
-      <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} />
+      <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} reloadKey={refreshToken} />
 
       {/* Framework switcher + per-framework summary ------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
@@ -785,6 +848,10 @@ export default function SecurityCompliance({ initialTab }) {
                     sx={{ cursor: "pointer" }}
                     onClick={() => setSelectedFramework(f.framework)}
                     selected={f.framework === selectedFramework}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Filter by ${frameworkLabels.get(f.framework) || f.framework}`}
+                    onKeyDown={rowKeyHandler(() => setSelectedFramework(f.framework))}
                   >
                     <TableCell>
                       <Stack>
@@ -805,7 +872,7 @@ export default function SecurityCompliance({ initialTab }) {
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: "inline-block" }}>
-                        <ScoreBar value={f.avgScore} />
+                        <ScoreBar value={f.avgScore} bands={bands} />
                       </Box>
                     </TableCell>
                     <TableCell align="right" sx={{ color: BRAND.dark }}>
@@ -823,14 +890,14 @@ export default function SecurityCompliance({ initialTab }) {
           the fleet analogue of the drawer's per-device category grouping.
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
-      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} />
+      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} reloadKey={refreshToken} />
 
       {/* Sprint 5 — fleet time-to-close by severity. Mounted between
           the framework table (top-down "how does the fleet compare to
           benchmarks") and the device table (drill-down) so an
           operator's eye lands on it BEFORE they scroll into per-
           device triage. */}
-      <MttrCard />
+      <MttrCard reloadKey={refreshToken} />
 
       {/* Device table ------------------------------------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2 }}>
@@ -885,17 +952,29 @@ export default function SecurityCompliance({ initialTab }) {
             <MenuItem value="older">Older</MenuItem>
             <MenuItem value="unknown">Unknown</MenuItem>
           </TextField>
+          <TextField
+            select size="small" label="Score band" value={scoreBandFilter}
+            onChange={(e) => setScoreBandFilter(e.target.value)}
+            sx={{ minWidth: 140 }}
+          >
+            <MenuItem value="">All bands</MenuItem>
+            <MenuItem value="good">Good (&ge;{bands.goodMin})</MenuItem>
+            <MenuItem value="warning">Warning ({bands.warningMin}&ndash;{bands.goodMin - 1})</MenuItem>
+            <MenuItem value="critical">Critical (&lt;{bands.warningMin})</MenuItem>
+            <MenuItem value="unscored">Unscored</MenuItem>
+          </TextField>
           <Box sx={{ flex: 1 }} />
           <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 600 }}>
             {filteredDevices.length} of {devices.length} devices
           </Typography>
-          {statusFilter || platformFilter || versionBucketFilter ? (
+          {statusFilter || platformFilter || versionBucketFilter || scoreBandFilter ? (
             <Button
               size="small"
               onClick={() => {
                 setStatusFilter("");
                 setPlatformFilter("");
                 setVersionBucketFilter("");
+                setScoreBandFilter("");
               }}
               sx={{ textTransform: "none", color: BRAND.gray }}
             >
@@ -952,6 +1031,10 @@ export default function SecurityCompliance({ initialTab }) {
                       hover
                       sx={{ cursor: "pointer" }}
                       onClick={() => openDrawer(d.agentId)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open details for ${d.hostname || d.agentId}`}
+                      onKeyDown={rowKeyHandler(() => openDrawer(d.agentId))}
                     >
                       <TableCell>
                         <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
@@ -1021,7 +1104,7 @@ export default function SecurityCompliance({ initialTab }) {
                             and painted a full red bar for devices that
                             had simply not reported a scorable posture,
                             making them look catastrophically broken. */}
-                        <ScoreBar value={score} />
+                        <ScoreBar value={score} bands={bands} />
                       </TableCell>
                       {selectedFramework ? (
                         <TableCell align="right">
