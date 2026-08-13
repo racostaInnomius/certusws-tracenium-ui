@@ -527,7 +527,7 @@ function navigateToPolicies() {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export default function PatchManagement() {
+export default function PatchManagement({ onNavigate }) {
   const [tab, setTab] = React.useState(CATEGORIES[0].key);
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
@@ -1525,6 +1525,7 @@ export default function PatchManagement() {
         jobs={activeJobs}
         onAllDone={handleAllJobsDone}
         onDismiss={dismissTracker}
+        onNavigate={onNavigate}
       />
     </Box>
   );
