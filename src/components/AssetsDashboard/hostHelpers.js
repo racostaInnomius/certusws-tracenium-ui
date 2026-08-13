@@ -476,7 +476,11 @@ const LOCATION_STATUS_TEXT = {
   denied: "The endpoint refused: location services are off, or the user declined the prompt.",
   consent_required:
     "Waiting for the person using this Mac to allow location in the prompt. If no prompt appeared, grant it in System Settings › Privacy & Security › Location Services.",
-  unavailable: "Location is enabled, but the device has not produced a fix yet.",
+  unavailable: "Location is enabled and granted, but the device has not produced a fix yet — usually indoors or just woken up.",
+  no_user_session:
+    "Nobody is signed in on this Mac, so nothing can read its position. Not a fault — it resolves when someone logs in.",
+  agent_not_publishing:
+    "Someone is signed in but the Tracenium menubar app is not reporting. Check that it is running on the endpoint.",
 };
 
 export function getLocationHint(profile) {

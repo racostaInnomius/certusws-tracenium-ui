@@ -364,6 +364,10 @@ describe("getLocationHint", () => {
     expect(getLocationHint({ locationStatus: "unsupported" })).toMatch(/no system location service/i);
     expect(getLocationHint({ locationStatus: "denied" })).toMatch(/refused|declined/i);
     expect(getLocationHint({ locationStatus: "unavailable" })).toMatch(/not produced a fix/i);
+    // Las tres formas de "sin posición" en macOS tienen que leerse distinto:
+    // una no es un fallo, la otra sí, y la tercera es esperar.
+    expect(getLocationHint({ locationStatus: "no_user_session" })).toMatch(/nobody is signed in/i);
+    expect(getLocationHint({ locationStatus: "agent_not_publishing" })).toMatch(/not reporting/i);
     // consent_required must NOT read like "wait a bit longer": nobody has
     // answered the OS prompt, so waiting resolves nothing.
     expect(getLocationHint({ locationStatus: "consent_required" })).toMatch(/System Settings/i);
