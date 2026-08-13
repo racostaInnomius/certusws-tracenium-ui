@@ -50,10 +50,17 @@ import {
   DistributionPanel,
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
+import {
+  PqcHorizonPanel,
+  PqcFamilyPanel,
+  TrustAnchorsPanel,
+  AgilityBlockersPanel,
+} from "../components/CryptoDiscovery/PqcReadinessPanels";
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import {
   getCdpSummary,
   getCdpDashboard,
+  getCdpPqcReadiness,
   listCdpCertificates,
   listCdpDevices,
   listCdpDeviceCertificates,
@@ -260,6 +267,53 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
           <TopDevicesPanel devices={d.topDevices} onSelect={() => onOpenDevices?.()} />
         </Grid>
       </Grid>
+    </Stack>
+  );
+}
+
+// ── PQC readiness tab ────────────────────────────────────────────────
+
+function CdpPqcTab({ refreshNonce }) {
+  const [pqc, setPqc] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    getCdpPqcReadiness()
+      .then((resp) => {
+        if (alive) {
+          setPqc(resp?.pqc ?? null);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (alive) setError(err?.message || String(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshNonce]);
+
+  if (error) {
+    return (
+      <Typography color="error" sx={{ py: 2 }}>
+        Failed to load post-quantum readiness: {error}
+      </Typography>
+    );
+  }
+
+  return (
+    <Stack spacing={2}>
+      <PqcHorizonPanel pqc={pqc} />
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <PqcFamilyPanel pqc={pqc} />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <TrustAnchorsPanel pqc={pqc} />
+        </Grid>
+      </Grid>
+      <AgilityBlockersPanel pqc={pqc} />
     </Stack>
   );
 }
@@ -704,7 +758,8 @@ export default function CryptoDiscovery() {
 
   const drillDown = React.useCallback((filter) => {
     setCertFilter({ ...filter });
-    setTab(1);
+    // Certificates moved to index 2 when the Post-quantum tab landed.
+    setTab(2);
   }, []);
 
   return (
@@ -724,6 +779,7 @@ export default function CryptoDiscovery() {
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Dashboard" />
+        <Tab label="Post-quantum" />
         <Tab label="Certificates" />
         <Tab label="Devices" />
       </Tabs>
@@ -732,13 +788,16 @@ export default function CryptoDiscovery() {
         <CdpDashboard
           refreshNonce={refreshNonce}
           onDrillDown={drillDown}
-          onOpenDevices={() => setTab(2)}
+          onOpenDevices={() => setTab(3)}
         />
       </TabPanel>
       <TabPanel value={tab} index={1}>
-        <CdpCertificatesTab refreshNonce={refreshNonce} externalFilter={certFilter} />
+        <CdpPqcTab refreshNonce={refreshNonce} />
       </TabPanel>
       <TabPanel value={tab} index={2}>
+        <CdpCertificatesTab refreshNonce={refreshNonce} externalFilter={certFilter} />
+      </TabPanel>
+      <TabPanel value={tab} index={3}>
         <CdpDevicesTab refreshNonce={refreshNonce} />
       </TabPanel>
     </Box>

@@ -20,6 +20,12 @@ export async function getCdpDashboard() {
   return httpGetJson(`${BASE}/dashboard`);
 }
 
+// Post-quantum readiness: the "valid beyond 2030/2035" metric plus the
+// crypto-agility blockers (ADR-0004 e-F1/e-F2).
+export async function getCdpPqcReadiness() {
+  return httpGetJson(`${BASE}/pqc`);
+}
+
 export async function listCdpCertificates(params = {}) {
   return httpGetJson(`${BASE}/certificates${buildQuery(params)}`);
 }
