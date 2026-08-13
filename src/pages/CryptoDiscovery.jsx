@@ -50,6 +50,7 @@ import {
   DistributionPanel,
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
+import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import {
   PqcHorizonPanel,
   PqcFamilyPanel,
@@ -333,6 +334,10 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
   // are surfaced as removable chips rather than yet more dropdowns.
   const [flag, setFlag] = React.useState("");
   const [issuer, setIssuer] = React.useState("");
+  // The fleet list answers "which certificates"; the drawer answers
+  // "and what do I do about this one" — attribution, chain and
+  // revocation all live there.
+  const [drawerCert, setDrawerCert] = React.useState(null);
 
   // Apply a drill-down coming from the Dashboard tab. Keyed on the
   // filter object identity — the page mints a new one per click, so
@@ -511,8 +516,30 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
         pageSizeOptions={[10, 25, 50]}
         disableRowSelectionOnClick
         disableColumnMenu
-        sx={DATAGRID_SX}
+        onRowClick={(params) => setDrawerCert(params.row.fingerprint256)}
+        sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
       />
+
+      <Drawer
+        anchor="right"
+        open={Boolean(drawerCert)}
+        onClose={() => setDrawerCert(null)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 480 } } }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
+          <IconButton aria-label="Close certificate details" onClick={() => setDrawerCert(null)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {drawerCert ? (
+          // keyed by fingerprint so internal state resets between certs
+          <CertificateDetailDrawer
+            key={drawerCert}
+            fingerprint={drawerCert}
+            flagLabels={FLAG_LABELS}
+          />
+        ) : null}
+      </Drawer>
     </Box>
   );
 }
