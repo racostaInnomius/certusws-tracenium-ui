@@ -255,6 +255,15 @@ const FLAG_META = {
     hint: "A CA trusted by only a small minority of comparable devices — the signature of an injected proxy CA or malware root. Needs at least 5 comparable devices to compute.",
     security: true,
   },
+  shared_private_key: {
+    label: "Shared private key",
+    hint: "The same private key is present on more than one device. A private key should exist on exactly one machine — if two report it, it was copied.",
+    security: true,
+  },
+  reused_key: {
+    label: "Reused key",
+    hint: "Two or more certificates share a key pair, usually a renewal that kept the old key. CA cross-signing and OS trust bundles are excluded, since both do this by design.",
+  },
 };
 
 export function HygienePanel({ flags, onSelect }) {

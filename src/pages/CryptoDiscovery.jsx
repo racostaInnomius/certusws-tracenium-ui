@@ -86,6 +86,9 @@ const FLAG_LABELS = {
   long_validity: "Validity > 398 days",
   nonstandard_root:
     "Nonstandard root — trusted by only a small minority of comparable devices",
+  shared_private_key:
+    "Shared private key — the same private key is present on more than one device",
+  reused_key: "Reused key — another certificate already uses this key pair",
 };
 
 function FlagChips({ flags }) {
