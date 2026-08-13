@@ -89,6 +89,9 @@ const FLAG_LABELS = {
   shared_private_key:
     "Shared private key — the same private key is present on more than one device",
   reused_key: "Reused key — another certificate already uses this key pair",
+  chain_incomplete:
+    "Incomplete chain — served without intermediates; clients without them will fail",
+  chain_untrusted: "Untrusted chain — the device's own trust store rejects it",
 };
 
 function FlagChips({ flags }) {

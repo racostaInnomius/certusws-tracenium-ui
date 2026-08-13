@@ -260,6 +260,16 @@ const FLAG_META = {
     hint: "The same private key is present on more than one device. A private key should exist on exactly one machine — if two report it, it was copied.",
     security: true,
   },
+  chain_incomplete: {
+    label: "Incomplete chain",
+    hint: "The service serves its certificate without the intermediates. It may work on this machine and fail for clients that do not already have them — one of the most common real-world TLS failures.",
+    security: true,
+  },
+  chain_untrusted: {
+    label: "Untrusted chain",
+    hint: "The device's own trust store rejects the chain the service serves.",
+    security: true,
+  },
   reused_key: {
     label: "Reused key",
     hint: "Two or more certificates share a key pair, usually a renewal that kept the old key. CA cross-signing and OS trust bundles are excluded, since both do this by design.",
