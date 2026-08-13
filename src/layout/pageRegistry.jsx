@@ -109,7 +109,7 @@ export const PAGE_REGISTRY = {
   audit: () => <Audit />,
   pki: () => <PKI />,
   ad: () => <SecurityCompliance />,
-  patch: () => <PatchManagement />,
+  patch: (ctx) => <PatchManagement onNavigate={ctx.onNavigate} />,
 
   // Crypto Discovery (CDP) — certificate inventory discovered ON the
   // devices by the cdp agent plugin. Distinct from PKI (the agent's
