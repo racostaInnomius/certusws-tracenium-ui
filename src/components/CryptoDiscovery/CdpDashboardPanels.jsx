@@ -407,6 +407,9 @@ export function IssuersPanel({ issuers, onSelect }) {
 const SOURCE_LABELS = {
   store: "OS certificate store",
   "java-store": "Java keystore",
+  // Captured from a live local handshake — what the service actually
+  // serves, which can differ from anything in a store.
+  listener: "TLS listener",
 };
 
 const SCOPE_LABELS = {
