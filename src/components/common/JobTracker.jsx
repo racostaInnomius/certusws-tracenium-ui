@@ -16,6 +16,11 @@
 //     so the post-job state surfaces immediately.
 //   * `onDismiss` fires when the operator clicks the X. Pages
 //     should clear their `activeJobs` state in response.
+//   * `onNavigate` (optional) is the app shell's page-switch function
+//     (see pageRegistry.jsx's ctx.onNavigate). When passed, each row
+//     gets a small arrow that deep-links into the Jobs page with that
+//     job pre-selected and flashed — "take me to the full picture"
+//     without losing the at-a-glance tracker.
 //
 // Why a custom component and not MUI Snackbar:
 //   * Snackbar shows ONE message at a time; we routinely fire
@@ -24,12 +29,14 @@
 //     re-firing snackbars per status would spam the operator.
 
 import * as React from "react";
-import { Box, Chip, IconButton, Typography, CircularProgress } from "@mui/material";
+import { Box, Chip, IconButton, Typography, CircularProgress, Tooltip } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { getJob } from "../../api/jobs";
+import { updateSearchParams } from "../../utils/browserState";
 
 const POLL_MS = 5_000;
 const TERMINAL_STATUSES = new Set(["success", "succeeded", "completed", "failed", "timeout", "cancelled"]);
@@ -76,7 +83,7 @@ function statusChip(bucket, rawStatus) {
   );
 }
 
-export default function JobTracker({ jobs, onAllDone, onDismiss }) {
+export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
   // Internal state: jobId → { status, error, lastUpdate }. Initialized
   // from the prop so a job appears as "pending" until the first poll
   // tick lands a real status.
@@ -161,6 +168,19 @@ export default function JobTracker({ jobs, onAllDone, onDismiss }) {
     if (allDone) onAllDone?.();
   }, [allDone, onAllDone]);
 
+  // Deep-links into the Jobs page, pre-selecting and flashing this
+  // job's row there (Jobs.jsx reads highlightJobId on mount). Kept
+  // optional — onNavigate is only wired up on pages that render this
+  // tracker inside the app shell; a future standalone usage just
+  // won't show the affordance.
+  const goToJob = React.useCallback(
+    (jobId) => {
+      updateSearchParams({ highlightJobId: jobId });
+      onNavigate?.("jobs");
+    },
+    [onNavigate]
+  );
+
   if (jobs.length === 0) return null;
 
   return (
@@ -214,6 +234,18 @@ export default function JobTracker({ jobs, onAllDone, onDismiss }) {
                 </Typography>
               </Box>
               {statusChip(bucket, entry.status)}
+              {typeof onNavigate === "function" ? (
+                <Tooltip title="View in Jobs">
+                  <IconButton
+                    aria-label="View in Jobs"
+                    size="small"
+                    onClick={() => goToJob(j.jobId)}
+                    sx={{ p: 0.5, color: BRAND.gray, "&:hover": { color: BRAND.tealText } }}
+                  >
+                    <ArrowForwardOutlinedIcon sx={{ fontSize: 15 }} />
+                  </IconButton>
+                </Tooltip>
+              ) : null}
             </Box>
           );
         })}

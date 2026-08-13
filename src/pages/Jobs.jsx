@@ -57,6 +57,7 @@ import {
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
+import { updateSearchParams } from "../utils/browserState";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -435,9 +436,44 @@ export default function Jobs() {
     [knownDevices]
   );
 
+  // Deep-link filters from other pages (Overview KPIs, Assets "view
+  // jobs", JobTracker's "View in Jobs" arrow, etc). "in_flight" is a
+  // virtual filter coming from the Overview's jobs KPI — we map it to
+  // "running" since the Jobs page's status dropdown operates on single
+  // values. Other unrecognized URL values fall through to "all" so a
+  // typo doesn't silently hide every row.
+  //
+  // highlightJobId takes priority over any other filter: the whole
+  // point is "here's the job you just dispatched," so status/type/
+  // search are forced back to "all" rather than risking a stale filter
+  // (left over from browsing this page earlier) hiding it.
+  const initialFilters = React.useMemo(() => {
+    if (typeof window === "undefined") return {};
+    const params = new URLSearchParams(window.location.search);
+    const rawStatus = (params.get("status") || "").toLowerCase();
+    const rawSearch = params.get("search") || "";
+    const highlightJobId = params.get("highlightJobId") || "";
+    const statusMap = {
+      in_flight: "running",
+      pending: "pending",
+      running: "running",
+      sent: "sent",
+      retrying: "retrying",
+      completed: "completed",
+      failed: "failed",
+      timeout: "timeout",
+      cancelled: "cancelled"
+    };
+    return {
+      status: highlightJobId ? "all" : (statusMap[rawStatus] || "all"),
+      search: highlightJobId ? "" : rawSearch.trim(),
+      highlightJobId
+    };
+  }, []);
+
   const [tenantJobs, setTenantJobs] = React.useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
-  const [selectedJobId, setSelectedJobId] = React.useState("");
+  const [selectedJobId, setSelectedJobId] = React.useState(initialFilters.highlightJobId || "");
   const [selectedJob, setSelectedJob] = React.useState(null);
 
   const [loadingJobs, setLoadingJobs] = React.useState(false);
@@ -473,37 +509,13 @@ export default function Jobs() {
   const [chartWindowDays, setChartWindowDays] = React.useState(7);
   const [chartTimeseries, setChartTimeseries] = React.useState(null);
   const [chartLoading, setChartLoading] = React.useState(true);
-  // Initial state honors deep-link filters from other pages (Overview
-  // KPIs, Assets "view jobs", etc.). "in_flight" is a virtual filter
-  // coming from the Overview's jobs KPI — we map it to "running" since
-  // the Jobs page's status dropdown operates on single values. Other
-  // unrecognized URL values fall through to "all" so a typo doesn't
-  // silently hide every row.
-  const initialFilters = React.useMemo(() => {
-    if (typeof window === "undefined") return {};
-    const params = new URLSearchParams(window.location.search);
-    const rawStatus = (params.get("status") || "").toLowerCase();
-    const rawSearch = params.get("search") || "";
-    const statusMap = {
-      in_flight: "running",
-      pending: "pending",
-      running: "running",
-      sent: "sent",
-      retrying: "retrying",
-      completed: "completed",
-      failed: "failed",
-      timeout: "timeout",
-      cancelled: "cancelled"
-    };
-    return {
-      status: statusMap[rawStatus] || "all",
-      search: rawSearch.trim()
-    };
-  }, []);
-
   const [statusFilter, setStatusFilter] = React.useState(initialFilters.status || "all");
   const [jobTypeFilter, setJobTypeFilter] = React.useState("all");
   const [search, setSearch] = React.useState(initialFilters.search || "");
+  // The just-dispatched job to flash once its row renders — cleared
+  // after the animation plays so it never re-triggers on a later
+  // re-render (filter change, refresh poll, etc).
+  const [highlightRowId, setHighlightRowId] = React.useState(initialFilters.highlightJobId || "");
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -668,6 +680,30 @@ export default function Jobs() {
   React.useEffect(() => {
     loadJobDetail(selectedJobId);
   }, [selectedJobId, loadJobDetail]);
+
+  // Deep-link flash: if we landed here via JobTracker's "View in Jobs"
+  // arrow, scroll the Tenant Job History panel into view, let the CSS
+  // pulse (see the DataGrid's getRowClassName below) play, then clear
+  // both the URL param and the highlight state so a later refresh
+  // doesn't replay it on an unrelated row.
+  React.useEffect(() => {
+    if (!highlightRowId) return;
+    const scrollTimer = setTimeout(() => {
+      document.getElementById("tenant-job-history-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 150);
+    updateSearchParams({ highlightJobId: null });
+    const clearTimer = setTimeout(() => setHighlightRowId(""), 2600);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+    // Intentionally mount-only — this is a one-shot "just arrived"
+    // flash, not a live sync with highlightRowId's later value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch the Jobs-by-status timeseries whenever the window toggle
   // changes. The response drops into `chartTimeseries` wrapped as a
@@ -1484,7 +1520,7 @@ export default function Jobs() {
 
       <Grid container spacing={2} alignItems="stretch">
         <Grid size={{ xs: 12, lg: 8 }}>
-          <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
+          <SectionPaper id="tenant-job-history-panel" variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
             <Box
               sx={{
                 display: "flex",
@@ -1569,15 +1605,34 @@ export default function Jobs() {
               columns={columns}
               loading={loadingJobs}
               getRowId={(row) => row.job_id}
+              // Row-level pulse for the job we just arrived to highlight
+              // (see the mount effect above) — plays twice then the
+              // class stops being applied once highlightRowId clears.
+              getRowClassName={(params) =>
+                params.row.job_id === highlightRowId ? "tracenium-job-flash-row" : ""
+              }
               onRowClick={(params) => setSelectedJobId(params.row.job_id)}
               pageSizeOptions={[10, 25, 50]}
               initialState={{
                 pagination: {
-                  paginationModel: { pageSize: 10, page: 0 },
+                  // A fresh deep-linked job is virtually always the most
+                  // recent row (default sort is newest-first), but a
+                  // bigger first page removes any doubt it's visible
+                  // without the operator having to page through.
+                  paginationModel: { pageSize: initialFilters.highlightJobId ? 50 : 10, page: 0 },
                 },
               }}
               columnVisibilityModel={columnVisibilityModel}
-              sx={DATAGRID_SX}
+              sx={{
+                ...DATAGRID_SX,
+                "@keyframes traceniumJobFlash": {
+                  "0%, 100%": { backgroundColor: "transparent" },
+                  "25%, 75%": { backgroundColor: BRAND.tealSoft }
+                },
+                "& .tracenium-job-flash-row": {
+                  animation: "traceniumJobFlash 1.2s ease-in-out 2"
+                }
+              }}
             />
           </SectionPaper>
         </Grid>
