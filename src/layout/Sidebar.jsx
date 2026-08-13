@@ -691,8 +691,17 @@ export default function Sidebar({
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
+    // Security Baselines = the desired endpoint state + remediation
+    // mode; Security Compliance right above shows the evidence of that
+    // state. They are the two halves of one loop (configure → observe),
+    // so they sit together. This entry lived six rows further down
+    // until 2026-08-13 — while its comment claimed "deliberately
+    // adjacent" — which is a big part of why the page went undiscovered.
+    ...(isPrivileged
+      ? [{ label: "Security Baselines", key: "security-baselines", icon: <ShieldOutlinedIcon /> }]
+      : []),
     // Crypto Discovery (CDP) — cert inventory ON the devices. Sits next
-    // to Security Compliance because both are posture-monitoring
+    // to the compliance pair because all three are posture-monitoring
     // surfaces (distinct from PKI in Administration, which is the
     // agent's own mTLS identity certs).
     { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon />, badge: "Beta" },
@@ -711,13 +720,6 @@ export default function Sidebar({
       : []),
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
-      : []),
-
-    // Security Baselines = the desired endpoint state + remediation
-    // mode. Deliberately adjacent to Security Compliance (`ad`), which
-    // shows the evidence of that state.
-    ...(isPrivileged
-      ? [{ label: "Security Baselines", key: "security-baselines", icon: <ShieldOutlinedIcon /> }]
       : []),
     ...(isPrivileged
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]

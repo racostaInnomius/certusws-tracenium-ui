@@ -338,6 +338,28 @@ export default function SecurityCompliance() {
         icon={<GppGoodOutlinedIcon />}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
+            {/* Baselines Fase A — reciprocal link. SecurityBaselines has
+                had "View compliance evidence →" since its creation; this
+                is the missing return path. Same gate as the sidebar
+                entry (privileged only): the target page hard-blocks
+                USER-role members anyway. */}
+            {canManage ? (
+              <Tooltip
+                title="Configure the desired endpoint state + remediation mode these findings are evidence of"
+                arrow
+                placement="bottom"
+              >
+                <Button
+                  onClick={() => navigateTo("security-baselines")}
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ShieldOutlinedIcon sx={{ fontSize: 16 }} />}
+                  sx={{ textTransform: "none" }}
+                >
+                  Baselines
+                </Button>
+              </Tooltip>
+            ) : null}
             {/* Sprint 5 — tenant compliance settings dialog opener.
                 Compact icon button rather than a full "Settings"
                 label because the header is already crowded with
