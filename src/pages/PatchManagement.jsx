@@ -16,6 +16,7 @@ import {
   IconButton,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
 
@@ -889,12 +890,28 @@ export default function PatchManagement() {
           unknown:           { label: "Unknown",           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
         };
         const m = meta[v] || meta.unknown;
-        return (
+        const chip = (
           <Chip
             size="small"
             label={m.label}
-            sx={{ bgcolor: m.bg, color: m.fg, fontWeight: 700, height: 22 }}
+            sx={{
+              bgcolor: m.bg,
+              color: m.fg,
+              fontWeight: 700,
+              height: 22,
+              ...(params.row.scanNote ? { cursor: "help" } : null),
+            }}
           />
+        );
+        // The scan's own explanation of why it came back with nothing —
+        // an IPC timeout, an empty Windows Update result, a provider error.
+        // Without it "Inventory only / 0 patches" reads as a clean machine,
+        // and a fleet that is silently failing to scan looks fine.
+        if (!params.row.scanNote) return chip;
+        return (
+          <Tooltip title={params.row.scanNote} arrow placement="top">
+            {chip}
+          </Tooltip>
         );
       }
     },
