@@ -474,6 +474,8 @@ const LOCATION_STATUS_TEXT = {
   disabled: "Location tracking is off for this tenant. Enable it in Policies → Features.",
   unsupported: "This platform has no system location service, so the device cannot report a position.",
   denied: "The endpoint refused: location services are off, or the user declined the prompt.",
+  consent_required:
+    "Waiting for the person using this Mac to allow location in the prompt. If no prompt appeared, grant it in System Settings › Privacy & Security › Location Services.",
   unavailable: "Location is enabled, but the device has not produced a fix yet.",
 };
 

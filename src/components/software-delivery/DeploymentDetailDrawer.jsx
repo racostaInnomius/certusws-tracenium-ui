@@ -17,11 +17,19 @@ import {
   Divider,
   Tooltip,
 } from "@mui/material";
+import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import { BRAND, ROLE, DATAGRID_SX } from "../../theme/brand";
 import { listDeploymentResults, cancelDeployment } from "../../api/softwareDelivery";
+import { listDeploymentSnapshots, revertSnapshot } from "../../api/patchManagement";
+import {
+  snapshotPresentation,
+  bySnapshotDevice,
+  isRevertable,
+  summarise as summariseSnapshots,
+} from "../patch-management/gateway/snapshotStatus";
 import { listFrom } from "../../api/shape";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "failed"]);
@@ -101,6 +109,9 @@ export default function DeploymentDetailDrawer({
   onClose,
 }) {
   const [results, setResults] = React.useState([]);
+  // Pre-patch snapshots (ADR-0001). Loaded separately and joined by device, so
+  // a tenant with no gateway simply sees an empty column instead of an error.
+  const [snapshots, setSnapshots] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
 
@@ -156,13 +167,55 @@ export default function DeploymentDetailDrawer({
   const counts = deployment?.counts || {};
   const pkg = deployment?.packageSnapshot || {};
 
+  React.useEffect(() => {
+    if (!deployment?.id) return;
+    let cancelled = false;
+    listDeploymentSnapshots(deployment.id)
+      .then((res) => {
+        if (!cancelled && res?.ok) setSnapshots(res.data?.snapshots ?? []);
+      })
+      .catch(() => {
+        // A tenant without a gateway has nothing to show here; never let this
+        // failure obscure the install results the drawer exists for.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deployment?.id, results]);
+
+  const snapshotByDevice = React.useMemo(() => bySnapshotDevice(snapshots), [snapshots]);
+  const snapshotSummary = React.useMemo(() => summariseSnapshots(snapshots), [snapshots]);
+
+  const doRevert = React.useCallback(
+    async (snapshot, deviceId) => {
+      if (
+        !window.confirm(
+          `Roll ${deviceId} back to its pre-patch snapshot?\n\n` +
+            "This DISCARDS everything written to the VM since the snapshot was taken — " +
+            "user data, other applications' state, unrelated changes. It cannot be undone."
+        )
+      ) {
+        return;
+      }
+      const res = await revertSnapshot(snapshot.id);
+      notify?.(
+        res?.ok ? "info" : "error",
+        res?.ok
+          ? "Rollback queued — the gateway will revert the VM and report back."
+          : res?.data?.message || "Could not queue the rollback."
+      );
+    },
+    [notify]
+  );
+
   const rows = React.useMemo(
     () =>
       results.map((r) => ({
         id: r.id,
         ...r,
+        snapshot: snapshotByDevice.get(r.deviceId) ?? null,
       })),
-    [results]
+    [results, snapshotByDevice]
   );
 
   const columns = [
@@ -182,6 +235,36 @@ export default function DeploymentDetailDrawer({
       headerName: "Outcome",
       width: 160,
       renderCell: (params) => outcomeChip(params.row.outcome),
+    },
+    {
+      // Pre-patch snapshot. Answers "can I roll this machine back?" — which is
+      // the question a failed outcome immediately raises.
+      field: "snapshot",
+      headerName: "Rollback",
+      width: 190,
+      sortable: false,
+      renderCell: (params) => {
+        const snap = params.row.snapshot;
+        const p = snapshotPresentation(snap);
+        return (
+          <Tooltip title={p.hint || ""}>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <Chip size="small" label={p.label} color={p.color} variant="outlined" />
+              {canManage && isRevertable(snap) && (
+                <Tooltip title="Roll this VM back to its pre-patch snapshot">
+                  <IconButton
+                    size="small"
+                    aria-label={`Roll ${params.row.deviceId} back to its pre-patch snapshot`}
+                    onClick={() => doRevert(snap, params.row.deviceId)}
+                  >
+                    <RestoreOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Stack>
+          </Tooltip>
+        );
+      },
     },
     {
       field: "exitCode",
@@ -360,6 +443,19 @@ export default function DeploymentDetailDrawer({
               sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}
             >
               Per-device results ({rows.length})
+              {snapshotSummary.total > 0 && (
+                <Typography
+                  component="span"
+                  variant="caption"
+                  sx={{ ml: 1, textTransform: "none", letterSpacing: 0, fontWeight: 400 }}
+                >
+                  {/* The number that matters before a patch run: how many of
+                      these machines have no way back. */}
+                  · {snapshotSummary.protected} with rollback
+                  {snapshotSummary.pending > 0 && `, ${snapshotSummary.pending} snapshotting`}
+                  {snapshotSummary.unprotected > 0 && `, ${snapshotSummary.unprotected} unprotected`}
+                </Typography>
+              )}
             </Typography>
             <Stack direction="row" spacing={1}>
               <Button

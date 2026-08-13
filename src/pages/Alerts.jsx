@@ -51,6 +51,7 @@ import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined
 
 import { BRAND, ROLE } from "../theme/brand";
 import { severityMeta } from "../theme/severity";
+import RuleNotifyEditor, { NotifyBadge } from "../components/Alerts/RuleNotifyEditor";
 import {
   getAlertRules,
   createAlertRule,
@@ -75,14 +76,23 @@ const SEVERITY_META = {
   low:      { label: "Low",      color: severityMeta("low").fg,      soft: severityMeta("low").bg }
 };
 
+// Must stay in step with the backend's handler map (ALERT_SOURCES in
+// modules/alerts/alerts.service.ts). This list feeds the feed's source
+// filter, so a missing entry means that source cannot be filtered on —
+// which is how compliance_stale, software_change and both CDP sources
+// went unreachable here for a while.
 const SOURCE_LABEL = {
   security_event:     "Security event",
   compliance_finding: "Compliance finding",
   compliance_score:   "Compliance score",
+  compliance_stale:   "Compliance stale",
   device_offline:     "Device offline",
-  cert_expiry:        "Cert expiry",
+  cert_expiry:        "Agent cert expiry",
   job_failure:        "Job failure",
-  device_enrollment:  "Device enrolled"
+  device_enrollment:  "Device enrolled",
+  software_change:    "Software change",
+  cdp_cert_expiry:    "Endpoint cert expiry",
+  cdp_weak_crypto:    "Certificate hygiene"
 };
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"];
@@ -554,6 +564,25 @@ export default function Alerts() {
               notify("error", "Could not enable template");
             }
           }}
+          onSaveNotify={async (rule, notifyConfig) => {
+            try {
+              await patchAlertRule(rule.id, { notify: notifyConfig });
+              const count = notifyConfig?.email?.length ?? 0;
+              notify(
+                "success",
+                count > 0
+                  ? `${rule.name}: emailing ${count} recipient${count === 1 ? "" : "s"}`
+                  : `${rule.name}: email delivery off`
+              );
+              refetchRules();
+            } catch (err) {
+              console.error(err);
+              // The backend rejects malformed recipients outright, which is
+              // what keeps a typo from saving "successfully" and silently
+              // never delivering.
+              notify("error", "Could not save email delivery — check the addresses");
+            }
+          }}
           onDeleteRule={async (rule) => {
             try {
               await deleteAlertRule(rule.id);
@@ -598,8 +627,12 @@ function ManageRulesDrawer({
   onRefresh,
   onToggle,
   onEnableTemplate,
-  onDeleteRule
+  onDeleteRule,
+  onSaveNotify
 }) {
+  // Which rule has its delivery editor open. One at a time — the drawer
+  // is narrow and the editor is two full-width fields.
+  const [notifyOpenFor, setNotifyOpenFor] = React.useState(null);
   // Group: which templates already have a tenant rule, which don't.
   // A template may have multiple instances (future-proof) so we look up
   // by templateId → count.
@@ -685,6 +718,22 @@ function ManageRulesDrawer({
                     <Typography variant="body2" sx={{ color: BRAND.gray, fontSize: 13 }}>
                       {t.description}
                     </Typography>
+                    {/* Delivery config only exists once the template has a
+                        tenant rule to hang it off. */}
+                    {primary ? (
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                        <NotifyBadge notify={primary.notify} />
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            setNotifyOpenFor(notifyOpenFor === primary.id ? null : primary.id)
+                          }
+                          sx={{ textTransform: "none", fontSize: 12, color: BRAND.tealText, minWidth: 0 }}
+                        >
+                          {notifyOpenFor === primary.id ? "Hide" : "Email…"}
+                        </Button>
+                      </Stack>
+                    ) : null}
                   </Box>
                   <Tooltip title={primary ? (enabled ? "Disable" : "Enable") : "Enable for this tenant"}>
                     <FormControlLabel
@@ -705,6 +754,13 @@ function ManageRulesDrawer({
                     />
                   </Tooltip>
                 </Stack>
+
+                {primary && notifyOpenFor === primary.id ? (
+                  <RuleNotifyEditor
+                    rule={primary}
+                    onSave={(notify) => onSaveNotify(primary, notify)}
+                  />
+                ) : null}
               </Paper>
             );
           })}
@@ -751,6 +807,16 @@ function ManageRulesDrawer({
                       >
                         {JSON.stringify(r.criteria)}
                       </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                        <NotifyBadge notify={r.notify} />
+                        <Button
+                          size="small"
+                          onClick={() => setNotifyOpenFor(notifyOpenFor === r.id ? null : r.id)}
+                          sx={{ textTransform: "none", fontSize: 12, color: BRAND.tealText, minWidth: 0 }}
+                        >
+                          {notifyOpenFor === r.id ? "Hide" : "Email…"}
+                        </Button>
+                      </Stack>
                     </Box>
                     <Switch
                       checked={r.enabled}
@@ -762,6 +828,10 @@ function ManageRulesDrawer({
                       </IconButton>
                     </Tooltip>
                   </Stack>
+
+                  {notifyOpenFor === r.id ? (
+                    <RuleNotifyEditor rule={r} onSave={(notify) => onSaveNotify(r, notify)} />
+                  ) : null}
                 </Paper>
               ))}
             </Stack>

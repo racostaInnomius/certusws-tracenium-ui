@@ -364,6 +364,10 @@ describe("getLocationHint", () => {
     expect(getLocationHint({ locationStatus: "unsupported" })).toMatch(/no system location service/i);
     expect(getLocationHint({ locationStatus: "denied" })).toMatch(/refused|declined/i);
     expect(getLocationHint({ locationStatus: "unavailable" })).toMatch(/not produced a fix/i);
+    // consent_required must NOT read like "wait a bit longer": nobody has
+    // answered the OS prompt, so waiting resolves nothing.
+    expect(getLocationHint({ locationStatus: "consent_required" })).toMatch(/System Settings/i);
+    expect(getLocationHint({ locationStatus: "consent_required" })).not.toMatch(/not produced a fix/i);
   });
 
   it("passes through a reason this build has never heard of", () => {
