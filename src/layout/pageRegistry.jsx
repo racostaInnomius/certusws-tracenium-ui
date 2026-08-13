@@ -26,7 +26,10 @@ const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
-const SecurityBaselines = React.lazy(() => import("../pages/SecurityBaselines"));
+// SecurityBaselines is no longer mounted directly — Fase B folded it
+// into Security Compliance as the Baselines tab; the `security-baselines`
+// key below is a route alias, same pattern as `agent-settings`/`policies`
+// aliasing into Configurations.
 const DeviceManagement = React.lazy(() => import("../pages/DeviceManagement"));
 const Audit = React.lazy(() => import("../pages/Audit"));
 const PKI = React.lazy(() => import("../pages/PKI"));
@@ -99,7 +102,7 @@ export const PAGE_REGISTRY = {
   // aliases so existing deep links (and the Patch Management CTA) keep
   // working; they just open Settings on the agent tab.
   "agent-settings": (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
-  "security-baselines": (ctx) => <SecurityBaselines onNavigate={ctx.onNavigate} />,
+  "security-baselines": () => <SecurityCompliance initialTab="baselines" />,
   "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
   policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 

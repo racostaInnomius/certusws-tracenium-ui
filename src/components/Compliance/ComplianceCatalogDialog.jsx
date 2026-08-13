@@ -181,7 +181,14 @@ function CheckRow({ check }) {
   );
 }
 
-export default function ComplianceCatalogDialog({ open, onClose }) {
+// Fase B — the browser body (filters + count + table) extracted from the
+// Dialog so the same component serves BOTH surfaces: the legacy modal
+// (kept for compatibility and its tests) and the Catalog tab inside
+// Security Compliance. `active` replaces the dialog's `open` as the
+// fetch trigger — pass true for an always-mounted tab. `sx` merges onto
+// the root flex column (the tab passes a height; the dialog fills its
+// DialogContent).
+export function CatalogBrowser({ active = true, sx }) {
   const [loading, setLoading] = React.useState(false);
   const [checks, setChecks] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -192,7 +199,7 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
   const [q, setQ] = React.useState("");
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     let cancelled = false;
     setLoading(true);
     setErr(null);
@@ -210,7 +217,7 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [active]);
 
   const categories = React.useMemo(
     () => Array.from(new Set(checks.map((c) => c.category).filter(Boolean))).sort(),
@@ -244,20 +251,7 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
   const selSx = { minWidth: 130 };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { height: "88vh" } }}>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 1 }}>
-        <MenuBookOutlinedIcon sx={{ color: BRAND.teal }} />
-        <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontSize: 17, fontWeight: 800, color: BRAND.dark }}>Checks catalog</Typography>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
-            Every control Tracenium evaluates, across platforms and frameworks.
-          </Typography>
-        </Box>
-        <IconButton aria-label="Close" size="small" onClick={onClose}>
-          <CloseOutlinedIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, minHeight: 0, flex: 1, ...sx }}>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, alignItems: "center" }}>
           <TextField
             select size="small" label="Platform" value={platform}
@@ -349,6 +343,27 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
             </Table>
           )}
         </Box>
+    </Box>
+  );
+}
+
+export default function ComplianceCatalogDialog({ open, onClose }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { height: "88vh" } }}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 1 }}>
+        <MenuBookOutlinedIcon sx={{ color: BRAND.teal }} />
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontSize: 17, fontWeight: 800, color: BRAND.dark }}>Checks catalog</Typography>
+          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+            Every control Tracenium evaluates, across platforms and frameworks.
+          </Typography>
+        </Box>
+        <IconButton aria-label="Close" size="small" onClick={onClose}>
+          <CloseOutlinedIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ display: "flex", flexDirection: "column" }}>
+        <CatalogBrowser active={open} />
       </DialogContent>
     </Dialog>
   );

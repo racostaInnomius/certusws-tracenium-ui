@@ -35,12 +35,14 @@ import {
   Select,
   Snackbar,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography
@@ -76,7 +78,7 @@ import {
   ScoreBar,
   StatusChip,
 } from "../components/Compliance/complianceChips";
-import { updateSearchParams } from "../utils/browserState";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
@@ -88,7 +90,7 @@ import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
 import { PatchChip, formatRelativeTime } from "../components/Compliance/PatchLevel";
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
-import ComplianceCatalogDialog from "../components/Compliance/ComplianceCatalogDialog";
+import { CatalogBrowser } from "../components/Compliance/ComplianceCatalogDialog";
 import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -143,7 +145,17 @@ function readUrlFilters() {
   return parseUrlFilters(window.location.search);
 }
 
-export default function SecurityCompliance() {
+// Fase B — Baselines lives as a tab of this page. Lazy so Posture (the
+// default and most-visited tab) doesn't pay for the policy editor until
+// the operator actually switches.
+const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
+
+// Deep-linkable via ?scpTab=. Same pattern Configurations uses for
+// ?settingsTab=. "baselines" is privileged-only — resolveTab() downgrades
+// it to "posture" for USER-role members.
+const SCP_TABS = ["posture", "baselines", "catalog"];
+
+export default function SecurityCompliance({ initialTab }) {
   // RBAC — same convention as SecurityBaselines.jsx: ADMIN/OWNER may
   // mutate (finding lifecycle, bulk ops, settings) and pull evidence
   // exports; USER is read-only. The backend enforces the same split
@@ -153,6 +165,23 @@ export default function SecurityCompliance() {
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // Fase B — tab state. URL param wins over the prop so a reload after
+  // switching tabs stays where the operator left it (the prop is only
+  // the seed the `security-baselines` registry alias plants); then the
+  // effect mirrors every change back to ?scpTab=.
+  const [tab, setTab] = React.useState(() => {
+    const fromUrl = getSearchParam("scpTab", "");
+    if (SCP_TABS.includes(fromUrl)) return fromUrl;
+    if (SCP_TABS.includes(initialTab)) return initialTab;
+    return "posture";
+  });
+  React.useEffect(() => {
+    updateSearchParams({ scpTab: tab === "posture" ? "" : tab });
+  }, [tab]);
+  // Baselines is privileged-only (the page itself hard-blocks USER, but
+  // the tab shouldn't even render). Deep links degrade to Posture.
+  const effectiveTab = tab === "baselines" && !canManage ? "posture" : tab;
 
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
 
@@ -295,9 +324,9 @@ export default function SecurityCompliance() {
   }, [selectedFramework, showToast]);
 
   // Sprint 5 — settings panel open/close. Boolean state; the panel
-  // component owns the form state internally.
+  // component owns the form state internally. (The catalog dialog's
+  // sibling state left in Fase B — the catalog is a tab now.)
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [catalogOpen, setCatalogOpen] = React.useState(false);
 
   // Framework picker label lookup.
   const frameworkLabels = React.useMemo(() => {
@@ -329,57 +358,29 @@ export default function SecurityCompliance() {
       <PageHeader
         title="Security Compliance"
         subtitle={
-          <>
-            Verdict is derived from published benchmarks (CIS) and standards (NIST SP 800-53, NIST CSF).
-            <br />
-            Tracenium maps the agent&apos;s evidence to the control IDs on each finding.
-          </>
+          effectiveTab === "baselines" ? (
+            "The endpoint state you require — and whether the agent may correct drift automatically. Posture shows the evidence of that state."
+          ) : effectiveTab === "catalog" ? (
+            "Every control Tracenium evaluates, across platforms and frameworks. Read-only — the catalog is global."
+          ) : (
+            <>
+              Verdict is derived from published benchmarks (CIS) and standards (NIST SP 800-53, NIST CSF).
+              <br />
+              Tracenium maps the agent&apos;s evidence to the control IDs on each finding.
+            </>
+          )
         }
         icon={<GppGoodOutlinedIcon />}
         actions={
+          effectiveTab !== "posture" ? undefined : (
           <Stack direction="row" spacing={1} alignItems="center">
-            {/* Baselines Fase A — reciprocal link. SecurityBaselines has
-                had "View compliance evidence →" since its creation; this
-                is the missing return path. Same gate as the sidebar
-                entry (privileged only): the target page hard-blocks
-                USER-role members anyway. */}
-            {canManage ? (
-              <Tooltip
-                title="Configure the desired endpoint state + remediation mode these findings are evidence of"
-                arrow
-                placement="bottom"
-              >
-                <Button
-                  onClick={() => navigateTo("security-baselines")}
-                  size="small"
-                  variant="outlined"
-                  startIcon={<ShieldOutlinedIcon sx={{ fontSize: 16 }} />}
-                  sx={{ textTransform: "none" }}
-                >
-                  Baselines
-                </Button>
-              </Tooltip>
-            ) : null}
+            {/* Fase B: the "Baselines" button (Fase A) and the catalog
+                icon-button both became tabs — the header now only hosts
+                posture-scoped actions (settings, exports, refresh). */}
             {/* Sprint 5 — tenant compliance settings dialog opener.
                 Compact icon button rather than a full "Settings"
                 label because the header is already crowded with
                 framework picker + export + refresh. */}
-            {/* Checks-catalog browser — surfaces the global control catalog
-                (what Tracenium evaluates) filtered by platform / category /
-                severity / framework. Compact icon button like Settings. */}
-            <Tooltip title="Browse the checks catalog" arrow placement="bottom">
-              <IconButton
-                aria-label="Open compliance catalog"
-                size="small"
-                onClick={() => setCatalogOpen(true)}
-                sx={{
-                  border: `1px solid ${BRAND.border}`,
-                  borderRadius: 1
-                }}
-              >
-                <MenuBookOutlinedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
             {canManage ? (
               <Tooltip title="Compliance settings" arrow placement="bottom">
                 <IconButton
@@ -462,9 +463,78 @@ export default function SecurityCompliance() {
               loading={loading || refreshing}
             />
           </Stack>
+          )
         }
       />
 
+      {/* Fase B — the module's three faces: what we observe (Posture),
+          what we require (Baselines, privileged), what we evaluate
+          (Catalog). Same Tabs styling as Configurations. */}
+      <Tabs
+        value={effectiveTab}
+        onChange={(_e, next) => setTab(next)}
+        sx={{
+          mb: 2,
+          borderBottom: `1px solid ${BRAND.border}`,
+          "& .MuiTab-root": {
+            textTransform: "none",
+            fontWeight: 700,
+            color: BRAND.dark,
+            minHeight: 48,
+            outline: "none",
+            "&:focus, &:focus-visible": { outline: "none", boxShadow: "none" },
+          },
+          "& .Mui-selected": { color: `${BRAND.teal} !important` },
+          "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
+        }}
+      >
+        <Tab
+          value="posture"
+          label="Posture"
+          icon={<GppGoodOutlinedIcon fontSize="small" />}
+          iconPosition="start"
+          sx={{ gap: 0.75 }}
+        />
+        {canManage ? (
+          <Tab
+            value="baselines"
+            label="Baselines"
+            icon={<ShieldOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            sx={{ gap: 0.75 }}
+          />
+        ) : null}
+        <Tab
+          value="catalog"
+          label="Catalog"
+          icon={<MenuBookOutlinedIcon fontSize="small" />}
+          iconPosition="start"
+          sx={{ gap: 0.75 }}
+        />
+      </Tabs>
+
+      {effectiveTab === "baselines" ? (
+        <React.Suspense
+          fallback={
+            <Box sx={{ display: "grid", placeItems: "center", minHeight: 240 }}>
+              <CircularProgress size={26} sx={{ color: BRAND.teal }} />
+            </Box>
+          }
+        >
+          {/* onNavigate: inside the tab, "go see the evidence" means
+              switching to Posture, not a page navigation. */}
+          <SecurityBaselines embedded onNavigate={() => setTab("posture")} />
+        </React.Suspense>
+      ) : null}
+
+      {effectiveTab === "catalog" ? (
+        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
+          <CatalogBrowser active sx={{ height: "72vh" }} />
+        </SectionPaper>
+      ) : null}
+
+      {effectiveTab !== "posture" ? null : (
+      <>
       {errorMsg ? (
         <Alert severity="error" sx={{ mb: 2 }}>
           {errorMsg}
@@ -943,9 +1013,8 @@ export default function SecurityCompliance() {
         onClose={() => setSettingsOpen(false)}
         onToast={showToast}
       />
-
-      {/* Read-only browser over the global control catalog. */}
-      <ComplianceCatalogDialog open={catalogOpen} onClose={() => setCatalogOpen(false)} />
+      </>
+      )}
     </Box>
   );
 }

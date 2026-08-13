@@ -39,7 +39,11 @@ import {
 import { DetailRow, shortHash } from "../components/Policies/policyDisplay";
 import SecurityPolicySection from "../components/Policies/SecurityPolicySection";
 
-export default function SecurityBaselines({ onNavigate }) {
+// `embedded` — rendered as the Baselines tab inside Security Compliance
+// (Fase B) rather than as a standalone page: skips the PageHeader (the
+// host page owns the header) and keeps its own RefreshControl in a slim
+// right-aligned row, same convention as AgentSettings inside Settings.
+export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
 
@@ -165,20 +169,31 @@ export default function SecurityBaselines({ onNavigate }) {
   const env = extractPolicyEnvelope(policyRow);
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
-      <PageHeader
-        title="Security Baselines"
-        subtitle="The endpoint state you require — and whether the agent may correct drift automatically. Evidence of the current state lives in Security Compliance."
-        icon={<ShieldOutlinedIcon />}
-        actions={
+    <Box sx={{ px: embedded ? 0 : { xs: 2, sm: 0.5 }, py: embedded ? 0 : { xs: 2, sm: 0.5 }, minWidth: 0 }}>
+      {embedded ? (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
           <RefreshControl
             refreshSeconds={refreshSeconds}
             onRefreshSecondsChange={setRefreshSeconds}
             onRefresh={load}
             loading={loading}
           />
-        }
-      />
+        </Box>
+      ) : (
+        <PageHeader
+          title="Security Baselines"
+          subtitle="The endpoint state you require — and whether the agent may correct drift automatically. Evidence of the current state lives in Security Compliance."
+          icon={<ShieldOutlinedIcon />}
+          actions={
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={load}
+              loading={loading}
+            />
+          }
+        />
+      )}
 
       <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 2 }}>
@@ -226,13 +241,16 @@ export default function SecurityBaselines({ onNavigate }) {
             </Typography>
           ) : null}
           <Box sx={{ flex: 1 }} />
-          <Button
-            size="small"
-            onClick={() => onNavigate?.("ad")}
-            sx={{ textTransform: "none", color: BRAND.gray }}
-          >
-            View compliance evidence →
-          </Button>
+          {/* Redundant when embedded — the Posture tab is one click up. */}
+          {embedded ? null : (
+            <Button
+              size="small"
+              onClick={() => onNavigate?.("ad")}
+              sx={{ textTransform: "none", color: BRAND.gray }}
+            >
+              View compliance evidence →
+            </Button>
+          )}
         </Box>
       </SectionPaper>
 
