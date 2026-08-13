@@ -79,3 +79,41 @@ describe("FindingCard (render smoke)", () => {
     expect(document.querySelector('input[type="checkbox"]')).not.toBeNull();
   });
 });
+
+describe("FindingCard (readOnly / RBAC)", () => {
+  function renderReadOnly(overrides = {}) {
+    return render(
+      <FindingCard
+        finding={{ ...baseFinding, ...overrides }}
+        onAck={noop}
+        onRevoke={noop}
+        onChangeStatus={noop}
+        onShowHistory={noop}
+        pendingAction={null}
+        readOnly
+      />
+    );
+  }
+
+  it("hides Acknowledge and Change status for read-only members", () => {
+    renderReadOnly();
+    expect(screen.queryByText(/Acknowledge/)).toBeNull();
+    expect(screen.queryByText("Change status")).toBeNull();
+  });
+
+  it("hides Revoke ack even when the finding is acknowledged", () => {
+    renderReadOnly({ acknowledgedAt: "2026-08-01T00:00:00Z" });
+    expect(screen.queryByText("Revoke ack")).toBeNull();
+  });
+
+  it("keeps the read-only History action visible", () => {
+    renderReadOnly();
+    expect(screen.getByText("History")).toBeInTheDocument();
+  });
+
+  it("still renders mutations when readOnly is false (default)", () => {
+    renderCard();
+    expect(screen.getByText(/Acknowledge/)).toBeInTheDocument();
+    expect(screen.getByText("History")).toBeInTheDocument();
+  });
+});

@@ -79,6 +79,7 @@ import {
 import { updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
+import { useAuthContext } from "../auth/AuthContext";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SharedSummaryCard from "../components/common/SummaryCard";
@@ -143,6 +144,16 @@ function readUrlFilters() {
 }
 
 export default function SecurityCompliance() {
+  // RBAC — same convention as SecurityBaselines.jsx: ADMIN/OWNER may
+  // mutate (finding lifecycle, bulk ops, settings) and pull evidence
+  // exports; USER is read-only. The backend enforces the same split
+  // (compliance.routes.ts requireTenantAdmin), so this only decides
+  // what to render — never rely on it as the security boundary.
+  const { auth } = useAuthContext();
+  const tenantRole = String(auth?.tenantMember?.role || "");
+  const isActiveMember = auth?.tenantMember?.isActive === true;
+  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
 
   // Deep-link filters (pre-populated from URL, user can clear via
@@ -347,25 +358,31 @@ export default function SecurityCompliance() {
                 <MenuBookOutlinedIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Compliance settings" arrow placement="bottom">
-              <IconButton
-                aria-label="Compliance settings"
-                size="small"
-                onClick={() => setSettingsOpen(true)}
-                sx={{
-                  border: `1px solid ${BRAND.border}`,
-                  borderRadius: 1
-                }}
-              >
-                <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Tooltip>
+            {canManage ? (
+              <Tooltip title="Compliance settings" arrow placement="bottom">
+                <IconButton
+                  aria-label="Compliance settings"
+                  size="small"
+                  onClick={() => setSettingsOpen(true)}
+                  sx={{
+                    border: `1px solid ${BRAND.border}`,
+                    borderRadius: 1
+                  }}
+                >
+                  <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+            ) : null}
             {/* Sprint 4 — CSV export. Fetched as an authenticated blob
                 (see handleExportCsv) rather than a plain anchor href, so
                 the X-Tenant-Id header for MSP-drilled sessions actually
                 reaches the backend. Filter is the currently selected
                 framework so the operator can "save what they're looking
                 at" without a separate export dialog. */}
+            {/* Exports are admin-gated (requireTenantAdmin on the
+                backend) — they hand the full evidence set to whoever
+                clicks, so USER-role members don't get the buttons. */}
+            {canManage ? (
             <Tooltip
               title={
                 selectedFramework
@@ -388,9 +405,11 @@ export default function SecurityCompliance() {
                 </Button>
               </span>
             </Tooltip>
+            ) : null}
             {/* Sprint 6 — PDF export. Same authenticated-blob pattern as
                 CSV; pdfkit emits Content-Disposition so the filename
                 still comes from the backend. */}
+            {canManage ? (
             <Tooltip
               title={
                 selectedFramework
@@ -413,6 +432,7 @@ export default function SecurityCompliance() {
                 </Button>
               </span>
             </Tooltip>
+            ) : null}
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
@@ -866,6 +886,7 @@ export default function SecurityCompliance() {
           // Sprint 3 — lifecycle wiring
           onRequestRefetch={refetchDrawer}
           onToast={showToast}
+          canManage={canManage}
         />
       </Drawer>
 

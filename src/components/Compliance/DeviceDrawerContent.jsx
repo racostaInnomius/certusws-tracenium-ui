@@ -63,7 +63,13 @@ export default function DeviceDrawerContent({
   // successful mutation, and the snackbar/dialog state stays at one
   // level instead of being scattered per-card.
   onRequestRefetch,
-  onToast
+  onToast,
+  // RBAC — false for USER-role members. Hides the bulk toolbar and
+  // every per-finding lifecycle mutation (the backend gates the same
+  // endpoints with requireTenantAdmin, so without this the buttons
+  // would render and then 403). Defaults to true so existing tests
+  // and call sites keep the privileged rendering.
+  canManage = true
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -525,7 +531,7 @@ export default function DeviceDrawerContent({
               keeps it visible while scrolling. Selection persists
               across the categories below — checkboxes per finding
               + this toolbar are the single bulk surface. */}
-          {findings.length > 0 ? (
+          {canManage && findings.length > 0 ? (
             <BulkFindingToolbar
               totalCount={findings.length}
               selectedCount={selectedIds.size}
@@ -606,10 +612,13 @@ export default function DeviceDrawerContent({
                     onChangeStatus={handleChangeStatus}
                     onShowHistory={(finding) => setHistoryDialog({ finding })}
                     pendingAction={pendingAction}
-                    // Sprint 6 — bulk selection
+                    readOnly={!canManage}
+                    // Sprint 6 — bulk selection. Checkbox hidden for
+                    // read-only members (selection only feeds bulk
+                    // mutations, which they can't run).
                     selected={selectedIds.has(f.id)}
                     onToggleSelected={
-                      f.id ? () => toggleSelected(f.id) : null
+                      canManage && f.id ? () => toggleSelected(f.id) : null
                     }
                   />
                 ))}

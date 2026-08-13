@@ -54,7 +54,13 @@ export default function FindingCard({
   // the checkbox is hidden (used for findings without a stable id
   // — shouldn't happen in production, defensive only).
   selected = false,
-  onToggleSelected = null
+  onToggleSelected = null,
+  // RBAC — when true, the lifecycle mutations (ack / revoke / change
+  // status) are hidden entirely. History stays: it's a read-only
+  // endpoint and any member may audit. Mirrors the backend gate
+  // (compliance.routes.ts requireTenantAdmin) so a USER never sees
+  // buttons that would 403.
+  readOnly = false
 }) {
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
@@ -240,7 +246,7 @@ export default function FindingCard({
             spacing={0.5}
             sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}
           >
-            {isAcked ? (
+            {readOnly ? null : isAcked ? (
               <Button
                 size="small"
                 variant="outlined"
@@ -292,7 +298,7 @@ export default function FindingCard({
                 </Menu>
               </>
             )}
-            {nextTransitions.length > 0 ? (
+            {!readOnly && nextTransitions.length > 0 ? (
               <>
                 <Button
                   size="small"
