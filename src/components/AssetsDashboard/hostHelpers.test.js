@@ -368,6 +368,8 @@ describe("getLocationHint", () => {
     // una no es un fallo, la otra sí, y la tercera es esperar.
     expect(getLocationHint({ locationStatus: "no_user_session" })).toMatch(/nobody is signed in/i);
     expect(getLocationHint({ locationStatus: "agent_not_publishing" })).toMatch(/not reporting/i);
+    // Que el rechazo se lea como decisión deliberada, no como falla.
+    expect(getLocationHint({ locationStatus: "ip_derived_rejected" })).toMatch(/where the traffic exits/i);
     // consent_required must NOT read like "wait a bit longer": nobody has
     // answered the OS prompt, so waiting resolves nothing.
     expect(getLocationHint({ locationStatus: "consent_required" })).toMatch(/System Settings/i);

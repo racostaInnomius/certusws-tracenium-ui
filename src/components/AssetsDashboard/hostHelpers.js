@@ -479,6 +479,8 @@ const LOCATION_STATUS_TEXT = {
   unavailable: "Location is enabled and granted, but the device has not produced a fix yet — usually indoors or just woken up.",
   no_user_session:
     "Nobody is signed in on this Mac, so nothing can read its position. Not a fault — it resolves when someone logs in.",
+  ip_derived_rejected:
+    "Windows could only guess the position from the network address, which is where the traffic exits — not where the device is. Rejected rather than shown. A machine with Wi-Fi nearby will report a real position.",
   agent_not_publishing:
     "Someone is signed in but the Tracenium menubar app is not reporting. Check that it is running on the endpoint.",
 };
