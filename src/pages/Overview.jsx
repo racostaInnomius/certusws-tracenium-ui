@@ -25,6 +25,7 @@ import RecentActivity from "../components/Overview/RecentActivity";
 import LatestAlerts from "../components/Overview/LatestAlerts";
 import PatchCoverageCard from "../components/Overview/PatchCoverageCard";
 import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
+import LicenseUsageCard from "../components/Overview/LicenseUsageCard";
 import ComplianceTrendCard from "../components/Overview/ComplianceTrendCard";
 import HealthDistributionCard from "../components/Overview/HealthDistributionCard";
 import PageHeader from "../components/common/PageHeader";
@@ -129,6 +130,18 @@ export default function Overview() {
       <Box sx={{ mb: 2 }}>
         <HeroKpis
           results={results}
+          loading={loading}
+          onNavigate={navigateWithQuery}
+        />
+      </Box>
+
+      {/* Row 1.5 — License usage. Full width and slim: it is the only
+          number here that can eventually stop enrollment working, and a
+          seventh card would break the 6-across KPI grid. Renders nothing
+          for tenants the license rule doesn't apply to. */}
+      <Box sx={{ mb: 2 }}>
+        <LicenseUsageCard
+          result={results?.dashboardSummary}
           loading={loading}
           onNavigate={navigateWithQuery}
         />

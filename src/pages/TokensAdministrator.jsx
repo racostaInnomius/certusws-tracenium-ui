@@ -316,7 +316,9 @@ function normalizeQuotaResponse(quota) {
       readFirstNumber(
         quota,
         ["upperLimit", "upper_limit", "hardLimit", "hard_limit"],
-        maxDevices * 1.2
+        // ADR-0005 D2: cap + 10% grace, additive. Only a fallback — the
+        // backend sends upperLimit; this keeps a stale response sane.
+        maxDevices + Math.ceil(maxDevices * 0.1)
       )
     )
   );
@@ -339,12 +341,15 @@ function normalizeQuotaResponse(quota) {
     readFirstNumber(quota, ["upperUsagePercent", "upper_usage_percent"], upperLimit > 0 ? (used / upperLimit) * 100 : 0).toFixed(1)
   );
 
-  const backendStatus = String(quota?.status || "").toUpperCase();
+  // ADR-0005 D3 renamed these. Accept both spellings so this page keeps
+  // working against a backend on either side of the rollout.
+  const rawStatus = String(quota?.status || "").toUpperCase();
+  const backendStatus = QUOTA_STATUS_ALIASES[rawStatus] || rawStatus;
   const inferredStatus =
     used >= upperLimit
-      ? "UPPER_LIMIT_REACHED"
+      ? "GRACE_EXHAUSTED"
       : used >= standardLimit
-        ? "STANDARD_LIMIT_EXCEEDED"
+        ? "OVER_LIMIT"
         : used >= warningThreshold
           ? "APPROACHING_LIMIT"
           : "NORMAL";
@@ -374,6 +379,11 @@ function normalizeQuotaResponse(quota) {
   };
 }
 
+const QUOTA_STATUS_ALIASES = {
+  STANDARD_LIMIT_EXCEEDED: "OVER_LIMIT",
+  UPPER_LIMIT_REACHED: "GRACE_EXHAUSTED",
+};
+
 function getQuotaStatusMeta(status) {
   switch (String(status || "").toUpperCase()) {
     case "APPROACHING_LIMIT":
@@ -384,21 +394,23 @@ function getQuotaStatusMeta(status) {
         title: "Approaching device limit",
         defaultMessage: "You are approaching your tenant device limit. Enrollment is still available.",
       };
+    case "OVER_LIMIT":
     case "STANDARD_LIMIT_EXCEEDED":
       return {
         severity: "warning",
         accent: BRAND.alert.warning,
         soft: BRAND.alert.warningSoft,
-        title: "Standard device limit exceeded",
-        defaultMessage: "This tenant has exceeded the standard device limit, but temporary enrollment capacity is still available.",
+        title: "Over your license limit",
+        defaultMessage: "This tenant is over its licensed device count. Enrollment continues within the grace margin; the overage is reconciled at the next subscription anniversary.",
       };
+    case "GRACE_EXHAUSTED":
     case "UPPER_LIMIT_REACHED":
       return {
         severity: "error",
         accent: BRAND.alert.error,
         soft: BRAND.alert.errorSoft,
-        title: "Enrollment upper limit reached",
-        defaultMessage: "Device enrollment upper limit reached. Increase the tenant device limit before creating more tokens.",
+        title: "License limit reached",
+        defaultMessage: "The licensed device count and its grace margin are both used up. Add licenses or remove devices before enrolling more.",
       };
     default:
       return {
@@ -540,7 +552,7 @@ const filteredRows = React.useMemo(() => {
   const shouldShowQuotaBanner =
     !quotaLoading &&
     !quotaError &&
-    ["APPROACHING_LIMIT", "STANDARD_LIMIT_EXCEEDED", "UPPER_LIMIT_REACHED"].includes(
+    ["APPROACHING_LIMIT", "OVER_LIMIT", "GRACE_EXHAUSTED"].includes(
       quotaSummary.status
     );
 

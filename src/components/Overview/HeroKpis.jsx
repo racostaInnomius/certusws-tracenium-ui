@@ -186,7 +186,19 @@ export default function HeroKpis({ results, loading, onNavigate }) {
   // Important: this must use the fleet inventory count, not activeHosts.
   // activeHosts/onlineNow are recency signals and can legitimately be 0
   // while the tenant still has devices and historical telemetry.
+  //
+  // `fleetDevices` is the roster from the control DB — the same number
+  // the MSP portfolio, Remote Control and the license rule use. The
+  // older `totalDevices`/`totalHosts` counted rows in the tenant DB's
+  // host_current_status, i.e. only devices that have REPORTED. A device
+  // that enrolled and never checked in was invisible here, which is how
+  // this page could show 16 while Remote Control showed 17. Keep the old
+  // keys as the fallback for a backend that predates fleetDevices.
+  const fleetDevices = dashboard?.fleetDevices;
+  const reportingDevices =
+    dashboard?.totalHosts ?? dashboard?.total_hosts ?? null;
   const totalDevices =
+    fleetDevices ??
     dashboard?.totalDevices ??
     dashboard?.total_devices ??
     dashboard?.totalHosts ??
@@ -298,13 +310,25 @@ export default function HeroKpis({ results, loading, onNavigate }) {
   // — `?filter=online` for Assets, `?severity=high` for SCP, etc. If
   // the target page doesn't yet honor a given query param, the link
   // still works (it just lands unfiltered).
+  const notReporting =
+    fleetDevices != null && reportingDevices != null
+      ? Math.max(fleetDevices - reportingDevices, 0)
+      : 0;
+
   const navigate = (page, query) => onNavigate?.(page, query);
 
   const cards = [
     {
       title: "Devices",
       value: totalDevices,
-      subtitle: totalDevices ? "total enrolled" : null,
+      // When the two counts disagree the gap is the story: those devices
+      // enrolled (got a cert) and never sent inventory — failed
+      // deployments worth chasing, not a rounding artifact.
+      subtitle: !totalDevices
+        ? null
+        : notReporting > 0
+          ? `${notReporting} enrolled, not reporting`
+          : "total enrolled",
       icon: DevicesOutlinedIcon,
       accent: BRAND.teal,
       tint: BRAND.tealSoft,
