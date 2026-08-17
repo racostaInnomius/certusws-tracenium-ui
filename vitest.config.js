@@ -25,6 +25,27 @@ export default defineConfig({
     // under full-suite load — past the 5s default, causing intermittent
     // timeouts. 15s gives comfortable headroom without masking real hangs.
     testTimeout: 15000,
+
+    // Deliberately far below the default (~cpus-1).
+    //
+    // Every worker boots its own jsdom and re-imports the whole MUI tree,
+    // so workers compete for memory bandwidth and GC rather than for idle
+    // cores. Adding them makes the suite *slower*, and slow enough that
+    // the userEvent tests above blow their 15s timeout — which reads as a
+    // dozen random test failures rather than as a capacity problem.
+    //
+    // Measured on this suite (12 logical cores / 6 performance):
+    //
+    //   workers   wall time   result
+    //   4          44s        857 passed
+    //   6          64s        857 passed
+    //   8         102s        1 timeout
+    //   ~11        164s       12 timeouts
+    //
+    // Monotonic in both directions, so this is a ceiling worth keeping
+    // even on a bigger CI box. Raising testTimeout would have hidden the
+    // failures without making anything faster.
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
       include: ["src/api/**"],
