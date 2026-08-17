@@ -249,7 +249,14 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
   });
 
   it("yields blanks when the policy has no cdp block", () => {
-    expect(readFormFromPolicy({}).cdp).toEqual({ intervalSeconds: "", javaKeystorePaths: "" });
+    expect(readFormFromPolicy({}).cdp).toEqual({
+      intervalSeconds: "",
+      javaKeystorePaths: "",
+      // The probe is opt-in, so "no block" has to read as off — not as
+      // undefined, which a checkbox would render as an uncontrolled input.
+      scanTlsListeners: false,
+      tlsListenerPorts: "",
+    });
   });
 
   it("omits the cdp key entirely when nothing is configured", () => {
@@ -342,5 +349,60 @@ describe("desktop location tracking feature", () => {
     );
     expect(form.features.locationTracking).toBe(true);
     expect(form.managedApp?.locationTracking ?? null).toBeNull();
+  });
+});
+
+// ── CDP TLS listener probe ────────────────────────────────────────
+// The round-trip that was missing entirely: `cdp.scanTlsListeners` had
+// no reader and no writer here, so an operator could not switch on the
+// only collector that feeds TLS chain validation and
+// certificate-to-process attribution.
+describe("cdp.scanTlsListeners", () => {
+  const cdpCatalog = [...catalog, { key: "cdp" }];
+  const withCdp = (cdp) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp });
+
+  it("round-trips on, with its port list", () => {
+    const form = readFormFromPolicy(
+      withCdp({ scanTlsListeners: true, tlsListenerPorts: [443, 8443] }),
+      cdpCatalog
+    );
+    expect(form.cdp.scanTlsListeners).toBe(true);
+    expect(form.cdp.tlsListenerPorts).toBe("443, 8443");
+
+    const out = formToPolicy(form, cdpCatalog);
+    expect(out.cdp.scanTlsListeners).toBe(true);
+    expect(out.cdp.tlsListenerPorts).toEqual([443, 8443]);
+  });
+
+  it("reads anything that is not a stored true as off", () => {
+    // Mirrors the agent's `=== true`.
+    expect(readFormFromPolicy(withCdp({ scanTlsListeners: "true" }), cdpCatalog).cdp.scanTlsListeners).toBe(false);
+    expect(readFormFromPolicy(withCdp({}), cdpCatalog).cdp.scanTlsListeners).toBe(false);
+  });
+
+  it("omits the key when off, rather than writing a no-op false", () => {
+    const form = readFormFromPolicy(withCdp({ intervalSeconds: 21600 }), cdpCatalog);
+    const out = formToPolicy(form, cdpCatalog);
+    expect(out.cdp.intervalSeconds).toBe(21600);
+    expect(out.cdp.scanTlsListeners).toBeUndefined();
+  });
+
+  it("drops the port list when the probe is off — it would do nothing", () => {
+    const form = readFormFromPolicy(withCdp({}), cdpCatalog);
+    form.cdp.tlsListenerPorts = "443, 8443";
+    expect(formToPolicy(form, cdpCatalog).cdp?.tlsListenerPorts).toBeUndefined();
+  });
+
+  it("parses ports pasted with commas, spaces or newlines, and drops junk", () => {
+    const form = readFormFromPolicy(withCdp({ scanTlsListeners: true }), cdpCatalog);
+    form.cdp.tlsListenerPorts = "443, 8443\n9443 443 https 70000";
+    // 443 deduped, "https" and 70000 dropped — same rules the agent applies.
+    expect(formToPolicy(form, cdpCatalog).cdp.tlsListenerPorts).toEqual([443, 8443, 9443]);
+  });
+
+  it("is dropped entirely when the cdp plugin is not enabled", () => {
+    const form = readFormFromPolicy(withCdp({ scanTlsListeners: true }), cdpCatalog);
+    form.plugins.cdp = false;
+    expect(formToPolicy(form, cdpCatalog).cdp).toBeUndefined();
   });
 });

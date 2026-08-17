@@ -93,4 +93,62 @@ describe("CryptoDiscoverySection", () => {
   it("survives a form with no cdp block at all", () => {
     expect(() => render(<CryptoDiscoverySection form={{}} onChange={() => {}} />)).not.toThrow();
   });
+
+  // The listener probe. It existed in the agent from the day the collector
+  // shipped and had no authoring surface anywhere, so it was off in every
+  // tenant and the capabilities that read only from it — TLS chain
+  // validation and certificate-to-process attribution — never had a row.
+  describe("TLS listener probe", () => {
+    const PROBE_LABEL = "Probe local TLS services";
+    const PORTS_LABEL = "Limit to ports (optional)";
+
+    it("is off by default and hides the port field until it is on", () => {
+      render(<CryptoDiscoverySection form={baseForm} onChange={() => {}} />);
+      expect(screen.getByLabelText(PROBE_LABEL)).not.toBeChecked();
+      expect(screen.queryByLabelText(PORTS_LABEL)).not.toBeVisible();
+    });
+
+    it("reveals the port field once switched on", () => {
+      const form = { cdp: { scanTlsListeners: true } };
+      render(<CryptoDiscoverySection form={form} onChange={() => {}} />);
+      expect(screen.getByLabelText(PROBE_LABEL)).toBeChecked();
+      expect(screen.getByLabelText(PORTS_LABEL)).toBeVisible();
+    });
+
+    it("treats anything that is not a stored true as off", () => {
+      // The agent tests `=== true`. A truthy string must not render as
+      // enabled, or the UI would claim a state the endpoint does not have.
+      render(<CryptoDiscoverySection form={{ cdp: { scanTlsListeners: "true" } }} onChange={() => {}} />);
+      expect(screen.getByLabelText(PROBE_LABEL)).not.toBeChecked();
+    });
+
+    it("writes the whole form back when toggled", () => {
+      const onChange = vi.fn();
+      render(<CryptoDiscoverySection form={{ managedApp: { requireAppPIN: true }, cdp: {} }} onChange={onChange} />);
+      fireEvent.click(screen.getByLabelText(PROBE_LABEL));
+      expect(onChange).toHaveBeenCalledWith({
+        managedApp: { requireAppPIN: true },
+        cdp: { scanTlsListeners: true },
+      });
+    });
+
+    it("names invalid ports rather than just flagging the field", () => {
+      const form = { cdp: { scanTlsListeners: true, tlsListenerPorts: "443, https, 65536" } };
+      render(<CryptoDiscoverySection form={form} onChange={() => {}} />);
+      expect(screen.getByText(/Not valid ports: https, 65536/)).toBeInTheDocument();
+    });
+
+    it("counts the ports it accepted so a typo does not read as a narrower scan", () => {
+      const form = { cdp: { scanTlsListeners: true, tlsListenerPorts: "443 8443, 9443" } };
+      render(<CryptoDiscoverySection form={form} onChange={() => {}} />);
+      expect(screen.getByText(/3 port\(s\)/)).toBeInTheDocument();
+    });
+
+    it("disables both probe controls in read-only mode", () => {
+      const form = { cdp: { scanTlsListeners: true, tlsListenerPorts: "443" } };
+      render(<CryptoDiscoverySection form={form} onChange={() => {}} readOnly />);
+      expect(screen.getByLabelText(PROBE_LABEL)).toBeDisabled();
+      expect(screen.getByLabelText(PORTS_LABEL)).toBeDisabled();
+    });
+  });
 });

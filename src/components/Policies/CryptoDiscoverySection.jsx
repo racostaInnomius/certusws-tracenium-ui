@@ -6,21 +6,41 @@
 //   intervalSeconds    — scan cadence (blank = agent default, 6h)
 //   javaKeystorePaths  — APPLICATION Java keystores to inventory on top
 //                        of the JVM cacerts the agent discovers by itself
+//   scanTlsListeners   — opt-in probe of local TLS services
+//   tlsListenerPorts   — optional narrowing of that probe
 //
 // Why the keystore list matters: JKS/PKCS12 keystores are invisible to
 // the OS certificate stores, so a Tomcat cert expiring inside one is
 // exactly the outage CDP exists to prevent — and the agent cannot guess
 // where those files live. Everything else in CDP is zero-config.
 //
+// Why the listener probe is here at all: the agent has read
+// `cdp.scanTlsListeners` since that collector shipped, but no authoring
+// surface knew the key existed, so it could never be turned on. It was
+// off across every tenant and the two capabilities that feed exclusively
+// from it — TLS chain validation and certificate-to-process attribution
+// — had no data at all. It is the only collector that opens sockets, so
+// it stays opt-in; what it must not stay is unreachable.
+//
 // Only rendered when the cdp plugin is enabled (see Policies.jsx).
 
 import * as React from "react";
-import { Box, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Collapse,
+  FormControlLabel,
+  Switch,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { BRAND } from "../../theme/brand";
 import {
   CDP_INTERVAL_MIN,
   CDP_INTERVAL_MAX,
   CDP_KEYSTORE_PATHS_MAX,
+  CDP_TLS_PORTS_MAX,
+  invalidPortTokens,
+  parsePortList,
   splitPathLines,
 } from "./policyTransforms";
 
@@ -46,6 +66,19 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
     (!Number.isInteger(intervalNum) ||
       intervalNum < CDP_INTERVAL_MIN ||
       intervalNum > CDP_INTERVAL_MAX);
+
+  const scanListeners = cdp.scanTlsListeners === true;
+  const badPorts = invalidPortTokens(cdp.tlsListenerPorts ?? "");
+  const portCount = parsePortList(cdp.tlsListenerPorts ?? "").length;
+  const portsOverCap = portCount > CDP_TLS_PORTS_MAX;
+
+  const portsHelp = badPorts.length > 0
+    ? `Not valid ports: ${badPorts.slice(0, 3).join(", ")}${badPorts.length > 3 ? "…" : ""}. Each must be 1–65535.`
+    : portsOverCap
+      ? `Too many ports (${portCount}). At most ${CDP_TLS_PORTS_MAX}.`
+      : portCount > 0
+        ? `${portCount} port(s). Only these are probed — everything else is skipped.`
+        : "Blank = probe every listening port the agent finds. Narrow it here if you'd rather be specific.";
 
   const pathsHelp = overCap
     ? `Too many paths (${paths.length}). At most ${CDP_KEYSTORE_PATHS_MAX}; the agent drops the remainder.`
@@ -121,6 +154,52 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
         Password-protected PKCS12 keystores are reported as a scan error rather than
         skipped silently — check the device&apos;s certificate list if one never appears.
       </Typography>
+
+      <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}` }}>
+        <FormControlLabel
+          disabled={readOnly}
+          control={
+            <Switch
+              size="small"
+              checked={scanListeners}
+              onChange={(e) => setField("scanTlsListeners", e.target.checked)}
+            />
+          }
+          label={
+            <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>
+              Probe local TLS services
+            </Typography>
+          }
+        />
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.5 }}>
+          Captures the certificate each service <strong>actually serves</strong>, which can
+          differ from anything in a store — a service pinned to an old file, or never
+          reloaded after renewal. This is what makes <strong>chain validation</strong> and
+          <strong> &ldquo;which process serves this certificate&rdquo;</strong> possible;
+          without it both stay empty.
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.75 }}>
+          Every probe goes to <code>127.0.0.1</code> — nothing leaves the host and no remote
+          service is touched. The socket closes the moment the handshake yields a
+          certificate, so not one byte of application protocol is ever written. Ports whose
+          protocols react badly to a stray <code>ClientHello</code> (SSH, SMTP, MySQL,
+          PostgreSQL and others) are never probed.
+        </Typography>
+
+        <Collapse in={scanListeners}>
+          <TextField
+            size="small"
+            label="Limit to ports (optional)"
+            value={cdp.tlsListenerPorts ?? ""}
+            onChange={(e) => setField("tlsListenerPorts", e.target.value)}
+            disabled={readOnly}
+            error={badPorts.length > 0 || portsOverCap}
+            helperText={portsHelp}
+            placeholder="443, 8443, 9443"
+            sx={{ mt: 1.5, width: { xs: "100%", md: 360 } }}
+          />
+        </Collapse>
+      </Box>
     </Box>
   );
 }

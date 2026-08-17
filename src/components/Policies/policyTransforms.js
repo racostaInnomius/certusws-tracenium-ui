@@ -23,6 +23,7 @@ export const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable 
 export const CDP_INTERVAL_MIN = 900;            // 15m
 export const CDP_INTERVAL_MAX = 86400;          // 24h
 export const CDP_KEYSTORE_PATHS_MAX = 50;
+export const CDP_TLS_PORTS_MAX = 64;
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
@@ -62,6 +63,36 @@ export function splitPathLines(text) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => (line.length > 1 ? line.replace(/[\\/]+$/, "") : line));
+}
+
+/**
+ * Parse the TLS listener port list. Accepts commas, spaces or newlines
+ * because operators paste from all three, and drops anything that is not
+ * a TCP port — the backend validator names the bad entries, so this only
+ * has to agree with it about what "valid" means.
+ */
+export function parsePortList(text) {
+  if (Array.isArray(text)) text = text.join(",");
+  if (typeof text !== "string") return [];
+  const out = [];
+  for (const token of text.split(/[\s,]+/)) {
+    if (!token) continue;
+    const port = Number(token);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) continue;
+    if (out.includes(port)) continue;
+    out.push(port);
+  }
+  return out;
+}
+
+/** Tokens that are not valid TCP ports, for authoring feedback. */
+export function invalidPortTokens(text) {
+  if (typeof text !== "string") return [];
+  return text.split(/[\s,]+/).filter((token) => {
+    if (!token) return false;
+    const port = Number(token);
+    return !Number.isInteger(port) || port < 1 || port > 65535;
+  });
 }
 
 // ── Security Policy schema mirror (Sprint 2 of Policy v2) ─────────
@@ -473,6 +504,11 @@ export function readFormFromPolicy(policy, catalog = []) {
       intervalSeconds:
         Number(policy?.cdp?.intervalSeconds) > 0 ? Number(policy.cdp.intervalSeconds) : "",
       javaKeystorePaths: (policy?.cdp?.javaKeystorePaths ?? []).join("\n"),
+      // Explicitly `=== true`: the probe is opt-in, so anything that is
+      // not a stored `true` must render as off. Mirrors the agent's own
+      // getCdpScanTlsListeners().
+      scanTlsListeners: policy?.cdp?.scanTlsListeners === true,
+      tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
     },
   };
 }
@@ -614,6 +650,19 @@ export function formToPolicy(form, catalog = []) {
     }
     const keystores = splitPathLines(form?.cdp?.javaKeystorePaths);
     if (keystores.length > 0) cdp.javaKeystorePaths = keystores;
+
+    // Written only when ON. `false` is the agent's default, so persisting
+    // it would add a key that changes nothing — and omit-when-empty is the
+    // rule everywhere else in this function.
+    if (form?.cdp?.scanTlsListeners === true) {
+      cdp.scanTlsListeners = true;
+      // Ports narrow the scan; they mean nothing with the probe off, so
+      // they ride inside the same branch rather than becoming an orphan
+      // setting an operator could believe is doing something.
+      const ports = parsePortList(form?.cdp?.tlsListenerPorts);
+      if (ports.length > 0) cdp.tlsListenerPorts = ports;
+    }
+
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }
 
