@@ -324,8 +324,6 @@ export default function HardwareInventory() {
   const [loadingDetail, setLoadingDetail] = React.useState(true);
 
   const [search, setSearch] = React.useState("");
-  const [platform, setPlatform] = React.useState("");
-  const [manufacturer, setManufacturer] = React.useState("");
 
   const [paginationModel, setPaginationModel] = React.useState({
     page: 0,
@@ -343,8 +341,6 @@ export default function HardwareInventory() {
       setLoadingDetail(true);
       const res = await getHardwareInventoryDetail({
         search: search || undefined,
-        platform: platform || undefined,
-        manufacturer: manufacturer || undefined,
         page: paginationModel.page + 1,
         pageSize: paginationModel.pageSize,
       });
@@ -365,7 +361,7 @@ export default function HardwareInventory() {
 
   React.useEffect(() => {
     loadDetail();
-  }, [search, platform, manufacturer, paginationModel.page, paginationModel.pageSize]);
+  }, [search, paginationModel.page, paginationModel.pageSize]);
 
   const refreshAll = () => {
     reloadSummary();
@@ -396,7 +392,6 @@ export default function HardwareInventory() {
     { field: "manufacturer", headerName: "Manufacturer", minWidth: 140, flex: 0.7 },
     { field: "model", headerName: "Model", minWidth: 160, flex: 0.8 },
     { field: "cpuBrand", headerName: "CPU", minWidth: 180, flex: 0.9 },
-    { field: "physicalCores", headerName: "Cores", minWidth: 90, flex: 0.35 },
     {
       field: "totalMemoryBytes",
       headerName: "Memory",
@@ -409,13 +404,6 @@ export default function HardwareInventory() {
       headerName: "Disk Usage",
       minWidth: 110,
       flex: 0.45,
-      renderCell: (params) => formatPercent(params.value),
-    },
-    {
-      field: "batteryPercent",
-      headerName: "Battery",
-      minWidth: 100,
-      flex: 0.4,
       renderCell: (params) => formatPercent(params.value),
     },
     {
@@ -723,15 +711,14 @@ export default function HardwareInventory() {
             gap: 1,
             gridTemplateColumns: {
               xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              lg: "2fr 1fr 1fr auto",
+              sm: "1fr auto",
             },
             alignItems: "center",
           }}
         >
           <TextField
             size="small"
-            placeholder="Search devices"
+            placeholder="Search hostname, serial, manufacturer, model, CPU, OS"
             value={search}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
@@ -745,30 +732,6 @@ export default function HardwareInventory() {
                 </InputAdornment>
               ),
             }}
-            sx={integratedFilterFieldSx}
-          />
-
-          <TextField
-            size="small"
-            placeholder="Platform"
-            value={platform}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setPlatform(e.target.value);
-            }}
-            fullWidth
-            sx={integratedFilterFieldSx}
-          />
-
-          <TextField
-            size="small"
-            placeholder="Manufacturer"
-            value={manufacturer}
-            onChange={(e) => {
-              setPaginationModel((prev) => ({ ...prev, page: 0 }));
-              setManufacturer(e.target.value);
-            }}
-            fullWidth
             sx={integratedFilterFieldSx}
           />
 
