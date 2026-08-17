@@ -2,18 +2,25 @@ import * as React from "react";
 import Grid from "@mui/material/Grid";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
+  Checkbox,
   Chip,
   Collapse,
   Divider,
+  FormControlLabel,
   MenuItem,
   Paper,
+  Radio,
+  RadioGroup,
   TextField,
   Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
+import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import RefreshControl from "../components/common/RefreshControl";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
@@ -54,6 +61,12 @@ import {
   listTenantJobs,
   retryJob,
 } from "../api/jobs";
+import {
+  dispatchAssetGroupJob,
+  listAssetGroupMembers,
+  listAssetGroups,
+} from "../api/assetGroups";
+import { listFrom } from "../api/shape";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
@@ -72,9 +85,17 @@ const PATCH_INSTALL_MODE_OPTIONS = [
 ];
 
 const TARGET_OPTIONS = [
-  { value: "device", label: "Selected Device" },
+  { value: "device", label: "Device(s)" },
+  { value: "group", label: "Group" },
   { value: "tenant", label: "All Connected Devices" },
 ];
+
+// Server-side cap on /asset-groups/:id/members?pageSize (see
+// asset-groups.controller.ts). For groups larger than this, "specific
+// device(s) in group" only offers the first page — the helper text
+// below the picker says so and points the operator at "Entire group"
+// instead of pretending to offer full coverage.
+const GROUP_MEMBERS_PAGE_SIZE = 100;
 
 // Agent update jobs carry only { version } in the payload. The agent
 // receives the job and downloads the binary that matches ITS OWN
@@ -126,6 +147,92 @@ function resolveVersionFetchKey(device) {
   const platform = device.platform || DEFAULT_VERSION_PLATFORM;
   const arch = device.arch || archForPlatform(platform);
   return { platform, arch };
+}
+
+/**
+ * Type-to-search device picker with a checkbox per row so the operator
+ * can select one or several devices without losing the free-text
+ * filter — plain MUI <Select> menus don't support typing to narrow a
+ * fleet-sized list. Used both for the top-level "Device(s)" target
+ * mode and for "specific device(s) in group" (same shape, different
+ * source list), so the filter/checkbox/chip behavior stays identical
+ * in both places.
+ */
+function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, helperText }) {
+  const selectedOptions = React.useMemo(
+    () => devices.filter((d) => value.includes(d.deviceId)),
+    [devices, value]
+  );
+
+  return (
+    <Autocomplete
+      multiple
+      fullWidth
+      size="small"
+      disableCloseOnSelect
+      disabled={disabled}
+      options={devices}
+      value={selectedOptions}
+      onChange={(_e, next) => onChange(next.map((d) => d.deviceId))}
+      isOptionEqualToValue={(opt, val) => opt.deviceId === val.deviceId}
+      getOptionLabel={(opt) => opt.hostname || opt.deviceId}
+      filterOptions={(opts, state) => {
+        const q = state.inputValue.trim().toLowerCase();
+        if (!q) return opts;
+        return opts.filter(
+          (o) =>
+            (o.hostname || "").toLowerCase().includes(q) ||
+            (o.deviceId || "").toLowerCase().includes(q)
+        );
+      }}
+      noOptionsText="No matching devices"
+      renderOption={(props, option, { selected }) => {
+        const { key, ...optionProps } = props;
+        return (
+          <Box component="li" key={key || option.deviceId} {...optionProps} sx={{ py: "4px !important" }}>
+            <Checkbox
+              icon={<CheckBoxOutlineBlankIcon fontSize="small" />}
+              checkedIcon={<CheckBoxIcon fontSize="small" />}
+              checked={selected}
+              size="small"
+              sx={{ mr: 1, p: 0.25, color: BRAND.teal, "&.Mui-checked": { color: BRAND.teal } }}
+            />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }} noWrap>
+                {option.hostname || option.deviceId}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: BRAND.gray }} noWrap>
+                {option.connected ? "Connected" : "Offline"}
+                {option.agentVersion ? ` · agent ${option.agentVersion}` : ""}
+              </Typography>
+            </Box>
+          </Box>
+        );
+      }}
+      renderTags={(selectedValues, getTagProps) =>
+        selectedValues.map((option, index) => {
+          const { key, ...tagProps } = getTagProps({ index });
+          return (
+            <Chip
+              key={key || option.deviceId}
+              {...tagProps}
+              size="small"
+              label={option.hostname || option.deviceId}
+              sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
+            />
+          );
+        })
+      }
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          placeholder={value.length ? "" : "Type to search…"}
+          helperText={helperText}
+        />
+      )}
+    />
+  );
 }
 
 function DetailRow({ label, value, mono = false }) {
@@ -472,7 +579,21 @@ export default function Jobs() {
   }, []);
 
   const [tenantJobs, setTenantJobs] = React.useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
+  const [selectedDeviceIds, setSelectedDeviceIds] = React.useState([]);
+
+  // ── Group targeting ─────────────────────────────────────────────
+  const [groupCatalog, setGroupCatalog] = React.useState([]);
+  const [loadingGroups, setLoadingGroups] = React.useState(false);
+  const [selectedGroupId, setSelectedGroupId] = React.useState("");
+  // "entire" dispatches via /asset-groups/:id/jobs (backend resolves
+  // membership, including re-evaluating dynamic-group criteria at
+  // dispatch time). "specific" narrows to hand-picked members of that
+  // group via the same device multi-select used for target=device.
+  const [groupTargetMode, setGroupTargetMode] = React.useState("entire");
+  const [groupMemberDevices, setGroupMemberDevices] = React.useState([]);
+  const [groupMembersTotal, setGroupMembersTotal] = React.useState(0);
+  const [loadingGroupMembers, setLoadingGroupMembers] = React.useState(false);
+  const [groupDeviceIds, setGroupDeviceIds] = React.useState([]);
   const [selectedJobId, setSelectedJobId] = React.useState(initialFilters.highlightJobId || "");
   const [selectedJob, setSelectedJob] = React.useState(null);
 
@@ -580,10 +701,10 @@ export default function Jobs() {
     if (!jobsMeta) return;
     const known = jobsMeta.known ?? [];
     const types = jobsMeta.types ?? [];
-    const devices = known.filter((item) => item.connected).map((item) => item.deviceId);
-    setSelectedDeviceId((current) => {
-      if (current && known.some((item) => item.deviceId === current)) return current;
-      return known[0]?.deviceId || devices[0] || "";
+    setSelectedDeviceIds((current) => {
+      const stillValid = current.filter((id) => known.some((item) => item.deviceId === id));
+      if (stillValid.length > 0) return stillValid;
+      return known[0]?.deviceId ? [known[0].deviceId] : [];
     });
     setJobType((current) => {
       if (current && types.some((item) => item.jobType === current)) return current;
@@ -591,37 +712,93 @@ export default function Jobs() {
     });
   }, [jobsMeta]);
 
+  // Lazy-load the asset-group catalog the first time the operator
+  // switches to Group targeting — avoids the extra round trip on every
+  // page load for operators who never use group dispatch.
+  const groupsLoadedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (targetMode !== "group" || groupsLoadedRef.current || !canManageJobs) return;
+    groupsLoadedRef.current = true;
+    setLoadingGroups(true);
+    listAssetGroups()
+      .then((res) => setGroupCatalog(listFrom(res, { context: "jobsTargetGroups" })))
+      .catch((err) => {
+        setSnackbar({
+          open: true,
+          message: err?.body?.message || err?.message || "Failed to load asset groups",
+          severity: "error",
+        });
+        setGroupCatalog([]);
+      })
+      .finally(() => setLoadingGroups(false));
+  }, [targetMode, canManageJobs]);
+
+  // Fetch the group's members whenever the operator narrows to
+  // "specific device(s) in group" — cleared (and the previous
+  // selection dropped) the moment the group changes so a stale
+  // deviceId from a different group can't ride along silently.
+  React.useEffect(() => {
+    if (targetMode !== "group" || groupTargetMode !== "specific" || !selectedGroupId) {
+      setGroupMemberDevices([]);
+      setGroupMembersTotal(0);
+      return undefined;
+    }
+    let cancelled = false;
+    setGroupDeviceIds([]);
+    setLoadingGroupMembers(true);
+    listAssetGroupMembers(selectedGroupId, { pageSize: GROUP_MEMBERS_PAGE_SIZE })
+      .then((res) => {
+        if (cancelled) return;
+        setGroupMemberDevices(listFrom(res, { context: "jobsGroupMembers" }));
+        setGroupMembersTotal(Number(res?.total ?? res?.count ?? 0));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSnackbar({
+          open: true,
+          message: err?.body?.message || err?.message || "Failed to load group members",
+          severity: "error",
+        });
+        setGroupMemberDevices([]);
+        setGroupMembersTotal(0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingGroupMembers(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [targetMode, groupTargetMode, selectedGroupId]);
+
   // Resolve the (platform, arch) pair to use when fetching agent versions.
-  // - targetMode "device": use the selected device's platform when known;
-  //   otherwise fall back to the windows/x64 defaults so the dropdown is
-  //   never empty.
-  // - targetMode "tenant": a tenant-wide agent_update fans out to every
-  //   connected device regardless of platform; each agent downloads the
-  //   binary for its own platform at apply time. We use the defaults to
-  //   keep the dropdown deterministic.
-  // We reuse the `selectedDevice` memo declared further below for the
-  // detail panel; here we only need the platform/arch pair for the
-  // version dropdown. Doing an inline find (rather than re-computing
-  // via deviceMap) matches the original code path and avoids reordering
-  // memos whose downstream consumers assume a specific declaration
-  // order.
+  // - targetMode "device" with EXACTLY ONE device selected: use that
+  //   device's platform/arch, so the dropdown only lists versions that
+  //   actually exist for it.
+  // - Anything that can fan out to more than one device (multiple
+  //   devices selected, a group in either sub-mode, or "all connected")
+  //   is potentially mixed-platform: each agent resolves its own binary
+  //   at apply time, so we fall back to a deterministic default just to
+  //   keep the version dropdown non-empty rather than guessing a
+  //   specific device's platform.
+  const isSingleDeviceTarget = targetMode === "device" && selectedDeviceIds.length === 1;
+  const isFanoutTarget = !isSingleDeviceTarget;
   const versionFetchDevice = React.useMemo(() => {
-    if (targetMode !== "device") return null;
-    return knownDevices.find((d) => d.deviceId === selectedDeviceId) ?? null;
-  }, [targetMode, knownDevices, selectedDeviceId]);
+    if (!isSingleDeviceTarget) return null;
+    return knownDevices.find((d) => d.deviceId === selectedDeviceIds[0]) ?? null;
+  }, [isSingleDeviceTarget, knownDevices, selectedDeviceIds]);
 
   const { platform: versionFetchPlatform, arch: versionFetchArch } =
     resolveVersionFetchKey(versionFetchDevice);
 
-  // In tenant-fanout mode we still need SOME arch to list versions —
-  // the fan-out itself is arch-agnostic (each agent resolves its own
-  // binary at apply time), so picking a common default keeps the
-  // dropdown non-empty without misleading the operator about any
-  // specific device. For targeted `device` mode we respect
+  // In fan-out mode we still need SOME arch to list versions — the
+  // fan-out itself is arch-agnostic (each agent resolves its own binary
+  // at apply time), so picking a common default keeps the dropdown
+  // non-empty without misleading the operator about any specific
+  // device. For a single targeted device we respect
   // resolveVersionFetchKey's null and surface that to the UI.
   const effectiveArch =
     versionFetchArch ??
-    (targetMode === "tenant" ? DEFAULT_TENANT_FANOUT_ARCH : null);
+    (isFanoutTarget ? DEFAULT_TENANT_FANOUT_ARCH : null);
 
   React.useEffect(() => {
     if (jobType !== "agent_update" || !canManageJobs) {
@@ -733,7 +910,14 @@ export default function Jobs() {
     [knownDevices]
   );
 
-  const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) || null : null;
+  const selectedDeviceObjs = React.useMemo(
+    () => selectedDeviceIds.map((id) => deviceMap.get(id)).filter(Boolean),
+    [selectedDeviceIds, deviceMap]
+  );
+  const selectedGroupObj = React.useMemo(
+    () => groupCatalog.find((g) => String(g.id) === String(selectedGroupId)) || null,
+    [groupCatalog, selectedGroupId]
+  );
 
   const filteredRows = React.useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -960,13 +1144,28 @@ export default function Jobs() {
       }
     }
 
-    if (targetMode === "device" && !selectedDeviceId) {
+    if (targetMode === "device" && selectedDeviceIds.length === 0) {
       setSnackbar({
         open: true,
-        message: "Select a device first",
+        message: "Select at least one device first",
         severity: "error",
       });
       return;
+    }
+
+    if (targetMode === "group") {
+      if (!selectedGroupId) {
+        setSnackbar({ open: true, message: "Select a group first", severity: "error" });
+        return;
+      }
+      if (groupTargetMode === "specific" && groupDeviceIds.length === 0) {
+        setSnackbar({
+          open: true,
+          message: "Select at least one device in the group",
+          severity: "error",
+        });
+        return;
+      }
     }
 
     if (targetMode === "tenant" && (!tenantId || connectedDeviceIds.length === 0)) {
@@ -981,7 +1180,19 @@ export default function Jobs() {
     const dispatchDescription =
       targetMode === "tenant"
         ? `${connectedDeviceIds.length} connected devices`
-        : `${selectedDevice?.hostname || selectedDeviceId} (${selectedDeviceId})${selectedDevice?.connected ? "" : " [offline]"}`;
+        : targetMode === "group"
+        ? groupTargetMode === "entire"
+          ? `every member of group "${selectedGroupObj?.name || selectedGroupId}"${
+              Number.isFinite(selectedGroupObj?.memberCount)
+                ? ` (~${selectedGroupObj.memberCount} device(s))`
+                : ""
+            }`
+          : `${groupDeviceIds.length} device(s) in group "${selectedGroupObj?.name || selectedGroupId}"`
+        : selectedDeviceIds.length === 1
+        ? `${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${selectedDeviceIds[0]})${
+            selectedDeviceObjs[0]?.connected ? "" : " [offline]"
+          }`
+        : `${selectedDeviceIds.length} selected devices`;
     const confirmed = await confirm({
       title: `Dispatch ${jobType}?`,
       body: `The job will be queued for ${dispatchDescription}.`,
@@ -1003,14 +1214,53 @@ export default function Jobs() {
           message: `Tenant job queued for ${response?.created?.count ?? connectedDeviceIds.length} devices`,
           severity: "success",
         });
-      } else {
-        const response = await createDeviceJob(selectedDeviceId, payload);
+      } else if (targetMode === "group") {
+        if (groupTargetMode === "entire") {
+          const response = await dispatchAssetGroupJob(selectedGroupId, payload);
+          setSnackbar({
+            open: true,
+            message: `Dispatched ${response?.count ?? 0} job(s) to "${
+              response?.groupName || selectedGroupObj?.name || selectedGroupId
+            }"`,
+            severity: "success",
+          });
+        } else if (groupDeviceIds.length === 1) {
+          const response = await createDeviceJob(groupDeviceIds[0], payload);
+          setSelectedJobId(response?.jobId || "");
+          setSnackbar({
+            open: true,
+            message: `Job queued successfully (${response?.jobId || "created"})`,
+            severity: "success",
+          });
+        } else {
+          const response = await createTenantJobs(tenantId, {
+            deviceIds: groupDeviceIds,
+            ...payload,
+          });
+          setSnackbar({
+            open: true,
+            message: `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
+            severity: "success",
+          });
+        }
+      } else if (selectedDeviceIds.length === 1) {
+        const response = await createDeviceJob(selectedDeviceIds[0], payload);
         setSelectedJobId(response?.jobId || "");
         setSnackbar({
           open: true,
-          message: selectedDevice?.connected
+          message: selectedDeviceObjs[0]?.connected
             ? `Job queued successfully (${response?.jobId || "created"})`
-            : `Job queued offline for ${selectedDevice?.hostname || selectedDeviceId} (${response?.jobId || "created"})`,
+            : `Job queued offline for ${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${response?.jobId || "created"})`,
+          severity: "success",
+        });
+      } else {
+        const response = await createTenantJobs(tenantId, {
+          deviceIds: selectedDeviceIds,
+          ...payload,
+        });
+        setSnackbar({
+          open: true,
+          message: `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
           severity: "success",
         });
       }
@@ -1256,7 +1506,7 @@ export default function Jobs() {
             gap: 2,
             gridTemplateColumns: {
               xs: "1fr",
-              sm: targetMode === "device" ? "1fr 2fr" : "1fr",
+              sm: targetMode === "tenant" ? "1fr" : "1fr 2fr",
             },
           }}
         >
@@ -1277,36 +1527,104 @@ export default function Jobs() {
           </TextField>
 
           {targetMode === "device" ? (
-            <TextField
-              select
-              label="Device"
-              size="small"
-              value={selectedDeviceId}
-              onChange={(e) => setSelectedDeviceId(e.target.value)}
+            <DeviceCheckAutocomplete
+              label="Device(s)"
+              devices={knownDevices}
+              value={selectedDeviceIds}
+              onChange={setSelectedDeviceIds}
               disabled={loadingMeta}
               helperText={
-                selectedDevice
-                  ? `${selectedDevice.connected ? "Connected" : "Offline"} · agent ${selectedDevice.agentVersion || "unknown"} · ${connectedDeviceIds.length}/${knownDevices.length} online`
+                selectedDeviceIds.length === 1
+                  ? `${selectedDeviceObjs[0]?.connected ? "Connected" : "Offline"} · agent ${
+                      selectedDeviceObjs[0]?.agentVersion || "unknown"
+                    } · ${connectedDeviceIds.length}/${knownDevices.length} online`
+                  : selectedDeviceIds.length > 1
+                  ? `${selectedDeviceIds.length} devices selected · ${connectedDeviceIds.length}/${knownDevices.length} online`
                   : `${connectedDeviceIds.length}/${knownDevices.length} online`
               }
-              fullWidth
-            >
-              {knownDevices.length === 0 ? (
-                <MenuItem value="">No known devices</MenuItem>
+            />
+          ) : targetMode === "group" ? (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <TextField
+                select
+                label="Group"
+                size="small"
+                value={selectedGroupId}
+                onChange={(e) => {
+                  setSelectedGroupId(e.target.value);
+                  setGroupDeviceIds([]);
+                }}
+                disabled={loadingGroups}
+                helperText={
+                  groupCatalog.length === 0
+                    ? loadingGroups
+                      ? "Loading groups…"
+                      : "No asset groups available — create one from the Asset Groups page"
+                    : selectedGroupObj
+                    ? `${selectedGroupObj.kind === "dynamic" ? "Dynamic" : "Static"}${
+                        Number.isFinite(selectedGroupObj.memberCount)
+                          ? ` · ${selectedGroupObj.memberCount} member(s)`
+                          : ""
+                      }`
+                    : "Membership for dynamic groups is evaluated at dispatch time."
+                }
+                fullWidth
+              >
+                {groupCatalog.length === 0 ? (
+                  <MenuItem value="">No asset groups</MenuItem>
+                ) : (
+                  groupCatalog.map((g) => (
+                    <MenuItem key={g.id} value={String(g.id)}>
+                      {g.name}
+                      {g.kind === "dynamic" ? " (dynamic)" : ""}
+                      {Number.isFinite(g.memberCount) ? ` · ${g.memberCount}` : ""}
+                    </MenuItem>
+                  ))
+                )}
+              </TextField>
+
+              <RadioGroup
+                row
+                value={groupTargetMode}
+                onChange={(e) => setGroupTargetMode(e.target.value)}
+              >
+                <FormControlLabel value="entire" control={<Radio size="small" />} label="Entire group" />
+                <FormControlLabel
+                  value="specific"
+                  control={<Radio size="small" />}
+                  label="Specific device(s) in group"
+                />
+              </RadioGroup>
+
+              {groupTargetMode === "specific" ? (
+                <DeviceCheckAutocomplete
+                  label="Devices in group"
+                  devices={groupMemberDevices}
+                  value={groupDeviceIds}
+                  onChange={setGroupDeviceIds}
+                  disabled={!selectedGroupId || loadingGroupMembers}
+                  helperText={
+                    !selectedGroupId
+                      ? "Pick a group first"
+                      : loadingGroupMembers
+                      ? "Loading members…"
+                      : groupMemberDevices.length === 0
+                      ? "This group has no members"
+                      : groupMembersTotal > groupMemberDevices.length
+                      ? `${groupDeviceIds.length} selected · showing first ${groupMemberDevices.length} of ${groupMembersTotal} members (use "Entire group" for full coverage)`
+                      : `${groupDeviceIds.length} of ${groupMemberDevices.length} selected`
+                  }
+                />
               ) : (
-                // Show hostname only — the connected/offline badge and
-                // agent version live in the helperText below the
-                // dropdown, and the device id is available on the row
-                // once selected. Keeping the MenuItem label to a single
-                // token makes scanning the list much faster for
-                // operators with fleets of dozens of devices.
-                knownDevices.map((device) => (
-                  <MenuItem key={device.deviceId} value={device.deviceId}>
-                    {device.hostname || device.deviceId}
-                  </MenuItem>
-                ))
+                <Alert severity="info" variant="outlined" sx={{ borderRadius: 2, alignItems: "center", py: 0.25 }}>
+                  This job will be dispatched to every member of{" "}
+                  <strong>{selectedGroupObj?.name || "the selected group"}</strong>
+                  {selectedGroupObj?.kind === "dynamic"
+                    ? " (membership re-evaluated at dispatch time)."
+                    : "."}
+                </Alert>
               )}
-            </TextField>
+            </Box>
           ) : (
             <Alert
               severity="info"
