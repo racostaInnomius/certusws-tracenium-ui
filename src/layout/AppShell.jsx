@@ -33,6 +33,8 @@ import HierarchyBreadcrumb from "../msp/HierarchyBreadcrumb";
 const Portfolio = React.lazy(() => import("../msp/Portfolio"));
 
 import { renderPage } from "./pageRegistry";
+import LicenseBlockedScreen from "../components/Licensing/LicenseBlockedScreen";
+import { getLicenseState } from "../api/licensing";
 
 
 function PageFallback() {
@@ -912,6 +914,37 @@ export default function AppShell() {
     onAssetsEmptyStateChange: handleAssetsEmptyStateChange,
   });
 
+  // ADR-0005 D6 — the blocked console.
+  //
+  // Read once per tenant, not polled: the state only changes when the
+  // operator acts (and then we refetch) or when the nightly job runs.
+  // Failure is silent and permissive on purpose — if this request breaks,
+  // the console stays usable. A license lever must never become an outage
+  // caused by its own lookup.
+  const [licenseState, setLicenseState] = React.useState(null);
+  const activeTenantKey = activeTenant?.tenantId ?? activeTenant?.id ?? "self";
+
+  const refreshLicenseState = React.useCallback(() => {
+    if (inPortfolioMode || mspResolving) return;
+    getLicenseState()
+      .then(setLicenseState)
+      .catch(() => setLicenseState(null));
+  }, [inPortfolioMode, mspResolving]);
+
+  React.useEffect(() => {
+    refreshLicenseState();
+  }, [refreshLicenseState, activeTenantKey]);
+
+  // The three things D6 keeps reachable while blocked:
+  //   1. the adjustment screen  -> LicenseBlockedScreen, rendered below
+  //   2. device removal         -> the Assets page, allowed through here
+  //   3. logout                 -> Topbar, which always renders
+  // Everything else is replaced by the blocked screen.
+  const DEVICE_REMOVAL_PAGE = "assets";
+  const licenseBlocked =
+    licenseState?.consoleBlocked === true && !inPortfolioMode && !mspResolving;
+  const showLicenseBlock = licenseBlocked && selectedPage !== DEVICE_REMOVAL_PAGE;
+
   const shouldShowNoInformationOverlay =
     !inPortfolioMode &&
     tenantInventoryState === "empty" && EMPTY_TENANT_GATED_PAGES.has(selectedPage);
@@ -1017,7 +1050,19 @@ export default function AppShell() {
                   userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
                 }}
               >
-                {mspResolving ? <PageFallback /> : inPortfolioMode ? <Portfolio /> : content}
+                {mspResolving ? (
+                  <PageFallback />
+                ) : inPortfolioMode ? (
+                  <Portfolio />
+                ) : showLicenseBlock ? (
+                  <LicenseBlockedScreen
+                    state={licenseState}
+                    onNavigate={handleSelect}
+                    onResolved={refreshLicenseState}
+                  />
+                ) : (
+                  content
+                )}
               </Box>
             </ErrorBoundary>
           </React.Suspense>

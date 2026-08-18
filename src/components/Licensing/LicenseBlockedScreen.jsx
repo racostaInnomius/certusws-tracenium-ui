@@ -1,0 +1,194 @@
+// src/components/Licensing/LicenseBlockedScreen.jsx
+//
+// ADR-0005 D6 — the blocked console, and the two doors out of it.
+//
+// The rule this screen exists to satisfy: a lock whose only key is behind
+// the lock is not a lock, it is a support ticket. So the blocked state
+// keeps exactly three things reachable — accept the adjustment, remove
+// devices, and log out — and this screen is where the first one lives
+// while linking to the second.
+//
+// It is a full-page takeover rather than a banner because a banner is
+// dismissible-looking; an operator who has already ignored the demand for
+// two days has demonstrated that a banner does not reach them.
+
+import * as React from "react";
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import { BRAND, ROLE } from "../../theme/brand";
+import { acceptLicenseAdjustment } from "../../api/licensing";
+
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
+export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) {
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [needsAdmin, setNeedsAdmin] = React.useState(false);
+
+  const adj = state?.adjustment ?? null;
+  const previous = adj?.previousMaxDevices ?? state?.maxDevices ?? 0;
+  const proposed = adj?.proposedMaxDevices ?? state?.used ?? 0;
+
+  const handleAccept = async () => {
+    if (!adj) return;
+    setBusy(true);
+    setError("");
+    try {
+      await acceptLicenseAdjustment(adj.id);
+      onResolved?.();
+    } catch (err) {
+      // A 409 means somebody already answered — the other admin clicked
+      // accept, or devices were removed. Re-reading state clears the
+      // screen, so treat it as success rather than showing a scary error.
+      if (err?.status === 409) onResolved?.();
+      // The server is the single authority on who may change what the
+      // tenant is billed for. Rather than duplicate its role logic here
+      // (and risk the two disagreeing), the button is always offered and
+      // a refusal is explained.
+      else if (err?.status === 403) setNeedsAdmin(true);
+      else setError(err?.message || "Could not apply the adjustment. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        p: { xs: 2, sm: 4 },
+        overflow: "auto",
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          maxWidth: 640,
+          width: "100%",
+          p: { xs: 3, sm: 4 },
+          borderRadius: 3,
+          border: `1px solid ${ROLE.critical}`,
+          boxShadow: BRAND.shadow,
+          backgroundColor: BRAND.surface || "#fff",
+        }}
+      >
+        <Stack spacing={2.5}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: 1.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: ROLE.criticalSoft,
+                color: ROLE.critical,
+                flexShrink: 0,
+              }}
+            >
+              <LockOutlinedIcon />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.2 }}>
+                Your license needs attention
+              </Typography>
+              <Typography variant="body2" sx={{ color: BRAND.tealText }}>
+                The console is paused until this is resolved.
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Typography variant="body2" sx={{ color: BRAND.dark }}>
+            On {formatDate(adj?.detectedAt)} this tenant had{" "}
+            <strong>{adj?.fleetAtDetection ?? state?.used}</strong> devices enrolled against{" "}
+            <strong>{previous}</strong> licenses. We asked you to choose by{" "}
+            {formatDate(adj?.dueAt)} and haven&apos;t heard back, so the console is on hold.
+            Your devices are still managed and still reporting — nothing was turned off on
+            the endpoints.
+          </Typography>
+
+          <Box
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              backgroundColor: BRAND.tealSoft,
+              border: `1px solid ${BRAND.border}`,
+            }}
+          >
+            <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+              Option 1 — adjust your licenses
+            </Typography>
+            <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+              Set your licensed device count to {proposed}, matching what you are actually
+              using. This records the change; no payment is taken here.
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              p: 2,
+              borderRadius: 2,
+              border: `1px solid ${BRAND.border}`,
+            }}
+          >
+            <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+              Option 2 — remove devices
+            </Typography>
+            <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+              Bring the fleet back to {previous} devices or fewer. The console unlocks as
+              soon as you do — you don&apos;t need to come back here.
+            </Typography>
+          </Box>
+
+          {error ? (
+            <Typography variant="caption" sx={{ color: ROLE.critical }}>
+              {error}
+            </Typography>
+          ) : null}
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Button
+              variant="contained"
+              onClick={handleAccept}
+              disabled={busy || !adj || needsAdmin}
+              startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
+              sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+            >
+              {busy ? "Applying…" : `Set my licenses to ${proposed}`}
+            </Button>
+            <Button variant="outlined" onClick={() => onNavigate?.("assets")} disabled={busy}>
+              Manage devices
+            </Button>
+          </Stack>
+
+          {needsAdmin ? (
+            // A viewer still sees why the console is locked and can still
+            // reach device management; only the billing decision is
+            // reserved. Hiding the screen from them would leave an
+            // inexplicably dead UI.
+            <Typography variant="caption" sx={{ color: BRAND.tealText }}>
+              Adjusting licenses requires an administrator or owner on this tenant.
+            </Typography>
+          ) : null}
+        </Stack>
+      </Paper>
+    </Box>
+  );
+}
