@@ -60,12 +60,21 @@ const TAB_SX = {
 
 export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false }) {
   const [activeTab, setActiveTab] = React.useState(0);
+  // Set right before jumping to the Hardware Inventory tab from a
+  // Dashboard "OS versions" row click, so that tab's search box opens
+  // pre-filtered to just that OS. Cleared on any DIRECT tab click (see
+  // handleChange) so it can't leak into a later, unrelated visit to the
+  // tab — HardwareInventory only reads it once, as its initial state,
+  // the moment TabPanel mounts it.
+  const [pendingHardwareSearch, setPendingHardwareSearch] = React.useState("");
 
   const handleChange = (_event, newValue) => {
     setActiveTab(newValue);
+    setPendingHardwareSearch("");
   };
 
-  const navigateToHardwareInventory = React.useCallback(() => {
+  const navigateToHardwareInventory = React.useCallback((searchTerm = "") => {
+    setPendingHardwareSearch(searchTerm);
     setActiveTab(3);
 
     // Keep the drill-down feeling intentional: when the user clicks a
@@ -193,7 +202,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={activeTab} index={3}>
-        <HardwareInventory />
+        <HardwareInventory initialSearch={pendingHardwareSearch} />
       </TabPanel>
     </Box>
   );
