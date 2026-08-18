@@ -57,6 +57,7 @@ function defaultsForCreate() {
     signingRequired: false,
     description: "",
     isActive: true,
+    selfServiceEnabled: false,
     detectionRule: null,
   };
 }
@@ -80,6 +81,7 @@ function fromExisting(item) {
     signingRequired: Boolean(item.signingRequired),
     description: item.description ?? "",
     isActive: item.isActive !== false,
+    selfServiceEnabled: Boolean(item.selfServiceEnabled),
     detectionRule: item.detectionRule ?? null,
   };
 }
@@ -172,6 +174,7 @@ export default function PackageDialog({
       signingRequired: form.signingRequired,
       description: form.description.trim() || null,
       isActive: form.isActive,
+      selfServiceEnabled: form.selfServiceEnabled,
       detectionRule: form.detectionRule, // already normalized by editor
     };
     onSubmit?.(payload);
@@ -400,6 +403,15 @@ export default function PackageDialog({
                 />
               }
               label="Active (deployable)"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.selfServiceEnabled}
+                  onChange={(e) => update({ selfServiceEnabled: e.target.checked })}
+                />
+              }
+              label="Self-service (offered in the Tracenium tray for users to install themselves)"
             />
           </Stack>
 
