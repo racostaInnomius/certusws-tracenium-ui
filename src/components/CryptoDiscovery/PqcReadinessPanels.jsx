@@ -289,7 +289,15 @@ export function AgilityBlockersPanel({ pqc }) {
         <>
           <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 1.5 }}>
             Thresholds: Java {agility.jvmMinMajor}+ (ML-KEM and ML-DSA arrived in that JDK),
-            OpenSSL {agility.opensslMinVersion}+.
+            OpenSSL {agility.opensslMinVersion}+, Windows{" "}
+            {agility.windowsMinBuild ? `build ${agility.windowsMinBuild}` : "24H2"}+ and macOS{" "}
+            {agility.macosMinMajor ?? 26}+ for the operating system&apos;s own TLS stack.
+          </Typography>
+          <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+            An <strong>os-tls</strong> blocker covers everything that uses the system stack —
+            on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a
+            software inventory. Clearing the threshold is not the same as having it on:
+            Windows ships the ML-KEM groups disabled until policy enables them.
           </Typography>
           <Stack divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
             {[...byDevice.values()].map((device) => (
