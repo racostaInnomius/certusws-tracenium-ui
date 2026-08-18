@@ -18,7 +18,7 @@ import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import AlertRow from "./AlertRow";
 import { BRAND, ROLE } from "../../theme/brand";
-import { classifyAgentVersions } from "./FleetComposition";
+import { classifyAgentVersions } from "./agentVersions";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;

@@ -12,22 +12,39 @@
 // out 10+ parallel requests with allSettled — any failing endpoint
 // leaves its slot in a quiet zero state instead of blanking the page.
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, lazy, Suspense } from "react";
 import { Box, Grid, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import { fetchOverviewBundle } from "../api/overview";
 import HeroKpis from "../components/Overview/HeroKpis";
 import AttentionPanel from "../components/Overview/AttentionPanel";
-import FleetComposition from "../components/Overview/FleetComposition";
-import AuditTimeseriesChart from "../components/Overview/AuditTimeseriesChart";
-import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 import RecentActivity from "../components/Overview/RecentActivity";
 import LatestAlerts from "../components/Overview/LatestAlerts";
-import PatchCoverageCard from "../components/Overview/PatchCoverageCard";
 import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
 import LicenseUsageCard from "../components/Overview/LicenseUsageCard";
-import ComplianceTrendCard from "../components/Overview/ComplianceTrendCard";
 import HealthDistributionCard from "../components/Overview/HealthDistributionCard";
+// ── Recharts, off the first paint ────────────────────────────────────
+//
+// Overview is the landing page, so its chunk is what stands between login
+// and seeing anything. Measured on the deployed build: the shell is ~303 KB
+// compressed and charts-vendor adds ~152 KB on top — a third of the
+// critical path — to draw cards that are all below the fold. Nothing above
+// it needs Recharts: the Hero KPIs use an inline SVG sparkline on purpose,
+// and the licence bar and Attention panel are plain layout.
+//
+// So the five chart-bearing cards load on their own. The KPIs paint as
+// soon as the shell is ready and the charts arrive a beat later, which is
+// the order an operator reads them in anyway.
+//
+// This is why the "cache the last load" idea would not have helped: the
+// data was never the thing being waited on — the page could not paint
+// until this JS had parsed, cached data or not.
+const FleetComposition = lazy(() => import("../components/Overview/FleetComposition"));
+const AuditTimeseriesChart = lazy(() => import("../components/Overview/AuditTimeseriesChart"));
+const JobsTimeseriesChart = lazy(() => import("../components/Overview/JobsTimeseriesChart"));
+const PatchCoverageCard = lazy(() => import("../components/Overview/PatchCoverageCard"));
+const ComplianceTrendCard = lazy(() => import("../components/Overview/ComplianceTrendCard"));
+
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -58,6 +75,25 @@ function navigateWithQuery(page, extraQuery = {}) {
   // way to force that re-render is dispatching a popstate so any
   // listeners in the app shell update themselves.
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+
+/**
+ * Stand-in while a chart chunk loads. Reserves the card's height on
+ * purpose: letting the page reflow as each chart lands reads as jank,
+ * which is a worse experience than the extra beat it saves.
+ */
+function ChartSlot({ height = 280 }) {
+  return (
+    <Box
+      sx={{
+        height,
+        borderRadius: 3,
+        border: "1px solid rgba(0,0,0,0.08)",
+        backgroundColor: "#fff",
+      }}
+    />
+  );
 }
 
 export default function Overview() {
@@ -156,11 +192,13 @@ export default function Overview() {
           />
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
-          <AuditTimeseriesChart
-            result={results?.auditTimeseries}
-            loading={loading}
-            onNavigate={navigateWithQuery}
-          />
+          <Suspense fallback={<ChartSlot height={320} />}>
+            <AuditTimeseriesChart
+              result={results?.auditTimeseries}
+              loading={loading}
+              onNavigate={navigateWithQuery}
+            />
+          </Suspense>
         </Grid>
       </Grid>
 
@@ -174,6 +212,7 @@ export default function Overview() {
           grid instead of a misaligned patchwork. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 8 }}>
+          <Suspense fallback={<ChartSlot height={360} />}>
           <FleetComposition
             results={results}
             loading={loading}
@@ -186,6 +225,7 @@ export default function Overview() {
               />
             }
           />
+          </Suspense>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <PluginCoverageStrip
@@ -205,11 +245,13 @@ export default function Overview() {
           a week". */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 6 }}>
-          <ComplianceTrendCard
-            result={results?.fleetComplianceTimeseries}
-            loading={loading}
-            onNavigate={navigateWithQuery}
-          />
+          <Suspense fallback={<ChartSlot />}>
+            <ComplianceTrendCard
+              result={results?.fleetComplianceTimeseries}
+              loading={loading}
+              onNavigate={navigateWithQuery}
+            />
+          </Suspense>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <HealthDistributionCard
@@ -226,11 +268,13 @@ export default function Overview() {
           row sits flush with the donut row above. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 8 }}>
-          <JobsTimeseriesChart
-            result={results?.jobsTimeseries}
-            loading={loading}
-            onNavigate={navigateWithQuery}
-          />
+          <Suspense fallback={<ChartSlot height={320} />}>
+            <JobsTimeseriesChart
+              result={results?.jobsTimeseries}
+              loading={loading}
+              onNavigate={navigateWithQuery}
+            />
+          </Suspense>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <LatestAlerts
