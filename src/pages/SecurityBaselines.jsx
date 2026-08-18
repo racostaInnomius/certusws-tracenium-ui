@@ -90,7 +90,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
       const [res, catSum, fleet] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setLoadError(null); return r; },
-          (err) => { setLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+          (err) => { setLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
         getCategorySummary().catch(() => null),
         getComplianceSummary().catch(() => null),
@@ -141,7 +141,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     // Rechazar aquí y no solo deshabilitar el botón: el botón se puede
     // rehabilitar en cualquier re-render, y esto no admite un "casi".
     if (loadError) {
-      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
     try {

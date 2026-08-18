@@ -117,7 +117,7 @@ export default function DeviceManagement({ onNavigate }) {
       const [policyRes, devicesRes] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setLoadError(null); return r; },
-          (err) => { setLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+          (err) => { setLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
         listKnownDevices().catch(() => ({ items: [] })),
       ]);
@@ -170,7 +170,7 @@ export default function DeviceManagement({ onNavigate }) {
   const handleSave = async () => {
     if (!canManage || !tenantId) return;
     if (loadError) {
-      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
     try {
@@ -206,7 +206,7 @@ export default function DeviceManagement({ onNavigate }) {
   const handleSaveMdm = async (platform) => {
     if (!canManage || !tenantId) return;
     if (loadError) {
-      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
     try {

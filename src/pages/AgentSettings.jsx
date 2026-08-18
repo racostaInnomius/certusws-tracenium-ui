@@ -432,7 +432,7 @@ export default function AgentSettings({ embedded = false }) {
         // y, sobre todo, tiene que impedir el guardado.
         getTenantPolicy(tenantId).then(
           (r) => { setTenantLoadError(null); return r; },
-          (err) => { setTenantLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+          (err) => { setTenantLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
         listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
         listKnownDevices().catch(() => ({ items: [] })),
@@ -557,7 +557,7 @@ export default function AgentSettings({ embedded = false }) {
     // no solo deshabilitar el botón, porque el botón se puede volver a
     // habilitar por cualquier re-render y esto no admite un "casi".
     if (tenantLoadError) {
-      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
     if (tenantJsonError) {
@@ -624,7 +624,7 @@ export default function AgentSettings({ embedded = false }) {
     // no solo deshabilitar el botón, porque el botón se puede volver a
     // habilitar por cualquier re-render y esto no admite un "casi".
     if (tenantLoadError) {
-      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      showSnack("The current policy could not be read — reload before saving.", "error");
       return;
     }
 
@@ -1276,14 +1276,14 @@ function TenantTab(props) {
               sx={{ mt: 2.5 }}
               action={
                 <Button color="inherit" size="small" onClick={onRetryLoad}>
-                  Reintentar
+                  Retry
                 </Button>
               }
             >
-              <AlertTitle>No se pudo leer la política actual</AlertTitle>
-              {tenantLoadError} — el formulario muestra valores por defecto, no la
-              configuración del tenant. Guardar está deshabilitado para no
-              sobrescribirla.
+              <AlertTitle>Couldn&apos;t read the current policy</AlertTitle>
+              {tenantLoadError} — the form below shows default values, not this
+              tenant&apos;s configuration. Saving is disabled so it can&apos;t be
+              overwritten.
             </Alert>
           ) : null}
 

@@ -14,6 +14,8 @@
 
 import * as React from "react";
 import {
+  Alert,
+  AlertTitle,
   Box,
   Chip,
   Drawer,
@@ -142,6 +144,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
   const [summary, setSummary] = React.useState(null);
   const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
+  // Separado de `error` a propósito: los KPIs y los paneles se piden por
+  // separado justamente para que uno sobreviva al otro. Lo que faltaba es
+  // que el que cae lo diga — sin esto los paneles se pintaban vacíos, que
+  // se lee como "no hay nada que mostrar" en vez de "no pude cargarlo".
+  const [panelsError, setPanelsError] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -157,10 +164,16 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
       });
     getCdpDashboard()
       .then((resp) => {
-        if (alive) setDashboard(resp?.dashboard ?? null);
+        if (alive) {
+          setDashboard(resp?.dashboard ?? null);
+          setPanelsError(null);
+        }
       })
-      .catch(() => {
-        if (alive) setDashboard(null);
+      .catch((err) => {
+        if (alive) {
+          setDashboard(null);
+          setPanelsError(err?.message || String(err));
+        }
       });
     return () => {
       alive = false;
@@ -232,6 +245,17 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
           </Grid>
         ))}
       </Grid>
+
+      {panelsError ? (
+        // Después de los KPIs, no antes: los KPIs vienen de otra petición y
+        // siguen siendo válidos. Lo que hay que decir es exactamente qué
+        // parte de la pantalla no es de fiar.
+        <Alert severity="warning">
+          <AlertTitle>The detail panels didn&apos;t load</AlertTitle>
+          {panelsError} — the indicators above are still accurate; the panels
+          below are empty because of the failure, not for lack of data.
+        </Alert>
+      ) : null}
 
       {/* Row 1 — when does the fleet break, and what do I do today. */}
       <Grid container spacing={2}>
@@ -322,6 +346,7 @@ function CdpPqcTab({ refreshNonce }) {
 // ── Certificates tab (fleet, deduped by fingerprint) ─────────────────
 
 function CdpCertificatesTab({ refreshNonce, externalFilter }) {
+  const [loadError, setLoadError] = React.useState(null);
   const [rows, setRows] = React.useState([]);
   const [rowCount, setRowCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -370,10 +395,13 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
         );
         setRowCount(Number(resp?.total ?? 0));
       })
-      .catch(() => {
+      .catch((err) => {
         if (alive) {
+          // Vaciar la tabla sin más decía "cero certificados", que es una
+          // afirmación sobre la flota. La verdad era "no pude leerlos".
           setRows([]);
           setRowCount(0);
+          setLoadError(err?.message || String(err));
         }
       })
       .finally(() => {
@@ -504,6 +532,14 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
         )}
       </Stack>
 
+      {loadError ? (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          <AlertTitle>Couldn&apos;t load</AlertTitle>
+          {loadError} — the table is empty because the query failed, not because
+          there is nothing to show.
+        </Alert>
+      ) : null}
+
       <DataGrid
         autoHeight
         rows={rows}
@@ -547,18 +583,23 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
 // ── Devices tab + drawer ─────────────────────────────────────────────
 
 function CdpDeviceDrawerContent({ agentId, host }) {
+  const [loadError, setLoadError] = React.useState(null);
   const [items, setItems] = React.useState(null);
   const [includeRoots, setIncludeRoots] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
     setItems(null);
+    setLoadError(null);
     listCdpDeviceCertificates(agentId, { includeRoots: includeRoots || undefined })
       .then((resp) => {
         if (alive) setItems(resp?.items ?? []);
       })
-      .catch(() => {
-        if (alive) setItems([]);
+      .catch((err) => {
+        // Ojo: `items = []` pinta "No certificates reported.", que le dice
+        // al operador algo falso sobre SU equipo y lo manda a revisar una
+        // máquina que está bien.
+        if (alive) setLoadError(err?.message || String(err));
       });
     return () => {
       alive = false;
@@ -584,7 +625,12 @@ function CdpDeviceDrawerContent({ agentId, host }) {
         label={<Typography sx={{ fontSize: 13 }}>Show system roots</Typography>}
         sx={{ mb: 1 }}
       />
-      {items === null ? (
+      {loadError ? (
+        <Alert severity="error">
+          <AlertTitle>Couldn&apos;t load</AlertTitle>
+          {loadError}
+        </Alert>
+      ) : items === null ? (
         <Typography sx={{ fontSize: 13, color: "text.secondary" }}>Loading…</Typography>
       ) : items.length === 0 ? (
         <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
@@ -631,6 +677,7 @@ function CdpDeviceDrawerContent({ agentId, host }) {
 }
 
 function CdpDevicesTab({ refreshNonce }) {
+  const [loadError, setLoadError] = React.useState(null);
   const [rows, setRows] = React.useState([]);
   const [rowCount, setRowCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -651,10 +698,13 @@ function CdpDevicesTab({ refreshNonce }) {
         setRows((resp?.items ?? []).map((item) => ({ id: item.agentId, ...item })));
         setRowCount(Number(resp?.total ?? 0));
       })
-      .catch(() => {
+      .catch((err) => {
         if (alive) {
+          // Vaciar la tabla sin más decía "cero certificados", que es una
+          // afirmación sobre la flota. La verdad era "no pude leerlos".
           setRows([]);
           setRowCount(0);
+          setLoadError(err?.message || String(err));
         }
       })
       .finally(() => {
@@ -733,6 +783,14 @@ function CdpDevicesTab({ refreshNonce }) {
           sx={{ minWidth: 240 }}
         />
       </Stack>
+
+      {loadError ? (
+        <Alert severity="error" sx={{ mb: 1.5 }}>
+          <AlertTitle>Couldn&apos;t load</AlertTitle>
+          {loadError} — the table is empty because the query failed, not because
+          there is nothing to show.
+        </Alert>
+      ) : null}
 
       <DataGrid
         autoHeight
