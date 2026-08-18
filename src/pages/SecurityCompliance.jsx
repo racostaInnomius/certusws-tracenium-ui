@@ -280,6 +280,12 @@ export default function SecurityCompliance({ initialTab }) {
   const [drawerData, setDrawerData] = React.useState(null);
   const [drawerTimeseries, setDrawerTimeseries] = React.useState(null);
   const [drawerLoading, setDrawerLoading] = React.useState(false);
+  // Distinct from `drawerData === null`. A failed request and a device
+  // with genuinely no compliance data used to be the same state, and the
+  // drawer reported both as "no compliance data for this device yet" —
+  // telling the operator something false ABOUT THE DEVICE when the real
+  // problem was a 403 or a 500 on our side.
+  const [drawerError, setDrawerError] = React.useState(null);
 
   // Cache key includes the selected framework so flipping the picker
   // gets its own snapshot — coming back to a previously-loaded
@@ -351,16 +357,28 @@ export default function SecurityCompliance({ initialTab }) {
     setDrawerLoading(true);
     setDrawerData(null);
     setDrawerTimeseries(null);
+    setDrawerError(null);
     try {
-      const [detail, ts] = await Promise.all([
-        getDeviceDetail(agentId).catch(() => null),
-        getDeviceTimeseries(agentId, 30).catch(() => null)
-      ]);
+      // The detail is the drawer. Its failure has to reach the operator —
+      // swallowing it left them reading "no compliance data yet", which
+      // is a claim about the device rather than about the request.
+      const detail = await getDeviceDetail(agentId);
       setDrawerData(detail ?? null);
-      setDrawerTimeseries(ts ?? null);
-    } finally {
-      setDrawerLoading(false);
+    } catch (err) {
+      setDrawerError(err?.message || "Could not load this device's compliance detail.");
+      setDrawerData(null);
     }
+
+    // The 30-day trend is secondary decoration: it gets its own request
+    // and its own failure, and losing the chart must not cost the
+    // findings list the operator actually came for.
+    try {
+      setDrawerTimeseries((await getDeviceTimeseries(agentId, 30)) ?? null);
+    } catch {
+      setDrawerTimeseries(null);
+    }
+
+    setDrawerLoading(false);
   }, []);
 
   // Sprint 3 — refetch just the drawer (NOT the device table) after a
@@ -384,6 +402,7 @@ export default function SecurityCompliance({ initialTab }) {
     setDrawerAgentId(null);
     setDrawerData(null);
     setDrawerTimeseries(null);
+    setDrawerError(null);
   };
 
   // Sprint 3 — page-level Snackbar surface for lifecycle mutations.
@@ -1161,6 +1180,8 @@ export default function SecurityCompliance({ initialTab }) {
           agentId={drawerAgentId}
           loading={drawerLoading}
           data={drawerData}
+          error={drawerError}
+          onRetry={() => openDrawer(drawerAgentId)}
           timeseries={drawerTimeseries}
           onClose={closeDrawer}
           frameworkLabels={frameworkLabels}

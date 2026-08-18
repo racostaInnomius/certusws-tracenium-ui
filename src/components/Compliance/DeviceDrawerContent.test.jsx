@@ -96,3 +96,53 @@ describe("DeviceDrawerContent", () => {
     );
   });
 });
+
+describe("a failed request is not an empty device", () => {
+  // The bug this pins: openDrawer swallowed the detail request's error, so
+  // `data` came back null and the drawer rendered "No compliance data for
+  // this device yet." A 403 or a 500 on our side was presented to the
+  // operator as a confident statement ABOUT THEIR MACHINE — sending them
+  // to investigate a device that was fine.
+
+  it("says the load failed, not that the device has no data", () => {
+    render(
+      <DeviceDrawerContent {...baseProps} data={null} error="HTTP 403: TENANT_NOT_RESOLVED" />
+    );
+    expect(screen.getByText(/couldn't load this device/i)).toBeInTheDocument();
+    expect(screen.getByText(/TENANT_NOT_RESOLVED/)).toBeInTheDocument();
+    expect(screen.queryByText(/no compliance data for this device yet/i)).toBeNull();
+  });
+
+  it("offers a retry, because these failures are usually transient", () => {
+    const onRetry = vi.fn();
+    render(<DeviceDrawerContent {...baseProps} data={null} error="boom" onRetry={onRetry} />);
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    expect(onRetry).toHaveBeenCalled();
+  });
+
+  it("still reports a genuinely empty device as empty", () => {
+    // The old message is correct in its own case — the fix is that it is
+    // no longer used for both.
+    render(<DeviceDrawerContent {...baseProps} data={null} error={null} />);
+    expect(screen.getByText(/no compliance data for this device yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't load this device/i)).toBeNull();
+  });
+
+  it("renders the detail normally when the request succeeded", () => {
+    render(<DeviceDrawerContent {...baseProps} data={deviceData} error={null} />);
+    expect(screen.queryByText(/couldn't load this device/i)).toBeNull();
+    expect(screen.queryByText(/no compliance data/i)).toBeNull();
+  });
+
+  it("shows the error even while an unrelated retry is not in flight", () => {
+    // Loading wins over error so a retry does not flash the old failure,
+    // but a settled failure must never be silently swallowed by a stale
+    // loading flag either.
+    const { rerender } = render(
+      <DeviceDrawerContent {...baseProps} data={null} error="boom" loading />
+    );
+    expect(screen.queryByText(/couldn't load this device/i)).toBeNull();
+    rerender(<DeviceDrawerContent {...baseProps} data={null} error="boom" loading={false} />);
+    expect(screen.getByText(/couldn't load this device/i)).toBeInTheDocument();
+  });
+});

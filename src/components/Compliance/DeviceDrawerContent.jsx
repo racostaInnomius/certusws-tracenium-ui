@@ -12,6 +12,7 @@
 import * as React from "react";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   CircularProgress,
@@ -53,6 +54,9 @@ import { PatchLevelSection } from "./PatchLevel";
 export default function DeviceDrawerContent({
   agentId,
   loading,
+  /** Set when the detail request failed. Distinct from an empty device. */
+  error,
+  onRetry,
   data,
   timeseries,
   onClose,
@@ -406,6 +410,28 @@ export default function DeviceDrawerContent({
       {loading ? (
         <Box sx={{ p: 4, textAlign: "center" }}>
           <CircularProgress size={24} sx={{ color: BRAND.teal }} />
+        </Box>
+      ) : error ? (
+        // A failed request is NOT an empty device. Collapsing the two used
+        // to render "no compliance data for this device yet" whenever the
+        // detail call returned 403/500 — a confident, false statement
+        // about the endpoint, which sends the operator to investigate a
+        // machine that is fine. Say what actually happened, and offer the
+        // retry, because the common causes here are transient.
+        <Box sx={{ p: 3 }}>
+          <Alert
+            severity="error"
+            action={
+              onRetry ? (
+                <Button color="inherit" size="small" onClick={onRetry}>
+                  Retry
+                </Button>
+              ) : null
+            }
+          >
+            <AlertTitle>Couldn&apos;t load this device</AlertTitle>
+            {error}
+          </Alert>
         </Box>
       ) : !device ? (
         <Box sx={{ p: 3 }}>
