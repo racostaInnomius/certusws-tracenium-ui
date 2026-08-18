@@ -289,7 +289,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function HardwareInventory() {
+export default function HardwareInventory({ initialSearch = "" }) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -323,7 +323,7 @@ export default function HardwareInventory() {
   const [totalRows, setTotalRows] = React.useState(0);
   const [loadingDetail, setLoadingDetail] = React.useState(true);
 
-  const [search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState(initialSearch);
 
   const [paginationModel, setPaginationModel] = React.useState({
     page: 0,
@@ -389,6 +389,16 @@ export default function HardwareInventory() {
     },
     { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.45 },
     { field: "distro", headerName: "OS", minWidth: 150, flex: 0.7 },
+    {
+      field: "osVersionFriendly",
+      headerName: "OS Version",
+      minWidth: 150,
+      flex: 0.7,
+      // Same friendly name the Dashboard's "OS versions" card shows
+      // (e.g. "macOS Tahoe", "Windows 11") — computed server-side by
+      // the same normalizer, not derived here.
+      renderCell: (params) => params.value || "—",
+    },
     { field: "manufacturer", headerName: "Manufacturer", minWidth: 140, flex: 0.7 },
     { field: "model", headerName: "Model", minWidth: 160, flex: 0.8 },
     { field: "cpuBrand", headerName: "CPU", minWidth: 180, flex: 0.9 },
@@ -718,7 +728,7 @@ export default function HardwareInventory() {
         >
           <TextField
             size="small"
-            placeholder="Search hostname, serial, manufacturer, model, CPU, OS"
+            placeholder="Search hostname, serial, manufacturer, model, CPU, OS version"
             value={search}
             onChange={(e) => {
               setPaginationModel((prev) => ({ ...prev, page: 0 }));
