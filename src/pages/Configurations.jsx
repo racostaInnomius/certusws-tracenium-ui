@@ -31,6 +31,8 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
+import { listLocationSites } from "../api/locationSites";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
@@ -232,6 +234,31 @@ export default function Configurations({ onNavigate, initialTab }) {
   const tenantsSummary = settingsSnapshot?.tenantsSummary ?? null;
   const tenantMembersSummary = settingsSnapshot?.tenantMembersSummary ?? null;
   const retentionStats = settingsSnapshot?.retentionStats ?? null;
+
+  // How many ranges are mapped, for the Location sites card. Read on its own
+  // and fail-open: a tenant with no mappings (the common case at first) must
+  // still see the card, because zero is exactly the state the card exists to
+  // get an operator out of.
+  const [locationSiteCount, setLocationSiteCount] = React.useState(null);
+  const [locationSitesLoading, setLocationSitesLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    listLocationSites()
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data) ? data : data?.items ?? [];
+        setLocationSiteCount(items.length);
+      })
+      .catch(() => {
+        if (!cancelled) setLocationSiteCount(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLocationSitesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Per-tenant session security (auto-logout) read separately. Doesn't
   // need stale-while-revalidate because the value is tiny + cached on
@@ -459,6 +486,32 @@ export default function Configurations({ onNavigate, initialTab }) {
                 count=""
                 variant={sessionAutoLogoutEnabled ? "success" : "warning"}
                 loading={sessionSettingsLoading}
+              />
+            }
+          />
+        </Grid>
+
+        {/* Location sites — the CIDR → site map. The page existed and its route
+            was registered, but nothing linked to it, so it was reachable only
+            by typing ?page=location-sites. Always shown: with no mappings the
+            device drawer falls back to a raw subnet, and this card is how an
+            operator discovers there is something better. */}
+        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+          <SettingsCard
+            title="Location sites"
+            valueHint="Name your network ranges so devices show a site and a city instead of a raw subnet"
+            value={locationSiteCount === null ? "—" : String(locationSiteCount)}
+            icon={<PlaceOutlinedIcon />}
+            accent={BRAND.teal}
+            tint={BRAND.tealSoft}
+            loading={locationSitesLoading}
+            onClick={() => onNavigate?.("location-sites")}
+            footer={
+              <StatChip
+                label="Ranges mapped"
+                count={locationSiteCount ?? 0}
+                variant={locationSiteCount ? "success" : "neutral"}
+                loading={locationSitesLoading}
               />
             }
           />

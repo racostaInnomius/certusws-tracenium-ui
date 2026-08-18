@@ -13,8 +13,14 @@ export async function listLocationSites() {
   return httpGetJson(BASE, { cache: "reload" });
 }
 
-export async function createLocationSite({ cidr, siteName, description }) {
-  return httpPostJson(BASE, { cidr, siteName, description });
+// ⚠️ Forwards the whole payload rather than destructuring a fixed list of
+// fields. The previous version named cidr/siteName/description explicitly and
+// silently dropped everything else — so when city, lat and lon were added to
+// the form and to the backend validator, they would have been discarded right
+// here, and an operator filling in coordinates would have watched them vanish
+// with no error. Same shape of bug as the AMP wire allowlist.
+export async function createLocationSite(site) {
+  return httpPostJson(BASE, site);
 }
 
 export async function updateLocationSite(id, patch) {
