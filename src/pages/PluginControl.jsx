@@ -24,6 +24,7 @@
 import * as React from "react";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
@@ -113,7 +114,21 @@ function buildPolicyForSave(loadedPolicy, enabledKeysArray, catalog, deriveModul
 // plugin enabled" — that's the policy itself; coverage just answers
 // "did the agents materialize the capability yet".
 function CoverageChip({ pluginKey, coverage, total }) {
-  const found = (coverage?.byPlugin || []).find(
+  // `coverage === null` means the summary did not load. Treating it as an
+  // empty byPlugin list rendered "0/N reporting" on every chip — each one
+  // asserting that no device reports that plugin, which is a claim about
+  // the fleet rather than about the request that failed.
+  if (!coverage) {
+    return (
+      <Chip
+        label="coverage unavailable"
+        size="small"
+        sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: "transparent", color: BRAND.gray }}
+      />
+    );
+  }
+
+  const found = (coverage.byPlugin || []).find(
     (r) => String(r.plugin).toLowerCase() === pluginKey
   );
   const count = Number(found?.count ?? 0);
@@ -230,6 +245,16 @@ export default function PluginControl() {
   // we'd be in last-writer-wins mode and could clobber the OTHER page's
   // edits with our stale view.
   const [loadedVersion, setLoadedVersion] = React.useState(null);
+  // Worse here than on the other policy pages: this one saves with
+  // saveTenantPolicy — a WHOLE-DOCUMENT PUT, not a domain-scoped PATCH.
+  // With the load swallowed, `loadedPolicy` fell back to {} and
+  // `loadedVersion` to null (so no If-Match), and one Save replaced the
+  // tenant's ENTIRE policy — agent-config, security and mam alike — with
+  // a document built from nothing plus the plugin toggles on screen.
+  const [loadError, setLoadError] = React.useState(null);
+  // Coverage is secondary. Its own failure must not block the toggles,
+  // but reporting it as {total: 0} claimed every plugin covers nothing.
+  const [coverageError, setCoverageError] = React.useState(null);
   const [draftEnabled, setDraftEnabled] = React.useState(() => new Set());
   const [coverage, setCoverage] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -243,15 +268,21 @@ export default function PluginControl() {
     try {
       setLoading(true);
       const [policyRes, coverageRes] = await Promise.all([
-        getTenantPolicy(tenantId).catch(() => null),
-        getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] })),
+        getTenantPolicy(tenantId).then(
+          (r) => { setLoadError(null); return r; },
+          (err) => { setLoadError(err?.message || "Could not load the tenant policy."); return null; }
+        ),
+        getPluginCoverageSummary().then(
+          (r) => { setCoverageError(null); return r; },
+          (err) => { setCoverageError(err?.message || String(err)); return null; }
+        ),
       ]);
       const policyJson = extractPolicyContent(policyRes) ?? {};
       const version = extractPolicyVersion(policyRes);
       setLoadedPolicy(policyJson);
       setLoadedVersion(version != null ? String(version) : null);
       setDraftEnabled(getEnabledPluginSet(policyJson));
-      setCoverage(coverageRes || { total: 0, byPlugin: [] });
+      setCoverage(coverageRes || null);
     } catch (e) {
       console.error("[plugin-control] load failed", e);
       showSnack("Failed to load plugin state", "error");
@@ -299,6 +330,13 @@ export default function PluginControl() {
 
   const handleSave = async () => {
     if (!tenantId) return;
+    // Refuse rather than rely on the disabled button: this save is a
+    // whole-document PUT, so getting it wrong costs every policy domain,
+    // not just the plugin block.
+    if (loadError) {
+      showSnack("The current policy could not be read — reload before saving.", "error");
+      return;
+    }
     try {
       setSaving(true);
       const enabledArray = catalog
@@ -364,6 +402,31 @@ export default function PluginControl() {
 
   return (
     <Box sx={{ pb: 4 }}>
+      {loadError ? (
+        // Without this the toggles render from an empty policy and look
+        // like a tenant with everything switched off.
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={load}>
+              Retry
+            </Button>
+          }
+        >
+          <AlertTitle>Couldn&apos;t read the current policy</AlertTitle>
+          {loadError} — the toggles below are defaults, not this tenant&apos;s
+          configuration. Saving is disabled so the policy document
+          can&apos;t be overwritten.
+        </Alert>
+      ) : null}
+
+      {coverageError ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {coverageError} — coverage figures are unavailable, not zero.
+        </Alert>
+      ) : null}
+
       <PageHeader
         title="Plugin Control"
         subtitle="Enable plugins for the devices in this tenant. Configure their behavior in Policies."
@@ -378,7 +441,7 @@ export default function PluginControl() {
               <Button
                 variant="contained"
                 onClick={handleSave}
-                disabled={!dirty || saving || loading || catalogLoading}
+                disabled={!dirty || saving || loading || catalogLoading || Boolean(loadError)}
                 startIcon={<SaveOutlinedIcon />}
                 fullWidth={isSmDown}
                 sx={{
