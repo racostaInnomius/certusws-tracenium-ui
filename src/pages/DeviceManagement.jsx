@@ -17,7 +17,7 @@
 
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { Alert, Box, Button, Chip, Divider, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Divider, Tab, Tabs, Typography } from "@mui/material";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PhonelinkSetupOutlinedIcon from "@mui/icons-material/PhonelinkSetupOutlined";
@@ -45,6 +45,8 @@ import {
 } from "../components/Policies/policyTransforms";
 import { DetailRow, shortHash } from "../components/Policies/policyDisplay";
 import ManagedAppSection from "../components/Policies/ManagedAppSection";
+import MdmPlatformSection from "../components/Policies/MdmPlatformSection";
+import useMdmCatalog from "../hooks/useMdmCatalog";
 
 const MOBILE_PLATFORMS = new Set(["ios", "android"]);
 
@@ -59,16 +61,16 @@ function isMobileRow(d) {
 // manages an app policy.
 const MDM_ROADMAP = [
   {
-    title: "Enrollment (ABM / ADE)",
-    body: "Zero-touch enrollment and supervision via Apple Business Manager, so devices are managed from first boot.",
+    title: "Servidor MDM + enrolamiento",
+    body: "Protocolo MDM de Apple, perfiles de configuración firmados e identidad por dispositivo (ACME + attestation). Es lo que convierte la intención de arriba en algo que el sistema impone.",
   },
   {
-    title: "Configuration profiles",
-    body: "Restrictions, managed preferences, Wi-Fi/VPN/certificates and PPPC grants — the payloads an agent cannot apply on its own.",
+    title: "Actualizaciones vía DDM",
+    body: "Apple eliminó la gestión de actualizaciones por MDM clásico en OS 27, así que este dominio va por Declarative Device Management desde el inicio.",
   },
   {
-    title: "Supervision & lifecycle",
-    body: "Non-removable management, remote wipe/lock at the OS level, and OS update enforcement.",
+    title: "Supervisión (ABM / ADE)",
+    body: "Enrolamiento sin fricción desde la compra y gestión no removible. Los equipos ya desplegados se enrolan sin supervisión y migran en cada reimagen.",
   },
 ];
 
@@ -85,6 +87,15 @@ export default function DeviceManagement({ onNavigate }) {
   // ManagedAppSection is props-driven against `form.managedApp`.
   const [form, setForm] = React.useState(() => ({ managedApp: readManagedAppFromPolicy({}) }));
   const [loadedMam, setLoadedMam] = React.useState(null);
+
+  // ── Modelo de intención MDM (por plataforma) ────────────────────────
+  // Un estado por plataforma porque cada una guarda su PROPIO dominio de
+  // política: así una edición de macOS no puede pisar iOS ni MAM.
+  const { groupsFor, loading: catalogLoading } = useMdmCatalog();
+  const [mdmTab, setMdmTab] = React.useState(0); // 0 = macOS, 1 = iOS
+  const [mdmBlocks, setMdmBlocks] = React.useState({ macos: {}, ios: {} });
+  const [loadedMdm, setLoadedMdm] = React.useState({ macos: "{}", ios: "{}" });
+  const [savingMdm, setSavingMdm] = React.useState(null); // plataforma en curso
   const [devices, setDevices] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -108,6 +119,14 @@ export default function DeviceManagement({ onNavigate }) {
       setPolicyRow(policyRes ?? null);
       setForm({ managedApp: readManagedAppFromPolicy(policy) });
       setLoadedMam(JSON.stringify(managedAppFormToPolicy(readManagedAppFromPolicy(policy))));
+
+      // Bloques MDM tal cual vienen del documento — el catálogo decide qué
+      // se renderiza, así que aquí no se normaliza nada.
+      const macos = policy?.macos && typeof policy.macos === "object" ? policy.macos : {};
+      const ios = policy?.ios && typeof policy.ios === "object" ? policy.ios : {};
+      setMdmBlocks({ macos, ios });
+      setLoadedMdm({ macos: JSON.stringify(macos), ios: JSON.stringify(ios) });
+
       setDevices(Array.isArray(devicesRes?.items) ? devicesRes.items : []);
     } catch (e) {
       console.error(e);
@@ -167,6 +186,43 @@ export default function DeviceManagement({ onNavigate }) {
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Guardado del bloque MDM de UNA plataforma. Cada una va a su propio
+  // dominio (`mdm-macos` / `mdm-ios`), que es lo que garantiza que un
+  // guardado no pueda tocar la otra plataforma ni el bloque MAM.
+  const handleSaveMdm = async (platform) => {
+    if (!canManage || !tenantId) return;
+    try {
+      setSavingMdm(platform);
+      const block = mdmBlocks[platform] || {};
+      // Slice de reemplazo: un bloque vacío borra la sección entera, que
+      // es justo lo que el operador espera al dejar todo "sin definir".
+      const slice = Object.keys(block).length > 0 ? { [platform]: block } : {};
+      const expectedVersion = extractPolicyEnvelope(policyRow).version;
+      await patchTenantPolicyDomain(tenantId, `mdm-${platform}`, slice, { expectedVersion });
+      showSnack(`Política de ${platform === "macos" ? "macOS" : "iOS"} guardada`, "success");
+      await load();
+    } catch (e) {
+      if (e?.status === 409) {
+        showSnack(
+          "Otra persona modificó la política. Se recargó — revisa tus cambios y vuelve a guardar.",
+          "warning"
+        );
+        await load();
+      } else {
+        console.error(e);
+        // El backend rechaza claves fuera del catálogo con el detalle por
+        // campo; mostrarlo tal cual evita que el operador adivine.
+        const issues = e?.body?.issues;
+        const detail = Array.isArray(issues) && issues.length
+          ? issues.map((i) => `${i.field}: ${i.message}`).join(" · ")
+          : e?.body?.message;
+        showSnack(detail || "No se pudo guardar la política", "error");
+      }
+    } finally {
+      setSavingMdm(null);
     }
   };
 
@@ -333,19 +389,121 @@ export default function DeviceManagement({ onNavigate }) {
         </Grid>
       </Grid>
 
+      {/* ── Intención MDM por plataforma ──────────────────────────────
+          Secciones separadas macOS / iOS: las políticas NO son las mismas
+          en ambas, y cada una guarda su propio dominio de política. Los
+          controles se renderizan desde el catálogo del backend — esta
+          página no conoce ningún ajuste por su nombre. */}
+      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+          <PhonelinkSetupOutlinedIcon sx={{ color: BRAND.tealText }} />
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
+            Configuración del sistema (MDM)
+          </Typography>
+          <Chip
+            size="small"
+            label="beta"
+            sx={{ height: 18, fontSize: 10, fontWeight: 800, color: BRAND.gray }}
+          />
+        </Box>
+        <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
+          Estado deseado a nivel de sistema operativo. Se autora por plataforma
+          porque las políticas de macOS e iOS no son equivalentes. Se entregará
+          por perfiles de configuración cuando el MDM propio esté operativo;
+          hoy queda registrado como intención.
+        </Typography>
+
+        <Tabs
+          value={mdmTab}
+          onChange={(_e, v) => setMdmTab(v)}
+          sx={{
+            mb: 2,
+            borderBottom: `1px solid ${BRAND.border}`,
+            "& .MuiTab-root": { textTransform: "none", fontWeight: 800, minHeight: 42 },
+            "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
+          }}
+        >
+          <Tab label="macOS" />
+          <Tab label="iOS" />
+          <Tab label="Android" disabled />
+        </Tabs>
+
+        {catalogLoading ? (
+          <Typography variant="body2" sx={{ color: BRAND.gray }}>
+            Cargando catálogo…
+          </Typography>
+        ) : (
+          (() => {
+            const platform = mdmTab === 1 ? "ios" : "macos";
+            const block = mdmBlocks[platform] || {};
+            const isDirty = JSON.stringify(block) !== loadedMdm[platform];
+            // Hoy ningún equipo está supervisado (no hay MDM operativo aún),
+            // así que el aviso de aplicabilidad cuenta toda la flota de esa
+            // plataforma. Cuando exista enrolamiento real, esto pasa a leer
+            // el estado de supervisión reportado por el dispositivo.
+            const unsupervised =
+              platform === "ios" ? mobileCounts.ios : devices.filter((d) => {
+                const p = String(d?.platform || d?.os || "").toLowerCase();
+                return p === "macos" || p === "darwin";
+              }).length;
+
+            return (
+              <Box>
+                <MdmPlatformSection
+                  platform={platform}
+                  groups={groupsFor(platform)}
+                  block={block}
+                  onChangeBlock={(next) =>
+                    setMdmBlocks((prev) => ({ ...prev, [platform]: next }))
+                  }
+                  readOnly={loading}
+                  unsupervisedCount={unsupervised}
+                />
+                <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center" }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveOutlinedIcon />}
+                    onClick={() => handleSaveMdm(platform)}
+                    disabled={savingMdm !== null || loading || !isDirty}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 800,
+                      bgcolor: BRAND.teal,
+                      "&:hover": { bgcolor: BRAND.tealHover },
+                    }}
+                  >
+                    {savingMdm === platform
+                      ? "Guardando…"
+                      : `Guardar política de ${platform === "macos" ? "macOS" : "iOS"}`}
+                  </Button>
+                  {isDirty ? (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: BRAND.alert.warning, fontWeight: 700 }}
+                    >
+                      Cambios sin guardar
+                    </Typography>
+                  ) : null}
+                </Box>
+              </Box>
+            );
+          })()
+        )}
+      </SectionPaper>
+
       {/* ── Roadmap ───────────────────────────────────────────────────── */}
       <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
           <RocketLaunchOutlinedIcon sx={{ color: BRAND.gray }} />
           <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
-            First-party MDM — planned
+            MDM propio — lo que falta
           </Typography>
         </Box>
         <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
-          What's above is application-level management (MAM): the app enforces
-          it on itself. OS-level controls — restrictions, managed preferences,
-          certificate and privacy (PPPC) payloads — require the Apple MDM
-          protocol, which is on the roadmap below. Nothing here is built yet.
+          El bloque MAM lo aplica la propia app sobre sí misma. La sección de
+          configuración del sistema ya permite <strong>declarar</strong> la
+          intención, pero <strong>todavía no hay quien la entregue</strong>: eso
+          exige el protocolo MDM de Apple. Nada de lo de abajo está construido.
         </Typography>
         <Divider sx={{ borderColor: BRAND.border, mb: 1.5 }} />
         <Grid container spacing={2}>

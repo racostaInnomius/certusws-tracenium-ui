@@ -87,3 +87,30 @@ export async function getDevicePolicyStatus(deviceId) {
 export async function getPluginCatalog() {
   return httpGetJson(`${BASE}/plugins/catalog`);
 }
+
+/**
+ * Catálogo del modelo de intención MDM. Misma lógica que el de plugins:
+ * el backend es la fuente única (modules/policies/mdm-catalog.ts) y la UI
+ * no duplica la lista de ajustes — así no pueden derivar.
+ *
+ * Devuelve { ok, platforms, settings[] } donde cada setting trae
+ * `requiresSupervision`, `platforms` y su `spec` de tipo.
+ */
+export async function getMdmCatalog(platform) {
+  const qs = platform ? `?platform=${encodeURIComponent(platform)}` : "";
+  return httpGetJson(`${BASE}/mdm/catalog${qs}`);
+}
+
+/**
+ * Guardado por dominio a nivel DISPOSITIVO (override). Simétrico de
+ * `patchTenantPolicyDomain`: existe para que editar el override de un
+ * device no obligue a reenviar el documento completo, que perdería la
+ * seguridad ante edición concurrente.
+ */
+export async function patchDevicePolicyDomain(deviceId, domain, slice, opts) {
+  return httpPatchJson(
+    `${BASE}/devices/${encodeURIComponent(deviceId)}/policy/domains/${encodeURIComponent(domain)}`,
+    slice,
+    buildPutHeaders(opts)
+  );
+}
