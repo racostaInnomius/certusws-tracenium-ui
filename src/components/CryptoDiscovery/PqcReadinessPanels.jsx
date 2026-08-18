@@ -327,3 +327,83 @@ export function AgilityBlockersPanel({ pqc }) {
     </SectionPaper>
   );
 }
+
+/**
+ * CNSA 2.0 assessment.
+ *
+ * ⚠️ The applicability line is not decoration. CNSA 2.0 is mandatory only
+ * for US National Security Systems; for everyone else it is a reference
+ * timeline. Showing counts and a countdown without that sentence would
+ * tell a commercial customer they are out of compliance with something
+ * that does not bind them. It comes from the API rather than being
+ * written here, so the claim has one source.
+ *
+ * The panel leads with the 2027 gate because that is the number that
+ * bears on a purchasing decision this year — unlike the 2030/2035
+ * horizon above it, which comes from a NIST draft.
+ */
+export function CnsaPanel({ pqc }) {
+  const cnsa = pqc?.cnsa;
+  if (!cnsa) return null;
+
+  const c = cnsa.certificates || {};
+  const next = (cnsa.gates || []).find((g) => !g.passed);
+
+  const rows = [
+    ["Approved parameter sets", c.approved, "ML-KEM-1024 or ML-DSA-87 throughout."],
+    [
+      "Post-quantum, not approved",
+      c.pqNotApproved,
+      "Genuinely post-quantum, but a parameter set CNSA 2.0 excludes — ML-DSA-44/65, ML-KEM-512/768, or SLH-DSA, which the suite omits entirely. A parameter change, not a migration."
+    ],
+    ["Quantum-vulnerable", c.quantumVulnerable, "RSA, ECDSA and friends. A full algorithm migration."],
+    ["Not classified", c.unknown, "No algorithm we could read. Neither passed nor failed."]
+  ];
+
+  return (
+    <SectionPaper sx={{ p: 2 }}>
+      <PanelTitle hint="CNSA 2.0 is the NSA's published suite: ML-KEM-1024 for key establishment and ML-DSA-87 for signatures, at the highest parameter sets only.">
+        CNSA 2.0
+      </PanelTitle>
+
+      <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+        {cnsa.applicability}
+      </Typography>
+
+      {next ? (
+        <Box sx={{ mb: 2, p: 1.25, borderRadius: 1, bgcolor: BRAND.surfaceMuted }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+            {next.daysRemaining} days to {next.date}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>{next.label}</Typography>
+        </Box>
+      ) : null}
+
+      <Stack spacing={0.75}>
+        {rows.map(([label, value, hint]) => (
+          <Tooltip key={label} title={hint} arrow>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="baseline"
+              sx={{ cursor: "help" }}
+            >
+              <Typography sx={{ fontSize: 12.5, color: BRAND.gray }}>{label}</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                {value ?? 0}
+              </Typography>
+            </Stack>
+          </Tooltip>
+        ))}
+      </Stack>
+
+      {c.weakDigest > 0 ? (
+        <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mt: 1.5 }}>
+          {c.weakDigest} of {c.total} also sit below the SHA-384 digest floor. Counted separately
+          because on an estate that has already migrated its algorithms, the digest can be the
+          only thing left failing.
+        </Typography>
+      ) : null}
+    </SectionPaper>
+  );
+}

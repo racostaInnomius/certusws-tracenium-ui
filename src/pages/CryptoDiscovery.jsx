@@ -58,6 +58,7 @@ import {
   PqcFamilyPanel,
   TrustAnchorsPanel,
   AgilityBlockersPanel,
+  CnsaPanel,
 } from "../components/CryptoDiscovery/PqcReadinessPanels";
 import { BRAND, DATAGRID_SX } from "../theme/brand";
 import {
@@ -339,6 +340,7 @@ function CdpPqcTab({ refreshNonce }) {
         </Grid>
       </Grid>
       <AgilityBlockersPanel pqc={pqc} />
+      <CnsaPanel pqc={pqc} />
     </Stack>
   );
 }
