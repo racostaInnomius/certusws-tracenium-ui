@@ -424,9 +424,29 @@ export function invalidateApiCachePrefix(prefix) {
   entryCache.invalidatePrefix(String(prefix));
 }
 
-export function clearApiCache() {
+/**
+ * @param {{ keepInFlight?: boolean }} [opts]
+ *
+ * `keepInFlight` exists for the tenant switch. Dropping the in-flight map
+ * there was costing a duplicated burst: `enterTenant` clears the cache,
+ * the shell re-renders and fires Overview's ~14 requests, then the
+ * un-awaited `refreshAuth()` lands, re-renders again, and the second wave
+ * cannot reuse the first because the map it would have matched against is
+ * gone. Measured on a real client switch: 28 requests where 21 were
+ * distinct.
+ *
+ * Clearing it is unnecessary there anyway — buildCacheKey is scoped by
+ * active tenant, so an in-flight entry from tenant A lives under a
+ * different key than anything tenant B will ask for, and the cross-tenant
+ * reuse the wipe was defending against cannot happen.
+ *
+ * After a MUTATION it still clears: a GET that left before the write
+ * carries pre-write data, and letting a later caller adopt that in-flight
+ * promise would serve them a stale answer.
+ */
+export function clearApiCache(opts = {}) {
   entryCache.clear();
-  inFlightGets.clear();
+  if (!opts.keepInFlight) inFlightGets.clear();
 }
 
 function invalidateAfterMutation(url) {

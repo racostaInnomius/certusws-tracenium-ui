@@ -114,7 +114,12 @@ export function MspProvider({ children }) {
     // request that was in-flight during the switch) can paint the new
     // tenant with the old tenant's numbers.
     if (changed) {
-      clearApiCache();
+      // keepInFlight: the cache keys are tenant-scoped, so nothing from
+      // the previous tenant can be adopted by the new one. Wiping the
+      // in-flight map only made the shell's second render (after
+      // refreshAuth lands) re-issue every request the first render had
+      // already sent.
+      clearApiCache({ keepInFlight: true });
       clearCachedFetch();
     }
     const meta = { id: String(id), name: name ?? null };
@@ -142,7 +147,7 @@ export function MspProvider({ children }) {
     const had = getActiveTenantId() != null;
     setActiveTenantId(null);
     if (had) {
-      clearApiCache();
+      clearApiCache({ keepInFlight: true });
       clearCachedFetch();
     }
     writeJson(ACTIVE_META_KEY, null);
