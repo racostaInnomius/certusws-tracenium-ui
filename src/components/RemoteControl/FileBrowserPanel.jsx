@@ -647,13 +647,28 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           );
           break;
         }
-        // Path refusals arrive without a transferId when they come from a
-        // `list`. Surface them inline — the listing simply didn't happen, so
-        // without this the panel would spin on "Loading…" forever.
-        if (PATH_REFUSAL_CODES.has(msg.code)) {
-          setListing(false);
-          setPathNotice(msg.message || "That location is not available.");
-        }
+        // Sin transferId, el error viene de un `list`: la petición murió y
+        // nadie más va a apagar el spinner.
+        //
+        // Esto solo miraba PATH_REFUSAL_CODES, o sea los rechazos de la jaula,
+        // y dejaba fuera el caso más común en campo: LIST_FAILED, que es lo
+        // que manda el agente cuando readdir falla. Y readdir falla a menudo
+        // por motivos perfectamente normales — en macOS TCC le niega
+        // ~/Downloads a un LaunchDaemon sin Full Disk Access aunque corra como
+        // root, y en Linux el servicio no tiene permiso para entrar en los
+        // home de otros usuarios. En esos casos el panel se quedaba girando
+        // para siempre, sin decir nada.
+        //
+        // Cualquier error sin transferId apaga el spinner y se muestra. Un
+        // mensaje que el operador no esperaba es mejor que un spinner eterno:
+        // al menos dice qué pasó.
+        setListing(false);
+        setPathNotice(
+          msg.message ||
+            (PATH_REFUSAL_CODES.has(msg.code)
+              ? "That location is not available."
+              : "Could not read that folder.")
+        );
         break;
       }
       default:
