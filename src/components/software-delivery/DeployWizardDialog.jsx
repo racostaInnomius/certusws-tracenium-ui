@@ -33,11 +33,15 @@ import {
   RadioGroup,
   FormControlLabel,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
   CircularProgress,
 } from "@mui/material";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
+import { listKnownDevices } from "../../api/jobs";
+import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import { listFrom } from "../../api/shape";
 
 const STEPS = ["Target", "Review"];
@@ -94,6 +98,18 @@ export default function DeployWizardDialog({
   const [groupCatalog, setGroupCatalog] = React.useState([]);
   const [groupId, setGroupId] = React.useState("");
   const [deviceIdsRaw, setDeviceIdsRaw] = React.useState("");
+  // Devices chosen from the picker. A Set because the picker owns toggling and
+  // the parent owns the selection — same contract Asset Groups uses.
+  const [pickedIds, setPickedIds] = React.useState(() => new Set());
+  // "picker" | "paste". Pasting stays available for lists that arrive from a
+  // ticket or a CSV, but it is no longer the only way in.
+  const [manualMode, setManualMode] = React.useState("picker");
+  // Device IDs from the pasted list that no known device matches. Surfaced
+  // BEFORE dispatch: an unknown id used to be accepted, dispatched and left to
+  // die as `stream_not_found`, so the operator believed they had targeted five
+  // machines when they had targeted four.
+  const [unknownPastedIds, setUnknownPastedIds] = React.useState([]);
+  const [validatingPaste, setValidatingPaste] = React.useState(false);
 
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -106,6 +122,9 @@ export default function DeployWizardDialog({
     setTargetMode("asset_group");
     setGroupId("");
     setDeviceIdsRaw("");
+    setPickedIds(new Set());
+    setManualMode("picker");
+    setUnknownPastedIds([]);
     setSubmitting(false);
   }, [open]);
 
@@ -128,12 +147,54 @@ export default function DeployWizardDialog({
     [groupCatalog, groupId]
   );
 
-  const parsedDeviceIds = React.useMemo(() => {
+  const pastedDeviceIds = React.useMemo(() => {
     return deviceIdsRaw
       .split(/[\s,;\n]+/)
       .map((s) => s.trim())
       .filter(Boolean);
   }, [deviceIdsRaw]);
+
+  // The devices we will actually dispatch to: whichever manual sub-mode is
+  // active. One derived value so validation, the summary and the payload can
+  // never disagree about who is being targeted.
+  const parsedDeviceIds = React.useMemo(
+    () => (manualMode === "picker" ? Array.from(pickedIds) : pastedDeviceIds),
+    [manualMode, pickedIds, pastedDeviceIds]
+  );
+
+  // Check pasted ids against the fleet. Debounced because it runs while the
+  // operator is still typing/pasting. Fail-open: if the lookup itself errors we
+  // clear the warning rather than blocking a dispatch on a flaky read.
+  React.useEffect(() => {
+    if (targetMode !== "device_list" || manualMode !== "paste") return;
+    if (pastedDeviceIds.length === 0) {
+      setUnknownPastedIds([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setValidatingPaste(true);
+      try {
+        const res = await listKnownDevices({ page: 1, pageSize: 500 });
+        const known = new Set(
+          listFrom(res, { context: "deployWizardKnownDevices" })
+            .map((d) => String(d?.deviceId || "").trim())
+            .filter(Boolean)
+        );
+        if (!cancelled) {
+          setUnknownPastedIds(pastedDeviceIds.filter((id) => !known.has(id)));
+        }
+      } catch {
+        if (!cancelled) setUnknownPastedIds([]);
+      } finally {
+        if (!cancelled) setValidatingPaste(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [targetMode, manualMode, pastedDeviceIds]);
 
   // Validation per step
   const canAdvanceFromTarget = React.useMemo(() => {
@@ -315,22 +376,79 @@ export default function DeployWizardDialog({
                 ))}
               </TextField>
             ) : (
-              <TextField
-                size="small"
-                fullWidth
-                label="Device IDs"
-                multiline
-                minRows={3}
-                maxRows={8}
-                value={deviceIdsRaw}
-                onChange={(e) => setDeviceIdsRaw(e.target.value)}
-                placeholder={"agent-001\nagent-002\nagent-003"}
-                helperText={
-                  parsedDeviceIds.length > 0
-                    ? `${parsedDeviceIds.length} device(s) — split by whitespace, comma, semicolon or newline`
-                    : "Paste one or more device IDs (whitespace / comma / newline separated)"
-                }
-              />
+              <Stack spacing={1.5}>
+                {/*
+                  This used to be a bare textarea asking for device IDs. Nobody
+                  knows those by heart, so the only way to target five loose
+                  machines was to leave for Asset Management and copy-paste an
+                  opaque UUID five times. The picker below already existed —
+                  Asset Groups uses it to choose members — it was simply never
+                  wired in here.
+                */}
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={manualMode}
+                  onChange={(_e, v) => v && setManualMode(v)}
+                >
+                  <ToggleButton value="picker">Select devices</ToggleButton>
+                  <ToggleButton value="paste">Paste IDs</ToggleButton>
+                </ToggleButtonGroup>
+
+                {manualMode === "picker" ? (
+                  <KnownDevicesPicker
+                    open={open}
+                    selectedIds={pickedIds}
+                    onToggleDevice={(deviceId) =>
+                      setPickedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(deviceId)) next.delete(deviceId);
+                        else next.add(deviceId);
+                        return next;
+                      })
+                    }
+                    selectedLabel="target(s)"
+                    emptyLabel="No devices match this package's platform."
+                    // Offering a macOS .pkg to Windows hosts is a guaranteed
+                    // failure the operator only discovers when the job returns.
+                    platformFilter={pkg?.platform}
+                  />
+                ) : (
+                  <>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      label="Device IDs"
+                      multiline
+                      minRows={3}
+                      maxRows={8}
+                      value={deviceIdsRaw}
+                      onChange={(e) => setDeviceIdsRaw(e.target.value)}
+                      placeholder={"agent-001\nagent-002\nagent-003"}
+                      helperText={
+                        pastedDeviceIds.length > 0
+                          ? `${pastedDeviceIds.length} device(s) — split by whitespace, comma, semicolon or newline`
+                          : "For lists that arrive from a ticket or a CSV. Otherwise use Select devices."
+                      }
+                    />
+                    {validatingPaste ? (
+                      <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                        Checking these IDs against the fleet…
+                      </Typography>
+                    ) : null}
+                    {unknownPastedIds.length > 0 ? (
+                      <Alert severity="warning">
+                        {unknownPastedIds.length} of {pastedDeviceIds.length} IDs match no
+                        known device and will never be delivered:{" "}
+                        {unknownPastedIds.slice(0, 5).join(", ")}
+                        {unknownPastedIds.length > 5
+                          ? ` and ${unknownPastedIds.length - 5} more`
+                          : ""}
+                      </Alert>
+                    ) : null}
+                  </>
+                )}
+              </Stack>
             )}
 
             {platformMatchesGroups ? (

@@ -115,6 +115,14 @@ export default function KnownDevicesPicker({
   excludeIds,
   selectedLabel = "selected",
   emptyLabel = "No devices match.",
+  /**
+   * Hide devices that cannot run the thing being targeted, e.g. a macOS .pkg
+   * offered to Windows hosts. Without it the operator only finds out when the
+   * job comes back failed. Devices that never reported a platform are KEPT:
+   * silently hiding a host because its inventory is incomplete is worse than
+   * showing one extra row.
+   */
+  platformFilter,
 }) {
   const [rows, setRows] = React.useState([]);
   const [total, setTotal] = React.useState(0);
@@ -157,6 +165,12 @@ export default function KnownDevicesPicker({
           items
             .map(normalizeKnownDevice)
             .filter((d) => d.deviceId && !excludeIds?.has(d.deviceId))
+            .filter(
+              (d) =>
+                !platformFilter ||
+                !d.platform ||
+                d.platform.toLowerCase() === String(platformFilter).toLowerCase()
+            )
         );
         setTotal(Number(res?.total ?? res?.count ?? 0));
       } catch (err) {
@@ -173,7 +187,7 @@ export default function KnownDevicesPicker({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [open, page, pageSize, search, excludeIds]);
+  }, [open, page, pageSize, search, excludeIds, platformFilter]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -427,7 +441,7 @@ export default function KnownDevicesPicker({
             onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
             sx={{ textTransform: "none", borderColor: BRAND.border, color: BRAND.dark }}
           >
-            Previous
+            Previous page
           </Button>
           <Button
             size="small"
@@ -436,7 +450,7 @@ export default function KnownDevicesPicker({
             onClick={() => setPage((prev) => prev + 1)}
             sx={{ textTransform: "none", borderColor: BRAND.border, color: BRAND.dark }}
           >
-            Next
+            Next page
           </Button>
         </Stack>
       </Stack>

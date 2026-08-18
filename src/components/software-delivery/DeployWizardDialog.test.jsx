@@ -21,6 +21,21 @@ import userEvent from "@testing-library/user-event";
 import DeployWizardDialog from "./DeployWizardDialog";
 import { respond } from "../../test/msw/server";
 
+/**
+ * Reveal the paste box.
+ *
+ * Pasting device IDs used to be the ONLY way to target loose machines, so it
+ * was the default view. It is now the secondary tab behind the device picker —
+ * these tests still describe real behaviour (parsing, the XOR payload), they
+ * just have to open that tab first.
+ */
+async function openPasteTab(user) {
+  // findByRole, not queryByRole: the tab renders with the target step and a
+  // silent miss here would leave the wizard on the picker, making these tests
+  // fail for a reason that has nothing to do with what they assert.
+  await user.click(await screen.findByRole("button", { name: /paste ids/i }));
+}
+
 afterEach(cleanup);
 
 const setupUser = () => userEvent.setup({ delay: null });
@@ -64,13 +79,13 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
     renderWizard();
 
     // Wait for the async group load to finish (options become available).
-    const next = screen.getByRole("button", { name: /Next/i });
+    const next = screen.getByRole("button", { name: /^Next$/i });
     expect(next).toBeDisabled();
 
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
 
-    expect(screen.getByRole("button", { name: /Next/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Next$/i })).toBeEnabled();
   });
 
   it("device_list mode: Next enables only once at least one id is parsed", async () => {
@@ -78,11 +93,12 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
     renderWizard();
 
     await user.click(screen.getByRole("radio", { name: /Manual device list/i }));
-    const next = screen.getByRole("button", { name: /Next/i });
+    const next = screen.getByRole("button", { name: /^Next$/i });
     expect(next).toBeDisabled();
 
+    await openPasteTab(user);
     await user.type(screen.getByRole("textbox", { name: /Device IDs/i }), "agent-001");
-    expect(screen.getByRole("button", { name: /Next/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Next$/i })).toBeEnabled();
   });
 
   it("builds { assetGroupId } (number) when firing in asset_group mode", async () => {
@@ -92,7 +108,7 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
 
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -105,11 +121,12 @@ describe("DeployWizardDialog — target step (XOR groupId / deviceIds)", () => {
     renderWizard({ onConfirm });
 
     await user.click(screen.getByRole("radio", { name: /Manual device list/i }));
+    await openPasteTab(user);
     await user.type(
       screen.getByRole("textbox", { name: /Device IDs/i }),
       "agent-001, agent-002"
     );
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -131,7 +148,7 @@ describe("DeployWizardDialog — mode selection", () => {
 
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     // Fire button now reads "Uninstall".
     await user.click(screen.getByRole("button", { name: /^Uninstall$/i }));
 
@@ -166,6 +183,7 @@ describe("DeployWizardDialog — device-id textarea parsing", () => {
     renderWizard();
 
     await user.click(screen.getByRole("radio", { name: /Manual device list/i }));
+    await openPasteTab(user);
     const ta = screen.getByRole("textbox", { name: /Device IDs/i });
     // Mixed separators + leading/trailing/double blanks.
     await user.type(ta, "  a1, a2;a3{Enter}a4   a5 , ");
@@ -179,11 +197,12 @@ describe("DeployWizardDialog — device-id textarea parsing", () => {
     renderWizard();
 
     await user.click(screen.getByRole("radio", { name: /Manual device list/i }));
+    await openPasteTab(user);
     await user.type(
       screen.getByRole("textbox", { name: /Device IDs/i }),
       "agent-001;agent-002"
     );
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
 
     expect(screen.getByText("agent-001")).toBeInTheDocument();
     expect(screen.getByText("agent-002")).toBeInTheDocument();
@@ -219,7 +238,7 @@ describe("DeployWizardDialog — deploy result surfacing", () => {
 
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     await waitFor(() =>
