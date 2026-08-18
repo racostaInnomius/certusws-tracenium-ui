@@ -23,6 +23,7 @@ import {
   IconButton,
   CircularProgress,
   Tooltip,
+  Switch,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
@@ -190,6 +191,26 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
     }
   };
 
+  const handleToggleSelfService = async (row) => {
+    const next = !row.selfServiceEnabled;
+    // Optimistic — this toggle lives in a dense grid an admin may click
+    // several times in a row; waiting for the round-trip before the
+    // switch visibly flips reads as broken.
+    setItems((prev) => prev.map((it) => (it.id === row.id ? { ...it, selfServiceEnabled: next } : it)));
+    try {
+      await updatePackage(row.id, { selfServiceEnabled: next });
+      notify(
+        "success",
+        next
+          ? `${row.name} is now self-installable from the tray`
+          : `${row.name} removed from the self-service catalog`
+      );
+    } catch (err) {
+      setItems((prev) => prev.map((it) => (it.id === row.id ? { ...it, selfServiceEnabled: !next } : it)));
+      notify("error", err?.body?.message || err?.message || "Failed to update self-service");
+    }
+  };
+
   const handleDeployFire = async (body) => {
     if (!deployItem) return;
     const res = await deployPackage(deployItem.id, body);
@@ -310,6 +331,31 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
             sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
           />
         ),
+    },
+    {
+      field: "selfServiceEnabled",
+      headerName: "Self-Service",
+      width: 120,
+      sortable: false,
+      renderCell: (p) => (
+        <Tooltip
+          title={
+            p.row.selfServiceEnabled
+              ? "Users can install this from the Tracenium tray without an admin dispatching it"
+              : "Only admin-dispatched — not offered in the tray's self-service catalog"
+          }
+        >
+          <span>
+            <Switch
+              size="small"
+              checked={Boolean(p.row.selfServiceEnabled)}
+              disabled={!canManage}
+              onChange={() => handleToggleSelfService(p.row)}
+              inputProps={{ "aria-label": `Self-service install for ${p.row.name}` }}
+            />
+          </span>
+        </Tooltip>
+      ),
     },
     {
       field: "updatedAt",

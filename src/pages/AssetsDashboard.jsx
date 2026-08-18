@@ -1311,11 +1311,29 @@ const osVersionItems = React.useMemo(() => {
               // Clicking a specific OS (e.g. "macOS Tahoe") jumps to
               // Hardware Inventory pre-filtered to just that OS via its
               // friendly name — the same string the "OS Version" column
-              // there searches by. Clicking elsewhere on the card (or the
-              // expand arrow on a row) keeps the existing unfiltered
-              // "open Hardware Inventory" / "show grouped versions"
-              // behavior.
-              onItemClick={(item) => onNavigateToHardwareInventory(item.label)}
+              // there searches by. Clicking elsewhere on the card (or
+              // just the expand arrow on a row) keeps the existing
+              // unfiltered "open Hardware Inventory" / "show grouped
+              // versions" behavior.
+              //
+              // A CHILD row (a specific point release under a "Multiple
+              // Versions" parent, e.g. "26.6.1" under macOS Tahoe) is
+              // distinguished by NOT carrying a `children` array (only
+              // top-level family rows do, even when it's empty). Its
+              // friendly label is identical across every sibling version
+              // ("Version 26.6.1" vs "Version 26.5.2" both just say
+              // "macOS Tahoe" once normalized) so searching by that
+              // wouldn't narrow anything — search by its raw
+              // technical_version instead, which is exactly what the
+              // backend's `distro` column (and therefore the free-text
+              // search) actually contains.
+              onItemClick={(item) => {
+                const isChildVersion = !Array.isArray(item.children);
+                const searchTerm = isChildVersion
+                  ? item.raw?.technical_version || item.label
+                  : item.label;
+                onNavigateToHardwareInventory(searchTerm);
+              }}
               actionLabel="Open Hardware Inventory"
             />
           </Box>
