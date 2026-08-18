@@ -21,7 +21,7 @@ import {
 } from "@mui/material";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
-import RefreshControl from "../components/common/RefreshControl";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -71,6 +71,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
+import { buildBatchRow } from "../utils/jobBatches";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -471,6 +472,36 @@ function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
   return {};
 }
 
+function renderBatchStatusChip(row) {
+  const { __doneCount: done, __failedCount: failed, __totalCount: total } = row;
+
+  if (done < total) {
+    return (
+      <Chip
+        label={`Running ${done}/${total}`}
+        size="small"
+        sx={{ bgcolor: BRAND.cyanSoft, color: BRAND.dark, fontWeight: 700, border: `1px solid ${BRAND.cyan}88` }}
+      />
+    );
+  }
+  if (failed === 0) {
+    return (
+      <Chip
+        label={`Completed (${total})`}
+        size="small"
+        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, border: `1px solid ${BRAND.teal}55` }}
+      />
+    );
+  }
+  return (
+    <Chip
+      label={failed === total ? `Failed (${total})` : `${total - failed}/${total} ok`}
+      size="small"
+      sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
+    />
+  );
+}
+
 function validateNumericField(value, { min, max, required = false }) {
   if (!String(value ?? "").trim()) {
     return required ? `Value must be between ${min} and ${max}` : null;
@@ -596,6 +627,9 @@ export default function Jobs() {
   const [groupDeviceIds, setGroupDeviceIds] = React.useState([]);
   const [selectedJobId, setSelectedJobId] = React.useState(initialFilters.highlightJobId || "");
   const [selectedJob, setSelectedJob] = React.useState(null);
+  // Set instead of selectedJobId when the operator clicks a grouped
+  // (multi-device) row — mutually exclusive with it, see selectRow().
+  const [selectedBatchId, setSelectedBatchId] = React.useState("");
 
   const [loadingJobs, setLoadingJobs] = React.useState(false);
   const [loadingJobDetail, setLoadingJobDetail] = React.useState(false);
@@ -615,7 +649,6 @@ export default function Jobs() {
   const [kbArticleIds, setKbArticleIds] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
-  const [autoRefreshSeconds, setAutoRefreshSeconds] = React.useState("0");
 
   // Create-Job form is collapsed by default — it occupies ~600px of
   // vertical space that most visits don't need (the page's primary
@@ -680,7 +713,19 @@ export default function Jobs() {
     try {
       setLoadingJobDetail(true);
       const response = await getJob(jobId);
-      setSelectedJob(response?.job ?? null);
+      const job = response?.job ?? null;
+      setSelectedJob(job);
+
+      // The detail fetch is always fresh; the table row backing it may
+      // not be (auto-refresh runs on its own cadence, not on every
+      // click). Patch just that row in place so a click never shows a
+      // status here that contradicts what's still sitting in Tenant
+      // Job History — no need to wait for the next refresh tick.
+      if (job) {
+        setTenantJobs((prev) =>
+          prev.map((row) => (row.job_id === job.job_id ? { ...row, ...job } : row))
+        );
+      }
     } catch (e) {
       console.error(e);
       setSelectedJob(null);
@@ -858,27 +903,35 @@ export default function Jobs() {
     loadJobDetail(selectedJobId);
   }, [selectedJobId, loadJobDetail]);
 
-  // Deep-link flash: if we landed here via JobTracker's "View in Jobs"
-  // arrow, scroll the Tenant Job History panel into view, let the CSS
-  // pulse (see the DataGrid's getRowClassName below) play, then clear
-  // both the URL param and the highlight state so a later refresh
-  // doesn't replay it on an unrelated row.
-  React.useEffect(() => {
-    if (!highlightRowId) return;
-    const scrollTimer = setTimeout(() => {
+  // Smooth-scrolls the Tenant Job History panel into view and pulses
+  // the given row (see the DataGrid's getRowClassName / the
+  // traceniumJobFlash keyframe below) for ~2.6s. Shared by the
+  // deep-link-arrival effect below AND by handleSubmit, so a job
+  // dispatched right here on the Jobs page gets the exact same
+  // "look, there it is" treatment as one landed on via JobTracker's
+  // "View in Jobs" arrow from another page.
+  const flashAndScrollToRow = React.useCallback((rowId) => {
+    if (!rowId) return;
+    setHighlightRowId(rowId);
+    const scrollTimer = window.setTimeout(() => {
       document.getElementById("tenant-job-history-panel")?.scrollIntoView({
         behavior: "smooth",
         block: "start"
       });
     }, 150);
+    window.setTimeout(() => setHighlightRowId(""), 2600);
+    return () => clearTimeout(scrollTimer);
+  }, []);
+
+  // Deep-link flash: if we landed here via JobTracker's "View in Jobs"
+  // arrow, run the same scroll + pulse once on mount, then clear the
+  // URL param so a later refresh doesn't replay it.
+  React.useEffect(() => {
+    if (!initialFilters.highlightJobId) return;
     updateSearchParams({ highlightJobId: null });
-    const clearTimer = setTimeout(() => setHighlightRowId(""), 2600);
-    return () => {
-      clearTimeout(scrollTimer);
-      clearTimeout(clearTimer);
-    };
+    return flashAndScrollToRow(initialFilters.highlightJobId);
     // Intentionally mount-only — this is a one-shot "just arrived"
-    // flash, not a live sync with highlightRowId's later value.
+    // flash, not a live sync with any state that changes later.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -919,27 +972,88 @@ export default function Jobs() {
     [groupCatalog, selectedGroupId]
   );
 
+  // Derived live from tenantJobs (not a snapshot taken at click time)
+  // so the batch detail view keeps reflecting reality as auto-refresh
+  // ticks bring in newer per-device statuses.
+  const selectedBatchJobs = React.useMemo(
+    () => (selectedBatchId ? tenantJobs.filter((j) => j.batch_id === selectedBatchId) : []),
+    [tenantJobs, selectedBatchId]
+  );
+
+  // Row click on the Tenant Job History grid: a grouped (multi-device)
+  // row selects the batch view; a plain row selects the single-job
+  // view. The two are mutually exclusive.
+  const selectRow = React.useCallback((row) => {
+    if (row.__isBatch) {
+      setSelectedBatchId(row.batch_id);
+      setSelectedJobId("");
+    } else {
+      setSelectedJobId(row.job_id);
+      setSelectedBatchId("");
+    }
+  }, []);
+
+  // Collapse jobs that share a batch_id into one row. A batch of one
+  // (e.g. "all connected" resolved to a single device) reads as a
+  // normal row — grouping only kicks in once there's actually
+  // something to group.
+  const groupedRows = React.useMemo(() => {
+    const batches = new Map();
+    const singles = [];
+    for (const row of tenantJobs) {
+      if (!row.batch_id) {
+        singles.push(row);
+        continue;
+      }
+      if (!batches.has(row.batch_id)) batches.set(row.batch_id, []);
+      batches.get(row.batch_id).push(row);
+    }
+
+    const rows = [...singles];
+    for (const [batchId, jobs] of batches.entries()) {
+      if (jobs.length === 1) {
+        rows.push(jobs[0]);
+      } else {
+        rows.push(buildBatchRow(batchId, jobs));
+      }
+    }
+
+    return rows.sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta;
+    });
+  }, [tenantJobs]);
+
   const filteredRows = React.useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
 
-    return tenantJobs.filter((row) => {
+    const matchesRowSearch = (row, needle) => {
       const device = deviceMap.get(String(row.device_id || ""));
       const hostname = String(device?.hostname || "").toLowerCase();
+      return (
+        String(row.job_id || "").toLowerCase().includes(needle) ||
+        String(row.device_id || "").toLowerCase().includes(needle) ||
+        hostname.includes(needle) ||
+        String(row.job_type || "").toLowerCase().includes(needle) ||
+        String(row.last_error || "").toLowerCase().includes(needle)
+      );
+    };
+
+    return groupedRows.filter((row) => {
       const matchesStatus =
         statusFilter === "all" || String(row.status || "").toLowerCase() === statusFilter;
       const matchesJobType =
         jobTypeFilter === "all" || String(row.job_type || "").toLowerCase() === jobTypeFilter;
       const matchesSearch =
         !q ||
-        String(row.job_id || "").toLowerCase().includes(q) ||
-        String(row.device_id || "").toLowerCase().includes(q) ||
-        hostname.includes(q) ||
-        String(row.job_type || "").toLowerCase().includes(q) ||
-        String(row.last_error || "").toLowerCase().includes(q);
+        (row.__isBatch
+          ? row.__jobs.some((j) => matchesRowSearch(j, q))
+          : matchesRowSearch(row, q));
 
       return matchesStatus && matchesJobType && matchesSearch;
     });
-  }, [tenantJobs, deviceMap, deferredSearch, statusFilter, jobTypeFilter]);
+  }, [groupedRows, deviceMap, deferredSearch, statusFilter, jobTypeFilter]);
 
   const summary = React.useMemo(() => {
     const total = tenantJobs.length;
@@ -1005,13 +1119,22 @@ export default function Jobs() {
   }, [tenantJobs, chartWindowDays]);
 
   const columns = [
-    { field: "job_id", headerName: "Job ID", minWidth: 210, flex: 1 },
+    {
+      field: "job_id",
+      headerName: "Job ID",
+      minWidth: 210,
+      flex: 1,
+      valueGetter: (value, row) => (row.__isBatch ? `Batch · ${row.__totalCount} devices` : value),
+    },
     {
       field: "hostname",
       headerName: "Hostname",
       minWidth: 180,
       flex: 0.8,
-      valueGetter: (_value, row) => deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
+      valueGetter: (_value, row) =>
+        row.__isBatch
+          ? `${row.__totalCount} devices`
+          : deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
     },
     // Device ID column dropped — the hostname column already
     // identifies the target, and the full UUID is still available in
@@ -1020,11 +1143,17 @@ export default function Jobs() {
     {
       field: "status",
       headerName: "Status",
-      minWidth: 120,
-      flex: 0.55,
-      renderCell: (params) => renderStatusChip(params.value),
+      minWidth: 140,
+      flex: 0.6,
+      renderCell: (params) => (params.row.__isBatch ? renderBatchStatusChip(params.row) : renderStatusChip(params.value)),
     },
-    { field: "attempts", headerName: "Attempts", minWidth: 90, flex: 0.35 },
+    {
+      field: "attempts",
+      headerName: "Attempts",
+      minWidth: 90,
+      flex: 0.35,
+      valueGetter: (value, row) => (row.__isBatch ? "—" : value),
+    },
     {
       field: "created_at",
       headerName: "Created At",
@@ -1078,20 +1207,21 @@ export default function Jobs() {
     }
   }, [loadJobDetail, reloadMeta, loadTenantJobs, selectedJobId]);
 
-  React.useEffect(() => {
-    const intervalSeconds = Number(autoRefreshSeconds || 0);
-    if (!canManageJobs || intervalSeconds <= 0) {
-      return undefined;
-    }
-
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      if (submitting || jobActionRunning) return;
-      refreshAll();
-    }, intervalSeconds * 1000);
-
-    return () => window.clearInterval(timer);
-  }, [autoRefreshSeconds, canManageJobs, jobActionRunning, refreshAll, submitting]);
+  // Auto-refresh — was hand-rolled here and defaulted OFF, unlike every
+  // other list page (PatchManagement, SecurityCompliance, Overview,
+  // Assets, Audit, Alerts, …), which all use this shared hook with its
+  // 60s default. That's the root cause of a real bug: dispatch a job,
+  // watch Tenant Job History sit on "Pending" forever after it actually
+  // finished (confirmed only by clicking into Job Detail, which always
+  // fetches fresh) — because with refresh off, the table simply never
+  // asked the backend again. Switching to useAutoRefresh fixes that and
+  // brings this page in line with the rest of the app (same 60s
+  // default, persisted to the URL, pauses on a hidden tab).
+  const autoRefreshTick = React.useCallback(() => {
+    if (!canManageJobs || submitting || jobActionRunning) return;
+    refreshAll();
+  }, [canManageJobs, jobActionRunning, refreshAll, submitting]);
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = useAutoRefresh(autoRefreshTick, "jobsAutoRefresh");
 
   const handleSubmit = async () => {
     if (!canManageJobs) return;
@@ -1200,6 +1330,13 @@ export default function Jobs() {
     });
     if (!confirmed) return;
 
+    // Whatever row the operator should be shown after the table
+    // reloads — a real job_id for a single-device dispatch, or the
+    // synthetic `batch:<batchId>` id (see groupedRows) for anything
+    // that fans out to multiple devices, since those collapse into one
+    // row in Tenant Job History.
+    let newRowId = "";
+
     try {
       setSubmitting(true);
 
@@ -1208,6 +1345,7 @@ export default function Jobs() {
           deviceIds: connectedDeviceIds,
           ...payload,
         });
+        newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
 
         setSnackbar({
           open: true,
@@ -1217,6 +1355,7 @@ export default function Jobs() {
       } else if (targetMode === "group") {
         if (groupTargetMode === "entire") {
           const response = await dispatchAssetGroupJob(selectedGroupId, payload);
+          newRowId = response?.batchId ? `batch:${response.batchId}` : "";
           setSnackbar({
             open: true,
             message: `Dispatched ${response?.count ?? 0} job(s) to "${
@@ -1226,6 +1365,7 @@ export default function Jobs() {
           });
         } else if (groupDeviceIds.length === 1) {
           const response = await createDeviceJob(groupDeviceIds[0], payload);
+          newRowId = response?.jobId || "";
           setSelectedJobId(response?.jobId || "");
           setSnackbar({
             open: true,
@@ -1237,6 +1377,7 @@ export default function Jobs() {
             deviceIds: groupDeviceIds,
             ...payload,
           });
+          newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
           setSnackbar({
             open: true,
             message: `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
@@ -1245,6 +1386,7 @@ export default function Jobs() {
         }
       } else if (selectedDeviceIds.length === 1) {
         const response = await createDeviceJob(selectedDeviceIds[0], payload);
+        newRowId = response?.jobId || "";
         setSelectedJobId(response?.jobId || "");
         setSnackbar({
           open: true,
@@ -1258,6 +1400,7 @@ export default function Jobs() {
           deviceIds: selectedDeviceIds,
           ...payload,
         });
+        newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
         setSnackbar({
           open: true,
           message: `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
@@ -1266,6 +1409,7 @@ export default function Jobs() {
       }
 
       await loadTenantJobs();
+      flashAndScrollToRow(newRowId);
     } catch (e) {
       console.error(e);
       setSnackbar({
@@ -1853,7 +1997,9 @@ export default function Jobs() {
                 Tenant Job History
               </Typography>
               <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-                Showing <strong>{filteredRows.length}</strong> of {tenantJobs.length} jobs
+                Showing <strong>{filteredRows.length}</strong> row{filteredRows.length === 1 ? "" : "s"} ·{" "}
+                {tenantJobs.length} job{tenantJobs.length === 1 ? "" : "s"} total
+                {groupedRows.length !== tenantJobs.length ? " (multi-device dispatches grouped)" : ""}
               </Typography>
             </Box>
 
@@ -1929,7 +2075,7 @@ export default function Jobs() {
               getRowClassName={(params) =>
                 params.row.job_id === highlightRowId ? "tracenium-job-flash-row" : ""
               }
-              onRowClick={(params) => setSelectedJobId(params.row.job_id)}
+              onRowClick={(params) => selectRow(params.row)}
               pageSizeOptions={[10, 25, 50]}
               initialState={{
                 pagination: {
@@ -1962,12 +2108,77 @@ export default function Jobs() {
           >
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
               <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
-                Job Detail
+                {selectedBatchId ? "Batch Detail" : "Job Detail"}
               </Typography>
-              {selectedJob ? renderStatusChip(selectedJob.status) : null}
+              {selectedBatchId && selectedBatchJobs.length > 0
+                ? renderBatchStatusChip(buildBatchRow(selectedBatchId, selectedBatchJobs))
+                : selectedJob
+                ? renderStatusChip(selectedJob.status)
+                : null}
             </Box>
 
-            {!selectedJobId ? (
+            {selectedBatchId ? (
+              selectedBatchJobs.length === 0 ? (
+                <Typography color="text.secondary">Loading batch…</Typography>
+              ) : (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1, minHeight: 0 }}>
+                  <Box>
+                    <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2 }}>
+                      Identity
+                    </Typography>
+                    <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
+                      <DetailRow label="Type" value={selectedBatchJobs[0]?.job_type} />
+                      <DetailRow label="Devices" value={String(selectedBatchJobs.length)} />
+                      <DetailRow label="Created By" value={selectedBatchJobs[0]?.created_by_email || selectedBatchJobs[0]?.created_by || "—"} />
+                      <DetailRow label="Created" value={formatDate(selectedBatchJobs[0]?.created_at)} />
+                    </Box>
+                  </Box>
+
+                  <Divider sx={{ borderColor: BRAND.border }} />
+
+                  <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+                    <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2, mb: 0.5 }}>
+                      Devices involved
+                    </Typography>
+                    <Box sx={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0.75, pr: 0.5 }}>
+                      {selectedBatchJobs.map((job) => (
+                        <Box
+                          key={job.job_id}
+                          onClick={() => {
+                            setSelectedJobId(job.job_id);
+                            setSelectedBatchId("");
+                          }}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            p: 1,
+                            borderRadius: 1.5,
+                            border: `1px solid ${BRAND.border}`,
+                            cursor: "pointer",
+                            transition: "background-color 0.15s ease",
+                            "&:hover": { bgcolor: BRAND.darkSoft },
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }} noWrap>
+                              {deviceMap.get(String(job.device_id || ""))?.hostname || job.device_id}
+                            </Typography>
+                            {job.last_error ? (
+                              <Typography sx={{ fontSize: 11, color: BRAND.alert.error }} noWrap>
+                                {job.last_error}
+                              </Typography>
+                            ) : null}
+                          </Box>
+                          {renderStatusChip(job.status)}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                </Box>
+              )
+            ) : !selectedJobId ? (
               <Box
                 sx={{
                   flex: 1,
