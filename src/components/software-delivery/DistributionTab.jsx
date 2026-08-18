@@ -30,6 +30,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  Alert,
+  AlertTitle,
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -41,6 +43,7 @@ import SummaryCard from "../common/SummaryCard";
 import { BRAND, ROLE } from "../../theme/brand";
 import {
   listSites,
+  getDistributionReachability,
   createSite,
   updateSite,
   deleteSite,
@@ -220,13 +223,21 @@ export default function DistributionTab({ canManage, notify }) {
   const [dps, setDps] = React.useState([]);
   const [siteDialog, setSiteDialog] = React.useState({ open: false, site: null });
   const [dpDialogOpen, setDpDialogOpen] = React.useState(false);
+  const [reachability, setReachability] = React.useState([]);
 
   const reload = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [s, d] = await Promise.all([listSites(), listDistributionPoints()]);
+      const [s, d, r] = await Promise.all([
+        listSites(),
+        listDistributionPoints(),
+        // Advisory only: if this call fails the tab still works, it just
+        // loses the warning. Never let it break the page.
+        getDistributionReachability().catch(() => ({ items: [] })),
+      ]);
       setSites(Array.isArray(s?.items) ? s.items : []);
       setDps(Array.isArray(d?.items) ? d.items : []);
+      setReachability(Array.isArray(r?.items) ? r.items : []);
     } catch (err) {
       notify?.("error", err?.body?.message || err?.message || "Failed to load distribution config");
     } finally {
@@ -297,6 +308,31 @@ export default function DistributionTab({ canManage, notify }) {
 
   return (
     <Stack spacing={3}>
+      {/*
+        Reachability warnings. A site declares "these subnets reach this DP over
+        the LAN", and nothing ever verified that claim: a DP outside one of its
+        own subnets means those peers cross a network boundary, hit a closed
+        firewall port, and their install hangs with no error to show for it.
+        Surfaced here because the fix is a configuration change made on this
+        very page.
+      */}
+      {reachability.length > 0 && (
+        <Alert severity="warning" icon={<WarningAmberOutlinedIcon fontSize="inherit" />}>
+          <AlertTitle>
+            {reachability.length === 1
+              ? "A distribution point may be unreachable"
+              : `${reachability.length} distribution points may be unreachable`}
+          </AlertTitle>
+          <Stack spacing={0.5}>
+            {reachability.map((w) => (
+              <Typography key={`${w.siteId}-${w.dpAgentId}`} variant="body2">
+                {w.message}
+              </Typography>
+            ))}
+          </Stack>
+        </Alert>
+      )}
+
       {/* Coverage KPIs */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 4 }}>

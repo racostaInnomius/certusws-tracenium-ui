@@ -135,6 +135,16 @@ export async function deleteDistributionPoint(id) {
   return httpDeleteJson(`${BASE}/distribution/dps/${encodeURIComponent(id)}`);
 }
 
+/**
+ * Config-coherence warnings: distribution points that do not live inside every
+ * subnet their own site claims. Those peers have to cross a network boundary
+ * to reach the DP, which normally means a closed firewall port and an install
+ * that hangs with no error at all.
+ */
+export async function getDistributionReachability() {
+  return httpGetJson(`${BASE}/distribution/coverage`);
+}
+
 export async function getIntake(id) {
   return httpGetJson(`${BASE}/intake/${encodeURIComponent(id)}`);
 }
