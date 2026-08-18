@@ -127,7 +127,17 @@ export default function CompositionBars({
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? actionLabel : undefined}
-      onClick={interactive ? onClick : undefined}
+      // Bound as () => onClick(), NOT onClick directly — a bare `onClick`
+      // binding hands the DOM click's SyntheticEvent to the consumer as
+      // its first argument. onClick's contract (see prop docs above) is
+      // zero-arg; consumers that now take an optional searchTerm-style
+      // first param (see AssetsDashboard's OS versions card) would
+      // otherwise receive the event object itself as that argument
+      // whenever a click bubbles up from something with no handler of
+      // its own (e.g. a child row before onItemClick support existed) —
+      // manifesting as a literal "[object Object]" wherever that value
+      // got used downstream.
+      onClick={interactive ? () => onClick() : undefined}
       onKeyDown={handleCardKeyDown}
       sx={{
         p: 2,
@@ -497,6 +507,10 @@ export default function CompositionBars({
                           Math.min(100, Math.round(childPct))
                         );
                         const childKey = getRowKey(child, childIndex);
+                        const handleChildActivate = (event) => {
+                          event.stopPropagation();
+                          onItemClick(child);
+                        };
 
                         return (
                           <Box
@@ -504,11 +518,36 @@ export default function CompositionBars({
                             sx={{ display: "flex", flexDirection: "column", gap: 0.3, minWidth: 0 }}
                           >
                             <Box
+                              role={hasItemClick ? "button" : undefined}
+                              tabIndex={hasItemClick ? 0 : undefined}
+                              onClick={hasItemClick ? handleChildActivate : undefined}
+                              onKeyDown={
+                                hasItemClick
+                                  ? (event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        handleChildActivate(event);
+                                      }
+                                    }
+                                  : undefined
+                              }
                               sx={{
                                 display: "grid",
                                 gridTemplateColumns: "minmax(0, 1fr) auto",
                                 alignItems: "center",
                                 columnGap: 1,
+                                cursor: hasItemClick ? "pointer" : "inherit",
+                                borderRadius: 1,
+                                mx: -0.5,
+                                px: 0.5,
+                                py: 0.15,
+                                transition: "background-color 140ms ease",
+                                "&:hover": hasItemClick
+                                  ? { bgcolor: "rgba(27,166,166,0.06)" }
+                                  : undefined,
+                                "&:focus-visible": hasItemClick
+                                  ? { outline: `2px solid ${BRAND.teal}`, outlineOffset: 2 }
+                                  : undefined,
                               }}
                             >
                               <Box sx={{ minWidth: 0 }}>

@@ -22,7 +22,10 @@ const itemsWithChildren = [
     id: "macos-tahoe",
     label: "macOS Tahoe",
     value: 6,
-    children: [{ id: "26.0", label: "26.0", value: 4 }, { id: "26.1", label: "26.1", value: 2 }],
+    children: [
+      { id: "v260", label: "Version 26.0", value: 4, raw: { technical_version: "26.0" } },
+      { id: "v261", label: "Version 26.1", value: 2, raw: { technical_version: "26.1" } },
+    ],
   },
 ];
 
@@ -62,7 +65,7 @@ describe("CompositionBars — row vs card click routing", () => {
 
     expect(onItemClick).toHaveBeenCalledTimes(1);
     // The children stay collapsed — the row click navigated, it didn't expand.
-    expect(screen.queryByText("26.0")).not.toBeInTheDocument();
+    expect(screen.queryByText("Version 26.0")).not.toBeInTheDocument();
   });
 
   it("the expand arrow still toggles children without calling onItemClick", () => {
@@ -72,7 +75,7 @@ describe("CompositionBars — row vs card click routing", () => {
     fireEvent.click(screen.getByRole("button", { name: /show grouped versions/i }));
 
     expect(onItemClick).not.toHaveBeenCalled();
-    expect(screen.getByText("26.0")).toBeInTheDocument();
+    expect(screen.getByText("Version 26.0")).toBeInTheDocument();
   });
 
   it("without onItemClick, a childless card falls back to the pre-existing behavior: row click bubbles to the card", () => {
@@ -82,5 +85,42 @@ describe("CompositionBars — row vs card click routing", () => {
     fireEvent.click(screen.getByText("macOS Tahoe"));
 
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("regression: card onClick is always invoked with zero arguments, never the raw click event", () => {
+    // Bug found 2026-08-17: onClick was bound directly as the DOM
+    // handler, so a click bubbling up from something with no handler
+    // of its own (e.g. a child row before it got its own onItemClick
+    // support) handed the SyntheticEvent to onClick as its first
+    // argument. Consumers that treat that argument as a search string
+    // (AssetsDashboard's OS versions card) rendered it as the literal
+    // text "[object Object]".
+    const onClick = vi.fn();
+    render(<CompositionBars title="OS versions" items={items} onClick={onClick} />);
+
+    fireEvent.click(screen.getByText("OS versions"));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(onClick.mock.calls[0]).toEqual([]);
+  });
+
+  it("clicking a child (point-version) row calls onItemClick with that child, not the parent, and does not bubble to the card", () => {
+    const onItemClick = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <CompositionBars
+        title="OS versions"
+        items={itemsWithChildren}
+        onClick={onClick}
+        onItemClick={onItemClick}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /show grouped versions/i }));
+    fireEvent.click(screen.getByText("Version 26.1"));
+
+    expect(onItemClick).toHaveBeenCalledTimes(1);
+    expect(onItemClick.mock.calls[0][0]).toMatchObject({ raw: { technical_version: "26.1" } });
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
