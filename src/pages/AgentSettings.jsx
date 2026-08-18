@@ -4,6 +4,7 @@ import { listGateways } from "../api/patchManagement";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import {
   Alert,
+  AlertTitle,
   Box,
   Button,
   Chip,
@@ -376,6 +377,16 @@ export default function AgentSettings({ embedded = false }) {
   const [tenantStatus, setTenantStatus] = React.useState([]);
   const [tenantLoading, setTenantLoading] = React.useState(true);
   const [tenantSaving, setTenantSaving] = React.useState(false);
+  // "No pude leer la política" NO es lo mismo que "todavía no hay
+  // política", aunque ambas dejaban `tenantPolicy` en null. Esa confusión
+  // no solo pintaba el formulario con defaults sin avisar: además
+  // desarmaba el candado optimista, porque `extractPolicyEnvelope(null)`
+  // devuelve version=null y eso significa "no mandes If-Match". Un 500
+  // pasajero en el GET más un click en Guardar reemplazaban la política
+  // real del tenant por los defaults del formulario, y de ahí a todos los
+  // agentes. El candado protege contra otro escritor, nunca protegió
+  // contra una lectura fallida.
+  const [tenantLoadError, setTenantLoadError] = React.useState(null);
   const [tenantPushing, setTenantPushing] = React.useState(false);
   // Plugin coverage real-state — distinto de policy ack: lee de
   // agent_payload->agent->capabilities (último facts publish del agent),
@@ -417,7 +428,12 @@ export default function AgentSettings({ embedded = false }) {
       // estándar de Promise.allSettled. Se carga en paralelo con el
       // resto (no bloquea la página si está lento o falla).
       const [policyRes, statusRes, devicesRes, coverageSettled] = await Promise.all([
-        getTenantPolicy(tenantId).catch(() => null),
+        // La política es la página. Su fallo tiene que llegar al operador
+        // y, sobre todo, tiene que impedir el guardado.
+        getTenantPolicy(tenantId).then(
+          (r) => { setTenantLoadError(null); return r; },
+          (err) => { setTenantLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+        ),
         listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
         listKnownDevices().catch(() => ({ items: [] })),
         Promise.allSettled([getPluginCoverageSummary()]).then((arr) => arr[0]),
@@ -535,6 +551,15 @@ export default function AgentSettings({ embedded = false }) {
   // ── Actions ────────────────────────────────────────────────────────────
   const handleSaveTenant = async () => {
     if (!canManage || !tenantId) return;
+    // El guard que importa. Si la política no se leyó, el formulario
+    // contiene defaults y `expectedVersion` sería null — o sea, un PATCH
+    // sin If-Match que pisa lo que haya en el servidor. Rechazar aquí, y
+    // no solo deshabilitar el botón, porque el botón se puede volver a
+    // habilitar por cualquier re-render y esto no admite un "casi".
+    if (tenantLoadError) {
+      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      return;
+    }
     if (tenantJsonError) {
       showSnack("Fix JSON errors before saving", "error");
       return;
@@ -593,6 +618,16 @@ export default function AgentSettings({ embedded = false }) {
       showSnack("Fix JSON errors before saving", "error");
       return;
     }
+    // El guard que importa. Si la política no se leyó, el formulario
+    // contiene defaults y `expectedVersion` sería null — o sea, un PATCH
+    // sin If-Match que pisa lo que haya en el servidor. Rechazar aquí, y
+    // no solo deshabilitar el botón, porque el botón se puede volver a
+    // habilitar por cualquier re-render y esto no admite un "casi".
+    if (tenantLoadError) {
+      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      return;
+    }
+
     const ok = await confirm({
       title: "Replace the entire policy document?",
       body:
@@ -1130,6 +1165,8 @@ export default function AgentSettings({ embedded = false }) {
               tenantHash={tenantHash}
               tenantUpdatedAt={tenantUpdatedAt}
               tenantSaving={tenantSaving}
+              tenantLoadError={tenantLoadError}
+              onRetryLoad={loadTenant}
               tenantPushing={tenantPushing}
               onSave={handleSaveTenant}
               onPush={handlePushTenant}
@@ -1194,6 +1231,7 @@ function TenantTab(props) {
     tenantJsonError, setTenantJsonError,
     tenantVersion, tenantHash, tenantUpdatedAt,
     tenantSaving, tenantPushing, onSave, onPush, onSaveRawJson,
+    tenantLoadError, onRetryLoad,
     tenantStatus, statusColumns, columnVisibilityModel, onRowClick,
     loading,
     pluginCoverageResult,
@@ -1230,12 +1268,31 @@ function TenantTab(props) {
             onSaveRawJson={onSaveRawJson}
           />
 
+          {tenantLoadError ? (
+            // Sin esto el formulario se ve normal — con defaults — y nada
+            // indica que lo que hay en pantalla no es la política real.
+            <Alert
+              severity="error"
+              sx={{ mt: 2.5 }}
+              action={
+                <Button color="inherit" size="small" onClick={onRetryLoad}>
+                  Reintentar
+                </Button>
+              }
+            >
+              <AlertTitle>No se pudo leer la política actual</AlertTitle>
+              {tenantLoadError} — el formulario muestra valores por defecto, no la
+              configuración del tenant. Guardar está deshabilitado para no
+              sobrescribirla.
+            </Alert>
+          ) : null}
+
           <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Button
               variant="contained"
               startIcon={<SaveOutlinedIcon />}
               onClick={onSave}
-              disabled={tenantSaving || Boolean(tenantJsonError)}
+              disabled={tenantSaving || Boolean(tenantJsonError) || Boolean(tenantLoadError)}
               sx={{
                 bgcolor: BRAND.teal,
                 color: "#fff",

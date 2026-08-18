@@ -62,6 +62,13 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const [form, setForm] = React.useState(() => ({ security: readSecurityFromPolicy({}) }));
   const [loadedSecurity, setLoadedSecurity] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  // Distinta de `policyRow === null`, que también significa "todavía no
+  // hay política". Confundirlas pintaba el formulario con defaults sin
+  // avisar Y desarmaba el candado optimista: extractPolicyEnvelope(null)
+  // da version=null, que se traduce en "no mandes If-Match", así que el
+  // PATCH pisaba lo que hubiera en el servidor. El candado nunca protegió
+  // contra una lectura fallida, solo contra otro escritor.
+  const [loadError, setLoadError] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const [pushing, setPushing] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -81,7 +88,10 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     try {
       setLoading(true);
       const [res, catSum, fleet] = await Promise.all([
-        getTenantPolicy(tenantId).catch(() => null),
+        getTenantPolicy(tenantId).then(
+          (r) => { setLoadError(null); return r; },
+          (err) => { setLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+        ),
         getCategorySummary().catch(() => null),
         getComplianceSummary().catch(() => null),
       ]);
@@ -128,6 +138,12 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
 
   const handleSave = async () => {
     if (!canManage || !tenantId) return;
+    // Rechazar aquí y no solo deshabilitar el botón: el botón se puede
+    // rehabilitar en cualquier re-render, y esto no admite un "casi".
+    if (loadError) {
+      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      return;
+    }
     try {
       setSaving(true);
       const security = securityFormToPolicy(form.security);

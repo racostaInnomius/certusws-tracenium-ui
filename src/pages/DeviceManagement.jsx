@@ -98,6 +98,10 @@ export default function DeviceManagement({ onNavigate }) {
   const [savingMdm, setSavingMdm] = React.useState(null); // plataforma en curso
   const [devices, setDevices] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  // Ver el comentario homólogo en SecurityBaselines: "no pude leerla" y
+  // "todavía no hay" colapsaban en el mismo null, y ese null desarma el
+  // If-Match además de pintar defaults sin avisar.
+  const [loadError, setLoadError] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const [pushing, setPushing] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
@@ -111,7 +115,10 @@ export default function DeviceManagement({ onNavigate }) {
     try {
       setLoading(true);
       const [policyRes, devicesRes] = await Promise.all([
-        getTenantPolicy(tenantId).catch(() => null),
+        getTenantPolicy(tenantId).then(
+          (r) => { setLoadError(null); return r; },
+          (err) => { setLoadError(err?.message || "No se pudo cargar la política del tenant."); return null; }
+        ),
         listKnownDevices().catch(() => ({ items: [] })),
       ]);
       const env = extractPolicyEnvelope(policyRes);
@@ -162,6 +169,10 @@ export default function DeviceManagement({ onNavigate }) {
 
   const handleSave = async () => {
     if (!canManage || !tenantId) return;
+    if (loadError) {
+      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      return;
+    }
     try {
       setSaving(true);
       const mam = managedAppFormToPolicy(form.managedApp);
@@ -194,6 +205,10 @@ export default function DeviceManagement({ onNavigate }) {
   // guardado no pueda tocar la otra plataforma ni el bloque MAM.
   const handleSaveMdm = async (platform) => {
     if (!canManage || !tenantId) return;
+    if (loadError) {
+      showSnack("No se pudo leer la política actual; recarga antes de guardar.", "error");
+      return;
+    }
     try {
       setSavingMdm(platform);
       const block = mdmBlocks[platform] || {};
