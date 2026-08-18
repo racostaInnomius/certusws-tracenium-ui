@@ -1308,6 +1308,14 @@ const osVersionItems = React.useMemo(() => {
               minHeight={280}
               maxItems={6}
               onClick={onNavigateToHardwareInventory}
+              // Clicking a specific OS (e.g. "macOS Tahoe") jumps to
+              // Hardware Inventory pre-filtered to just that OS via its
+              // friendly name — the same string the "OS Version" column
+              // there searches by. Clicking elsewhere on the card (or the
+              // expand arrow on a row) keeps the existing unfiltered
+              // "open Hardware Inventory" / "show grouped versions"
+              // behavior.
+              onItemClick={(item) => onNavigateToHardwareInventory(item.label)}
               actionLabel="Open Hardware Inventory"
             />
           </Box>

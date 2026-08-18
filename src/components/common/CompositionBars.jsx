@@ -77,6 +77,7 @@ export default function CompositionBars({
   minHeight = 260,
   sx = null,
   onClick = null,
+  onItemClick = null,
   actionLabel = "Open details",
   totalValue = null,
   showTotalChip = true,
@@ -100,6 +101,7 @@ export default function CompositionBars({
   ) || 1;
 
   const interactive = typeof onClick === "function";
+  const hasItemClick = typeof onItemClick === "function";
 
   const toggleRow = React.useCallback((rowKey) => {
     setExpandedRows((prev) => ({
@@ -313,9 +315,21 @@ export default function CompositionBars({
             const rowKey = getRowKey(row, index);
             const expanded = Boolean(expandedRows[rowKey]);
 
-            // If the card is clickable, row clicks should navigate with the
-            // card. Only the arrow icon expands/collapses and stops bubbling.
-            const rowCanExpandByClick = hasChildren && !interactive;
+            // A row is independently clickable when the caller wants
+            // per-item navigation (onItemClick — takes priority over the
+            // whole-card onClick), or, failing that, when it has children
+            // and the card itself isn't already interactive (in which
+            // case a row click bubbles up to the card instead — only the
+            // arrow icon expands/collapses there, and stops bubbling).
+            const rowClickable = hasItemClick || (hasChildren && !interactive);
+            const handleRowActivate = (event) => {
+              event.stopPropagation();
+              if (hasItemClick) {
+                onItemClick(row);
+              } else {
+                toggleRow(rowKey);
+              }
+            };
 
             return (
               <Box
@@ -323,24 +337,16 @@ export default function CompositionBars({
                 sx={{ display: "flex", flexDirection: "column", gap: 0.35 }}
               >
                 <Box
-                  role={rowCanExpandByClick ? "button" : undefined}
-                  tabIndex={rowCanExpandByClick ? 0 : undefined}
-                  aria-expanded={rowCanExpandByClick ? expanded : undefined}
-                  onClick={
-                    rowCanExpandByClick
-                      ? (event) => {
-                          event.stopPropagation();
-                          toggleRow(rowKey);
-                        }
-                      : undefined
-                  }
+                  role={rowClickable ? "button" : undefined}
+                  tabIndex={rowClickable ? 0 : undefined}
+                  aria-expanded={!hasItemClick && hasChildren ? expanded : undefined}
+                  onClick={rowClickable ? handleRowActivate : undefined}
                   onKeyDown={
-                    rowCanExpandByClick
+                    rowClickable
                       ? (event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            event.stopPropagation();
-                            toggleRow(rowKey);
+                            handleRowActivate(event);
                           }
                         }
                       : undefined
@@ -353,16 +359,16 @@ export default function CompositionBars({
                     alignItems: "center",
                     columnGap: 1,
                     fontSize: 12.5,
-                    cursor: rowCanExpandByClick ? "pointer" : "inherit",
+                    cursor: rowClickable ? "pointer" : "inherit",
                     borderRadius: 1,
                     mx: hasChildren ? -0.5 : 0,
                     px: hasChildren ? 0.5 : 0,
                     py: hasChildren ? 0.25 : 0,
                     transition: "background-color 140ms ease",
-                    "&:hover": rowCanExpandByClick
+                    "&:hover": rowClickable
                       ? { bgcolor: "rgba(27,166,166,0.06)" }
                       : undefined,
-                    "&:focus-visible": rowCanExpandByClick
+                    "&:focus-visible": rowClickable
                       ? {
                           outline: `2px solid ${BRAND.teal}`,
                           outlineOffset: 2,
