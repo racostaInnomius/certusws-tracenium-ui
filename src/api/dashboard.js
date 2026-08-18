@@ -3,6 +3,8 @@ import { httpGetJson } from "./http";
 export const dashboardApi = {
   getSummary: () => httpGetJson("/api/v1/dashboard/summary"),
   getHosts: () => httpGetJson("/api/v1/dashboard/hosts"),
+  // Map view. Unpaginated by design — see fetchHostLocations in the backend.
+  getHostLocations: () => httpGetJson("/api/v1/dashboard/hosts/locations"),
   getPrinters: () => httpGetJson("/api/v1/dashboard/printers"),
   getHostDetail: (agentId) => httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/detail`),
   // Per-device printer list. Returns rows from the device_printers

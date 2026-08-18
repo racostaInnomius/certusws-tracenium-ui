@@ -37,6 +37,8 @@ import {
   Paper,
   Snackbar,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Tab,
   Tabs,
   TextField,
@@ -96,6 +98,10 @@ import {
   normalizeHardwareDetailPayload,
 } from "../components/AssetsDashboard/hostHelpers";
 import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/DeviceDecommissionConfirmDialog";
+// Own chunk: Leaflet is dead weight for anyone who never opens the map.
+const FleetLocationMap = React.lazy(() =>
+  import("../components/AssetsDashboard/FleetLocationMap")
+);
 import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
 
@@ -323,6 +329,49 @@ export default function AssetsDashboard({
   const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
   const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
   const [assetWorkbenchView, setAssetWorkbenchView] = React.useState("devices"); // devices | inactive-assets
+
+  // List ⇄ Map. Kept in the URL like the other filters on this page, so a map
+  // an operator is looking at can be pasted to a colleague and survives a
+  // refresh instead of snapping back to the table.
+  const [deviceView, setDeviceView] = React.useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "map"
+      ? "map"
+      : "list"
+  );
+  const [fleetLocations, setFleetLocations] = React.useState(null);
+  const [fleetLocationsLoading, setFleetLocationsLoading] = React.useState(false);
+
+  const changeDeviceView = React.useCallback((next) => {
+    if (!next) return; // ToggleButtonGroup emits null when the active button is re-clicked
+    setDeviceView(next);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (next === "map") url.searchParams.set("view", "map");
+    else url.searchParams.delete("view");
+    window.history.replaceState({}, "", url);
+  }, []);
+
+  // Fetched only when the map is actually shown: the payload is small, but an
+  // operator who never opens the map should not pay for it on every load.
+  React.useEffect(() => {
+    if (deviceView !== "map") return;
+    let cancelled = false;
+    setFleetLocationsLoading(true);
+    dashboardApi
+      .getHostLocations()
+      .then((data) => {
+        if (!cancelled) setFleetLocations(data);
+      })
+      .catch(() => {
+        if (!cancelled) setFleetLocations({ devices: [], withoutPosition: 0 });
+      })
+      .finally(() => {
+        if (!cancelled) setFleetLocationsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deviceView, refreshNonce]);
   const [hostsSearchInput, setHostsSearchInput] = React.useState("");
   const [hostsSearch, setHostsSearch] = React.useState("");
   const [hostsPaginationModel, setHostsPaginationModel] = React.useState({
@@ -1399,6 +1448,22 @@ const osVersionItems = React.useMemo(() => {
                       Devices
                     </Typography>
 
+                    <ToggleButtonGroup
+                      size="small"
+                      exclusive
+                      value={deviceView}
+                      onChange={(_, next) => changeDeviceView(next)}
+                      aria-label="Device view"
+                      sx={{ alignSelf: { xs: "stretch", sm: "flex-start" }, mt: { xs: 0, sm: "4px" } }}
+                    >
+                      <ToggleButton value="list" sx={{ textTransform: "none", px: 1.5 }}>
+                        List view
+                      </ToggleButton>
+                      <ToggleButton value="map" sx={{ textTransform: "none", px: 1.5 }}>
+                        Map view
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+
                     <TextField
                       size="small"
                       value={hostsSearchInput}
@@ -1546,6 +1611,27 @@ const osVersionItems = React.useMemo(() => {
                   </Stack>
                 ) : null}
 
+                {deviceView === "map" ? (
+                  <React.Suspense
+                    fallback={
+                      <Typography sx={{ fontSize: 13, color: "text.secondary", py: 4, textAlign: "center" }}>
+                        Loading map…
+                      </Typography>
+                    }
+                  >
+                    {fleetLocationsLoading && !fleetLocations ? (
+                      <Typography sx={{ fontSize: 13, color: "text.secondary", py: 4, textAlign: "center" }}>
+                        Loading positions…
+                      </Typography>
+                    ) : (
+                      <FleetLocationMap
+                        devices={fleetLocations?.devices || []}
+                        withoutPosition={fleetLocations?.withoutPosition || 0}
+                        onSelectDevice={handleAgentSelect}
+                      />
+                    )}
+                  </React.Suspense>
+                ) : (
                 <HostsTable
                   rows={filteredHosts}
                   connectedIds={connectedIds}
@@ -1575,6 +1661,7 @@ const osVersionItems = React.useMemo(() => {
                     });
                   }}
                 />
+                )}
               </>
             )}
           </SectionPaper>
