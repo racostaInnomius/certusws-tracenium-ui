@@ -287,6 +287,38 @@ export default function ShellTerminal({ session, device, onClose }) {
       // queue any candidates that fire before then in a small array
       // so they don't get dropped on slow networks.
       const pendingIce = [];
+
+      // `addIceCandidate` RECHAZA si todavía no hay descripción remota, y el
+      // agente manda sus candidatos por mensajes independientes de su propia
+      // answer. Esa carrera la pierde la answer a menudo: en campo se midió la
+      // cola de señales entregando 4 candidatos ANTES que la answer, y el
+      // navegador los descartaba todos — ICE se quedaba en `new`, sin una sola
+      // pareja que probar, hasta morir de `ice_failed` a los 42 s. Encolar y
+      // vaciar DESPUÉS de setRemoteDescription es lo único que lo hace
+      // determinista; el orden de llegada no se puede garantizar.
+      const applyOrQueueIce = async (cand) => {
+        if (!pc.remoteDescription) {
+          pendingIce.push(cand);
+          return;
+        }
+        try {
+          await pc.addIceCandidate(cand);
+        } catch (err) {
+          console.warn("[rcp] addIceCandidate failed", err);
+        }
+      };
+
+      const drainPendingIce = async () => {
+        if (!pc.remoteDescription) return;
+        for (const cand of pendingIce.splice(0)) {
+          try {
+            await pc.addIceCandidate(cand);
+          } catch (err) {
+            console.warn("[rcp] queued addIceCandidate failed", err);
+          }
+        }
+      };
+
       ws.onopen = async () => {
         if (cancelled) return;
         try {
@@ -301,14 +333,11 @@ export default function ShellTerminal({ session, device, onClose }) {
               })
             );
           }
-          // Flush any ICE that arrived during createOffer.
-          for (const cand of pendingIce.splice(0)) {
-            try {
-              await pc.addIceCandidate(cand);
-            } catch {
-              /* late candidate, ignore */
-            }
-          }
+          // Aquí NO se vacía la cola: acabamos de fijar la descripción
+          // LOCAL, la remota sigue sin existir. El vaciado que había en este
+          // punto sacaba los candidatos de la cola con splice y dejaba que
+          // addIceCandidate los rechazara contra un catch vacío, así que los
+          // destruía. El único punto correcto es tras la answer.
         } catch (err) {
           setState(STATE.ERROR);
           setStatusMsg(`Offer creation failed: ${err?.message || err}`);
@@ -330,6 +359,9 @@ export default function ShellTerminal({ session, device, onClose }) {
               type: "answer",
               sdp: parsed.sdp
             });
+            // Ya hay descripción remota: todo lo que se adelantó a la answer
+            // puede aplicarse por fin.
+            await drainPendingIce();
           } catch (err) {
             setState(STATE.ERROR);
             setStatusMsg(`setRemoteDescription failed: ${err?.message}`);
@@ -340,17 +372,7 @@ export default function ShellTerminal({ session, device, onClose }) {
             sdpMid: parsed.sdpMid,
             sdpMLineIndex: parsed.sdpMLineIndex
           };
-          // setRemoteDescription might not have happened yet (race
-          // between offer/answer + early ICE) — queue.
-          if (pc.remoteDescription) {
-            try {
-              await pc.addIceCandidate(cand);
-            } catch {
-              /* ignore */
-            }
-          } else {
-            pendingIce.push(cand);
-          }
+          await applyOrQueueIce(cand);
         } else if (parsed.type === "close") {
           setState(STATE.ENDED);
           setStatusMsg(`Session closed (${parsed.reason || "remote"}).`);

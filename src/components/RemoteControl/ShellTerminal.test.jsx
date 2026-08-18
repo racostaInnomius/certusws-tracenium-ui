@@ -172,6 +172,7 @@ class FakeRTCPeerConnection {
     this._listeners = {};
     this.remoteDescription = null;
     this.localDescription = null;
+    this.addedIce = [];
     this.onicecandidate = null;
     this.onconnectionstatechange = null;
     this.dc = null;
@@ -196,7 +197,19 @@ class FakeRTCPeerConnection {
   async setRemoteDescription(desc) {
     this.remoteDescription = desc;
   }
-  async addIceCandidate() {}
+  // Los navegadores RECHAZAN addIceCandidate mientras no haya descripción
+  // remota. El fake lo hacía en silencio y por eso ningún test veía que la UI
+  // tiraba los candidatos que se adelantaban a la answer — el bug que dejaba
+  // ICE en `new` hasta morir de ice_failed a los 42 s.
+  async addIceCandidate(cand) {
+    if (!this.remoteDescription) {
+      throw new DOMException(
+        "The remote description was null",
+        "InvalidStateError"
+      );
+    }
+    this.addedIce.push(cand);
+  }
   close() {
     this.connectionState = "closed";
   }
@@ -380,5 +393,72 @@ describe("ShellTerminal — teardown", () => {
     expect(closeFrame).toMatchObject({ type: "close", reason: "user_closed" });
     // xterm was disposed on cleanup.
     expect(xtermState.lastTerm.disposed).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orden de señalización: los candidatos del agente pueden adelantar a su propia
+// answer, porque viajan en mensajes independientes por un camino asíncrono.
+// Medido en campo: la cola de señales entregó 4 candidatos ANTES que la answer
+// y el navegador los descartó todos, dejando ICE en `new` sin una sola pareja
+// que probar hasta morir de ice_failed a los 42 s. Estos tests fijan que el
+// orden de llegada no puede romper la negociación.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("ShellTerminal — orden ICE/answer", () => {
+  const ice = (n) => ({
+    type: "ice",
+    candidate: `candidate:${n} 1 udp 2130706431 10.0.0.${n} 5000 typ host`,
+    sdpMid: "0",
+    sdpMLineIndex: 0
+  });
+
+  it("aplica los candidatos que llegaron ANTES de la answer, en vez de tirarlos", async () => {
+    renderTerminal();
+    const ws = sockets[0];
+    const pc = peers[0];
+    await ws.fireOpen();
+
+    // Tres candidatos se adelantan a la answer.
+    await ws.fireMessage(ice(1));
+    await ws.fireMessage(ice(2));
+    await ws.fireMessage(ice(3));
+    expect(pc.addedIce).toHaveLength(0); // aún no hay descripción remota
+
+    await ws.fireMessage({ type: "answer", sdp: "v=0-fake-answer" });
+
+    // Al llegar la answer se vacía la cola: ninguno se pierde y el orden se
+    // respeta. Sin el fix esto queda en 0 e ICE nunca arranca.
+    expect(pc.addedIce.map((c) => c.candidate)).toEqual([
+      ice(1).candidate,
+      ice(2).candidate,
+      ice(3).candidate
+    ]);
+  });
+
+  it("sigue aplicando los que llegan DESPUÉS de la answer", async () => {
+    renderTerminal();
+    const ws = sockets[0];
+    const pc = peers[0];
+    await ws.fireOpen();
+    await ws.fireMessage({ type: "answer", sdp: "v=0-fake-answer" });
+    await ws.fireMessage(ice(7));
+
+    expect(pc.addedIce.map((c) => c.candidate)).toEqual([ice(7).candidate]);
+  });
+
+  it("un candidato que el navegador rechaza no tumba la sesión", async () => {
+    renderTerminal();
+    const ws = sockets[0];
+    const pc = peers[0];
+    await ws.fireOpen();
+    await ws.fireMessage({ type: "answer", sdp: "v=0-fake-answer" });
+
+    pc.addIceCandidate = async () => {
+      throw new DOMException("Malformed candidate", "OperationError");
+    };
+    await ws.fireMessage(ice(9));
+    await pc.dc.fireOpen();
+
+    expect(screen.getByText(/Connected/i)).toBeTruthy();
   });
 });

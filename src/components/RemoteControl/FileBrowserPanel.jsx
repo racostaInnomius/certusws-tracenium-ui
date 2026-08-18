@@ -448,25 +448,58 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         });
         cleanupFns.push(detachIceRestart);
 
+        // `addIceCandidate` RECHAZA mientras no haya descripción remota, y los
+        // candidatos del agente viajan en mensajes independientes de su propia
+        // answer: es habitual que se le adelanten. Sin cola, el navegador los
+        // descartaba todos e ICE moría en `new` sin probar una sola pareja.
+        // También sirve para el ICE restart, porque su answer entra por este
+        // mismo handler (ver iceRestart.js).
+        const pendingIce = [];
+        const drainPendingIce = async () => {
+          if (!pc.remoteDescription) return;
+          for (const cand of pendingIce.splice(0)) {
+            try {
+              await pc.addIceCandidate(cand);
+            } catch (err) {
+              console.warn("[rcp] queued addIceCandidate failed", err);
+            }
+          }
+        };
+
         // 5. WS message handler.
-        ws.onmessage = ({ data }) => {
+        ws.onmessage = async ({ data }) => {
           if (destroyed) return;
+          let msg;
           try {
-            const msg = JSON.parse(data);
+            msg = JSON.parse(data);
+          } catch {
+            return;
+          }
+          try {
             if (msg.type === "answer") {
-              pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+              await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+              await drainPendingIce();
             } else if (msg.type === "ice" && msg.candidate) {
-              pc.addIceCandidate({
+              const cand = {
                 candidate: msg.candidate,
                 sdpMid: msg.sdpMid,
                 sdpMLineIndex: msg.sdpMLineIndex
-              });
+              };
+              if (!pc.remoteDescription) {
+                pendingIce.push(cand);
+              } else {
+                await pc.addIceCandidate(cand);
+              }
             } else if (msg.type === "close") {
               if (!destroyed) {
                 setState(STATE.ENDED);
               }
             }
-          } catch {/**/ }
+          } catch (err) {
+            // Antes el try/catch envolvía promesas sin await, así que no
+            // capturaba nada y los fallos se perdían como rechazos sueltos.
+            console.warn("[rcp] signaling message failed", msg?.type, err);
+          }
         };
         ws.onclose = (ev) => {
           // Use the ref instead of `state` (closure-captured value would

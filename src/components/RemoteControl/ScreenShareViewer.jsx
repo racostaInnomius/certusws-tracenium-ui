@@ -181,6 +181,15 @@ const CAPTURE_ERROR_COPY = {
   x11_connect_failed:
     "The capture helper could not reach the device's X server. The user may have " +
     "logged out since the session started.",
+  screen_capture_unsupported_adapter:
+    "This device's display adapter can't do the screen duplication that sharing " +
+    "requires — common on virtual machines with a basic or paravirtual display " +
+    "adapter. Nothing is wrong with the session; the hardware path isn't there. " +
+    "Shell and file sessions work normally.",
+  screen_capture_access_denied:
+    "The agent was denied access to the desktop. This happens while a UAC prompt " +
+    "or the lock screen is showing — retry once it's dismissed. If it persists, " +
+    "the agent's service cannot attach to the user's session on this build.",
   screen_capture_init_failed:
     "The device's screen capture stack failed to initialise. A GPU driver issue " +
     "or a locked-down Windows build are the usual causes."
@@ -615,23 +624,56 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         });
         cleanupFns.push(detachIceRestart);
 
+        // `addIceCandidate` RECHAZA mientras no haya descripción remota, y los
+        // candidatos del agente viajan en mensajes independientes de su propia
+        // answer: es habitual que se le adelanten. Sin cola, el navegador los
+        // descartaba todos e ICE moría en `new` sin probar una sola pareja.
+        // También sirve para el ICE restart, porque su answer entra por este
+        // mismo handler (ver iceRestart.js).
+        const pendingIce = [];
+        const drainPendingIce = async () => {
+          if (!pc.remoteDescription) return;
+          for (const cand of pendingIce.splice(0)) {
+            try {
+              await pc.addIceCandidate(cand);
+            } catch (err) {
+              console.warn("[rcp] queued addIceCandidate failed", err);
+            }
+          }
+        };
+
         // 5. WS message handler.
-        ws.onmessage = ({ data }) => {
+        ws.onmessage = async ({ data }) => {
           if (destroyed) return;
+          let msg;
           try {
-            const msg = JSON.parse(data);
+            msg = JSON.parse(data);
+          } catch {
+            return;
+          }
+          try {
             if (msg.type === "answer") {
-              pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+              await pc.setRemoteDescription({ type: "answer", sdp: msg.sdp });
+              await drainPendingIce();
             } else if (msg.type === "ice" && msg.candidate) {
-              pc.addIceCandidate({
+              const cand = {
                 candidate: msg.candidate,
                 sdpMid: msg.sdpMid,
                 sdpMLineIndex: msg.sdpMLineIndex
-              });
+              };
+              if (!pc.remoteDescription) {
+                pendingIce.push(cand);
+              } else {
+                await pc.addIceCandidate(cand);
+              }
             } else if (msg.type === "close") {
               if (!destroyed) setState(STATE.ENDED);
             }
-          } catch {/**/ }
+          } catch (err) {
+            // Antes el try/catch envolvía promesas sin await, así que no
+            // capturaba nada y los fallos se perdían como rechazos sueltos.
+            console.warn("[rcp] signaling message failed", msg?.type, err);
+          }
         };
         ws.onclose = () => {
           if (!destroyed && state !== STATE.VIEWING && state !== STATE.ENDED) {
