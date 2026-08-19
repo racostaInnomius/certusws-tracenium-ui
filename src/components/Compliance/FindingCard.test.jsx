@@ -161,3 +161,56 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(onRemediate.mock.calls[0][0].checkId).toBe(baseFinding.checkId);
   });
 });
+
+describe("FindingCard (Sprint 4 — CVE/KEV cross checks)", () => {
+  const kevFinding = {
+    ...baseFinding,
+    checkId: "cross.vulnerability.no_kev",
+    status: "fail",
+    category: "patching",
+  };
+  function renderKev(props = {}) {
+    return render(
+      <FindingCard
+        finding={kevFinding}
+        onAck={noop}
+        onRevoke={noop}
+        onChangeStatus={noop}
+        onShowHistory={noop}
+        pendingAction={null}
+        {...props}
+      />
+    );
+  }
+
+  it("names the KEVs from the device block and links to Vulnerabilities", () => {
+    const onOpen = vi.fn();
+    renderKev({
+      onOpenVulnerabilities: onOpen,
+      deviceVulnerability: { kev_ids: ["CVE-2026-0001", "CVE-2026-0002"], next_kev_due_date: "2026-09-01" },
+    });
+    const chip = screen.getByText("2 KEVs · due 2026-09-01");
+    chip.click();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to a generic label when the device block is absent", () => {
+    renderKev({ onOpenVulnerabilities: vi.fn() });
+    expect(screen.getByText("View vulnerabilities")).toBeInTheDocument();
+  });
+
+  it("does not render the chip on non-vulnerability checks or passing ones", () => {
+    render(
+      <FindingCard finding={{ ...baseFinding, status: "fail" }} onAck={noop} onRevoke={noop}
+        onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
+        deviceVulnerability={{ kev_ids: ["CVE-X"] }} onOpenVulnerabilities={vi.fn()} />
+    );
+    expect(screen.queryByText(/KEV/)).toBeNull();
+    render(
+      <FindingCard finding={{ ...kevFinding, status: "pass" }} onAck={noop} onRevoke={noop}
+        onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
+        deviceVulnerability={{ kev_ids: ["CVE-X"] }} onOpenVulnerabilities={vi.fn()} />
+    );
+    expect(screen.queryByText(/KEV/)).toBeNull();
+  });
+});

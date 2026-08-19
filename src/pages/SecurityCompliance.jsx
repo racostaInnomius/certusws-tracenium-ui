@@ -1276,6 +1276,10 @@ export default function SecurityCompliance({ initialTab }) {
           }
           onOpenBaselines={() => setTab("baselines")}
           onRemediateFinding={canManage ? handleRemediateFinding : null}
+          onOpenVulnerabilities={() => {
+            closeDrawer();
+            navigateTo("patch", { pmTab: "vulnerabilities" });
+          }}
         />
       </Drawer>
 

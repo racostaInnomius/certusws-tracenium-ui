@@ -72,8 +72,25 @@ export default function FindingCard({
   // finding `agentRemediable` (detection↔remediation crosswalk) AND
   // it's failing AND the viewer can manage. The handler receives the
   // finding; the drawer owns the confirm + POST + toast.
-  onRemediate = null
+  onRemediate = null,
+  // Sprint 4 — CVE/KEV cross checks (cross.vulnerability.*) carry the
+  // KEV ids in their evidence; this opens Patch Management →
+  // Vulnerabilities where the per-CVE drill-down and fix packages live.
+  onOpenVulnerabilities = null,
+  // Sprint 4 — the device's `vulnerability` block (summary_payload,
+  // exposed on device detail). The finding's own evidence is only the
+  // matched count ({path, value}); the block carries kev_ids[] and the
+  // next CISA due date so the chip can NAME the CVEs.
+  deviceVulnerability = null
 }) {
+  const isVulnerabilityCheck = String(finding.checkId || "").startsWith("cross.vulnerability.");
+  const kevIds = isVulnerabilityCheck && Array.isArray(deviceVulnerability?.kev_ids)
+    ? deviceVulnerability.kev_ids
+    : [];
+  const nextKevDue =
+    isVulnerabilityCheck && typeof deviceVulnerability?.next_kev_due_date === "string"
+      ? deviceVulnerability.next_kev_due_date
+      : null;
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
 
@@ -348,6 +365,36 @@ export default function FindingCard({
                   ))}
                 </Menu>
               </>
+            ) : null}
+            {/* Sprint 4 — CVE/KEV: name the actual CVEs and jump to the
+                per-CVE view. Only on failing vulnerability checks. */}
+            {isVulnerabilityCheck && finding.status === "fail" ? (
+              <Tooltip
+                title={
+                  (kevIds.length
+                    ? `Known exploited: ${kevIds.join(", ")}${nextKevDue ? ` · CISA due ${nextKevDue}` : ""}. `
+                    : "") + "Open Patch Management → Vulnerabilities for per-CVE detail and fix packages."
+                }
+                arrow
+              >
+                <Chip
+                  size="small"
+                  label={
+                    kevIds.length
+                      ? `${kevIds.length} KEV${kevIds.length === 1 ? "" : "s"}${nextKevDue ? ` · due ${nextKevDue}` : ""}`
+                      : "View vulnerabilities"
+                  }
+                  onClick={onOpenVulnerabilities || undefined}
+                  clickable={Boolean(onOpenVulnerabilities)}
+                  sx={{
+                    height: 24,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    bgcolor: ROLE.criticalSoft,
+                    color: ROLE.critical,
+                  }}
+                />
+              </Tooltip>
             ) : null}
             {/* Sprint 4 — one-click remediation on THIS device. The
                 Patch Management grid does fleet-wide campaigns; this is

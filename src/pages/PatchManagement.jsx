@@ -1,4 +1,5 @@
 import * as React from "react";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import Grid from "@mui/material/Grid";
 import {
   Alert,
@@ -529,7 +530,16 @@ function navigateToPolicies() {
 }
 
 export default function PatchManagement({ onNavigate }) {
-  const [tab, setTab] = React.useState(CATEGORIES[0].key);
+  // Deep-linkable via ?pmTab= (same pattern as ?settingsTab= / ?scpTab=).
+  // Sprint 4: the SCP drawer's cross.vulnerability.* findings link here
+  // with pmTab=vulnerabilities so "go see the KEVs" is one click.
+  const [tab, setTab] = React.useState(() => {
+    const fromUrl = getSearchParam("pmTab", "");
+    return CATEGORIES.some((c) => c.key === fromUrl) ? fromUrl : CATEGORIES[0].key;
+  });
+  React.useEffect(() => {
+    updateSearchParams({ pmTab: tab === CATEGORIES[0].key ? "" : tab });
+  }, [tab]);
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
   const { auth } = useAuthContext();

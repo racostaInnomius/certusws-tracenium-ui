@@ -82,7 +82,9 @@ export default function DeviceDrawerContent({
   onOpenBaselines = null,
   // Sprint 4 — one-click fix (finding) => Promise. Provided by the page,
   // which owns the confirm dialog + POST /remediate + toast.
-  onRemediateFinding = null
+  onRemediateFinding = null,
+  // Sprint 4 — cross.vulnerability.* findings link to PM → Vulnerabilities.
+  onOpenVulnerabilities = null
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -667,6 +669,8 @@ export default function DeviceDrawerContent({
                     baselineHint={baselineHintForCategory ? baselineHintForCategory(f.category) : null}
                     onOpenBaselines={onOpenBaselines}
                     onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
+                    onOpenVulnerabilities={onOpenVulnerabilities}
+                    deviceVulnerability={device?.vulnerability ?? null}
                     // Sprint 6 — bulk selection. Checkbox hidden for
                     // read-only members (selection only feeds bulk
                     // mutations, which they can't run).
