@@ -113,6 +113,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deleteItem, setDeleteItem] = React.useState(null);
   const [deleteSubmitting, setDeleteSubmitting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState("");
 
   const [deployOpen, setDeployOpen] = React.useState(false);
   const [deployItem, setDeployItem] = React.useState(null);
@@ -173,6 +174,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
   const handleDelete = async () => {
     if (!deleteItem) return;
     setDeleteSubmitting(true);
+    setDeleteError("");
     try {
       await deletePackage(deleteItem.id);
       notify("success", `Deleted ${deleteItem.name}`);
@@ -183,8 +185,12 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       const code = err?.body?.error;
       const msg =
         code === "SOFTWARE_PACKAGE_CONFLICT"
-          ? "Cannot delete: still referenced by one or more deployments. Mark inactive instead."
+          ? "Cannot delete: still referenced by one or more deployments. Mark it inactive instead — that stops new deployments without breaking the history of past ones."
           : err?.body?.message || err?.message || "Delete failed";
+      // Shown INSIDE the dialog, not only as a toast. On failure the dialog
+      // stays open, so a refusal that only spoke through a snackbar read as
+      // "the delete button does nothing" — which is how this was reported.
+      setDeleteError(msg);
       notify("error", msg);
     } finally {
       setDeleteSubmitting(false);
@@ -404,6 +410,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
                 size="small"
                 onClick={() => {
                   setDeleteItem(p.row);
+                  setDeleteError("");
                   setDeleteOpen(true);
                 }}
                 sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert?.error } }}
@@ -505,9 +512,11 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
         open={deleteOpen}
         item={deleteItem}
         submitting={deleteSubmitting}
+        error={deleteError}
         onClose={() => {
           setDeleteOpen(false);
           setDeleteItem(null);
+          setDeleteError("");
         }}
         onConfirm={handleDelete}
       />

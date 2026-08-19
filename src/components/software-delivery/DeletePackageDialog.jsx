@@ -6,36 +6,55 @@
 
 import * as React from "react";
 import {
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Stack,
   Typography,
   Button,
 } from "@mui/material";
 
-export default function DeletePackageDialog({ open, item, submitting, onClose, onConfirm }) {
+export default function DeletePackageDialog({
+  open,
+  item,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}) {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>Delete software package</DialogTitle>
       <DialogContent>
-        <Typography color="text.secondary">
-          This will permanently delete{" "}
-          <strong>{item?.name}</strong>{" "}
-          (v{item?.version}, {item?.platform}/{item?.arch}/{item?.format}).
-          {" "}If any deployment still references this package the
-          delete will fail — mark the package inactive instead.
-        </Typography>
+        <Stack spacing={1.5}>
+          <Typography color="text.secondary">
+            This will permanently delete{" "}
+            <strong>{item?.name}</strong>{" "}
+            (v{item?.version}, {item?.platform}/{item?.arch}/{item?.format}).
+            {" "}If any deployment still references this package the
+            delete will fail — mark the package inactive instead.
+          </Typography>
+          {/* The refusal has to be visible HERE. This dialog stays open when
+              the delete is rejected, so an error that only reached a snackbar
+              looked like the button did nothing at all. */}
+          {error ? <Alert severity="error">{error}</Alert> : null}
+        </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+        <Button onClick={onClose} disabled={submitting}>
+          {error ? "Close" : "Cancel"}
+        </Button>
         <Button
           color="error"
           variant="contained"
           onClick={onConfirm}
-          disabled={submitting}
+          // A refused delete is not retryable by clicking again: the package is
+          // referenced and that does not change between clicks.
+          disabled={submitting || Boolean(error)}
         >
-          Delete
+          {submitting ? "Deleting…" : "Delete"}
         </Button>
       </DialogActions>
     </Dialog>
