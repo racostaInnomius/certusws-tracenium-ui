@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Alert,
   Switch,
   FormControlLabel,
   useMediaQuery,
@@ -344,6 +345,7 @@ function ConfirmDeleteDialog({
   title,
   description,
   submitting,
+  error,
   onClose,
   onConfirm,
 }) {
@@ -353,6 +355,11 @@ function ConfirmDeleteDialog({
 
       <DialogContent>
         <Typography color="text.secondary">{description}</Typography>
+        {error ? (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
       </DialogContent>
 
       <DialogActions>
@@ -406,6 +413,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
   const [memberDialogMode, setMemberDialogMode] = React.useState("create");
 
   const [deleteTenantOpen, setDeleteTenantOpen] = React.useState(false);
+  const [deleteTenantError, setDeleteTenantError] = React.useState(null);
   const [deleteMemberOpen, setDeleteMemberOpen] = React.useState(false);
 
   const [editingTenant, setEditingTenant] = React.useState(null);
@@ -608,12 +616,17 @@ export default function TenantsAdministrator({ mode = "global" }) {
     } catch (e) {
       console.error(e);
       const errorMessage = String(e?.message || "");
+      const friendlyMessage = errorMessage.includes("TENANT_HAS_ACTIVE_MEMBERS")
+        ? "Tenant has active members and cannot be deleted. Remove its members first."
+        : "Failed to delete tenant";
 
+      // Shown inline in the dialog (stays visible until the user acts) in
+      // addition to the toast (which auto-hides after 4.5s and is easy to
+      // miss while the confirm dialog is still open on top of it).
+      setDeleteTenantError(friendlyMessage);
       setSnackbar({
         open: true,
-        message: errorMessage.includes("TENANT_HAS_ACTIVE_MEMBERS")
-          ? "Tenant has active members and cannot be deleted"
-          : "Failed to delete tenant",
+        message: friendlyMessage,
         severity: "error",
       });
     } finally {
@@ -736,6 +749,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
             color="error"
             onClick={() => {
               setEditingTenant(params.row);
+              setDeleteTenantError(null);
               setDeleteTenantOpen(true);
             }}
           >
@@ -1066,7 +1080,11 @@ export default function TenantsAdministrator({ mode = "global" }) {
         title="Delete Tenant"
         description="This action will permanently delete the tenant record. If the tenant has active members, deletion may be blocked."
         submitting={submitting}
-        onClose={() => setDeleteTenantOpen(false)}
+        error={deleteTenantError}
+        onClose={() => {
+          setDeleteTenantOpen(false);
+          setDeleteTenantError(null);
+        }}
         onConfirm={handleDeleteTenant}
       />
 
