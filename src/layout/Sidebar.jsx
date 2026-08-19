@@ -712,7 +712,7 @@ export default function Sidebar({
     // not under Administration: it's a product area in its own right
     // (first-party MDM lands here), not a configuration knob.
     ...(isPrivileged
-      ? [{ label: "Device Management", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" }]
+      ? [{ label: "MDM / MAM", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" }]
       : []),
     ...(isPrivileged
       ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
