@@ -88,6 +88,8 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 // findings, and a set-to-auto quick action that patches the security
 // policy domain without leaving the Posture tab.
 import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
+// Sprint 4 — one-click fix from the finding card (crosswalk-gated).
+import { remediate as remediateFinding } from "../api/patchManagement";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -467,6 +469,55 @@ export default function SecurityCompliance({ initialTab }) {
       }
     },
     [canManage, tenantId, securityForm, confirmDialog, showToast]
+  );
+
+  // Sprint 4 — one-click remediation on the open device. Delegates to
+  // the same POST /patch-management/remediate the PM grid uses (mode
+  // apply, single device); the backend translates the catalog id to the
+  // agent's handler id and, on a successful ACK, writes the outcome
+  // back onto this very finding (remediation_status → remediated). The
+  // drawer refetch shows that transition without a page reload.
+  const handleRemediateFinding = React.useCallback(
+    async (finding) => {
+      if (!canManage || !drawerAgentId || !finding?.checkId) return;
+      const ok = await confirmDialog({
+        title: "Remediate on this device?",
+        body:
+          `The agent will run its fix for "${finding.title || finding.checkId}" on this ` +
+          "device now (apply mode). Some fixes need a reboot to fully take effect; the " +
+          "finding is marked remediated once the agent confirms, and the next scan " +
+          "verifies it.",
+        confirmText: "Fix now",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        const res = await remediateFinding({
+          checkId: finding.checkId,
+          mode: "apply",
+          deviceIds: [drawerAgentId],
+        });
+        const id = res?.remediation?.id;
+        showToast({
+          severity: "success",
+          message: id
+            ? `Remediation #${id} queued for this device. The finding updates when the agent reports back.`
+            : "Remediation queued for this device.",
+        });
+        // The remediation row exists now; the finding flips when the ACK
+        // lands. Refetch once so a fast agent is reflected immediately.
+        setTimeout(() => { refetchDrawer(); }, 4000);
+      } catch (e) {
+        showToast({
+          severity: "error",
+          message:
+            e?.status === 403
+              ? "Patch Management plugin is not enabled for this tenant."
+              : e?.body?.message || e?.message || "Failed to queue the remediation.",
+        });
+      }
+    },
+    [canManage, drawerAgentId, confirmDialog, showToast, refetchDrawer]
   );
 
   // Fase C — bundle handed to the category breakdown (chips + actions).
@@ -1205,6 +1256,7 @@ export default function SecurityCompliance({ initialTab }) {
               : null
           }
           onOpenBaselines={() => setTab("baselines")}
+          onRemediateFinding={canManage ? handleRemediateFinding : null}
         />
       </Drawer>
 

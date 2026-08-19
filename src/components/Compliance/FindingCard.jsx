@@ -67,7 +67,12 @@ export default function FindingCard({
   // COULD fix this drift but is only reporting it. Clicking jumps to
   // the Baselines tab (onOpenBaselines).
   baselineHint = null,
-  onOpenBaselines = null
+  onOpenBaselines = null,
+  // Sprint 4 — one-click fix. Rendered only when the backend flags the
+  // finding `agentRemediable` (detection↔remediation crosswalk) AND
+  // it's failing AND the viewer can manage. The handler receives the
+  // finding; the drawer owns the confirm + POST + toast.
+  onRemediate = null
 }) {
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
@@ -343,6 +348,32 @@ export default function FindingCard({
                   ))}
                 </Menu>
               </>
+            ) : null}
+            {/* Sprint 4 — one-click remediation on THIS device. The
+                Patch Management grid does fleet-wide campaigns; this is
+                the "fix it here, now" affordance the finding was
+                missing. */}
+            {!readOnly && onRemediate && finding.agentRemediable && finding.status === "fail" ? (
+              <Tooltip
+                title="Run the agent's remediation handler for this check on this device (apply mode)"
+                arrow
+              >
+                <Button
+                  size="small"
+                  variant="contained"
+                  disableElevation
+                  startIcon={<BuildOutlinedIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => onRemediate(finding)}
+                  disabled={isPending}
+                  sx={{
+                    textTransform: "none",
+                    bgcolor: BRAND.teal,
+                    "&:hover": { bgcolor: BRAND.tealHover },
+                  }}
+                >
+                  Fix now
+                </Button>
+              </Tooltip>
             ) : null}
             {/* Fase C — this drift is auto-fixable but the baseline is
                 only reporting it. Only on failing findings: a pass

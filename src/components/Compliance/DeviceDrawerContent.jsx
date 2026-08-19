@@ -79,7 +79,10 @@ export default function DeviceDrawerContent({
   // yet in auto, FindingCard shows the "auto-fix available" hint and
   // onOpenBaselines jumps to the Baselines tab.
   baselineHintForCategory = null,
-  onOpenBaselines = null
+  onOpenBaselines = null,
+  // Sprint 4 — one-click fix (finding) => Promise. Provided by the page,
+  // which owns the confirm dialog + POST /remediate + toast.
+  onRemediateFinding = null
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -663,6 +666,7 @@ export default function DeviceDrawerContent({
                     readOnly={!canManage}
                     baselineHint={baselineHintForCategory ? baselineHintForCategory(f.category) : null}
                     onOpenBaselines={onOpenBaselines}
+                    onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
                     // Sprint 6 — bulk selection. Checkbox hidden for
                     // read-only members (selection only feeds bulk
                     // mutations, which they can't run).

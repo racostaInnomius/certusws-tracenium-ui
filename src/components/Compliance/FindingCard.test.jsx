@@ -117,3 +117,47 @@ describe("FindingCard (readOnly / RBAC)", () => {
     expect(screen.getByText("History")).toBeInTheDocument();
   });
 });
+
+describe("FindingCard (Sprint 4 — one-click fix)", () => {
+  function renderWith(overrides, props = {}) {
+    return render(
+      <FindingCard
+        finding={{ ...baseFinding, ...overrides }}
+        onAck={noop}
+        onRevoke={noop}
+        onChangeStatus={noop}
+        onShowHistory={noop}
+        pendingAction={null}
+        {...props}
+      />
+    );
+  }
+
+  it("shows Fix now only for a failing, agentRemediable finding with a handler", () => {
+    const onRemediate = vi.fn();
+    renderWith({ status: "fail", agentRemediable: true }, { onRemediate });
+    expect(screen.getByText("Fix now")).toBeInTheDocument();
+  });
+
+  it("hides Fix now when the crosswalk says no handler exists", () => {
+    renderWith({ status: "fail", agentRemediable: false }, { onRemediate: vi.fn() });
+    expect(screen.queryByText("Fix now")).toBeNull();
+  });
+
+  it("hides Fix now on a passing finding, in read-only mode, and without a handler prop", () => {
+    renderWith({ status: "pass", agentRemediable: true }, { onRemediate: vi.fn() });
+    expect(screen.queryByText("Fix now")).toBeNull();
+    renderWith({ status: "fail", agentRemediable: true }, { onRemediate: vi.fn(), readOnly: true });
+    expect(screen.queryByText("Fix now")).toBeNull();
+    renderWith({ status: "fail", agentRemediable: true });
+    expect(screen.queryByText("Fix now")).toBeNull();
+  });
+
+  it("clicking Fix now hands the finding to the handler", () => {
+    const onRemediate = vi.fn();
+    renderWith({ status: "fail", agentRemediable: true }, { onRemediate });
+    screen.getByText("Fix now").click();
+    expect(onRemediate).toHaveBeenCalledTimes(1);
+    expect(onRemediate.mock.calls[0][0].checkId).toBe(baseFinding.checkId);
+  });
+});
