@@ -27,6 +27,8 @@ import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import FindingExplanation from "./FindingExplanation";
 import { BRAND, ROLE } from "../../theme/brand";
 import {
   SeverityChip,
@@ -81,8 +83,14 @@ export default function FindingCard({
   // exposed on device detail). The finding's own evidence is only the
   // matched count ({path, value}); the block carries kev_ids[] and the
   // next CISA due date so the chip can NAME the CVEs.
-  deviceVulnerability = null
+  deviceVulnerability = null,
+  // Sprint 4 — AI explanation. When true (admin + failing finding) the
+  // card offers "Explain" and mounts FindingExplanation on demand; the
+  // panel owns the request. Off by default so the read-only/USER view
+  // and existing tests are untouched.
+  canExplain = false
 }) {
+  const [explainOpen, setExplainOpen] = React.useState(false);
   const isVulnerabilityCheck = String(finding.checkId || "").startsWith("cross.vulnerability.");
   const kevIds = isVulnerabilityCheck && Array.isArray(deviceVulnerability?.kev_ids)
     ? deviceVulnerability.kev_ids
@@ -447,6 +455,19 @@ export default function FindingCard({
                 />
               </Tooltip>
             ) : null}
+            {canExplain && finding.status === "fail" && finding.id ? (
+              <Tooltip title="Ask the AI to explain this finding for this device's OS (cached; first call spends AI budget)" arrow>
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<AutoAwesomeOutlinedIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => setExplainOpen((v) => !v)}
+                  sx={{ textTransform: "none", color: BRAND.teal }}
+                >
+                  {explainOpen ? "Hide explanation" : "Explain"}
+                </Button>
+              </Tooltip>
+            ) : null}
             <Button
               size="small"
               variant="text"
@@ -461,6 +482,7 @@ export default function FindingCard({
               <CircularProgress size={16} sx={{ ml: 0.5, alignSelf: "center" }} />
             ) : null}
           </Stack>
+          {explainOpen && finding.id ? <FindingExplanation findingId={finding.id} /> : null}
         </Box>
         <Button
           size="small"

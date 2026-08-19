@@ -214,3 +214,22 @@ describe("FindingCard (Sprint 4 — CVE/KEV cross checks)", () => {
     expect(screen.queryByText(/KEV/)).toBeNull();
   });
 });
+
+describe("FindingCard (Sprint 4 — Explain)", () => {
+  it("offers Explain only with canExplain on a failing finding with an id", () => {
+    render(
+      <FindingCard finding={{ ...baseFinding, status: "fail" }} onAck={noop} onRevoke={noop}
+        onChangeStatus={noop} onShowHistory={noop} pendingAction={null} canExplain />
+    );
+    expect(screen.getByText("Explain")).toBeInTheDocument();
+  });
+  it("hides Explain without canExplain, and on passing findings", () => {
+    renderCard({ status: "fail" });
+    expect(screen.queryByText("Explain")).toBeNull();
+    render(
+      <FindingCard finding={{ ...baseFinding, status: "pass" }} onAck={noop} onRevoke={noop}
+        onChangeStatus={noop} onShowHistory={noop} pendingAction={null} canExplain />
+    );
+    expect(screen.queryByText("Explain")).toBeNull();
+  });
+});

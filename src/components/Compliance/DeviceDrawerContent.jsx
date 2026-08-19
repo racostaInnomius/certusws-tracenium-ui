@@ -671,6 +671,7 @@ export default function DeviceDrawerContent({
                     onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
                     onOpenVulnerabilities={onOpenVulnerabilities}
                     deviceVulnerability={device?.vulnerability ?? null}
+                    canExplain={canManage}
                     // Sprint 6 — bulk selection. Checkbox hidden for
                     // read-only members (selection only feeds bulk
                     // mutations, which they can't run).

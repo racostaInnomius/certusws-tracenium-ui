@@ -141,6 +141,17 @@ export async function updateFindingRemediationStatus(
 
 // GET /findings/:id/history?limit=N — append-only audit timeline.
 // Drives the "History" tab in the finding drawer.
+// Sprint 4 — AI explanation of one finding (cached server-side by typed
+// facts; a cache miss spends tokens against the tenant's AI quota —
+// 429 AI_QUOTA_EXCEEDED when not entitled / budget reached). `refresh`
+// bypasses the cache.
+export async function explainFinding(findingId, { refresh = false } = {}) {
+  return httpPostJson(
+    `${BASE}/findings/${encodeURIComponent(findingId)}/explain${buildQuery({ refresh: refresh ? 1 : "" })}`,
+    {}
+  );
+}
+
 export async function getFindingHistory(findingId, { limit = 200 } = {}) {
   return httpGetJson(
     `${BASE}/findings/${encodeURIComponent(findingId)}/history${buildQuery({ limit })}`
