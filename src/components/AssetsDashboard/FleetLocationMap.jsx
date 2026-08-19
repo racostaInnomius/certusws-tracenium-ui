@@ -49,7 +49,12 @@ function FitToPins({ bounds }) {
   return null;
 }
 
-export default function FleetLocationMap({ devices = [], withoutPosition = 0, onSelectDevice }) {
+export default function FleetLocationMap({
+  devices = [],
+  withoutPosition = 0,
+  loadError = null,
+  onSelectDevice,
+}) {
   const pins = useMemo(
     () =>
       devices
@@ -62,6 +67,24 @@ export default function FleetLocationMap({ devices = [], withoutPosition = 0, on
     () => (pins.length ? pins.map((d) => [d.lat, d.lon]) : null),
     [pins]
   );
+
+  // A failed load must never render as an empty fleet. "No device is reporting
+  // a position" is a statement about the fleet; if we could not ask, we do not
+  // get to make it.
+  if (loadError) {
+    return (
+      <Box sx={{ p: 4, textAlign: "center" }}>
+        <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+          Could not load device positions
+        </Typography>
+        <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 1 }}>
+          {loadError === "unavailable"
+            ? "This control plane does not expose the fleet positions endpoint yet — it arrives with the next backend release."
+            : "The request failed. Try refreshing; if it persists, check the control plane logs."}
+        </Typography>
+      </Box>
+    );
+  }
 
   if (!pins.length) {
     return (

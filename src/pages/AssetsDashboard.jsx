@@ -340,6 +340,10 @@ export default function AssetsDashboard({
   );
   const [fleetLocations, setFleetLocations] = React.useState(null);
   const [fleetLocationsLoading, setFleetLocationsLoading] = React.useState(false);
+  // Kept apart from the data on purpose: a request that FAILED is not the same
+  // as a tenant with no positions, and the first version of this collapsed both
+  // into an empty map that claimed "no device is reporting a position yet".
+  const [fleetLocationsError, setFleetLocationsError] = React.useState(null);
 
   const changeDeviceView = React.useCallback((next) => {
     if (!next) return; // ToggleButtonGroup emits null when the active button is re-clicked
@@ -357,13 +361,20 @@ export default function AssetsDashboard({
     if (deviceView !== "map") return;
     let cancelled = false;
     setFleetLocationsLoading(true);
+    setFleetLocationsError(null);
     dashboardApi
       .getHostLocations()
       .then((data) => {
-        if (!cancelled) setFleetLocations(data);
+        if (cancelled) return;
+        setFleetLocations(data);
+        setFleetLocationsError(null);
       })
-      .catch(() => {
-        if (!cancelled) setFleetLocations({ devices: [], withoutPosition: 0 });
+      .catch((err) => {
+        if (cancelled) return;
+        // Say what happened. Swallowing this made a backend that had not been
+        // deployed yet look like a fleet that reports nothing.
+        setFleetLocations(null);
+        setFleetLocationsError(err?.status === 404 ? "unavailable" : "failed");
       })
       .finally(() => {
         if (!cancelled) setFleetLocationsLoading(false);
@@ -1627,6 +1638,7 @@ const osVersionItems = React.useMemo(() => {
                       <FleetLocationMap
                         devices={fleetLocations?.devices || []}
                         withoutPosition={fleetLocations?.withoutPosition || 0}
+                        loadError={fleetLocationsError}
                         onSelectDevice={handleAgentSelect}
                       />
                     )}
