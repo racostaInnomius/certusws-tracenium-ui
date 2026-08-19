@@ -30,8 +30,10 @@ export async function getComplianceCatalog(params = {}) {
 }
 
 // Published framework versions (CIS Win11, CIS macOS, NIST 800-53, NIST CSF).
-export async function getFrameworks() {
-  return httpGetJson(`${BASE}/frameworks`);
+// Sprint 4 — `all: true` bypasses the tenant's compliance pack so the
+// settings panel can list every framework, not just the active ones.
+export async function getFrameworks({ all = false } = {}) {
+  return httpGetJson(`${BASE}/frameworks${all ? "?all=1" : ""}`);
 }
 
 // Fleet-wide posture aggregated by catalog category (firewall, crypto,

@@ -324,6 +324,9 @@ export default function SecurityCompliance({ initialTab }) {
     return {
       summary: byKey.summary?.summary ?? null,
       frameworks: Array.isArray(byKey.frameworks?.frameworks) ? byKey.frameworks.frameworks : [],
+      // Sprint 4 — compliance pack telemetry from /frameworks.
+      packActive: Boolean(byKey.frameworks?.packActive),
+      totalFrameworks: Number(byKey.frameworks?.totalFrameworks) || 0,
       frameworkSummary: Array.isArray(byKey.frameworkSummary?.items) ? byKey.frameworkSummary.items : [],
       devices: Array.isArray(byKey.devices?.items) ? byKey.devices.items : [],
       failedSections,
@@ -873,6 +876,22 @@ export default function SecurityCompliance({ initialTab }) {
             </Typography>
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
               Scoring uses the severity weights defined by each framework. Switch to filter the device table below.
+              {/* Sprint 4 — say so when a compliance pack is trimming the
+                  list, so nobody wonders where the other frameworks went. */}
+              {data?.packActive ? (
+                <Tooltip
+                  title={`This tenant's compliance pack shows ${frameworks.length} of ${data.totalFrameworks} catalog frameworks. Change it in Compliance settings.`}
+                  arrow
+                >
+                  <Chip
+                    size="small"
+                    label={`Pack: ${frameworks.length} of ${data.totalFrameworks}`}
+                    onClick={canManage ? () => setSettingsOpen(true) : undefined}
+                    clickable={canManage}
+                    sx={{ ml: 1, height: 18, fontSize: 10.5, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                  />
+                </Tooltip>
+              ) : null}
             </Typography>
           </Box>
           <Select

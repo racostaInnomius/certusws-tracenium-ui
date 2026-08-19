@@ -19,11 +19,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
+  Checkbox,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControlLabel,
   IconButton,
   Stack,
   Switch,
@@ -35,7 +39,8 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
 import {
   getComplianceSettings,
-  updateComplianceSettings
+  updateComplianceSettings,
+  getFrameworks
 } from "../../api/compliance";
 import { BRAND } from "../../theme/brand";
 import AsyncState from "../common/AsyncState";
@@ -94,6 +99,11 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
   // dirty / pristine and discard easily on Cancel.
   const [draft, setDraft] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
+  // Sprint 4 — compliance pack. `allFrameworks` is the full catalog list
+  // (bypassing the pack); `packDraft` is null for "all frameworks" or a
+  // Set of active keys while editing.
+  const [allFrameworks, setAllFrameworks] = useState([]);
+  const [packDraft, setPackDraft] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -101,15 +111,22 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
     setLoading(true);
     setError(null);
     setFieldErrors({});
-    getComplianceSettings()
-      .then((res) => {
+    Promise.all([
+      getComplianceSettings(),
+      // Fail-soft: without the list the pack section just doesn't render.
+      getFrameworks({ all: true }).catch(() => null),
+    ])
+      .then(([res, fw]) => {
         if (cancelled) return;
         if (res?.ok) {
           setSettings(res.settings ?? null);
           setDraft(seedDraftFromSettings(res.settings));
+          const active = res.settings?.effective?.activeFrameworks;
+          setPackDraft(Array.isArray(active) && active.length ? new Set(active) : null);
         } else {
           setError(res?.message || "Failed to load settings.");
         }
+        setAllFrameworks(Array.isArray(fw?.frameworks) ? fw.frameworks : []);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -136,8 +153,16 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
         result[def.key] = inDraft.useDefault ? null : Number(inDraft.value);
       }
     }
+    // Sprint 4 — pack diff. Compare as sorted lists; null = all.
+    const serverPack = Array.isArray(settings.effective?.activeFrameworks) && settings.effective.activeFrameworks.length
+      ? [...settings.effective.activeFrameworks].sort().join("|")
+      : "";
+    const draftPack = packDraft ? [...packDraft].sort().join("|") : "";
+    if (serverPack !== draftPack) {
+      result.activeFrameworks = packDraft ? [...packDraft] : null;
+    }
     return result;
-  }, [draft, settings]);
+  }, [draft, settings, packDraft]);
 
   const hasChanges = Object.keys(patch).length > 0;
 
@@ -151,6 +176,8 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
         onToast?.({ severity: "success", message: "Compliance settings saved." });
         setSettings(res.settings ?? null);
         setDraft(seedDraftFromSettings(res.settings));
+        const active = res.settings?.effective?.activeFrameworks;
+        setPackDraft(Array.isArray(active) && active.length ? new Set(active) : null);
       } else if (res?.code === "VALIDATION_FAILED") {
         const errors = {};
         for (const issue of res.issues ?? []) {
@@ -172,10 +199,30 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
   }
 
   function handleCancel() {
-    if (settings) setDraft(seedDraftFromSettings(settings));
+    if (settings) {
+      setDraft(seedDraftFromSettings(settings));
+      const active = settings.effective?.activeFrameworks;
+      setPackDraft(Array.isArray(active) && active.length ? new Set(active) : null);
+    }
     setFieldErrors({});
     onClose();
   }
+
+  // Sprint 4 — pack helpers. Toggling from "all" to a subset seeds the
+  // Set with everything so the operator unchecks what they don't want
+  // (rather than starting from an empty page).
+  const packIsAll = packDraft === null;
+  const allKeys = allFrameworks.map((f) => f.framework);
+  const setPackAll = (all) => setPackDraft(all ? null : new Set(allKeys));
+  const togglePackKey = (key) =>
+    setPackDraft((prev) => {
+      const next = new Set(prev ?? allKeys);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      // Unchecking the last one → back to "all" (an empty pack means
+      // "all" server-side anyway; make the UI say so).
+      return next.size === 0 ? null : next;
+    });
 
   return (
     <Dialog open={open} onClose={handleCancel} maxWidth="sm" fullWidth>
@@ -217,6 +264,65 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
                 effective={settings?.effective?.[def.key]}
               />
             ))}
+
+            {/* Sprint 4 — compliance pack. Which framework breakdowns
+                this tenant sees. A VIEW: scores keep computing for every
+                framework, so this is reversible with no re-evaluation. */}
+            {allFrameworks.length > 0 ? (
+              <Box>
+                <Divider sx={{ mb: 2 }} />
+                <Typography sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 14 }}>
+                  Active frameworks (compliance pack)
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+                  Choose which frameworks appear in the framework table, filter and trend. Scores
+                  are still computed for every framework — switching this back on later loses nothing.
+                  {fieldErrors.activeFrameworks ? (
+                    <Box component="span" sx={{ color: BRAND.alert?.error, display: "block", mt: 0.5 }}>
+                      {fieldErrors.activeFrameworks}
+                    </Box>
+                  ) : null}
+                </Typography>
+                <FormControlLabel
+                  control={<Switch size="small" checked={packIsAll} onChange={(e) => setPackAll(e.target.checked)} />}
+                  label={
+                    <Typography variant="body2">
+                      All frameworks{" "}
+                      <Typography component="span" variant="caption" sx={{ color: BRAND.gray }}>
+                        ({allFrameworks.length})
+                      </Typography>
+                    </Typography>
+                  }
+                />
+                {!packIsAll ? (
+                  <Stack sx={{ mt: 0.5, ml: 1 }}>
+                    {allFrameworks.map((f) => (
+                      <FormControlLabel
+                        key={f.framework}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={packDraft?.has(f.framework) ?? true}
+                            onChange={() => togglePackKey(f.framework)}
+                          />
+                        }
+                        label={
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            <Typography variant="body2">{f.shortName || f.framework}</Typography>
+                            {f.family ? (
+                              <Chip size="small" label={f.family} sx={{ height: 18, fontSize: 10 }} />
+                            ) : null}
+                          </Stack>
+                        }
+                      />
+                    ))}
+                    <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.5 }}>
+                      {packDraft?.size ?? 0} of {allFrameworks.length} active
+                    </Typography>
+                  </Stack>
+                ) : null}
+              </Box>
+            ) : null}
           </Stack>
         </AsyncState>
       </DialogContent>

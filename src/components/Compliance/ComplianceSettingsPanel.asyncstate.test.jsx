@@ -10,6 +10,9 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 vi.mock("../../api/compliance", () => ({
   getComplianceSettings: vi.fn(),
   updateComplianceSettings: vi.fn(),
+  // Sprint 4 — the panel also lists frameworks for the compliance-pack
+  // section; resolve empty so these AsyncState tests stay focused.
+  getFrameworks: vi.fn(async () => ({ ok: true, frameworks: [] })),
 }));
 
 import { getComplianceSettings } from "../../api/compliance";
