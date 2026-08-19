@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 
 import {
   listTenants,
@@ -356,7 +357,17 @@ function ConfirmDeleteDialog({
       <DialogContent>
         <Typography color="text.secondary">{description}</Typography>
         {error ? (
-          <Alert severity="error" sx={{ mt: 2 }}>
+          <Alert
+            severity="error"
+            icon={<ReportProblemOutlinedIcon fontSize="small" sx={{ color: BRAND.alert.errorText }} />}
+            sx={{
+              mt: 2,
+              bgcolor: BRAND.alert.errorSoft,
+              color: BRAND.alert.errorText,
+              border: `1px solid ${BRAND.alert.error}`,
+              "& .MuiAlert-message": { color: BRAND.alert.errorText, fontWeight: 600 },
+            }}
+          >
             {error}
           </Alert>
         ) : null}
@@ -415,6 +426,7 @@ export default function TenantsAdministrator({ mode = "global" }) {
   const [deleteTenantOpen, setDeleteTenantOpen] = React.useState(false);
   const [deleteTenantError, setDeleteTenantError] = React.useState(null);
   const [deleteMemberOpen, setDeleteMemberOpen] = React.useState(false);
+  const [deleteMemberError, setDeleteMemberError] = React.useState(null);
 
   const [editingTenant, setEditingTenant] = React.useState(null);
   const [editingMember, setEditingMember] = React.useState(null);
@@ -697,9 +709,11 @@ export default function TenantsAdministrator({ mode = "global" }) {
       }
     } catch (e) {
       console.error(e);
+      const message = "Failed to delete tenant member";
+      setDeleteMemberError(message);
       setSnackbar({
         open: true,
-        message: "Failed to delete tenant member",
+        message,
         severity: "error",
       });
     } finally {
@@ -803,6 +817,17 @@ export default function TenantsAdministrator({ mode = "global" }) {
         <Box sx={{ display: "flex", gap: 1 }}>
           <Button size="small" onClick={() => openEditMember(params.row)}>
             Edit
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            onClick={() => {
+              setEditingMember(params.row);
+              setDeleteMemberError(null);
+              setDeleteMemberOpen(true);
+            }}
+          >
+            Delete
           </Button>
         </Box>
       ),
@@ -1093,7 +1118,11 @@ export default function TenantsAdministrator({ mode = "global" }) {
         title="Delete Tenant Member"
         description="This action will permanently delete the tenant member."
         submitting={submitting}
-        onClose={() => setDeleteMemberOpen(false)}
+        error={deleteMemberError}
+        onClose={() => {
+          setDeleteMemberOpen(false);
+          setDeleteMemberError(null);
+        }}
         onConfirm={handleDeleteMember}
       />
 
