@@ -2,8 +2,13 @@
 // confundirlos fue el bug real: un backend sin desplegar se veía igual que una
 // flota que no reporta nada.
 
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+
+// Este proyecto no configura cleanup global de testing-library, asi que sin
+// esto los renders se acumulan y las consultas encuentran elementos de tests
+// anteriores.
+afterEach(cleanup);
 
 // Leaflet necesita un DOM con APIs que jsdom no trae completas; el mapa en sí
 // no es lo que se prueba aquí, sino qué mensaje se elige.
@@ -15,7 +20,12 @@ vi.mock("react-leaflet", () => ({
   Popup: ({ children }) => <div>{children}</div>,
   useMap: () => ({ fitBounds: vi.fn(), setView: vi.fn() }),
 }));
-vi.mock("leaflet", () => ({ default: { divIcon: () => ({}) } }));
+vi.mock("leaflet", () => ({ default: { divIcon: (o) => o } }));
+// El wrapper de clustering renderiza sus hijos; lo que se prueba aquí es el
+// comportamiento nuestro, no el del plugin.
+vi.mock("react-leaflet-cluster", () => ({
+  default: ({ children }) => <div data-testid="cluster-group">{children}</div>,
+}));
 
 import FleetLocationMap from "./FleetLocationMap";
 
@@ -47,5 +57,30 @@ describe("FleetLocationMap — estados vacíos", () => {
     );
     expect(screen.getByTestId("map")).toBeInTheDocument();
     expect(screen.getByText(/14 devices without a position/i)).toBeInTheDocument();
+  });
+});
+
+describe("FleetLocationMap — agrupación", () => {
+  const two = [
+    { agentId: "a1", hostname: "MB-Rodrigo", lat: 19.364695, lon: -99.161331, source: "gps", osPlatform: "macos" },
+    { agentId: "a2", hostname: "W11_JPR_LAB", lat: 19.364564, lon: -99.161465, source: "gps", osPlatform: "windows" },
+  ];
+
+  it("los marcadores viven dentro del grupo de clustering", () => {
+    // Sin esto, dos equipos a 20 m se pintan uno encima del otro y uno queda
+    // literalmente inalcanzable con el mouse.
+    render(<FleetLocationMap devices={two} />);
+    expect(screen.getByTestId("cluster-group")).toBeInTheDocument();
+  });
+
+  it("no muestra la lista hasta que se pulsa un badge", () => {
+    render(<FleetLocationMap devices={two} />);
+    expect(screen.queryByText(/devices at this location/i)).not.toBeInTheDocument();
+  });
+
+  it("sigue distinguiendo el origen de cada pin en la leyenda", () => {
+    render(<FleetLocationMap devices={two} />);
+    expect(screen.getByText("2 device-reported")).toBeInTheDocument();
+    expect(screen.getByText("0 by site")).toBeInTheDocument();
   });
 });
