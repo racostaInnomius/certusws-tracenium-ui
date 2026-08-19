@@ -5,6 +5,9 @@ import {
   MAX_RECIPIENTS,
   hasAnyTarget,
   describeTargets,
+  normalizeMatrix,
+  severitiesFor,
+  MATRIX_SEVERITIES,
 } from "./notifyHelpers";
 
 describe("parseRecipients", () => {
@@ -109,5 +112,44 @@ describe("describeTargets", () => {
   it("singulariza bien", () => {
     expect(describeTargets({ members: ["s1", "s2"] })).toBe("2 members");
     expect(describeTargets({ email: ["a@b.co", "c@d.co"] })).toBe("2 addresses");
+  });
+});
+
+// ADR-0007 fase 2 — la matriz en la UI. Refleja el parser del backend,
+// que es quien la impone de verdad; esto existe para que el operador vea
+// el invariante mientras edita, no para hacerlo cumplir.
+
+describe("normalizeMatrix (UI)", () => {
+  it("fuerza console en toda severidad", () => {
+    const m = normalizeMatrix({ critical: ["email"], high: [] });
+    for (const sev of MATRIX_SEVERITIES) expect(m[sev], sev).toContain("console");
+  });
+
+  it("rellena las severidades ausentes con solo consola", () => {
+    const m = normalizeMatrix({ critical: ["email"] });
+    expect(m.low).toEqual(["console"]);
+    expect(m.medium).toEqual(["console"]);
+  });
+
+  it("descarta canales inventados", () => {
+    expect(normalizeMatrix({ critical: ["email", "sms"] }).critical).toEqual(["console", "email"]);
+  });
+
+  it("sobrevive a que no haya matriz guardada", () => {
+    // Una regla anterior a la fase 2 no trae `channels`.
+    const m = normalizeMatrix(undefined);
+    expect(Object.keys(m).sort()).toEqual([...MATRIX_SEVERITIES].sort());
+    expect(severitiesFor(m, "email")).toEqual([]);
+  });
+});
+
+describe("severitiesFor (UI)", () => {
+  it("nombra exactamente lo que va por correo", () => {
+    const m = normalizeMatrix({ critical: ["email"], high: ["email"], medium: [], low: [] });
+    expect(severitiesFor(m, "email")).toEqual(["critical", "high"]);
+  });
+
+  it("console siempre son las cuatro", () => {
+    expect(severitiesFor(normalizeMatrix({}), "console")).toHaveLength(4);
   });
 });

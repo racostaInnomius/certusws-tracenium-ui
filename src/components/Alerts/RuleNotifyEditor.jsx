@@ -16,7 +16,6 @@ import {
   Box,
   Button,
   Chip,
-  MenuItem,
   Stack,
   TextField,
   Tooltip,
@@ -29,8 +28,12 @@ import {
   parseRecipients,
   validateRecipients,
   MAX_RECIPIENTS,
-  SEVERITIES,
   NOTIFY_ROLES,
+  NOTIFY_CHANNELS,
+  PENDING_CHANNELS,
+  MATRIX_SEVERITIES,
+  normalizeMatrix,
+  severitiesFor,
   hasAnyTarget,
   describeTargets,
 } from "./notifyHelpers";
@@ -83,17 +86,36 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
     : "";
   const initialSeverity = rule?.notify?.minSeverity ?? "low";
   const initialRoles = Array.isArray(rule?.notify?.roles) ? rule.notify.roles.join(",") : "";
+  const initialMatrix = JSON.stringify(normalizeMatrix(rule?.notify?.channels));
 
   const [emails, setEmails] = React.useState(initialEmails);
-  const [minSeverity, setMinSeverity] = React.useState(initialSeverity);
+  // Ya no es editable. La matriz gobierna el enrutado; dejar el selector
+  // habría sido enseñar dos controles que gobiernan lo mismo y discrepan
+  // — con la matriz diciendo "correo en critical y high" y el desplegable
+  // diciendo "Low: por debajo, sin correo". Se conserva el valor guardado
+  // para no reescribir la configuración de una regla que nadie tocó, y
+  // porque el backend lo sigue leyendo para derivar la matriz de reglas
+  // anteriores a la fase 2.
+  const [minSeverity] = React.useState(initialSeverity);
   const [roles, setRoles] = React.useState(initialRoles);
+  const [matrixJson, setMatrixJson] = React.useState(initialMatrix);
 
   // Re-sync when the rule refreshes underneath us (post-save reload).
   React.useEffect(() => {
     setEmails(initialEmails);
-    setMinSeverity(initialSeverity);
     setRoles(initialRoles);
-  }, [initialEmails, initialSeverity, initialRoles]);
+    setMatrixJson(initialMatrix);
+  }, [initialEmails, initialRoles, initialMatrix]);
+
+  const matrix = JSON.parse(matrixJson);
+  const toggleChannel = (severity, channel) => {
+    if (channel === "console") return; // el feed es el registro, no una entrega
+    const current = matrix[severity] ?? ["console"];
+    const next = current.includes(channel)
+      ? current.filter((c) => c !== channel)
+      : [...current, channel];
+    setMatrixJson(JSON.stringify({ ...matrix, [severity]: next }));
+  };
 
   const selectedRoles = roles ? roles.split(",").filter(Boolean) : [];
   const toggleRole = (role) =>
@@ -109,8 +131,10 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
 
   const dirty =
     emails.trim() !== initialEmails.trim() ||
-    minSeverity !== initialSeverity ||
-    roles !== initialRoles;
+    roles !== initialRoles ||
+    matrixJson !== initialMatrix;
+
+  const mailSeverities = severitiesFor(matrix, "email");
 
   const helper = invalid.length
     ? `Not a valid address: ${invalid.slice(0, 2).join(", ")}${invalid.length > 2 ? "…" : ""}`
@@ -126,6 +150,10 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
     const payload = {};
     if (unique.length > 0) payload.email = unique;
     if (selectedRoles.length > 0) payload.roles = selectedRoles;
+    // La matriz se guarda siempre que haya destinatarios: es lo que hace
+    // que «solo consola» sea un estado legible en la fila y no la
+    // ausencia de configuración.
+    if (Object.keys(payload).length > 0) payload.channels = matrix;
     onSave(Object.keys(payload).length > 0 ? { ...payload, minSeverity } : {});
   };
 
@@ -135,8 +163,65 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
         variant="caption"
         sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 1 }}
       >
-        Email delivery
+        Delivery
       </Typography>
+
+      <Box sx={{ mb: 2 }}>
+        <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 0.75 }}>
+          Where each severity goes. <strong>Console cannot be switched off</strong> — the feed is
+          the record; the other columns are deliveries.
+        </Typography>
+
+        <Box sx={{ display: "grid", gridTemplateColumns: "auto repeat(3, 76px)", gap: 0.5, alignItems: "center" }}>
+          <Box />
+          {NOTIFY_CHANNELS.map((channel) => (
+            <Typography
+              key={channel}
+              sx={{ fontSize: 11, fontWeight: 700, color: BRAND.gray, textAlign: "center", textTransform: "uppercase" }}
+            >
+              {channel}
+              {PENDING_CHANNELS.includes(channel) ? " *" : ""}
+            </Typography>
+          ))}
+
+          {MATRIX_SEVERITIES.map((severity) => (
+            <React.Fragment key={severity}>
+              <Typography sx={{ fontSize: 12, fontWeight: 600, color: BRAND.dark, pr: 1 }}>
+                {severity}
+              </Typography>
+              {NOTIFY_CHANNELS.map((channel) => {
+                const on = (matrix[severity] ?? []).includes(channel);
+                const locked = channel === "console" || PENDING_CHANNELS.includes(channel);
+                return (
+                  <Box key={channel} sx={{ textAlign: "center" }}>
+                    <Chip
+                      size="small"
+                      label={on ? "on" : "·"}
+                      onClick={busy || locked ? undefined : () => toggleChannel(severity, channel)}
+                      sx={{
+                        width: 54,
+                        cursor: busy || locked ? "default" : "pointer",
+                        fontWeight: 700,
+                        fontSize: 10.5,
+                        opacity: PENDING_CHANNELS.includes(channel) ? 0.45 : 1,
+                        bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
+                        color: on ? BRAND.tealText : BRAND.gray,
+                      }}
+                    />
+                  </Box>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </Box>
+
+        <Typography sx={{ fontSize: 11, color: BRAND.gray, mt: 0.75 }}>
+          {mailSeverities.length === 0
+            ? "Console only — nothing is delivered for this rule. That is a choice, and it reads as one."
+            : `Email for ${mailSeverities.join(", ")}.`}
+          {" * push is not built yet (ADR-0007 phase 3)."}
+        </Typography>
+      </Box>
 
       <Box sx={{ mb: 1.5 }}>
         <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 0.75 }}>
@@ -180,22 +265,6 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
           placeholder={"ops@example.com\nsecurity@example.com"}
           sx={{ flex: 1, minWidth: 0, "& textarea": { fontSize: 12.5 } }}
         />
-        <TextField
-          size="small"
-          select
-          label="Min severity"
-          value={minSeverity}
-          onChange={(e) => setMinSeverity(e.target.value)}
-          disabled={busy}
-          helperText="Below this, no email"
-          sx={{ minWidth: 140 }}
-        >
-          {SEVERITIES.map((s) => (
-            <MenuItem key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
-            </MenuItem>
-          ))}
-        </TextField>
       </Stack>
 
       <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1 }}>

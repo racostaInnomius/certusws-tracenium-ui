@@ -24,6 +24,37 @@ export const SEVERITIES = ["low", "medium", "high", "critical"];
  */
 export const NOTIFY_ROLES = ["OWNER", "ADMIN", "USER"];
 
+/**
+ * Delivery channels. `console` is not a delivery — it is the feed, where
+ * everything a rule matches always appears. It is in the list because
+ * ADR-0007 requires "console only" to be a state you can READ off the
+ * row, rather than the absence of configuration.
+ */
+export const NOTIFY_CHANNELS = ["console", "email", "push"];
+
+/** Channels not built yet. Shown, but not selectable. */
+export const PENDING_CHANNELS = ["push"];
+
+export const MATRIX_SEVERITIES = ["critical", "high", "medium", "low"];
+
+/** Full matrix with `console` forced on, mirroring the backend parser. */
+export function normalizeMatrix(raw) {
+  const out = {};
+  for (const severity of MATRIX_SEVERITIES) {
+    const entry = Array.isArray(raw?.[severity]) ? raw[severity] : [];
+    const channels = entry
+      .map((c) => String(c ?? "").trim().toLowerCase())
+      .filter((c) => NOTIFY_CHANNELS.includes(c) && c !== "console");
+    out[severity] = ["console", ...new Set(channels)];
+  }
+  return out;
+}
+
+/** Severities this matrix routes to a channel. */
+export function severitiesFor(matrix, channel) {
+  return MATRIX_SEVERITIES.filter((s) => (matrix?.[s] ?? []).includes(channel));
+}
+
 /** True when the rule targets anybody at all, by any means. */
 export function hasAnyTarget(notify) {
   const len = (k) => (Array.isArray(notify?.[k]) ? notify[k].length : 0);
