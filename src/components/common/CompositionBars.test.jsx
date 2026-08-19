@@ -123,4 +123,18 @@ describe("CompositionBars — row vs card click routing", () => {
     expect(onItemClick.mock.calls[0][0]).toMatchObject({ raw: { technical_version: "26.1" } });
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it("regression: without a totalValue prop, the total chip and row percentages use the calculated sum, not 0", () => {
+    // Bug found 2026-08-18: `totalValue` defaults to `null`, and
+    // `Number(null)` is `0` — which IS finite, so the old check
+    // `Number.isFinite(Number(totalValue))` treated "prop not passed" the
+    // same as "caller wants a hardcoded 0 total". Every consumer that
+    // doesn't pass totalValue (most of them — AssetsDashboard's "OS
+    // versions" card, HardwareInventory's "Top manufacturers" etc.)
+    // rendered "0 hosts" and 0% on every row no matter the real counts.
+    render(<CompositionBars title="OS versions" items={items} totalLabel="hosts" />);
+
+    expect(screen.getByText("12 hosts")).toBeInTheDocument();
+    expect(screen.getAllByText("50%")).toHaveLength(2);
+  });
 });
