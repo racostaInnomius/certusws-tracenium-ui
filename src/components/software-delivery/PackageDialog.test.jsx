@@ -348,3 +348,64 @@ describe("PackageDialog — approve mode (AI intake review)", () => {
     expect(screen.getByText(/must be an https URL/i)).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Editing an intake-approved package
+// ---------------------------------------------------------------------------
+//
+// Approving through AI intake stores `blob:<name>` as the download path — the
+// backend mints a fresh signed URL from that exact string on every dispatch.
+// The form used to demand https, so EVERY intake-approved package was
+// impossible to edit: even just ticking Active off failed with "Download path
+// must be an https URL". Every package in the live catalog is of this shape.
+
+describe("PackageDialog — managed blob download paths", () => {
+  const blobItem = {
+    id: 7,
+    name: "Tracenium Agent",
+    version: "1.1.45",
+    platform: "windows",
+    arch: "x64",
+    format: "msi",
+    downloadPath: "blob:intake/111/4800de477c1bd99f/agent.msi",
+    sha256: VALID_SHA,
+    silentInstallArgs: "/qn /norestart",
+    expectedExitCodes: [0, 3010],
+    detectionRule: null,
+    isActive: true,
+  };
+
+  it("saves an intake-approved package without demanding an https URL", async () => {
+    const user = setupUser();
+    const { onSubmit } = renderDialog({ mode: "edit", item: blobItem });
+
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0].downloadPath).toBe(blobItem.downloadPath);
+    expect(screen.queryByText(/must be an https URL/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the managed path read-only — hand-editing it would break delivery", () => {
+    renderDialog({ mode: "edit", item: blobItem });
+    const field = textbox(/Download source/i);
+    expect(field).toHaveAttribute("readonly");
+    expect(field).toHaveValue(blobItem.downloadPath);
+  });
+
+  it("keeps rejecting a non-https URL that the operator typed by hand", async () => {
+    const user = setupUser();
+    const { onSubmit } = renderDialog({
+      mode: "edit",
+      item: { ...blobItem, downloadPath: "https://cdn.example.com/a.msi" },
+    });
+
+    const field = textbox(/Download URL/i);
+    await user.clear(field);
+    await user.type(field, "ftp://nope/app.msi");
+    await user.click(screen.getByRole("button", { name: /save/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/must be an https URL/i)).toBeInTheDocument();
+  });
+});

@@ -125,6 +125,18 @@ export default function PackageDialog({
 
   const update = (patch) => setForm((p) => ({ ...p, ...patch }));
 
+  /**
+   * Is this download path a backend-managed reference to an uploaded binary?
+   *
+   * Approving an AI-intake package stores `blob:<name>` rather than a URL: the
+   * blob is private, and the backend mints a FRESH signed URL from this exact
+   * string on every dispatch (resolveDownloadUrl), so no long-lived credential
+   * sits in the catalog. The form used to reject anything that wasn't https,
+   * which made every intake-approved package impossible to edit — including
+   * just ticking Active off.
+   */
+  const isManagedBlobRef = (value) => /^blob:/i.test(String(value ?? "").trim());
+
   const validate = () => {
     if (!form.name.trim()) return "Name is required";
     if (!form.version.trim()) return "Version is required";
@@ -133,7 +145,7 @@ export default function PackageDialog({
       // In approve mode a blank download path is allowed: the backend mints a
       // signed URL over the uploaded blob. In create/edit it's required.
       if (mode !== "approve") return "Download path is required";
-    } else if (!/^https:\/\//i.test(dp)) {
+    } else if (!isManagedBlobRef(dp) && !/^https:\/\//i.test(dp)) {
       return "Download path must be an https URL";
     }
     if (!SHA256_RE.test(form.sha256.trim())) {
@@ -285,15 +297,28 @@ export default function PackageDialog({
             <Stack spacing={1.5} sx={{ mt: 1 }}>
               <TextField
                 size="small"
-                label={mode === "approve" ? "Download URL (optional)" : "Download URL (https)"}
+                label={
+                  isManagedBlobRef(form.downloadPath)
+                    ? "Download source (uploaded binary)"
+                    : mode === "approve"
+                      ? "Download URL (optional)"
+                      : "Download URL (https)"
+                }
                 placeholder="https://blob.tracenium.com/foo-1.2.3.msi"
                 value={form.downloadPath}
                 onChange={(e) => update({ downloadPath: e.target.value })}
                 required={mode !== "approve"}
+                // Read-only for a managed reference on purpose: the backend
+                // resolves this exact string into a signed URL at dispatch, so
+                // hand-editing it would break delivery with no visible symptom
+                // until a deployment failed to download.
+                InputProps={{ readOnly: isManagedBlobRef(form.downloadPath) }}
                 helperText={
-                  mode === "approve"
-                    ? "Leave blank to serve the uploaded file — a signed URL is generated on approve."
-                    : undefined
+                  isManagedBlobRef(form.downloadPath)
+                    ? "Served from the binary uploaded through AI intake. Tracenium signs a fresh URL for each deployment."
+                    : mode === "approve"
+                      ? "Leave blank to serve the uploaded file — a signed URL is generated on approve."
+                      : undefined
                 }
               />
               <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "2fr 1fr" }}>
