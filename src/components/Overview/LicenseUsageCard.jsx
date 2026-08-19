@@ -20,6 +20,11 @@ import { Box, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material"
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
+// Opaque equivalent of BRAND.darkSoft (rgba(59,64,77,0.08)) composited over
+// a white card — used for the gradient bar's track/mask, which must not be
+// translucent (see the comment at its usage site).
+const TRACK_COLOR = "#eff0f1";
+
 // Mirrors modules/licensing/license-thresholds.ts on the backend. The
 // backend sends `status`, so this is only a fallback for an older API —
 // but the card must never render a *different* verdict than the one the
@@ -145,7 +150,7 @@ export default function LicenseUsageCard({ result, loading, onNavigate }) {
                   height: 8,
                   borderRadius: 4,
                   overflow: "hidden",
-                  backgroundColor: BRAND.darkSoft,
+                  backgroundColor: TRACK_COLOR,
                 }}
               >
                 {/*
@@ -167,7 +172,13 @@ export default function LicenseUsageCard({ result, loading, onNavigate }) {
                   }}
                 />
                 {/* Masks the gradient beyond the current usage — only
-                    reveals it up to `barValue`. */}
+                    reveals it up to `barValue`. Must be OPAQUE: unlike
+                    every other track fill in this codebase, this one
+                    sits on top of the gradient layer, not the plain card
+                    background, so a translucent brand token (e.g.
+                    BRAND.darkSoft) barely dims what's underneath instead
+                    of hiding it — the whole bar read as "fully colored"
+                    no matter how little was actually used. */}
                 <Box
                   sx={{
                     position: "absolute",
@@ -175,7 +186,7 @@ export default function LicenseUsageCard({ result, loading, onNavigate }) {
                     bottom: 0,
                     right: 0,
                     width: `${100 - barValue}%`,
-                    backgroundColor: BRAND.darkSoft,
+                    backgroundColor: TRACK_COLOR,
                   }}
                 />
               </Box>
