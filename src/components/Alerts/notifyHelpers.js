@@ -14,6 +14,34 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MAX_RECIPIENTS = 20;
 export const SEVERITIES = ["low", "medium", "high", "critical"];
 
+/**
+ * Roles a rule can target, matching TenantMember.Role.
+ *
+ * Targeting a role is the recommended path, and not for convenience:
+ * the address is read from TenantMember at send time, so someone who
+ * leaves the tenant stops being notified without anyone editing the
+ * rule. A typed-in address keeps arriving until a human remembers it.
+ */
+export const NOTIFY_ROLES = ["OWNER", "ADMIN", "USER"];
+
+/** True when the rule targets anybody at all, by any means. */
+export function hasAnyTarget(notify) {
+  const len = (k) => (Array.isArray(notify?.[k]) ? notify[k].length : 0);
+  return len("email") + len("members") + len("roles") > 0;
+}
+
+/** Short human summary of who a rule notifies, for the row badge. */
+export function describeTargets(notify) {
+  const parts = [];
+  const roles = Array.isArray(notify?.roles) ? notify.roles : [];
+  const members = Array.isArray(notify?.members) ? notify.members : [];
+  const emails = Array.isArray(notify?.email) ? notify.email : [];
+  if (roles.length) parts.push(roles.join(", "));
+  if (members.length) parts.push(`${members.length} member${members.length === 1 ? "" : "s"}`);
+  if (emails.length) parts.push(`${emails.length} address${emails.length === 1 ? "" : "es"}`);
+  return parts.join(" · ");
+}
+
 /** Split on newlines, commas and semicolons — operators paste all three. */
 export function parseRecipients(text) {
   if (typeof text !== "string") return [];

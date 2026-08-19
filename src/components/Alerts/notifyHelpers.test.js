@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { parseRecipients, validateRecipients, MAX_RECIPIENTS } from "./notifyHelpers";
+import {
+  parseRecipients,
+  validateRecipients,
+  MAX_RECIPIENTS,
+  hasAnyTarget,
+  describeTargets,
+} from "./notifyHelpers";
 
 describe("parseRecipients", () => {
   it("accepts the three separators operators actually paste", () => {
@@ -64,5 +70,44 @@ describe("validateRecipients", () => {
   it("survives junk input", () => {
     expect(validateRecipients(null).ok).toBe(true);
     expect(validateRecipients(undefined).unique).toEqual([]);
+  });
+});
+
+// ADR-0007 fase 1 — el destino deja de ser una lista de correos.
+//
+// El badge de la fila leía `notify.email.length`, así que una regla que
+// avisa a los OWNER del tenant se mostraba como "No email" — justo lo
+// contrario de lo que hace. Estas fijan que "tiene destino" y "qué
+// destino" cuenten todas las formas de apuntar a alguien.
+
+describe("hasAnyTarget", () => {
+  it("cuenta roles y miembros, no solo direcciones", () => {
+    expect(hasAnyTarget({ roles: ["OWNER"] })).toBe(true);
+    expect(hasAnyTarget({ members: ["s1"] })).toBe(true);
+    expect(hasAnyTarget({ email: ["a@b.co"] })).toBe(true);
+  });
+
+  it("es falso solo cuando no hay ningún destino — el estado 'solo consola'", () => {
+    expect(hasAnyTarget({})).toBe(false);
+    expect(hasAnyTarget({ email: [], roles: [], members: [] })).toBe(false);
+    expect(hasAnyTarget(null)).toBe(false);
+    // minSeverity sin destinatarios no es una entrega configurada.
+    expect(hasAnyTarget({ minSeverity: "high" })).toBe(false);
+  });
+});
+
+describe("describeTargets", () => {
+  it("nombra el rol, que es lo que el operador eligió", () => {
+    expect(describeTargets({ roles: ["OWNER", "ADMIN"] })).toBe("OWNER, ADMIN");
+  });
+
+  it("combina las tres formas en una sola frase", () => {
+    expect(describeTargets({ roles: ["OWNER"], members: ["s1"], email: ["a@b.co"] }))
+      .toBe("OWNER · 1 member · 1 address");
+  });
+
+  it("singulariza bien", () => {
+    expect(describeTargets({ members: ["s1", "s2"] })).toBe("2 members");
+    expect(describeTargets({ email: ["a@b.co", "c@d.co"] })).toBe("2 addresses");
   });
 });
