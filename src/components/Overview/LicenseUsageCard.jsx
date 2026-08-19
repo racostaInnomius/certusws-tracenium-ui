@@ -16,7 +16,7 @@
 // modules/fleet/fleet-count.ts server-side), never the number of devices
 // that happen to have reported inventory.
 
-import { Box, LinearProgress, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 
@@ -139,16 +139,46 @@ export default function LicenseUsageCard({ result, loading, onNavigate }) {
             title={`${used} devices in the fleet · plan limit ${maxDevices} · enrollment stops at ${upperLimit}`}
           >
             <Box sx={{ position: "relative" }}>
-              <LinearProgress
-                variant="determinate"
-                value={barValue}
+              <Box
                 sx={{
+                  position: "relative",
                   height: 8,
                   borderRadius: 4,
-                  backgroundColor: tint,
-                  "& .MuiLinearProgress-bar": { backgroundColor: accent, borderRadius: 4 },
+                  overflow: "hidden",
+                  backgroundColor: BRAND.darkSoft,
                 }}
-              />
+              >
+                {/*
+                  Fixed to the track's full width (0 → grace ceiling), not
+                  the filled sub-range, so the color at any given point is
+                  the same regardless of how much of the bar is filled —
+                  green while comfortably under the plan, ambering by half
+                  the plan limit, into the "high" orange right at the plan
+                  limit (the same tick drawn below), and red once inside
+                  the grace margin. Same tokens severityOf() already uses
+                  for the badge/border, just spread across the scale
+                  instead of picked as one flat color.
+                */}
+                <Box
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    backgroundImage: `linear-gradient(to right, ${ROLE.positive} 0%, ${ROLE.caution} ${Math.max(planTickPct / 2, 1)}%, ${BRAND.alert.high} ${planTickPct}%, ${ROLE.critical} 100%)`,
+                  }}
+                />
+                {/* Masks the gradient beyond the current usage — only
+                    reveals it up to `barValue`. */}
+                <Box
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    right: 0,
+                    width: `${100 - barValue}%`,
+                    backgroundColor: BRAND.darkSoft,
+                  }}
+                />
+              </Box>
               {/* Where the paid plan ends and the grace margin begins. */}
               <Box
                 sx={{
