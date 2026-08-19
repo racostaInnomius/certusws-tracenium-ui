@@ -30,25 +30,21 @@ import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import { BRAND } from "../../theme/brand";
 import {
-  acknowledgeFinding,
-  revokeFindingAcknowledgement,
-  updateFindingRemediationStatus,
-  bulkFindingOp
-} from "../../api/compliance";
-import {
   StatusChip,
   ScoreBar,
   Sparkline,
   RemediationStatusChip,
   REMEDIATION_STATUS_META
 } from "./complianceChips";
-import { ACK_EXPIRY_PRESETS, ackUntilIso, shortDate } from "./complianceHelpers";
+import { ACK_EXPIRY_PRESETS, ackUntilIso } from "./complianceHelpers";
 import FindingCard from "./FindingCard";
 import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
 import FleetRankingLine from "./FleetRankingLine";
 import BulkFindingToolbar from "./BulkFindingToolbar";
+import { useFindingLifecycle } from "./useFindingLifecycle";
+import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
 
 export default function DeviceDrawerContent({
@@ -165,217 +161,37 @@ export default function DeviceDrawerContent({
     return c;
   }, [findings]);
 
-  // ── Sprint 3 — lifecycle mutation state ────────────────────────────
-  //
-  // pendingAction tracks which finding has a mutation in-flight so
-  // FindingCard can disable its buttons + show a spinner without
-  // each card holding its own state. One concurrent mutation per
-  // drawer is a deliberate simplification: a flurry of clicks on
-  // different findings would race against the parent refetch and
-  // make the UI feel sluggish; serializing them is fine for an
-  // operator workflow.
-  const [pendingAction, setPendingAction] = React.useState(null);
-  // statusDialog: { finding, targetStatus } when open, null otherwise.
-  const [statusDialog, setStatusDialog] = React.useState(null);
-  // historyDialog: { finding } when open.
-  const [historyDialog, setHistoryDialog] = React.useState(null);
+  // ── Sprint 3 lifecycle + Sprint 6 bulk — extracted to hooks (Sprint 2
+  // item 6). Behaviour is byte-for-byte what lived inline here; see
+  // useFindingLifecycle.js / useBulkSelection.js. The drawer keeps
+  // owning only its render + dialog wiring.
+  const {
+    pendingAction,
+    statusDialog,
+    setStatusDialog,
+    historyDialog,
+    setHistoryDialog,
+    handleAck,
+    handleRevoke,
+    handleChangeStatus,
+    confirmStatusChange,
+  } = useFindingLifecycle({ onToast, onRequestRefetch });
 
-  // ── Sprint 6 — bulk selection state ───────────────────────────────
-  //
-  // Set<findingId> drives the checkboxes' checked state. We keep it
-  // as a Set (not array) so toggle is O(1); the bulk toolbar reads
-  // size to decide whether to show.
-  //
-  // Selection is reset on drawer close (the drawer's open/close
-  // remounts DeviceDrawerContent through React's keying). Switching
-  // BETWEEN devices without closing doesn't reset — we explicitly
-  // clear when agentId changes.
-  const [selectedIds, setSelectedIds] = React.useState(() => new Set());
-  // bulkStatusDialog: { targetStatus } when open.
-  const [bulkStatusDialog, setBulkStatusDialog] = React.useState(null);
-  // Anchor for the bulk action menu.
-  const [bulkMenuAnchor, setBulkMenuAnchor] = React.useState(null);
-  const [bulkPending, setBulkPending] = React.useState(false);
-
-  React.useEffect(() => {
-    // Different device => clear selection so a "Acknowledge all 5
-    // selected" doesn't accidentally target the previous device's
-    // findings after navigation.
-    setSelectedIds(new Set());
-  }, [agentId]);
-
-  const toggleSelected = React.useCallback((id) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-  const selectAll = React.useCallback(() => {
-    setSelectedIds(new Set(findings.map((f) => f.id).filter(Boolean)));
-  }, [findings]);
-  const clearSelection = React.useCallback(() => setSelectedIds(new Set()), []);
-
-  /**
-   * Wraps any lifecycle API call with the standard shape:
-   *   - mark pending
-   *   - call the helper
-   *   - branch on res.ok (parsed business-level result, NOT raw fetch)
-   *   - toast + refetch on success, toast on failure
-   *   - clear pending
-   *
-   * Centralised so each mutation site (ack / revoke / status change)
-   * stays a one-liner. The helper is intentionally not memoised —
-   * its deps would invalidate it on every render anyway because of
-   * onRequestRefetch / onToast.
-   */
-  async function runMutation(finding, apiCall, successMessage) {
-    setPendingAction(finding.id);
-    try {
-      const res = await apiCall();
-      if (res?.ok) {
-        onToast?.({ severity: "success", message: successMessage });
-        // The cache helper in api/http.js invalidates GETs that
-        // share the mutation's URL prefix; the drawer's device
-        // detail fetch DOES NOT share that prefix, so we explicitly
-        // ask the parent to refetch.
-        onRequestRefetch?.();
-      } else {
-        // Backend returned a structured failure (INVALID_TRANSITION,
-        // FINDING_CLOSED, FINDING_NOT_FOUND). Surface the human
-        // message rather than a generic error.
-        onToast?.({
-          severity: "warning",
-          message: res?.message || "Action was not allowed."
-        });
-      }
-    } catch (err) {
-      onToast?.({
-        severity: "error",
-        message: err?.message || String(err)
-      });
-    } finally {
-      setPendingAction(null);
-    }
-  }
-
-  function handleAck(finding, acknowledgedUntil = null) {
-    const untilLabel = acknowledgedUntil
-      ? ` until ${shortDate(acknowledgedUntil)}`
-      : "";
-    return runMutation(
-      finding,
-      () => acknowledgeFinding(finding.id, { acknowledgedUntil }),
-      `Finding acknowledged${untilLabel}.`
-    );
-  }
-  function handleRevoke(finding) {
-    return runMutation(
-      finding,
-      () => revokeFindingAcknowledgement(finding.id),
-      "Acknowledgement revoked."
-    );
-  }
-  function handleChangeStatus(finding, next) {
-    // Open the confirmation dialog. Actual API call happens in
-    // confirmStatusChange below after the operator types a note
-    // (and we validate that terminal transitions HAVE a note).
-    setStatusDialog({ finding, targetStatus: next });
-  }
-  async function confirmStatusChange({ note }) {
-    if (!statusDialog) return;
-    const { finding, targetStatus } = statusDialog;
-    setStatusDialog(null);
-    await runMutation(
-      finding,
-      () =>
-        updateFindingRemediationStatus(finding.id, {
-          status: targetStatus,
-          note
-        }),
-      `Status set to ${REMEDIATION_STATUS_META[targetStatus]?.label}.`
-    );
-  }
-
-  // ── Sprint 6 — bulk operation runners ─────────────────────────────
-  //
-  // Each bulk handler:
-  //   1. computes the finding-id array from the selection
-  //   2. calls `bulkFindingOp` and unpacks the per-item summary
-  //   3. toasts with "X ok, Y failed" so an operator sees partial
-  //      success at a glance (e.g. closed findings that got filtered
-  //      out by the backend's transition guard).
-  //   4. refetches the drawer + clears selection on success
-  function summarizeBulk(label, summary) {
-    const ok = summary?.ok ?? 0;
-    const failed = summary?.failed ?? 0;
-    const total = summary?.total ?? ok + failed;
-    if (failed === 0) {
-      return { severity: "success", message: `${label}: ${ok}/${total} ok` };
-    }
-    return {
-      severity: "warning",
-      message: `${label}: ${ok}/${total} ok, ${failed} failed (check audit log)`
-    };
-  }
-
-  async function runBulk(opPayload, label) {
-    const findingIds = Array.from(selectedIds);
-    if (findingIds.length === 0) return;
-    setBulkPending(true);
-    try {
-      const res = await bulkFindingOp({ ...opPayload, findingIds });
-      if (res?.ok) {
-        onToast?.(summarizeBulk(label, res.summary));
-        clearSelection();
-        onRequestRefetch?.();
-      } else {
-        onToast?.({
-          severity: "error",
-          message: res?.message || "Bulk action failed."
-        });
-      }
-    } catch (err) {
-      onToast?.({
-        severity: "error",
-        message: err?.message || String(err)
-      });
-    } finally {
-      setBulkPending(false);
-    }
-  }
-
-  function handleBulkAck(acknowledgedUntil = null) {
-    setBulkMenuAnchor(null);
-    const untilLabel = acknowledgedUntil
-      ? ` until ${shortDate(acknowledgedUntil)}`
-      : "";
-    return runBulk(
-      { op: "acknowledge", acknowledgedUntil },
-      `Acknowledged${untilLabel}`
-    );
-  }
-  function handleBulkRevoke() {
-    setBulkMenuAnchor(null);
-    return runBulk({ op: "revoke_acknowledgement" }, "Acknowledgement revoked");
-  }
-  function handleBulkChangeStatus(next) {
-    setBulkMenuAnchor(null);
-    // Same confirmation pattern as the single-finding flow:
-    // terminal states require a note. The bulk dialog reuses
-    // StatusChangeDialog (different `targetStatus`, same component).
-    setBulkStatusDialog({ targetStatus: next });
-  }
-  async function confirmBulkStatusChange({ note }) {
-    if (!bulkStatusDialog) return;
-    const { targetStatus } = bulkStatusDialog;
-    setBulkStatusDialog(null);
-    await runBulk(
-      { op: "change_status", newStatus: targetStatus, note },
-      `Status set to ${REMEDIATION_STATUS_META[targetStatus]?.label}`
-    );
-  }
+  const {
+    selectedIds,
+    toggleSelected,
+    selectAll,
+    clearSelection,
+    bulkStatusDialog,
+    setBulkStatusDialog,
+    bulkMenuAnchor,
+    setBulkMenuAnchor,
+    bulkPending,
+    handleBulkAck,
+    handleBulkRevoke,
+    handleBulkChangeStatus,
+    confirmBulkStatusChange,
+  } = useBulkSelection({ findings, resetKey: agentId, onToast, onRequestRefetch });
 
   if (!agentId) return null;
 
