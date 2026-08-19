@@ -335,6 +335,17 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
       source.locationLastSeenAt,
       source.location_last_seen_at
     ),
+    // ⚠️ Este objeto es un ALLOWLIST, no un merge: lo que el API mande y no
+    // esté nombrado aquí se pierde en silencio. `locationFixAt` se quedó fuera
+    // cuando se agregó, y el resultado fue que getPositionFreshness nunca vio
+    // una fecha y todo pin quedó en "Device-reported position" — la distinción
+    // entre posición actual y última conocida existía en el backend, viajaba
+    // por la red, y moría aquí.
+    //
+    // Es el mismo modo de fallo que ya se pagó dos veces del lado del agente
+    // (buildDeviceFacts se comió printers, y después geo). Si agregas un campo
+    // de location al backend, agrégalo TAMBIÉN aquí.
+    locationFixAt: coalesceValue(source.locationFixAt, source.location_fix_at),
     // Coordinates arrive only for `gps` fixes (mobile, Phase 2). Desktop rows
     // are always null here — we never infer coordinates for them.
     locationLat: source.locationLat ?? source.location_lat ?? null,

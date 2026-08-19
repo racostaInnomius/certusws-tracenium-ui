@@ -357,6 +357,39 @@ describe("getMapPin", () => {
   });
 });
 
+describe("normalizeHostDetailPayload — el allowlist deja pasar location", () => {
+  it("conserva locationFixAt, sin el cual no hay 'última posición conocida'", () => {
+    // Regresión: el campo se quedó fuera del literal y la distinción entre
+    // posición actual y última conocida murió entre el API y el render, con el
+    // backend mandándola correctamente. El objeto es un allowlist, así que un
+    // campo no nombrado se pierde sin error.
+    const out = normalizeHostDetailPayload({
+      agent: { agent_id: "a1", locationFixAt: "2026-08-18T09:11:00.000Z" },
+    });
+    expect(out.locationFixAt).toBe("2026-08-18T09:11:00.000Z");
+  });
+
+  it("deja pasar el pin completo de una posición vieja", () => {
+    // El caso de campo entero: una Mac offline cuyo último fix es de ayer
+    // tiene que llegar al drawer con coordenadas Y con su fecha.
+    const out = normalizeHostDetailPayload({
+      agent: {
+        agent_id: "a1",
+        locationMapLat: 19.364695,
+        locationMapLon: -99.183,
+        locationMapSource: "gps",
+        locationLat: 19.364695,
+        locationLon: -99.183,
+        locationFixAt: "2026-08-18T09:11:00.000Z",
+      },
+    });
+    const pin = getMapPin(out);
+    expect(pin).not.toBeNull();
+    expect(pin.source).toBe("gps");
+    expect(pin.freshness).toBe("last_known");
+  });
+});
+
 describe("getPositionFreshness", () => {
   const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
 
