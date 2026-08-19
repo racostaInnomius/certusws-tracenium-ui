@@ -9,7 +9,7 @@
 // Loaded as its own lazy chunk — Leaflet is dead weight for anyone who never
 // switches to the map view.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -207,26 +207,6 @@ export default function FleetLocationMap({
   // and then needs some other route to find out which twelve. Clicking the
   // badge lists them, and each row opens that device.
   const [clusterSelection, setClusterSelection] = useState(null);
-
-  const byAgentId = useMemo(
-    () => new Map(pins.map((d) => [d.agentId, d])),
-    [pins]
-  );
-
-  const handleClusterClick = useCallback(
-    (event) => {
-      // getAllChildMarkers gives the Leaflet layers; the agentId was stamped on
-      // each one when it mounted (see the Marker ref below) because that is the
-      // only thread back from a Leaflet layer to our own row.
-      const ids = event.layer
-        .getAllChildMarkers()
-        .map((m) => m.options?.__agentId)
-        .filter(Boolean);
-      const devices = ids.map((id) => byAgentId.get(id)).filter(Boolean);
-      setClusterSelection(devices.length ? devices : null);
-    },
-    [byAgentId]
-  );
 
   // A failed load must never render as an empty fleet. "No device is reporting
   // a position" is a statement about the fleet; if we could not ask, we do not
