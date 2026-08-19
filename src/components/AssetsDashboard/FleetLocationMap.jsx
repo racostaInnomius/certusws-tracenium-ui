@@ -11,10 +11,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from "react-leaflet";
-import MarkerClusterGroup from "react-leaflet-cluster";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+// Side-effect import: registers L.markerClusterGroup on the Leaflet namespace.
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
 import { BRAND, ROLE } from "../../theme/brand";
 
 // Leaflet's default marker icons resolve as bundler-relative URLs that Vite
@@ -72,6 +74,90 @@ function FitToPins({ bounds }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
   return null;
+}
+
+
+/**
+ * The pins, clustered, as a layer this component owns end to end.
+ *
+ * ⚠️ Why not the React wrapper. react-leaflet-cluster built its own marker
+ * layers instead of adopting the ones React mounted, which showed up in the
+ * field as a badge counting every device twice and a cluster whose members
+ * carried none of our data — so clicking a badge listed nothing. Creating the
+ * markers here means the layer that gets clustered is the same object that
+ * holds the device, and the count can only be what we put in.
+ *
+ * The whole group is rebuilt when `pins` changes, and always removed first, so
+ * a re-render cannot leave a second copy behind.
+ */
+function ClusteredPins({ pins, onSelect }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !pins.length) return undefined;
+
+    const group = L.markerClusterGroup({
+      iconCreateFunction: clusterIcon,
+      // The coverage polygon on hover is noise on an inventory map and hides
+      // the very pins it outlines.
+      showCoverageOnHover: false,
+      // Devices in one building sit metres apart. A tight radius keeps two
+      // adjacent offices from merging into one badge, which is exactly how
+      // clustering hides meaning.
+      maxClusterRadius: 45,
+      // At the deepest zoom, overlapping pins fan out. Without this, one of two
+      // devices twenty metres apart is unreachable with a mouse.
+      spiderfyOnMaxZoom: true,
+    });
+
+    for (const device of pins) {
+      const isGps = device.source === "gps";
+      const color = isGps ? ROLE.positive : BRAND.teal;
+      const marker = L.marker([device.lat, device.lon], { icon: pinIcon(color) });
+      // The device travels ON the layer, so a cluster can always name its
+      // members without a lookup that could go stale.
+      marker.__device = device;
+      marker.bindPopup(
+        `<strong>${escapeHtml(device.hostname || device.agentId)}</strong><br/>` +
+          (isGps
+            ? "Device-reported position"
+            : `Site: ${escapeHtml(device.siteName || device.city || device.subnetCidr || "—")}`)
+      );
+      group.addLayer(marker);
+
+      // Accuracy is drawn only for a device-reported fix that carries one. An
+      // invented radius around a site pin would claim a precision nobody
+      // measured.
+      if (isGps && Number(device.accuracyM) > 0) {
+        L.circle([device.lat, device.lon], {
+          radius: Number(device.accuracyM),
+          color,
+          fillColor: color,
+          fillOpacity: 0.1,
+          weight: 1,
+        }).addTo(map);
+      }
+    }
+
+    group.on("clusterclick", (event) => {
+      const devices = event.layer.getAllChildMarkers().map((m) => m.__device).filter(Boolean);
+      onSelect(devices.length ? devices : null);
+    });
+
+    map.addLayer(group);
+    return () => {
+      map.removeLayer(group);
+    };
+  }, [map, pins, onSelect]);
+
+  return null;
+}
+
+/** Popups take an HTML string, so anything from the device has to be escaped. */
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])
+  );
 }
 
 export default function FleetLocationMap({
@@ -195,67 +281,7 @@ export default function FleetLocationMap({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <MarkerClusterGroup
-            iconCreateFunction={clusterIcon}
-            // The coverage polygon on hover is visual noise for an inventory
-            // map and obscures the very pins it outlines.
-            showCoverageOnHover={false}
-            // Devices in the same building sit metres apart. A tight radius
-            // keeps two adjacent offices from merging into one badge, which is
-            // exactly the way clustering hides meaning.
-            maxClusterRadius={45}
-            // At the deepest zoom, overlapping pins fan out. Without this, one
-            // of two devices twenty metres apart is unreachable with a mouse.
-            spiderfyOnMaxZoom
-            eventHandlers={{ clusterclick: handleClusterClick }}
-          >
-          {pins.map((d) => {
-            const isGps = d.source === "gps";
-            const color = isGps ? ROLE.positive : BRAND.teal;
-            return (
-              <Marker
-                key={d.agentId}
-                position={[d.lat, d.lon]}
-                icon={pinIcon(color)}
-                // Stamp the id on the Leaflet layer so a cluster can name its
-                // members. react-leaflet does not forward unknown props to
-                // layer options, so the ref is the supported way through.
-                ref={(m) => {
-                  if (m) m.options.__agentId = d.agentId;
-                }}
-              >
-                {/* Accuracy is drawn only for a device-reported fix, and only
-                    when the device gave one. An invented radius around a site
-                    pin would claim a precision nobody measured. */}
-                {isGps && Number(d.accuracyM) > 0 ? (
-                  <Circle
-                    center={[d.lat, d.lon]}
-                    radius={Number(d.accuracyM)}
-                    pathOptions={{ color, fillColor: color, fillOpacity: 0.1, weight: 1 }}
-                  />
-                ) : null}
-                <Popup>
-                  <Typography sx={{ fontSize: 13, fontWeight: 800 }}>{d.hostname || d.agentId}</Typography>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-                    {isGps ? "Device-reported position" : `Site: ${d.siteName || d.city || d.subnetCidr || "—"}`}
-                  </Typography>
-                  {onSelectDevice ? (
-                    <Typography
-                      component="button"
-                      onClick={() => onSelectDevice(d.agentId)}
-                      sx={{
-                        mt: 0.75, p: 0, border: 0, background: "none", cursor: "pointer",
-                        fontSize: 12, fontWeight: 700, color: BRAND.teal, textDecoration: "underline",
-                      }}
-                    >
-                      Open device
-                    </Typography>
-                  ) : null}
-                </Popup>
-              </Marker>
-            );
-          })}
-          </MarkerClusterGroup>
+          <ClusteredPins pins={pins} onSelect={setClusterSelection} />
           <FitToPins bounds={bounds} />
         </MapContainer>
       </Box>

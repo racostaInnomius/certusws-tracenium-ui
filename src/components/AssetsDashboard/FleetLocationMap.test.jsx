@@ -2,8 +2,8 @@
 // confundirlos fue el bug real: un backend sin desplegar se veía igual que una
 // flota que no reporta nada.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 // Este proyecto no configura cleanup global de testing-library, asi que sin
 // esto los renders se acumulan y las consultas encuentran elementos de tests
@@ -15,17 +15,38 @@ afterEach(cleanup);
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children }) => <div data-testid="map">{children}</div>,
   TileLayer: () => null,
-  Marker: ({ children }) => <div>{children}</div>,
-  Circle: () => null,
-  Popup: ({ children }) => <div>{children}</div>,
-  useMap: () => ({ fitBounds: vi.fn(), setView: vi.fn() }),
+  useMap: () => ({
+    fitBounds: vi.fn(),
+    setView: vi.fn(),
+    addLayer: (g) => added.markers.push(g),
+    removeLayer: (g) => added.removed.push(g),
+  }),
 }));
-vi.mock("leaflet", () => ({ default: { divIcon: (o) => o } }));
-// El wrapper de clustering renderiza sus hijos; lo que se prueba aquí es el
-// comportamiento nuestro, no el del plugin.
-vi.mock("react-leaflet-cluster", () => ({
-  default: ({ children }) => <div data-testid="cluster-group">{children}</div>,
+// Leaflet falso que REGISTRA lo que se le agrega, para poder contar capas.
+// El bug de campo fue precisamente un conteo: el badge decía el doble.
+const added = { markers: [], groups: [], removed: [] };
+const clusterHandlers = {};
+vi.mock("leaflet", () => ({
+  default: {
+    divIcon: (o) => o,
+    marker: (latlng, opts) => ({ latlng, opts, bindPopup: vi.fn() }),
+    circle: () => ({ addTo: vi.fn() }),
+    markerClusterGroup: (opts) => {
+      const layers = [];
+      const group = {
+        opts,
+        layers,
+        addLayer: (m) => layers.push(m),
+        on: (evt, fn) => { clusterHandlers[evt] = fn; },
+        getAllChildMarkers: () => layers,
+      };
+      added.groups.push(group);
+      return group;
+    },
+  },
 }));
+vi.mock("leaflet.markercluster", () => ({}));
+vi.mock("leaflet.markercluster/dist/MarkerCluster.css", () => ({}));
 
 import FleetLocationMap from "./FleetLocationMap";
 
@@ -66,16 +87,50 @@ describe("FleetLocationMap — agrupación", () => {
     { agentId: "a2", hostname: "W11_JPR_LAB", lat: 19.364564, lon: -99.161465, source: "gps", osPlatform: "windows" },
   ];
 
-  it("los marcadores viven dentro del grupo de clustering", () => {
-    // Sin esto, dos equipos a 20 m se pintan uno encima del otro y uno queda
-    // literalmente inalcanzable con el mouse.
-    render(<FleetLocationMap devices={two} />);
-    expect(screen.getByTestId("cluster-group")).toBeInTheDocument();
+  beforeEach(() => {
+    added.markers.length = 0;
+    added.groups.length = 0;
+    added.removed.length = 0;
+    for (const k of Object.keys(clusterHandlers)) delete clusterHandlers[k];
   });
 
-  it("no muestra la lista hasta que se pulsa un badge", () => {
+  it("crea EXACTAMENTE un marcador por equipo", () => {
+    // El bug de campo: el badge contaba el doble porque el wrapper de React
+    // construía sus propias capas además de las que React montaba. Con 1 equipo
+    // decía 2; con 2, decía 4.
     render(<FleetLocationMap devices={two} />);
-    expect(screen.queryByText(/devices at this location/i)).not.toBeInTheDocument();
+    expect(added.groups).toHaveLength(1);
+    expect(added.groups[0].layers).toHaveLength(2);
+  });
+
+  it("un solo equipo produce un solo marcador", () => {
+    render(<FleetLocationMap devices={[two[0]]} />);
+    expect(added.groups[0].layers).toHaveLength(1);
+  });
+
+  it("cada marcador lleva SU device encima", () => {
+    // Sin esto, pulsar el badge no puede decir de quiénes se trata — que fue
+    // el segundo síntoma reportado.
+    render(<FleetLocationMap devices={two} />);
+    const ids = added.groups[0].layers.map((m) => m.__device?.agentId);
+    expect(ids).toEqual(["a1", "a2"]);
+  });
+
+  it("al pulsar el badge se resuelven los equipos de ese grupo", () => {
+    render(<FleetLocationMap devices={two} />);
+    const group = added.groups[0];
+    // El evento viene de Leaflet, fuera del ciclo de React, así que el
+    // setState no se refleja sin act().
+    act(() => clusterHandlers.clusterclick({ layer: group }));
+    expect(screen.getByText(/2 devices at this location/i)).toBeInTheDocument();
+    expect(screen.getByText("MB-Rodrigo")).toBeInTheDocument();
+    expect(screen.getByText("W11_JPR_LAB")).toBeInTheDocument();
+  });
+
+  it("retira el grupo al desmontar, para no dejar una segunda copia", () => {
+    const { unmount } = render(<FleetLocationMap devices={two} />);
+    unmount();
+    expect(added.removed).toHaveLength(1);
   });
 
   it("sigue distinguiendo el origen de cada pin en la leyenda", () => {
