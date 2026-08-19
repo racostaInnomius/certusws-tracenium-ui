@@ -86,7 +86,17 @@ export default function CompositionBars({
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
   const calculatedTotal = safeItems.reduce((acc, it) => acc + Number(it?.value || 0), 0);
-  const total = Number.isFinite(Number(totalValue)) ? Number(totalValue) : calculatedTotal;
+  // `totalValue == null` covers both the unset default (null) and an
+  // omitted prop (undefined). Number(null) is 0, which IS finite, so a
+  // naive `Number.isFinite(Number(totalValue))` check treated "caller
+  // didn't pass one" the same as "caller explicitly wants zero" — every
+  // card that relies on the calculated fallback (most of them) rendered
+  // a permanent 0-total chip and 0% on every row regardless of the real
+  // counts.
+  const total =
+    totalValue != null && Number.isFinite(Number(totalValue))
+      ? Number(totalValue)
+      : calculatedTotal;
 
   const displayed = (sortByValue
     ? [...safeItems].sort((a, b) => Number(b.value || 0) - Number(a.value || 0))
