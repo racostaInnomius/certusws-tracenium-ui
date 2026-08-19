@@ -18,16 +18,23 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import { BRAND, ROLE } from "../../theme/brand";
+import { getPositionFreshness } from "./hostHelpers";
 
 // Leaflet's default marker icons resolve as bundler-relative URLs that Vite
 // does not rewrite, so the stock setup renders broken images. A divIcon keeps
 // it in CSS and lets the pin carry the brand colour.
-function pinIcon(color) {
+// `hollow` marks a position the device reported but has not refreshed inside
+// the freshness window — see getPositionFreshness. Outline instead of fill, at
+// the same colour and size: it is the same kind of fact, held with less
+// confidence. Scanning a map of forty pins, that difference has to be visible
+// without opening anything.
+function pinIcon(color, hollow = false) {
   return L.divIcon({
     className: "",
     html: `<span style="
       display:block;width:14px;height:14px;border-radius:50%;
-      background:${color};border:3px solid #fff;
+      background:${hollow ? "transparent" : color};
+      border:3px solid ${hollow ? color : "#fff"};
       box-shadow:0 0 0 1px rgba(0,0,0,.3);
     "></span>`,
     iconSize: [14, 14],
@@ -113,14 +120,16 @@ function ClusteredPins({ pins, onSelect }) {
     for (const device of pins) {
       const isGps = device.source === "gps";
       const color = isGps ? ROLE.positive : BRAND.teal;
-      const marker = L.marker([device.lat, device.lon], { icon: pinIcon(color) });
+      const marker = L.marker([device.lat, device.lon], {
+        icon: pinIcon(color, device.freshness === "last_known"),
+      });
       // The device travels ON the layer, so a cluster can always name its
       // members without a lookup that could go stale.
       marker.__device = device;
       marker.bindPopup(
         `<strong>${escapeHtml(device.hostname || device.agentId)}</strong><br/>` +
           (isGps
-            ? "Device-reported position"
+            ? escapeHtml(device.freshnessLabel)
             : `Site: ${escapeHtml(device.siteName || device.city || device.subnetCidr || "—")}`)
       );
       group.addLayer(marker);
@@ -169,7 +178,20 @@ export default function FleetLocationMap({
   const pins = useMemo(
     () =>
       devices
-        .map((d) => ({ ...d, lat: Number(d.lat), lon: Number(d.lon) }))
+        .map((d) => {
+          // Same derivation the drawer uses, fed the fleet payload's field
+          // name. Sharing the function is what keeps a pin from being called
+          // "current" on one screen and "last known" on the other.
+          const freshness = getPositionFreshness({ locationFixAt: d.fixAt }, d.source);
+          return {
+            ...d,
+            lat: Number(d.lat),
+            lon: Number(d.lon),
+            freshness: freshness.kind,
+            freshnessLabel: freshness.label,
+            fixAgeMinutes: freshness.ageMinutes,
+          };
+        })
         .filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lon)),
     [devices]
   );
@@ -243,6 +265,9 @@ export default function FleetLocationMap({
 
   const gpsCount = pins.filter((d) => d.source === "gps").length;
   const siteCount = pins.length - gpsCount;
+  // Not folded into the two counts above: a stale pin is still a
+  // device-reported one. This says how much of the map is a live picture.
+  const staleCount = pins.filter((d) => d.freshness === "last_known").length;
 
   return (
     <Box>
@@ -257,6 +282,14 @@ export default function FleetLocationMap({
           label={`${siteCount} by site`}
           sx={{ height: 22, fontSize: 11.5, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
         />
+        {staleCount > 0 ? (
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${staleCount} last known`}
+            sx={{ height: 22, fontSize: 11.5, fontWeight: 700, color: "text.secondary" }}
+          />
+        ) : null}
         {/* The count that keeps the map honest: five dots means something very
             different if the fleet is five or nineteen. */}
         {withoutPosition > 0 ? (

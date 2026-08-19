@@ -23,6 +23,7 @@ import {
   formatLocationLabel,
   formatCoordinates,
   getMapPin,
+  getPositionFreshness,
   getLocationHint,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
@@ -353,6 +354,75 @@ describe("getMapPin", () => {
       locationSite: "Oficina Reforma",
     });
     expect(pin.label).toBe("Oficina Reforma");
+  });
+});
+
+describe("getPositionFreshness", () => {
+  const minutesAgo = (m) => new Date(Date.now() - m * 60_000).toISOString();
+
+  it("calls a fresh fix the device's current position", () => {
+    const f = getPositionFreshness({ locationFixAt: minutesAgo(12) }, "gps");
+    expect(f.kind).toBe("current");
+    expect(f.label).toBe("Current position");
+  });
+
+  it("calls an old fix the LAST KNOWN position, with its age", () => {
+    // This is the whole point of the field: a Mac that got a fix this morning
+    // and has been checking in all day without another one is showing a
+    // this-morning position. Presenting it as "current" is the lie.
+    const f = getPositionFreshness({ locationFixAt: minutesAgo(6 * 60) }, "gps");
+    expect(f.kind).toBe("last_known");
+    expect(f.label).toMatch(/Last known position/);
+    expect(f.label).toMatch(/6h ago/);
+  });
+
+  it("uses the agent's own 60-minute window as the boundary", () => {
+    // Past its own staleness window the agent stops treating the cached fix as
+    // current; claiming otherwise here would contradict the component that
+    // took the measurement.
+    expect(getPositionFreshness({ locationFixAt: minutesAgo(59) }, "gps").kind).toBe("current");
+    expect(getPositionFreshness({ locationFixAt: minutesAgo(61) }, "gps").kind).toBe("last_known");
+  });
+
+  it("does NOT date a site pin — nobody measured the device there", () => {
+    const f = getPositionFreshness({ locationFixAt: minutesAgo(5) }, "site");
+    expect(f.kind).toBe("site");
+    expect(f.ageMinutes).toBeNull();
+  });
+
+  it("stays quiet when the backend does not send a fix time", () => {
+    // An older control plane. Inventing an age would be worse than omitting it.
+    const f = getPositionFreshness({}, "gps");
+    expect(f.kind).toBe("unknown");
+    expect(f.ageMinutes).toBeNull();
+    expect(f.label).toBe("Device-reported position");
+  });
+
+  it("ignores an unparseable timestamp instead of rendering NaN", () => {
+    expect(getPositionFreshness({ locationFixAt: "no soy una fecha" }, "gps").kind).toBe("unknown");
+  });
+});
+
+describe("getMapPin — freshness travels with the pin", () => {
+  it("marks a stale gps pin so the map can draw it differently", () => {
+    const pin = getMapPin({
+      locationMapLat: 19.3646,
+      locationMapLon: -99.183,
+      locationMapSource: "gps",
+      locationFixAt: new Date(Date.now() - 8 * 3600_000).toISOString(),
+    });
+    expect(pin.freshness).toBe("last_known");
+    expect(pin.freshnessLabel).toMatch(/Last known position/);
+  });
+
+  it("marks a fresh one as current", () => {
+    const pin = getMapPin({
+      locationMapLat: 19.3646,
+      locationMapLon: -99.183,
+      locationMapSource: "gps",
+      locationFixAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+    });
+    expect(pin.freshness).toBe("current");
   });
 });
 

@@ -20,12 +20,16 @@ import { BRAND, ROLE } from "../../theme/brand";
 // Leaflet's default marker icons are resolved as bundler-relative URLs, which
 // Vite does not rewrite — the stock setup renders broken images. A divIcon
 // keeps the whole thing in CSS and lets the pin carry the brand colour.
-function pinIcon(color) {
+// `hollow` marks a position the device reported but has not refreshed inside
+// the freshness window. Same colour, same size, outline instead of fill: the
+// place is still where it said it was, we just cannot claim it is there NOW.
+function pinIcon(color, hollow = false) {
   return L.divIcon({
     className: "",
     html: `<span style="
       display:block;width:16px;height:16px;border-radius:50%;
-      background:${color};border:3px solid #fff;
+      background:${hollow ? "transparent" : color};
+      border:3px solid ${hollow ? color : "#fff"};
       box-shadow:0 0 0 1px rgba(0,0,0,.3);
     "></span>`,
     iconSize: [16, 16],
@@ -47,6 +51,10 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
   if (!pin) return null;
 
   const isGps = pin.source === "gps";
+  // "Last known" is still a real position the device reported — it is just old.
+  // Drawn in the same colour, dimmed, so it reads as the same kind of fact at a
+  // lower confidence rather than as a different kind of pin.
+  const isStale = pin.freshness === "last_known";
   const color = isGps ? ROLE.positive : BRAND.teal;
   // A site pin is a whole network's nominal spot, so it opens wider: zooming to
   // street level would imply a precision the mapping does not have.
@@ -57,19 +65,28 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: "wrap", rowGap: 0.5 }}>
         <Chip
           size="small"
-          label={isGps ? "Device-reported position" : "Site location (network range)"}
+          label={pin.freshnessLabel || (isGps ? "Device-reported position" : "Site location (network range)")}
           sx={{
             height: 20,
             fontSize: 11,
             fontWeight: 700,
-            bgcolor: isGps ? "rgba(46,125,50,.12)" : BRAND.tealSoft,
-            color: isGps ? ROLE.positive : BRAND.tealText,
+            // A fix past its freshness window drops out of the "live" colour:
+            // an operator scanning the drawer should not have to read the
+            // timestamp to notice they are looking at yesterday's position.
+            bgcolor: !isGps
+              ? BRAND.tealSoft
+              : isStale
+              ? BRAND.surfaceMuted
+              : "rgba(46,125,50,.12)",
+            color: !isGps ? BRAND.tealText : isStale ? "text.secondary" : ROLE.positive,
           }}
         />
         <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-          {isGps
-            ? "Reported by the device itself."
-            : "Where this network range is registered — not a position the device reported."}
+          {!isGps
+            ? "Where this network range is registered — not a position the device reported."
+            : isStale
+            ? "The device reported this position and has not reported a newer one since. It may have moved."
+            : "Reported by the device itself."}
         </Typography>
       </Stack>
 
@@ -89,7 +106,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <Marker position={[pin.lat, pin.lon]} icon={pinIcon(color)} />
+          <Marker position={[pin.lat, pin.lon]} icon={pinIcon(color, isStale)} />
           {/* The accuracy radius is drawn only when the device gave one: an
               invented circle would overstate how well we know the position. */}
           {isGps && pin.accuracyM ? (

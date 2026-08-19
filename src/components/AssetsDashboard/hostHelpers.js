@@ -433,6 +433,69 @@ export function formatCoordinates(profile) {
  * renders them differently — claiming a laptop is exactly at the office pin
  * would be the same category of lie the IP city was.
  */
+/**
+ * How old a fix may be and still be called the device's position.
+ *
+ * 60 minutes because that is the agent's own staleness window (isFixFresh in
+ * plugins/amp/providers/geo.ts): past it the agent stops treating its cached
+ * fix as current, so presenting it as current here would contradict the
+ * component that took it. Reusing that number instead of inventing a second
+ * one keeps the two from drifting apart.
+ */
+const FIX_FRESH_MINUTES = 60;
+
+function minutesSince(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.round((Date.now() - t) / 60000);
+}
+
+/** "3m", "5h", "2d" — compact because it sits inside a longer sentence. */
+function shortAge(mins) {
+  if (mins === null) return "";
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.round(mins / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+/**
+ * How much the pin is claiming: a position taken now, or the last one known.
+ *
+ * ⚠️ Deliberately NOT combined with whether the device is online. A machine
+ * that is online but whose last fix is from this morning is showing a
+ * this-morning position, and a machine that went offline ten minutes ago is
+ * showing a ten-minute-old one — the connection says nothing about when the
+ * coordinates were taken. Only the fix's own clock answers that, so only the
+ * fix's own clock is consulted.
+ *
+ * `site` pins have no fix at all: nobody observed the device there, it is the
+ * nominal location of the network it is on. Giving them an age would date a
+ * measurement that was never made.
+ */
+export function getPositionFreshness(profile, source) {
+  if (source === "site") {
+    return { kind: "site", ageMinutes: null, label: "Site location (nominal)" };
+  }
+
+  const ageMinutes = minutesSince(profile?.locationFixAt);
+  if (ageMinutes === null) {
+    // A gps pin with no timestamp: an older backend that does not send
+    // locationFixAt yet. Say nothing rather than guess an age.
+    return { kind: "unknown", ageMinutes: null, label: "Device-reported position" };
+  }
+  if (ageMinutes <= FIX_FRESH_MINUTES) {
+    return { kind: "current", ageMinutes, label: "Current position" };
+  }
+  return {
+    kind: "last_known",
+    ageMinutes,
+    label: `Last known position · ${shortAge(ageMinutes)}`,
+  };
+}
+
 export function getMapPin(profile) {
   const lat = Number(profile?.locationMapLat);
   const lon = Number(profile?.locationMapLon);
@@ -441,12 +504,18 @@ export function getMapPin(profile) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
   const source = profile?.locationMapSource === "gps" ? "gps" : "site";
+  const freshness = getPositionFreshness(profile, source);
   return {
     lat,
     lon,
     source,
     accuracyM: source === "gps" ? Number(profile?.locationAccuracyM) || null : null,
     label: formatLocationLabel(profile),
+    // What the pin is claiming, so no caller has to re-derive it and reach a
+    // different answer than the one beside it on screen.
+    freshness: freshness.kind,
+    freshnessLabel: freshness.label,
+    fixAgeMinutes: freshness.ageMinutes,
   };
 }
 
