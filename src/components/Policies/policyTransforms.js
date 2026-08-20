@@ -468,6 +468,7 @@ export function readFormFromPolicy(policy, catalog = []) {
     rcpFile: {
       roots: (policy?.rcp?.file?.roots ?? []).join("\n"),
       denyPaths: (policy?.rcp?.file?.denyPaths ?? []).join("\n"),
+      denyExtensions: (policy?.rcp?.file?.denyExtensions ?? []).join("\n"),
     },
     // Security Policy v2 — separate sub-form so the security cards
     // can be a sibling section. Stored back into policy.security on
@@ -631,8 +632,17 @@ export function formToPolicy(form, catalog = []) {
     const rcpFile = {};
     const roots = splitPathLines(form?.rcpFile?.roots);
     const denyPaths = splitPathLines(form?.rcpFile?.denyPaths);
+    // Extensiones: el backend exige el punto delantero, asi que lo ponemos
+    // nosotros si el operador escribio "pem" en vez de ".pem". Escribir la
+    // extension sin punto es el error natural, y rechazarlo por eso seria
+    // pedanteria — el agente cae en un silencio total si no valida.
+    const denyExtensions = splitPathLines(form?.rcpFile?.denyExtensions)
+      .map((e) => e.toLowerCase())
+      .map((e) => (e.startsWith(".") ? e : `.${e}`))
+      .filter((e) => e.length > 1);
     if (roots.length > 0) rcpFile.roots = roots;
     if (denyPaths.length > 0) rcpFile.denyPaths = denyPaths;
+    if (denyExtensions.length > 0) rcpFile.denyExtensions = denyExtensions;
     if (Object.keys(rcpFile).length > 0) {
       policy.rcp = { ...(policy.rcp || {}), file: rcpFile };
     }

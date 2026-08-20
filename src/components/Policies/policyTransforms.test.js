@@ -199,7 +199,7 @@ describe("policyTransforms — rcp.file confinement", () => {
 
   it("yields empty strings when the policy has no rcp block", () => {
     const form = readFormFromPolicy({});
-    expect(form.rcpFile).toEqual({ roots: "", denyPaths: "" });
+    expect(form.rcpFile).toEqual({ roots: "", denyPaths: "", denyExtensions: "" });
   });
 
   it("writes the arrays back, trimming blanks and trailing separators", () => {
@@ -209,6 +209,28 @@ describe("policyTransforms — rcp.file confinement", () => {
     expect(policy.rcp.file.roots).toEqual(["/home", "/srv/share"]);
     // denyPaths was empty → key omitted entirely, not an empty array.
     expect(policy.rcp.file.denyPaths).toBeUndefined();
+  });
+
+  // El agente ya leia denyExtensions y el backend ya lo validaba, pero no
+  // habia forma de escribirlo: el campo no existia ni en la UI ni en el
+  // transform, asi que la politica nunca lo llevaba.
+  it("normaliza el punto delantero y las mayusculas de denyExtensions", () => {
+    const form = withRcpOn();
+    form.rcpFile = { roots: "", denyPaths: "", denyExtensions: "pem\n.PFX\n  key  " };
+    const policy = formToPolicy(form, catalog);
+    expect(policy.rcp.file.denyExtensions).toEqual([".pem", ".pfx", ".key"]);
+  });
+
+  it("omite denyExtensions cuando no hay nada escrito", () => {
+    const form = withRcpOn();
+    form.rcpFile = { roots: "/home", denyPaths: "", denyExtensions: "  \n \n" };
+    const policy = formToPolicy(form, catalog);
+    expect(policy.rcp.file.denyExtensions).toBeUndefined();
+  });
+
+  it("lee denyExtensions de la politica como texto", () => {
+    const form = readFormFromPolicy({ rcp: { file: { denyExtensions: [".pem", ".pfx"] } } });
+    expect(form.rcpFile.denyExtensions).toBe(".pem\n.pfx");
   });
 
   it("omits the rcp key entirely when both fields are blank", () => {

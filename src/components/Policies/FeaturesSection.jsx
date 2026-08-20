@@ -10,6 +10,7 @@
 
 import * as React from "react";
 import {
+  Alert,
   Box,
   Chip,
   FormControlLabel,
@@ -20,7 +21,20 @@ import {
 } from "@mui/material";
 import { BRAND, ROLE } from "../../theme/brand";
 
+// Una raíz que abre el disco entero: "/" en POSIX o "C:\\" en Windows.
+// Devuelve la primera que encuentre, para poder nombrarla en el aviso.
+function findWideOpenRoot(text) {
+  if (typeof text !== "string") return null;
+  for (const line of text.split("\n")) {
+    const p = line.trim();
+    if (!p) continue;
+    if (p === "/" || /^[a-zA-Z]:[\\/]?$/.test(p)) return p;
+  }
+  return null;
+}
+
 export default function FeaturesSection({ form, onChange, readOnly = false, catalog = [] }) {
+  const wideOpenRoot = findWideOpenRoot(form?.rcpFile?.roots);
   return (
       <Box
         sx={{
@@ -471,7 +485,44 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                       })
                     }
                     helperText="Merged with the agent's built-in blocks. Blocking always beats allowing."
+                    sx={{ mb: 1.5 }}
                   />
+
+                  <TextField
+                    label="Additionally blocked file types"
+                    placeholder={".pem\n.pfx"}
+                    multiline
+                    minRows={2}
+                    maxRows={4}
+                    fullWidth
+                    size="small"
+                    disabled={readOnly}
+                    value={form?.rcpFile?.denyExtensions ?? ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...form,
+                        rcpFile: {
+                          ...(form.rcpFile || {}),
+                          denyExtensions: e.target.value,
+                        },
+                      })
+                    }
+                    helperText="One per line. The leading dot is added if you leave it out."
+                  />
+
+                  {/* Poner la raíz del disco como root no está prohibido — un
+                      admin puede necesitarlo — pero es un salto de alcance que
+                      merece decirse en voz alta, porque desde el formulario no
+                      se ve lo que deja de estar fuera. La denylist sigue
+                      aplicando; todo lo demás pasa a ser alcanzable. */}
+                  {wideOpenRoot ? (
+                    <Alert severity="warning" sx={{ mt: 1.5 }}>
+                      A filesystem root ({wideOpenRoot}) makes the whole disk
+                      reachable except the blocked paths. The agent&apos;s
+                      built-in blocks still apply, but everything else is in
+                      scope for remote file sessions.
+                    </Alert>
+                  ) : null}
                 </Box>
               </Box>
             ) : null}
