@@ -4,7 +4,8 @@
 // envelope convention as compliance.js: callers should check
 // `res.ok` before touching the payload.
 
-import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
+import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson, httpGetBlob } from "./http";
+import { saveBlob } from "../utils/browserState";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/patch-management";
@@ -149,6 +150,17 @@ export async function getDeviceVulnerabilities(agentId) {
 // OIDC cookie stays in flight (same pattern as the compliance export).
 export function buildCveExposureReportPdfUrl() {
   return `${API_BASE}${BASE}/vulnerabilities/exposure/report.pdf`;
+}
+
+// The URL builder above must NOT be rendered as a plain `<a href>`: a
+// browser navigation can't carry the X-Tenant-Id header (see the same
+// warning in api/compliance.js), so an MSP drilled-in session would
+// export the WRONG tenant — and depending on cookie flags the API may
+// 401 outright. Authenticated-blob download instead, same pattern as
+// downloadFindingsPdf.
+export async function downloadCveExposurePdf() {
+  const { blob, filename } = await httpGetBlob(`${BASE}/vulnerabilities/exposure/report.pdf`);
+  saveBlob(blob, filename || "tracenium-cve-exposure.pdf");
 }
 
 // One-click remediation: deploy the CVE entry's linked SDP package to the
