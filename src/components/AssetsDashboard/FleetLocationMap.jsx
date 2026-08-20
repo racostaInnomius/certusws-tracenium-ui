@@ -18,7 +18,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import { BRAND, ROLE } from "../../theme/brand";
-import { getPositionFreshness } from "./hostHelpers";
+import { getPositionFreshness, formatPositionSource } from "./hostHelpers";
 
 // Leaflet's default marker icons resolve as bundler-relative URLs that Vite
 // does not rewrite, so the stock setup renders broken images. A divIcon keeps
@@ -129,7 +129,11 @@ function ClusteredPins({ pins, onSelect }) {
       marker.bindPopup(
         `<strong>${escapeHtml(device.hostname || device.agentId)}</strong><br/>` +
           (isGps
-            ? escapeHtml(device.freshnessLabel)
+            ? escapeHtml(device.freshnessLabel) +
+              // Accuracy and method together: either alone can flatter a bad
+              // fix. A ±35 m Wi-Fi reading once landed 120 km off.
+              (Number(device.accuracyM) > 0 ? ` · ±${Math.round(Number(device.accuracyM))} m` : "") +
+              (device.methodLabel ? ` · ${escapeHtml(device.methodLabel)}` : "")
             : `Site: ${escapeHtml(device.siteName || device.city || device.subnetCidr || "—")}`)
       );
       group.addLayer(marker);
@@ -190,6 +194,7 @@ export default function FleetLocationMap({
             freshness: freshness.kind,
             freshnessLabel: freshness.label,
             fixAgeMinutes: freshness.ageMinutes,
+            methodLabel: formatPositionSource({ locationPositionSource: d.positionSource }),
           };
         })
         .filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lon)),

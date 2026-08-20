@@ -88,6 +88,17 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
             ? "The device reported this position and has not reported a newer one since. It may have moved."
             : "Reported by the device itself."}
         </Typography>
+        {/* How the OS positioned itself, beside the accuracy circle it drew.
+            A ±35 m Wi-Fi fix and a ±35 m satellite fix look the same on the
+            map and are not worth the same trust. */}
+        {pin.positionSource ? (
+          <Chip
+            size="small"
+            variant="outlined"
+            label={pin.positionSource}
+            sx={{ height: 20, fontSize: 11, fontWeight: 700, color: "text.secondary" }}
+          />
+        ) : null}
       </Stack>
 
       <Box

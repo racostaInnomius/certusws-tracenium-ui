@@ -24,6 +24,7 @@ import {
   formatCoordinates,
   getMapPin,
   getPositionFreshness,
+  formatPositionSource,
   getLocationHint,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
@@ -387,6 +388,74 @@ describe("normalizeHostDetailPayload — el allowlist deja pasar location", () =
     expect(pin).not.toBeNull();
     expect(pin.source).toBe("gps");
     expect(pin.freshness).toBe("last_known");
+  });
+});
+
+describe("formatPositionSource", () => {
+  it("traduce el vocabulario del agente a algo accionable", () => {
+    expect(formatPositionSource({ locationPositionSource: "wifi" })).toBe("Wi-Fi");
+    expect(formatPositionSource({ locationPositionSource: "satellite" })).toBe("Satellite");
+    expect(formatPositionSource({ locationPositionSource: "unknown" })).toBe("Method not reported");
+  });
+
+  it("deja pasar un método que este build no conoce", () => {
+    // El agente se despliega por su cuenta y va a reportar métodos nuevos.
+    // Esconderlos repetiría el error que este campo existe para terminar.
+    expect(formatPositionSource({ locationPositionSource: "lidar" })).toBe("lidar");
+  });
+
+  it("no dice nada cuando no hay dato", () => {
+    // macOS no expone el método, y los agentes viejos tampoco lo mandan.
+    expect(formatPositionSource({ locationPositionSource: null })).toBe("");
+    expect(formatPositionSource({})).toBe("");
+  });
+
+  it("pone el método JUNTO a la precisión en las coordenadas", () => {
+    // ⚠️ Esta pareja es el punto entero: ±35 m por Wi-Fi y ±35 m por satélite
+    // se leen igual y no merecen la misma confianza. Un equipo reportó ±35 m
+    // estando a 120 km.
+    const line = formatCoordinates({
+      locationLat: 19.364695,
+      locationLon: -99.161331,
+      locationAccuracyM: 35,
+      locationPositionSource: "wifi",
+    });
+    expect(line).toBe("19.36470, -99.16133 ±35 m · Wi-Fi");
+  });
+
+  it("sin método, la línea de coordenadas queda como antes", () => {
+    expect(
+      formatCoordinates({ locationLat: 19.364695, locationLon: -99.161331, locationAccuracyM: 35 })
+    ).toBe("19.36470, -99.16133 ±35 m");
+  });
+});
+
+describe("normalizeHostDetailPayload — locationPositionSource sobrevive al allowlist", () => {
+  it("conserva el método de posicionamiento", () => {
+    // Tercera vez que este literal se come un campo de location. El test va
+    // junto al de locationFixAt por la misma razón: el objeto no falla, calla.
+    const out = normalizeHostDetailPayload({ agent: { agent_id: "a1", locationPositionSource: "wifi" } });
+    expect(out.locationPositionSource).toBe("wifi");
+  });
+
+  it("el pin GPS lo lleva consigo; el de sitio no", () => {
+    const gps = getMapPin({
+      locationMapLat: 19.36,
+      locationMapLon: -99.16,
+      locationMapSource: "gps",
+      locationPositionSource: "satellite",
+    });
+    expect(gps.positionSource).toBe("Satellite");
+
+    // Un pin de sitio no se posicionó: atribuirle un método sería inventar una
+    // medición que nadie tomó.
+    const site = getMapPin({
+      locationMapLat: 19.43,
+      locationMapLon: -99.13,
+      locationMapSource: "site",
+      locationPositionSource: "satellite",
+    });
+    expect(site.positionSource).toBe("");
   });
 });
 

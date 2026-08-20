@@ -346,6 +346,10 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     // (buildDeviceFacts se comió printers, y después geo). Si agregas un campo
     // de location al backend, agrégalo TAMBIÉN aquí.
     locationFixAt: coalesceValue(source.locationFixAt, source.location_fix_at),
+    locationPositionSource: coalesceValue(
+      source.locationPositionSource,
+      source.location_position_source
+    ),
     // Coordinates arrive only for `gps` fixes (mobile, Phase 2). Desktop rows
     // are always null here — we never infer coordinates for them.
     locationLat: source.locationLat ?? source.location_lat ?? null,
@@ -425,6 +429,41 @@ function toCoordinate(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * How the OS positioned itself, in words an operator can act on.
+ *
+ * Mirrors GeoPositionSource in the agent. An unrecognised value is passed
+ * through rather than swallowed: the agent ships on its own cadence and will
+ * report methods this build has never heard of, and showing the raw word beats
+ * hiding that the OS said something.
+ */
+const POSITION_SOURCE_TEXT = {
+  satellite: "Satellite",
+  wifi: "Wi-Fi",
+  cellular: "Cellular",
+  ip: "IP address",
+  default: "Region default",
+  obfuscated: "Obfuscated",
+  unknown: "Method not reported",
+};
+
+/**
+ * ⚠️ This reads next to the accuracy on purpose, and that pairing is the point.
+ *
+ * A ±35 m Wi-Fi fix and a ±35 m satellite fix look identical and do not deserve
+ * the same trust — a laptop once reported ±35 m from 120 km away because the
+ * Wi-Fi database was wrong, and with only the accuracy on screen there was no
+ * way to see it.
+ *
+ * Returns "" when nothing is known, so the caller can append unconditionally.
+ */
+export function formatPositionSource(profile) {
+  const raw = profile?.locationPositionSource;
+  if (!raw) return "";
+  const key = String(raw).trim().toLowerCase();
+  return POSITION_SOURCE_TEXT[key] ?? String(raw);
+}
+
 export function formatCoordinates(profile) {
   const lat = toCoordinate(profile?.locationLat);
   const lon = toCoordinate(profile?.locationLon);
@@ -432,7 +471,8 @@ export function formatCoordinates(profile) {
 
   const accuracy = toCoordinate(profile?.locationAccuracyM);
   const suffix = accuracy !== null && accuracy > 0 ? ` ±${Math.round(accuracy)} m` : "";
-  return `${lat.toFixed(5)}, ${lon.toFixed(5)}${suffix}`;
+  const method = formatPositionSource(profile);
+  return `${lat.toFixed(5)}, ${lon.toFixed(5)}${suffix}${method ? ` · ${method}` : ""}`;
 }
 
 /**
@@ -522,6 +562,9 @@ export function getMapPin(profile) {
     source,
     accuracyM: source === "gps" ? Number(profile?.locationAccuracyM) || null : null,
     label: formatLocationLabel(profile),
+    // Travels with the coordinates so the map can say how they were obtained
+    // without a second lookup.
+    positionSource: source === "gps" ? formatPositionSource(profile) : "",
     // What the pin is claiming, so no caller has to re-derive it and reach a
     // different answer than the one beside it on screen.
     freshness: freshness.kind,
