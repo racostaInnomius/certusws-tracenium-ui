@@ -156,6 +156,32 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
       </Typography>
 
       <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}` }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+          Certificate files on disk
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Where most server certificates actually live. nginx, HAProxy, Apache and Postgres
+          are pointed at a <code>.pem</code> path in a config file — they never read the OS
+          trust store, so without this the certificate a service serves is invisible unless
+          the listener probe happens to catch it. <strong>Private keys are never read</strong>:
+          a file containing a key block is skipped whole, by content rather than by name,
+          because <code>server.pem</code> routinely holds both halves.
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          label="Directories to scan (optional)"
+          value={cdp.certFilePaths ?? ""}
+          onChange={(e) => setField("certFilePaths", e.target.value)}
+          disabled={readOnly}
+          helperText="One absolute directory per line. Blank = off — there is no default, because a default would either find nothing or recursively scan something large on every endpoint."
+          multiline
+          minRows={2}
+          maxRows={6}
+          placeholder={"/etc/ssl/certs\n/etc/nginx/ssl\nC:\\inetpub\\certs"}
+          sx={{ mb: 2.5, "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 } }}
+        />
+
         <FormControlLabel
           disabled={readOnly}
           control={

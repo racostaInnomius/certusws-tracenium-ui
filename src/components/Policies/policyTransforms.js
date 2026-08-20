@@ -509,6 +509,7 @@ export function readFormFromPolicy(policy, catalog = []) {
       // not a stored `true` must render as off. Mirrors the agent's own
       // getCdpScanTlsListeners().
       scanTlsListeners: policy?.cdp?.scanTlsListeners === true,
+      certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
     },
   };
@@ -660,6 +661,11 @@ export function formToPolicy(form, catalog = []) {
     }
     const keystores = splitPathLines(form?.cdp?.javaKeystorePaths);
     if (keystores.length > 0) cdp.javaKeystorePaths = keystores;
+
+    // Rutas de certificados sueltos. Omit-when-empty como el resto: sin
+    // rutas la función está apagada, que es su estado por defecto.
+    const certFiles = splitPathLines(form?.cdp?.certFilePaths);
+    if (certFiles.length > 0) cdp.certFilePaths = certFiles;
 
     // Written only when ON. `false` is the agent's default, so persisting
     // it would add a key that changes nothing — and omit-when-empty is the

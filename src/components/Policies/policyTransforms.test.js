@@ -278,6 +278,7 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
       // undefined, which a checkbox would render as an uncontrolled input.
       scanTlsListeners: false,
       tlsListenerPorts: "",
+      certFilePaths: "",
     });
   });
 
@@ -426,5 +427,21 @@ describe("cdp.scanTlsListeners", () => {
     const form = readFormFromPolicy(withCdp({ scanTlsListeners: true }), cdpCatalog);
     form.plugins.cdp = false;
     expect(formToPolicy(form, cdpCatalog).cdp).toBeUndefined();
+  });
+});
+
+describe("cdp.certFilePaths", () => {
+  const cdpCatalog = [...catalog, { key: "cdp" }];
+  const withCdp = (cdp) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp });
+
+  it("round-trips las rutas como texto multilínea", () => {
+    const form = readFormFromPolicy(withCdp({ certFilePaths: ["/etc/ssl/certs", "/opt/app/ssl"] }), cdpCatalog);
+    expect(form.cdp.certFilePaths).toBe("/etc/ssl/certs\n/opt/app/ssl");
+    expect(formToPolicy(form, cdpCatalog).cdp.certFilePaths).toEqual(["/etc/ssl/certs", "/opt/app/ssl"]);
+  });
+
+  it("omite la clave cuando no hay rutas — apagado es el estado por defecto", () => {
+    const form = readFormFromPolicy(withCdp({}), cdpCatalog);
+    expect(formToPolicy(form, cdpCatalog).cdp?.certFilePaths).toBeUndefined();
   });
 });
