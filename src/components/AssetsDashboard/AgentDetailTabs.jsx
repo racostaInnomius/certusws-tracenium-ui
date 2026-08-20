@@ -142,7 +142,14 @@ export function AgentTab({
                         sx={{ flexWrap: "wrap", rowGap: 0.5 }}
                       >
                         <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
-                          {entry.siteName || entry.city || entry.subnetCidr || "—"}
+                          {/* Same rule as the Location field above: the site an
+                              operator declared, else the bare network range.
+                              The IP-derived city (entry.ipCity) is NOT a
+                              fallback — it says where the traffic exits, and it
+                              put two machines sitting in Mexico City under
+                              "Cleveland Heights" because that is where their
+                              egress lands. */}
+                          {entry.siteName || entry.subnetCidr || "—"}
                         </Typography>
                         <Chip
                           size="small"
