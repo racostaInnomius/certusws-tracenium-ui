@@ -12,10 +12,13 @@
 // out 10+ parallel requests with allSettled — any failing endpoint
 // leaves its slot in a quiet zero state instead of blanking the page.
 
-import { useCallback, useMemo, lazy, Suspense } from "react";
-import { Box, Grid, Typography } from "@mui/material";
+import { useCallback, useMemo, useState, lazy, Suspense } from "react";
+import { Box, Button, Grid, Stack, Tooltip, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import { fetchOverviewBundle } from "../api/overview";
+import { useAuthContext } from "../auth/AuthContext";
+import FleetReportDialog from "../components/Overview/FleetReportDialog";
 import HeroKpis from "../components/Overview/HeroKpis";
 import AttentionPanel from "../components/Overview/AttentionPanel";
 import RecentActivity from "../components/Overview/RecentActivity";
@@ -116,6 +119,16 @@ export default function Overview() {
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "overviewAutoRefresh");
   const errorMsg = error ? error?.message || "Failed to load overview data" : null;
 
+  // Fleet Health Report — admin-gated, same RBAC convention as
+  // SecurityCompliance.jsx's export buttons: this only decides what to
+  // render, the backend enforces the same split (requireRole on
+  // /api/v1/fleet-report).
+  const { auth } = useAuthContext();
+  const tenantRole = String(auth?.tenantMember?.role || "");
+  const isActiveMember = auth?.tenantMember?.isActive === true;
+  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+  const [reportOpen, setReportOpen] = useState(false);
+
   // Build a device_id → hostname index from the hosts bundle so the
   // Latest alerts strip can render hostnames instead of raw UUIDs.
   // Falls back to an empty Map when the hosts endpoint errors out
@@ -153,14 +166,33 @@ export default function Overview() {
           ) : null
         }
         actions={
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={refetch}
-            loading={loading || refreshing}
-          />
+          <Stack direction="row" spacing={1} alignItems="center">
+            {canManage ? (
+              <Tooltip title="Fleet health report" arrow placement="bottom">
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<AssessmentOutlinedIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => setReportOpen(true)}
+                    sx={{ textTransform: "none" }}
+                  >
+                    Report
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : null}
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={refetch}
+              loading={loading || refreshing}
+            />
+          </Stack>
         }
       />
+
+      <FleetReportDialog open={reportOpen} onClose={() => setReportOpen(false)} />
 
       {/* Row 1 — Hero KPIs (full width, all cards now clickable) */}
       <Box sx={{ mb: 2 }}>
