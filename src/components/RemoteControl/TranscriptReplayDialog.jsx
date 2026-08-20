@@ -60,6 +60,13 @@ import { httpGetJson } from "../../api/http";
 
 const SPEEDS = [1, 2, 4, 8];
 
+// Reparto de la escritura progresiva. MAX_SMOOTH_MS evita que un hueco largo
+// entre chunks convierta una linea en un goteo eterno; MIN_SLICE_MS mantiene
+// los trozos por encima del ruido del temporizador del navegador.
+const MAX_SMOOTH_MS = 1200;
+const MIN_SLICE_MS = 40;
+const MAX_SLICES = 40;
+
 export default function TranscriptReplayDialog({ open, session, onClose }) {
   const containerRef = React.useRef(null);
   const termRef = React.useRef(null);
@@ -158,6 +165,51 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
     };
   }, [open, data]);
 
+  // ── Escritura progresiva ─────────────────────────────────────────
+  // Un bloque pendiente de escribir y su temporizador. Si el siguiente evento
+  // llega antes de terminar, se vuelca lo que queda de golpe: mas vale un
+  // salto que dos bloques entrelazandose en la pantalla.
+  const pendingRef = React.useRef(null);
+
+  const flushPending = React.useCallback(() => {
+    const p = pendingRef.current;
+    if (!p) return;
+    clearTimeout(p.timer);
+    if (p.rest && termRef.current) termRef.current.write(p.rest);
+    pendingRef.current = null;
+  }, []);
+
+  const typeOut = React.useCallback(
+    (term, payload, spanMs) => {
+      flushPending();
+      // Techo al reparto: si el hueco al siguiente evento son 15 s, nadie
+      // quiere ver una linea saliendo letra a letra durante 15 segundos.
+      const budget = Math.min(spanMs, MAX_SMOOTH_MS);
+      if (!payload || budget < MIN_SLICE_MS * 2) {
+        term.write(payload);
+        return;
+      }
+      const slices = Math.max(2, Math.min(MAX_SLICES, Math.floor(budget / MIN_SLICE_MS)));
+      const size = Math.ceil(payload.length / slices);
+      const step = budget / slices;
+      let offset = 0;
+
+      const writeSlice = () => {
+        const term2 = termRef.current;
+        if (!term2) { pendingRef.current = null; return; }
+        term2.write(payload.slice(offset, offset + size));
+        offset += size;
+        if (offset >= payload.length) { pendingRef.current = null; return; }
+        pendingRef.current = {
+          rest: payload.slice(offset),
+          timer: setTimeout(writeSlice, step)
+        };
+      };
+      writeSlice();
+    },
+    [flushPending]
+  );
+
   // ── Playback loop ────────────────────────────────────────────────
   React.useEffect(() => {
     if (!playing || !data || !termRef.current) return;
@@ -178,7 +230,24 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
       if (!term) return;
       const [, kind, payload] = events[cursor];
       if (kind === "o" && typeof payload === "string") {
-        term.write(payload);
+        // Repartir el bloque en el hueco hasta el siguiente evento en vez de
+        // volcarlo entero de golpe.
+        //
+        // El agente agrupa el transcript en chunks cada 5-15 s, asi que una
+        // sesion de 10 s son dos o tres eventos. Escribir cada uno de una vez
+        // hacia que el replay pareciera un pase de diapositivas: la pantalla
+        // salta de un estado al siguiente sin nada en medio.
+        //
+        // Esto es SUAVIZADO, no fidelidad: los caracteres no llegaron
+        // repartidos, llegaron a rafagas. Reproducirlos a ritmo constante se
+        // parece mucho mas a lo que el operador vio en su terminal que el
+        // volcado seco, y la linea de tiempo sigue siendo exacta — cada evento
+        // empieza en su timestamp real.
+        const nextTime = Number(events[cursor + 1]?.[0]);
+        const spanMs = Number.isFinite(nextTime)
+          ? ((nextTime - nextEventTime) * 1000) / speed
+          : 0;
+        typeOut(term, payload, spanMs);
       }
       // (input events 'i' are not recorded in M1.S3, so this
       // branch is unreachable. We keep it as a no-op for the day
@@ -193,7 +262,13 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
         tickTimerRef.current = null;
       }
     };
-  }, [playing, cursor, data, elapsedSeconds, speed]);
+  }, [playing, cursor, data, elapsedSeconds, speed, typeOut]);
+
+  // Pausar o cerrar no debe dejar un bloque escribiendose solo.
+  React.useEffect(() => {
+    if (!playing) flushPending();
+  }, [playing, flushPending]);
+  React.useEffect(() => () => flushPending(), [flushPending]);
 
   // ── Derived ──────────────────────────────────────────────────────
   const totalDurationSec = React.useMemo(() => {
@@ -251,7 +326,17 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
       maxWidth="lg"
       fullWidth
       PaperProps={{
-        sx: { bgcolor: BRAND.surfaceMuted, borderRadius: 2 }
+        // OPACO. `surfaceMuted` es rgba(190,190,190,0.08): un tinte del 8%
+        // pensado para rellenos sutiles ENCIMA de una superficie, no para ser
+        // la superficie. Como fondo del Paper dejaba el diálogo un 92%
+        // transparente, y la tabla de sesiones de detrás se leía a través del
+        // texto de la cabecera.
+        sx: {
+          bgcolor: BRAND.surface,
+          backgroundImage: "none",
+          borderRadius: 2,
+          border: `1px solid ${BRAND.border}`
+        }
       }}
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", pb: 1 }}>
@@ -263,7 +348,10 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
           >
             Replay · {session?.hostname || session?.deviceId}
           </Typography>
-          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+          {/* `gray` (#BEBEBE) sobre blanco da ~1.9:1 de contraste, por debajo
+              del 4.5:1 que pide WCAG AA para texto pequeño. Este renglón lleva
+              el operador y la fecha: es dato de auditoría, tiene que leerse. */}
+          <Typography variant="caption" sx={{ color: BRAND.dark, opacity: 0.75 }}>
             {session?.operator || "—"} ·{" "}
             {session?.startedAt
               ? new Date(session.startedAt).toLocaleString()
