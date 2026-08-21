@@ -27,6 +27,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import DomainOutlinedIcon from "@mui/icons-material/DomainOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import PageHeader from "../components/common/PageHeader";
@@ -39,7 +40,7 @@ import MspAdmin from "./MspAdmin";
 import MspTeamDialog from "./MspTeamDialog";
 import ClaimCodesDialog from "./ClaimCodesDialog";
 
-export default function Portfolio() {
+export default function Portfolio({ onManageTenants }) {
   const { portfolio, loading, error, enterTenant, reloadPortfolio } = useMsp();
   const [filter, setFilter] = React.useState("");
 
@@ -176,21 +177,38 @@ export default function Portfolio() {
         icon={<BusinessOutlinedIcon />}
         actions={
           level === "vendor" && !drilledMsp ? (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<SettingsOutlinedIcon />}
-              onClick={() => setAdminOpen(true)}
-              sx={{
-                textTransform: "none",
-                fontWeight: 800,
-                borderColor: BRAND.teal,
-                color: BRAND.tealText,
-                "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              Manage partners
-            </Button>
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<DomainOutlinedIcon />}
+                onClick={() => onManageTenants?.()}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: BRAND.teal,
+                  color: BRAND.tealText,
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+                }}
+              >
+                Manage Tenants
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SettingsOutlinedIcon />}
+                onClick={() => setAdminOpen(true)}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: BRAND.teal,
+                  color: BRAND.tealText,
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+                }}
+              >
+                Manage partners
+              </Button>
+            </Stack>
           ) : level === "msp" && ownedMsps.length > 0 ? (
             <Stack direction="row" spacing={1}>
               <Button

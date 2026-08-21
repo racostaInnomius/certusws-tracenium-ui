@@ -28,7 +28,6 @@ import { Box, Chip, Divider, Stack, Tab, Tabs, Typography } from "@mui/material"
 import CircularProgress from "@mui/material/CircularProgress";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
@@ -219,7 +218,6 @@ export default function Configurations({ onNavigate, initialTab }) {
       ]);
 
       return {
-        tenantsSummary: summary?.tenants_summary ?? null,
         tenantMembersSummary: summary?.tenant_members_summary ?? null,
         retentionStats: retention ?? null,
       };
@@ -231,7 +229,6 @@ export default function Configurations({ onNavigate, initialTab }) {
     }
   );
 
-  const tenantsSummary = settingsSnapshot?.tenantsSummary ?? null;
   const tenantMembersSummary = settingsSnapshot?.tenantMembersSummary ?? null;
   const retentionStats = settingsSnapshot?.retentionStats ?? null;
 
@@ -282,7 +279,6 @@ export default function Configurations({ onNavigate, initialTab }) {
   const sessionAutoLogoutMinutes =
     sessionSettingsView?.effective?.autoLogoutMinutes ?? null;
   const error = settingsError ? "Failed to load configurations summary" : "";
-  const tenantsTotal     = tenantsSummary?.tenantsCount      ?? 0;
 
   // Partner (MSP) status — only relevant for a client tenant. Drives the
   // "Join a partner" card + its redeem dialog (self-service client-attach).
@@ -413,21 +409,15 @@ export default function Configurations({ onNavigate, initialTab }) {
           Enrollment page (top-level sidebar entry), which combines
           token generation with agent installer downloads — the two
           things needed to onboard a device. Settings now hosts only
-          tenant and member admin surfaces. */}
-      <Grid container spacing={2} alignItems="stretch">
-        {tenantsSummary ? (
-          <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-            <SettingsCard
-              title="Tenants"
-              valueHint="Tenant records · click to manage"
-              value={tenantsTotal}
-              icon={<BusinessOutlinedIcon />}
-              loading={loading}
-              onClick={() => onNavigate?.("tenants")}
-            />
-          </Grid>
-        ) : null}
+          tenant and member admin surfaces.
 
+          The "Tenants" card (cross-tenant admin_master data) was
+          relocated out of here — it doesn't belong on a per-tenant
+          Settings page and was visible to any viewer regardless of
+          role. It now lives as the "Manage Tenants" button on the
+          vendor-only "All tenants" Portfolio view, which is already
+          admin_master-gated (see src/msp/Portfolio.jsx). */}
+      <Grid container spacing={2} alignItems="stretch">
         {tenantMembersSummary ? (
           <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
             <SettingsCard

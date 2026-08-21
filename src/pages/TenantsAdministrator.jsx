@@ -22,6 +22,7 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
 import {
   listTenants,
@@ -432,7 +433,7 @@ function ConfirmDeleteDialog({
   );
 }
 
-export default function TenantsAdministrator({ mode = "global" }) {
+export default function TenantsAdministrator({ mode = "global", onBack }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -945,6 +946,23 @@ export default function TenantsAdministrator({ mode = "global" }) {
             : "Manage tenants and tenant members"
         }
         icon={<BusinessOutlinedIcon />}
+        actions={
+          onBack ? (
+            <Button
+              size="small"
+              startIcon={<ArrowBackOutlinedIcon />}
+              onClick={onBack}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                color: BRAND.dark,
+                "&:hover": { bgcolor: BRAND.darkSoft },
+              }}
+            >
+              Back to All tenants
+            </Button>
+          ) : null
+        }
       />
 
       {!isTenantMode && (
