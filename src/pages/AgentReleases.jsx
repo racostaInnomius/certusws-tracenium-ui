@@ -9,10 +9,13 @@ import {
   TextField,
   MenuItem,
   Chip,
+  IconButton,
+  Tooltip,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
@@ -29,6 +32,7 @@ import DeleteAgentReleaseDialog from "../components/agent-releases/DeleteAgentRe
 
 import { BRAND } from "../theme/brand";
 import { formatDate } from "../utils/format";
+import UnattendedInstallDialog from "../components/agent-releases/UnattendedInstallDialog";
 
 const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
 const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
@@ -111,6 +115,8 @@ export default function AgentReleases({ embedded = false }) {
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
 
+  const [commandOpen, setCommandOpen] = React.useState(false);
+  const [commandRow, setCommandRow] = React.useState(null);
   const [search, setSearch] = React.useState("");
   const [platform, setPlatform] = React.useState("all");
   const [arch, setArch] = React.useState("all");
@@ -308,19 +314,37 @@ export default function AgentReleases({ embedded = false }) {
     {
       field: "download",
       headerName: "Download",
-      minWidth: 140,
-      flex: 0.65,
+      minWidth: 230,
+      flex: 0.9,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
-        <Button
-          size="small"
-          startIcon={<DownloadOutlinedIcon />}
-          onClick={() => handleDownload(params.row)}
-          sx={{ textTransform: "none", fontWeight: 700 }}
-        >
-          Download
-        </Button>
+        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
+          <Button
+            size="small"
+            startIcon={<DownloadOutlinedIcon />}
+            onClick={() => handleDownload(params.row)}
+            sx={{ textTransform: "none", fontWeight: 700 }}
+          >
+            Download
+          </Button>
+          {/* Junto a la descarga a propósito: el comando lleva dentro la
+              versión, arquitectura y formato de ESTA fila, así que pegado a su
+              binario no puede desincronizarse. */}
+          <Tooltip title="Comando de instalación desatendida">
+            <IconButton
+              size="small"
+              aria-label={`Instalación desatendida de ${params.row.platform} ${params.row.arch} v${params.row.version}`}
+              onClick={() => {
+                setCommandRow(params.row);
+                setCommandOpen(true);
+              }}
+              sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}
+            >
+              <TerminalOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       ),
     },
     ...(canEditAgentReleases
@@ -587,6 +611,13 @@ export default function AgentReleases({ embedded = false }) {
           />
         </Box>
       </Paper>
+
+      <UnattendedInstallDialog
+        open={commandOpen}
+        row={commandRow}
+        onClose={() => setCommandOpen(false)}
+        notify={(severity, message) => setSnackbar({ open: true, message, severity })}
+      />
 
       <AgentReleaseDialog
         open={dialogOpen}
