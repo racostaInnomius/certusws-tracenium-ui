@@ -11,6 +11,7 @@ vi.mock("../api/tenants", () => ({
   createTenantMember: vi.fn(),
   updateTenantMember: vi.fn(),
   deleteTenantMember: vi.fn(),
+  cancelPendingInvite: vi.fn(),
 }));
 
 vi.mock("../auth/AuthContext", () => ({
@@ -26,6 +27,7 @@ import {
   getTenantById,
   listTenantMembers,
   createTenantMember,
+  cancelPendingInvite,
 } from "../api/tenants";
 import TenantsAdministrator from "./TenantsAdministrator";
 
@@ -125,5 +127,54 @@ describe("TenantsAdministrator — invite a new member", () => {
     expect(
       await screen.findByText(/tenant no longer exists/i)
     ).toBeInTheDocument();
+  });
+});
+
+describe("TenantsAdministrator — pending invites in the members grid", () => {
+  it("shows a Pending row with no Edit action, alongside real members", async () => {
+    listTenantMembers.mockResolvedValue({
+      items: [
+        { id: 1, subject: "auth0|alice", email: "alice@acme.com", role: "OWNER", isActive: true, createdAt: "2026-08-01", updatedAt: "2026-08-01" },
+      ],
+      pending: [
+        { id: 42, email: "bob@acme.com", role: "USER", invitedBySubject: "auth0|alice", createdAt: "2026-08-20" },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("alice@acme.com")).toBeInTheDocument();
+    expect(await screen.findByText("bob@acme.com")).toBeInTheDocument();
+    expect(screen.getByText("Pending")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+
+    // The pending row's action cell has "Cancel Invite" but no "Edit".
+    const pendingRow = screen.getByText("bob@acme.com").closest("[role='row']");
+    expect(within(pendingRow).getByText("Cancel Invite")).toBeInTheDocument();
+    expect(within(pendingRow).queryByText("Edit")).not.toBeInTheDocument();
+
+    // The real member's row still gets both actions.
+    const memberRow = screen.getByText("alice@acme.com").closest("[role='row']");
+    expect(within(memberRow).getByText("Edit")).toBeInTheDocument();
+    expect(within(memberRow).getByText("Delete")).toBeInTheDocument();
+  });
+
+  it("cancels a pending invite via cancelPendingInvite, not deleteTenantMember", async () => {
+    listTenantMembers.mockResolvedValue({
+      items: [],
+      pending: [{ id: 42, email: "bob@acme.com", role: "USER", invitedBySubject: null, createdAt: "2026-08-20" }],
+    });
+    cancelPendingInvite.mockResolvedValue({ message: "Invite canceled successfully" });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByText("Cancel Invite"));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/withdraw the invite/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel Invite" }));
+
+    await waitFor(() => expect(cancelPendingInvite).toHaveBeenCalledWith(7, 42));
+    expect(await screen.findByText(/Invite canceled successfully/i)).toBeInTheDocument();
   });
 });
