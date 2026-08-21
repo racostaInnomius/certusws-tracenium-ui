@@ -35,7 +35,6 @@ const TENANT = {
   externalIdpTenant: "ext-acme",
   tenantDb: "tenant_7",
   maxDevices: 50,
-  hasIdpApiToken: true,
 };
 
 beforeEach(() => {
@@ -109,9 +108,9 @@ describe("TenantsAdministrator — invite a new member", () => {
     ).toBeInTheDocument();
   });
 
-  it("surfaces a clear message when the tenant has no IDP token configured", async () => {
-    const err = new Error("HTTP 409: {...}");
-    err.code = "IDP_TOKEN_NOT_CONFIGURED";
+  it("surfaces a clear message when the tenant no longer exists", async () => {
+    const err = new Error("HTTP 404: {...}");
+    err.code = "TENANT_NOT_FOUND";
     createTenantMember.mockRejectedValue(err);
 
     renderPage();
@@ -124,7 +123,7 @@ describe("TenantsAdministrator — invite a new member", () => {
     fireEvent.click(within(dialog).getByText("Send Invite"));
 
     expect(
-      await screen.findByText(/no IDP token configured yet/i)
+      await screen.findByText(/tenant no longer exists/i)
     ).toBeInTheDocument();
   });
 });
