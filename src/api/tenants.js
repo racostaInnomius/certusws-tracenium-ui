@@ -47,3 +47,9 @@ export async function deleteTenantMember(tenantId, memberId) {
     `${BASE}/${encodeURIComponent(tenantId)}/members/${encodeURIComponent(memberId)}`
   );
 }
+
+export async function cancelPendingInvite(tenantId, inviteId) {
+  return httpDeleteJson(
+    `${BASE}/${encodeURIComponent(tenantId)}/pending-invites/${encodeURIComponent(inviteId)}`
+  );
+}

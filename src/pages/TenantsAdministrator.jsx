@@ -33,6 +33,7 @@ import {
   createTenantMember,
   updateTenantMember,
   deleteTenantMember,
+  cancelPendingInvite,
 } from "../api/tenants";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listFrom } from "../api/shape";
@@ -122,8 +123,22 @@ function renderRoleChip(role) {
   return <Chip label={value || "UNKNOWN"} size="small" />;
 }
 
-function renderActiveChip(isActive) {
-  return isActive ? (
+function renderStatusChip(row) {
+  if (row?.__pending) {
+    return (
+      <Chip
+        label="Pending"
+        size="small"
+        sx={{
+          bgcolor: BRAND.alert.warningSoft,
+          color: BRAND.alert.warningText,
+          fontWeight: 700,
+        }}
+      />
+    );
+  }
+
+  return row?.isActive ? (
     <Chip
       label="Active"
       size="small"
@@ -364,6 +379,7 @@ function ConfirmDeleteDialog({
   open,
   title,
   description,
+  confirmLabel = "Delete",
   submitting,
   error,
   onClose,
@@ -395,7 +411,7 @@ function ConfirmDeleteDialog({
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button color="error" variant="contained" onClick={onConfirm} disabled={submitting}>
-          Delete
+          {confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>
@@ -431,6 +447,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
   const [selectedTenantId, setSelectedTenantId] = React.useState(null);
   const [tenantDetails, setTenantDetails] = React.useState(null);
   const [members, setMembers] = React.useState([]);
+  const [pendingInvites, setPendingInvites] = React.useState([]);
 
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -498,6 +515,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
   const loadMembers = async (tenantId) => {
     if (!tenantId) {
       setMembers([]);
+      setPendingInvites([]);
       return;
     }
 
@@ -505,6 +523,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       setLoadingMembers(true);
       const response = await listTenantMembers(tenantId);
       setMembers(Array.isArray(response?.items) ? response.items : []);
+      setPendingInvites(Array.isArray(response?.pending) ? response.pending : []);
       setMembersFlash(true);
     } catch (e) {
       console.error(e);
@@ -557,18 +576,39 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
     });
   }, [tenants, tenantSearch]);
 
+  // Pending invites have no TenantMember row yet (no subject, no id) — they
+  // only exist as PendingTenantInvite until the invitee registers and logs
+  // in. Merged into the same grid, prefixed ids so they can never collide
+  // with a real member's numeric id, and `__pending` drives the Status
+  // chip + which action ("Edit"+"Delete" vs "Cancel Invite") each row gets.
+  const allMemberRows = React.useMemo(() => {
+    const realRows = members.map((member) => ({ ...member, __pending: false }));
+    const pendingRows = pendingInvites.map((invite) => ({
+      id: `pending-${invite.id}`,
+      inviteId: invite.id,
+      subject: null,
+      email: invite.email,
+      role: invite.role,
+      isActive: null,
+      createdAt: invite.createdAt,
+      updatedAt: null,
+      __pending: true,
+    }));
+    return [...pendingRows, ...realRows];
+  }, [members, pendingInvites]);
+
   const filteredMembers = React.useMemo(() => {
     const q = memberSearch.trim().toLowerCase();
-    if (!q) return members;
+    if (!q) return allMemberRows;
 
-    return members.filter((member) => {
+    return allMemberRows.filter((member) => {
       return (
         String(member?.subject || "").toLowerCase().includes(q) ||
         String(member?.email || "").toLowerCase().includes(q) ||
         String(member?.role || "").toLowerCase().includes(q)
       );
     });
-  }, [members, memberSearch]);
+  }, [allMemberRows, memberSearch]);
 
   const summary = React.useMemo(() => {
     const totalTenants = tenants.length;
@@ -717,16 +757,24 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
 
   const handleDeleteMember = async () => {
     const targetTenantId = isTenantMode ? currentTenantId : selectedTenant?.id;
-    if (!targetTenantId || !editingMember?.id) return;
+    if (!targetTenantId || !editingMember) return;
+
+    const isPending = Boolean(editingMember.__pending);
+    if (isPending ? !editingMember.inviteId : !editingMember.id) return;
 
     try {
       setSubmitting(true);
-      await deleteTenantMember(targetTenantId, editingMember.id);
+
+      if (isPending) {
+        await cancelPendingInvite(targetTenantId, editingMember.inviteId);
+      } else {
+        await deleteTenantMember(targetTenantId, editingMember.id);
+      }
       setDeleteMemberOpen(false);
 
       setSnackbar({
         open: true,
-        message: "Tenant member deleted successfully",
+        message: isPending ? "Invite canceled successfully" : "Tenant member deleted successfully",
         severity: "success",
       });
 
@@ -737,7 +785,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       }
     } catch (e) {
       console.error(e);
-      const message = "Failed to delete tenant member";
+      const message = isPending ? "Failed to cancel invite" : "Failed to delete tenant member";
       setDeleteMemberError(message);
       setSnackbar({
         open: true,
@@ -804,7 +852,20 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
 
   const memberColumns = [
     { field: "id", headerName: "ID", width: 70 },
-    { field: "subject", headerName: "Subject", minWidth: 180, flex: 1 },
+    {
+      field: "subject",
+      headerName: "Subject",
+      minWidth: 180,
+      flex: 1,
+      renderCell: (params) =>
+        params.row?.__pending ? (
+          <Typography variant="body2" color="text.secondary">
+            Awaiting registration
+          </Typography>
+        ) : (
+          params.value
+        ),
+    },
     { field: "email", headerName: "Email", minWidth: 220, flex: 1 },
     {
       field: "role",
@@ -818,7 +879,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       headerName: "Status",
       minWidth: 100,
       flex: 0.5,
-      renderCell: (params) => renderActiveChip(params.value),
+      renderCell: (params) => renderStatusChip(params.row),
     },
     {
       field: "createdAt",
@@ -832,7 +893,12 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       headerName: "Updated At",
       minWidth: 160,
       flex: 0.8,
-      renderCell: (params) => formatDate(params?.value),
+      renderCell: (params) =>
+        params.row?.__pending ? (
+          <Typography variant="body2" color="text.secondary">—</Typography>
+        ) : (
+          formatDate(params?.value)
+        ),
     },
     {
       field: "actions",
@@ -843,9 +909,11 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       filterable: false,
       renderCell: (params) => (
         <Box sx={{ display: "flex", gap: 1 }}>
-          <Button size="small" onClick={() => openEditMember(params.row)}>
-            Edit
-          </Button>
+          {!params.row?.__pending && (
+            <Button size="small" onClick={() => openEditMember(params.row)}>
+              Edit
+            </Button>
+          )}
           <Button
             size="small"
             color="error"
@@ -855,7 +923,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
               setDeleteMemberOpen(true);
             }}
           >
-            Delete
+            {params.row?.__pending ? "Cancel Invite" : "Delete"}
           </Button>
         </Box>
       ),
@@ -1171,8 +1239,13 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
 
       <ConfirmDeleteDialog
         open={deleteMemberOpen}
-        title="Delete Tenant Member"
-        description="This action will permanently delete the tenant member."
+        title={editingMember?.__pending ? "Cancel Invite" : "Delete Tenant Member"}
+        description={
+          editingMember?.__pending
+            ? "This will withdraw the invite. The link in the invitee's email will stop working."
+            : "This action will permanently delete the tenant member."
+        }
+        confirmLabel={editingMember?.__pending ? "Cancel Invite" : "Delete"}
         submitting={submitting}
         error={deleteMemberError}
         onClose={() => {

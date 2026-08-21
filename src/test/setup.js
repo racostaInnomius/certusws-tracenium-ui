@@ -5,6 +5,7 @@
 // auth-redirect latch).
 
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach } from "vitest";
 
 import { server } from "./msw/server";
@@ -13,6 +14,19 @@ import {
   clearApiCache,
   setApiCacheSessionScope,
 } from "../api/http";
+
+// vitest.config.js already raised testTimeout to 15000ms for exactly this
+// reason ("MUI dialog + userEvent interaction tests ... can take ~8-10s
+// under full-suite load") — but that budget only bounds the whole `it()`
+// block. Testing Library's own findBy*/waitFor polling (what actually
+// waits for a Dialog's portal + transition to mount) has a SEPARATE
+// internal timeout, defaulting to 1000ms regardless of testTimeout. Under
+// real CI load that default was too tight — a `findByRole("dialog")` can
+// legitimately take longer than 1s to resolve, which reads as a random
+// flake rather than a capacity problem. 5000ms gives real headroom while
+// still leaving most of the 15s test budget for a test with more than one
+// findBy in it.
+configure({ asyncUtilTimeout: 5000 });
 
 // http.js falls back to window.location.assign(loginUrl) 50 ms after a
 // backend-confirmed 401 when no listener marks the event as handled.
