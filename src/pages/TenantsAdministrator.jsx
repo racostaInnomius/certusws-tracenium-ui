@@ -22,6 +22,7 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
+import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
 import {
   listTenants,
@@ -247,19 +248,18 @@ function TenantMemberDialog({
   onClose,
   onSubmit,
 }) {
-  const [subject, setSubject] = React.useState("");
+  const isEdit = mode === "edit";
+
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState("USER");
   const [isActive, setIsActive] = React.useState(true);
 
   React.useEffect(() => {
     if (open) {
-      setSubject(member?.subject || "");
       setEmail(member?.email || "");
       setRole(member?.role || "USER");
       setIsActive(Boolean(member?.isActive ?? true));
     } else {
-      setSubject("");
       setEmail("");
       setRole("USER");
       setIsActive(true);
@@ -267,33 +267,50 @@ function TenantMemberDialog({
   }, [open, member]);
 
   const handleSubmit = () => {
-    onSubmit?.({
-      subject: String(subject || "").trim(),
-      email: String(email || "").trim(),
-      role,
-      isActive,
-    });
+    if (isEdit) {
+      onSubmit?.({
+        subject: String(member?.subject || "").trim(),
+        email: String(email || "").trim(),
+        role,
+        isActive,
+      });
+    } else {
+      // Create mode invites by email — there's no `subject` (raw IDP user
+      // id) yet. It's populated automatically once the invitee registers
+      // and logs in for the first time, same as it is for every member
+      // today (ensureTenantProvisioned on the backend).
+      onSubmit?.({
+        email: String(email || "").trim(),
+        role,
+      });
+    }
   };
 
-  const isDisabled =
-    !String(subject || "").trim() ||
-    !String(email || "").trim();
+  const isDisabled = !String(email || "").trim();
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>
-        {mode === "edit" ? "Edit Tenant Member" : "Add Tenant Member"}
+        {isEdit ? "Edit Tenant Member" : "Invite Tenant Member"}
       </DialogTitle>
 
       <DialogContent>
         <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
-          <TextField
-            label="Subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            fullWidth
-            disabled
-          />
+          {!isEdit && (
+            <Typography variant="body2" color="text.secondary">
+              The recipient gets an email invite, registers in the IDP, and
+              lands directly in this tenant on their first login.
+            </Typography>
+          )}
+
+          {isEdit && (
+            <TextField
+              label="Subject"
+              value={member?.subject || ""}
+              fullWidth
+              disabled
+            />
+          )}
 
           <TextField
             label="Email"
@@ -315,15 +332,17 @@ function TenantMemberDialog({
             <MenuItem value="USER">USER</MenuItem>
           </TextField>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-              />
-            }
-            label={isActive ? "Active" : "Inactive"}
-          />
+          {isEdit && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+              }
+              label={isActive ? "Active" : "Inactive"}
+            />
+          )}
         </Box>
       </DialogContent>
 
@@ -334,7 +353,7 @@ function TenantMemberDialog({
           onClick={handleSubmit}
           disabled={submitting || isDisabled}
         >
-          {mode === "edit" ? "Save Changes" : "Add Member"}
+          {isEdit ? "Save Changes" : "Send Invite"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -383,7 +402,7 @@ function ConfirmDeleteDialog({
   );
 }
 
-export default function TenantsAdministrator({ mode = "global" }) {
+export default function TenantsAdministrator({ mode = "global", onBack }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -661,10 +680,13 @@ export default function TenantsAdministrator({ mode = "global" }) {
           severity: "success",
         });
       } else {
+        // No member row exists yet — it's auto-provisioned on the
+        // invitee's first login. Say so, rather than implying a row
+        // just got created.
         await createTenantMember(targetTenantId, payload);
         setSnackbar({
           open: true,
-          message: "Tenant member created successfully",
+          message: `Invite sent to ${payload.email}`,
           severity: "success",
         });
       }
@@ -677,9 +699,15 @@ export default function TenantsAdministrator({ mode = "global" }) {
       }
     } catch (e) {
       console.error(e);
+
+      const message =
+        e?.code === "TENANT_NOT_FOUND"
+          ? "This tenant no longer exists."
+          : "Failed to save tenant member";
+
       setSnackbar({
         open: true,
-        message: "Failed to save tenant member",
+        message,
         severity: "error",
       });
     } finally {
@@ -884,6 +912,23 @@ export default function TenantsAdministrator({ mode = "global" }) {
             : "Manage tenants and tenant members"
         }
         icon={<BusinessOutlinedIcon />}
+        actions={
+          onBack ? (
+            <Button
+              size="small"
+              startIcon={<ArrowBackOutlinedIcon />}
+              onClick={onBack}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                color: BRAND.dark,
+                "&:hover": { bgcolor: BRAND.darkSoft },
+              }}
+            >
+              Back to All tenants
+            </Button>
+          ) : null
+        }
       />
 
       {!isTenantMode && (
@@ -1027,7 +1072,18 @@ export default function TenantsAdministrator({ mode = "global" }) {
               sx={{ width: { xs: "100%", sm: 240 } }}
               disabled={!displayedTenant}
             />
-            
+
+            <Button
+              variant="contained"
+              onClick={() => {
+                setEditingMember(null);
+                setMemberDialogMode("create");
+                setMemberDialogOpen(true);
+              }}
+              disabled={!displayedTenant}
+            >
+              Add Member
+            </Button>
           </Box>
         </Box>
 

@@ -31,6 +31,7 @@ import { useMsp } from "../msp/MspContext";
 import TenantSwitcher from "../msp/TenantSwitcher";
 import HierarchyBreadcrumb from "../msp/HierarchyBreadcrumb";
 const Portfolio = React.lazy(() => import("../msp/Portfolio"));
+const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministrator"));
 
 import { renderPage } from "./pageRegistry";
 import LicenseBlockedScreen from "../components/Licensing/LicenseBlockedScreen";
@@ -478,6 +479,18 @@ export default function AppShell() {
   // the portfolio resolves. Render a neutral loader instead of flashing the
   // single-tenant shell and then snapping to the portfolio a second later.
   const mspResolving = mspLoading && !hasPortfolio && !activeTenant;
+
+  // Vendor-only escape hatch: "Manage Tenants" on the top-level "All
+  // tenants" Portfolio view opens the cross-tenant TenantsAdministrator
+  // page in place of the portfolio grid, without requiring the vendor to
+  // enter a client tenant first (that page has no per-tenant scope of its
+  // own). Reset whenever portfolio mode is left, so re-entering it later
+  // (e.g. via the tenant switcher's "back to portfolio") always starts
+  // back on the grid, not stranded on this page.
+  const [manageTenantsOpen, setManageTenantsOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!inPortfolioMode) setManageTenantsOpen(false);
+  }, [inPortfolioMode]);
   const sessionSettings = auth?.sessionSettings ?? null;
   const idleEnabled = sessionSettings?.autoLogoutEnabled !== false; // default true
   const idleTimeoutMs =
@@ -1053,7 +1066,14 @@ export default function AppShell() {
                 {mspResolving ? (
                   <PageFallback />
                 ) : inPortfolioMode ? (
-                  <Portfolio />
+                  manageTenantsOpen ? (
+                    <TenantsAdministrator
+                      mode="global"
+                      onBack={() => setManageTenantsOpen(false)}
+                    />
+                  ) : (
+                    <Portfolio onManageTenants={() => setManageTenantsOpen(true)} />
+                  )
                 ) : showLicenseBlock ? (
                   <LicenseBlockedScreen
                     state={licenseState}
