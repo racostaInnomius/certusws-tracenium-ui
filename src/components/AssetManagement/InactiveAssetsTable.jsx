@@ -65,7 +65,9 @@ const INACTIVE_DAYS_OPTIONS = [7, 14, 30, 60, 90];
 
 const PLATFORM_STYLE = {
   windows: { bg: BRAND.darkSoft, fg: BRAND.dark },
-  "windows server": { bg: BRAND.darkSoft, fg: BRAND.dark },
+  // Distinct blue so Windows Server doesn't read as identical to desktop
+  // Windows at a glance — same hue HostsTable.jsx already uses for it.
+  "windows server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
   macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
   ios: { bg: BRAND.tealSoft, fg: BRAND.tealText },
