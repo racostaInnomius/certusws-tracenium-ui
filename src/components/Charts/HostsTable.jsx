@@ -28,7 +28,10 @@ import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 
 const PLATFORM_STYLE = {
   windows: { bg: BRAND.darkSoft, fg: BRAND.dark },
-  "windows-server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
+  // Backend sends the literal "Windows Server" (space, not hyphen) —
+  // see dashboard.service.ts's os_platform CASE expressions. The
+  // hyphenated key here never matched, so this color was dead code.
+  "windows server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
   macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
   // Mobile managed clients (MAM). Distinct hues so a mixed fleet reads
