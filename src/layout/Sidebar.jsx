@@ -29,6 +29,7 @@ import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutl
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
@@ -721,6 +722,10 @@ export default function Sidebar({
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
       : []),
     { label: "Alerts", key: "alerts", icon: <NotificationsOutlinedIcon /> },
+    // ADR-0008 F1a — always visible for any active member; the catalog
+    // itself is gated server-side per report type (GET /reports/types),
+    // not by hiding this entry.
+    { label: "Reports", key: "reports", icon: <SummarizeOutlinedIcon /> },
 
     // ── Administration group ───────────────────────────────
     ...(isPrivileged

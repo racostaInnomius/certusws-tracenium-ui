@@ -30,6 +30,7 @@ describe("PAGE_REGISTRY", () => {
       "cdp",
       "remote-control",
       "alerts",
+      "reports",
       "retention",
       "session-settings",
       "location-sites",
