@@ -77,6 +77,7 @@ const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
   { value: "compliance", label: "Compliance" },
   { value: "patch", label: "Patch" },
+  { value: "cdp", label: "Certificates" },
   { value: "all", label: "All" },
 ];
 

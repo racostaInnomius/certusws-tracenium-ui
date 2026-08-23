@@ -603,7 +603,7 @@ function RenameGroupDialog({ open, group, onClose, onUpdated }) {
 // operator needs more advanced control they can still hit individual
 // devices through the existing Jobs page.
 
-const FACT_TYPES = ["inventory", "compliance", "all"];
+const FACT_TYPES = ["inventory", "compliance", "patch", "cdp", "all"];
 const PATCH_INSTALL_MODES = ["install", "download"];
 
 function defaultPayloadFor(jobType) {
