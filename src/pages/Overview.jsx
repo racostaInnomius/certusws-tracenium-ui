@@ -119,6 +119,15 @@ export default function Overview() {
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "overviewAutoRefresh");
   const errorMsg = error ? error?.message || "Failed to load overview data" : null;
 
+  // Control-DB enrollment roster (same number HeroKpis' "Devices" card
+  // shows) — passed down to PatchCoverageCard so its donut can reconcile
+  // to the same total the other two Row-3 donuts use. See
+  // FleetComposition.jsx's header comment for the full rationale.
+  const fleetDevices =
+    results?.dashboardSummary?.status === "fulfilled"
+      ? results.dashboardSummary.value?.fleetDevices ?? null
+      : null;
+
   // Fleet Health Report — admin-gated, same RBAC convention as
   // SecurityCompliance.jsx's export buttons: this only decides what to
   // render, the backend enforces the same split (requireRole on
@@ -254,6 +263,7 @@ export default function Overview() {
                 result={results?.devicePosture}
                 loading={loading}
                 onNavigate={navigateWithQuery}
+                fleetDevices={fleetDevices}
               />
             }
           />
