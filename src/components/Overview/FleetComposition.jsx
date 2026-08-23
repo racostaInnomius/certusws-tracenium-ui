@@ -67,7 +67,12 @@ export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, 
       }
       data={data}
       loading={loading}
-      totalLabel="devices"
+      // "checked in", not "devices": this counts rows in the `agent`
+      // table (agent has connected at least once), an earlier pipeline
+      // stage than the "reporting" total the OS platform donut shows —
+      // the two can legitimately differ. See DonutCard's OS platform
+      // usage below for the matching caption.
+      totalLabel="checked in"
       fallbackLabel={fallback}
       onCardClick={onCardClick}
       onSegmentClick={onSegmentClick}
@@ -321,7 +326,11 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           title="OS platform"
           data={osDataColored}
           loading={loading}
-          totalLabel="devices"
+          // "reporting", not "devices": this counts host_current_status
+          // rows (full inventory received), a later pipeline stage than
+          // "Agent versions"' totalLabel — a device can check in before
+          // its inventory scan completes, so the two totals can differ.
+          totalLabel="reporting"
           fallbackLabel="No platform breakdown available"
           onCardClick={() => navToAssets()}
           onSegmentClick={(segment) =>

@@ -155,8 +155,14 @@ export default function PatchCoverageCard({ result, loading, onNavigate }) {
                         <tspan x="50%" dy="-2" fontSize="16" fontWeight="800" fill={BRAND.dark}>
                           {total}
                         </tspan>
+                        {/* "scanned", not "SCP devices": this counts
+                            devices with a completed compliance scan —
+                            a device can check in and even finish its
+                            inventory scan before SCP runs, so this total
+                            can legitimately differ from the other two
+                            donuts in this row. */}
                         <tspan x="50%" dy="14" fontSize="10" fill={BRAND.gray}>
-                          SCP devices
+                          scanned
                         </tspan>
                       </text>
                     )}

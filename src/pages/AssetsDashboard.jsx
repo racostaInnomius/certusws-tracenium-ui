@@ -1353,7 +1353,9 @@ const osVersionItems = React.useMemo(() => {
               title="OS platform"
               data={osDonutData}
               loading={loading}
-              totalLabel="devices"
+              // See FleetComposition.jsx's OS platform DonutCard for why
+              // this says "reporting" rather than "devices".
+              totalLabel="reporting"
               fallbackLabel="No platform breakdown available"
             />
           </Box>
