@@ -9,7 +9,9 @@ import * as React from "react";
 import { Box, Button, Paper, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
+import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import { getReportTypes, getReportRuns, runReport } from "../api/reports";
 import { BRAND } from "../theme/brand";
 
@@ -20,6 +22,7 @@ export default function Reports() {
   // `${key}:${format}` while that specific button's download is in flight.
   const [runningKey, setRunningKey] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
+  const [emailTarget, setEmailTarget] = React.useState(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -52,6 +55,22 @@ export default function Reports() {
     }
   };
 
+  const handleEmailResult = (result) => {
+    const sentCount = result?.sent?.length || 0;
+    const failedCount = result?.failed?.length || 0;
+    if (failedCount === 0) {
+      setSnackbar({ open: true, message: `Emailed to ${sentCount} recipient${sentCount === 1 ? "" : "s"}.`, severity: "success" });
+    } else if (sentCount === 0) {
+      setSnackbar({ open: true, message: `Could not send to any recipient (${result.failed[0]?.reason || "unknown error"}).`, severity: "error" });
+    } else {
+      setSnackbar({
+        open: true,
+        message: `Sent to ${sentCount}, failed for ${failedCount} (${result.failed.map((f) => f.email).join(", ")}).`,
+        severity: "warning"
+      });
+    }
+  };
+
   const typeColumns = [
     { field: "group", headerName: "Group", minWidth: 100 },
     { field: "label", headerName: "Report", minWidth: 220, flex: 1 },
@@ -76,6 +95,14 @@ export default function Reports() {
               {format.toUpperCase()}
             </Button>
           ))}
+          <Button
+            size="small"
+            startIcon={<MailOutlineIcon />}
+            onClick={() => setEmailTarget(params.row)}
+            sx={{ textTransform: "none" }}
+          >
+            Email
+          </Button>
         </Box>
       ),
     },
@@ -134,6 +161,13 @@ export default function Reports() {
           />
         </Box>
       </Paper>
+
+      <EmailReportDialog
+        open={Boolean(emailTarget)}
+        reportType={emailTarget}
+        onClose={() => setEmailTarget(null)}
+        onResult={handleEmailResult}
+      />
 
       <BrandSnackbar
         open={snackbar.open}

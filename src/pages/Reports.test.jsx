@@ -17,6 +17,18 @@ vi.mock("../utils/browserState", async (importOriginal) => {
 });
 import { saveBlob } from "../utils/browserState";
 
+// EmailReportDialog (rendered inside Reports, just not visibly "open"
+// until a row's Email button is clicked) calls useAuthContext()
+// unconditionally — same mock TenantsAdministrator.test.jsx uses.
+vi.mock("../auth/AuthContext", () => ({
+  useAuthContext: () => ({
+    auth: { tenantId: 7 },
+    loading: false,
+    refreshAuth: vi.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}));
+
 import Reports from "./Reports";
 
 afterEach(() => {
@@ -98,6 +110,19 @@ describe("Reports page", () => {
     expect(saveBlob).toHaveBeenCalledTimes(1);
     // No <a href> anywhere on the page for a report download.
     expect(document.querySelector("a[href*='/reports/']")).toBeNull();
+  });
+
+  it("clicking Email opens the dialog for that row's report type", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", "/api/v1/tenants/7/members", { items: [] });
+
+    render(<Reports />);
+
+    const emailButtons = await screen.findAllByRole("button", { name: /email/i });
+    await userEvent.click(emailButtons[0]);
+
+    expect(await screen.findByText(/Email "Crypto Bill of Materials \(CBOM\)"/i)).toBeInTheDocument();
   });
 
   it("shows an error snackbar when the catalog fails to load", async () => {

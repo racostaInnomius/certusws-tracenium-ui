@@ -3,7 +3,7 @@
 // Client for ADR-0008 Fase F1a's /api/v1/reports/* — the registry
 // wrapping the 5 existing report generators behind one gated catalog.
 
-import { httpGetJson, httpGetBlob } from "./http";
+import { httpGetJson, httpGetBlob, httpPostJson } from "./http";
 import { saveBlob } from "../utils/browserState";
 
 const BASE = "/api/v1/reports";
@@ -28,4 +28,13 @@ export async function runReport(key, format) {
     `${BASE}/${encodeURIComponent(key)}/run?format=${encodeURIComponent(format)}`
   );
   saveBlob(blob, filename || `${key}.${format}`);
+}
+
+// { sent: string[], failed: {email, sent, reason}[] }
+export async function emailReport(key, { format, memberIds, externalEmails }) {
+  return httpPostJson(`${BASE}/${encodeURIComponent(key)}/email`, {
+    format,
+    memberIds,
+    externalEmails
+  });
 }
