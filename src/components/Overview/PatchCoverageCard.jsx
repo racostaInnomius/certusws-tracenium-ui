@@ -12,18 +12,19 @@
 //
 // The same thresholds drive the `PatchChip` in the device table, so
 // the dashboard reads consistently with the drilldown.
+//
+// Shares its chart/legend chrome with the other two Overview donuts via
+// `DonutCard` (FleetComposition.jsx) — that includes the "pending"
+// bucket reconciliation against the enrollment roster (`fleetDevices`,
+// same number the "Devices" KPI card shows). See that file's header
+// comment for why. This card used to render its own copy of the same
+// Pie/legend markup; folded into DonutCard so the reconciliation logic
+// only exists once.
 
 import { useMemo } from "react";
-import { Paper, Box, Typography, Skeleton } from "@mui/material";
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Label
-} from "recharts";
+import { Typography } from "@mui/material";
 import { BRAND, ROLE } from "../../theme/brand";
+import { DonutCard } from "./FleetComposition";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -50,7 +51,7 @@ function bucketOf(patchSummary) {
   return "stale";
 }
 
-export default function PatchCoverageCard({ result, loading, onNavigate }) {
+export default function PatchCoverageCard({ result, loading, onNavigate, fleetDevices = null }) {
   const posture = getValue(result);
   const items = Array.isArray(posture?.items) ? posture.items : [];
 
@@ -70,164 +71,39 @@ export default function PatchCoverageCard({ result, loading, onNavigate }) {
     { name: "Unknown", value: buckets.unknown, color: BRAND.gray }
   ].filter((x) => x.value > 0);
 
-  const total = items.length;
+  const scanned = items.length;
+  const pendingValue = fleetDevices != null ? Math.max(fleetDevices - scanned, 0) : null;
 
   const interactive = typeof onNavigate === "function";
   const navigate = () => onNavigate?.("ad");
 
   return (
-    <Paper
-      elevation={0}
-      onClick={interactive ? navigate : undefined}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        cursor: interactive ? "pointer" : "default",
-        transition: "border-color 120ms ease, box-shadow 120ms ease",
-        "&:hover": interactive
-          ? { borderColor: BRAND.teal, boxShadow: "0 4px 12px rgba(59,64,77,0.08)" }
-          : undefined
-      }}
-    >
-      <Typography
-        variant="subtitle2"
-        sx={{ color: BRAND.dark, fontWeight: 700, mb: 1.5 }}
-      >
-        Patch coverage
-        <Typography
-          component="span"
-          variant="caption"
-          sx={{ color: BRAND.gray, ml: 0.75, fontWeight: 500 }}
-        >
-          (SCP-enabled)
-        </Typography>
-      </Typography>
-
-      {loading ? (
-        <Skeleton variant="rounded" height={170} />
-      ) : data.length === 0 ? (
-        <Box
-          sx={{
-            height: 170,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: BRAND.gray
-          }}
-        >
-          <Typography variant="caption">
-            {total === 0
-              ? "No compliance data yet"
-              : "No patch data reported"}
-          </Typography>
-        </Box>
-      ) : (
-        // Stacked layout — matches the FleetComposition donuts so the
-        // three cards in Row 3 read as a visual unit.
-        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 120, height: 120 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="62%"
-                  outerRadius="92%"
-                  paddingAngle={2}
-                >
-                  {data.map((d, i) => (
-                    <Cell key={i} fill={d.color} />
-                  ))}
-                  <Label
-                    position="center"
-                    content={() => (
-                      <text
-                        x="50%"
-                        y="50%"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                      >
-                        <tspan x="50%" dy="-2" fontSize="16" fontWeight="800" fill={BRAND.dark}>
-                          {total}
-                        </tspan>
-                        {/* "scanned", not "SCP devices": this counts
-                            devices with a completed compliance scan —
-                            a device can check in and even finish its
-                            inventory scan before SCP runs, so this total
-                            can legitimately differ from the other two
-                            donuts in this row. */}
-                        <tspan x="50%" dy="14" fontSize="10" fill={BRAND.gray}>
-                          scanned
-                        </tspan>
-                      </text>
-                    )}
-                  />
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
-
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0.5,
-              width: "100%",
-              overflow: "hidden"
-            }}
+    <DonutCard
+      title={
+        <>
+          Patch coverage
+          <Typography
+            component="span"
+            variant="caption"
+            sx={{ color: BRAND.gray, ml: 0.75, fontWeight: 500 }}
           >
-            {data.map((d) => (
-              <Box
-                key={d.name}
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  minWidth: 0,
-                  px: 0.5,
-                  mx: -0.5,
-                  borderRadius: 1
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    bgcolor: d.color,
-                    flexShrink: 0
-                  }}
-                />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: BRAND.dark,
-                    flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    fontSize: 12.5
-                  }}
-                >
-                  {d.name}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ color: BRAND.gray, fontWeight: 600, fontSize: 12.5 }}
-                >
-                  {d.value}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-    </Paper>
+            (SCP-enabled)
+          </Typography>
+        </>
+      }
+      data={data}
+      loading={loading}
+      // "scanned", not "SCP devices": this counts devices with a
+      // completed compliance scan — a device can check in and even
+      // finish its inventory scan before SCP runs, so this total can
+      // legitimately differ from the other two donuts in this row.
+      // Once fleetDevices is known the total reconciles to the full
+      // roster and the label follows (see DonutCard's pending handling).
+      totalLabel={fleetDevices != null ? "enrolled" : "scanned"}
+      fallbackLabel={scanned === 0 ? "No compliance data yet" : "No patch data reported"}
+      onCardClick={interactive ? navigate : undefined}
+      pendingValue={pendingValue}
+      pendingLabel="Not scanned yet"
+    />
   );
 }

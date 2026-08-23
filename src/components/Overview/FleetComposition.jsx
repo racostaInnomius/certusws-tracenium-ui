@@ -1,6 +1,8 @@
 // src/components/Overview/FleetComposition.jsx
 //
-// Two donuts side-by-side: OS platform · Agent version.
+// Three donuts: OS platform · Agent version · Patch coverage (the third
+// one rendered by PatchCoverageCard.jsx, which reuses `DonutCard` below
+// via the parent's `patchCoverageSlot`).
 //
 // "Top manufacturers" was in this panel originally but removed — an
 // Overview about operational health shouldn't lead with vendor mix.
@@ -15,6 +17,20 @@
 //   - "older" = everything else (or unknown)
 // Zero surface area backend-side; any time the auto-update shippability
 // threshold changes we adjust the classifier here.
+//
+// Reconciled totals ("pending" bucket): each donut used to show only
+// what its own source table already had — OS platform counted
+// host_current_status rows, Agent versions counted the `agent` table,
+// Patch coverage counted completed SCP scans. Those totals can
+// legitimately differ (they're different pipeline stages), but showing
+// three different totals side by side on the same row reads as the
+// dashboard's numbers not "adding up". Fix: every donut here now also
+// accepts `fleetDevices` (the control-DB enrollment roster — the same
+// number the "Devices" KPI card shows) and, when given, reconciles to
+// it by rendering the gap as an explicit "pending" segment instead of
+// silently excluding those devices from the total. No new backend
+// query — `fleetDevices` already rides along in the dashboard summary
+// bundle this page already fetches.
 
 import { useMemo } from "react";
 import { Paper, Grid, Typography, Box, Skeleton } from "@mui/material";
@@ -35,13 +51,27 @@ function getValue(result) {
 
 import { classifyAgentVersions, compareVersions } from "./agentVersions";
 
+// Muted, desaturated gray for the "pending" bucket — deliberately
+// distinct from BRAND.gray, which every donut here already uses for its
+// own internal "Unknown" bucket. Reusing BRAND.gray for both would make
+// "we don't know this device's OS" and "this device hasn't reported at
+// all yet" look like the same segment.
+export const PENDING_COLOR = "#C7CBD1";
 
 // Exported as a named export so the Assets page can reuse the exact
 // same donut (classification + coloring + legend) instead of
 // re-implementing it. The default export of this module stays the
 // composition wrapper; individual primitives are opt-in for pages
 // that only want one slice.
-export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, onSegmentClick }) {
+export function AgentVersionDonut({
+  byVersion,
+  latestMap,
+  loading,
+  onCardClick,
+  onSegmentClick,
+  fleetDevices = null,
+  agentTotal = null
+}) {
   const { buckets, canonicalLatest } = classifyAgentVersions(
     byVersion,
     latestMap
@@ -60,6 +90,18 @@ export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, 
     ? "No enrolled devices"
     : "No version data";
 
+  // Reconcile against the enrollment roster (see file header comment).
+  // `agentTotal` is the backend's own count of `agent` rows — prefer it
+  // over re-summing `byVersion` since it's the exact same number the
+  // pre-reconciliation "checked in" label used to show.
+  const knownTotal =
+    agentTotal ??
+    (Array.isArray(byVersion)
+      ? byVersion.reduce((sum, r) => sum + Number(r?.count ?? 0), 0)
+      : 0);
+  const pendingValue =
+    fleetDevices != null ? Math.max(fleetDevices - knownTotal, 0) : null;
+
   return (
     <DonutCard
       title={
@@ -70,12 +112,15 @@ export function AgentVersionDonut({ byVersion, latestMap, loading, onCardClick, 
       // "checked in", not "devices": this counts rows in the `agent`
       // table (agent has connected at least once), an earlier pipeline
       // stage than the "reporting" total the OS platform donut shows —
-      // the two can legitimately differ. See DonutCard's OS platform
-      // usage below for the matching caption.
-      totalLabel="checked in"
+      // the two can legitimately differ. Once fleetDevices is known,
+      // the total is reconciled to the full roster and the label
+      // switches to "enrolled" (see DonutCard's pending handling).
+      totalLabel={fleetDevices != null ? "enrolled" : "checked in"}
       fallbackLabel={fallback}
       onCardClick={onCardClick}
       onSegmentClick={onSegmentClick}
+      pendingValue={pendingValue}
+      pendingLabel="Not connected"
     />
   );
 }
@@ -87,9 +132,22 @@ export function DonutCard({
   totalLabel = "items",
   fallbackLabel = "No data",
   onCardClick,
-  onSegmentClick
+  onSegmentClick,
+  // When set (and > 0), a "pending" segment is appended to the chart —
+  // devices counted in the reconciled roster (see file header comment)
+  // that this particular donut's own source table doesn't have a row
+  // for yet. `null` means "no roster to reconcile against" (an older
+  // backend, or the roster fetch failed) — falls back to the donut's
+  // own total, exactly like before this existed.
+  pendingValue = null,
+  pendingLabel = "Pending"
 }) {
-  const total = data.reduce((sum, x) => sum + x.value, 0);
+  const knownTotal = data.reduce((sum, x) => sum + x.value, 0);
+  const hasPending = pendingValue != null && pendingValue > 0;
+  const total = hasPending ? knownTotal + pendingValue : knownTotal;
+  const chartData = hasPending
+    ? [...data, { name: pendingLabel, value: pendingValue, color: PENDING_COLOR, pending: true }]
+    : data;
   // The card header + empty body is clickable as a whole (drops the
   // operator at the target page with no filter). Individual legend
   // rows are clickable when `onSegmentClick` is wired — those carry a
@@ -124,7 +182,7 @@ export function DonutCard({
 
       {loading ? (
         <Skeleton variant="rounded" height={170} />
-      ) : data.length === 0 ? (
+      ) : data.length === 0 && !hasPending ? (
         <Box
           sx={{
             height: 170,
@@ -143,11 +201,25 @@ export function DonutCard({
         // the donut centered and legend stacked we get full horizontal
         // room for readable labels even when the card is narrow.
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-          <Box sx={{ width: 120, height: 120 }}>
+          <Box sx={{ position: "relative", width: 120, height: 120 }}>
+            {hasPending && (
+              // Dashed ring flags "this total includes an inferred
+              // pending bucket" — drawn outside the circle (inset: -5)
+              // so it doesn't shrink the chart itself.
+              <Box
+                sx={{
+                  position: "absolute",
+                  inset: -5,
+                  borderRadius: "50%",
+                  border: "2px dashed rgba(154,160,166,0.65)",
+                  pointerEvents: "none"
+                }}
+              />
+            )}
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={data}
+                  data={chartData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
@@ -156,7 +228,7 @@ export function DonutCard({
                   outerRadius="92%"
                   paddingAngle={2}
                 >
-                  {data.map((d, i) => (
+                  {chartData.map((d, i) => (
                     <Cell key={i} fill={d.color} />
                   ))}
                   <Label
@@ -187,13 +259,15 @@ export function DonutCard({
               overflow: "hidden"
             }}
           >
-            {data.map((d) => {
+            {chartData.map((d) => {
               // Per-segment nav. stopPropagation so clicking the legend
               // row doesn't also trigger the card-level onClick (which
               // would lose the filter). Only rows with a handler get
-              // the hover/pointer cue — no-op rows stay static.
+              // the hover/pointer cue — no-op rows stay static. The
+              // pending row never navigates: there's no "pending"
+              // filter on the drilldown pages.
               const segClick =
-                typeof onSegmentClick === "function"
+                !d.pending && typeof onSegmentClick === "function"
                   ? (e) => {
                       e.stopPropagation();
                       onSegmentClick(d);
@@ -224,14 +298,20 @@ export function DonutCard({
                       width: 10,
                       height: 10,
                       borderRadius: "50%",
-                      bgcolor: d.color,
-                      flexShrink: 0
+                      flexShrink: 0,
+                      ...(d.pending
+                        ? {
+                            background: `repeating-linear-gradient(45deg, ${PENDING_COLOR}, ${PENDING_COLOR} 1.5px, transparent 1.5px, transparent 3px)`,
+                            border: `1px solid ${PENDING_COLOR}`
+                          }
+                        : { bgcolor: d.color })
                     }}
                   />
                   <Typography
                     variant="body2"
                     sx={{
-                      color: BRAND.dark,
+                      color: d.pending ? BRAND.gray : BRAND.dark,
+                      fontStyle: d.pending ? "italic" : "normal",
                       flex: 1,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -243,9 +323,14 @@ export function DonutCard({
                   </Typography>
                   <Typography
                     variant="body2"
-                    sx={{ color: BRAND.gray, fontWeight: 600, fontSize: 12.5 }}
+                    sx={{
+                      color: BRAND.gray,
+                      fontWeight: 600,
+                      fontSize: 12.5,
+                      fontStyle: d.pending ? "italic" : "normal"
+                    }}
                   >
-                    {d.value}
+                    {d.pending ? `+${d.value}` : d.value}
                   </Typography>
                 </Box>
               );
@@ -261,6 +346,13 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
   const dashboard = getValue(results?.dashboardSummary);
   const latest = getValue(results?.latestVersions);
   const agentVersions = getValue(results?.agentVersions);
+
+  // Control-DB enrollment roster — the reconciliation denominator (see
+  // file header comment). Same field HeroKpis' "Devices" card already
+  // uses, so this donut row and that KPI never disagree on what "the
+  // fleet" is.
+  const fleetDevices =
+    typeof dashboard?.fleetDevices === "number" ? dashboard.fleetDevices : null;
 
   // OS platform data. Backend shapes vary across versions — try a few
   // common shapes before giving up.
@@ -285,6 +377,11 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
       : [];
     return osData.map((d, i) => ({ ...d, color: osColors[i % osColors.length] }));
   }, [osRaw]);
+
+  const osPending =
+    fleetDevices != null
+      ? Math.max(fleetDevices - osDataColored.reduce((sum, x) => sum + x.value, 0), 0)
+      : null;
 
   // Agent version donut is now powered by a dedicated backend aggregate
   // (`/dashboard/agent-versions`), which is the only place this tenant's
@@ -330,12 +427,16 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           // rows (full inventory received), a later pipeline stage than
           // "Agent versions"' totalLabel — a device can check in before
           // its inventory scan completes, so the two totals can differ.
-          totalLabel="reporting"
+          // Once fleetDevices is known the total reconciles to the full
+          // roster (see file header comment) and the label follows.
+          totalLabel={fleetDevices != null ? "enrolled" : "reporting"}
           fallbackLabel="No platform breakdown available"
           onCardClick={() => navToAssets()}
           onSegmentClick={(segment) =>
             navToAssets({ platform: String(segment.name || "").toLowerCase() })
           }
+          pendingValue={osPending}
+          pendingLabel="Pending inventory"
         />
       </Grid>
       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
@@ -343,6 +444,8 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           byVersion={byVersion}
           latestMap={latestMap}
           loading={loading}
+          fleetDevices={fleetDevices}
+          agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
           onCardClick={() => navToAssets()}
           onSegmentClick={(segment) => {
             // Map the visible legend label back to a filter key the
