@@ -21,10 +21,16 @@ export default defineConfig({
       VITE_API_BASE: "http://tracenium-api.test",
     },
     // MUI dialog + userEvent interaction tests (PackageDialog, DeployWizard,
-    // ShellTerminal) render heavy component trees in jsdom and can take ~8-10s
-    // under full-suite load — past the 5s default, causing intermittent
-    // timeouts. 15s gives comfortable headroom without masking real hangs.
-    testTimeout: 15000,
+    // ShellTerminal, TenantsAdministrator's invite dialogs) render heavy
+    // component trees in jsdom and can take ~8-10s under full-suite load —
+    // past the 5s default, causing intermittent timeouts. 15s gave headroom
+    // for a while, but TenantsAdministrator.test.jsx's "invite a new member"
+    // block (several findBy/waitFor calls per test, one of them a Dialog
+    // mount) kept intermittently failing in CI with "Unable to find
+    // role=dialog" even after asyncUtilTimeout below was raised once
+    // already (2026-08-20). 20s keeps the same proportion of headroom over
+    // the higher asyncUtilTimeout.
+    testTimeout: 20000,
 
     // Deliberately far below the default (~cpus-1).
     //
