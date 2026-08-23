@@ -15,18 +15,27 @@ import {
   setApiCacheSessionScope,
 } from "../api/http";
 
-// vitest.config.js already raised testTimeout to 15000ms for exactly this
-// reason ("MUI dialog + userEvent interaction tests ... can take ~8-10s
-// under full-suite load") — but that budget only bounds the whole `it()`
-// block. Testing Library's own findBy*/waitFor polling (what actually
-// waits for a Dialog's portal + transition to mount) has a SEPARATE
-// internal timeout, defaulting to 1000ms regardless of testTimeout. Under
-// real CI load that default was too tight — a `findByRole("dialog")` can
-// legitimately take longer than 1s to resolve, which reads as a random
-// flake rather than a capacity problem. 5000ms gives real headroom while
-// still leaving most of the 15s test budget for a test with more than one
-// findBy in it.
-configure({ asyncUtilTimeout: 5000 });
+// vitest.config.js already raised testTimeout (now 20000ms) for exactly
+// this reason ("MUI dialog + userEvent interaction tests ... can take
+// ~8-10s under full-suite load") — but that budget only bounds the whole
+// `it()` block. Testing Library's own findBy*/waitFor polling (what
+// actually waits for a Dialog's portal + transition to mount) has a
+// SEPARATE internal timeout, defaulting to 1000ms regardless of
+// testTimeout. Under real CI load that default was too tight — a
+// `findByRole("dialog")` can legitimately take longer than 1s to resolve,
+// which reads as a random flake rather than a capacity problem.
+//
+// Raised once already (2026-08-20, 1000ms -> 5000ms) but
+// TenantsAdministrator.test.jsx's "invite a new member" block — several
+// findBy/waitFor calls per test, including a Dialog mount — kept
+// intermittently failing in CI ("Unable to find role=dialog") even at
+// 5000ms: confirmed via 3 consecutive CI reruns of the same unchanged
+// commit, each time a DIFFERENT test in that block failing at the same
+// assertion, which rules out a logic bug in any one test and points at
+// the ceiling itself still being too tight under heavier CI load. 8000ms
+// gives more headroom while still leaving most of the 20s test budget
+// for a test with more than one findBy in it.
+configure({ asyncUtilTimeout: 8000 });
 
 // http.js falls back to window.location.assign(loginUrl) 50 ms after a
 // backend-confirmed 401 when no listener marks the event as handled.

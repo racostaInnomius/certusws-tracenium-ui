@@ -36,6 +36,7 @@ const PKI = React.lazy(() => import("../pages/PKI"));
 const SecurityCompliance = React.lazy(() => import("../pages/SecurityCompliance"));
 const PatchManagement = React.lazy(() => import("../pages/PatchManagement"));
 const Alerts = React.lazy(() => import("../pages/Alerts"));
+const Reports = React.lazy(() => import("../pages/Reports"));
 const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 const Retention = React.lazy(() => import("../pages/Retention"));
 const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
@@ -118,6 +119,7 @@ export const PAGE_REGISTRY = {
 
   "remote-control": () => <RemoteControl />,
   alerts: () => <Alerts />,
+  reports: () => <Reports />,
 
   // Retention — admin-only drilldown reached from the "Database retention"
   // card on Settings. Mounted at top level (not nested under settings/*)
