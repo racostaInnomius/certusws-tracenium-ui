@@ -346,6 +346,11 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     // (buildDeviceFacts se comió printers, y después geo). Si agregas un campo
     // de location al backend, agrégalo TAMBIÉN aquí.
     locationFixAt: coalesceValue(source.locationFixAt, source.location_fix_at),
+    // Clasificación del equipo, derivada por el backend a partir del chasis
+    // que reportó el SO. ⚠️ Allowlist: si no está nombrada aquí, se pierde.
+    formFactor: coalesceValue(source.formFactor, source.form_factor),
+    isVirtual: source.isVirtual === true || source.is_virtual === true,
+    chassisRaw: coalesceValue(source.chassisRaw, source.chassis_raw, source.type),
     locationPositionSource: coalesceValue(
       source.locationPositionSource,
       source.location_position_source
@@ -545,6 +550,39 @@ export function getPositionFreshness(profile, source) {
     ageMinutes,
     label: `Last known position · ${shortAge(ageMinutes)}`,
   };
+}
+
+/**
+ * El tipo de equipo, en una línea.
+ *
+ * `unknown` se muestra como tal y NO se disfraza de escritorio: el backend
+ * llega a "unknown" cuando el chasis dice "Other" o viene vacío, y este dato
+ * alimenta decisiones de ventanas de mantenimiento y políticas. Cuando el SO
+ * dijo algo que no supimos clasificar, se muestra al lado entre paréntesis para
+ * que el operador vea la evidencia en vez de un veredicto sin respaldo.
+ */
+const FORM_FACTOR_TEXT = {
+  laptop: "Laptop",
+  desktop: "Desktop",
+  server: "Server",
+  unknown: "Unknown",
+};
+
+export function formatFormFactor(profile) {
+  const ff = String(profile?.formFactor || "unknown").toLowerCase();
+  const label = FORM_FACTOR_TEXT[ff] ?? ff;
+  const parts = [label];
+
+  // La virtualización es un eje aparte: un servidor puede ser virtual, y
+  // colapsarlos en un solo valor perdería una de las dos cosas.
+  if (profile?.isVirtual) parts.push("virtual");
+
+  const raw = profile?.chassisRaw;
+  // El crudo solo aporta cuando NO pudimos clasificar; repetir "Notebook"
+  // junto a "Laptop" sería ruido.
+  if (ff === "unknown" && raw) parts.push(`reported "${raw}"`);
+
+  return parts.join(" · ");
 }
 
 export function getMapPin(profile) {

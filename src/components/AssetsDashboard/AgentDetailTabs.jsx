@@ -36,6 +36,7 @@ import {
   formatOperatingMode,
   storageHealthColor,
   formatLocationLabel,
+  formatFormFactor,
   formatCoordinates,
   getMapPin,
   getLocationHint
@@ -68,6 +69,7 @@ export function AgentTab({
                 <DetailField label="Hostname" value={hostname} />
                 <DetailField label="Agent ID" value={agentId} mono />
                 <DetailField label="Platform" value={platform} />
+                <DetailField label="Device type" value={formatFormFactor(profile)} />
                 <DetailField label="OS" value={formatDetailValue(profile?.os || hardware?.distro)} />
                 <DetailField label="Agent version" value={agentVersion} mono />
                 <DetailField label="Last logon user" value={formatDetailValue(profile?.lastLogonUser)} />

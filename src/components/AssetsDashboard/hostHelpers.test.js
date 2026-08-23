@@ -25,6 +25,7 @@ import {
   getMapPin,
   getPositionFreshness,
   formatPositionSource,
+  formatFormFactor,
   getLocationHint,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
@@ -579,5 +580,54 @@ describe("getLocationHint", () => {
 
   it("survives a null profile", () => {
     expect(() => getLocationHint(null)).not.toThrow();
+  });
+});
+
+describe("formatFormFactor", () => {
+  it("nombra el tipo de equipo", () => {
+    expect(formatFormFactor({ formFactor: "laptop" })).toBe("Laptop");
+    expect(formatFormFactor({ formFactor: "server" })).toBe("Server");
+    expect(formatFormFactor({ formFactor: "desktop" })).toBe("Desktop");
+  });
+
+  it("la virtualización es un eje aparte, no otro valor", () => {
+    // Un servidor puede ser virtual. Colapsarlos en un solo valor perdería
+    // una de las dos cosas — en la flota hay un Windows Server en Hyper-V.
+    expect(formatFormFactor({ formFactor: "server", isVirtual: true })).toBe("Server · virtual");
+  });
+
+  it("unknown se muestra como unknown, con lo que dijo la máquina", () => {
+    // No se disfraza de escritorio: este dato alimenta ventanas de
+    // mantenimiento y políticas.
+    expect(formatFormFactor({ formFactor: "unknown", chassisRaw: "Other", isVirtual: true }))
+      .toBe('Unknown · virtual · reported "Other"');
+  });
+
+  it("no repite el crudo cuando ya se pudo clasificar", () => {
+    // "Laptop · reported Notebook" sería ruido.
+    expect(formatFormFactor({ formFactor: "laptop", chassisRaw: "Notebook" })).toBe("Laptop");
+  });
+
+  it("un perfil sin dato cae a unknown en vez de romperse", () => {
+    expect(formatFormFactor({})).toBe("Unknown");
+    expect(formatFormFactor(null)).toBe("Unknown");
+  });
+});
+
+describe("normalizeHostDetailPayload — formFactor sobrevive al allowlist", () => {
+  it("conserva la clasificación y sus dos ejes", () => {
+    // Cuarta vez que se agrega un campo a este literal. El test va por la misma
+    // razón que los de locationFixAt y locationPositionSource: no falla, calla.
+    const out = normalizeHostDetailPayload({
+      agent: { agent_id: "a1", formFactor: "server", isVirtual: true, chassisRaw: "Desktop" },
+    });
+    expect(out.formFactor).toBe("server");
+    expect(out.isVirtual).toBe(true);
+    expect(formatFormFactor(out)).toBe("Server · virtual");
+  });
+
+  it("cae al campo type cuando el backend no manda chassisRaw", () => {
+    const out = normalizeHostDetailPayload({ agent: { agent_id: "a1", type: "Notebook" } });
+    expect(out.chassisRaw).toBe("Notebook");
   });
 });
