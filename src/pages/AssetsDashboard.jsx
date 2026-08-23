@@ -60,7 +60,7 @@ import {
   getHardwareInventoryDetail,
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
-import { getConnectedDevices, getLatestAgentVersions } from "../api/overview";
+import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
 import { normalizePlatform } from "../utils/platform";
@@ -474,10 +474,11 @@ export default function AssetsDashboard({
       sortDir: hostsSortDir,
     });
 
-    const [sumRes, hostsRes, latestRes] = await Promise.allSettled([
+    const [sumRes, hostsRes, latestRes, agentVersionsRes] = await Promise.allSettled([
       dashboardApi.getSummary(),
       httpGetJson(`/api/v1/dashboard/hosts?${hostsQuery}`, { cache: "reload" }),
       getLatestAgentVersions(),
+      getAgentVersionsSummary(),
     ]);
 
     const summaryOk = sumRes.status === "fulfilled";
@@ -522,11 +523,19 @@ export default function AssetsDashboard({
       }
     }
 
+    // Same dedicated endpoint Overview's FleetComposition uses for its
+    // Agent versions donut — full `agent` table, not scoped to whatever
+    // page of the hosts table happens to be loaded (that page-scoped
+    // client-side tally used to be this donut's only data source, which
+    // is why it could show as few as 25 devices' worth of versions).
+    const agentVersions = agentVersionsRes.status === "fulfilled" ? agentVersionsRes.value : null;
+
     return {
       summary,
       hosts,
       hostsMeta,
       latestMap,
+      agentVersions,
       loadState: {
         summaryLoaded: summaryOk,
         hostsLoaded: hostsOk,
@@ -563,6 +572,7 @@ export default function AssetsDashboard({
     [data, hostsPaginationModel.page, hostsPaginationModel.pageSize, hostsSearch, hostsSortBy, hostsSortDir]
   );
   const latestMap = React.useMemo(() => data?.latestMap ?? {}, [data]);
+  const agentVersions = data?.agentVersions ?? null;
 
   const loadState = React.useMemo(
     () =>
@@ -1150,6 +1160,13 @@ export default function AssetsDashboard({
     []
   );
 
+  // Control-DB enrollment roster — same reconciliation denominator
+  // Overview's FleetComposition uses for these two donuts (see that
+  // file's header comment). Without this, the OS platform/Agent
+  // versions totals here silently drifted from Overview's once Overview
+  // started reconciling to the full roster and this page didn't.
+  const fleetDevices = typeof summary?.fleetDevices === "number" ? summary.fleetDevices : null;
+
   // Donut-shaped data for the shared OS platform chart from Overview's
   // FleetComposition. Same palette as the bar items above so swapping
   // visual idioms doesn't change which slice maps to which platform.
@@ -1178,6 +1195,11 @@ export default function AssetsDashboard({
       })
       .filter((d) => d.value > 0);
   }, [summary, platformColors]);
+
+  const osPending =
+    fleetDevices != null
+      ? Math.max(fleetDevices - osDonutData.reduce((sum, x) => sum + x.value, 0), 0)
+      : null;
 
 const osVersionItems = React.useMemo(() => {
   const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
@@ -1227,21 +1249,16 @@ const osVersionItems = React.useMemo(() => {
   });
 }, [summary, platformColors]);
 
-  // `byVersion` for the AgentVersionDonut. The Overview endpoint
-  // (/dashboard/agent-versions) would return this directly, but we
-  // can reconstruct it from the hosts list without an extra call.
-  const byVersion = React.useMemo(() => {
-    const counts = new Map();
-    for (const h of hosts) {
-      const v = String(h?.agent_version || "").trim();
-      if (!v) continue;
-      counts.set(v, (counts.get(v) || 0) + 1);
-    }
-    return Array.from(counts.entries()).map(([version, count]) => ({
-      version,
-      count,
-    }));
-  }, [hosts]);
+  // `byVersion` for the AgentVersionDonut — the same dedicated
+  // `/dashboard/agent-versions` aggregate Overview's FleetComposition
+  // uses. Used to be reconstructed from the (paginated, ≤ pageSize)
+  // hosts list instead, which meant this donut only ever saw whatever
+  // page of the hosts table happened to be loaded — never the full
+  // fleet, and never matching what Overview showed for the same tenant.
+  const byVersion = React.useMemo(
+    () => (Array.isArray(agentVersions?.byVersion) ? agentVersions.byVersion : []),
+    [agentVersions]
+  );
 
   // KPI values derived from the loaded data. `onlineCount` is the
   // intersection of connected IDs and the raw hosts list so a
@@ -1341,6 +1358,8 @@ const osVersionItems = React.useMemo(() => {
               byVersion={byVersion}
               latestMap={latestMap}
               loading={loading}
+              fleetDevices={fleetDevices}
+              agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
             />
           </Box>
         </Grid>
@@ -1354,9 +1373,13 @@ const osVersionItems = React.useMemo(() => {
               data={osDonutData}
               loading={loading}
               // See FleetComposition.jsx's OS platform DonutCard for why
-              // this says "reporting" rather than "devices".
-              totalLabel="reporting"
+              // this says "reporting" rather than "devices" — and for why
+              // it switches to "enrolled" once fleetDevices is known
+              // (reconciled total, same as Overview).
+              totalLabel={fleetDevices != null ? "enrolled" : "reporting"}
               fallbackLabel="No platform breakdown available"
+              pendingValue={osPending}
+              pendingLabel="Pending inventory"
             />
           </Box>
         </Grid>
