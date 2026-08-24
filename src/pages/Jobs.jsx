@@ -570,7 +570,27 @@ export default function Jobs() {
     { enabled: canManageJobs, staleMs: 60_000, storageMaxAgeMs: 10 * 60_000, revalidateOnMount: "stale" }
   );
   const knownDevices = React.useMemo(() => jobsMeta?.known ?? [], [jobsMeta]);
+  // Every advertised type — the history's label lookup and type filter
+  // use this, so it must include the non-creatable ones (a job_type that
+  // can't be filtered is worse than useless in a history).
   const jobTypeOptions = React.useMemo(() => jobsMeta?.types ?? [], [jobsMeta]);
+  // The subset an operator can actually build from the form. The backend
+  // marks creatable=false for types whose payload is a snapshot from
+  // another page (software_install, patch_remediate) or that are
+  // system-emitted (software_dp_prefetch, reset_baseline). Older backends
+  // predate the flag and sent no creatable key at all — treat a missing
+  // flag as creatable so the form doesn't go empty against them.
+  const creatableJobTypeOptions = React.useMemo(
+    () => jobTypeOptions.filter((t) => t.creatable !== false),
+    [jobTypeOptions]
+  );
+  // job_type -> label, for the history table's Type column. Falls back to
+  // the raw type so an unknown value still renders (just unlabelled).
+  const jobTypeLabels = React.useMemo(() => {
+    const m = new Map();
+    for (const t of jobTypeOptions) m.set(t.jobType, t.label || t.jobType);
+    return m;
+  }, [jobTypeOptions]);
   const connectedDeviceIds = React.useMemo(
     () => knownDevices.filter((item) => item.connected).map((item) => item.deviceId),
     [knownDevices]
@@ -754,8 +774,11 @@ export default function Jobs() {
       return known[0]?.deviceId ? [known[0].deviceId] : [];
     });
     setJobType((current) => {
-      if (current && types.some((item) => item.jobType === current)) return current;
-      return types[0]?.jobType || "facts_snapshot";
+      // Only creatable types are valid selections for the form. A default
+      // that landed on a view-only type would build an unsubmittable job.
+      const creatable = types.filter((t) => t.creatable !== false);
+      if (current && creatable.some((item) => item.jobType === current)) return current;
+      return creatable[0]?.jobType || "facts_snapshot";
     });
   }, [jobsMeta]);
 
@@ -1141,7 +1164,17 @@ export default function Jobs() {
     // Device ID column dropped — the hostname column already
     // identifies the target, and the full UUID is still available in
     // the detail drawer for anyone who needs it for logs / support.
-    { field: "job_type", headerName: "Type", minWidth: 130, flex: 0.6 },
+    {
+      field: "job_type",
+      headerName: "Type",
+      minWidth: 150,
+      flex: 0.6,
+      // Show the human label ("Distribution Prefetch") not the raw
+      // job_type ("software_dp_prefetch"). The catalogue now advertises
+      // all 8 types, so every value resolves; the fallback keeps an
+      // unknown value visible rather than blank.
+      valueGetter: (value) => jobTypeLabels.get(value) || value,
+    },
     {
       field: "status",
       headerName: "Status",
@@ -1812,7 +1845,7 @@ export default function Jobs() {
             disabled={loadingMeta}
             fullWidth
           >
-            {jobTypeOptions.map((opt) => (
+            {creatableJobTypeOptions.map((opt) => (
               <MenuItem key={opt.jobType} value={opt.jobType}>
                 {opt.label}
               </MenuItem>
