@@ -98,11 +98,55 @@ export async function getJobsTimeseries(windowDays = 7) {
 
 /**
  * Latest published version per platform+arch. Used to compute the
- * "agent X% outdated" Hero card. We ask for each platform separately
- * because the metadata endpoint requires it — the backend doesn't (yet)
- * expose a bulk variant.
+ * "agent X% outdated" Hero card.
+ *
+ * ONE request via the bulk endpoint. This used to fan out to four — macos and
+ * windows × x64 and arm64 — inside a client switch that already fires ~28, and
+ * where a 1 KB response costs a full round-trip queued behind everything else.
+ *
+ * The old fan-out also hard-coded its platform list, so Linux agents were never
+ * compared against a published version and could never show as outdated. The
+ * bulk endpoint derives the combinations server-side from the platforms it
+ * actually serves, which is why that list is gone from here rather than simply
+ * having "linux" appended: a hard-coded copy is what let it drift.
+ *
+ * Falls back to the old fan-out when the endpoint isn't there. The UI and the
+ * backend deploy independently, so shipping this first must not blank the Hero
+ * card — a 404 means "old backend", and we take the four requests for now.
  */
 export async function getLatestAgentVersions() {
+  try {
+    const bulk = await httpGetJson("/api/v1/binaries/agent/metadata/all", {
+      notifyOnTemporaryError: false,
+    });
+    if (Array.isArray(bulk?.items)) {
+      return bulk.items.map((item) => ({
+        platform: item.platform,
+        arch: item.arch,
+        data: item.data,
+        ok: item.ok !== false,
+      }));
+    }
+    // Shape we don't recognise — treat like a missing endpoint rather than
+    // handing the Hero card something it will silently mis-read.
+  } catch (err) {
+    // A real outage must surface, exactly as it did before: the caller
+    // distinguishes "no build published" from "backend down", and swallowing
+    // a 5xx here would report every agent as up-to-date.
+    if (isTemporaryApiError(err)) {
+      throw err;
+    }
+    // Anything else (404 on an older backend) → fall through.
+  }
+
+  return getLatestAgentVersionsPerCombo();
+}
+
+/**
+ * Pre-bulk fan-out, kept only as the fallback above. Delete once every
+ * deployed backend serves /agent/metadata/all.
+ */
+async function getLatestAgentVersionsPerCombo() {
   const platforms = ["macos", "windows"];
   const arches = ["arm64", "x64"];
 

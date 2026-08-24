@@ -697,11 +697,51 @@ export default function AppShell() {
   const resolveTenantInventoryState = React.useCallback(async () => {
     setTenantInventoryState((prev) => (prev === "empty" || prev === "has-data" ? prev : "checking"));
 
+    // ── Probe first, fan out only if it can't settle the question ──────
+    //
+    // `hasInventory` below is an OR across five sources, so ONE source
+    // reporting devices already settles it — the other four cannot change the
+    // answer. This used to fire all five on every tenant switch regardless,
+    // five requests to compute a boolean, in the same burst where ~28 others
+    // are competing for the connection.
+    //
+    // The fan-out is NOT removed: it is what stops a single flaky endpoint
+    // from declaring a populated tenant empty (see the comment further down,
+    // and the Assets recheck that calls this). It just stops being the only
+    // path. A positive answer short-circuits; a zero or a failure falls
+    // through to exactly the logic that ran before.
+    //
+    // dashboard/summary is the probe because the Overview requests it moments
+    // later — so unlike the others it is worth caching, and this call warms
+    // the entry the page would otherwise re-fetch. It is deliberately NOT
+    // `no-store` for that reason: a ≤60s-old summary is fine for "does this
+    // tenant have devices", and we only trust it when it says YES. Every path
+    // that could conclude "empty" still runs against fresh, uncached reads.
+    let dashboardSummarySettled;
+    try {
+      dashboardSummarySettled = {
+        status: "fulfilled",
+        value: await httpGetJson("/api/v1/dashboard/summary", {
+          notifyOnTemporaryError: false,
+        }),
+      };
+    } catch (reason) {
+      dashboardSummarySettled = { status: "rejected", reason };
+    }
+
+    if (
+      dashboardSummarySettled.status === "fulfilled" &&
+      getDashboardKnownDeviceCount(dashboardSummarySettled.value) > 0
+    ) {
+      setTenantInventoryState("has-data");
+      setShowWelcomeEntry(false);
+      return;
+    }
+
+    // Inconclusive: the summary reported no devices, or it failed. Ask the
+    // remaining four — the summary result is carried over rather than
+    // re-requested, so this path still costs five requests total, never six.
     const requests = {
-      dashboardSummary: httpGetJson("/api/v1/dashboard/summary", {
-        cache: "no-store",
-        notifyOnTemporaryError: false,
-      }),
       hosts: httpGetJson("/api/v1/dashboard/hosts?page=1&pageSize=1", {
         cache: "no-store",
         notifyOnTemporaryError: false,
@@ -722,7 +762,10 @@ export default function AppShell() {
 
     const keys = Object.keys(requests);
     const settled = await Promise.allSettled(keys.map((key) => requests[key]));
-    const results = Object.fromEntries(keys.map((key, index) => [key, settled[index]]));
+    const results = {
+      dashboardSummary: dashboardSummarySettled,
+      ...Object.fromEntries(keys.map((key, index) => [key, settled[index]])),
+    };
     const resultList = Object.values(results);
 
     const authFailure = resultList.some(
