@@ -20,8 +20,9 @@ import {
 } from "@mui/material";
 import { httpGetJson, httpPostJson } from "../../api/http";
 import {
-  TIERS, TIER_LABELS, TIER_PRICES, TIER_ADDS,
-  estimateMonthly, classifyChange, graceCeiling, statusNotice,
+  LINES, LINE_LABELS, LINE_HINTS, LINE_TIERS, LINE_PRICES,
+  TIER_LABELS, TIER_ADDS, MDM_INCLUDES,
+  estimateMonthly, estimateLine, classifyChange, graceCeiling, statusNotice,
 } from "./billingModel";
 
 const money = (cents, currency = "usd") =>
@@ -34,8 +35,9 @@ export default function Billing() {
   const [sub, setSub] = useState(null);
   const [invoices, setInvoices] = useState([]);
 
-  const [tier, setTier] = useState("starter");
-  const [quantity, setQuantity] = useState(1);
+  // Selección POR LÍNEA. `null` significa "no contratada", que no es lo mismo
+  // que cantidad 0: dar de baja una línea es quitar su item de la suscripción.
+  const [selection, setSelection] = useState({ endpoint: null, mdm: null });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(null);
 
@@ -46,9 +48,12 @@ export default function Billing() {
       const data = await httpGetJson("/api/v1/billing/summary");
       setConfigured(Boolean(data?.configured));
       setSub(data?.subscription ?? null);
-      if (data?.subscription) {
-        setTier(data.subscription.tier ?? "starter");
-        setQuantity(data.subscription.quantity ?? 1);
+      const s = data?.subscription;
+      if (s) {
+        setSelection({
+          endpoint: s.tier ? { tier: s.tier, quantity: s.quantity ?? 1 } : null,
+          mdm: s.mdmTier ? { tier: s.mdmTier, quantity: s.mdmQuantity ?? 1 } : null,
+        });
       }
       // Las facturas se piden aparte y su fallo NO tumba la pantalla: sin
       // historial el usuario todavía puede cambiar de plan o de tarjeta, que
@@ -69,18 +74,33 @@ export default function Billing() {
   useEffect(() => { load(); }, [load]);
 
   const notice = useMemo(() => statusNotice(sub), [sub]);
-  const change = useMemo(
-    () => classifyChange(sub ? { tier: sub.tier, quantity: sub.quantity } : null, { tier, quantity }),
-    [sub, tier, quantity]
+
+  const current = useMemo(
+    () =>
+      sub
+        ? {
+            endpoint: sub.tier ? { tier: sub.tier, quantity: sub.quantity ?? 0 } : null,
+            mdm: sub.mdmTier ? { tier: sub.mdmTier, quantity: sub.mdmQuantity ?? 0 } : null,
+          }
+        : null,
+    [sub]
   );
-  const estimate = estimateMonthly(tier, quantity);
+  const change = useMemo(() => classifyChange(current, selection), [current, selection]);
+  const estimate = estimateMonthly(selection);
+
+  const setLine = (line, patch) =>
+    setSelection((s) => ({ ...s, [line]: patch === null ? null : { ...s[line], ...patch } }));
 
   const submit = async () => {
     setSaving(true);
     setError(null);
     setSaved(null);
     try {
-      const r = await httpPostJson("/api/v1/billing/subscription", { tier, quantity });
+      // Se manda sólo lo contratado: una línea ausente del cuerpo significa
+      // darla de baja, y el backend lo traduce en quitar su item.
+      const body = { isUpgrade: change === "upgrade" || change === "new" };
+      for (const line of LINES) if (selection[line]) body[line] = selection[line];
+      const r = await httpPostJson("/api/v1/billing/subscription", body);
       setSaved(r);
       await load();
     } catch (err) {
@@ -124,26 +144,46 @@ export default function Billing() {
         <CardContent>
           <Typography variant="subtitle1" gutterBottom>Plan actual</Typography>
           {sub ? (
-            <Stack direction="row" spacing={3} flexWrap="wrap" alignItems="center">
-              <Chip
-                label={TIER_LABELS[sub.effectiveTier] ?? "Sin plan"}
-                color={sub.status === "active" || sub.status === "trialing" ? "success" : "warning"}
-              />
+            <Stack spacing={1.5}>
+              {/* Una fila por LÍNEA: los topes son independientes, así que
+                  mezclarlos en un solo número escondería que 500 licencias de
+                  PC no sirven para enrolar un móvil. */}
+              {LINES.map((line) => {
+                const tierOf = line === "endpoint" ? sub.tier : sub.mdmTier;
+                const qty = line === "endpoint" ? sub.quantity : sub.mdmQuantity;
+                if (!tierOf) return null;
+                return (
+                  <Stack key={line} direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+                    <Chip
+                      size="small"
+                      label={`${LINE_LABELS[line]}: ${TIER_LABELS[tierOf] ?? "—"}`}
+                      color={sub.status === "active" || sub.status === "trialing" ? "success" : "warning"}
+                    />
+                    <Typography variant="body2">
+                      <strong>{qty ?? "—"}</strong> licencias
+                    </Typography>
+                    {/* El margen del 10% es parte de lo contratado: si no se
+                        enseña, el usuario no sabe que puede pasarse un poco. */}
+                    {qty > 0 && (
+                      <Typography variant="body2" color="text.secondary">
+                        puedes enrolar hasta {graceCeiling(qty)}
+                      </Typography>
+                    )}
+                  </Stack>
+                );
+              })}
+
+              {!sub.tier && !sub.mdmTier && (
+                <Typography variant="body2" color="text.secondary">
+                  Sin líneas contratadas.
+                </Typography>
+              )}
+
               {/* Durante el trial el efectivo y el contratado difieren, y decirlo
                   evita la sorpresa del día que se apaguen los plugins de más. */}
               {sub.inTrial && sub.tier !== sub.effectiveTier && (
                 <Typography variant="body2" color="text.secondary">
-                  contratado: {TIER_LABELS[sub.tier] ?? "—"}
-                </Typography>
-              )}
-              <Typography variant="body2">
-                <strong>{sub.quantity ?? "—"}</strong> licencias
-              </Typography>
-              {/* El margen del 10% es parte de lo contratado: si no se enseña,
-                  el usuario no sabe que puede pasarse un poco. */}
-              {sub.quantity > 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  puedes enrolar hasta {graceCeiling(sub.quantity)} equipos
+                  durante la prueba estás usando {TIER_LABELS[sub.effectiveTier] ?? "—"}
                 </Typography>
               )}
               {sub.currentPeriodEnd && (
@@ -164,42 +204,82 @@ export default function Billing() {
         <CardContent>
           <Typography variant="subtitle1" gutterBottom>Cambiar plan</Typography>
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
-            <FormControl sx={{ minWidth: 220 }} size="small">
-              <InputLabel id="tier-label">Plan</InputLabel>
-              <Select
-                labelId="tier-label" label="Plan" value={tier}
-                onChange={(e) => setTier(e.target.value)}
-              >
-                {TIERS.map((t) => (
-                  <MenuItem key={t} value={t}>
-                    {TIER_LABELS[t]} — ${TIER_PRICES[t]}/equipo/mes
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          {LINES.map((line) => {
+            const sel = selection[line];
+            const tiers = LINE_TIERS[line];
+            return (
+              <Box key={line} sx={{ mb: 2.5 }}>
+                <Stack direction="row" spacing={1} alignItems="baseline" sx={{ mb: 1 }}>
+                  <Typography variant="body1"><strong>{LINE_LABELS[line]}</strong></Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {LINE_HINTS[line]}
+                  </Typography>
+                </Stack>
 
-            <TextField
-              size="small" type="number" label="Licencias" value={quantity}
-              onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-              inputProps={{ min: 1 }} sx={{ width: 160 }}
-            />
-          </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+                  <FormControl sx={{ minWidth: 240 }} size="small">
+                    <InputLabel id={`tier-${line}`}>Plan</InputLabel>
+                    <Select
+                      labelId={`tier-${line}`} label="Plan"
+                      value={sel?.tier ?? ""}
+                      onChange={(e) =>
+                        setLine(line, e.target.value ? { tier: e.target.value, quantity: sel?.quantity ?? 1 } : null)
+                      }
+                    >
+                      {/* "No contratar" es una opción explícita, no la ausencia
+                          de selección: dar de baja una línea es una decisión
+                          que el usuario tiene que poder tomar aquí. */}
+                      <MenuItem value=""><em>No contratar</em></MenuItem>
+                      {tiers.map((tv) => (
+                        <MenuItem key={tv} value={tv}>
+                          {TIER_LABELS[tv]} — ${LINE_PRICES[line][tv]}/equipo/mes
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
 
-          {/* Los planes se presentan por lo que SUMAN, no por su lista completa:
-              es como se explican, y deja ver que subir nunca quita nada. */}
-          <Stack spacing={0.5} sx={{ mb: 2 }}>
-            {TIERS.map((t) => (
-              <Typography
-                key={t} variant="body2"
-                color={t === tier ? "text.primary" : "text.secondary"}
-              >
-                <strong>{TIER_LABELS[t]}</strong>
-                {t === "starter" ? ": " : " suma: "}
-                {TIER_ADDS[t].map((p) => p.toUpperCase()).join(" · ")}
-              </Typography>
-            ))}
-          </Stack>
+                  <TextField
+                    size="small" type="number" label="Licencias"
+                    value={sel?.quantity ?? ""}
+                    disabled={!sel}
+                    onChange={(e) =>
+                      setLine(line, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                    }
+                    inputProps={{ min: 1 }} sx={{ width: 150 }}
+                  />
+
+                  {sel && estimateLine(line, sel.tier, sel.quantity) !== null && (
+                    <Typography variant="body2" color="text.secondary">
+                      ${estimateLine(line, sel.tier, sel.quantity)}/mes
+                    </Typography>
+                  )}
+                </Stack>
+
+                {/* Endpoints se presenta por lo que SUMA cada nivel; MDM por lo
+                    que incluye, porque es una línea sola y no una escalera. */}
+                <Stack spacing={0.25} sx={{ mt: 1 }}>
+                  {line === "endpoint"
+                    ? tiers.map((tv) => (
+                        <Typography
+                          key={tv} variant="caption"
+                          color={tv === sel?.tier ? "text.primary" : "text.secondary"}
+                        >
+                          <strong>{TIER_LABELS[tv]}</strong>
+                          {tv === "starter" ? ": " : " suma: "}
+                          {TIER_ADDS[tv].map((pl) => pl.toUpperCase()).join(" · ")}
+                        </Typography>
+                      ))
+                    : (
+                      <Typography variant="caption" color="text.secondary">
+                        {MDM_INCLUDES.join(" · ")}
+                      </Typography>
+                    )}
+                </Stack>
+              </Box>
+            );
+          })}
+
+          <Divider sx={{ mb: 2 }} />
 
           {estimate !== null && (
             <Typography variant="body2" sx={{ mb: 1 }}>

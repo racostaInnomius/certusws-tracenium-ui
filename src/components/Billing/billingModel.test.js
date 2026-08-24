@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   TIERS,
   pluginsIncludedIn,
+  estimateLine,
   estimateMonthly,
   classifyChange,
   graceCeiling,
@@ -39,17 +40,38 @@ describe("planes aditivos", () => {
 });
 
 describe("estimación de coste", () => {
-  it("multiplica precio por dispositivo", () => {
-    expect(estimateMonthly("starter", 50)).toBe(100);
-    expect(estimateMonthly("enterprise", 12)).toBe(120);
+  it("multiplica precio por dispositivo, por línea", () => {
+    expect(estimateLine("endpoint", "starter", 50)).toBe(100);
+    expect(estimateLine("endpoint", "enterprise", 12)).toBe(120);
+  });
+
+  it("el Professional de MDM cuesta distinto que el de endpoints", () => {
+    // $4 frente a $6. Un único mapa por tier —sin la línea— daría cifras
+    // falsas justo en el plan que más se va a vender de MDM.
+    expect(estimateLine("mdm", "professional", 10)).toBe(40);
+    expect(estimateLine("endpoint", "professional", 10)).toBe(60);
+  });
+
+  it("suma las dos líneas", () => {
+    expect(
+      estimateMonthly({
+        endpoint: { tier: "enterprise", quantity: 500 },
+        mdm: { tier: "professional", quantity: 30 },
+      })
+    ).toBe(500 * 10 + 30 * 4);
+  });
+
+  it("un cliente sólo-MDM estima sólo su línea", () => {
+    expect(estimateMonthly({ mdm: { tier: "professional", quantity: 30 } })).toBe(120);
   });
 
   it("no estima con cantidades inválidas", () => {
     // Mejor no enseñar nada que enseñar un número inventado junto a un campo
     // que el usuario está editando.
-    expect(estimateMonthly("starter", 0)).toBeNull();
-    expect(estimateMonthly("starter", NaN)).toBeNull();
-    expect(estimateMonthly("nope", 10)).toBeNull();
+    expect(estimateLine("endpoint", "starter", 0)).toBeNull();
+    expect(estimateLine("endpoint", "starter", NaN)).toBeNull();
+    expect(estimateLine("mdm", "enterprise", 10)).toBeNull(); // MDM no tiene ese tier
+    expect(estimateMonthly({})).toBeNull();
   });
 });
 
@@ -66,22 +88,63 @@ describe("margen de enrolamiento", () => {
 });
 
 describe("clasificación del cambio", () => {
-  const actual = { tier: "professional", quantity: 20 };
+  const actual = { endpoint: { tier: "professional", quantity: 20 } };
 
-  it("subir de tier es upgrade aunque bajen las licencias", () => {
-    expect(classifyChange(actual, { tier: "enterprise", quantity: 10 })).toBe("upgrade");
+  it("subir de tier es upgrade aunque el gasto baje", () => {
+    // Enterprise×10 = $100 < Professional×20 = $120, pero se lleva PMP y CDP
+    // de inmediato. Diferir el cargo le regalaría el tier alto todo el mes.
+    expect(classifyChange(actual, { endpoint: { tier: "enterprise", quantity: 10 } })).toBe("upgrade");
   });
 
   it("más licencias en el mismo tier es upgrade", () => {
-    expect(classifyChange(actual, { tier: "professional", quantity: 40 })).toBe("upgrade");
+    expect(classifyChange(actual, { endpoint: { tier: "professional", quantity: 40 } })).toBe("upgrade");
   });
 
-  it("bajar de tier es downgrade", () => {
-    expect(classifyChange(actual, { tier: "starter", quantity: 100 })).toBe("downgrade");
+  it("bajar de tier conservando licencias es downgrade", () => {
+    expect(classifyChange(actual, { endpoint: { tier: "starter", quantity: 20 } })).toBe("downgrade");
+  });
+
+  it("bajar de tier pero subiendo mucho las licencias es UPGRADE", () => {
+    // Professional×20 = $120 → Starter×100 = $200. El tier baja pero el gasto
+    // sube: cobrarlo como bajada le regalaría 80 licencias hasta el siguiente
+    // ciclo. Por eso la clasificación mira el coste, no la dirección del tier.
+    expect(classifyChange(actual, { endpoint: { tier: "starter", quantity: 100 } })).toBe("upgrade");
   });
 
   it("sin suscripción previa es alta nueva", () => {
-    expect(classifyChange(null, { tier: "starter", quantity: 5 })).toBe("new");
+    expect(classifyChange(null, { endpoint: { tier: "starter", quantity: 5 } })).toBe("new");
+  });
+
+  it("añadir la línea de MDM es upgrade", () => {
+    expect(
+      classifyChange(actual, { ...actual, mdm: { tier: "professional", quantity: 30 } })
+    ).toBe("upgrade");
+  });
+
+  it("dar de baja una línea es downgrade", () => {
+    const conMdm = { ...actual, mdm: { tier: "professional", quantity: 30 } };
+    expect(classifyChange(conMdm, actual)).toBe("downgrade");
+  });
+
+  it("con dos líneas manda el coste total, no cada línea por su lado", () => {
+    const conMdm = { ...actual, mdm: { tier: "professional", quantity: 30 } };
+    // Antes: 20×$6 + 30×$4 = $240.
+    // Después: 20×$2 + 60×$4 = $280 → paga más, aunque endpoints baje de tier.
+    expect(
+      classifyChange(conMdm, {
+        endpoint: { tier: "starter", quantity: 20 },
+        mdm: { tier: "professional", quantity: 60 },
+      })
+    ).toBe("upgrade");
+
+    // Recortar en las dos líneas sin subir ninguna sí es bajada pura.
+    // Después: 20×$2 + 5×$4 = $60 < $240, y ningún tier sube.
+    expect(
+      classifyChange(conMdm, {
+        endpoint: { tier: "starter", quantity: 20 },
+        mdm: { tier: "professional", quantity: 5 },
+      })
+    ).toBe("downgrade");
   });
 });
 
