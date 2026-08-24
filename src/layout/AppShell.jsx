@@ -21,7 +21,7 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import Topbar from "./Topbar";
+import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
@@ -37,6 +37,34 @@ import { renderPage } from "./pageRegistry";
 import LicenseBlockedScreen from "../components/Licensing/LicenseBlockedScreen";
 import { getLicenseState } from "../api/licensing";
 
+
+// One shared full-width line under the Sidebar header + Topbar, instead
+// of each drawing its own bottom border. Two independently-rendered
+// borders with identical CSS can still land on different physical
+// pixels at fractional device pixel ratios, producing a visible 1px
+// step right at the seam where the sidebar meets the topbar. A single
+// painted element spans both and can't step against itself. Only shown
+// at md+ (900px), matching Sidebar's own breakpoint for the permanent
+// (non-Drawer) layout — see the borderBottom notes in Topbar.jsx and
+// Sidebar.jsx for the mobile/Drawer side of this.
+function HeaderDivider() {
+  return (
+    <Box
+      aria-hidden="true"
+      sx={{
+        display: { xs: "none", md: "block" },
+        position: "fixed",
+        top: TOPBAR_HEIGHT - CHROME_LINE_WIDTH,
+        left: 0,
+        right: 0,
+        height: CHROME_LINE_WIDTH,
+        bgcolor: BRAND.accentBrightLine,
+        pointerEvents: "none",
+        zIndex: 20,
+      }}
+    />
+  );
+}
 
 function PageFallback() {
   return (
@@ -1015,6 +1043,8 @@ export default function AppShell() {
         overflow: "hidden", // the shell is a fixed frame
       }}
     >
+      <HeaderDivider />
+
       {/* Client-specific sidebar. Hidden in portfolio mode (and while the
           portfolio is still resolving) — its pages only make sense once a
           client is selected. */}

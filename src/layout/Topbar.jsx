@@ -121,7 +121,17 @@ export default function Topbar({ onMenuClick }) {
         px: { xs: 1.5, sm: 2, md: 3 },
         gap: 1,
         background: `linear-gradient(90deg, ${BRAND.dark} 0%, ${BRAND.teal} 100%)`,
-        borderBottom: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`,
+        // Below md (< 900px) the permanent Sidebar is replaced by a
+        // temporary Drawer, so the Topbar spans the full width alone and
+        // draws its own line. At md+ the Sidebar's header sits directly
+        // beside this one, and AppShell paints ONE shared full-width line
+        // across both instead (see `HeaderDivider` in AppShell.jsx) — two
+        // independently-rendered borders can land on different physical
+        // pixels at fractional device pixel ratios, producing a visible
+        // 1px step right at the sidebar/topbar seam even though both use
+        // the same CSS value. A single painted element can't step against
+        // itself.
+        borderBottom: { xs: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`, md: "none" },
         boxShadow: "none",
         display: "flex",
         alignItems: "center",
