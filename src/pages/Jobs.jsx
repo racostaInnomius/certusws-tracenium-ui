@@ -72,6 +72,7 @@ import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
+import { buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
@@ -441,39 +442,6 @@ function renderStatusChip(status) {
 }
 
 
-function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
-  if (jobType === "agent_update") {
-    return { version: String(version || "").trim() };
-  }
-
-  if (jobType === "facts_snapshot") {
-    return { factType };
-  }
-
-  if (jobType === "patch_scan") {
-    return {};
-  }
-
-  if (jobType === "patch_install") {
-    const normalizedKbArticleIds = String(kbArticleIds || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const payload = {
-      mode: String(patchMode || "install").trim() || "install",
-    };
-
-    if (normalizedKbArticleIds.length > 0) {
-      payload.kbArticleIds = normalizedKbArticleIds;
-    }
-
-    return payload;
-  }
-
-  return {};
-}
-
 function renderBatchStatusChip(row) {
   const { __doneCount: done, __failedCount: failed, __totalCount: total } = row;
 
@@ -504,18 +472,6 @@ function renderBatchStatusChip(row) {
   );
 }
 
-function validateNumericField(value, { min, max, required = false }) {
-  if (!String(value ?? "").trim()) {
-    return required ? `Value must be between ${min} and ${max}` : null;
-  }
-
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-    return `Value must be between ${min} and ${max}`;
-  }
-
-  return null;
-}
 
 export default function Jobs() {
   const theme = useTheme();
@@ -792,13 +748,12 @@ export default function Jobs() {
       return creatable[0]?.jobType || "facts_snapshot";
     });
     // A ?type= deep-link that names no advertised type would hide every
-    // row. Once the catalogue is loaded, drop such a value back to "all".
-    // Runs only against a non-"all" filter so it never fights a user's
-    // own selection.
-    setJobTypeFilter((current) => {
-      if (current === "all") return current;
-      return types.some((t) => t.jobType === current) ? current : "all";
-    });
+    // row. Once the catalogue is loaded, drop such a value back to "all"
+    // (resolveTypeFilter). Only touches a non-"all" filter, so it never
+    // fights the operator's own selection.
+    setJobTypeFilter((current) =>
+      current === "all" ? current : resolveTypeFilter(current, types)
+    );
   }, [jobsMeta]);
 
   // Lazy-load the asset-group catalog the first time the operator
