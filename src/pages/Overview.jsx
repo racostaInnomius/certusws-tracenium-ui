@@ -42,11 +42,21 @@ import HealthDistributionCard from "../components/Overview/HealthDistributionCar
 // This is why the "cache the last load" idea would not have helped: the
 // data was never the thing being waited on — the page could not paint
 // until this JS had parsed, cached data or not.
-const FleetComposition = lazy(() => import("../components/Overview/FleetComposition"));
-const AuditTimeseriesChart = lazy(() => import("../components/Overview/AuditTimeseriesChart"));
-const JobsTimeseriesChart = lazy(() => import("../components/Overview/JobsTimeseriesChart"));
-const PatchCoverageCard = lazy(() => import("../components/Overview/PatchCoverageCard"));
-const ComplianceTrendCard = lazy(() => import("../components/Overview/ComplianceTrendCard"));
+// All five chart cards come from ONE dynamic import. Calling loadCharts()
+// repeatedly is free: a dynamic import is memoised, so the five lazy()
+// wrappers below share a single in-flight promise and a single request.
+//
+// Five separate lazy() imports meant five chunks and five round-trips on the
+// critical path, for 1-2 KB of wrapper each — Recharts itself is in the shared
+// `charts` chunk they all pull. On a measured MSP client switch those landed
+// at 1194/1196/1200/1207 and 2769 ms, the last a third waterfall level, and
+// each card's API call waits on its own chunk. See charts.lazy.js.
+const loadCharts = () => import("../components/Overview/charts.lazy");
+const FleetComposition = lazy(() => loadCharts().then((m) => ({ default: m.FleetComposition })));
+const AuditTimeseriesChart = lazy(() => loadCharts().then((m) => ({ default: m.AuditTimeseriesChart })));
+const JobsTimeseriesChart = lazy(() => loadCharts().then((m) => ({ default: m.JobsTimeseriesChart })));
+const PatchCoverageCard = lazy(() => loadCharts().then((m) => ({ default: m.PatchCoverageCard })));
+const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.ComplianceTrendCard })));
 
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
