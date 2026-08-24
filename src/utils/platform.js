@@ -21,7 +21,7 @@
 export function normalizePlatform(raw) {
   const v = String(raw ?? "").trim().toLowerCase();
   if (!v) return null;
-  if (v === "windows server" || v === "windows-server" || v === "win server") return "windows server";
+  if (v === "windows server" || v === "windows-server" || v === "windows_server" || v === "win server") return "windows server";
   if (v === "windows" || v === "win32" || v.startsWith("win")) return "windows";
   if (v === "macos" || v === "macosx" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
   if (v === "linux") return "linux";
