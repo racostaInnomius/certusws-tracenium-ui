@@ -23,6 +23,22 @@ describe("normalizePlatform", () => {
     // instead of purple in AssetsDashboard's OS Versions list.
     expect(normalizePlatform("windows_server")).toBe("windows server");
   });
+  it("buckets individual Linux distro families under 'linux'", () => {
+    // modules/dashboard/os-version-normalizer.ts's inferFamily emits the
+    // specific distro name (ubuntu, debian, fedora, rhel, rocky, alma,
+    // centos) as os_platform, not the generic "linux" — without these
+    // aliases each distro fell through to the raw-passthrough branch,
+    // missed every key in PLATFORM_COLORS, and rendered grey (unknown)
+    // instead of Linux's orange.
+    expect(normalizePlatform("ubuntu")).toBe("linux");
+    expect(normalizePlatform("Ubuntu")).toBe("linux");
+    expect(normalizePlatform("debian")).toBe("linux");
+    expect(normalizePlatform("fedora")).toBe("linux");
+    expect(normalizePlatform("rhel")).toBe("linux");
+    expect(normalizePlatform("rocky")).toBe("linux");
+    expect(normalizePlatform("alma")).toBe("linux");
+    expect(normalizePlatform("centos")).toBe("linux");
+  });
   it("returns null for empty/blank", () => {
     expect(normalizePlatform("")).toBeNull();
     expect(normalizePlatform(null)).toBeNull();
