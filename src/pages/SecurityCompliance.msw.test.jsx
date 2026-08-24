@@ -111,10 +111,16 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     mountPage();
     // Hero reads res.summary.*
     // Hero KPI card reads res.summary.devicesReporting ("12" also appears
-    // in the framework table, so scope to the card by its title).
+    // in the framework table, so scope to the card by its title). The
+    // title and its value can render a tick apart (title is static markup,
+    // the value updates once the summary fetch resolves) — under CI load
+    // that gap was wide enough for a synchronous getByText right after the
+    // title's findByText to lose the race and see the KPI's loading
+    // placeholder ("—") instead. findByText for the value too closes it.
     const kpiTitle = await screen.findByText("Devices reporting", { selector: "p,span,div,h6" });
-    expect(within(kpiTitle.closest(".MuiCard-root, .MuiPaper-root")).getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("81%")).toBeInTheDocument(); // avgScore rounded
+    const kpiCard = kpiTitle.closest(".MuiCard-root, .MuiPaper-root");
+    expect(await within(kpiCard).findByText("12")).toBeInTheDocument();
+    expect(await screen.findByText("81%")).toBeInTheDocument(); // avgScore rounded
     // Framework table reads res.items[] and the pack chip reads packActive/totalFrameworks
     expect(await screen.findByText("Pack: 2 of 12")).toBeInTheDocument();
     expect(screen.getByText("CIS Win11")).toBeInTheDocument();

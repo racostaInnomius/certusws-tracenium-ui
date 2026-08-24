@@ -2,7 +2,7 @@ import * as React from "react";
 import { Paper, Typography, Box } from "@mui/material";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Label } from "recharts";
 import { BRAND } from "../../theme/brand";
-import { CHART_SERIES_WIDE } from "../../theme/chartPalette";
+import { platformColor } from "../../utils/platform";
 
 /**
  * Props:
@@ -14,13 +14,13 @@ export default function OsPlatformDonut({ osPlatform }) {
     return osPlatform
       .map((row) => ({
         name: row?.os_platform ?? "Unknown",
-        value: Number(row?.host_count ?? 0)
+        value: Number(row?.host_count ?? 0),
+        color: platformColor(row?.os_platform).dot
       }))
       .filter((x) => x.value > 0);
   }, [osPlatform]);
 
   const total = React.useMemo(() => data.reduce((sum, x) => sum + x.value, 0), [data]);
-  const COLORS = CHART_SERIES_WIDE;
 
   return (
     <Paper sx={{ p: 2, borderRadius: 3, height: "100%" }}>
@@ -45,8 +45,8 @@ export default function OsPlatformDonut({ osPlatform }) {
                 paddingAngle={2}
                 isAnimationActive={true}
               >
-                {data.map((_, idx) => (
-                  <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                {data.map((d, idx) => (
+                  <Cell key={idx} fill={d.color} />
                 ))}
 
                 {/* Centro del donut (correcto en Recharts) */}
@@ -73,14 +73,14 @@ export default function OsPlatformDonut({ osPlatform }) {
 
         {/* Leyenda manual (evita que Recharts la “rompa”) */}
         <Box sx={{ ml: 2, display: "flex", flexDirection: "column", gap: 0.75 }}>
-          {data.map((d, idx) => (
+          {data.map((d) => (
             <Box key={d.name} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Box
                 sx={{
                   width: 10,
                   height: 10,
                   borderRadius: "50%",
-                  bgcolor: COLORS[idx % COLORS.length]
+                  bgcolor: d.color
                 }}
               />
               <Typography variant="body2" sx={{ color: BRAND.dark }}>

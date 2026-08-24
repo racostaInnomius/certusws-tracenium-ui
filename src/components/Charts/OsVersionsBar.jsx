@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Box, Typography } from "@mui/material";
-import { CHART_SERIES } from "../../theme/chartPalette";
+import { platformColor } from "../../utils/platform";
 import {
   ResponsiveContainer,
   BarChart,
@@ -25,23 +25,23 @@ function toChartData(osVersions) {
       return {
         label: `${platform} ${version}`,
         hostCount: Number(r?.host_count ?? 0),
+        color: platformColor(platform).dot,
       };
     })
     .filter((x) => x.hostCount > 0)
     .sort((a, b) => b.hostCount - a.hostCount);
 }
 
-// 1er lugar más oscuro, el resto más claro. Lifted out of the render
-// function so recharts gets a stable `shape` reference — declaring a
-// component inside the render body reinstantiates it every tick and
-// eslint's `react-hooks/cannot-create-components-during-render` rule
-// (correctly) flagged it.
-// Shared categorical ramp — see theme/chartPalette.
-const BAR_COLORS = CHART_SERIES;
-
+// Colored by the row's own OS platform (canonical map, utils/platform.js)
+// rather than by row position — used to be "1st place darkest, rest
+// lighter" from a shared categorical ramp with no tie to OS identity.
+// Lifted out of the render function so recharts gets a stable `shape`
+// reference — declaring a component inside the render body reinstantiates
+// it every tick and eslint's `react-hooks/cannot-create-components-during-render`
+// rule (correctly) flagged it.
 function BarShape(props) {
-  const { x, y, width, height, index } = props;
-  const fill = BAR_COLORS[index] || BAR_COLORS[BAR_COLORS.length - 1];
+  const { x, y, width, height, payload } = props;
+  const fill = payload?.color || "#BEBEBE";
   return <rect x={x} y={y} width={width} height={height} rx={2} ry={2} fill={fill} />;
 }
 

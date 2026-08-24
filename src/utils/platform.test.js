@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizePlatform, platformLabel, isMobilePlatform } from "./platform";
+import { normalizePlatform, platformLabel, isMobilePlatform, platformColor } from "./platform";
 
 describe("normalizePlatform", () => {
   it("maps known aliases to canonical keys", () => {
@@ -42,5 +42,38 @@ describe("isMobilePlatform", () => {
     expect(isMobilePlatform("android")).toBe(true);
     expect(isMobilePlatform("windows")).toBe(false);
     expect(isMobilePlatform(null)).toBe(false);
+  });
+});
+
+describe("platformColor", () => {
+  it("gives every known platform its own distinct color set", () => {
+    const keys = ["windows", "windows server", "macos", "linux", "ios", "android"];
+    const seen = new Set();
+    for (const key of keys) {
+      const { dot, fg, bg } = platformColor(key);
+      expect(dot).toBeTruthy();
+      expect(fg).toBeTruthy();
+      expect(bg).toBeTruthy();
+      // No two platforms should ever collide on the same swatch — that's
+      // the exact bug this module exists to prevent (Windows/Windows
+      // Server used to render near-identical shades).
+      expect(seen.has(dot)).toBe(false);
+      seen.add(dot);
+    }
+  });
+
+  it("gives Windows and Windows Server visibly different colors, not just different keys", () => {
+    expect(platformColor("windows").dot).not.toBe(platformColor("windows server").dot);
+  });
+
+  it("resolves raw/aliased platform strings the same as normalizePlatform does", () => {
+    expect(platformColor("Windows Server").dot).toBe(platformColor("windows server").dot);
+    expect(platformColor("Darwin").dot).toBe(platformColor("macos").dot);
+    expect(platformColor("win32").dot).toBe(platformColor("windows").dot);
+  });
+
+  it("falls back to a neutral color for null/unrecognized platforms, without crashing", () => {
+    expect(platformColor(null)).toEqual({ dot: "#BEBEBE", fg: "#BEBEBE", bg: "rgba(190,190,190,0.08)" });
+    expect(platformColor("freebsd")).toEqual({ dot: "#BEBEBE", fg: "#BEBEBE", bg: "rgba(190,190,190,0.08)" });
   });
 });
