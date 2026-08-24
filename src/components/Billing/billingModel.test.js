@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   TIERS,
   pluginsIncludedIn,
+  pricesFrom,
+  availableTiers,
   estimateLine,
-  estimateMonthly,
+  estimateTotal,
   classifyChange,
   graceCeiling,
   statusNotice,
@@ -19,6 +21,24 @@ import {
 
 const DAY = 86_400_000;
 const NOW = new Date("2026-08-21T12:00:00Z");
+
+/**
+ * El catálogo tal y como lo devuelve Stripe: importes en céntimos, y el anual
+ * NO es doce veces el mensual —lleva descuento—. Esa asimetría es justo por lo
+ * que los precios dejaron de estar escritos a mano en el frontend.
+ */
+const CATALOG = [
+  { line: "endpoint", tier: "starter", interval: "monthly", unitAmount: 200, currency: "usd" },
+  { line: "endpoint", tier: "professional", interval: "monthly", unitAmount: 600, currency: "usd" },
+  { line: "endpoint", tier: "enterprise", interval: "monthly", unitAmount: 1000, currency: "usd" },
+  { line: "mdm", tier: "professional", interval: "monthly", unitAmount: 400, currency: "usd" },
+  { line: "endpoint", tier: "starter", interval: "yearly", unitAmount: 2000, currency: "usd" },
+  { line: "endpoint", tier: "professional", interval: "yearly", unitAmount: 6000, currency: "usd" },
+  { line: "mdm", tier: "professional", interval: "yearly", unitAmount: 4000, currency: "usd" },
+];
+
+const M = pricesFrom(CATALOG, "monthly");
+const Y = pricesFrom(CATALOG, "yearly");
 
 describe("planes aditivos", () => {
   it("cada nivel acumula los de abajo", () => {
@@ -39,39 +59,69 @@ describe("planes aditivos", () => {
   });
 });
 
+describe("catálogo de precios", () => {
+  it("separa mensual de anual", () => {
+    expect(M.endpoint.starter).toBe(200);
+    expect(Y.endpoint.starter).toBe(2000);
+  });
+
+  it("sólo ofrece tiers que EXISTEN en esa periodicidad", () => {
+    // Enterprise no tiene precio anual en este catálogo. Ofrecerlo sería un
+    // botón que falla al pulsarlo: el alta muere resolviendo un lookup_key
+    // que no existe en Stripe.
+    expect(availableTiers(M, "endpoint")).toEqual(["starter", "professional", "enterprise"]);
+    expect(availableTiers(Y, "endpoint")).toEqual(["starter", "professional"]);
+  });
+
+  it("con catálogo vacío no ofrece nada", () => {
+    expect(availableTiers(pricesFrom([], "monthly"), "endpoint")).toEqual([]);
+  });
+});
+
 describe("estimación de coste", () => {
   it("multiplica precio por dispositivo, por línea", () => {
-    expect(estimateLine("endpoint", "starter", 50)).toBe(100);
-    expect(estimateLine("endpoint", "enterprise", 12)).toBe(120);
+    expect(estimateLine(M, "endpoint", "starter", 50)).toBe(10_000);
+    expect(estimateLine(M, "endpoint", "enterprise", 12)).toBe(12_000);
   });
 
   it("el Professional de MDM cuesta distinto que el de endpoints", () => {
     // $4 frente a $6. Un único mapa por tier —sin la línea— daría cifras
     // falsas justo en el plan que más se va a vender de MDM.
-    expect(estimateLine("mdm", "professional", 10)).toBe(40);
-    expect(estimateLine("endpoint", "professional", 10)).toBe(60);
+    expect(estimateLine(M, "mdm", "professional", 10)).toBe(4_000);
+    expect(estimateLine(M, "endpoint", "professional", 10)).toBe(6_000);
   });
 
   it("suma las dos líneas", () => {
     expect(
-      estimateMonthly({
+      estimateTotal(CATALOG, {
+        interval: "monthly",
         endpoint: { tier: "enterprise", quantity: 500 },
         mdm: { tier: "professional", quantity: 30 },
       })
-    ).toBe(500 * 10 + 30 * 4);
+    ).toBe(500 * 1000 + 30 * 400);
   });
 
   it("un cliente sólo-MDM estima sólo su línea", () => {
-    expect(estimateMonthly({ mdm: { tier: "professional", quantity: 30 } })).toBe(120);
+    expect(
+      estimateTotal(CATALOG, { interval: "monthly", mdm: { tier: "professional", quantity: 30 } })
+    ).toBe(12_000);
+  });
+
+  it("el anual no es doce veces el mensual", () => {
+    // $20/año frente a $2/mes: hay descuento. Es la razón de que los precios
+    // vengan de Stripe y no de una tabla copiada a mano.
+    const sel = { endpoint: { tier: "starter", quantity: 10 } };
+    expect(estimateTotal(CATALOG, { ...sel, interval: "yearly" })).toBe(20_000);
+    expect(estimateTotal(CATALOG, { ...sel, interval: "monthly" })).toBe(2_000);
   });
 
   it("no estima con cantidades inválidas", () => {
     // Mejor no enseñar nada que enseñar un número inventado junto a un campo
     // que el usuario está editando.
-    expect(estimateLine("endpoint", "starter", 0)).toBeNull();
-    expect(estimateLine("endpoint", "starter", NaN)).toBeNull();
-    expect(estimateLine("mdm", "enterprise", 10)).toBeNull(); // MDM no tiene ese tier
-    expect(estimateMonthly({})).toBeNull();
+    expect(estimateLine(M, "endpoint", "starter", 0)).toBeNull();
+    expect(estimateLine(M, "endpoint", "starter", NaN)).toBeNull();
+    expect(estimateLine(M, "mdm", "enterprise", 10)).toBeNull(); // MDM no tiene ese tier
+    expect(estimateTotal(CATALOG, { interval: "monthly" })).toBeNull();
   });
 });
 
@@ -88,42 +138,62 @@ describe("margen de enrolamiento", () => {
 });
 
 describe("clasificación del cambio", () => {
-  const actual = { endpoint: { tier: "professional", quantity: 20 } };
+  const actual = { interval: "monthly", endpoint: { tier: "professional", quantity: 20 } };
 
   it("subir de tier es upgrade aunque el gasto baje", () => {
     // Enterprise×10 = $100 < Professional×20 = $120, pero se lleva PMP y CDP
     // de inmediato. Diferir el cargo le regalaría el tier alto todo el mes.
-    expect(classifyChange(actual, { endpoint: { tier: "enterprise", quantity: 10 } })).toBe("upgrade");
+    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "enterprise", quantity: 10 } })).toBe("upgrade");
   });
 
   it("más licencias en el mismo tier es upgrade", () => {
-    expect(classifyChange(actual, { endpoint: { tier: "professional", quantity: 40 } })).toBe("upgrade");
+    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "professional", quantity: 40 } })).toBe("upgrade");
   });
 
   it("bajar de tier conservando licencias es downgrade", () => {
-    expect(classifyChange(actual, { endpoint: { tier: "starter", quantity: 20 } })).toBe("downgrade");
+    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "starter", quantity: 20 } })).toBe("downgrade");
   });
 
   it("bajar de tier pero subiendo mucho las licencias es UPGRADE", () => {
     // Professional×20 = $120 → Starter×100 = $200. El tier baja pero el gasto
     // sube: cobrarlo como bajada le regalaría 80 licencias hasta el siguiente
     // ciclo. Por eso la clasificación mira el coste, no la dirección del tier.
-    expect(classifyChange(actual, { endpoint: { tier: "starter", quantity: 100 } })).toBe("upgrade");
+    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "starter", quantity: 100 } })).toBe("upgrade");
+  });
+
+  it("pasar de mensual a anual se cobra YA", () => {
+    // No sube el tier ni las licencias, pero la próxima factura pasa de $120 a
+    // $1.200: es un cargo inmediato, y clasificarlo como bajada lo diferiría
+    // regalando el año. Comparar importes POR PERIODO lo resuelve solo.
+    const anual = { ...actual, interval: "yearly" };
+    expect(classifyChange(CATALOG, actual, anual)).toBe("upgrade");
+  });
+
+  it("sin precios conocidos NO se inventa un cargo", () => {
+    // Un catálogo que no cargó no puede ser motivo para cobrar de inmediato:
+    // equivocarse hacia ahí sería cobrar de más por un cálculo que no supimos
+    // hacer. Sin subida de tier, se difiere.
+    expect(
+      classifyChange([], actual, {
+        interval: "monthly",
+        endpoint: { tier: "professional", quantity: 200 },
+      })
+    ).toBe("downgrade");
   });
 
   it("sin suscripción previa es alta nueva", () => {
-    expect(classifyChange(null, { endpoint: { tier: "starter", quantity: 5 } })).toBe("new");
+    expect(classifyChange(CATALOG, null, { interval: "monthly", endpoint: { tier: "starter", quantity: 5 } })).toBe("new");
   });
 
   it("añadir la línea de MDM es upgrade", () => {
     expect(
-      classifyChange(actual, { ...actual, mdm: { tier: "professional", quantity: 30 } })
+      classifyChange(CATALOG, actual, { ...actual, mdm: { tier: "professional", quantity: 30 } })
     ).toBe("upgrade");
   });
 
   it("dar de baja una línea es downgrade", () => {
     const conMdm = { ...actual, mdm: { tier: "professional", quantity: 30 } };
-    expect(classifyChange(conMdm, actual)).toBe("downgrade");
+    expect(classifyChange(CATALOG, conMdm, actual)).toBe("downgrade");
   });
 
   it("con dos líneas manda el coste total, no cada línea por su lado", () => {
@@ -131,7 +201,8 @@ describe("clasificación del cambio", () => {
     // Antes: 20×$6 + 30×$4 = $240.
     // Después: 20×$2 + 60×$4 = $280 → paga más, aunque endpoints baje de tier.
     expect(
-      classifyChange(conMdm, {
+      classifyChange(CATALOG, conMdm, {
+        interval: "monthly",
         endpoint: { tier: "starter", quantity: 20 },
         mdm: { tier: "professional", quantity: 60 },
       })
@@ -140,7 +211,8 @@ describe("clasificación del cambio", () => {
     // Recortar en las dos líneas sin subir ninguna sí es bajada pura.
     // Después: 20×$2 + 5×$4 = $60 < $240, y ningún tier sube.
     expect(
-      classifyChange(conMdm, {
+      classifyChange(CATALOG, conMdm, {
+        interval: "monthly",
         endpoint: { tier: "starter", quantity: 20 },
         mdm: { tier: "professional", quantity: 5 },
       })
