@@ -72,6 +72,7 @@ import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
+import { hasJobResult, formatJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -2218,7 +2219,11 @@ export default function Jobs() {
                     <DetailRow label="Device" value={selectedJob.device_id} mono />
                     <DetailRow label="Type" value={selectedJob.job_type} />
                     <DetailRow label="Attempts" value={String(selectedJob.attempts ?? 0)} />
-                    <DetailRow label="Created By" value={selectedJob.created_by || "—"} />
+                    {/* Prefer the resolved email over the raw Auth0 sub, same
+                        as the history table. getJob now LEFT JOINs TenantMember
+                        so this matches what the row showed — before, clicking a
+                        row flipped this from a readable email to `auth0|…`. */}
+                    <DetailRow label="Created By" value={selectedJob.created_by_email || selectedJob.created_by || "—"} />
                     <DetailRow label="Trace ID" value={selectedJob.trace_id || "—"} mono />
                   </Box>
                 </Box>
@@ -2260,6 +2265,43 @@ export default function Jobs() {
                         }}
                       >
                         {selectedJob.last_error}
+                      </Paper>
+                    </Box>
+                  </>
+                ) : null}
+
+                {/* Result — what the agent reported back on completion.
+                    The panel used to show only the payload (what was
+                    REQUESTED); this is what actually HAPPENED. For a
+                    patch_remediate dry-run, whose whole purpose is to
+                    return a result without acting, the payload alone made
+                    the detail view useless. Only shown when the agent
+                    returned something, so a still-running or never-answered
+                    job doesn't render an empty block. */}
+                {hasJobResult(selectedJob.result_json) ? (
+                  <>
+                    <Divider sx={{ borderColor: BRAND.border }} />
+                    <Box>
+                      <Typography variant="overline" sx={{ color: BRAND.tealText, fontWeight: 800, letterSpacing: 1.2 }}>
+                        Result
+                      </Typography>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          mt: 0.5,
+                          p: 1.25,
+                          borderColor: `${BRAND.teal}55`,
+                          bgcolor: BRAND.tealSoft,
+                          color: BRAND.dark,
+                          overflow: "auto",
+                          maxHeight: 220,
+                          fontFamily: "monospace",
+                          fontSize: 12,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {formatJobResult(selectedJob.result_json)}
                       </Paper>
                     </Box>
                   </>
