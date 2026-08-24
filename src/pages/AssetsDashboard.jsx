@@ -1256,25 +1256,6 @@ const osVersionItems = React.useMemo(() => {
   });
 }, [summary]);
 
-  /**
-   * Equipos —no versiones— en un SO caducado o a punto de caducar.
-   *
-   * ⚠️ Se cuenta sobre los HIJOS cuando existen, porque el padre agrupa varias
-   * versiones con estados distintos: sumar el padre daría por caducada una
-   * familia entera por una sola versión vieja, o la daría por sana escondiendo
-   * la que no lo está.
-   */
-  const osFleetAtRisk = React.useMemo(() => {
-    let n = 0;
-    for (const item of osVersionItems) {
-      const filas = item.children?.length ? item.children : [item];
-      for (const fila of filas) {
-        if (getOsLifecycle(fila.raw).isRisk) n += toSafeNumber(fila.value);
-      }
-    }
-    return n;
-  }, [osVersionItems]);
-
   // `byVersion` for the AgentVersionDonut — the same dedicated
   // `/dashboard/agent-versions` aggregate Overview's FleetComposition
   // uses. Used to be reconstructed from the (paginated, ≤ pageSize)
@@ -1411,18 +1392,6 @@ const osVersionItems = React.useMemo(() => {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
-            {/* El contador que convierte la tarjeta en algo accionable: seis
-                barras no dicen si la flota está sana. Cuenta EQUIPOS, no
-                versiones — dos versiones caducadas con un equipo cada una
-                pesan menos que una con veinte. */}
-            {osFleetAtRisk > 0 ? (
-              <Typography
-                sx={{ fontSize: 12, fontWeight: 700, color: ROLE.critical, mb: 0.75 }}
-              >
-                {osFleetAtRisk} device{osFleetAtRisk === 1 ? "" : "s"} on an OS that is
-                unsupported or ends soon
-              </Typography>
-            ) : null}
             <CompositionBars
               title="OS versions"
               items={osVersionItems}

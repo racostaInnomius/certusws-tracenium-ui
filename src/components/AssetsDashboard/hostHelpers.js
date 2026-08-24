@@ -346,6 +346,12 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     // (buildDeviceFacts se comió printers, y después geo). Si agregas un campo
     // de location al backend, agrégalo TAMBIÉN aquí.
     locationFixAt: coalesceValue(source.locationFixAt, source.location_fix_at),
+    // Ciclo de vida del SO, derivado por el backend. ⚠️ Allowlist: si no está
+    // nombrado aquí, se pierde.
+    lifecycle_status: coalesceValue(source.lifecycle_status, source.lifecycleStatus),
+    lifecycle_days_remaining:
+      source.lifecycle_days_remaining ?? source.lifecycleDaysRemaining ?? null,
+    lifecycle_date: coalesceValue(source.lifecycle_date, source.lifecycleDate),
     // Clasificación del equipo, derivada por el backend a partir del chasis
     // que reportó el SO. ⚠️ Allowlist: si no está nombrada aquí, se pierde.
     formFactor: coalesceValue(source.formFactor, source.form_factor),
@@ -640,6 +646,25 @@ export function getOsLifecycle(row) {
     // resto es contexto.
     isRisk: status === "eol" || status === "approaching_eol",
   };
+}
+
+/**
+ * El estado de soporte del SO de UN equipo, como pista bajo el campo "OS".
+ *
+ * `supported` no dice nada: repetir "con soporte" en cada ficha sana entrena a
+ * saltarse la línea, y entonces tampoco se lee cuando sí importa. Sólo habla
+ * cuando hay algo que decidir.
+ *
+ * `unknown` sí habla, pero explicando qué significa: no es que el equipo esté
+ * mal, es que su SO no está en el catálogo.
+ */
+export function getOsLifecycleHint(profile) {
+  const lc = getOsLifecycle(profile);
+  if (lc.status === "supported") return "";
+  if (lc.status === "unknown") {
+    return "This OS version is not in the lifecycle catalog yet, so its support dates are unknown.";
+  }
+  return lc.detail;
 }
 
 export function getMapPin(profile) {

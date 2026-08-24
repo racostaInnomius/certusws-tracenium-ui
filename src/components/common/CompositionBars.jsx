@@ -399,6 +399,7 @@ export default function CompositionBars({
                   }}
                 >
                   <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
                     <Typography
                       sx={{
                         fontSize: 13,
@@ -412,11 +413,13 @@ export default function CompositionBars({
                     >
                       {row.label}
                     </Typography>
-                    {/* Distintivo opcional junto a la etiqueta. Se añadió para
-                        el estado de soporte del SO, y va aquí y no en `sub`
-                        porque `sub` ya lleva la versión técnica: un estado
-                        como "Unsupported" tiene que leerse de un vistazo en la
-                        lista, no compitiendo con un número de build. */}
+                    {/* Distintivo opcional, EN LÍNEA con el nombre. Se añadió
+                        para el estado de soporte del SO, y va aquí y no en
+                        `sub` porque `sub` ya lleva la versión técnica: un
+                        estado como "Unsupported" tiene que leerse junto al
+                        nombre, no compitiendo con un número de build.
+                        `flexShrink: 0` para que el nombre largo se recorte
+                        antes que el distintivo, que es el dato accionable. */}
                     {row.badge ? (
                       <Tooltip title={row.badge.title || ""} arrow>
                         <Chip
@@ -426,8 +429,7 @@ export default function CompositionBars({
                             height: 17,
                             fontSize: 10,
                             fontWeight: 800,
-                            mt: 0.25,
-                            alignSelf: "flex-start",
+                            flexShrink: 0,
                             bgcolor: row.badge.bg,
                             color: row.badge.fg,
                             "& .MuiChip-label": { px: 0.75 },
@@ -435,6 +437,7 @@ export default function CompositionBars({
                         />
                       </Tooltip>
                     ) : null}
+                    </Box>
                     {row.sub ? (
                       <Typography
                         sx={{
