@@ -612,6 +612,7 @@ export default function Jobs() {
     const params = new URLSearchParams(window.location.search);
     const rawStatus = (params.get("status") || "").toLowerCase();
     const rawSearch = params.get("search") || "";
+    const rawType = (params.get("type") || "").toLowerCase();
     const highlightJobId = params.get("highlightJobId") || "";
     const statusMap = {
       in_flight: "running",
@@ -626,6 +627,10 @@ export default function Jobs() {
     };
     return {
       status: highlightJobId ? "all" : (statusMap[rawStatus] || "all"),
+      // Type is validated against the catalogue once it loads (below), not
+      // here — the catalogue isn't available on first render. An unknown
+      // value just leaves the filter at "all" via that guard.
+      type: highlightJobId ? "all" : (rawType || "all"),
       search: highlightJobId ? "" : rawSearch.trim(),
       highlightJobId
     };
@@ -686,12 +691,17 @@ export default function Jobs() {
   const [chartTimeseries, setChartTimeseries] = React.useState(null);
   const [chartLoading, setChartLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState(initialFilters.status || "all");
-  const [jobTypeFilter, setJobTypeFilter] = React.useState("all");
+  const [jobTypeFilter, setJobTypeFilter] = React.useState(initialFilters.type || "all");
   const [search, setSearch] = React.useState(initialFilters.search || "");
   // The just-dispatched job to flash once its row renders — cleared
   // after the animation plays so it never re-triggers on a later
   // re-render (filter change, refresh poll, etc).
   const [highlightRowId, setHighlightRowId] = React.useState(initialFilters.highlightJobId || "");
+  // The backend caps the history window and reports when older jobs exist
+  // beyond it. Surfaced as a banner so the operator knows the list — and
+  // therefore the filters and search that run over it — is not the whole
+  // story once a tenant grows past the window.
+  const [historyTruncated, setHistoryTruncated] = React.useState(false);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -708,6 +718,7 @@ export default function Jobs() {
       const response = await listTenantJobs(tenantId, { limit: 200 });
       const items = Array.isArray(response?.items) ? response.items : [];
       setTenantJobs(items);
+      setHistoryTruncated(response?.truncated === true);
       setSelectedJobId((current) => {
         if (current && items.some((item) => item.job_id === current)) return current;
         return items[0]?.job_id || "";
@@ -779,6 +790,14 @@ export default function Jobs() {
       const creatable = types.filter((t) => t.creatable !== false);
       if (current && creatable.some((item) => item.jobType === current)) return current;
       return creatable[0]?.jobType || "facts_snapshot";
+    });
+    // A ?type= deep-link that names no advertised type would hide every
+    // row. Once the catalogue is loaded, drop such a value back to "all".
+    // Runs only against a non-"all" filter so it never fights a user's
+    // own selection.
+    setJobTypeFilter((current) => {
+      if (current === "all") return current;
+      return types.some((t) => t.jobType === current) ? current : "all";
     });
   }, [jobsMeta]);
 
@@ -2033,10 +2052,24 @@ export default function Jobs() {
               </Typography>
               <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
                 Showing <strong>{filteredRows.length}</strong> row{filteredRows.length === 1 ? "" : "s"} ·{" "}
-                {tenantJobs.length} job{tenantJobs.length === 1 ? "" : "s"} total
+                {/* "loaded", not "total", once the window is truncated —
+                    tenantJobs is then the window, not the whole history. */}
+                {tenantJobs.length} job{tenantJobs.length === 1 ? "" : "s"} {historyTruncated ? "loaded" : "total"}
                 {groupedRows.length !== tenantJobs.length ? " (multi-device dispatches grouped)" : ""}
               </Typography>
             </Box>
+
+            {historyTruncated ? (
+              <Alert
+                severity="info"
+                variant="outlined"
+                sx={{ borderRadius: 2, mb: 1.5, py: 0.25, alignItems: "center" }}
+              >
+                Showing the most recent {tenantJobs.length} jobs. Older jobs
+                exist beyond this window — filters and search below apply only
+                to what's loaded here.
+              </Alert>
+            ) : null}
 
             <Box
               sx={{
