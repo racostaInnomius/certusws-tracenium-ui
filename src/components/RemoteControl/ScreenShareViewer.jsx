@@ -177,6 +177,15 @@ const CAPTURE_ERROR_COPY = {
     "Apple requires a person to approve this on the Mac itself — MDM cannot " +
     "grant it. Ask someone at the device to open System Settings › Privacy & " +
     "Security › Screen Recording and enable Tracenium.",
+  // No es un error: es un permiso recién solicitado con alguien decidiendo al
+  // otro lado. Se redacta como una acción pendiente y no como un fallo, porque
+  // lo que el operador tiene que hacer es hablar con la persona del equipo.
+  screen_recording_permission_pending:
+    "Waiting for someone at the Mac to approve Screen Recording. macOS has " +
+    "just asked, and Tracenium now appears in System Settings › Privacy & " +
+    "Security › Screen Recording — ask them to enable it there, then start " +
+    "the session again. Apple requires a person to approve this; it cannot " +
+    "be granted remotely.",
   screen_capture_helper_missing:
     "The screen capture helper isn't installed on this device. Reinstall or " +
     "upgrade the agent package to deploy it.",
