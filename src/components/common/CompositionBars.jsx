@@ -9,7 +9,9 @@
 // actually have ("3 OS versions", "2 manufacturers"). A flat list
 // reads in <200ms and doesn't waste the whole panel on axes + legend.
 //
-// Consumers pass `items` as `[{ label, value, color?, sub?, children? }]`.
+// Consumers pass `items` as `[{ label, value, color?, sub?, badge?, children? }]`.
+// `badge` is `{ label, title?, bg, fg }` and renders a small chip under the
+// label — used for the OS support-status pill.
 // Color defaults to BRAND.teal; `sub` is an optional secondary line.
 // When `children` is provided, an expand/collapse icon appears and the
 // nested breakdown is rendered below the parent row.
@@ -410,6 +412,29 @@ export default function CompositionBars({
                     >
                       {row.label}
                     </Typography>
+                    {/* Distintivo opcional junto a la etiqueta. Se añadió para
+                        el estado de soporte del SO, y va aquí y no en `sub`
+                        porque `sub` ya lleva la versión técnica: un estado
+                        como "Unsupported" tiene que leerse de un vistazo en la
+                        lista, no compitiendo con un número de build. */}
+                    {row.badge ? (
+                      <Tooltip title={row.badge.title || ""} arrow>
+                        <Chip
+                          size="small"
+                          label={row.badge.label}
+                          sx={{
+                            height: 17,
+                            fontSize: 10,
+                            fontWeight: 800,
+                            mt: 0.25,
+                            alignSelf: "flex-start",
+                            bgcolor: row.badge.bg,
+                            color: row.badge.fg,
+                            "& .MuiChip-label": { px: 0.75 },
+                          }}
+                        />
+                      </Tooltip>
+                    ) : null}
                     {row.sub ? (
                       <Typography
                         sx={{

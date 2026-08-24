@@ -83,6 +83,7 @@ import {
   bucketOfVersion,
   toSafeNumber,
   getOsVersionDisplayTitle,
+  getOsLifecycle,
   getOsVersionDisplaySubtitle,
   formatDetailValue,
   formatDetailPercent,
@@ -1186,6 +1187,26 @@ export default function AssetsDashboard({
       ? Math.max(fleetDevices - osDonutData.reduce((sum, x) => sum + x.value, 0), 0)
       : null;
 
+/**
+ * Traduce el estado de soporte de una fila de SO al distintivo de la barra.
+ *
+ * `supported` NO lleva distintivo: si todo lo sano se marca, el color deja de
+ * significar nada y lo que hay que accionar se pierde entre lo que no. Sólo se
+ * marca lo que pide una decisión — y `unknown`, que pide catalogar.
+ */
+function osLifecycleBadge(row) {
+  const lc = getOsLifecycle(row);
+  if (lc.status === "supported") return null;
+
+  const tones = {
+    critical: { bg: "rgba(198,40,40,.12)", fg: ROLE.critical },
+    warning: { bg: "rgba(176,120,24,.14)", fg: "#8A5E12" },
+    muted: { bg: BRAND.surfaceMuted, fg: "text.secondary" },
+  };
+  const tone = tones[lc.tone] ?? tones.muted;
+  return { label: lc.label, title: lc.detail, bg: tone.bg, fg: tone.fg };
+}
+
 const osVersionItems = React.useMemo(() => {
   const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
 
@@ -1216,6 +1237,7 @@ const osVersionItems = React.useMemo(() => {
                 ? (toSafeNumber(child?.host_count ?? child?.count) / parentValue) * 100
                 : 0,
             color,
+            badge: osLifecycleBadge(child),
             raw: child,
           }))
           .filter((child) => Number(child.value || 0) > 0)
@@ -1227,11 +1249,31 @@ const osVersionItems = React.useMemo(() => {
       sub: getOsVersionDisplaySubtitle(r),
       value: parentValue,
       color,
+      badge: osLifecycleBadge(r),
       children,
       raw: r,
     };
   });
 }, [summary]);
+
+  /**
+   * Equipos —no versiones— en un SO caducado o a punto de caducar.
+   *
+   * ⚠️ Se cuenta sobre los HIJOS cuando existen, porque el padre agrupa varias
+   * versiones con estados distintos: sumar el padre daría por caducada una
+   * familia entera por una sola versión vieja, o la daría por sana escondiendo
+   * la que no lo está.
+   */
+  const osFleetAtRisk = React.useMemo(() => {
+    let n = 0;
+    for (const item of osVersionItems) {
+      const filas = item.children?.length ? item.children : [item];
+      for (const fila of filas) {
+        if (getOsLifecycle(fila.raw).isRisk) n += toSafeNumber(fila.value);
+      }
+    }
+    return n;
+  }, [osVersionItems]);
 
   // `byVersion` for the AgentVersionDonut — the same dedicated
   // `/dashboard/agent-versions` aggregate Overview's FleetComposition
@@ -1369,6 +1411,18 @@ const osVersionItems = React.useMemo(() => {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
+            {/* El contador que convierte la tarjeta en algo accionable: seis
+                barras no dicen si la flota está sana. Cuenta EQUIPOS, no
+                versiones — dos versiones caducadas con un equipo cada una
+                pesan menos que una con veinte. */}
+            {osFleetAtRisk > 0 ? (
+              <Typography
+                sx={{ fontSize: 12, fontWeight: 700, color: ROLE.critical, mb: 0.75 }}
+              >
+                {osFleetAtRisk} device{osFleetAtRisk === 1 ? "" : "s"} on an OS that is
+                unsupported or ends soon
+              </Typography>
+            ) : null}
             <CompositionBars
               title="OS versions"
               items={osVersionItems}

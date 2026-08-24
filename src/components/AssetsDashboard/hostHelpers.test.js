@@ -26,6 +26,7 @@ import {
   getPositionFreshness,
   formatPositionSource,
   formatFormFactor,
+  getOsLifecycle,
   getLocationHint,
 } from "./hostHelpers";
 import { ROLE } from "../../theme/brand";
@@ -629,5 +630,44 @@ describe("normalizeHostDetailPayload — formFactor sobrevive al allowlist", () 
   it("cae al campo type cuando el backend no manda chassisRaw", () => {
     const out = normalizeHostDetailPayload({ agent: { agent_id: "a1", type: "Notebook" } });
     expect(out.chassisRaw).toBe("Notebook");
+  });
+});
+
+describe("getOsLifecycle", () => {
+  it("nombra cada estado con palabras de operador", () => {
+    expect(getOsLifecycle({ lifecycle_status: "eol" }).label).toBe("Unsupported");
+    expect(getOsLifecycle({ lifecycle_status: "approaching_eol" }).label).toBe("Ends soon");
+    expect(getOsLifecycle({ lifecycle_status: "security_only" }).label).toBe("Security fixes only");
+    expect(getOsLifecycle({ lifecycle_status: "supported" }).label).toBe("Supported");
+  });
+
+  it("⚠️ marca como riesgo sólo lo que pide una decisión", () => {
+    // security_only NO es riesgo: el equipo sigue recibiendo parches. Meterlo
+    // en el contador inflaría la alarma con equipos que están protegidos.
+    expect(getOsLifecycle({ lifecycle_status: "eol" }).isRisk).toBe(true);
+    expect(getOsLifecycle({ lifecycle_status: "approaching_eol" }).isRisk).toBe(true);
+    expect(getOsLifecycle({ lifecycle_status: "security_only" }).isRisk).toBe(false);
+    expect(getOsLifecycle({ lifecycle_status: "supported" }).isRisk).toBe(false);
+  });
+
+  it("el detalle dice de qué lado del calendario estamos", () => {
+    // Un número suelto no distingue "faltan 50 días" de "hace 50 días".
+    expect(getOsLifecycle({ lifecycle_status: "approaching_eol", lifecycle_days_remaining: 50 }).detail)
+      .toBe("Ends soon · in 50 days");
+    expect(getOsLifecycle({ lifecycle_status: "eol", lifecycle_days_remaining: -707 }).detail)
+      .toBe("Unsupported · 2 years ago");
+  });
+
+  it("⚠️ unknown se muestra, no se esconde", () => {
+    // Es la señal de que ese SO no está catalogado. Esconderlo lo volvería
+    // invisible justo cuando hace falta catalogarlo.
+    const lc = getOsLifecycle({ lifecycle_status: "unknown" });
+    expect(lc.label).toBe("Unknown");
+    expect(lc.isRisk).toBe(false);
+  });
+
+  it("una fila sin dato cae a unknown en vez de romperse", () => {
+    expect(getOsLifecycle({}).status).toBe("unknown");
+    expect(getOsLifecycle(null).status).toBe("unknown");
   });
 });

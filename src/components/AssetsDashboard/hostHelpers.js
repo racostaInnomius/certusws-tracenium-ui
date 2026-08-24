@@ -585,6 +585,63 @@ export function formatFormFactor(profile) {
   return parts.join(" · ");
 }
 
+/**
+ * El estado de soporte de un SO, listo para pintar.
+ *
+ * El estado lo DERIVA el backend a partir de las fechas del catálogo; aquí sólo
+ * se le pone nombre y color. Re-derivarlo en el navegador significaría otro
+ * reloj y otras reglas, y dos pantallas contradiciéndose.
+ */
+const OS_LIFECYCLE_TEXT = {
+  supported: { label: "Supported", tone: "positive" },
+  approaching_eol: { label: "Ends soon", tone: "warning" },
+  security_only: { label: "Security fixes only", tone: "warning" },
+  eol: { label: "Unsupported", tone: "critical" },
+  unknown: { label: "Unknown", tone: "muted" },
+};
+
+/** "in 50 days" / "312 days ago" — el número crudo no dice de qué lado está. */
+function lifecycleAge(days) {
+  if (days === null || days === undefined || !Number.isFinite(Number(days))) return "";
+  const n = Number(days);
+  if (n === 0) return "today";
+  const abs = Math.abs(n);
+  // El umbral de años es UN año, no dos: con dos, un SO caducado hace 707 días
+  // se leía "24 months ago", que obliga a dividir mentalmente.
+  const unit =
+    abs >= 365
+      ? `${Math.round(abs / 365)} year${Math.round(abs / 365) === 1 ? "" : "s"}`
+      : abs >= 60
+      ? `${Math.round(abs / 30)} months`
+      : `${abs} days`;
+  return n > 0 ? `in ${unit}` : `${unit} ago`;
+}
+
+/**
+ * Etiqueta, tono y detalle del ciclo de vida de una fila de SO.
+ *
+ * ⚠️ `unknown` se muestra, no se esconde. Es la señal de que ese SO no está en
+ * el catálogo, y esconderlo lo volvería invisible justo cuando hace falta
+ * catalogarlo.
+ */
+export function getOsLifecycle(row) {
+  const status = String(row?.lifecycle_status || "unknown").toLowerCase();
+  const meta = OS_LIFECYCLE_TEXT[status] ?? OS_LIFECYCLE_TEXT.unknown;
+  const age = lifecycleAge(row?.lifecycle_days_remaining);
+
+  return {
+    status,
+    label: meta.label,
+    tone: meta.tone,
+    // La antigüedad NO se mete en la etiqueta: "Unsupported" tiene que leerse
+    // de un vistazo en una lista, y el detalle vive en el tooltip.
+    detail: age ? `${meta.label} · ${age}` : meta.label,
+    // Un SO caducado o a punto es lo que un operador tiene que accionar; el
+    // resto es contexto.
+    isRisk: status === "eol" || status === "approaching_eol",
+  };
+}
+
 export function getMapPin(profile) {
   const lat = Number(profile?.locationMapLat);
   const lon = Number(profile?.locationMapLon);
