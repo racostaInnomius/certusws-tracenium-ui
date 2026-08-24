@@ -25,6 +25,7 @@ const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
 const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
 const PluginControl = React.lazy(() => import("../pages/PluginControl"));
+const Billing = React.lazy(() => import("../components/Billing/Billing"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
 // SecurityBaselines is no longer mounted directly — Fase B folded it
 // into Security Compliance as the Baselines tab; the `security-baselines`
@@ -64,6 +65,11 @@ export const PAGE_REGISTRY = {
   // behaves" knobs. Admin-scoped at the UI layer; backend hardening
   // (whitelist + role middleware) is Phase 2.
   "plugin-control": () => <PluginControl />,
+
+  // Billing (ADR-0010). Sin gate de entitlement A PROPÓSITO: si un tenant
+  // pierde derechos por impago, ésta es la única pantalla donde puede
+  // corregir la tarjeta. Gatearla sería un candado sin llave.
+  billing: () => <Billing />,
 
   // Legacy `tokens` route kept alive so existing bookmarks / deep links
   // (Settings → Tokens cards from prior releases, automation links)

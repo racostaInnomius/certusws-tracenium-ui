@@ -35,6 +35,7 @@ import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 
@@ -742,6 +743,11 @@ export default function Sidebar({
           // tenant-scoped configuration, and splitting them meant
           // operators had to know that plugin cadence lived somewhere
           // other than the rest of the tenant's setup.
+          // Billing — sólo OWNER, en espejo del requireRole("OWNER") del
+          // backend. Un ADMIN que la viera recibiría 403 al abrirla.
+          ...(tenantMemberRole === "OWNER"
+            ? [{ label: "Billing", key: "billing", icon: <CreditCardOutlinedIcon /> }]
+            : []),
           { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
         ]
       : []),
