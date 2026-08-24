@@ -169,10 +169,14 @@ const CAPTURE_ERROR_COPY = {
     "This device is running a Wayland session, which isn't supported by screen " +
     "sharing yet. Ask the user to log out and back in selecting an X11 / Xorg " +
     "session, then retry. Shell and file sessions work on Wayland normally.",
+  // Este texto mandaba al operador a comprobar un perfil MDM que NUNCA puede
+  // conceder este permiso: Apple trata Screen Recording como deny-only en
+  // PPPC. Decirle que revise el perfil es mandarlo a una tarea imposible.
   no_screen_recording_permission:
-    "macOS has not granted Screen Recording permission to the Tracenium capture " +
-    "helper. This is provisioned fleet-wide by the MDM PPPC profile — check that " +
-    "the profile is installed on this device.",
+    "macOS hasn't granted Screen Recording to the Tracenium capture helper. " +
+    "Apple requires a person to approve this on the Mac itself — MDM cannot " +
+    "grant it. Ask someone at the device to open System Settings › Privacy & " +
+    "Security › Screen Recording and enable Tracenium.",
   screen_capture_helper_missing:
     "The screen capture helper isn't installed on this device. Reinstall or " +
     "upgrade the agent package to deploy it.",
