@@ -41,6 +41,7 @@ import SectionPaper from "../common/SectionPaper";
 import SummaryCard from "../common/SummaryCard";
 import CompositionBars from "../common/CompositionBars";
 import { BRAND, ROLE } from "../../theme/brand";
+import { platformColor } from "../../utils/platform";
 import {
   listPackages,
   listDeployments,
@@ -195,9 +196,9 @@ export default function OverviewTab({ onNavigateTab }) {
   const platformItems = React.useMemo(
     () =>
       [
-        { label: "Windows", value: stats.platformCounts.windows ?? 0, color: BRAND.dark },
-        { label: "macOS", value: stats.platformCounts.macos ?? 0, color: BRAND.teal },
-        { label: "Linux", value: stats.platformCounts.linux ?? 0, color: BRAND.gray },
+        { label: "Windows", value: stats.platformCounts.windows ?? 0, color: platformColor("windows").dot },
+        { label: "macOS", value: stats.platformCounts.macos ?? 0, color: platformColor("macos").dot },
+        { label: "Linux", value: stats.platformCounts.linux ?? 0, color: platformColor("linux").dot },
       ].filter((i) => i.value > 0),
     [stats.platformCounts]
   );

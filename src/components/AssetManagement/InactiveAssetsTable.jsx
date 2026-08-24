@@ -35,7 +35,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ROLE } from "../../theme/brand";
-import { normalizePlatform } from "../../utils/platform";
+import { normalizePlatform, platformColor } from "../../utils/platform";
 import { formatDate } from "../../utils/format";
 import { listFrom } from "../../api/shape";
 
@@ -63,18 +63,6 @@ const PLATFORM_OPTIONS = [
 
 const INACTIVE_DAYS_OPTIONS = [7, 14, 30, 60, 90];
 
-const PLATFORM_STYLE = {
-  windows: { bg: BRAND.darkSoft, fg: BRAND.dark },
-  // Distinct blue so Windows Server doesn't read as identical to desktop
-  // Windows at a glance — same hue HostsTable.jsx already uses for it.
-  "windows server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
-  macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
-  linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
-  ios: { bg: BRAND.tealSoft, fg: BRAND.tealText },
-  android: { bg: "rgba(61,220,132,0.14)", fg: "#1b7a45" },
-  unknown: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
-};
-
 function coalesceValue(...values) {
   for (const value of values) {
     if (value === null || value === undefined) continue;
@@ -100,7 +88,7 @@ function PlatformChip({ platform }) {
   // Canonical normalizePlatform returns null for empty; this table renders
   // those as the "unknown" filter bucket.
   const normalized = normalizePlatform(platform) ?? "unknown";
-  const style = PLATFORM_STYLE[normalized] || { bg: BRAND.surfaceMuted, fg: BRAND.dark };
+  const style = platformColor(normalized);
 
   const fixedLabel = normalized === "macos" ? "macOS" : normalized === "ios" ? "iOS" : null;
   const useFixedCase = fixedLabel !== null;

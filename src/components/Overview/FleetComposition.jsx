@@ -50,6 +50,7 @@ function getValue(result) {
 }
 
 import { classifyAgentVersions, compareVersions } from "./agentVersions";
+import { platformColor } from "../../utils/platform";
 
 // Muted, desaturated gray for the "pending" bucket — deliberately
 // distinct from BRAND.gray, which every donut here already uses for its
@@ -364,18 +365,24 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
 
   // Memoized so the PieChart gets a stable data reference across parent
   // re-renders (only recomputes when the raw OS aggregate changes).
+  // Colors come from the canonical per-platform map (utils/platform.js) —
+  // used to be assigned by array position (whichever OS had the most
+  // hosts got whatever color sat first), which meant the same OS could
+  // render a different color depending on that tenant's device counts,
+  // and Windows/Windows Server could land on near-identical shades.
   const osDataColored = useMemo(() => {
-    const osColors = [BRAND.teal, BRAND.dark, BRAND.cyan, BRAND.gray];
-    const osData = Array.isArray(osRaw)
+    return Array.isArray(osRaw)
       ? osRaw
-          .map((row) => ({
-            name: row.os_platform ?? row.name ?? row.platform ?? "Unknown",
-            value: Number(row.host_count ?? row.count ?? row.value ?? 0),
-            color: null
-          }))
+          .map((row) => {
+            const name = row.os_platform ?? row.name ?? row.platform ?? "Unknown";
+            return {
+              name,
+              value: Number(row.host_count ?? row.count ?? row.value ?? 0),
+              color: platformColor(name).dot
+            };
+          })
           .filter((x) => x.value > 0)
       : [];
-    return osData.map((d, i) => ({ ...d, color: osColors[i % osColors.length] }));
   }, [osRaw]);
 
   const osPending =
