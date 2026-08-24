@@ -63,7 +63,7 @@ import {
 import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
-import { normalizePlatform } from "../utils/platform";
+import { normalizePlatform, platformColor } from "../utils/platform";
 import { formatBytesToGb } from "../utils/format";
 import { listFrom } from "../api/shape";
 
@@ -1146,19 +1146,8 @@ export default function AssetsDashboard({
   // client-side from the dashboard summary so the categorical colors
   // match what the rest of the app uses for each platform family —
   // and so we don't have to change the backend to change a palette.
-
-  // Color palette keyed by normalized platform. Matches the chips the
-  // HostsTable uses so the two surfaces read as a single language.
-  const platformColors = React.useMemo(
-    () => ({
-      windows: BRAND.dark,
-      macos: BRAND.teal,
-      linux: "#ed6c02",
-      ios: BRAND.cyan,
-      android: "#3DDC84",
-    }),
-    []
-  );
+  // Colors come from utils/platform.js's `platformColor()` — the single
+  // canonical map every OS-platform chip/donut/bar in the app now shares.
 
   // Control-DB enrollment roster — same reconciliation denominator
   // Overview's FleetComposition uses for these two donuts (see that
@@ -1170,8 +1159,6 @@ export default function AssetsDashboard({
   // Donut-shaped data for the shared OS platform chart from Overview's
   // FleetComposition. Same palette as the bar items above so swapping
   // visual idioms doesn't change which slice maps to which platform.
-  // Cycles through teal/dark/cyan/gray for any tail beyond the keyed
-  // platforms — matches the Overview donut's color sequence.
   function formatPlatformLabel(value) {
     return String(value || "Unknown")
       .trim()
@@ -1181,20 +1168,18 @@ export default function AssetsDashboard({
   }
 
   const osDonutData = React.useMemo(() => {
-    const cycleColors = [BRAND.teal, BRAND.dark, BRAND.cyan, BRAND.gray];
     const rows = Array.isArray(summary?.osPlatform) ? summary.osPlatform : [];
     return rows
-      .map((r, i) => {
+      .map((r) => {
         const rawName = String(r?.os_platform ?? r?.name ?? "Unknown");
-        const normalized = normalizePlatform(rawName);
         return {
           name: formatPlatformLabel(rawName),
           value: Number(r?.host_count ?? r?.count ?? 0),
-          color: platformColors[normalized] || cycleColors[i % cycleColors.length],
+          color: platformColor(rawName).dot,
         };
       })
       .filter((d) => d.value > 0);
-  }, [summary, platformColors]);
+  }, [summary]);
 
   const osPending =
     fleetDevices != null
@@ -1206,8 +1191,7 @@ const osVersionItems = React.useMemo(() => {
 
   return rows.map((r, rowIndex) => {
     const platform = String(r?.os_platform ?? "").toLowerCase();
-    const normalized = normalizePlatform(platform);
-    const color = platformColors[normalized] || BRAND.gray;
+    const color = platformColor(platform).dot;
     const parentValue = toSafeNumber(r?.host_count ?? r?.count);
     const children = Array.isArray(r?.children)
       ? r.children
@@ -1247,7 +1231,7 @@ const osVersionItems = React.useMemo(() => {
       raw: r,
     };
   });
-}, [summary, platformColors]);
+}, [summary]);
 
   // `byVersion` for the AgentVersionDonut — the same dedicated
   // `/dashboard/agent-versions` aggregate Overview's FleetComposition

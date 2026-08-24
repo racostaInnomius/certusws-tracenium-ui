@@ -23,29 +23,13 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND } from "../../theme/brand";
+import { normalizePlatform, platformLabel, platformColor } from "../../utils/platform";
 import OnlineDot from "../common/OnlineDot";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 
-const PLATFORM_STYLE = {
-  windows: { bg: BRAND.darkSoft, fg: BRAND.dark },
-  // Backend sends the literal "Windows Server" (space, not hyphen) —
-  // see dashboard.service.ts's os_platform CASE expressions. The
-  // hyphenated key here never matched, so this color was dead code.
-  "windows server": { bg: "rgba(37, 99, 235, 0.10)", fg: "#1d4ed8" },
-  macos: { bg: BRAND.tealSoft, fg: BRAND.tealText },
-  linux: { bg: "rgba(237,108,2,0.12)", fg: "#8a4400" },
-  // Mobile managed clients (MAM). Distinct hues so a mixed fleet reads
-  // at a glance: indigo for iOS, green for Android.
-  ios: { bg: "rgba(99,102,241,0.12)", fg: "#4338ca" },
-  android: { bg: "rgba(16,185,129,0.12)", fg: "#047857" },
-};
-
-// Display overrides where CSS capitalize would mangle the casing.
-const PLATFORM_LABEL = { ios: "iOS" };
-
 function PlatformChip({ platform }) {
-  const p = String(platform || "").trim().toLowerCase();
-  if (!p) {
+  const normalized = normalizePlatform(platform);
+  if (!normalized) {
     return (
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
         —
@@ -53,18 +37,17 @@ function PlatformChip({ platform }) {
     );
   }
 
-  const style = PLATFORM_STYLE[p] || { bg: BRAND.surfaceMuted, fg: BRAND.dark };
+  const style = platformColor(normalized);
+  const label = platformLabel(normalized);
 
   return (
     <Chip
       size="small"
-      label={PLATFORM_LABEL[p] || p}
+      label={label}
       sx={{
         height: 20,
         fontWeight: 700,
         fontSize: 11,
-        // Keep explicit labels (e.g. "iOS") verbatim; capitalize the rest.
-        textTransform: PLATFORM_LABEL[p] ? "none" : "capitalize",
         bgcolor: style.bg,
         color: style.fg,
         border: `1px solid ${style.fg}33`,
