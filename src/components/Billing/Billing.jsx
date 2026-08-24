@@ -19,6 +19,7 @@ import {
   TableCell, TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
 import { httpGetJson, httpPostJson } from "../../api/http";
+import PaymentMethodCard from "./PaymentMethodCard";
 import {
   LINES, LINE_LABELS, LINE_HINTS, LINE_TIERS, LINE_PRICES,
   TIER_LABELS, TIER_ADDS, MDM_INCLUDES,
@@ -32,6 +33,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [configured, setConfigured] = useState(true);
+  const [publishableKey, setPublishableKey] = useState(null);
   const [sub, setSub] = useState(null);
   const [invoices, setInvoices] = useState([]);
 
@@ -47,6 +49,9 @@ export default function Billing() {
     try {
       const data = await httpGetJson("/api/v1/billing/summary");
       setConfigured(Boolean(data?.configured));
+      // La clave publicable la sirve el backend: la SPA se construye una sola
+      // vez para todos los entornos, así que no puede llevarla horneada.
+      setPublishableKey(data?.publishableKey ?? null);
       setSub(data?.subscription ?? null);
       const s = data?.subscription;
       if (s) {
@@ -199,6 +204,12 @@ export default function Billing() {
           )}
         </CardContent>
       </Card>
+
+      <PaymentMethodCard
+        publishableKey={publishableKey}
+        hasPaymentMethod={Boolean(sub?.hasPaymentMethod)}
+        onSaved={load}
+      />
 
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
