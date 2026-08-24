@@ -24,7 +24,23 @@ export function normalizePlatform(raw) {
   if (v === "windows server" || v === "windows-server" || v === "windows_server" || v === "win server") return "windows server";
   if (v === "windows" || v === "win32" || v.startsWith("win")) return "windows";
   if (v === "macos" || v === "macosx" || v === "darwin" || v === "osx" || v === "mac os x") return "macos";
-  if (v === "linux") return "linux";
+  // Individual distro families the backend's OS-version normalizer emits
+  // (os-version-normalizer.ts's inferFamily) — all Linux for coloring
+  // purposes, same orange dot as the generic "linux" bucket.
+  if (
+    v === "linux" ||
+    v === "ubuntu" ||
+    v === "debian" ||
+    v === "fedora" ||
+    v === "rhel" ||
+    v === "red hat" ||
+    v === "redhat" ||
+    v === "rocky" ||
+    v === "alma" ||
+    v === "centos"
+  ) {
+    return "linux";
+  }
   if (v === "ios" || v === "ipados") return "ios";
   if (v === "android") return "android";
   return v;
