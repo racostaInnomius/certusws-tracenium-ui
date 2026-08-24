@@ -228,4 +228,13 @@ pendiente, y la página se quedó modelando el mundo de 4 tipos sin resultado.
 - **P2 tope + aviso de truncado** — hecho. Ventana con techo de 500, flag `truncated`, banner en la UI. (`32f33b3`, `9c817cf`)
 - **P2 `?type=` deep-link** — hecho. (`9c817cf`)
 - **P2 gating del select por plataforma** — DIFERIDO. El backend ya rechaza al ejecutar; la lógica (matrices por tipo, targets multi-plataforma) es más superficie que el valor actual. Pendiente si se vuelve un problema real de campo.
-- **P3 tests de la página, quitar rama muerta de `validateNumericField`** — pendiente.
+- **P3 rama muerta + tests de lógica pura** — hecho. `buildJobPayload`, `validateNumericField` (sin la rama `required` muerta) y `resolveTypeFilter` extraídos a `utils/jobForm.js` con 13 tests. (`665b8bd`)
+
+### Lo que queda genuinamente pendiente
+
+- **Gating del `<select>` de creación por plataforma del device** (P2 diferido) — el backend ya rechaza al ejecutar; construir las matrices plataforma×tipo es más superficie que el valor actual.
+- **Ergonomía diferida** (§4): un solo tipo por dispatch (no hay flujo "scan y luego install"), y el panel de detalle fijo en vez de drawer que roba una columna en `lg`.
+- **Olor `DEFAULT_TENANT_FANOUT_ARCH`** (§5): la suposición x64 que el código de al lado documenta como peligrosa para Windows. No es muerto, pero merece revisión cuando se toque el fan-out.
+- **`/devices-connected` sin usar** (§5): la página deriva la cuenta de `knownDevices` cacheado (60s), no del estado de sesión en vivo. Aceptable, anotado.
+
+Con P0/P1/P2/P3 cerrados, la madurez de la página sube de ≈2.8/5 a ≈3.7/5: la brecha de tipos y el agujero de RBAC eran los dos lastres grandes, y ambos están resueltos.
