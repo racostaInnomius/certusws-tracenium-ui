@@ -43,11 +43,26 @@ export function registerCacheClearListener(cb) {
   return () => cacheClearListeners.delete(cb);
 }
 
+/**
+ * The scope the caches were last keyed under, remembered across tabs.
+ *
+ * ⚠️ This MUST outlive the tab, and it lives in localStorage for one reason:
+ * `setApiCacheSessionScope` wipes both caches whenever the scope it is handed
+ * differs from the remembered one. Reading the previous scope from
+ * sessionStorage meant a fresh tab always started at DEFAULT_SESSION_SCOPE, so
+ * the first bootstrap of every new tab looked like a user switch and cleared
+ * the cache — defeating the persisted entries entirely, no matter which store
+ * held them.
+ *
+ * The wipe still fires when it should: a genuinely different subject+email
+ * mismatches the remembered scope, and performLogout() stamps "signed-out",
+ * so signing out still guarantees the next sign-in starts cold.
+ */
 function readStoredSessionScope() {
   if (typeof window === "undefined") return DEFAULT_SESSION_SCOPE;
 
   try {
-    const stored = window.sessionStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
+    const stored = window.localStorage?.getItem(SESSION_SCOPE_STORAGE_KEY);
     return stored || DEFAULT_SESSION_SCOPE;
   } catch {
     return DEFAULT_SESSION_SCOPE;
@@ -144,7 +159,10 @@ export function setApiCacheSessionScope(scope) {
 
   if (typeof window !== "undefined") {
     try {
-      window.sessionStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
+      // localStorage to match readStoredSessionScope — see the note there:
+      // a scope only remembered for the tab makes every new tab look like a
+      // user switch and wipes the persisted caches on first bootstrap.
+      window.localStorage?.setItem(SESSION_SCOPE_STORAGE_KEY, nextScope);
     } catch {
       // best effort
     }

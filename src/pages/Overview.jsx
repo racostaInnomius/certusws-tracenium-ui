@@ -121,10 +121,25 @@ export default function Overview() {
     return results;
   }, []);
 
-  const { data: results, loading, refreshing, error, refetch } = useCachedFetch(
-    "overview:bundle",
-    loader,
-  );
+  const { data: results, loading, refreshing, error, refetch, lastUpdatedAt } =
+    useCachedFetch("overview:bundle", loader, {
+      // 24h, against the 10-minute default. This is the entry that decides
+      // whether a returning operator sees their fleet or an empty page: the
+      // cache is read on mount and painted immediately, then revalidated in
+      // the background (revalidateOnMount defaults to "stale"). With a
+      // 10-minute horizon the entry was always already evicted by the time
+      // anyone came back, so the dashboard opened blank and waited on ~28
+      // requests before showing a single number.
+      //
+      // Painting a stale bundle is only honest if the page says so — the
+      // header stamps the capture time, and the refresh lands seconds later.
+      storageMaxAgeMs: 24 * 60 * 60 * 1000,
+    });
+
+  // When the first paint comes from cache this is the moment it was captured,
+  // not "now". Shown in the header so nobody reads yesterday's numbers as
+  // today's while the background refresh is still in flight.
+  const refreshedAt = lastUpdatedAt ? new Date(lastUpdatedAt) : null;
 
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "overviewAutoRefresh");
   const errorMsg = error ? error?.message || "Failed to load overview data" : null;
@@ -181,6 +196,12 @@ export default function Overview() {
           errorMsg ? (
             <Typography variant="caption" sx={{ color: ROLE.critical }}>
               {errorMsg}
+            </Typography>
+          ) : refreshedAt ? (
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {refreshing
+                ? `Last refresh ${refreshedAt.toLocaleTimeString()} · updating…`
+                : `Last refresh ${refreshedAt.toLocaleTimeString()}`}
             </Typography>
           ) : null
         }

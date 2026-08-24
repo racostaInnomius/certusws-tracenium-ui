@@ -1,6 +1,6 @@
 // src/api/entryCache.js
 //
-// The two-tier (memory + sessionStorage) cache-entry engine shared by the
+// The two-tier (memory + Web Storage) cache-entry engine shared by the
 // dashboard's two caches: the GET cache in ./http.js and the SWR cache behind
 // ../hooks/useCachedFetch.js. Both had their own byte-for-byte copy of this
 // logic — read-through with expiry eviction, storage hydration, quota-safe
@@ -14,6 +14,9 @@
 //                     useCachedFetch scopes per call (session::tenant::key).
 //   • unscopeKey    — inverse of deriveKey, used to match a caller-supplied
 //                     prefix against the raw (unscoped) key.
+//   • persistence   — which Web Storage backs the second tier. See the option
+//                     below: session (dies with the tab) vs local (survives to
+//                     the next sign-in).
 //
 // Every instance owns its own memory Map; instances never share state.
 
@@ -38,15 +41,43 @@ export function createEntryCache({
   storagePrefix,
   deriveKey = (key) => String(key ?? ""),
   unscopeKey = (key) => key,
+  // "session" (default) keeps the old behaviour: entries die with the tab.
+  // "local" survives tab close and sign-out, which is what a cache has to do
+  // to be worth anything on the NEXT login — sessionStorage guarantees every
+  // first visit of the day paints an empty dashboard and waits on the network.
+  //
+  // Only opt in where the payload is a view the same operator will look at
+  // again, and only alongside the two guards that make it safe: keys are
+  // partitioned by session scope (subject:email) so another principal on this
+  // browser can never read these entries, and performLogout() clears the cache
+  // outright. Entries are still bounded by the caller's storageMaxAgeMs.
+  persistence = "session",
 }) {
   const memCache = new Map();
+
+  /**
+   * The backing Storage, or null when unavailable. Access is wrapped because
+   * both stores throw on access (not just on write) in some privacy modes and
+   * in sandboxed iframes — a cache must degrade to memory-only there, never
+   * take the page down.
+   */
+  function store() {
+    if (typeof window === "undefined") return null;
+    try {
+      return persistence === "local"
+        ? window.localStorage ?? null
+        : window.sessionStorage ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   function storageKeyFor(scopedKey) {
     return `${storagePrefix}${scopedKey}`;
   }
 
   /**
-   * Read-through: memory first, then sessionStorage (hydrating memory on a
+   * Read-through: memory first, then Web Storage (hydrating memory on a
    * hit). An entry past `storageMaxAgeMs` is evicted from both tiers and read
    * as a miss. Returns the raw `{data, ts}` entry, or null.
    */
@@ -59,15 +90,16 @@ export function createEntryCache({
       memCache.delete(scopedKey);
     }
 
-    if (typeof window === "undefined") return null;
+    const storage = store();
+    if (!storage) return null;
 
     try {
-      const raw = window.sessionStorage?.getItem(storageKeyFor(scopedKey));
+      const raw = storage.getItem(storageKeyFor(scopedKey));
       if (!raw) return null;
 
       const parsed = safeJsonParse(raw);
       if (!parsed || isEntryExpired(parsed, storageMaxAgeMs)) {
-        window.sessionStorage?.removeItem(storageKeyFor(scopedKey));
+        storage.removeItem(storageKeyFor(scopedKey));
         return null;
       }
 
@@ -86,10 +118,11 @@ export function createEntryCache({
 
     memCache.set(scopedKey, entry);
 
-    if (typeof window === "undefined") return entry;
+    const storage = store();
+    if (!storage) return entry;
 
     try {
-      window.sessionStorage?.setItem(storageKeyFor(scopedKey), JSON.stringify(entry));
+      storage.setItem(storageKeyFor(scopedKey), JSON.stringify(entry));
     } catch {
       // Non-fatal — see above.
     }
@@ -103,9 +136,10 @@ export function createEntryCache({
     const scopedKey = deriveKey(key);
     memCache.delete(scopedKey);
 
-    if (typeof window === "undefined") return;
+    const storage = store();
+    if (!storage) return;
     try {
-      window.sessionStorage?.removeItem(storageKeyFor(scopedKey));
+      storage.removeItem(storageKeyFor(scopedKey));
     } catch {
       // best effort
     }
@@ -119,12 +153,13 @@ export function createEntryCache({
       if (unscopeKey(scopedKey).startsWith(prefix)) memCache.delete(scopedKey);
     });
 
-    if (typeof window === "undefined") return;
+    const storage = store();
+    if (!storage) return;
 
     try {
       const toRemove = [];
-      for (let i = 0; i < window.sessionStorage.length; i += 1) {
-        const storageKey = window.sessionStorage.key(i);
+      for (let i = 0; i < storage.length; i += 1) {
+        const storageKey = storage.key(i);
         if (
           storageKey &&
           storageKey.startsWith(storagePrefix) &&
@@ -133,7 +168,7 @@ export function createEntryCache({
           toRemove.push(storageKey);
         }
       }
-      toRemove.forEach((k) => window.sessionStorage.removeItem(k));
+      toRemove.forEach((k) => storage.removeItem(k));
     } catch {
       // best effort
     }
@@ -143,15 +178,16 @@ export function createEntryCache({
   function clear() {
     memCache.clear();
 
-    if (typeof window === "undefined") return;
+    const storage = store();
+    if (!storage) return;
 
     try {
       const toRemove = [];
-      for (let i = 0; i < window.sessionStorage.length; i += 1) {
-        const storageKey = window.sessionStorage.key(i);
+      for (let i = 0; i < storage.length; i += 1) {
+        const storageKey = storage.key(i);
         if (storageKey && storageKey.startsWith(storagePrefix)) toRemove.push(storageKey);
       }
-      toRemove.forEach((k) => window.sessionStorage.removeItem(k));
+      toRemove.forEach((k) => storage.removeItem(k));
     } catch {
       // best effort
     }

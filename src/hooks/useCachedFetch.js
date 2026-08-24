@@ -102,6 +102,18 @@ const entryCache = createEntryCache({
   storagePrefix: STORAGE_PREFIX,
   deriveKey: buildScopedCacheKey,
   unscopeKey: unscopedCacheKey,
+  // localStorage, not sessionStorage: this cache exists so a returning
+  // operator sees their dashboard immediately instead of an empty page and a
+  // spinner. sessionStorage dies with the tab, so it could never serve that
+  // case — every first visit after closing the browser was a cold start, no
+  // matter how long the entries were allowed to live.
+  //
+  // Safe because the keys here are `sessionScope::tenant::key`, where the
+  // scope is the signed-in subject+email: a different principal on the same
+  // browser reads a different namespace, never these entries. performLogout()
+  // clears the cache outright, and every read still enforces the caller's
+  // storageMaxAgeMs, so nothing is served past its own freshness budget.
+  persistence: "local",
 });
 
 const memCache = entryCache.memCache;

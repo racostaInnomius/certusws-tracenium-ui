@@ -8,7 +8,7 @@
 //
 // These pin the observable contract through the module's public API
 // (prefetchCachedFetch writes; invalidateCache / invalidateCachePrefix /
-// clearCachedFetch remove) plus the sessionStorage layout, so the entry logic
+// clearCachedFetch remove) plus the localStorage layout, so the entry logic
 // can be refactored — or shared with http.js — with a real safety net.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -22,19 +22,19 @@ import { setApiCacheSessionScope, setActiveTenantId } from "../api/http";
 
 const STORAGE_PREFIX = "tnm:cache:";
 
-/** Every sessionStorage key this cache owns. */
+/** Every localStorage key this cache owns. */
 function cacheKeys() {
-  return Object.keys(window.sessionStorage).filter((k) => k.startsWith(STORAGE_PREFIX));
+  return Object.keys(window.localStorage).filter((k) => k.startsWith(STORAGE_PREFIX));
 }
 
 /** The parsed entry whose scoped key ends with `::<key>`. */
 function storedEntryFor(key) {
   const match = cacheKeys().find((k) => k.endsWith(`::${key}`));
-  return match ? JSON.parse(window.sessionStorage.getItem(match)) : null;
+  return match ? JSON.parse(window.localStorage.getItem(match)) : null;
 }
 
 beforeEach(() => {
-  window.sessionStorage.clear();
+  window.localStorage.clear();
   clearCachedFetch();
   setApiCacheSessionScope("user-a");
   setActiveTenantId(null);
@@ -42,12 +42,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  window.sessionStorage.clear();
+  window.localStorage.clear();
   clearCachedFetch();
 });
 
 describe("write path", () => {
-  it("persists the loader result to sessionStorage as {data, ts}", async () => {
+  it("persists the loader result to localStorage as {data, ts}", async () => {
     await prefetchCachedFetch("widgets", async () => ({ n: 1 }));
 
     const entry = storedEntryFor("widgets");
@@ -99,8 +99,8 @@ describe("cache key scoping", () => {
     expect(t1Key).toContain("tenant-1");
     expect(t2Key).toContain("tenant-2");
     // Two distinct entries — tenant-2 never reads tenant-1's payload.
-    expect(JSON.parse(window.sessionStorage.getItem(t1Key)).data).toEqual(["t1-device"]);
-    expect(JSON.parse(window.sessionStorage.getItem(t2Key)).data).toEqual(["t2-device"]);
+    expect(JSON.parse(window.localStorage.getItem(t1Key)).data).toEqual(["t1-device"]);
+    expect(JSON.parse(window.localStorage.getItem(t2Key)).data).toEqual(["t2-device"]);
   });
 
   it("uses '_' for the tenant segment when no tenant is active", async () => {
@@ -144,17 +144,17 @@ describe("invalidation", () => {
 });
 
 describe("expiry on read", () => {
-  it("an entry older than storageMaxAgeMs is evicted from sessionStorage", async () => {
+  it("an entry older than storageMaxAgeMs is evicted from localStorage", async () => {
     await prefetchCachedFetch("stale-me", async () => "old");
     const key = cacheKeys().find((k) => k.endsWith("::stale-me"));
 
     // Backdate the stored entry well past any sane max-age.
-    const entry = JSON.parse(window.sessionStorage.getItem(key));
+    const entry = JSON.parse(window.localStorage.getItem(key));
     entry.ts = Date.now() - 24 * 60 * 60 * 1000; // 24h ago
-    window.sessionStorage.setItem(key, JSON.stringify(entry));
+    window.localStorage.setItem(key, JSON.stringify(entry));
     // Drop the in-memory copy so the next read has to go to storage.
     clearCachedFetch();
-    window.sessionStorage.setItem(key, JSON.stringify(entry));
+    window.localStorage.setItem(key, JSON.stringify(entry));
 
     // Re-prefetching overwrites with a fresh timestamp rather than serving
     // the expired payload.
@@ -166,13 +166,78 @@ describe("expiry on read", () => {
   it("tolerates a corrupt stored entry without throwing", async () => {
     await prefetchCachedFetch("corrupt", async () => "ok");
     const key = cacheKeys().find((k) => k.endsWith("::corrupt"));
-    window.sessionStorage.setItem(key, "{not json");
+    window.localStorage.setItem(key, "{not json");
     clearCachedFetch();
-    window.sessionStorage.setItem(key, "{not json");
+    window.localStorage.setItem(key, "{not json");
 
     await expect(
       prefetchCachedFetch("corrupt", async () => "recovered")
     ).resolves.not.toThrow();
     expect(storedEntryFor("corrupt").data).toBe("recovered");
+  });
+});
+
+describe("survives the tab closing — the point of the cache", () => {
+  it("writes to localStorage and NOT to sessionStorage", async () => {
+    // The regression this guards: entries used to live in sessionStorage,
+    // which the browser drops when the tab closes. That made the cache
+    // worthless for the case it exists to serve — the operator who signs in
+    // the next morning and stares at an empty dashboard while ~28 requests
+    // resolve. sessionStorage could never serve that no matter how long
+    // storageMaxAgeMs allowed entries to live.
+    //
+    // Asserting the ABSENCE from sessionStorage matters as much as the
+    // presence in localStorage: flipping the backing store back would still
+    // pass every other test in this file.
+    await prefetchCachedFetch("fleet", async () => ["device-1"]);
+
+    expect(storedEntryFor("fleet")?.data).toEqual(["device-1"]);
+    const sessionKeys = Object.keys(window.sessionStorage).filter((k) =>
+      k.startsWith(STORAGE_PREFIX)
+    );
+    expect(sessionKeys).toEqual([]);
+  });
+});
+
+describe("the returning operator — same identity must not look like a switch", () => {
+  it("remembers the scope in localStorage, so a new tab recovers it", async () => {
+    // The trap this guards: setApiCacheSessionScope wipes both caches when the
+    // scope it is handed differs from the REMEMBERED one. That memory used to
+    // live in sessionStorage, so a fresh tab started at the default, the first
+    // bootstrap looked like a user switch, and the wipe ran — which would have
+    // silently defeated persisting the entries at all.
+    setApiCacheSessionScope("user-a");
+
+    const remembered = window.localStorage.getItem("tnm:session-cache-scope:v1");
+    expect(remembered).toBe("user-a");
+    // Not in the store that dies with the tab.
+    expect(window.sessionStorage.getItem("tnm:session-cache-scope:v1")).toBeNull();
+  });
+
+  it("keeps cached entries when the same identity signs in again", async () => {
+    await prefetchCachedFetch("fleet", async () => ["device-1"]);
+    expect(storedEntryFor("fleet")?.data).toEqual(["device-1"]);
+
+    // Same subject+email as beforeEach: this is the returning operator, not a
+    // different principal. Nothing may be dropped.
+    setApiCacheSessionScope("user-a");
+
+    expect(storedEntryFor("fleet")?.data).toEqual(["device-1"]);
+  });
+
+  it("still wipes when a DIFFERENT identity signs in", async () => {
+    // The guarantee the wipe exists for has to survive the fix.
+    await prefetchCachedFetch("fleet", async () => ["device-1"]);
+    expect(storedEntryFor("fleet")).not.toBeNull();
+
+    setApiCacheSessionScope("user-b");
+
+    expect(storedEntryFor("fleet")).toBeNull();
+  });
+
+  it("still wipes after an explicit sign-out", async () => {
+    await prefetchCachedFetch("fleet", async () => ["device-1"]);
+    setApiCacheSessionScope("signed-out");
+    expect(storedEntryFor("fleet")).toBeNull();
   });
 });
