@@ -15,6 +15,14 @@ describe("normalizePlatform", () => {
     expect(normalizePlatform("Windows Server")).toBe("windows server");
     expect(normalizePlatform("windows")).toBe("windows");
   });
+  it("recognizes the backend's 'windows_server' (underscore) wire format", () => {
+    // modules/dashboard/os-version-normalizer.ts emits os_platform: "windows_server"
+    // for the OS Versions aggregate. Without this alias it falls through to the
+    // `startsWith("win")` branch and gets misclassified as plain "windows",
+    // which is exactly the bug that made Windows Server bars render blue
+    // instead of purple in AssetsDashboard's OS Versions list.
+    expect(normalizePlatform("windows_server")).toBe("windows server");
+  });
   it("returns null for empty/blank", () => {
     expect(normalizePlatform("")).toBeNull();
     expect(normalizePlatform(null)).toBeNull();
