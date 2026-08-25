@@ -53,6 +53,19 @@ export const BRAND = {
     warningSoft: "rgba(244,211,125,0.30)",
     // Darker amber for text on warningSoft (contrast).
     warningText: "#7a5c00",
+    // Ámbar MÁS CLARO que `warning`, para texto sobre superficie oscura. En la
+    // pantalla de login el `warning` normal (#F4D37D) se apaga contra el fondo
+    // oscuro; este sube la luminancia lo justo para mantener la legibilidad
+    // sin cambiar el matiz.
+    warningOnDark: "#FDE68A",
+    // Rojo saturado del indicador de estado del terminal remoto. Deliberadamente
+    // distinto de `error` (#E37D78, un rojo suave pensado para rellenos sobre
+    // fondo claro): sobre el cromo oscuro del terminal ese tono se lava.
+    errorStrong: "#D9534F",
+    // Hover del botón destructivo cuyo estado de reposo es ROLE.critical — un
+    // paso más oscuro del MISMO rojo suave. No confundir con `errorHover`
+    // (#991b1b), que es para botones destructivos de relleno sólido.
+    errorHoverSoft: "#C66460",
     success: "#52B788",
     successSoft: "rgba(82,183,136,0.16)",
     info: "#5A9F9F",
@@ -62,6 +75,38 @@ export const BRAND = {
   // Darker, text-legible counterpart to `cyan` (#8FFDFF is an accent
   // color, far too light for small chip/label text on a light surface).
   cyanText: "#0E7C80",
+};
+
+/**
+ * Escala neutra — grises de cromo, superficie y texto secundario.
+ *
+ * Se derivó de los ~40 grises que ya vivían hardcodeados por la app (pantalla
+ * de login, terminal remoto, fondos del shell, pistas de progreso), no se
+ * inventó: cada paso es un valor que ya se estaba usando. Lo que sí hizo el
+ * ejercicio fue COLAPSAR los que eran indistinguibles entre sí — había tres
+ * grises medios a distancia RGB ≤9 y tres claros a ≤6, que ningún ojo separa
+ * pero que multiplicaban la paleta.
+ *
+ * Numeración tipo rampa (0 = negro, 50 = casi blanco) para que "más alto =
+ * más claro" se lea sin consultar. Es también la escala sobre la que se
+ * apoyará el modo oscuro: con los grises sueltos por el código era inviable.
+ *
+ * ⚠️ Los pasos 500/100/50 colapsan varios originales. El desplazamiento
+ * máximo es de 11 en distancia RGB, por debajo del umbral perceptible para
+ * texto y bordes — pero NO es cero. Si algún punto concreto necesita su tono
+ * exacto, añade un paso en vez de reintroducir el hex.
+ */
+export const NEUTRAL = {
+  0: "#000000",    // negro puro — fondo del visor de pantalla remota
+  900: "#161C25",  // superficie más oscura (chrome del terminal)
+  800: "#1F2933",  // fondo del terminal
+  700: "#2D3742",  // bordes sobre superficie oscura
+  500: "#98A2B3",  // texto secundario sobre oscuro   (colapsa #94a3b8, #9aa5b1)
+  400: "#B9BEC8",  // texto desactivado / iconos inactivos
+  300: "#C7CBD1",  // relleno "pendiente" en gráficas
+  200: "#CBD5E1",  // texto terciario sobre oscuro
+  100: "#E5E7EB",  // texto claro sobre oscuro        (colapsa #e2e8f0, #e7e9ee)
+  50: "#F5F6F8",   // fondo de página / pista de progreso (colapsa #f8fafc, #eff0f1)
 };
 
 export const ROLE = {

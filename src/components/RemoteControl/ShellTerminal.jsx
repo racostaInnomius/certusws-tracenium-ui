@@ -47,7 +47,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -94,8 +94,8 @@ export default function ShellTerminal({ session, device, onClose }) {
       // Match the brand-dark surface for visual continuity with the
       // rest of the dashboard.
       theme: {
-        background: "#1f2933",
-        foreground: "#e5e7eb",
+        background: NEUTRAL[800],
+        foreground: NEUTRAL[100],
         cursor: ROLE.accent
       },
       scrollback: 5000
@@ -450,7 +450,7 @@ export default function ShellTerminal({ session, device, onClose }) {
     state === STATE.RUNNING
       ? BRAND.teal
       : state === STATE.ERROR
-      ? "#d9534f"
+      ? BRAND.alert.errorStrong
       : BRAND.gray;
 
   return (
@@ -458,7 +458,7 @@ export default function ShellTerminal({ session, device, onClose }) {
       sx={{
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#1f2933",
+        bgcolor: NEUTRAL[800],
         borderRadius: 2,
         overflow: "hidden",
         border: `1px solid ${BRAND.border}`,
@@ -473,8 +473,8 @@ export default function ShellTerminal({ session, device, onClose }) {
           gap: 1,
           px: 1.5,
           py: 0.75,
-          borderBottom: `1px solid #2d3742`,
-          bgcolor: "#161c25"
+          borderBottom: `1px solid ${NEUTRAL[700]}`,
+          bgcolor: NEUTRAL[900]
         }}
       >
         <Box
@@ -489,7 +489,7 @@ export default function ShellTerminal({ session, device, onClose }) {
         <Typography
           variant="caption"
           sx={{
-            color: "#e5e7eb",
+            color: NEUTRAL[100],
             fontFamily: "monospace",
             flex: 1,
             minWidth: 0,
@@ -505,7 +505,7 @@ export default function ShellTerminal({ session, device, onClose }) {
             aria-label="Close terminal"
             size="small"
             onClick={onClose}
-            sx={{ color: "#9aa5b1" }}
+            sx={{ color: NEUTRAL[500] }}
           >
             <CloseOutlinedIcon sx={{ fontSize: 16 }} />
           </IconButton>

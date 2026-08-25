@@ -9,6 +9,7 @@ import {
   Paper,
   Box,
 } from "@mui/material";
+import { NEUTRAL } from "../../theme/brand";
 
 export default function TokenCreatedDialog({ open, onClose, tokenData }) {
   const handleCopy = async () => {
@@ -29,7 +30,7 @@ export default function TokenCreatedDialog({ open, onClose, tokenData }) {
           variant="outlined"
           sx={{
             p: 2,
-            bgcolor: "#f8fafc",
+            bgcolor: NEUTRAL[50],
             wordBreak: "break-all",
             fontFamily: "monospace",
             mb: 2,

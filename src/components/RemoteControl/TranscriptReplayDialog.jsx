@@ -55,7 +55,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
 import { httpGetJson } from "../../api/http";
 
 const SPEEDS = [1, 2, 4, 8];
@@ -134,8 +134,8 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: 13,
       theme: {
-        background: "#1f2933",
-        foreground: "#e5e7eb",
+        background: NEUTRAL[800],
+        foreground: NEUTRAL[100],
         cursor: ROLE.accent
       },
       // Replay viewport sized from the asciinema header — if a
@@ -386,7 +386,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
             <Box
               ref={containerRef}
               sx={{
-                bgcolor: "#1f2933",
+                bgcolor: NEUTRAL[800],
                 borderRadius: 2,
                 p: 1,
                 minHeight: 380,
@@ -402,7 +402,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
               sx={{
                 p: 1,
                 borderRadius: 1,
-                bgcolor: "#161c25"
+                bgcolor: NEUTRAL[900]
               }}
             >
               <Tooltip title={playing ? "Pause" : "Play"} arrow>
@@ -410,7 +410,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                   aria-label={playing ? "Pause replay" : "Play replay"}
                   size="small"
                   onClick={togglePlay}
-                  sx={{ color: "#e5e7eb" }}
+                  sx={{ color: NEUTRAL[100] }}
                 >
                   {playing ? (
                     <PauseOutlinedIcon />
@@ -420,7 +420,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                 </IconButton>
               </Tooltip>
               <Tooltip title="Restart" arrow>
-                <IconButton aria-label="Restart replay" size="small" onClick={restart} sx={{ color: "#e5e7eb" }}>
+                <IconButton aria-label="Restart replay" size="small" onClick={restart} sx={{ color: NEUTRAL[100] }}>
                   <RestartAltOutlinedIcon />
                 </IconButton>
               </Tooltip>
@@ -431,7 +431,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                   sx={{
                     height: 6,
                     borderRadius: 3,
-                    bgcolor: "#2d3742",
+                    bgcolor: NEUTRAL[700],
                     "& .MuiLinearProgress-bar": { bgcolor: BRAND.teal }
                   }}
                 />
@@ -439,7 +439,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
               <Typography
                 variant="caption"
                 sx={{
-                  color: "#9aa5b1",
+                  color: NEUTRAL[500],
                   fontFamily: "monospace",
                   minWidth: 90,
                   textAlign: "right"
@@ -456,8 +456,8 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                     variant={s === speed ? "contained" : "outlined"}
                     sx={{
                       minWidth: 36,
-                      color: s === speed ? BRAND.dark : "#e5e7eb",
-                      borderColor: "#2d3742"
+                      color: s === speed ? BRAND.dark : NEUTRAL[100],
+                      borderColor: NEUTRAL[700]
                     }}
                   >
                     {s}x

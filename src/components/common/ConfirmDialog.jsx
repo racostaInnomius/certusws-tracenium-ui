@@ -64,7 +64,7 @@ export default function ConfirmDialog({
   icon = null,
 }) {
   const confirmBg = danger ? ROLE.critical : BRAND.teal;
-  const confirmHover = danger ? "#c66460" : BRAND.tealHover;
+  const confirmHover = danger ? BRAND.alert.errorHoverSoft : BRAND.tealHover;
 
   return (
     <Dialog

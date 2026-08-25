@@ -43,7 +43,7 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 // BRAND used to be duplicated here (Fase 1 homologation deleted it).
 // Central source of truth lives in src/theme/brand.js; adding
 // borderStrong/tealText/etc. there propagates automatically.
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
@@ -2341,7 +2341,7 @@ export default function Jobs() {
                       mt: 0.5,
                       p: 1.25,
                       bgcolor: BRAND.dark,
-                      color: "#e2e8f0",
+                      color: NEUTRAL[100],
                       borderColor: BRAND.dark,
                       overflow: "auto",
                       maxHeight: 220,

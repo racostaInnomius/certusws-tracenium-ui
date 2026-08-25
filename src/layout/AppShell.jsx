@@ -25,7 +25,7 @@ import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
 import { useMsp } from "../msp/MspContext";
 import TenantSwitcher from "../msp/TenantSwitcher";
@@ -1039,7 +1039,7 @@ export default function AppShell() {
         display: "flex",
         height: "100dvh",
         width: "100%",
-        bgcolor: "#f5f6f8",
+        bgcolor: NEUTRAL[50],
         overflow: "hidden", // the shell is a fixed frame
       }}
     >
@@ -1065,7 +1065,7 @@ export default function AppShell() {
           height: "100dvh",
           display: "flex",
           flexDirection: "column",
-          bgcolor: "#f5f6f8",
+          bgcolor: NEUTRAL[50],
           overflow: "hidden",
         }}
       >
@@ -1109,7 +1109,7 @@ export default function AppShell() {
             width: "100%",
             px: { xs: 1.25, sm: 2, md: 2.5 },
             py: { xs: 1.25, sm: 2 },
-            bgcolor: "#f5f6f8",
+            bgcolor: NEUTRAL[50],
             overflowY: "auto",
             overflowX: "hidden",
             position: "relative",

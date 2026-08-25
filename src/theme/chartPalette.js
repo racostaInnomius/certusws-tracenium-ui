@@ -47,3 +47,15 @@ export const CHART_NEUTRAL = {
   other: "#A8B0B5", // neutral mid-gray, slightly cool
   unknown: "#D0D5D8", // lighter — even less attention-grabbing
 };
+
+// Acentos por categoría de la página Software Inventory. Viven aquí y no en
+// BRAND por la misma razón que los ramps de arriba: codifican una categoría de
+// dominio ("instalados", "editores", "orígenes"), no un rol de marca. Meterlos
+// en BRAND ensancharía la superficie de tokens sin aclarar nada — que es
+// exactamente el criterio con el que este módulo se separó.
+export const SOFTWARE_ACCENTS = {
+  installed: "#4F9A96",
+  publishers: "#3E877F",
+  sources: "#536B82",
+  appsPerDevice: "#D7787C",
+};

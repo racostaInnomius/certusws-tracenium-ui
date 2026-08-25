@@ -20,7 +20,7 @@ import Logo from "../assets/T.png";
 import { useAuthContext } from "./AuthContext";
 import { clearApiCache, setApiCacheSessionScope, getActiveTenantId } from "../api/http";
 import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
-import { BRAND } from "../theme/brand";
+import { BRAND, NEUTRAL } from "../theme/brand";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -257,7 +257,7 @@ function AuthShell({
 
         <Typography
           sx={{
-            color: "#cbd5e1",
+            color: NEUTRAL[200],
             fontSize: 14,
             lineHeight: 1.6,
             maxWidth: 320,
@@ -302,7 +302,7 @@ function RetryMeta({ attempt }) {
   return (
     <Typography
       sx={{
-        color: "#94a3b8",
+        color: NEUTRAL[500],
         fontSize: 12,
         lineHeight: 1.6,
         mb: 2.5,
@@ -620,7 +620,7 @@ export default function AuthGate({ children }) {
 
               <Typography
                 sx={{
-                  color: "#cbd5e1",
+                  color: NEUTRAL[200],
                   fontSize: 16,
                   lineHeight: 1.6,
                   mb: 3,
@@ -689,7 +689,7 @@ export default function AuthGate({ children }) {
         >
           <Typography
             sx={{
-              color: "#fde68a",
+              color: BRAND.alert.warningOnDark,
               fontWeight: 700,
               fontSize: 13,
               mb: 0.75,
@@ -698,19 +698,19 @@ export default function AuthGate({ children }) {
             NO_SERVICE_ACCESS
           </Typography>
 
-          <Typography sx={{ color: "#e5e7eb", fontSize: 13, lineHeight: 1.6 }}>
+          <Typography sx={{ color: NEUTRAL[100], fontSize: 13, lineHeight: 1.6 }}>
             {accessDeniedInfo?.message ||
               "The user is authenticated, but does not have access to this Tracenium service."}
           </Typography>
 
           {accessDeniedInfo?.expectedServiceKey ? (
-            <Typography sx={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, mt: 1 }}>
+            <Typography sx={{ color: NEUTRAL[500], fontSize: 12, lineHeight: 1.6, mt: 1 }}>
               Expected service: {accessDeniedInfo.expectedServiceKey}
             </Typography>
           ) : null}
 
           {assignedServicesText ? (
-            <Typography sx={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6, mt: 0.5 }}>
+            <Typography sx={{ color: NEUTRAL[500], fontSize: 12, lineHeight: 1.6, mt: 0.5 }}>
               Assigned service: {assignedServicesText}
             </Typography>
           ) : null}
@@ -847,14 +847,14 @@ export default function AuthGate({ children }) {
           </Typography>
 
           <Typography
-            sx={{ color: "#cbd5e1", fontSize: 15, lineHeight: 1.6, mb: 3 }}
+            sx={{ color: NEUTRAL[200], fontSize: 15, lineHeight: 1.6, mb: 3 }}
           >
             {errorMessage ||
               "We could not connect to the backend after several attempts. Please try again."}
           </Typography>
 
           <Typography
-            sx={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.6, mb: 3 }}
+            sx={{ color: NEUTRAL[500], fontSize: 13, lineHeight: 1.6, mb: 3 }}
           >
             Checked {`${API.BASE}${API.BOOTSTRAP}`} and {`${API.BASE}${API.HEALTH}`}.
           </Typography>

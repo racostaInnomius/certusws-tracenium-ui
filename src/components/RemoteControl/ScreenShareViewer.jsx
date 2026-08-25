@@ -91,7 +91,7 @@ import FullscreenExitOutlinedIcon from "@mui/icons-material/FullscreenExitOutlin
 import MouseOutlinedIcon from "@mui/icons-material/MouseOutlined";
 import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -1102,7 +1102,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 2,
-            bgcolor: "#000"
+            bgcolor: NEUTRAL[0]
           }}
         >
           <CircularProgress size={28} sx={{ color: BRAND.teal }} />
@@ -1120,7 +1120,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            bgcolor: "#000",
+            bgcolor: NEUTRAL[0],
             overflow: "hidden",
             position: "relative"
           }}

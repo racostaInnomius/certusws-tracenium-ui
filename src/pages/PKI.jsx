@@ -53,7 +53,7 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
@@ -1266,7 +1266,7 @@ function InspectorTab(props) {
                   mt: 0.5,
                   p: 1.25,
                   bgcolor: BRAND.dark,
-                  color: "#e2e8f0",
+                  color: NEUTRAL[100],
                   borderColor: BRAND.dark,
                   overflow: "auto",
                   maxHeight: 220,

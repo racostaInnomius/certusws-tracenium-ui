@@ -47,7 +47,7 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -1112,7 +1112,7 @@ export default function Audit() {
                     mt: 0.5,
                     p: 1.25,
                     bgcolor: BRAND.dark,
-                    color: "#e2e8f0",
+                    color: NEUTRAL[100],
                     borderColor: BRAND.dark,
                     overflow: "auto",
                     maxHeight: 360,

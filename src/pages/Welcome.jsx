@@ -14,7 +14,7 @@ import SettingsApplicationsOutlinedIcon from "@mui/icons-material/SettingsApplic
 import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, NEUTRAL } from "../theme/brand";
 
 function navigateToPageWithParams(page, extraParams = {}) {
   if (typeof window === "undefined") return false;
@@ -91,7 +91,7 @@ function StepCard({ step, title, description, icon, actionLabel, onAction, hint 
       </Typography>
 
       {hint && (
-        <Typography sx={{ fontSize: 13, color: "#98A2B3", lineHeight: 1.5 }}>
+        <Typography sx={{ fontSize: 13, color: NEUTRAL[500], lineHeight: 1.5 }}>
           {hint}
         </Typography>
       )}

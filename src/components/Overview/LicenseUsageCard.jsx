@@ -18,12 +18,12 @@
 
 import { Box, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
 
 // Opaque equivalent of BRAND.darkSoft (rgba(59,64,77,0.08)) composited over
 // a white card — used for the gradient bar's track/mask, which must not be
 // translucent (see the comment at its usage site).
-const TRACK_COLOR = "#eff0f1";
+const TRACK_COLOR = NEUTRAL[50];
 
 // Mirrors modules/licensing/license-thresholds.ts on the backend. The
 // backend sends `status`, so this is only a fallback for an older API —

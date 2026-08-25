@@ -42,7 +42,7 @@ import {
   Tooltip,
   Label
 } from "recharts";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -57,7 +57,7 @@ import { platformColor } from "../../utils/platform";
 // own internal "Unknown" bucket. Reusing BRAND.gray for both would make
 // "we don't know this device's OS" and "this device hasn't reported at
 // all yet" look like the same segment.
-export const PENDING_COLOR = "#C7CBD1";
+export const PENDING_COLOR = NEUTRAL[300];
 
 // Exported as a named export so the Assets page can reuse the exact
 // same donut (classification + coloring + legend) instead of

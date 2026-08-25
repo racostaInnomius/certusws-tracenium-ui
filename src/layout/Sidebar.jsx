@@ -41,7 +41,7 @@ import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOu
 
 import { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, NEUTRAL } from "../theme/brand";
 import { getTenantById } from "../api/tenants";
 
 export const SIDEBAR_WIDTH = 210;
@@ -366,7 +366,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
       sx={{
         width: SIDEBAR_WIDTH,
         bgcolor: BRAND.dark,
-        color: "#e7e9ee",
+        color: NEUTRAL[100],
         display: "flex",
         flexDirection: "column",
         height: "100dvh",
@@ -476,7 +476,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                 py: 0.6,
                 px: 1.1,
                 minHeight: 36,
-                color: "#e7e9ee",
+                color: NEUTRAL[100],
                 transition: "background-color 0.12s ease, color 0.12s ease",
                 ...(it.highlighted && {
                   bgcolor: BRAND.tealSoft,
@@ -500,7 +500,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
               <ListItemIcon
                 sx={{
                   minWidth: 32,
-                  color: isSelected ? BRAND.teal : "#b9bec8",
+                  color: isSelected ? BRAND.teal : NEUTRAL[400],
                   "& svg": { fontSize: 20 },
                 }}
               >

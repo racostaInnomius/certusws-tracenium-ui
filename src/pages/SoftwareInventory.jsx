@@ -42,13 +42,8 @@ import { BRAND } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 import { formatDate } from "../utils/format";
+import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
 
-const SOFTWARE_ACCENTS = {
-  installed: "#4F9A96",
-  publishers: "#3E877F",
-  sources: "#536B82",
-  appsPerDevice: "#D7787C",
-};
 
 function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
   return (
