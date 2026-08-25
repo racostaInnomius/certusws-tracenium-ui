@@ -186,6 +186,15 @@ const CAPTURE_ERROR_COPY = {
     "Security › Screen Recording — ask them to enable it there, then start " +
     "the session again. Apple requires a person to approve this; it cannot " +
     "be granted remotely.",
+  // Accesibilidad es un permiso SEPARADO del de Grabación de Pantalla: ver la
+  // pantalla no implica poder controlarla. El operador tiene que entender que
+  // no es el mismo diálogo que ya aprobaron, o pensará que algo se rompió.
+  accessibility_permission_pending:
+    "Remote control needs the Accessibility permission, which macOS keeps " +
+    "separate from Screen Recording — approving one does not grant the other. " +
+    "Tracenium Screen Helper now appears in System Settings › Privacy & " +
+    "Security › Accessibility; ask someone at the Mac to enable it there. " +
+    "Viewing the screen keeps working meanwhile.",
   screen_capture_helper_missing:
     "The screen capture helper isn't installed on this device. Reinstall or " +
     "upgrade the agent package to deploy it.",
