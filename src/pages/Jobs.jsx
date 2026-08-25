@@ -345,7 +345,7 @@ function DetailRow({ label, value, mono = false }) {
  * track; everything else scales proportionally so the user reads
  * ranking at a glance. Empty windows render an honest hint.
  */
-function JobsByTypeCard({ windowDays, data, loading }) {
+function JobsByTypeCard({ windowDays, data, loading, typeLabels }) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const total = Number(data?.total || 0);
   const max = items.reduce((acc, it) => Math.max(acc, Number(it.count || 0)), 0) || 1;
@@ -423,7 +423,12 @@ function JobsByTypeCard({ windowDays, data, loading }) {
                       pr: 1,
                     }}
                   >
-                    {row.type}
+                    {/* La etiqueta humana, igual que en la tabla. Esta tarjeta
+                        seguía imprimiendo el job_type crudo
+                        ("software_dp_prefetch"): el catálogo de 8 tipos se
+                        cableó al historial y a los filtros, y este sitio se
+                        quedó fuera. */}
+                    {typeLabels?.get(row.type) || row.type}
                   </Typography>
                   <Typography
                     sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.teal, flexShrink: 0 }}
@@ -506,33 +511,47 @@ function renderStatusChip(status, attempts) {
 }
 
 
+/**
+ * Batch rows read like single rows: the same dot, the same weight.
+ *
+ * They kept a filled pill after the single rows moved to dots, so a grouped
+ * dispatch looked like a different KIND of thing rather than the same thing
+ * covering several devices — the exact confusion the batch row exists to
+ * avoid. The counts stay, because on a batch "how many of them" IS the status.
+ */
 function renderBatchStatusChip(row) {
   const { __doneCount: done, __failedCount: failed, __totalCount: total } = row;
 
+  let label;
+  let color;
   if (done < total) {
-    return (
-      <Chip
-        label={`Running ${done}/${total}`}
-        size="small"
-        sx={{ bgcolor: BRAND.cyanSoft, color: BRAND.dark, fontWeight: 700, border: `1px solid ${BRAND.cyan}88` }}
-      />
-    );
+    label = "Running";
+    color = BRAND.cyan;
+  } else if (failed === 0) {
+    label = "Completed";
+    color = BRAND.teal;
+  } else if (failed === total) {
+    label = "Failed";
+    color = BRAND.alert.error;
+  } else {
+    label = "Partial";
+    color = BRAND.alert.warning;
   }
-  if (failed === 0) {
-    return (
-      <Chip
-        label={`Completed (${total})`}
-        size="small"
-        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, border: `1px solid ${BRAND.teal}55` }}
-      />
-    );
-  }
+
+  const count = done < total ? `${done}/${total}` : failed > 0 && failed < total
+    ? `${total - failed}/${total}`
+    : String(total);
+
   return (
-    <Chip
-      label={failed === total ? `Failed (${total})` : `${total - failed}/${total} ok`}
-      size="small"
-      sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
-    />
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />
+      <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, whiteSpace: "nowrap" }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+        {count}
+      </Typography>
+    </Stack>
   );
 }
 
@@ -1683,6 +1702,7 @@ export default function Jobs() {
           <JobsByTypeCard
             windowDays={chartWindowDays}
             data={jobsByType}
+            typeLabels={jobTypeLabels}
             loading={chartLoading || loadingJobs}
           />
         </Grid>

@@ -26,6 +26,22 @@ export default function App() {
             boxShadow: FOCUS_RING,
             borderRadius: 4,
           },
+          // ⚠️ Los inputs de MUI YA dibujan su propio foco: el <fieldset>
+          // recortado que rodea al campo engorda a 2px y toma el color
+          // primario. El anillo de arriba se pintaba ENCIMA, y el resultado
+          // era un doble borde en el selector de equipos.
+          //
+          // El foco sigue siendo visible en ellos — lo dibuja MUI, que además
+          // lo hace mejor porque su borde sigue la muesca de la etiqueta. Sólo
+          // se retira el anillo redundante.
+          [[
+            ".MuiInputBase-input",
+            ".MuiOutlinedInput-input",
+            ".MuiSelect-select",
+            ".MuiAutocomplete-input",
+          ].map((sel) => `${sel}:focus-visible`).join(", ")]: {
+            boxShadow: "none",
+          },
         }}
       />
       {/* MSP navigation state (portfolio + active client) wraps the shell
