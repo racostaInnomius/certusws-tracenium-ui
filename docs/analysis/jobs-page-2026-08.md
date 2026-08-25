@@ -230,7 +230,38 @@ pendiente, y la página se quedó modelando el mundo de 4 tipos sin resultado.
 - **P2 gating del select por plataforma** — DIFERIDO. El backend ya rechaza al ejecutar; la lógica (matrices por tipo, targets multi-plataforma) es más superficie que el valor actual. Pendiente si se vuelve un problema real de campo.
 - **P3 rama muerta + tests de lógica pura** — hecho. `buildJobPayload`, `validateNumericField` (sin la rama `required` muerta) y `resolveTypeFilter` extraídos a `utils/jobForm.js` con 13 tests. (`665b8bd`)
 
-### Lo que queda genuinamente pendiente
+### Cierre de los pendientes (verificado 2026-08-24, contra producción)
+
+Los cuatro puntos de abajo se revisaron uno a uno. **Ninguno requiere trabajo**:
+
+- **Gating por plataforma** — DESCARTADO POR DATOS. Cero fallos por plataforma
+  incorrecta en toda la historia de `device_jobs`; ningún `last_error` menciona
+  nada parecido. Era un juicio, ahora es un hecho medido.
+- **`DEFAULT_TENANT_FANOUT_ARCH`** — NO ES UN RIESGO. Alimenta sólo el
+  desplegable de versiones en fan-out; el binario lo resuelve cada agente con
+  su propia arquitectura al descargar (ver el comentario de `dpBaseUrlsForDevice`
+  en `job-dispatcher.ts`). El olor estaba documentado y es benigno.
+- **`/devices-connected` sin usar** — aceptable, ya anotado.
+- **Ergonomía** (un tipo por dispatch, panel fijo vs drawer) — sigue siendo
+  fricción real, pero es mejora de UX, no defecto.
+
+### Los dos bugs que destapó el análisis: ambos ya cerrados
+
+- **`unsupported_job_type:reset_baseline`** — RESUELTO el 2026-08-12 por
+  `408164c`. La causa era la deriva clásica de este fichero: `reset_baseline`
+  entró en `JOB_TYPES` y empezó a despacharse en mayo, pero `isSupportedJobType`
+  —una lista duplicada escrita a mano— no lo incluía, así que **el control-plane
+  rechazaba su propio auto-sanado durante ~3 meses, en silencio**. El mismo
+  commit añadió el test `accepts every JOB_TYPES entry`, que cierra la clase
+  entera; el P1 añadió la guarda por el otro lado (el catálogo cubre
+  exactamente lo que acepta el validador). Sin reapariciones.
+- **`software_install` con `last_error='OK'`** — una sola vez, 2026-08-17, sin
+  reaparecer. Queda anotado por si vuelve; con una ocurrencia no hay señal
+  suficiente para perseguirlo.
+
+Salud del orquestador al cierre: 289 completados, 25 timeouts, 14 fallos.
+
+### Referencia: los pendientes originales
 
 - **Gating del `<select>` de creación por plataforma del device** (P2 diferido) — el backend ya rechaza al ejecutar; construir las matrices plataforma×tipo es más superficie que el valor actual.
 - **Ergonomía diferida** (§4): un solo tipo por dispatch (no hay flujo "scan y luego install"), y el panel de detalle fijo en vez de drawer que roba una columna en `lg`.
