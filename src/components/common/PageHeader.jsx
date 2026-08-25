@@ -24,7 +24,7 @@
 
 import * as React from "react";
 import { Box, Stack, Typography } from "@mui/material";
-import { BRAND, LAYOUT, TEXT, TEXT_MUTED } from "../../theme/brand";
+import { BRAND, LAYOUT, TEXT } from "../../theme/brand";
 
 export default function PageHeader({
   title,
@@ -33,14 +33,6 @@ export default function PageHeader({
   chips = null,
   actions = null,
   sx = null,
-  // Compact variant: title on the same baseline as its subtitle, at h6 size.
-  // OPT-IN — the 22 other pages that use this header are untouched.
-  //
-  // For a page whose subject is a table, the page's own NAME is the largest
-  // thing on screen at h4/800 and pushes the data down. Compact hands that
-  // room back and lets the subtitle carry a live number instead of a sentence
-  // the operator has already read.
-  dense = false,
 }) {
   return (
     <Stack
@@ -70,28 +62,21 @@ export default function PageHeader({
                 display: "flex",
                 alignItems: "center",
                 flexShrink: 0,
-                "& svg": { fontSize: dense ? TEXT.xl : TEXT["3xl"], display: "block" },
+                "& svg": { fontSize: TEXT["3xl"], display: "block" },
               }}
             >
               {icon}
             </Box>
           ) : null}
           <Typography
-            variant={dense ? "h6" : LAYOUT.header.variant}
+            variant={LAYOUT.header.variant}
             component={LAYOUT.header.component}
-            sx={dense ? LAYOUT.headerDense.sx : LAYOUT.header.sx}
+            sx={LAYOUT.header.sx}
           >
             {title}
           </Typography>
-          {/* Compact puts the subtitle on the title's baseline, so a live
-              count reads as part of the heading instead of a second line. */}
-          {dense && subtitle ? (
-            <Typography sx={{ fontSize: TEXT.md, color: TEXT_MUTED, whiteSpace: "nowrap" }}>
-              {subtitle}
-            </Typography>
-          ) : null}
         </Stack>
-        {!dense && subtitle ? (
+        {subtitle ? (
           <Typography variant={LAYOUT.subtitle.variant} sx={LAYOUT.subtitle.sx}>
             {subtitle}
           </Typography>

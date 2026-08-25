@@ -40,7 +40,7 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 // BRAND used to be duplicated here (Fase 1 homologation deleted it).
 // Central source of truth lives in src/theme/brand.js; adding
 // borderStrong/tealText/etc. there propagates automatically.
-import { BRAND, DATAGRID_SX, ICON, MONO, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 
@@ -385,7 +385,7 @@ function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, s
   return (
     <SectionPaper variant="panel" sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box sx={{ mb: 1.5 }}>
-        <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: BRAND.dark }}>
+        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
           Jobs by type
         </Typography>
         <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
@@ -432,7 +432,7 @@ function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, s
                 pointerEvents: "none",
               }}
             >
-              <Typography sx={{ fontFamily: MONO, fontSize: TEXT["2xl"], fontWeight: 600, color: BRAND.dark, lineHeight: 1 }}>
+              <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 600, color: BRAND.dark, lineHeight: 1 }}>
                 {total}
               </Typography>
               <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>jobs</Typography>
@@ -471,7 +471,7 @@ function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, s
                   <Typography sx={{ flex: 1, fontSize: TEXT.md, color: BRAND.dark, minWidth: 0 }} noWrap>
                     {s.label}
                   </Typography>
-                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
                     {s.count}
                   </Typography>
                 </Stack>
@@ -524,7 +524,7 @@ function renderStatusChip(status, attempts) {
         {spec.label}
       </Typography>
       {burnt ? (
-        <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
           {burnt}
         </Typography>
       ) : null}
@@ -570,7 +570,7 @@ function renderBatchStatusChip(row) {
       <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, whiteSpace: "nowrap" }}>
         {label}
       </Typography>
-      <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
         {count}
       </Typography>
     </Stack>
@@ -1277,15 +1277,14 @@ export default function Jobs() {
       },
     },
     {
-      // Monospaced: dates are compared DOWN the column, and proportional
-      // digits never line up. Completed-at moves into the detail panel —
-      // on a history the question is almost always "when was this fired".
+      // Completed-at moves into the detail panel — on a history the question
+      // is almost always "when was this fired".
       field: "created_at",
       headerName: "When",
       minWidth: 160,
       flex: 0.6,
       renderCell: (params) => (
-        <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: BRAND.dark }} noWrap>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }} noWrap>
           {formatDate(params.value)}
         </Typography>
       ),
@@ -1729,12 +1728,16 @@ export default function Jobs() {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
-        dense
         title="Jobs"
-        // The old subtitle described what the page is — something the operator
-        // knows by the time they have navigated to it. A live count is what
-        // they actually came to find out.
-        subtitle={jobCountSummary}
+        subtitle="Dispatch and track orchestrator jobs across the fleet"
+        // The live count keeps its place, but in the `chips` slot rather than
+        // in the title — same slot Overview uses for its freshness line. The
+        // heading itself stays identical to the other 22 pages.
+        chips={
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            {jobCountSummary}
+          </Typography>
+        }
         icon={<AssignmentOutlinedIcon />}
         actions={
           <RefreshControl
@@ -1798,7 +1801,7 @@ export default function Jobs() {
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1} alignItems="baseline">
-                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT["3xl"], fontWeight: 600, color: cell.fg, lineHeight: 1 }}>
+                  <Typography sx={{ fontSize: TEXT["3xl"], fontWeight: 600, color: cell.fg, lineHeight: 1 }}>
                     {cell.value}
                   </Typography>
                   <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap>
@@ -1813,9 +1816,8 @@ export default function Jobs() {
 
       {/* Jobs by status (timeseries) + Jobs by type (breakdown).
           The two share `chartWindowDays`; the chart's window toggle
-          re-slices both cards in lock-step. Laid out 8/4 so the
-          chart gets enough horizontal room to read the lines clearly
-          on md+ screens. */}
+          re-slices both cards in lock-step. Laid out 8/4 so the stack
+          has room for one readable column per day on md+ screens. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 8 }}>
           <JobsTimeseriesChart
@@ -1823,6 +1825,11 @@ export default function Jobs() {
             loading={chartLoading}
             windowDays={chartWindowDays}
             onWindowDaysChange={setChartWindowDays}
+            // Stacked here, not on Overview: this card sits directly above
+            // the history it summarises, so the question is what SHARE of
+            // the day failed — a band, not three lines to eyeball against
+            // each other. Overview keeps the lines.
+            variant="stacked"
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -1859,7 +1866,7 @@ export default function Jobs() {
             sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${BRAND.border}` }}
           >
             <Box>
-              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: BRAND.dark }}>
+              <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
                 Failures
               </Typography>
               <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
@@ -1933,11 +1940,11 @@ export default function Jobs() {
                   {row.label}
                 </Typography>
                 {row.meta ? (
-                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
                     {row.meta}
                   </Typography>
                 ) : null}
-                <Typography sx={{ fontFamily: MONO, fontSize: TEXT.md, fontWeight: 600, color: row.dot }}>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: row.dot }}>
                   {row.count}
                 </Typography>
               </Stack>
@@ -1972,7 +1979,7 @@ export default function Jobs() {
         >
           {createJobOpen ? (
             <Box>
-              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
+              <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700, mb: 0.25 }}>
                 Create Job
               </Typography>
               <Typography sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>
@@ -2377,7 +2384,7 @@ export default function Jobs() {
                 flexWrap: "wrap",
               }}
             >
-              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
+              <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
                 Tenant Job History
               </Typography>
               <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
@@ -2505,7 +2512,7 @@ export default function Jobs() {
             sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}
           >
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
-              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
+              <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
                 {selectedBatchId ? "Batch Detail" : "Job Detail"}
               </Typography>
               {selectedBatchId && selectedBatchJobs.length > 0

@@ -5,10 +5,20 @@
 //   { windowDays: 7, buckets: [{ bucket, completed, failed, inFlight, total }] }
 // returned by GET /api/v1/orchestrator/jobs/timeseries?window=7d.
 //
-// Three separate lines (not stacked) because the user needs to read
-// "did more fail today than usual?" independently of total volume. A
-// stacked area would hide that signal. Failed line uses the red role
-// color so it stands out when it moves.
+// Two shapes, chosen by `variant`:
+//
+//   "line" (default) — three separate lines. On Overview the card is one
+//     tile among many and the question is "did more fail today than
+//     usual?", read independently of total volume.
+//
+//   "stacked" — stacked bars, used by the Jobs page. There the chart is
+//     the page's own subject sitting above the history it summarises, and
+//     the question becomes "how much of the day's work failed": a
+//     proportion, which a stack shows as a band and three lines do not.
+//     The failed series sits on top so its band is the one that grows into
+//     empty space instead of being squeezed between the other two.
+//
+// Failed uses the red role color in both.
 
 import { useEffect, useState } from "react";
 import { Paper, Typography, Box, Skeleton, Stack } from "@mui/material";
@@ -18,6 +28,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -49,6 +61,9 @@ export default function JobsTimeseriesChart({
   // behaviour intact (as on Overview).
   windowDays: windowDaysProp,
   onWindowDaysChange,
+  // "line" | "stacked" — see the header comment. Default keeps Overview
+  // and Software Delivery exactly as they were.
+  variant = "line",
 }) {
   // Same override pattern as AuditTimeseriesChart. See the comments
   // there for the rationale — we keep the two charts structurally
@@ -174,59 +189,94 @@ export default function JobsTimeseriesChart({
       ) : (
         <Box sx={{ height: 220 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
-              <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="day"
-                tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
-                axisLine={{ stroke: BRAND.borderStrong }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
-                axisLine={{ stroke: BRAND.borderStrong }}
-                tickLine={false}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: `1px solid ${BRAND.border}`,
-                  fontSize: TEXT.sm
-                }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
-                iconType="circle"
-              />
-              <Line
-                type="monotone"
-                dataKey="completed"
-                name="Completed"
-                stroke={ROLE.positive}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="inFlight"
-                name="In flight"
-                stroke={BRAND.teal}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="failed"
-                name="Failed"
-                stroke={ROLE.critical}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
+            {variant === "stacked" ? (
+              <BarChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }} barCategoryGap="22%">
+                <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
+                  axisLine={{ stroke: BRAND.borderStrong }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
+                  axisLine={{ stroke: BRAND.borderStrong }}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  cursor={{ fill: BRAND.surfaceMuted }}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: `1px solid ${BRAND.border}`,
+                    fontSize: TEXT.sm
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
+                  iconType="square"
+                />
+                {/* Declaration order is bottom-to-top in a Recharts stack, so
+                    Failed is declared last to land on top of the column. */}
+                <Bar dataKey="completed" name="Completed" stackId="s" fill={ROLE.positive} />
+                <Bar dataKey="inFlight" name="In flight" stackId="s" fill={BRAND.cyan} />
+                <Bar dataKey="failed" name="Failed" stackId="s" fill={ROLE.critical} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            ) : (
+              <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
+                  axisLine={{ stroke: BRAND.borderStrong }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
+                  axisLine={{ stroke: BRAND.borderStrong }}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: `1px solid ${BRAND.border}`,
+                    fontSize: TEXT.sm
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
+                  iconType="circle"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="completed"
+                  name="Completed"
+                  stroke={ROLE.positive}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="inFlight"
+                  name="In flight"
+                  stroke={BRAND.teal}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="failed"
+                  name="Failed"
+                  stroke={ROLE.critical}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            )}
           </ResponsiveContainer>
         </Box>
       )}

@@ -179,19 +179,6 @@ export const ICON = {
  * esquinas redondeadas.
  */
 /**
- * Monospaced stack for MACHINE values — timestamps, counters, versions, ids.
- *
- * Not a branding choice: these are values read by comparing them down a
- * column. In a proportional face the digits have different widths, so the
- * columns never line up and the eye has to read each row instead of scanning
- * the shape of the column.
- *
- * System stack on purpose — no webfont round-trip on a page whose job is to
- * render a table fast.
- */
-export const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
-
-/**
  * Secondary text on a light surface.
  *
  * MUI's default (`text.secondary`, rgba(0,0,0,0.6)) is a transparency, so its
@@ -232,16 +219,6 @@ export const LAYOUT = {
       color: BRAND.dark,
       fontWeight: 800,
       letterSpacing: -0.5,
-      lineHeight: 1.2,
-    },
-  },
-  // Compact heading: same <h1> semantics, sized for a page whose subject is a
-  // table rather than the heading itself. See PageHeader's `dense` prop.
-  headerDense: {
-    sx: {
-      color: BRAND.dark,
-      fontWeight: 700,
-      letterSpacing: -0.2,
       lineHeight: 1.2,
     },
   },
