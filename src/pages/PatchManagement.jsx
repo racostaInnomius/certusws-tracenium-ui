@@ -339,7 +339,7 @@ function IMPACT_CHIP({ impact }) {
   const map = {
     none: { label: "No impact", bg: BRAND.tealSoft, fg: BRAND.tealText, border: `${BRAND.teal}55` },
     host: { label: "Host busy", bg: BRAND.cyanSoft, fg: BRAND.dark, border: `${BRAND.cyan}88` },
-    access: { label: "Access change", bg: "rgba(199,121,43,0.14)", fg: "#8b5418", border: "rgba(199,121,43,0.4)" },
+    access: { label: "Access change", bg: "rgba(199,121,43,0.14)", fg: BRAND.alert.high, border: "rgba(199,121,43,0.4)" },
     reboot: { label: "May reboot", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
     downtime: { label: "Downtime", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
   };
@@ -398,7 +398,7 @@ function ActionsList({ actions, pmpEnabled, onRun }) {
             p: 1.5,
             borderRadius: 2,
             border: `1px solid ${BRAND.border}`,
-            bgcolor: "#ffffff",
+            bgcolor: BRAND.surface,
             transition: "background-color 0.12s ease, border-color 0.12s ease",
             "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft },
             flexDirection: { xs: "column", sm: "row" },
@@ -428,7 +428,7 @@ function ActionsList({ actions, pmpEnabled, onRun }) {
                 textTransform: "none",
                 fontWeight: 700,
                 bgcolor: enabled ? BRAND.teal : BRAND.tealSoft,
-                color: enabled ? "#fff" : BRAND.tealText,
+                color: enabled ? BRAND.surface : BRAND.tealText,
                 "&:hover": { bgcolor: enabled ? BRAND.tealHover : BRAND.tealSoft },
                 "&.Mui-disabled": {
                   bgcolor: BRAND.darkSoft,
@@ -1151,7 +1151,7 @@ export default function PatchManagement({ onNavigate }) {
           dispatcher path is wired (next milestone). */}
       <SectionPaper
         variant="panel"
-        sx={{ p: 0, bgcolor: "#ffffff", overflow: "hidden", mb: 2 }}
+        sx={{ p: 0, bgcolor: BRAND.surface, overflow: "hidden", mb: 2 }}
       >
         <Tabs
           value={tab}
@@ -1298,7 +1298,7 @@ export default function PatchManagement({ onNavigate }) {
               <Button
                 variant="contained"
                 size="small"
-                startIcon={dispatching ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <DownloadOutlinedIcon />}
+                startIcon={dispatching ? <CircularProgress size={14} sx={{ color: BRAND.surface }} /> : <DownloadOutlinedIcon />}
                 onClick={handleInstallSelected}
                 disabled={dispatching || selectedHotfixes.size === 0}
                 sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
@@ -1540,7 +1540,7 @@ export default function PatchManagement({ onNavigate }) {
             variant="contained"
             onClick={confirmBulkInstall}
             disabled={!bulkDialog || bulkDialog.loading || bulkDialog.dispatching || !bulkDialog.plan || bulkDialog.plan.length === 0}
-            startIcon={bulkDialog?.dispatching ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : null}
+            startIcon={bulkDialog?.dispatching ? <CircularProgress size={14} sx={{ color: BRAND.surface }} /> : null}
             sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
           >
             Dispatch

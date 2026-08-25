@@ -438,7 +438,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                         sx={{
                           height: 20,
                           fontSize: 11,
-                          bgcolor: "#fff",
+                          bgcolor: BRAND.surface,
                           border: `1px solid ${BRAND.border}`,
                           color: BRAND.dark,
                         }}
@@ -818,7 +818,7 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
           onClick={handleSubmit}
           disabled={!canSubmit}
           variant="contained"
-          startIcon={submitting ? <CircularProgress size={14} sx={{ color: "#fff" }} /> : <RocketLaunchOutlinedIcon />}
+          startIcon={submitting ? <CircularProgress size={14} sx={{ color: BRAND.surface }} /> : <RocketLaunchOutlinedIcon />}
           sx={{
             textTransform: "none",
             fontWeight: 700,
@@ -1062,7 +1062,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
           sx: {
             width: { xs: "100%", sm: 560, lg: 640 },
             p: 2,
-            bgcolor: "#fff",
+            bgcolor: BRAND.surface,
           },
         },
       }}

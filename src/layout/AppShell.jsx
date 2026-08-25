@@ -25,7 +25,7 @@ import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import { BRAND } from "../theme/brand";
+import { BRAND, ROLE } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
 import { useMsp } from "../msp/MspContext";
 import TenantSwitcher from "../msp/TenantSwitcher";
@@ -76,7 +76,7 @@ function PageFallback() {
         justifyContent: "center",
       }}
     >
-      <CircularProgress sx={{ color: "#5A9F9F" }} />
+      <CircularProgress sx={{ color: ROLE.neutral }} />
     </Box>
   );
 }
@@ -315,7 +315,7 @@ function NoInformationOverlay({ onNavigate }) {
                 fontWeight: 800,
                 borderRadius: 2,
                 bgcolor: BRAND.teal,
-                color: "#fff",
+                color: BRAND.surface,
                 px: 2.25,
                 "&:hover": { bgcolor: BRAND.tealHover },
               }}
@@ -1088,7 +1088,7 @@ export default function AppShell() {
               gap: 2,
               px: { xs: 1.25, sm: 2, md: 2.5 },
               py: 1,
-              bgcolor: "#fff",
+              bgcolor: BRAND.surface,
               borderBottom: `1px solid ${BRAND.border}`,
             }}
           >

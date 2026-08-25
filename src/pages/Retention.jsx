@@ -536,7 +536,7 @@ export default function Retention({ onNavigate }) {
                               key={r.table}
                               size="small"
                               label={`${r.table}: ${formatRows(Number(r.candidates))}`}
-                              sx={{ bgcolor: "#fff", color: BRAND.dark, fontSize: 11 }}
+                              sx={{ bgcolor: BRAND.surface, color: BRAND.dark, fontSize: 11 }}
                             />
                           ))
                       : null}

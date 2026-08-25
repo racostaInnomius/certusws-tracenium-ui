@@ -915,7 +915,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         <FolderOutlinedIcon sx={{ color: BRAND.teal, fontSize: 18 }} />
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, color: "#fff", flex: 1, fontSize: 13 }}
+          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: 13 }}
         >
           File Manager · {devLabel}
         </Typography>
@@ -937,7 +937,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 2,
-            bgcolor: "#fff",
+            bgcolor: BRAND.surface,
             p: 3
           }}
         >
@@ -968,7 +968,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 2,
-            bgcolor: "#fff"
+            bgcolor: BRAND.surface
           }}
         >
           <CircularProgress size={28} sx={{ color: BRAND.teal }} />
@@ -980,7 +980,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
 
       {/* ── Browsing UI ── */}
       {state === STATE.BROWSING && (
-        <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", bgcolor: "#fff" }}>
+        <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", bgcolor: BRAND.surface }}>
           {/* Path bar */}
           <Stack
             direction="row"

@@ -145,7 +145,7 @@ function renderOutcomeChip(outcome) {
       <Chip
         label="Error"
         size="small"
-        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: "#8b5418", fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
+        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: BRAND.alert.high, fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
       />
     );
   }
@@ -770,7 +770,7 @@ export default function Audit() {
                         bgcolor: isActive
                           ? meta?.color || BRAND.teal
                           : meta?.tint || BRAND.darkSoft,
-                        color: isActive ? "#fff" : meta?.color || BRAND.gray,
+                        color: isActive ? BRAND.surface : meta?.color || BRAND.gray,
                         border: `1px solid ${(meta?.color || BRAND.border)}55`,
                         opacity: disabled ? 0.4 : 1,
                         cursor: disabled ? "not-allowed" : "pointer",
@@ -999,7 +999,7 @@ export default function Audit() {
             sx: {
               width: { xs: "100%", sm: 520, lg: 600 },
               p: 2,
-              bgcolor: "#fff",
+              bgcolor: BRAND.surface,
             },
           },
         }}

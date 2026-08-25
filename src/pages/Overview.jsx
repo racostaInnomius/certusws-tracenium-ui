@@ -61,7 +61,7 @@ const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.Co
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { ROLE } from "../theme/brand";
+import { BRAND, ROLE } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
@@ -103,7 +103,7 @@ function ChartSlot({ height = 280 }) {
         height,
         borderRadius: 3,
         border: "1px solid rgba(0,0,0,0.08)",
-        backgroundColor: "#fff",
+        backgroundColor: BRAND.surface,
       }}
     />
   );

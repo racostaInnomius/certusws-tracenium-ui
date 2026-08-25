@@ -611,7 +611,7 @@ export default function DeployWizardDialog({
             variant="contained"
             startIcon={
               submitting ? (
-                <CircularProgress size={14} sx={{ color: "#fff" }} />
+                <CircularProgress size={14} sx={{ color: BRAND.surface }} />
               ) : (
                 <RocketLaunchOutlinedIcon />
               )

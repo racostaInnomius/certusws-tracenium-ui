@@ -55,7 +55,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND } from "../../theme/brand";
+import { BRAND, ROLE } from "../../theme/brand";
 import { httpGetJson } from "../../api/http";
 
 const SPEEDS = [1, 2, 4, 8];
@@ -136,7 +136,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
       theme: {
         background: "#1f2933",
         foreground: "#e5e7eb",
-        cursor: "#8ffdff"
+        cursor: ROLE.accent
       },
       // Replay viewport sized from the asciinema header — if a
       // future agent reports the negotiated dimensions, this

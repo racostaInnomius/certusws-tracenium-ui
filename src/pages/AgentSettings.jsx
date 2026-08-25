@@ -311,7 +311,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
               "& .MuiInputBase-root": {
                 fontFamily: "monospace",
                 fontSize: 12.5,
-                bgcolor: "#ffffff",
+                bgcolor: BRAND.surface,
               },
             }}
           />
@@ -1102,7 +1102,7 @@ export default function AgentSettings({ embedded = false }) {
               value={summary.pending}
               hint="sent, awaiting agent reply"
               icon={<HourglassEmptyOutlinedIcon />}
-              accent="#8b5418"
+              accent={BRAND.alert.high}
               tint="rgba(199,121,43,0.14)"
             />
           </Grid>
@@ -1295,7 +1295,7 @@ function TenantTab(props) {
               disabled={tenantSaving || Boolean(tenantJsonError) || Boolean(tenantLoadError)}
               sx={{
                 bgcolor: BRAND.teal,
-                color: "#fff",
+                color: BRAND.surface,
                 fontWeight: 700,
                 textTransform: "none",
                 "&:hover": { bgcolor: BRAND.tealHover },
@@ -1508,7 +1508,7 @@ function DeviceTab(props) {
                   disabled={deviceSaving || Boolean(deviceJsonError) || loading}
                   sx={{
                     bgcolor: BRAND.teal,
-                    color: "#fff",
+                    color: BRAND.surface,
                     fontWeight: 700,
                     textTransform: "none",
                     "&:hover": { bgcolor: BRAND.tealHover },

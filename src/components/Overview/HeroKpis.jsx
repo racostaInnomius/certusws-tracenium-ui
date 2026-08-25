@@ -139,7 +139,7 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClic
         // Native <button> resets we need once the Paper becomes
         // interactive — otherwise MUI's default button styling (font
         // family, background) bleeds through.
-        backgroundColor: BRAND.surface || "#fff",
+        backgroundColor: BRAND.surface,
         backgroundImage: "none",
         font: "inherit",
         cursor: interactive ? "pointer" : "default",

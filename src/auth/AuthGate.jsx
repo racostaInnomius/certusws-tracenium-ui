@@ -20,6 +20,7 @@ import Logo from "../assets/T.png";
 import { useAuthContext } from "./AuthContext";
 import { clearApiCache, setApiCacheSessionScope, getActiveTenantId } from "../api/http";
 import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
+import { BRAND } from "../theme/brand";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -244,7 +245,7 @@ function AuthShell({
 
         <Typography
           sx={{
-            color: "#ffffff",
+            color: BRAND.surface,
             fontWeight: 600,
             fontSize: { xs: 28, sm: 30 },
             lineHeight: 1.2,
@@ -607,7 +608,7 @@ export default function AuthGate({ children }) {
               <Typography
                 variant="h6"
                 sx={{
-                  color: "#ffffff",
+                  color: BRAND.surface,
                   fontWeight: 600,
                   fontSize: { xs: 28, sm: 30 },
                   lineHeight: 1.2,
@@ -840,7 +841,7 @@ export default function AuthGate({ children }) {
         >
           <Typography
             variant="h6"
-            sx={{ color: "#ffffff", fontWeight: 600, mb: 1.5 }}
+            sx={{ color: BRAND.surface, fontWeight: 600, mb: 1.5 }}
           >
             {getErrorTitle(errorConnectivityState)}
           </Typography>

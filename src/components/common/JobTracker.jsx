@@ -212,7 +212,7 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
         width: { xs: "calc(100% - 32px)", sm: 360 },
         maxHeight: "60vh",
         overflowY: "auto",
-        bgcolor: "#ffffff",
+        bgcolor: BRAND.surface,
         border: `1px solid ${BRAND.border}`,
         borderRadius: 2,
         boxShadow: "0 8px 24px rgba(59,64,77,0.15)",

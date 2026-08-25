@@ -417,7 +417,7 @@ function renderStatusChip(status) {
       <Chip
         label={value === "pending" ? "Pending" : "Retrying"}
         size="small"
-        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: "#8b5418", fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
+        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: BRAND.alert.high, fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
       />
     );
   }
@@ -1557,7 +1557,7 @@ export default function Jobs() {
               title="Pending / Running"
               value={summary.pending}
               icon={<HourglassBottomOutlinedIcon />}
-              accent="#8b5418"
+              accent={BRAND.alert.high}
               tint="rgba(199,121,43,0.14)"
             />
           </Grid>
@@ -1634,7 +1634,7 @@ export default function Jobs() {
                   }
                 : {
                     bgcolor: BRAND.teal,
-                    color: "#fff",
+                    color: BRAND.surface,
                     "&:hover": { bgcolor: BRAND.tealHover },
                   }),
             }}
@@ -1974,7 +1974,7 @@ export default function Jobs() {
             disabled={submitting || loadingMeta}
             sx={{
               bgcolor: BRAND.teal,
-              color: "#fff",
+              color: BRAND.surface,
               fontWeight: 700,
               textTransform: "none",
               minWidth: 170,

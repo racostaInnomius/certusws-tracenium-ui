@@ -357,7 +357,7 @@ export default function DeploymentDetailDrawer({
       open={open}
       onClose={onClose}
       slotProps={{
-        paper: { sx: { width: { xs: "100%", sm: 640, lg: 760 }, p: 2, bgcolor: "#fff" } },
+        paper: { sx: { width: { xs: "100%", sm: 640, lg: 760 }, p: 2, bgcolor: BRAND.surface } },
       }}
     >
       {deployment ? (

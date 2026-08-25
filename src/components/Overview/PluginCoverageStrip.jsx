@@ -328,7 +328,7 @@ function PluginCoverageDrillDialog({
                   bgcolor:
                     (data?.missingCount ?? 0) > 0 ? ROLE.caution : BRAND.surfaceMuted,
                   color:
-                    (data?.missingCount ?? 0) > 0 ? "#fff" : BRAND.gray
+                    (data?.missingCount ?? 0) > 0 ? BRAND.surface : BRAND.gray
                 }}
               />
             </Stack>
@@ -347,7 +347,7 @@ function PluginCoverageDrillDialog({
                   bgcolor:
                     (data?.coveredCount ?? 0) > 0 ? ROLE.positive : BRAND.surfaceMuted,
                   color:
-                    (data?.coveredCount ?? 0) > 0 ? "#fff" : BRAND.gray
+                    (data?.coveredCount ?? 0) > 0 ? BRAND.surface : BRAND.gray
                 }}
               />
             </Stack>

@@ -136,7 +136,7 @@ export default function Topbar({ onMenuClick }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        color: "#ffffff",
+        color: BRAND.surface,
       }}
     >
       {/* Left cluster: hamburger (mobile only) + brand + subtitle.
@@ -148,7 +148,7 @@ export default function Topbar({ onMenuClick }) {
           aria-label="Open navigation"
           size="small"
           sx={{
-            color: "#ffffff",
+            color: BRAND.surface,
             mr: 0.5,
             flexShrink: 0,
             display: { xs: "inline-flex", md: "none" },
@@ -163,7 +163,7 @@ export default function Topbar({ onMenuClick }) {
             fontSize: { xs: 12, sm: 13 },
             fontWeight: 400,
             letterSpacing: 0.3,
-            color: "#ffffff",
+            color: BRAND.surface,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -212,7 +212,7 @@ export default function Topbar({ onMenuClick }) {
           sx={{
             fontSize: 13,
             fontWeight: 500,
-            color: "#ffffff",
+            color: BRAND.surface,
             whiteSpace: "nowrap",
             display: { xs: "none", md: "block" },
           }}
@@ -225,7 +225,7 @@ export default function Topbar({ onMenuClick }) {
             aria-label="Alerts"
             onClick={() => navigateToPage("alerts")}
             sx={{
-              color: "#ffffff",
+              color: BRAND.surface,
               flexShrink: 0,
               "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
             }}
@@ -254,7 +254,7 @@ export default function Topbar({ onMenuClick }) {
             aria-label="Sign out"
             onClick={performLogout}
             sx={{
-              color: "#ffffff",
+              color: BRAND.surface,
               flexShrink: 0,
               "&:hover": { bgcolor: "rgba(90,159,159,0.28)" },
             }}

@@ -241,6 +241,10 @@ export default defineConfig([
   // -----------------------------------------------------------------
   {
     files: COLOR_SCOPED,
+    // Los tests quedan fuera: sus colores son fixtures ("#111", "#222") que
+    // existen para distinguir series en una aserción, no para pintar UI.
+    // Forzarlos a tokens haría el test menos legible sin proteger nada.
+    ignores: ['**/*.test.{js,jsx}', '**/__tests__/**'],
     rules: {
       'no-restricted-syntax': [
         'error',

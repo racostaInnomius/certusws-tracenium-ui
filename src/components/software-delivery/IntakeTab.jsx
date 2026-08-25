@@ -153,7 +153,7 @@ export default function IntakeTab({ canManage, notify }) {
     ok: { bg: BRAND.alert?.successSoft, border: BRAND.alert?.success, color: BRAND.alert?.success },
     warn: { bg: BRAND.alert?.warningSoft, border: BRAND.alert?.warning, color: BRAND.alert?.warning },
     crit: { bg: BRAND.alert?.errorSoft, border: BRAND.alert?.error, color: BRAND.alert?.error },
-    neutral: { bg: "#fff", border: BRAND.border, color: BRAND.dark },
+    neutral: { bg: BRAND.surface, border: BRAND.border, color: BRAND.dark },
   };
 
   return (

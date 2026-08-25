@@ -1005,7 +1005,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         <DesktopWindowsOutlinedIcon sx={{ color: BRAND.teal, fontSize: 18 }} />
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, color: "#fff", flex: 1, fontSize: 13 }}
+          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: 13 }}
         >
           Screen Share · {devLabel}
         </Typography>
@@ -1071,7 +1071,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             alignItems: "center",
             justifyContent: "center",
             gap: 2,
-            bgcolor: "#fff",
+            bgcolor: BRAND.surface,
             p: 3
           }}
         >

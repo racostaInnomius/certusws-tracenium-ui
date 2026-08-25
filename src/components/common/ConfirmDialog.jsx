@@ -189,7 +189,7 @@ export default function ConfirmDialog({
             "&.Mui-disabled": {
               bgcolor: confirmBg,
               opacity: 0.6,
-              color: "#fff",
+              color: BRAND.surface,
             },
           }}
         >

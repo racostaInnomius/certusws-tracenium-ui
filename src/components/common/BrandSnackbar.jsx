@@ -80,7 +80,7 @@ export default function BrandSnackbar({
   // For brand pastels (success/warning) use BRAND.dark text; for the
   // coral critical it works with white. Keep this simple: dark on
   // anything except critical.
-  const fg = severity === "error" ? "#fff" : BRAND.dark;
+  const fg = severity === "error" ? BRAND.surface : BRAND.dark;
 
   return (
     <Snackbar

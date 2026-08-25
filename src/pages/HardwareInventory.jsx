@@ -228,7 +228,7 @@ const integratedFilterFieldSx = {
   "& .MuiOutlinedInput-root": {
     minHeight: 40,
     borderRadius: 2,
-    bgcolor: "#fff",
+    bgcolor: BRAND.surface,
     transition: "border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease",
     "& fieldset": {
       borderColor: BRAND.border,
@@ -758,7 +758,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
               fontWeight: 800,
               textTransform: "none",
               whiteSpace: "nowrap",
-              bgcolor: "#fff",
+              bgcolor: BRAND.surface,
               "&:hover": {
                 borderColor: BRAND.tealHover,
                 bgcolor: BRAND.tealSoft,

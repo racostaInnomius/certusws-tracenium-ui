@@ -47,7 +47,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND } from "../../theme/brand";
+import { BRAND, ROLE } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -96,7 +96,7 @@ export default function ShellTerminal({ session, device, onClose }) {
       theme: {
         background: "#1f2933",
         foreground: "#e5e7eb",
-        cursor: "#8ffdff"
+        cursor: ROLE.accent
       },
       scrollback: 5000
     });

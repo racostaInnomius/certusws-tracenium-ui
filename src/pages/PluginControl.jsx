@@ -162,7 +162,7 @@ function PluginRow({ plugin, enabled, onToggle, readOnly, coverage, totalDevices
         p: 1.5,
         border: `1px solid ${BRAND.border}`,
         borderRadius: 2,
-        bgcolor: plugin.required ? BRAND.darkSoft : "#ffffff",
+        bgcolor: plugin.required ? BRAND.darkSoft : BRAND.surface,
         flexWrap: "wrap",
       }}
     >

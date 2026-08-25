@@ -90,7 +90,7 @@ function StatusChip({ status }) {
         size="small"
         sx={{
           bgcolor: "rgba(199,121,43,0.14)",
-          color: "#8b5418",
+          color: BRAND.alert.high,
           fontWeight: 700,
           border: "1px solid rgba(199,121,43,0.4)",
         }}
@@ -729,7 +729,7 @@ export default function PKI() {
               title="Pending"
               value={summary?.pending ?? 0}
               icon={<HourglassEmptyOutlinedIcon />}
-              accent="#8b5418"
+              accent={BRAND.alert.high}
               tint="rgba(199,121,43,0.14)"
             />
           </Grid>

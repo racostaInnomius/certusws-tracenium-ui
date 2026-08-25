@@ -239,7 +239,7 @@ function cardSx(borderColor) {
     borderRadius: 3,
     border: `1px solid ${borderColor}`,
     boxShadow: BRAND.shadow,
-    backgroundColor: BRAND.surface || "#fff",
+    backgroundColor: BRAND.surface,
     backgroundImage: "none",
   };
 }

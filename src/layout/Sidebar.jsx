@@ -485,11 +485,11 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                 }),
                 "&:hover": {
                   bgcolor: "rgba(90,159,159,0.16)",
-                  color: "#ffffff",
+                  color: BRAND.surface,
                 },
                 "&.Mui-selected": {
                   bgcolor: "rgba(90,159,159,0.28)",
-                  color: "#ffffff",
+                  color: BRAND.surface,
                   "& .MuiListItemIcon-root": { color: BRAND.teal },
                 },
                 "&.Mui-selected:hover": {
@@ -592,7 +592,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
             borderRadius: 2,
             "&:hover": {
               bgcolor: "rgba(90,159,159,0.16)",
-              color: "#ffffff",
+              color: BRAND.surface,
             },
           }}
         >

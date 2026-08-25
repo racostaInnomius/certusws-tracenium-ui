@@ -123,7 +123,7 @@ function StepCard({ active, number, icon, title, body, actionLabel, onClick }) {
           border: active
             ? `1px solid ${BRAND.teal}`
             : `1px solid ${BRAND.border}`,
-          bgcolor: "#fff",
+          bgcolor: BRAND.surface,
           display: "flex",
           gap: 1.25,
           alignItems: "flex-start",
@@ -145,7 +145,7 @@ function StepCard({ active, number, icon, title, body, actionLabel, onClick }) {
             height: 28,
             borderRadius: "50%",
             bgcolor: active ? BRAND.teal : BRAND.tealSoftStrong,
-            color: active ? "#fff" : BRAND.tealText,
+            color: active ? BRAND.surface : BRAND.tealText,
             fontSize: 13,
             fontWeight: 700,
             display: "flex",
