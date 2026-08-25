@@ -163,6 +163,15 @@ export default defineConfig([
       // same reason for any `import React from "react"` stragglers.
       'react/jsx-uses-vars': 'error',
       'react/jsx-uses-react': 'error',
+      // ⚠️ La contraparte de `jsx-uses-vars`, y NO es la misma regla.
+      //
+      // `jsx-uses-vars` evita que se borre un import que sólo se usa en JSX.
+      // Ésta detecta lo INVERSO: un componente usado en JSX que nadie importó.
+      // El hueco entre las dos tiró una página entera en producción — un
+      // <Button/> sin import en AssetsDashboard, que sólo reventaba en el
+      // tenant cuyo dato hacía renderizar esa rama, así que ni el build ni los
+      // tests ni la revisión visual lo vieron.
+      'react/jsx-no-undef': 'error',
       // Delegate unused-import detection to the dedicated plugin so
       // `--fix` can remove them. We disable the base rule on imports
       // specifically, and keep it (as warn) for the other unused-var
