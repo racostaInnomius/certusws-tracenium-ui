@@ -58,7 +58,7 @@ import {
   createTenantJobs,
   getJob,
   listJobTypes,
-  listKnownDevices,
+  listAllKnownDevices,
   listTenantJobs,
   retryJob,
 } from "../api/jobs";
@@ -563,7 +563,7 @@ export default function Jobs() {
     "jobs:meta:v1",
     async () => {
       const [knownResponse, typeResponse] = await Promise.all([
-        listKnownDevices(),
+        listAllKnownDevices(),
         listJobTypes(),
       ]);
       const known = Array.isArray(knownResponse?.items)

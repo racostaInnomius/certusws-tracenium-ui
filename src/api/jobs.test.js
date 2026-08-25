@@ -4,18 +4,19 @@
 
 import { describe, expect, it } from "vitest";
 
-import { respond } from "../test/msw/server";
+import { API_BASE, http, HttpResponse, respond, server } from "../test/msw/server";
 import { clearApiCache } from "./http";
 import {
   cancelJob,
   createDeviceJob,
   createTenantJobs,
   getJob,
+  listAllKnownDevices,
   listDeviceJobs,
   listJobTypes,
   listKnownDevices,
   listTenantJobs,
-  retryJob,
+  retryJob
 } from "./jobs";
 
 const BASE = "/api/v1/orchestrator";
@@ -121,5 +122,43 @@ describe("job mutations", () => {
 
     expect(calls[0].pathname).toBe(`${BASE}/tenants/t-1/jobs`);
     expect(calls[0].body).toEqual(payload);
+  });
+});
+
+describe("listAllKnownDevices — la lista completa, no la primera página", () => {
+  it("sigue la paginación hasta agotar el total", async () => {
+    // El bug real: el backend pagina de 25 en 25 y la página pedía sin
+    // parámetros, así que se quedaba con los 25 primeros de un tenant de 45.
+    // Eso rompía en silencio tres cosas: el hostname de las filas, el selector
+    // de destino y —la peor— `connectedDeviceIds`, que ES la carga del
+    // despacho "a todos los conectados del tenant".
+    const paginas = {
+      1: { ok: true, items: Array.from({ length: 100 }, (_v, i) => ({ deviceId: `d${i}` })), total: 145 },
+      2: { ok: true, items: Array.from({ length: 45 }, (_v, i) => ({ deviceId: `d${100 + i}` })), total: 145 },
+    };
+    server.use(
+      http.get(`${API_BASE}/api/v1/orchestrator/known-devices`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get("page") || 1);
+        return HttpResponse.json(paginas[page]);
+      })
+    );
+
+    const res = await listAllKnownDevices();
+
+    expect(res.items).toHaveLength(145);
+    expect(res.total).toBe(145);
+  });
+
+  it("para en una página corta sin pedir una de más", async () => {
+    const calls = respond("get", "/api/v1/orchestrator/known-devices", {
+      ok: true,
+      items: [{ deviceId: "a" }, { deviceId: "b" }],
+      total: 2,
+    });
+
+    const res = await listAllKnownDevices();
+
+    expect(res.items).toHaveLength(2);
+    expect(calls).toHaveLength(1);
   });
 });
