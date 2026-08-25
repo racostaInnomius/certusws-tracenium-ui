@@ -1169,7 +1169,7 @@ export default function PatchManagement({ onNavigate }) {
               minHeight: 48,
               px: 2,
               outline: "none",
-              "&:focus, &:focus-visible": { outline: "none", boxShadow: "none" },
+              "&:focus": { outline: "none" },
               "&.Mui-focusVisible": { backgroundColor: BRAND.cyanSoft },
             },
             "& .Mui-selected": { color: `${BRAND.teal} !important` },

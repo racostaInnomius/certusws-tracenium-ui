@@ -162,6 +162,24 @@ export const ICON = {
   "3xl": 48, // ilustración a pantalla completa
 };
 
+/**
+ * Anillo de foco de teclado.
+ *
+ * La app tenía 14 `outline: none` repartidos por las tablas y las pestañas, y
+ * varios suprimían también `:focus-visible` — con lo que navegar con Tab era
+ * literalmente a ciegas: el foco se movía sin nada que lo indicara.
+ *
+ * La distinción que lo resuelve: `:focus` dispara también al hacer clic con el
+ * ratón (de ahí que a alguien le molestara y lo quitara), pero
+ * `:focus-visible` SOLO cuando el navegador estima que el usuario navega por
+ * teclado. Se puede quitar el anillo del ratón y conservarlo donde importa.
+ *
+ * Se usa `box-shadow` en vez de `outline` porque respeta el border-radius de
+ * los componentes MUI; un outline dibuja un rectángulo que se sale de las
+ * esquinas redondeadas.
+ */
+export const FOCUS_RING = `0 0 0 2px ${BRAND.surface}, 0 0 0 4px ${BRAND.teal}`;
+
 export const ROLE = {
   positive: BRAND.alert.success,
   positiveSoft: BRAND.alert.successSoft,
@@ -180,7 +198,13 @@ export const LAYOUT = {
     pb: 4,
   },
   header: {
+    // `variant` es el ESTILO; `component` es la ETIQUETA. Estaban acoplados,
+    // así que el título de cada página salía como <h4> y la app entera no
+    // tenía un solo <h1>: un lector de pantalla no encontraba el encabezado
+    // principal, y la jerarquía arrancaba en el cuarto nivel sin que
+    // existieran los tres anteriores. Separarlos deja el aspecto intacto.
     variant: "h4",
+    component: "h1",
     sx: {
       color: BRAND.dark,
       fontWeight: 800,

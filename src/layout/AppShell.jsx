@@ -1219,6 +1219,13 @@ export default function AppShell() {
               onReset={() => setViewReloadToken((t) => t + 1)}
             >
               <Box
+                // `main` como landmark: era el único contenedor de página y
+                // no tenía etiqueta semántica, así que un lector de pantalla
+                // no podía saltar al contenido y tenía que recorrer todo el
+                // menú lateral en cada navegación. Renderiza el mismo <div>
+                // con otra etiqueta — cero cambio visual.
+                component="main"
+                id="contenido-principal"
                 key={`${selectedPage}-${viewReloadToken}`}
                 sx={{
                   minWidth: 0,

@@ -398,7 +398,7 @@ export default function Configurations({ onNavigate, initialTab }) {
             color: BRAND.dark,
             minHeight: 48,
             outline: "none",
-            "&:focus, &:focus-visible": { outline: "none", boxShadow: "none" },
+            "&:focus": { outline: "none" },
           },
           "& .Mui-selected": { color: `${BRAND.teal} !important` },
           "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },

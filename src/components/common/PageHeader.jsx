@@ -68,7 +68,11 @@ export default function PageHeader({
               {icon}
             </Box>
           ) : null}
-          <Typography variant={LAYOUT.header.variant} sx={LAYOUT.header.sx}>
+          <Typography
+            variant={LAYOUT.header.variant}
+            component={LAYOUT.header.component}
+            sx={LAYOUT.header.sx}
+          >
             {title}
           </Typography>
         </Stack>

@@ -780,7 +780,7 @@ export default function PKI() {
               color: BRAND.dark,
               minHeight: 48,
               outline: "none",
-              "&:focus, &:focus-visible": { outline: "none", boxShadow: "none" },
+              "&:focus": { outline: "none" },
               "&.Mui-focusVisible": { backgroundColor: BRAND.cyanSoft },
             },
             "& .Mui-selected": { color: `${BRAND.teal} !important` },

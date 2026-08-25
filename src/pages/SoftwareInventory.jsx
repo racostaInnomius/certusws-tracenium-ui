@@ -198,7 +198,7 @@ const enterpriseDataGridSx = {
   },
   "& .MuiDataGrid-columnHeader": {
     backgroundColor: `${BRAND.surfaceMuted} !important`,
-    outline: "none !important",
+    outline: "none",
     borderRight: "none",
     paddingTop: 0,
     paddingBottom: 0,
@@ -219,7 +219,7 @@ const enterpriseDataGridSx = {
     borderRight: "none",
     fontSize: TEXT.base,
     color: BRAND.dark,
-    outline: "none !important",
+    outline: "none",
     paddingTop: "0 !important",
     paddingBottom: "0 !important",
     lineHeight: 1.25,
