@@ -90,6 +90,36 @@ describe("backend sin configurar", () => {
   });
 });
 
+describe("el tope contratado frente al que se aplica", () => {
+  it("avisa cuando no coinciden", async () => {
+    // Pasó en producción: el gate aceptaba altas hasta 55 mientras la pantalla
+    // decía 1, porque cada uno leía un sitio distinto y nada los comparaba.
+    summary.mockReturnValue({
+      configured: true,
+      publishableKey: "pk_test",
+      subscription: { ...SUB, quantity: 1, licensedQuantity: 55, usage: { endpoint: 49, mdm: 0 } },
+    });
+    render(<Billing />);
+    await ready();
+
+    expect(await screen.findByText(/El tope que aplica el enrolamiento es/)).toBeTruthy();
+  });
+
+  it("sin cantidad contratada NO preselecciona 1", async () => {
+    // Ese 1 no era un defecto inocente: quedaba preseleccionado, y confirmar
+    // cualquier otro cambio habría recortado el tope del cliente a un equipo.
+    summary.mockReturnValue({
+      configured: true,
+      publishableKey: "pk_test",
+      subscription: { ...SUB, quantity: null, licensedQuantity: 55, usage: { endpoint: 49, mdm: 0 } },
+    });
+    render(<Billing />);
+    await ready();
+
+    expect(screen.getAllByLabelText("Licencias")[0].value).toBe("55");
+  });
+});
+
 describe("la tarjeta va primero", () => {
   it("SIN tarjeta no se puede confirmar un cambio", async () => {
     // El backend lo rechaza, pero dejar pulsar el botón convierte un paso que

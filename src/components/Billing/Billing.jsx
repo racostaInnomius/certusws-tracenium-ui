@@ -82,8 +82,17 @@ export default function Billing() {
           // "mensual" marcado y al tocar sus licencias se lo lleva a mensual
           // sin haberlo pedido — y eso refactura.
           interval: s.billingInterval ?? "monthly",
-          endpoint: s.tier ? { tier: s.tier, quantity: s.quantity ?? 1 } : null,
-          mdm: s.mdmTier ? { tier: s.mdmTier, quantity: s.mdmQuantity ?? 1 } : null,
+          // ⚠️ Sin cantidad NO se cae a 1. Con `quantity` vacía —el caso de
+          // los tenants heredados— ese 1 no era un valor por defecto inocente:
+          // quedaba preseleccionado, y confirmar cualquier otro cambio habría
+          // recortado el tope del cliente a un equipo. Se prefiere el tope que
+          // el gate aplica de verdad, y en su defecto la flota que ya existe.
+          endpoint: s.tier
+            ? { tier: s.tier, quantity: s.quantity ?? s.licensedQuantity ?? s.usage?.endpoint ?? 1 }
+            : null,
+          mdm: s.mdmTier
+            ? { tier: s.mdmTier, quantity: s.mdmQuantity ?? s.usage?.mdm ?? 1 }
+            : null,
         });
       }
 
@@ -118,7 +127,9 @@ export default function Billing() {
       sub
         ? {
             interval: sub.billingInterval ?? "monthly",
-            endpoint: sub.tier ? { tier: sub.tier, quantity: sub.quantity ?? 0 } : null,
+            endpoint: sub.tier
+              ? { tier: sub.tier, quantity: sub.quantity ?? sub.licensedQuantity ?? 0 }
+              : null,
             mdm: sub.mdmTier ? { tier: sub.mdmTier, quantity: sub.mdmQuantity ?? 0 } : null,
           }
         : null,

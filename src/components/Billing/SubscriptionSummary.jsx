@@ -8,7 +8,7 @@
 //
 // Aquí va junto y en ese orden, que es el de las preguntas.
 
-import { Box, Card, CardContent, Chip, LinearProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, CardContent, Chip, LinearProgress, Stack, Typography } from "@mui/material";
 import { BRAND } from "../../theme/brand";
 import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS, graceCeiling } from "./billingModel";
 
@@ -67,6 +67,18 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
     used: sub?.usage?.[line] ?? null,
   })).filter((l) => l.tier);
 
+  // ⚠️ EL TOPE CONTRATADO Y EL QUE SE APLICA PUEDEN DIFERIR.
+  //
+  // No es hipotético: el gate aceptaba altas hasta 55 mientras esta pantalla
+  // decía 1, porque cada uno leía un sitio distinto y nada los comparaba. Si
+  // vuelven a separarse —alguien edita el tope del tenant a mano— tiene que
+  // verse aquí, no descubrirse el día que un alta se rechace sin motivo
+  // aparente.
+  const cap = sub?.licensedQuantity ?? null;
+  const contracted = sub?.quantity ?? null;
+  const mismatch =
+    Number.isFinite(cap) && Number.isFinite(contracted) && cap !== contracted ? { cap, contracted } : null;
+
   const paid = sub?.status === "active" || sub?.status === "trialing";
 
   return (
@@ -106,8 +118,16 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
                     </Box>
                     {/* Cada línea con SU uso: los topes son independientes, y un
                         único número escondería que las licencias de PC no
-                        sirven para enrolar un móvil. */}
-                    <UsageBar used={used} quantity={quantity} />
+                        sirven para enrolar un móvil.
+
+                        Para endpoints se mide contra el tope EFECTIVO, que es
+                        el que decide si un alta pasa. Dibujar la barra contra
+                        lo contratado enseñaría una holgura que el enrolamiento
+                        no va a respetar. */}
+                    <UsageBar
+                      used={used}
+                      quantity={line === "endpoint" ? (cap ?? quantity) : quantity}
+                    />
                   </Stack>
                 ))}
               </Stack>
@@ -144,6 +164,14 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
             )}
           </Box>
         </Stack>
+
+        {mismatch && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            El tope que aplica el enrolamiento es <strong>{mismatch.cap}</strong>, pero
+            la suscripción tiene contratadas <strong>{mismatch.contracted}</strong>{" "}
+            licencias. Manda el primero hasta que se sincronicen.
+          </Alert>
+        )}
       </CardContent>
     </Card>
   );
