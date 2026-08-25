@@ -17,6 +17,15 @@
 // themselves — it disables the toggle with an inline explanation. This
 // mirrors the product's core UX requirement for END USERS (don't hide,
 // explain on attempt) applied to the admin's OWN role-editing screen.
+//
+// Separately, each capability carries `enforced` (from the backend's
+// capability-registry.ts) — whether a route actually calls
+// requireCapability(key) yet. As of Phase 1 that's only jobs, alerts,
+// and remote_control; the other ~17 keys are still gated purely by
+// requireRole(OWNER,ADMIN) server-side, so granting them here is
+// currently a no-op. Unlike entitled/callerHasIt this does NOT disable
+// the toggle (an admin may reasonably want to pre-configure a role
+// ahead of enforcement landing) — it's a label, not a block.
 
 import * as React from "react";
 import {
@@ -129,9 +138,34 @@ function CapabilityRow({ capability, granted, callerHasIt, onToggle }) {
       }}
     >
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
-          {capability.label}
-        </Typography>
+        {/* component="span", not the Stack default of "div" — existing
+            tests locate this row via getByText(label).closest("div"),
+            which must keep landing on the outer row Box below, not this
+            inline wrapper. */}
+        <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+          <Typography component="span" sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
+            {capability.label}
+          </Typography>
+          {capability.enforced === false ? (
+            <Tooltip title="This capability isn't wired into the backend yet — granting it here doesn't change what the member can actually do.">
+              <Box
+                component="span"
+                sx={{
+                  fontSize: TEXT.xs,
+                  fontWeight: 700,
+                  color: BRAND.gray,
+                  border: `1px solid ${BRAND.border}`,
+                  borderRadius: 1,
+                  px: 0.75,
+                  py: 0.1,
+                  lineHeight: 1.6,
+                }}
+              >
+                Not yet enforced
+              </Box>
+            </Tooltip>
+          ) : null}
+        </Box>
         <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
           {capability.description}
         </Typography>
@@ -142,6 +176,10 @@ function CapabilityRow({ capability, granted, callerHasIt, onToggle }) {
         ) : !callerHasIt ? (
           <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.warningText, mt: 0.25 }}>
             You don't have this permission yourself
+          </Typography>
+        ) : capability.enforced === false ? (
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.25 }}>
+            Granting this has no effect yet — the backend doesn't check it
           </Typography>
         ) : null}
       </Box>

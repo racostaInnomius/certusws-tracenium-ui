@@ -28,14 +28,14 @@ import {
 } from "../api/roles";
 import RolesAdministrator from "./RolesAdministrator";
 
-const OWNER = { id: 1, name: "OWNER", isSystem: true, permissions: ["jobs", "alerts", "remote_control"] };
+const OWNER = { id: 1, name: "OWNER", isSystem: true, permissions: ["jobs", "alerts", "remote_control", "reports"] };
 const ADMIN = { id: 2, name: "ADMIN", isSystem: true, permissions: ["jobs", "alerts"] };
 const USER = { id: 3, name: "USER", isSystem: true, permissions: ["jobs"] };
 const CUSTOM = { id: 10, name: "IT Support", isSystem: false, permissions: ["jobs", "alerts"] };
 
 const CAPABILITIES = [
-  { key: "jobs", label: "Jobs", description: "Dispatch and manage jobs.", group: "Operations", plugin: null, entitled: true },
-  { key: "alerts", label: "Alerts", description: "Manage alert rules.", group: "Operations", plugin: null, entitled: true },
+  { key: "jobs", label: "Jobs", description: "Dispatch and manage jobs.", group: "Operations", plugin: null, entitled: true, enforced: true },
+  { key: "alerts", label: "Alerts", description: "Manage alert rules.", group: "Operations", plugin: null, entitled: true, enforced: true },
   {
     key: "remote_control",
     label: "Remote Control",
@@ -43,8 +43,17 @@ const CAPABILITIES = [
     group: "Operations",
     plugin: "rcp",
     entitled: false,
+    enforced: true,
   },
-  { key: "reports", label: "Reports", description: "Access the reports catalog.", group: "Visibility", plugin: null, entitled: true },
+  {
+    key: "reports",
+    label: "Reports",
+    description: "Access the reports catalog.",
+    group: "Visibility",
+    plugin: null,
+    entitled: true,
+    enforced: false,
+  },
 ];
 
 beforeEach(() => {
@@ -128,6 +137,21 @@ describe("RolesAdministrator — create", () => {
       })
     );
     expect(await screen.findByText(/role updated/i)).toBeInTheDocument();
+  });
+
+  it("labels a not-yet-enforced capability without disabling its toggle", async () => {
+    render(<RolesAdministrator />);
+    fireEvent.click(await screen.findByText("New role"));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByText(/not yet enforced/i)).toBeInTheDocument();
+
+    // Reports: entitled, and OWNER (the caller here) holds it — the
+    // switch must stay togglable even though enforced:false, since
+    // that field is informational, not a gate.
+    const reportsRow = within(dialog).getByText("Reports").closest("div").parentElement;
+    const reportsSwitch = within(reportsRow).getByRole("switch");
+    expect(reportsSwitch).not.toBeDisabled();
   });
 
   it("surfaces the escalation-guard error with a specific message", async () => {
