@@ -14,10 +14,11 @@ import {
   Paper,
   Radio,
   RadioGroup,
+  Stack,
   TextField,
   Typography,
   useMediaQuery,
-  useTheme,
+  useTheme
 } from "@mui/material";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
@@ -43,7 +44,7 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 // BRAND used to be duplicated here (Fase 1 homologation deleted it).
 // Central source of truth lives in src/theme/brand.js; adding
 // borderStrong/tealText/etc. there propagates automatically.
-import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, MONO, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
@@ -312,7 +313,7 @@ function DetailRow({ label, value, mono = false }) {
       <Typography
         sx={{
           fontSize: TEXT.sm,
-          color: "text.secondary",
+          color: TEXT_MUTED,
           fontWeight: 600,
           minWidth: 88,
           textTransform: "uppercase",
@@ -388,7 +389,7 @@ function JobsByTypeCard({ windowDays, data, loading }) {
       </Box>
 
       {loading && items.length === 0 ? (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
           Loading…
         </Typography>
       ) : items.length === 0 ? (
@@ -456,55 +457,51 @@ function JobsByTypeCard({ windowDays, data, loading }) {
   );
 }
 
-function renderStatusChip(status) {
+/**
+ * Status as a dot plus a word, not a filled pill.
+ *
+ * The history renders up to a dozen rows at once. With a bordered, tinted pill
+ * on every one, the screen carried a dozen coloured rectangles competing for
+ * attention — and colour stopped meaning "look here" precisely because
+ * everything had it. A 7px dot keeps the same at-a-glance read (colour is
+ * still the first thing the eye lands on) while giving the failures back their
+ * loudness relative to the completions.
+ *
+ * `attempts` rides alongside the label when a job has burnt more than one, so
+ * "Timeout 5/5" reads as one fact instead of forcing a glance at a separate
+ * column that is blank for most rows.
+ */
+const STATUS_DOT = {
+  completed: { label: "Completed", color: BRAND.teal },
+  running: { label: "Running", color: BRAND.cyan },
+  sent: { label: "Sent", color: BRAND.cyan },
+  pending: { label: "Pending", color: BRAND.alert.warning },
+  retrying: { label: "Retrying", color: BRAND.alert.warning },
+  failed: { label: "Failed", color: BRAND.alert.error },
+  timeout: { label: "Timeout", color: BRAND.alert.error },
+  cancelled: { label: "Cancelled", color: BRAND.gray },
+  expired: { label: "Expired", color: BRAND.gray },
+};
+
+function renderStatusChip(status, attempts) {
   const value = String(status || "").toLowerCase();
-
-  if (value === "completed") {
-    return (
-      <Chip
-        label="Completed"
-        size="small"
-        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, border: `1px solid ${BRAND.teal}55` }}
-      />
-    );
-  }
-
-  if (value === "running" || value === "sent") {
-    return (
-      <Chip
-        label={value === "running" ? "Running" : "Sent"}
-        size="small"
-        sx={{ bgcolor: BRAND.cyanSoft, color: BRAND.dark, fontWeight: 700, border: `1px solid ${BRAND.cyan}88` }}
-      />
-    );
-  }
-
-  if (value === "pending" || value === "retrying") {
-    return (
-      <Chip
-        label={value === "pending" ? "Pending" : "Retrying"}
-        size="small"
-        sx={{ bgcolor: "rgba(199,121,43,0.14)", color: BRAND.alert.high, fontWeight: 700, border: "1px solid rgba(199,121,43,0.4)" }}
-      />
-    );
-  }
-
-  if (value === "failed" || value === "timeout" || value === "cancelled") {
-    return (
-      <Chip
-        label={String(status || "Failed")}
-        size="small"
-        sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
-      />
-    );
-  }
+  const spec = STATUS_DOT[value] || { label: status || "Unknown", color: BRAND.gray };
+  const burnt = Number(attempts) > 1 ? String(attempts) : null;
 
   return (
-    <Chip
-      label={status || "Unknown"}
-      size="small"
-      sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 700 }}
-    />
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+      <Box
+        sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: spec.color, flexShrink: 0 }}
+      />
+      <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, whiteSpace: "nowrap" }}>
+        {spec.label}
+      </Typography>
+      {burnt ? (
+        <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+          {burnt}
+        </Typography>
+      ) : null}
+    </Stack>
   );
 }
 
@@ -1186,85 +1183,109 @@ export default function Jobs() {
 
   const columns = [
     {
-      field: "job_id",
-      headerName: "Job ID",
-      minWidth: 210,
-      flex: 1,
-      valueGetter: (value, row) => (row.__isBatch ? `Batch · ${row.__totalCount} devices` : value),
-    },
-    {
+      // ── Device · Type, one cell ───────────────────────────────────
+      // They were two columns, and they are read together: "which machine,
+      // doing what". Merging them frees the width that made every column
+      // truncate, and lets the device — the thing an operator scans for —
+      // carry the weight while the type sits under it as the qualifier.
       field: "hostname",
-      headerName: "Hostname",
-      minWidth: 180,
-      flex: 0.8,
+      headerName: "Device · Type",
+      minWidth: 240,
+      flex: 1.1,
+      sortable: true,
       valueGetter: (_value, row) =>
         row.__isBatch
           ? `${row.__totalCount} devices`
           : deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
+      renderCell: (params) => (
+        <Box sx={{ minWidth: 0, py: 0.5 }}>
+          <Typography
+            sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}
+            noWrap
+          >
+            {params.value}
+          </Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap>
+            {jobTypeLabels.get(params.row.job_type) || params.row.job_type}
+          </Typography>
+        </Box>
+      ),
     },
-    // Device ID column dropped — the hostname column already
-    // identifies the target, and the full UUID is still available in
-    // the detail drawer for anyone who needs it for logs / support.
     {
-      field: "job_type",
-      headerName: "Type",
-      minWidth: 150,
-      flex: 0.6,
-      // Show the human label ("Distribution Prefetch") not the raw
-      // job_type ("software_dp_prefetch"). The catalogue now advertises
-      // all 8 types, so every value resolves; the fallback keeps an
-      // unknown value visible rather than blank.
-      valueGetter: (value) => jobTypeLabels.get(value) || value,
-    },
-    {
+      // ── Status, with attempts and the error that explains it ──────
+      // `attempts` and `last_error` were their own columns. Both are blank
+      // or "-" on the majority of rows (a job that worked has one attempt
+      // and no error), so they spent full-width columns saying nothing and
+      // forced the useful ones to truncate. Folded in here they appear only
+      // when they mean something, next to the status they qualify.
       field: "status",
       headerName: "Status",
-      minWidth: 140,
-      flex: 0.6,
-      renderCell: (params) => (params.row.__isBatch ? renderBatchStatusChip(params.row) : renderStatusChip(params.value)),
+      minWidth: 210,
+      flex: 0.95,
+      renderCell: (params) => {
+        if (params.row.__isBatch) return renderBatchStatusChip(params.row);
+        const error = params.row.last_error;
+        return (
+          <Box sx={{ minWidth: 0, py: 0.5 }}>
+            {renderStatusChip(params.value, params.row.attempts)}
+            {error ? (
+              <Typography
+                sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mt: 0.25 }}
+                noWrap
+                title={error}
+              >
+                {error}
+              </Typography>
+            ) : null}
+          </Box>
+        );
+      },
     },
     {
-      field: "attempts",
-      headerName: "Attempts",
-      minWidth: 90,
-      flex: 0.35,
-      valueGetter: (value, row) => (row.__isBatch ? "—" : value),
-    },
-    {
+      // Monospaced: dates are compared DOWN the column, and proportional
+      // digits never line up. Completed-at moves into the detail panel —
+      // on a history the question is almost always "when was this fired".
       field: "created_at",
-      headerName: "Created At",
-      minWidth: 150,
+      headerName: "When",
+      minWidth: 160,
       flex: 0.6,
-      renderCell: (params) => formatDate(params.value),
-    },
-    {
-      field: "completed_at",
-      headerName: "Completed At",
-      minWidth: 150,
-      flex: 0.6,
-      renderCell: (params) => formatDate(params.value),
+      renderCell: (params) => (
+        <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: BRAND.dark }} noWrap>
+          {formatDate(params.value)}
+        </Typography>
+      ),
     },
     {
       // Backend LEFT JOIN's TenantMember on the sub so we can show the
-      // operator email instead of a raw Auth0 subject like
-      // `auth0|abc123`. Falls back to the sub when no membership row
-      // matches (e.g. old rows, deleted users) so we never show "—"
-      // in place of identifiable info.
+      // operator email instead of a raw Auth0 subject like `auth0|abc123`.
+      // Falls back to the sub when no membership row matches (old rows,
+      // deleted users) so we never show "—" in place of identifiable info.
       field: "created_by",
-      headerName: "Created By",
-      minWidth: 200,
-      flex: 0.9,
+      headerName: "Who",
+      minWidth: 190,
+      flex: 0.8,
       valueGetter: (_value, row) =>
-        row.created_by_email || row.created_by || " - ",
-    },
-    {
-      field: "last_error",
-      headerName: "Last Error",
-      minWidth: 220,
-      flex: 1,
-      valueGetter: (_value, row) => row.last_error || " - ",
+        row.created_by_email || row.created_by || "system",
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap title={params.value}>
+          {params.value}
+        </Typography>
+      ),
     },
   ];
+
+  // "155 total · 2 running" — the two numbers an operator opens this page for.
+  // In-flight covers everything the orchestrator still owns, so a job between
+  // retries is counted as live rather than quietly dropped from both figures.
+  const jobCountSummary = React.useMemo(() => {
+    const total = tenantJobs.length;
+    const live = tenantJobs.filter((j) =>
+      ["pending", "sent", "running", "retrying"].includes(String(j.status || "").toLowerCase())
+    ).length;
+    if (!total) return "No jobs yet";
+    const totalText = `${total}${historyTruncated ? "+" : ""} total`;
+    return live ? `${totalText} · ${live} in flight` : totalText;
+  }, [tenantJobs, historyTruncated]);
 
   const selectedJobStatus = String(selectedJob?.status || "").toLowerCase();
   const canRetrySelectedJob = ["failed", "timeout", "cancelled"].includes(selectedJobStatus);
@@ -1579,8 +1600,12 @@ export default function Jobs() {
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
+        dense
         title="Jobs"
-        subtitle="Dispatch jobs and review tenant-wide execution history."
+        // The old subtitle described what the page is — something the operator
+        // knows by the time they have navigated to it. A live count is what
+        // they actually came to find out.
+        subtitle={jobCountSummary}
         icon={<AssignmentOutlinedIcon />}
         actions={
           <RefreshControl
@@ -1663,7 +1688,17 @@ export default function Jobs() {
         </Grid>
       </Grid>
 
-      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
+      <SectionPaper
+        variant="panel"
+        // Collapsed, this is a BAR, not a card: tighter padding and no shadow,
+        // so it reads as a control the operator can walk past on the way to
+        // the table. Expanded it becomes the panel it always was.
+        sx={{
+          p: createJobOpen ? { xs: 1.5, sm: 2.5 } : { xs: 1, sm: 1.25 },
+          mb: 2,
+          boxShadow: createJobOpen ? undefined : "none",
+        }}
+      >
         {/* Header row: title + collapse toggle. Create Job opens as a
             full form on demand — most visits read Tenant Job History
             and don't need to see the ~600px-tall form by default. */}
@@ -1677,14 +1712,29 @@ export default function Jobs() {
             mb: createJobOpen ? 2 : 0,
           }}
         >
-          <Box>
-            <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
-              Create Job
-            </Typography>
-            <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
-              Dispatch a job to a single device or to every connected device in the tenant.
-            </Typography>
-          </Box>
+          {createJobOpen ? (
+            <Box>
+              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
+                Create Job
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>
+                Dispatch a job to a single device or to every connected device in the tenant.
+              </Typography>
+            </Box>
+          ) : (
+            // Collapsed: one line. The sentence explaining what dispatching is
+            // costs a second row of vertical space on every visit to a page
+            // whose subject is the table below it.
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: BRAND.teal, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: TEXT.base, fontWeight: 600, color: BRAND.dark }}>
+                Create Job
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.md, color: TEXT_MUTED }} noWrap>
+                one device, a group, or the whole tenant
+              </Typography>
+            </Stack>
+          )}
           <Button
             variant={createJobOpen ? "outlined" : "contained"}
             onClick={() => setCreateJobOpen((v) => !v)}
@@ -2072,7 +2122,7 @@ export default function Jobs() {
               <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                 Tenant Job History
               </Typography>
-              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
                 Showing <strong>{filteredRows.length}</strong> row{filteredRows.length === 1 ? "" : "s"} ·{" "}
                 {/* "loaded", not "total", once the window is truncated —
                     tenantJobs is then the window, not the whole history. */}
@@ -2209,7 +2259,7 @@ export default function Jobs() {
 
             {selectedBatchId ? (
               selectedBatchJobs.length === 0 ? (
-                <Typography color="text.secondary">Loading batch…</Typography>
+                <Typography sx={{ color: TEXT_MUTED }}>Loading batch…</Typography>
               ) : (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1, minHeight: 0 }}>
                   <Box>
@@ -2275,7 +2325,7 @@ export default function Jobs() {
                   display: "grid",
                   placeItems: "center",
                   textAlign: "center",
-                  color: "text.secondary",
+                  color: TEXT_MUTED,
                   p: 3,
                   border: `1px dashed ${BRAND.border}`,
                   borderRadius: 2,
@@ -2288,9 +2338,9 @@ export default function Jobs() {
                 </Box>
               </Box>
             ) : loadingJobDetail ? (
-              <Typography color="text.secondary">Loading job detail…</Typography>
+              <Typography sx={{ color: TEXT_MUTED }}>Loading job detail…</Typography>
             ) : !selectedJob ? (
-              <Typography color="text.secondary">Job detail unavailable.</Typography>
+              <Typography sx={{ color: TEXT_MUTED }}>Job detail unavailable.</Typography>
             ) : (
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75, flex: 1 }}>
                 {/* Identity */}
