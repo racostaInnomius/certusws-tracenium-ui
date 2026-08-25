@@ -35,6 +35,7 @@ import {
   deleteTenantMember,
   cancelPendingInvite,
 } from "../api/tenants";
+import { listTenantRoles } from "../api/roles";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listFrom } from "../api/shape";
 import { useAuthContext } from "../auth/AuthContext";
@@ -255,15 +256,38 @@ function TenantDialog({
   );
 }
 
+// Built-ins always sort first, in this fixed order, regardless of what
+// the API returns them in (it sorts IsSystem DESC, Name ASC — which
+// alphabetizes to ADMIN, OWNER, USER, not the canonical rank order).
+const BUILTIN_ROLE_ORDER = ["OWNER", "ADMIN", "USER"];
+
+function sortRolesForSelector(roles) {
+  const systemRoles = roles.filter((r) => r.isSystem);
+  const customRoles = roles.filter((r) => !r.isSystem);
+  systemRoles.sort(
+    (a, b) => BUILTIN_ROLE_ORDER.indexOf(a.name) - BUILTIN_ROLE_ORDER.indexOf(b.name)
+  );
+  customRoles.sort((a, b) => a.name.localeCompare(b.name));
+  return { systemRoles, customRoles };
+}
+
 function TenantMemberDialog({
   open,
   mode,
   member,
   submitting,
+  roles = [],
   onClose,
   onSubmit,
 }) {
   const isEdit = mode === "edit";
+  // Fallback for the brief window before loadRoles resolves (or if it
+  // failed) — the 3 built-ins always exist server-side, so this keeps
+  // the selector usable rather than empty.
+  const availableRoles = roles.length
+    ? roles
+    : BUILTIN_ROLE_ORDER.map((name) => ({ name, isSystem: true }));
+  const { systemRoles, customRoles } = sortRolesForSelector(availableRoles);
 
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState("USER");
@@ -342,9 +366,17 @@ function TenantMemberDialog({
             onChange={(e) => setRole(e.target.value)}
             fullWidth
           >
-            <MenuItem value="OWNER">OWNER</MenuItem>
-            <MenuItem value="ADMIN">ADMIN</MenuItem>
-            <MenuItem value="USER">USER</MenuItem>
+            {systemRoles.map((r) => (
+              <MenuItem key={r.name} value={r.name}>
+                {r.name}
+              </MenuItem>
+            ))}
+            {customRoles.length > 0 && <Divider />}
+            {customRoles.map((r) => (
+              <MenuItem key={r.name} value={r.name}>
+                {r.name}
+              </MenuItem>
+            ))}
           </TextField>
 
           {isEdit && (
@@ -448,6 +480,11 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
   const [tenantDetails, setTenantDetails] = React.useState(null);
   const [members, setMembers] = React.useState([]);
   const [pendingInvites, setPendingInvites] = React.useState([]);
+  // ADR-0011 — feeds TenantMemberDialog's role selector. Built-ins are
+  // always present server-side (seeded), so an empty array here just
+  // means "still loading" — the dialog falls back to the 3 built-in
+  // names in that case rather than rendering an empty select.
+  const [roles, setRoles] = React.useState([]);
 
   const [loadingMembers, setLoadingMembers] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -537,20 +574,40 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
     }
   };
 
+  // Fails silent (console only) rather than a snackbar — this only
+  // degrades the role dropdown to the 3 built-in names, it doesn't
+  // block viewing/managing members, so it doesn't deserve the same
+  // visible error treatment as loadMembers/loadTenantDetails failing.
+  const loadRoles = async (tenantId) => {
+    if (!tenantId) {
+      setRoles([]);
+      return;
+    }
+    try {
+      const response = await listTenantRoles(tenantId);
+      setRoles(Array.isArray(response?.items) ? response.items : []);
+    } catch (e) {
+      console.error(e);
+      setRoles([]);
+    }
+  };
 
   React.useEffect(() => {
     if (isTenantMode) {
       if (currentTenantId) {
         loadTenantDetails(currentTenantId);
         loadMembers(currentTenantId);
+        loadRoles(currentTenantId);
       } else {
         setTenantDetails(null);
         setMembers([]);
+        setRoles([]);
       }
       return;
     }
 
     loadMembers(selectedTenant?.id);
+    loadRoles(selectedTenant?.id);
   }, [isTenantMode, currentTenantId, selectedTenant?.id]);
 
   React.useEffect(() => {
@@ -743,7 +800,13 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
       const message =
         e?.code === "TENANT_NOT_FOUND"
           ? "This tenant no longer exists."
-          : "Failed to save tenant member";
+          // ADR-0011 escalation guard: you can't grant a role with more
+          // permissions than your own. Same snackbar path as every other
+          // save error here, not a bespoke inline form error — matches
+          // how this dialog already surfaces every other failure.
+          : e?.body?.error === "ROLE_EXCEEDS_ASSIGNER"
+            ? "You can't assign a role with more permissions than your own."
+            : "Failed to save tenant member";
 
       setSnackbar({
         open: true,
@@ -1220,6 +1283,7 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
         mode={memberDialogMode}
         member={editingMember}
         submitting={submitting}
+        roles={roles}
         onClose={() => setMemberDialogOpen(false)}
         onSubmit={handleSubmitMember}
       />

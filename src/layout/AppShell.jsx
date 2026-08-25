@@ -21,8 +21,9 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import AccessTimeRoundedIcon from "@mui/icons-material/AccessTimeRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
-import { AUTH_REQUIRED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
+import { AUTH_REQUIRED_EVENT, PERMISSION_DENIED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { BRAND } from "../theme/brand";
@@ -487,6 +488,82 @@ function UserInactivityDialog({
   );
 }
 
+// ADR-0011 — shown on any 403 PERMISSION_DENIED from the backend (a
+// custom role attempting a capability it wasn't granted). Deliberately
+// a Dialog, not a toast: the message needs to be read and understood
+// ("ask a tenant admin"), not glanced at and dismissed. Warning tone
+// (amber), not error/red — same reasoning TokensAdministrator.jsx's
+// existing 403 handling already uses: "a permissions problem is
+// expected-and-explained, not a fault."
+function PermissionDeniedDialog({ open, message, onClose }) {
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          border: `1px solid ${BRAND.border}`,
+          overflow: "hidden",
+          boxShadow: "0 22px 60px rgba(15,23,42,0.28)",
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          pb: 1.25,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          color: BRAND.dark,
+          fontWeight: 900,
+        }}
+      >
+        <Box
+          sx={{
+            width: 38,
+            height: 38,
+            borderRadius: 2,
+            display: "grid",
+            placeItems: "center",
+            color: BRAND.alert.warningText,
+            bgcolor: BRAND.alert.warningSoft,
+            border: `1px solid ${BRAND.alert.warning}`,
+            flexShrink: 0,
+          }}
+        >
+          <LockOutlinedIcon fontSize="small" />
+        </Box>
+        Insufficient permissions
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 0.75 }}>
+        <Typography sx={{ color: "text.secondary", fontSize: 14.5, lineHeight: 1.65 }}>
+          {message || "You don't have permission to do that. Ask a tenant admin to grant it."}
+        </Typography>
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button
+          onClick={onClose}
+          variant="contained"
+          sx={{
+            textTransform: "none",
+            fontWeight: 900,
+            borderRadius: 2,
+            bgcolor: BRAND.teal,
+            "&:hover": { bgcolor: BRAND.tealHover },
+          }}
+        >
+          Got it
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function AppShell() {
   // Read tenant-level session settings exposed by /api/bootstrap so the
   // idle timer matches what the OWNER/ADMIN configured for this tenant.
@@ -536,6 +613,7 @@ export default function AppShell() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [viewReloadToken, setViewReloadToken] = React.useState(0);
   const [temporaryWarning, setTemporaryWarning] = React.useState(null);
+  const [permissionDenied, setPermissionDenied] = React.useState(null);
 
   const [idleDialogOpen, setIdleDialogOpen] = React.useState(false);
   const [idleCountdown, setIdleCountdown] = React.useState(USER_IDLE_COUNTDOWN_SECONDS);
@@ -938,6 +1016,22 @@ export default function AppShell() {
   }, []);
 
   React.useEffect(() => {
+    const handlePermissionDenied = (event) => {
+      setPermissionDenied({
+        message:
+          event?.detail?.message ||
+          "You don't have permission to do that. Ask a tenant admin to grant it.",
+        ts: event?.detail?.ts || Date.now(),
+      });
+    };
+
+    window.addEventListener(PERMISSION_DENIED_EVENT, handlePermissionDenied);
+    return () => {
+      window.removeEventListener(PERMISSION_DENIED_EVENT, handlePermissionDenied);
+    };
+  }, []);
+
+  React.useEffect(() => {
     let redirecting = false;
 
     const handleAuthRequired = (event) => {
@@ -1174,6 +1268,12 @@ export default function AppShell() {
         error={idleDialogError}
         onStayActive={handleStayActive}
         onSignOut={performIdleLogout}
+      />
+
+      <PermissionDeniedDialog
+        open={Boolean(permissionDenied)}
+        message={permissionDenied?.message}
+        onClose={() => setPermissionDenied(null)}
       />
 
       <Snackbar

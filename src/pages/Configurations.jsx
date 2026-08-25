@@ -36,14 +36,17 @@ import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import HandshakeOutlinedIcon from "@mui/icons-material/HandshakeOutlined";
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 
 import { httpGetJson } from "../api/http";
 import { getRetentionStats } from "../api/retention";
+import { listTenantRoles } from "../api/roles";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { fetchMyPartner } from "../msp/mspApi";
 import JoinPartnerDialog from "../msp/JoinPartnerDialog";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import { useAuthContext } from "../auth/AuthContext";
 import { BRAND } from "../theme/brand";
 
 // Canonical shell for the three Settings cards. Takes an icon box +
@@ -183,6 +186,8 @@ const AgentSettings = React.lazy(() => import("./AgentSettings"));
 const SETTINGS_TABS = ["tenant", "agent"];
 
 export default function Configurations({ onNavigate, initialTab }) {
+  const { auth } = useAuthContext();
+  const tenantId = auth?.tenantId;
   // Seeded once from the prop (set by the `agent-settings` / `policies`
   // route aliases) or the URL, then kept in the URL so a reload and the
   // back button both land on the same division.
@@ -256,6 +261,35 @@ export default function Configurations({ onNavigate, initialTab }) {
       cancelled = true;
     };
   }, []);
+
+  // Custom (non-built-in) role count, for the Roles card. Same fail-open
+  // shape as location sites — a tenant with zero custom roles (the
+  // common case before any admin has used this yet) must still see the
+  // card, and a read error shouldn't hide the entry point to fix it.
+  const [customRoleCount, setCustomRoleCount] = React.useState(null);
+  const [rolesCountLoading, setRolesCountLoading] = React.useState(true);
+  React.useEffect(() => {
+    if (!tenantId) {
+      setRolesCountLoading(false);
+      return;
+    }
+    let cancelled = false;
+    listTenantRoles(tenantId)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setCustomRoleCount(items.filter((r) => !r.isSystem).length);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomRoleCount(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRolesCountLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
 
   // Per-tenant session security (auto-logout) read separately. Doesn't
   // need stale-while-revalidate because the value is tiny + cached on
@@ -446,6 +480,32 @@ export default function Configurations({ onNavigate, initialTab }) {
             />
           </Grid>
         ) : null}
+
+        {/* Roles & Permissions (ADR-0011) — create custom roles beyond
+            the 3 built-ins, with a per-capability permission matrix.
+            Same "always rendered, inner page gates the write actions"
+            posture as Session security below: any member can see the
+            count, only OWNER/ADMIN can open it and change anything. */}
+        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+          <SettingsCard
+            title="Roles & permissions"
+            valueHint={
+              customRoleCount ? "Custom roles configured" : "Only the built-in roles so far"
+            }
+            value={customRoleCount === null ? "—" : String(customRoleCount)}
+            icon={<AdminPanelSettingsOutlinedIcon />}
+            loading={rolesCountLoading}
+            onClick={() => onNavigate?.("roles")}
+            footer={
+              <StatChip
+                label="Custom roles"
+                count={customRoleCount ?? 0}
+                variant={customRoleCount ? "success" : "neutral"}
+                loading={rolesCountLoading}
+              />
+            }
+          />
+        </Grid>
 
         {/* Session security — auto-logout toggle + idle minutes.
             Always rendered for any authenticated tenant member, but the
