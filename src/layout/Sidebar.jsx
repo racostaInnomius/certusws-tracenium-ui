@@ -41,7 +41,7 @@ import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOu
 
 import { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 
-import { BRAND, NEUTRAL } from "../theme/brand";
+import { BRAND, ICON, NEUTRAL, TEXT } from "../theme/brand";
 import { getTenantById } from "../api/tenants";
 
 export const SIDEBAR_WIDTH = 210;
@@ -295,13 +295,13 @@ function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
               flexShrink: 0,
             }}
           >
-            <BusinessOutlinedIcon sx={{ fontSize: 16 }} />
+            <BusinessOutlinedIcon sx={{ fontSize: ICON.md }} />
           </Box>
 
           <Box sx={{ minWidth: 0 }}>
             <Typography
               sx={{
-                fontSize: 10,
+                fontSize: TEXT.xs,
                 lineHeight: 1.1,
                 fontWeight: 800,
                 letterSpacing: 0.85,
@@ -315,7 +315,7 @@ function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
               noWrap
               sx={{
                 mt: 0.15,
-                fontSize: 12.5,
+                fontSize: TEXT.sm,
                 lineHeight: 1.25,
                 fontWeight: 700,
                 color: "rgba(255,255,255,0.90)",
@@ -329,7 +329,7 @@ function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
                 noWrap
                 sx={{
                   mt: 0.2,
-                  fontSize: 10.6,
+                  fontSize: TEXT.xs,
                   lineHeight: 1.2,
                   fontWeight: 500,
                   color: "rgba(231,233,238,0.62)",
@@ -343,7 +343,7 @@ function TenantWorkspaceBadge({ tenantName, tenantId, userEmail }) {
                 noWrap
                 sx={{
                   mt: 0.2,
-                  fontSize: 10.2,
+                  fontSize: TEXT.xs,
                   lineHeight: 1.15,
                   fontWeight: 500,
                   color: "rgba(231,233,238,0.42)",
@@ -444,7 +444,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                   <Typography
                     component="div"
                     sx={{
-                      fontSize: 10.5,
+                      fontSize: TEXT.xs,
                       fontWeight: 700,
                       letterSpacing: 1,
                       textTransform: "uppercase",
@@ -501,7 +501,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                 sx={{
                   minWidth: 32,
                   color: isSelected ? BRAND.teal : NEUTRAL[400],
-                  "& svg": { fontSize: 20 },
+                  "& svg": { fontSize: TEXT.xl },
                 }}
               >
                 {it.icon}
@@ -513,7 +513,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                     primary: {
                       noWrap: true,
                       sx: {
-                        fontSize: 13.5,
+                        fontSize: TEXT.md,
                         fontWeight: isSelected ? 700 : 500,
                         lineHeight: 1.2,
                         letterSpacing: 0.2,
@@ -533,7 +533,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                     bgcolor: BRAND.teal,
                     color: BRAND.dark,
                     fontWeight: 800,
-                    fontSize: 10,
+                    fontSize: TEXT.xs,
                   }}
                 />
               )}
@@ -554,7 +554,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
                     color: BRAND.cyan,
                     border: "1px solid rgba(143,253,255,0.4)",
                     fontWeight: 800,
-                    fontSize: 9.5,
+                    fontSize: TEXT.xs,
                     letterSpacing: 0.3,
                     "& .MuiChip-label": { px: 0.7 },
                   }}

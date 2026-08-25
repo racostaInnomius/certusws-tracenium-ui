@@ -19,7 +19,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 // Una raíz que abre el disco entero: "/" en POSIX o "C:\\" en Windows.
 // Devuelve la primera que encuentre, para poder nombrarla en el aviso.
@@ -117,7 +117,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                     sx={{
                       ml: 0.5,
                       height: 18,
-                      fontSize: 10,
+                      fontSize: TEXT.xs,
                       bgcolor: BRAND.tealSoft,
                       color: BRAND.teal,
                       fontWeight: 700,
@@ -167,7 +167,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                     sx={{
                       ml: 0.5,
                       height: 18,
-                      fontSize: 10,
+                      fontSize: TEXT.xs,
                       bgcolor: BRAND.tealSoft,
                       color: BRAND.teal,
                       fontWeight: 700,
@@ -215,7 +215,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
               size="small"
               sx={{
                 height: 18,
-                fontSize: 10,
+                fontSize: TEXT.xs,
                 bgcolor: BRAND.tealSoft,
                 color: BRAND.teal,
                 fontWeight: 700,
@@ -383,7 +383,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                             sx={{
                               ml: 1,
                               height: 18,
-                              fontSize: 10,
+                              fontSize: TEXT.xs,
                               fontWeight: 700,
                               bgcolor: BRAND.surfaceMuted,
                               color: BRAND.gray,

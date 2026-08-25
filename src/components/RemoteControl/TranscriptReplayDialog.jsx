@@ -55,7 +55,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { httpGetJson } from "../../api/http";
 
 const SPEEDS = [1, 2, 4, 8];
@@ -132,7 +132,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
       scrollback: 5000,
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      fontSize: 13,
+      fontSize: TEXT.md,
       theme: {
         background: NEUTRAL[800],
         foreground: NEUTRAL[100],

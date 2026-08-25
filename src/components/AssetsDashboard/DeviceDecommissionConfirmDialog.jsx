@@ -22,7 +22,7 @@ import {
 } from "@mui/material";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { getHostDeviceId, getHostDisplayName } from "./hostHelpers";
 
 export default function DeviceDecommissionConfirmDialog({
@@ -103,7 +103,7 @@ export default function DeviceDecommissionConfirmDialog({
             agent certificates, and remove it from active inventory.
           </Alert>
 
-          <Typography sx={{ fontSize: 13.5, color: BRAND.dark, lineHeight: 1.65 }}>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, lineHeight: 1.65 }}>
             Collected hardware inventory, software inventory, sessions, compliance
             data, projections, and related telemetry will be retained only during
             the configured retention window and then permanently purged. Revoked
@@ -118,13 +118,13 @@ export default function DeviceDecommissionConfirmDialog({
               bgcolor: BRAND.surfaceMuted,
             }}
           >
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontWeight: 700 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontWeight: 700 }}>
               Device
             </Typography>
-            <Typography sx={{ fontSize: 14, color: BRAND.dark, fontWeight: 800 }}>
+            <Typography sx={{ fontSize: TEXT.base, color: BRAND.dark, fontWeight: 800 }}>
               {hostname || "—"}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontFamily: "monospace" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontFamily: "monospace" }}>
               {deviceId || "—"}
             </Typography>
           </Box>

@@ -14,7 +14,7 @@ import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
 
@@ -22,17 +22,17 @@ import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
 // compliance page key off it too (this was shared module-level state in the
 // old god-component).
 export const STATUS_META = {
-  pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.positive, bg: ROLE.positiveSoft },
-  fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.critical, bg: ROLE.criticalSoft },
-  not_applicable: { label: "N/A", icon: <BlockOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
-  info: { label: "Info", icon: <InfoOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.teal, bg: BRAND.tealSoft },
-  error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: ROLE.caution, bg: ROLE.cautionSoft },
-  unknown: { label: "Unknown", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.positive, bg: ROLE.positiveSoft },
+  fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.critical, bg: ROLE.criticalSoft },
+  not_applicable: { label: "N/A", icon: <BlockOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  info: { label: "Info", icon: <InfoOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.teal, bg: BRAND.tealSoft },
+  error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.caution, bg: ROLE.cautionSoft },
+  unknown: { label: "Unknown", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
   // "No data" (transient: enrolled <1 cycle, or fewer than the scoring
   // threshold of applicable rules) — distinct from "Unknown" (evaluator/
   // evidence problem). Same neutral gray; the label tells the operator whether
   // to wait or investigate.
-  insufficient_data: { label: "No data", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: 14 }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  insufficient_data: { label: "No data", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
 };
 
 // Operator-declared remediation state (mirrors the backend CHECK constraint on
@@ -76,7 +76,7 @@ export function RemediationStatusChip({ status }) {
         fontWeight: 700,
         border: `1px solid ${meta.fg}44`,
         height: 22,
-        fontSize: 11,
+        fontSize: TEXT.xs,
       }}
     />
   );
@@ -133,7 +133,7 @@ export function FrameworkChip({ framework, controlId, controlLevel, controlTitle
     <Chip
       label={label}
       size="small"
-      icon={referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: 12 }} /> : undefined}
+      icon={referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: ICON.xs }} /> : undefined}
       onClick={
         referenceUrl
           ? () => window.open(referenceUrl, "_blank", "noopener,noreferrer")
@@ -144,7 +144,7 @@ export function FrameworkChip({ framework, controlId, controlLevel, controlTitle
         bgcolor: BRAND.darkSoft,
         color: BRAND.dark,
         fontWeight: 600,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         height: 22,
         border: `1px solid ${BRAND.border}`,
         "& .MuiChip-icon": { color: BRAND.dark, marginLeft: "6px" },

@@ -28,7 +28,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON } from "../../theme/brand";
 import {
   StatusChip,
   ScoreBar,
@@ -429,9 +429,9 @@ export default function DeviceDrawerContent({
                 onClick={() => handleBulkAck(ackUntilIso(preset.days))}
               >
                 {preset.days == null ? (
-                  <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                  <VisibilityOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
                 ) : (
-                  <ScheduleOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                  <ScheduleOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
                 )}
                 <Typography variant="body2">
                   Acknowledge selected {preset.label}
@@ -439,7 +439,7 @@ export default function DeviceDrawerContent({
               </MenuItem>
             ))}
             <MenuItem onClick={handleBulkRevoke}>
-              <VisibilityOffOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+              <VisibilityOffOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
               <Typography variant="body2">Revoke acknowledgement</Typography>
             </MenuItem>
             {/* All transitions surfaced. The backend rejects

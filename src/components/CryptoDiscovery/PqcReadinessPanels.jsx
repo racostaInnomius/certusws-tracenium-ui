@@ -17,11 +17,11 @@
 import * as React from "react";
 import { Box, Chip, LinearProgress, Stack, Tooltip, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 function PanelTitle({ children, hint }) {
   const title = (
-    <Typography sx={{ fontWeight: 700, fontSize: 14, color: BRAND.dark }}>{children}</Typography>
+    <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>{children}</Typography>
   );
   return (
     <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
@@ -38,7 +38,7 @@ function PanelTitle({ children, hint }) {
 
 function Empty({ children }) {
   return (
-    <Typography sx={{ color: BRAND.gray, fontSize: 13, py: 3, textAlign: "center" }}>
+    <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
       {children}
     </Typography>
   );
@@ -65,12 +65,12 @@ function HorizonBlock({ year, data, emphasis }) {
         bgcolor: emphasis ? BRAND.alert.errorSoft : BRAND.surfaceMuted,
       }}
     >
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: BRAND.gray, letterSpacing: 0.6 }}>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.gray, letterSpacing: 0.6 }}>
         STILL VALID AFTER {year}
       </Typography>
       <Typography
         sx={{
-          fontSize: 34,
+          fontSize: TEXT["4xl"],
           fontWeight: 800,
           lineHeight: 1.1,
           color: emphasis ? BRAND.alert.error : BRAND.dark,
@@ -79,10 +79,10 @@ function HorizonBlock({ year, data, emphasis }) {
         {total.toLocaleString()}
       </Typography>
       <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
           <strong>{(data?.ca ?? 0).toLocaleString()}</strong> certificate authorities
         </Typography>
-        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
           <strong>{(data?.withPrivateKey ?? 0).toLocaleString()}</strong> with private key
         </Typography>
       </Stack>
@@ -109,7 +109,7 @@ export function PqcHorizonPanel({ pqc }) {
             <HorizonBlock year={deprecation} data={outliving.beyondDeprecation} />
             <HorizonBlock year={disallowed} data={outliving.beyondDisallowed} emphasis />
           </Stack>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray, mt: 1.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1.5 }}>
             Replacing a certificate authority means distributing a new root to every device
             years in advance. Renewing a leaf you hold the key for does not.
             {outliving.noExpiry > 0 && (
@@ -170,15 +170,15 @@ export function PqcFamilyPanel({ pqc }) {
               <Box key={row.family}>
                 <Stack direction="row" justifyContent="space-between" alignItems="baseline">
                   <Tooltip title={meta.hint ?? ""} arrow>
-                    <Typography sx={{ fontSize: 12.5, fontWeight: 600, cursor: meta.hint ? "help" : "default" }}>
+                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: meta.hint ? "help" : "default" }}>
                       {meta.label}
                     </Typography>
                   </Tooltip>
                   <Typography
-                    sx={{ fontSize: 13, fontWeight: 700, color: row.total === 0 ? BRAND.gray : BRAND.dark }}
+                    sx={{ fontSize: TEXT.md, fontWeight: 700, color: row.total === 0 ? BRAND.gray : BRAND.dark }}
                   >
                     {row.total.toLocaleString()}
-                    <Typography component="span" sx={{ fontSize: 11, color: BRAND.gray, ml: 0.5 }}>
+                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
                       {pct}%
                     </Typography>
                   </Typography>
@@ -198,7 +198,7 @@ export function PqcFamilyPanel({ pqc }) {
                   }}
                 />
                 {row.total > 0 && (
-                  <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                     {row.nonRoot.toLocaleString()} outside trust stores ·{" "}
                     {row.withPrivateKey.toLocaleString()} with private key
                   </Typography>
@@ -232,7 +232,7 @@ export function TrustAnchorsPanel({ pqc }) {
             <Box key={row.fingerprint256} sx={{ py: 1, px: 0.5 }}>
               <Typography
                 sx={{
-                  fontSize: 13,
+                  fontSize: TEXT.md,
                   fontWeight: 600,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -245,9 +245,9 @@ export function TrustAnchorsPanel({ pqc }) {
                 <Chip
                   size="small"
                   label={[row.keyAlgorithm ?? "?", row.keySizeBits].filter(Boolean).join(" ")}
-                  sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: 10.5 }}
+                  sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: TEXT.xs }}
                 />
-                <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                   valid to {formatDate(row.notAfter)} · {row.deviceCount} device
                   {row.deviceCount === 1 ? "" : "s"}
                 </Typography>
@@ -287,13 +287,13 @@ export function AgilityBlockersPanel({ pqc }) {
         </Empty>
       ) : (
         <>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 1.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
             Thresholds: Java {agility.jvmMinMajor}+ (ML-KEM and ML-DSA arrived in that JDK),
             OpenSSL {agility.opensslMinVersion}+, Windows{" "}
             {agility.windowsMinBuild ? `build ${agility.windowsMinBuild}` : "24H2"}+ and macOS{" "}
             {agility.macosMinMajor ?? 26}+ for the operating system&apos;s own TLS stack.
           </Typography>
-          <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
             An <strong>os-tls</strong> blocker covers everything that uses the system stack —
             on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a
             software inventory. Clearing the threshold is not the same as having it on:
@@ -302,7 +302,7 @@ export function AgilityBlockersPanel({ pqc }) {
           <Stack divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
             {[...byDevice.values()].map((device) => (
               <Box key={device.host} sx={{ py: 1, px: 0.5 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{device.host}</Typography>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>{device.host}</Typography>
                 <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5 }}>
                   {device.items.map((item) => (
                     <Tooltip key={`${item.runtime}-${item.version}`} title={item.reason} arrow>
@@ -313,7 +313,7 @@ export function AgilityBlockersPanel({ pqc }) {
                           bgcolor: BRAND.alert.highSoft,
                           color: BRAND.alert.high,
                           fontWeight: 700,
-                          fontSize: 10.5,
+                          fontSize: TEXT.xs,
                         }}
                       />
                     </Tooltip>
@@ -366,16 +366,16 @@ export function CnsaPanel({ pqc }) {
         CNSA 2.0
       </PanelTitle>
 
-      <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
         {cnsa.applicability}
       </Typography>
 
       {next ? (
         <Box sx={{ mb: 2, p: 1.25, borderRadius: 1, bgcolor: BRAND.surfaceMuted }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {next.daysRemaining} days to {next.date}
           </Typography>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>{next.label}</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{next.label}</Typography>
         </Box>
       ) : null}
 
@@ -388,8 +388,8 @@ export function CnsaPanel({ pqc }) {
               alignItems="baseline"
               sx={{ cursor: "help" }}
             >
-              <Typography sx={{ fontSize: 12.5, color: BRAND.gray }}>{label}</Typography>
-              <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{label}</Typography>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                 {value ?? 0}
               </Typography>
             </Stack>
@@ -398,7 +398,7 @@ export function CnsaPanel({ pqc }) {
       </Stack>
 
       {c.weakDigest > 0 ? (
-        <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mt: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1.5 }}>
           {c.weakDigest} of {c.total} also sit below the SHA-384 digest floor. Counted separately
           because on an estate that has already migrated its algorithms, the digest can be the
           only thing left failing.

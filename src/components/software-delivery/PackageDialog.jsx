@@ -27,7 +27,7 @@ import {
   Typography,
   Divider,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import DetectionRuleEditor from "./DetectionRuleEditor";
 
 const PLATFORM_OPTIONS = ["windows", "macos", "linux"];
@@ -328,7 +328,7 @@ export default function PackageDialog({
                   value={form.sha256}
                   onChange={(e) => update({ sha256: e.target.value })}
                   required
-                  inputProps={{ style: { fontFamily: "monospace", fontSize: 12 } }}
+                  inputProps={{ style: { fontFamily: "monospace", fontSize: TEXT.sm } }}
                 />
                 <TextField
                   size="small"
@@ -447,7 +447,7 @@ export default function PackageDialog({
                 borderRadius: 1,
                 bgcolor: BRAND.alert?.errorSoft,
                 color: BRAND.alert?.error,
-                fontSize: 13,
+                fontSize: TEXT.md,
                 fontWeight: 600,
               }}
             >

@@ -40,7 +40,7 @@ import LanOutlinedIcon from "@mui/icons-material/LanOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import SummaryCard from "../common/SummaryCard";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
   listSites,
   getDistributionReachability,
@@ -403,7 +403,7 @@ export default function DistributionTab({ canManage, notify }) {
             {sites.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4}>
-                  <Typography sx={{ fontSize: 13, color: BRAND.gray, py: 1 }}>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, py: 1 }}>
                     No sites yet — define one to enable LAN distribution for its devices.
                   </Typography>
                 </TableCell>
@@ -425,7 +425,7 @@ export default function DistributionTab({ canManage, notify }) {
                   <TableCell>
                     <Stack direction="row" spacing={0.5} flexWrap="wrap">
                       {s.matchSubnets.map((c) => (
-                        <Chip key={c} size="small" label={c} sx={{ fontFamily: "monospace", fontSize: 11 }} />
+                        <Chip key={c} size="small" label={c} sx={{ fontFamily: "monospace", fontSize: TEXT.xs }} />
                       ))}
                     </Stack>
                   </TableCell>
@@ -483,7 +483,7 @@ export default function DistributionTab({ canManage, notify }) {
             {dps.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5}>
-                  <Typography sx={{ fontSize: 13, color: BRAND.gray, py: 1 }}>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, py: 1 }}>
                     No distribution points. Packages download from CDN/origin on every device.
                   </Typography>
                 </TableCell>
@@ -491,9 +491,9 @@ export default function DistributionTab({ canManage, notify }) {
             ) : (
               dps.map((dp) => (
                 <TableRow key={dp.id}>
-                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{dp.agentId}</TableCell>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>{dp.agentId}</TableCell>
                   <TableCell>{siteName(dp.siteId)}</TableCell>
-                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>
                     {dp.lanUrl || "auto (device IP:47821)"}
                   </TableCell>
                   <TableCell>

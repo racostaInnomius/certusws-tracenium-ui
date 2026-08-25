@@ -53,7 +53,7 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
@@ -153,7 +153,7 @@ function DetailRow({ label, value, mono = false }) {
     <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 600,
           minWidth: 120,
@@ -166,7 +166,7 @@ function DetailRow({ label, value, mono = false }) {
       </Typography>
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: TEXT.md,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
           wordBreak: "break-all",
@@ -544,7 +544,7 @@ export default function PKI() {
       minWidth: 170,
       flex: 0.8,
       renderCell: (params) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12.5 }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>
           {shortFp(params.value)}
         </Typography>
       ),
@@ -606,7 +606,7 @@ export default function PKI() {
       minWidth: 170,
       flex: 0.8,
       renderCell: (params) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12.5 }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>
           {shortFp(params.value)}
         </Typography>
       ),
@@ -871,10 +871,10 @@ function OverviewTab(props) {
           sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Certificate coverage by device
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {devices.total} devices · click row to inspect
             </Typography>
           </Box>
@@ -946,10 +946,10 @@ function OverviewTab(props) {
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
             <Box>
-              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                 Expiring certificates
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                 Active certs expiring within the selected window.
               </Typography>
             </Box>
@@ -990,10 +990,10 @@ function OverviewTab(props) {
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
             <Box>
-              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                 Devices without active certificate
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                 Enrolled devices whose current certificate is not active.
               </Typography>
             </Box>
@@ -1063,7 +1063,7 @@ function InspectorTab(props) {
           color: "text.secondary",
         }}
       >
-        <InfoOutlinedIcon sx={{ fontSize: 40, color: BRAND.gray, mb: 1.5 }} />
+        <InfoOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray, mb: 1.5 }} />
         <Typography variant="body1" sx={{ fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
           No device selected
         </Typography>
@@ -1084,7 +1084,7 @@ function InspectorTab(props) {
           sx={{ minWidth: 0 }}
         >
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Certificate
             </Typography>
             {selectedCertificate ? <StatusChip status={selectedCertificate.status} /> : null}
@@ -1202,10 +1202,10 @@ function InspectorTab(props) {
           sx={{ minWidth: 0, overflow: "hidden", mb: 2 }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Device certificate chain
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {deviceCertificates.length} cert{deviceCertificates.length === 1 ? "" : "s"} · click to switch
             </Typography>
           </Box>
@@ -1236,10 +1236,10 @@ function InspectorTab(props) {
           sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Activity
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {certificateActivity.length} event{certificateActivity.length === 1 ? "" : "s"}
             </Typography>
           </Box>
@@ -1271,7 +1271,7 @@ function InspectorTab(props) {
                   overflow: "auto",
                   maxHeight: 220,
                   fontFamily: "monospace",
-                  fontSize: 12,
+                  fontSize: TEXT.sm,
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-word",
                 }}

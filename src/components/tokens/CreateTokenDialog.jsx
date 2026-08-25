@@ -10,7 +10,7 @@ import {
   Alert,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 function toPositiveNumber(value, fallback = 0) {
   const n = Number(value);
@@ -133,13 +133,13 @@ export default function CreateTokenDialog({
               },
             }}
           >
-            <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700 }}>
               Device enrollment capacity
             </Typography>
-            <Typography sx={{ fontSize: 13 }}>
+            <Typography sx={{ fontSize: TEXT.md }}>
               Max devices: {maxDevices} · Used agents: {used} · Remaining before standard limit: {remaining}
             </Typography>
-            <Typography sx={{ fontSize: 13 }}>
+            <Typography sx={{ fontSize: TEXT.md }}>
               Upper cap: {upperLimit} · Available token capacity: {creatableRemaining}
               {capacityStatus === "exceeded" ? ` · Grace remaining: ${overageRemaining}` : ""}
             </Typography>

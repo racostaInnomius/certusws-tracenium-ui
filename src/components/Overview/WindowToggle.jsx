@@ -7,7 +7,7 @@
 // when the selection changes.
 
 import { Box, ButtonBase } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const OPTIONS = [
   { label: "1d", value: 1 },
@@ -44,7 +44,7 @@ export default function WindowToggle({ value, onChange, disabled = false }) {
             sx={{
               px: 1.25,
               py: 0.5,
-              fontSize: 11,
+              fontSize: TEXT.xs,
               fontWeight: 700,
               letterSpacing: 0.3,
               color: active ? BRAND.surface : BRAND.dark,

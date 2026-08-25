@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { Box, Paper, Stack, Typography } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 export function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper }) {
   return (
@@ -38,15 +38,15 @@ export function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper
         >
           {icon}
         </Box>
-        <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
           {title}
         </Typography>
       </Stack>
-      <Typography sx={{ fontSize: 20, fontWeight: 900, color: BRAND.dark, lineHeight: 1.15 }} noWrap title={String(value || "—")}>
+      <Typography sx={{ fontSize: TEXT.xl, fontWeight: 900, color: BRAND.dark, lineHeight: 1.15 }} noWrap title={String(value || "—")}>
         {value || "—"}
       </Typography>
       {helper ? (
-        <Typography sx={{ mt: 0.75, fontSize: 12, color: "text.secondary" }} noWrap title={helper}>
+        <Typography sx={{ mt: 0.75, fontSize: TEXT.sm, color: "text.secondary" }} noWrap title={helper}>
           {helper}
         </Typography>
       ) : null}
@@ -57,13 +57,13 @@ export function DetailStatCard({ title, value, icon, accent = BRAND.teal, helper
 export function DetailField({ label, value, mono = false, hint = "" }) {
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
         {label}
       </Typography>
       <Typography
         sx={{
           mt: 0.35,
-          fontSize: 13,
+          fontSize: TEXT.md,
           fontWeight: 700,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
@@ -79,7 +79,7 @@ export function DetailField({ label, value, mono = false, hint = "" }) {
           but not self-explanatory — e.g. a bare CIDR under "Location", which
           is what is left when no site mapping and no GPS fix exist. */}
       {hint ? (
-        <Typography sx={{ mt: 0.25, fontSize: 11, color: "text.secondary", whiteSpace: "normal" }}>
+        <Typography sx={{ mt: 0.25, fontSize: TEXT.xs, color: "text.secondary", whiteSpace: "normal" }}>
           {hint}
         </Typography>
       ) : null}

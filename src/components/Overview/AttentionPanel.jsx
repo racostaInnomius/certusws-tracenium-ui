@@ -17,7 +17,7 @@ import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import AlertRow from "./AlertRow";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE } from "../../theme/brand";
 import { classifyAgentVersions } from "./agentVersions";
 
 function getValue(result) {
@@ -164,7 +164,7 @@ export default function AttentionPanel({ results, onNavigate }) {
             color: ROLE.positive
           }}
         >
-          <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 36, mb: 1 }} />
+          <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON["2xl"], mb: 1 }} />
           <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
             All clear
           </Typography>

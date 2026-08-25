@@ -61,7 +61,7 @@ const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.Co
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, ICON, ROLE } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
@@ -213,7 +213,7 @@ export default function Overview() {
                   <Button
                     size="small"
                     variant="outlined"
-                    startIcon={<AssessmentOutlinedIcon sx={{ fontSize: 16 }} />}
+                    startIcon={<AssessmentOutlinedIcon sx={{ fontSize: ICON.md }} />}
                     onClick={() => setReportOpen(true)}
                     sx={{ textTransform: "none" }}
                   >

@@ -10,7 +10,7 @@ import { Box, Chip, Paper, Typography } from "@mui/material";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 export function formatJson(value) {
   return JSON.stringify(value ?? {}, null, 2);
@@ -55,7 +55,7 @@ export function renderAckChip(status, reasonText) {
       <Chip
         label="ACK OK"
         size="small"
-        icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
         sx={{
           bgcolor: BRAND.tealSoft,
           color: BRAND.tealText,
@@ -71,7 +71,7 @@ export function renderAckChip(status, reasonText) {
       <Chip
         label={reasonText || "Pending"}
         size="small"
-        icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: ICON.sm }} />}
         sx={{
           bgcolor: BRAND.darkSoft,
           color: BRAND.dark,
@@ -86,7 +86,7 @@ export function renderAckChip(status, reasonText) {
     <Chip
       label={`ACK ERR ${status}`}
       size="small"
-      icon={<ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+      icon={<ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
       sx={{
         bgcolor: BRAND.alert.errorSoft,
         color: BRAND.alert.error,
@@ -169,14 +169,14 @@ export function SummaryCard({ title, value, hint, icon, accent = BRAND.teal, tin
         {icon}
       </Box>
       <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
           {title}
         </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
+        <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
           {value}
         </Typography>
         {hint ? (
-          <Typography sx={{ fontSize: 11, color: "text.secondary", mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.25 }}>
             {hint}
           </Typography>
         ) : null}
@@ -190,7 +190,7 @@ export function DetailRow({ label, value, mono = false }) {
     <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 600,
           minWidth: 96,
@@ -203,7 +203,7 @@ export function DetailRow({ label, value, mono = false }) {
       </Typography>
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: TEXT.md,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
           wordBreak: "break-all",
@@ -228,7 +228,7 @@ export function JsonBlock({ value, maxHeight = 260 }) {
         overflow: "auto",
         maxHeight,
         fontFamily: "monospace",
-        fontSize: 12,
+        fontSize: TEXT.sm,
         whiteSpace: "pre-wrap",
         wordBreak: "break-word",
       }}

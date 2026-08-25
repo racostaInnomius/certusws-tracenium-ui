@@ -24,7 +24,7 @@ import {
 } from "@mui/material";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getCriteriaSuggestions } from "../../api/assetGroups";
 import {
   normalizeOptionLabel,
@@ -184,11 +184,11 @@ export function CriteriaValueEditor({ pred, fieldSpec, opSpec, disabled, onChang
           {...optionProps}
           sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", py: 0.75 }}
         >
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {option.label}
           </Typography>
           {option.description ? (
-            <Typography sx={{ fontSize: 11, color: BRAND.gray, lineHeight: 1.25 }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, lineHeight: 1.25 }}>
               {option.description}
             </Typography>
           ) : null}

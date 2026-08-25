@@ -40,7 +40,7 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SectionPaper from "../common/SectionPaper";
 import SummaryCard from "../common/SummaryCard";
 import CompositionBars from "../common/CompositionBars";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { platformColor } from "../../utils/platform";
 import {
   listPackages,
@@ -291,10 +291,10 @@ export default function OverviewTab({ onNavigateTab }) {
               gap={1}
             >
               <Box>
-                <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 14 }}>
+                <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
                   Installs over time
                 </Typography>
-                <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                   Per-device outcomes by day
                 </Typography>
               </Box>
@@ -320,7 +320,7 @@ export default function OverviewTab({ onNavigateTab }) {
                     display: "grid",
                     placeItems: "center",
                     color: BRAND.gray,
-                    fontSize: 13,
+                    fontSize: TEXT.md,
                   }}
                 >
                   No installs completed in this window
@@ -329,16 +329,16 @@ export default function OverviewTab({ onNavigateTab }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
                     <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fill: BRAND.dark, fontSize: 11 }} tickLine={false} />
-                    <YAxis tick={{ fill: BRAND.dark, fontSize: 11 }} tickLine={false} allowDecimals={false} />
+                    <XAxis dataKey="day" tick={{ fill: BRAND.dark, fontSize: TEXT.xs }} tickLine={false} />
+                    <YAxis tick={{ fill: BRAND.dark, fontSize: TEXT.xs }} tickLine={false} allowDecimals={false} />
                     <RechartsTooltip
                       contentStyle={{
                         borderRadius: 8,
                         border: `1px solid ${BRAND.border}`,
-                        fontSize: 12,
+                        fontSize: TEXT.sm,
                       }}
                     />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: TEXT.sm }} />
                     <Line
                       type="monotone"
                       dataKey="succeeded"
@@ -384,7 +384,7 @@ export default function OverviewTab({ onNavigateTab }) {
             minHeight={230}
             headerExtra={
               stats.dpShare != null ? (
-                <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                   {stats.dpShare}% served from the LAN
                 </Typography>
               ) : null

@@ -10,7 +10,7 @@ import * as React from "react";
 import { Button, Checkbox, CircularProgress, Paper, Stack, Typography } from "@mui/material";
 import PlaylistAddCheckOutlinedIcon from "@mui/icons-material/PlaylistAddCheckOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON } from "../../theme/brand";
 
 export default function BulkFindingToolbar({
   totalCount,
@@ -75,10 +75,10 @@ export default function BulkFindingToolbar({
                 pending ? (
                   <CircularProgress size={14} color="inherit" />
                 ) : (
-                  <PlaylistAddCheckOutlinedIcon sx={{ fontSize: 16 }} />
+                  <PlaylistAddCheckOutlinedIcon sx={{ fontSize: ICON.md }} />
                 )
               }
-              endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+              endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               sx={{ textTransform: "none" }}
             >
               Actions

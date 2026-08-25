@@ -30,7 +30,7 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useAuthContext } from "../auth/AuthContext";
 import { useConfirm } from "../components/common/ConfirmDialog";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import {
   getTenantPolicy,
@@ -328,7 +328,7 @@ export default function DeviceManagement({ onNavigate }) {
               </Box>
             ) : (
               <Box>
-                <Typography sx={{ fontSize: 34, fontWeight: 900, color: BRAND.dark, lineHeight: 1 }}>
+                <Typography sx={{ fontSize: TEXT["4xl"], fontWeight: 900, color: BRAND.dark, lineHeight: 1 }}>
                   {mobileCounts.total}
                 </Typography>
                 <Typography variant="caption" sx={{ color: BRAND.gray }}>
@@ -418,7 +418,7 @@ export default function DeviceManagement({ onNavigate }) {
           <Chip
             size="small"
             label="beta"
-            sx={{ height: 18, fontSize: 10, fontWeight: 800, color: BRAND.gray }}
+            sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
           />
         </Box>
         <Typography variant="body2" sx={{ color: BRAND.gray, mb: 1.5 }}>
@@ -534,13 +534,13 @@ export default function DeviceManagement({ onNavigate }) {
                 }}
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-                  <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 14 }}>
+                  <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
                     {item.title}
                   </Typography>
                   <Chip
                     size="small"
                     label="planned"
-                    sx={{ height: 18, fontSize: 10, fontWeight: 800, color: BRAND.gray }}
+                    sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}
                   />
                 </Box>
                 <Typography variant="caption" sx={{ color: BRAND.gray, lineHeight: 1.6 }}>

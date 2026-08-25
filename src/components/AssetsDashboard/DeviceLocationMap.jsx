@@ -15,7 +15,7 @@ import { Box, Chip, Stack, Typography } from "@mui/material";
 import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 // Leaflet's default marker icons are resolved as bundler-relative URLs, which
 // Vite does not rewrite — the stock setup renders broken images. A divIcon
@@ -68,7 +68,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
           label={pin.freshnessLabel || (isGps ? "Device-reported position" : "Site location (network range)")}
           sx={{
             height: 20,
-            fontSize: 11,
+            fontSize: TEXT.xs,
             fontWeight: 700,
             // A fix past its freshness window drops out of the "live" colour:
             // an operator scanning the drawer should not have to read the
@@ -81,7 +81,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
             color: !isGps ? BRAND.tealText : isStale ? "text.secondary" : ROLE.positive,
           }}
         />
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
           {!isGps
             ? "Where this network range is registered — not a position the device reported."
             : isStale
@@ -96,7 +96,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
             size="small"
             variant="outlined"
             label={pin.positionSource}
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, color: "text.secondary" }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary" }}
           />
         ) : null}
       </Stack>

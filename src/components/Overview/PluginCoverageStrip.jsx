@@ -44,7 +44,7 @@ import {
   Chip,
   Divider,
 } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import AsyncState from "../common/AsyncState";
 import { getPluginCoverageDevices } from "../../api/overview";
 
@@ -227,7 +227,7 @@ export default function PluginCoverageStrip({ result, loading }) {
                       >
                         <Typography
                           variant="body2"
-                          sx={{ color: BRAND.dark, fontWeight: 600, fontSize: 12.5 }}
+                          sx={{ color: BRAND.dark, fontWeight: 600, fontSize: TEXT.sm }}
                         >
                           {row.label}
                         </Typography>
@@ -324,7 +324,7 @@ function PluginCoverageDrillDialog({
                 label={data?.missingCount ?? "—"}
                 sx={{
                   height: 18,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   bgcolor:
                     (data?.missingCount ?? 0) > 0 ? ROLE.caution : BRAND.surfaceMuted,
                   color:
@@ -343,7 +343,7 @@ function PluginCoverageDrillDialog({
                 label={data?.coveredCount ?? "—"}
                 sx={{
                   height: 18,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   bgcolor:
                     (data?.coveredCount ?? 0) > 0 ? ROLE.positive : BRAND.surfaceMuted,
                   color:
@@ -387,7 +387,7 @@ function PluginCoverageDrillDialog({
                             label={dev.platform}
                             sx={{
                               height: 18,
-                              fontSize: 10.5,
+                              fontSize: TEXT.xs,
                               bgcolor: BRAND.surfaceMuted,
                               color: BRAND.dark
                             }}

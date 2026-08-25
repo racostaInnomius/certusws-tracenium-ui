@@ -43,7 +43,7 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 // BRAND used to be duplicated here (Fase 1 homologation deleted it).
 // Central source of truth lives in src/theme/brand.js; adding
 // borderStrong/tealText/etc. there propagates automatically.
-import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
@@ -202,10 +202,10 @@ function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, he
               sx={{ mr: 1, p: 0.25, color: BRAND.teal, "&.Mui-checked": { color: BRAND.teal } }}
             />
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }} noWrap>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }} noWrap>
                 {option.hostname || option.deviceId}
               </Typography>
-              <Typography sx={{ fontSize: 11, color: BRAND.gray }} noWrap>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }} noWrap>
                 {option.connected ? "Connected" : "Offline"}
                 {option.agentVersion ? ` · agent ${option.agentVersion}` : ""}
               </Typography>
@@ -244,7 +244,7 @@ function DetailRow({ label, value, mono = false }) {
     <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 600,
           minWidth: 88,
@@ -256,7 +256,7 @@ function DetailRow({ label, value, mono = false }) {
       </Typography>
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: TEXT.md,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
           wordBreak: "break-all",
@@ -312,7 +312,7 @@ function JobsByTypeCard({ windowDays, data, loading }) {
           label={`${total} job${total === 1 ? "" : "s"}`}
           sx={{
             height: 20,
-            fontSize: 11,
+            fontSize: TEXT.xs,
             fontWeight: 700,
             bgcolor: BRAND.tealSoft,
             color: BRAND.tealText,
@@ -343,10 +343,10 @@ function JobsByTypeCard({ windowDays, data, loading }) {
             const pct = Math.round((Number(row.count || 0) / max) * 100);
             return (
               <Box key={row.type} sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: TEXT.sm }}>
                   <Typography
                     sx={{
-                      fontSize: 12,
+                      fontSize: TEXT.sm,
                       fontWeight: 600,
                       color: BRAND.dark,
                       overflow: "hidden",
@@ -358,7 +358,7 @@ function JobsByTypeCard({ windowDays, data, loading }) {
                     {row.type}
                   </Typography>
                   <Typography
-                    sx={{ fontSize: 12, fontWeight: 700, color: BRAND.teal, flexShrink: 0 }}
+                    sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.teal, flexShrink: 0 }}
                   >
                     {row.count}
                   </Typography>
@@ -1611,10 +1611,10 @@ export default function Jobs() {
           }}
         >
           <Box>
-            <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
+            <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
               Create Job
             </Typography>
-            <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
               Dispatch a job to a single device or to every connected device in the tenant.
             </Typography>
           </Box>
@@ -2002,10 +2002,10 @@ export default function Jobs() {
                 flexWrap: "wrap",
               }}
             >
-              <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                 Tenant Job History
               </Typography>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                 Showing <strong>{filteredRows.length}</strong> row{filteredRows.length === 1 ? "" : "s"} ·{" "}
                 {/* "loaded", not "total", once the window is truncated —
                     tenantJobs is then the window, not the whole history. */}
@@ -2130,7 +2130,7 @@ export default function Jobs() {
             sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}
           >
             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
-              <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
                 {selectedBatchId ? "Batch Detail" : "Job Detail"}
               </Typography>
               {selectedBatchId && selectedBatchJobs.length > 0
@@ -2185,11 +2185,11 @@ export default function Jobs() {
                           }}
                         >
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }} noWrap>
+                            <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }} noWrap>
                               {deviceMap.get(String(job.device_id || ""))?.hostname || job.device_id}
                             </Typography>
                             {job.last_error ? (
-                              <Typography sx={{ fontSize: 11, color: BRAND.alert.error }} noWrap>
+                              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.error }} noWrap>
                                 {job.last_error}
                               </Typography>
                             ) : null}
@@ -2216,7 +2216,7 @@ export default function Jobs() {
                 }}
               >
                 <Box>
-                  <InfoOutlinedIcon sx={{ fontSize: 36, color: BRAND.gray, mb: 1 }} />
+                  <InfoOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray, mb: 1 }} />
                   <Typography variant="body2">Select a job from the table to see its details.</Typography>
                 </Box>
               </Box>
@@ -2279,7 +2279,7 @@ export default function Jobs() {
                           borderColor: `${BRAND.alert.error}55`,
                           bgcolor: BRAND.alert.errorSoft,
                           color: BRAND.alert.error,
-                          fontSize: 13,
+                          fontSize: TEXT.md,
                           fontFamily: "monospace",
                           whiteSpace: "pre-wrap",
                           wordBreak: "break-word",
@@ -2317,7 +2317,7 @@ export default function Jobs() {
                           overflow: "auto",
                           maxHeight: 220,
                           fontFamily: "monospace",
-                          fontSize: 12,
+                          fontSize: TEXT.sm,
                           whiteSpace: "pre-wrap",
                           wordBreak: "break-word",
                         }}
@@ -2346,7 +2346,7 @@ export default function Jobs() {
                       overflow: "auto",
                       maxHeight: 220,
                       fontFamily: "monospace",
-                      fontSize: 12,
+                      fontSize: TEXT.sm,
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-word",
                     }}

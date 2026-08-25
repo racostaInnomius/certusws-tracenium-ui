@@ -20,7 +20,7 @@ import {
   FormControlLabel,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const PLATFORMS = ["windows", "macos", "linux"];
 
@@ -127,11 +127,11 @@ export default function CatalogDialog({ open, mode, entry, submitting, onClose, 
           />
 
           {error ? (
-            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: 13, fontWeight: 600 }}>
+            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: TEXT.md, fontWeight: 600 }}>
               {error}
             </Box>
           ) : null}
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             Entries created by approving an SDP package are refreshed automatically; manual entries are yours to maintain.
           </Typography>
         </Stack>

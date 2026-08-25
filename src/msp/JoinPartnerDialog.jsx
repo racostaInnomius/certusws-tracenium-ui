@@ -22,7 +22,7 @@ import {
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import HandshakeOutlinedIcon from "@mui/icons-material/HandshakeOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON } from "../theme/brand";
 import { fetchMyPartner, redeemClaimCode } from "./mspApi";
 
 function errorText(err) {
@@ -101,7 +101,7 @@ export default function JoinPartnerDialog({ open, onClose, onJoined }) {
           </Stack>
         ) : joined ? (
           <Stack alignItems="center" spacing={1.5} sx={{ py: 3, textAlign: "center" }}>
-            <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 44, color: BRAND.alert.success }} />
+            <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON["3xl"], color: BRAND.alert.success }} />
             <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
               You're now managed by {joined.mspName}.
             </Typography>

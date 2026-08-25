@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { Chip } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const VERDICTS = {
   verified: { label: "Verified", bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
@@ -26,7 +26,7 @@ export default function VerdictBadge({ verdict, size = "small" }) {
     <Chip
       label={v.label}
       size={size}
-      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: v.bg, color: v.color }}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: v.bg, color: v.color }}
     />
   );
 }

@@ -13,7 +13,7 @@ import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import { getReportTypes, getReportRuns, runReport } from "../api/reports";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 
 export default function Reports() {
   const [rows, setRows] = React.useState([]);
@@ -125,7 +125,7 @@ export default function Reports() {
       <Paper
         sx={{ p: 2, mb: 3, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}
       >
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
           Catalog
         </Typography>
         <Box sx={{ width: "100%" }}>
@@ -144,7 +144,7 @@ export default function Reports() {
       </Paper>
 
       <Paper sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
           Recent runs
         </Typography>
         <Box sx={{ width: "100%" }}>

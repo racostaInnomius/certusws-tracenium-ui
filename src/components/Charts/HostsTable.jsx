@@ -22,7 +22,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { normalizePlatform, platformLabel, platformColor } from "../../utils/platform";
 import OnlineDot from "../common/OnlineDot";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
@@ -47,7 +47,7 @@ function PlatformChip({ platform }) {
       sx={{
         height: 20,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         bgcolor: style.bg,
         color: style.fg,
         border: `1px solid ${style.fg}33`,
@@ -160,7 +160,7 @@ function DecommissionStatusChip({ job, row }) {
         label={label}
         sx={{
           height: 20,
-          fontSize: 10.5,
+          fontSize: TEXT.xs,
           fontWeight: 800,
           bgcolor: isFailed
             ? BRAND.alert.errorSoft
@@ -369,7 +369,7 @@ export default function HostsTable({
                         <Typography
                           component="span"
                           sx={{
-                            fontSize: 13,
+                            fontSize: TEXT.md,
                             fontWeight: 700,
                             color: BRAND.dark,
                             overflow: "hidden",
@@ -386,7 +386,7 @@ export default function HostsTable({
                         <Box sx={{ mt: 0.5, maxWidth: 260 }}>
                           <Typography
                             sx={{
-                              fontSize: 10.5,
+                              fontSize: TEXT.xs,
                               color: BRAND.gray,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
@@ -415,7 +415,7 @@ export default function HostsTable({
                         <Typography
                           sx={{
                             mt: 0.4,
-                            fontSize: 10.5,
+                            fontSize: TEXT.xs,
                             color: BRAND.alert.error,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -431,11 +431,11 @@ export default function HostsTable({
                   <TableCell sx={{ minWidth: 110 }}>
                     <PlatformChip platform={platform} />
                   </TableCell>
-                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12, minWidth: 120 }}>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 120 }}>
                     {displayText(agentVersion)}
                   </TableCell>
                   <TableCell sx={{ minWidth: 150 }}>{displayText(lastLogonUser)}</TableCell>
-                  <TableCell sx={{ fontFamily: "monospace", fontSize: 12, minWidth: 130 }}>
+                  <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 130 }}>
                     {displayText(localIp)}
                   </TableCell>
                   <TableCell align="right" onClick={(event) => event.stopPropagation()}>
@@ -522,7 +522,7 @@ export default function HostsTable({
               rowGap: 1,
             },
             "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-              fontSize: 12,
+              fontSize: TEXT.sm,
               color: "text.secondary",
             },
           }}

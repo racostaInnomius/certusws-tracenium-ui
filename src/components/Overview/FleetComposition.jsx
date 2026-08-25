@@ -42,7 +42,7 @@ import {
   Tooltip,
   Label
 } from "recharts";
-import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
+import { BRAND, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -317,7 +317,7 @@ export function DonutCard({
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
-                      fontSize: 12.5
+                      fontSize: TEXT.sm
                     }}
                   >
                     {d.name}
@@ -327,7 +327,7 @@ export function DonutCard({
                     sx={{
                       color: BRAND.gray,
                       fontWeight: 600,
-                      fontSize: 12.5,
+                      fontSize: TEXT.sm,
                       fontStyle: d.pending ? "italic" : "normal"
                     }}
                   >

@@ -1,7 +1,7 @@
 import { CircularProgress, Alert, Button, Typography, Stack } from "@mui/material";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 /**
  * One place for the loading / error / empty triad that ~every page hand-rolls
@@ -42,7 +42,7 @@ export default function AsyncState({
       <Stack alignItems="center" justifyContent="center" spacing={1.25} sx={{ minHeight, py: 3 }}>
         <CircularProgress size={26} sx={{ color: BRAND.teal }} />
         {loadingText ? (
-          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>{loadingText}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>{loadingText}</Typography>
         ) : null}
       </Stack>
     );
@@ -69,8 +69,8 @@ export default function AsyncState({
   if (isEmpty) {
     return (
       <Stack alignItems="center" justifyContent="center" spacing={1} sx={{ minHeight, py: 3, textAlign: "center" }}>
-        {emptyIcon ?? <InboxOutlinedIcon sx={{ fontSize: 34, color: BRAND.gray }} />}
-        <Typography sx={{ fontSize: 13.5, color: "text.secondary" }}>{emptyText}</Typography>
+        {emptyIcon ?? <InboxOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray }} />}
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>{emptyText}</Typography>
       </Stack>
     );
   }

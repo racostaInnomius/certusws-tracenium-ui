@@ -24,7 +24,7 @@
 
 import * as React from "react";
 import { Box, Stack, Typography } from "@mui/material";
-import { BRAND, LAYOUT } from "../../theme/brand";
+import { BRAND, LAYOUT, TEXT } from "../../theme/brand";
 
 export default function PageHeader({
   title,
@@ -62,7 +62,7 @@ export default function PageHeader({
                 display: "flex",
                 alignItems: "center",
                 flexShrink: 0,
-                "& svg": { fontSize: 30, display: "block" },
+                "& svg": { fontSize: TEXT["3xl"], display: "block" },
               }}
             >
               {icon}

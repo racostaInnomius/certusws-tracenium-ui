@@ -27,7 +27,7 @@ import {
   TableRow,
   Typography
 } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { formatBytesToGb } from "../../utils/format";
 import {
   formatDetailValue,
@@ -113,7 +113,7 @@ export function AgentTab({
                   {mapOpen ? (
                     <React.Suspense
                       fallback={
-                        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 1 }}>
+                        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
                           Loading map…
                         </Typography>
                       }
@@ -132,7 +132,7 @@ export function AgentTab({
                 <Box sx={{ mt: 2.5 }}>
                   <Typography
                     sx={{
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       fontWeight: 800,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
@@ -151,7 +151,7 @@ export function AgentTab({
                         alignItems="center"
                         sx={{ flexWrap: "wrap", rowGap: 0.5 }}
                       >
-                        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                           {/* Same rule as the Location field above: the site an
                               operator declared, else the bare network range.
                               The IP-derived city (entry.ipCity) is NOT a
@@ -164,9 +164,9 @@ export function AgentTab({
                         <Chip
                           size="small"
                           label={`${entry.hitCount}\u00d7`}
-                          sx={{ height: 18, fontSize: 10.5, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+                          sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
                         />
-                        <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
+                        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
                           {formatDetailDate(entry.firstSeenAt)} → {formatDetailDate(entry.lastSeenAt)}
                         </Typography>
                       </Stack>
@@ -180,7 +180,7 @@ export function AgentTab({
                 <Box sx={{ mt: 2.5 }}>
                   <Typography
                     sx={{
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       fontWeight: 800,
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
@@ -193,7 +193,7 @@ export function AgentTab({
                   <FieldGrid>
                     <DetailField label="Operating mode" value={formatOperatingMode(profile?.operatingMode)} />
                     <Box sx={{ minWidth: 0 }}>
-                      <Typography sx={{ fontSize: 11, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.4 }}>
                         Storage health
                       </Typography>
                       <Box sx={{ mt: 0.35 }}>
@@ -204,14 +204,14 @@ export function AgentTab({
                             sx={{
                               height: 20,
                               fontWeight: 700,
-                              fontSize: 11,
+                              fontSize: TEXT.xs,
                               textTransform: "capitalize",
                               bgcolor: `${storageHealthColor(profile.storageHealth)}1f`,
                               color: storageHealthColor(profile.storageHealth),
                             }}
                           />
                         ) : (
-                          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>—</Typography>
+                          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>—</Typography>
                         )}
                       </Box>
                     </Box>
@@ -259,7 +259,7 @@ export function SoftwareTab({
                   <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
                     Installed applications
                   </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
+                  <Typography sx={{ mt: 0.25, fontSize: TEXT.sm, color: "text.secondary" }}>
                     Paginated software inventory for this device.
                   </Typography>
                 </Box>
@@ -320,7 +320,7 @@ export function SoftwareTab({
                       px: { xs: 1, sm: 2 },
                     },
                     "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-                      fontSize: 12,
+                      fontSize: TEXT.sm,
                       color: "text.secondary",
                     },
                   }}
@@ -344,7 +344,7 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                   <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
                     Configured printers
                   </Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: 12, color: "text.secondary" }}>
+                  <Typography sx={{ mt: 0.25, fontSize: TEXT.sm, color: "text.secondary" }}>
                     Print queues this device knows about, ordered with the
                     default first, then network printers, then local.
                   </Typography>
@@ -403,7 +403,7 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                             </Stack>
                           </TableCell>
                           <TableCell>{formatDetailValue(p.driver)}</TableCell>
-                          <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>
+                          <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>
                             {formatDetailValue(p.port)}
                           </TableCell>
                           <TableCell>{p.isNetwork ? "Network" : "Local"}</TableCell>

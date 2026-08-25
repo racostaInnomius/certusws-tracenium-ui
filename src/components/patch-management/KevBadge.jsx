@@ -10,7 +10,7 @@ import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import LocalFireDepartmentOutlinedIcon from "@mui/icons-material/LocalFireDepartmentOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 export default function KevBadge({ ransomware = false, dueDate = null, overdue = false, size = "small" }) {
   return (
@@ -18,11 +18,11 @@ export default function KevBadge({ ransomware = false, dueDate = null, overdue =
       <Tooltip title="On the CISA Known Exploited Vulnerabilities catalog — actively exploited in the wild. Prioritize this fix.">
         <Chip
           size={size}
-          icon={<GppMaybeOutlinedIcon sx={{ fontSize: 14, color: "#fff !important" }} />}
+          icon={<GppMaybeOutlinedIcon sx={{ fontSize: ICON.sm, color: "#fff !important" }} />}
           label="Actively exploited"
           sx={{
             height: 20,
-            fontSize: 10.5,
+            fontSize: TEXT.xs,
             fontWeight: 800,
             bgcolor: BRAND.alert?.error,
             color: "#fff",
@@ -34,11 +34,11 @@ export default function KevBadge({ ransomware = false, dueDate = null, overdue =
         <Tooltip title={`Past the CISA remediate-by deadline${dueDate ? ` (${dueDate})` : ""}. Under BOD 22-01 this fix is overdue.`}>
           <Chip
             size={size}
-            icon={<EventBusyOutlinedIcon sx={{ fontSize: 14, color: "#fff !important" }} />}
+            icon={<EventBusyOutlinedIcon sx={{ fontSize: ICON.sm, color: "#fff !important" }} />}
             label={dueDate ? `Overdue · due ${dueDate}` : "Overdue"}
             sx={{
               height: 20,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
               fontWeight: 800,
               bgcolor: "#7a1420",
               color: "#fff",
@@ -50,11 +50,11 @@ export default function KevBadge({ ransomware = false, dueDate = null, overdue =
         <Tooltip title="CISA remediate-by deadline for this actively-exploited CVE.">
           <Chip
             size={size}
-            icon={<ScheduleOutlinedIcon sx={{ fontSize: 14 }} />}
+            icon={<ScheduleOutlinedIcon sx={{ fontSize: ICON.sm }} />}
             label={`Due ${dueDate}`}
             sx={{
               height: 20,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
               fontWeight: 700,
               bgcolor: BRAND.darkSoft,
               color: BRAND.gray,
@@ -67,11 +67,11 @@ export default function KevBadge({ ransomware = false, dueDate = null, overdue =
         <Tooltip title="CISA marks this CVE as used in known ransomware campaigns.">
           <Chip
             size={size}
-            icon={<LocalFireDepartmentOutlinedIcon sx={{ fontSize: 14 }} />}
+            icon={<LocalFireDepartmentOutlinedIcon sx={{ fontSize: ICON.sm }} />}
             label="Ransomware"
             sx={{
               height: 20,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
               fontWeight: 800,
               bgcolor: "rgba(199,121,43,0.16)",
               color: "#8b5418",

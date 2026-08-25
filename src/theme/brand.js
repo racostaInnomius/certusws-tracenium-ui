@@ -109,6 +109,59 @@ export const NEUTRAL = {
   50: "#F5F6F8",   // fondo de página / pista de progreso (colapsa #f8fafc, #eff0f1)
 };
 
+/**
+ * Escala tipográfica — px, no rem, porque toda la app dimensiona en px vía `sx`.
+ *
+ * Derivada de los 807 usos reales de `fontSize` sobre texto, que tenían 26
+ * valores distintos. Nueve de ellos eran FRACCIONES (9.5, 10.2, 10.5, 10.6,
+ * 11.5, 12.5, 13.5, 14.5, 15.5), ~130 usos de puro ajuste a mano acumulado.
+ *
+ * La consolidación es deliberadamente conservadora: la gran mayoría de los
+ * usos no se mueve, y el desplazamiento máximo en texto es 2px. Ordenar y
+ * rediseñar son cosas distintas, y mezclarlas haría imposible saber cuál de
+ * las dos rompió qué.
+ *
+ * ⚠️ `xs` es el suelo y absorbe todo lo que había por debajo (10px y menos).
+ * 11px sigue siendo pequeño para leer cómodo — subir el suelo a 12 es una
+ * mejora real de legibilidad, pero mueve el layout de toda la app (etiquetas
+ * más anchas, chips que crecen, tablas que reflowean). Esa decisión va con
+ * pantallas delante; y cuando llegue, es UN valor el que cambia.
+ */
+export const TEXT = {
+  xs: 11,    // etiquetas, chips, texto auxiliar denso
+  sm: 12,    // texto secundario — el tamaño más usado de la app
+  md: 13,    // cuerpo de tabla y descripciones
+  base: 14,  // cuerpo por defecto
+  lg: 16,    // subtítulos
+  xl: 18,    // títulos de tarjeta y sección
+  "2xl": 24, // títulos de página
+  "3xl": 28, // cifras de KPI
+  "4xl": 36, // cifras destacadas
+  "5xl": 48, // display
+};
+
+/**
+ * Tamaños de icono. Escala APARTE de TEXT a propósito: en MUI, `fontSize`
+ * sobre un <Icon> controla su TAMAÑO, no la tipografía. Los 118 usos que
+ * dimensionan iconos se contaban entre los "tamaños de letra", y forzarlos a
+ * la escala de texto habría atado dos cosas que no tienen por qué moverse
+ * juntas.
+ *
+ * Tiene más pasos arriba y abajo que TEXT por una razón medida: con una escala
+ * de cinco pasos (suelo 14, techo 36), los iconos de 48px encogían a 36 — un
+ * 25% de reducción, perfectamente visible. Los extremos de un icono son su
+ * tamaño, no un matiz tipográfico, así que la escala los respeta.
+ */
+export const ICON = {
+  xs: 12,    // iconos embebidos en texto denso
+  sm: 14,    // iconos en línea con texto
+  md: 16,    // iconos de acción en barras
+  lg: 18,    // iconos de encabezado
+  xl: 24,    // iconos destacados
+  "2xl": 36, // ilustración de estado vacío
+  "3xl": 48, // ilustración a pantalla completa
+};
+
 export const ROLE = {
   positive: BRAND.alert.success,
   positiveSoft: BRAND.alert.successSoft,

@@ -15,7 +15,7 @@ import FileCopyOutlinedIcon from "@mui/icons-material/FileCopyOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 
 const CAPABILITIES = [
   {
@@ -80,7 +80,7 @@ export default function PluginUnavailableCard() {
               bgcolor: ROLE.cautionSoft,
               color: ROLE.caution,
               fontWeight: 700,
-              fontSize: 10,
+              fontSize: TEXT.xs,
               border: `1px solid ${ROLE.caution}33`
             }}
           />
@@ -107,7 +107,7 @@ export default function PluginUnavailableCard() {
                 mt: 0.25
               }}
             >
-              <Icon sx={{ fontSize: 14 }} />
+              <Icon sx={{ fontSize: ICON.sm }} />
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>

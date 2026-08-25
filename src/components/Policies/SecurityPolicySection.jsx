@@ -18,7 +18,7 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { SECURITY_CAPABILITIES, SECURITY_MODES } from "./policyTransforms";
 
 // Fase C — `evidenceByCapability` (optional): live posture evidence per
@@ -117,13 +117,13 @@ export default function SecurityPolicySection({
                       {cap.label}
                     </Typography>
                     {cap.osTags.map((t) => (
-                      <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: 10, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
+                      <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
                     ))}
                     {!cap.enforcer && (
                       <Chip
                         label="auto coming soon"
                         size="small"
-                        sx={{ height: 18, fontSize: 10, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
+                        sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
                       />
                     )}
                     {(() => {
@@ -144,7 +144,7 @@ export default function SecurityPolicySection({
                           clickable={Boolean(failing && onShowEvidence)}
                           sx={{
                             height: 18,
-                            fontSize: 10,
+                            fontSize: TEXT.xs,
                             fontWeight: 700,
                             bgcolor: failing ? BRAND.alert?.errorSoft : BRAND.tealSoft,
                             color: failing ? BRAND.alert?.error : BRAND.tealText,

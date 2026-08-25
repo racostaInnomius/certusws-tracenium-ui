@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Typography, Button, Stack } from "@mui/material";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
-import { ROLE } from "../../theme/brand";
+import { ICON, ROLE, TEXT } from "../../theme/brand";
 
 /**
  * App/route-level error boundary.
@@ -65,11 +65,11 @@ export default class ErrorBoundary extends React.Component {
           bgcolor: "background.paper",
         }}
       >
-        <ReportProblemOutlinedIcon sx={{ fontSize: 40, color: ROLE.critical, mb: 1 }} />
-        <Typography sx={{ fontSize: 17, fontWeight: 800, mb: 0.5 }}>
+        <ReportProblemOutlinedIcon sx={{ fontSize: ICON["2xl"], color: ROLE.critical, mb: 1 }} />
+        <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, mb: 0.5 }}>
           Something went wrong{label}
         </Typography>
-        <Typography sx={{ fontSize: 13.5, color: "text.secondary", mb: 2.5 }}>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", mb: 2.5 }}>
           This view hit an unexpected error and stopped rendering. The rest of the
           dashboard is still available — try again, switch pages, or reload.
         </Typography>

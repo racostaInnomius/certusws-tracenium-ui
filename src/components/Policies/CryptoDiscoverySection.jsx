@@ -33,7 +33,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   CDP_INTERVAL_MIN,
   CDP_INTERVAL_MAX,
@@ -146,7 +146,7 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           minRows={3}
           maxRows={10}
           placeholder={"/opt/tomcat/conf/keystore.jks\nC:\\Program Files\\App\\keystore.p12"}
-          sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 } }}
+          sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.sm } }}
         />
       </Box>
 
@@ -179,7 +179,7 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           minRows={2}
           maxRows={6}
           placeholder={"/etc/ssl/certs\n/etc/nginx/ssl\nC:\\inetpub\\certs"}
-          sx={{ mb: 2.5, "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5 } }}
+          sx={{ mb: 2.5, "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.sm } }}
         />
 
         <FormControlLabel

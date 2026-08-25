@@ -13,7 +13,7 @@ import {
   CircularProgress,
   Tooltip,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   MOBILE_COMMANDS,
   issueMobileCommand,
@@ -37,7 +37,7 @@ function StatusChip({ status }) {
     <Chip
       size="small"
       label={status}
-      sx={{ height: 20, fontWeight: 700, fontSize: 11, textTransform: "capitalize", bgcolor: s.bg, color: s.fg }}
+      sx={{ height: 20, fontWeight: 700, fontSize: TEXT.xs, textTransform: "capitalize", bgcolor: s.bg, color: s.fg }}
     />
   );
 }
@@ -120,7 +120,7 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
 
   if (!deviceId) {
     return (
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
         Remote commands are unavailable — no device identity resolved for this host.
       </Typography>
     );
@@ -130,7 +130,7 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
     <Box>
       <Typography
         sx={{
-          fontSize: 11,
+          fontSize: TEXT.xs,
           fontWeight: 800,
           letterSpacing: "0.08em",
           textTransform: "uppercase",
@@ -140,7 +140,7 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
       >
         Remote commands
       </Typography>
-      <Typography sx={{ fontSize: 12.5, color: BRAND.gray, mb: 1.5 }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
         App-scoped actions delivered by push to this {platform || "mobile"} device.
         The device drains and acknowledges commands on wake or next check-in.
       </Typography>
@@ -166,19 +166,19 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
       </Stack>
 
       {error ? (
-        <Typography sx={{ mt: 1.5, fontSize: 12.5, fontWeight: 700, color: "#b91c1c" }}>{error}</Typography>
+        <Typography sx={{ mt: 1.5, fontSize: TEXT.sm, fontWeight: 700, color: "#b91c1c" }}>{error}</Typography>
       ) : null}
 
       {/* History */}
       <Box sx={{ mt: 2 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-          <Typography sx={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", color: "text.secondary" }}>
+          <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", color: "text.secondary" }}>
             Recent commands
           </Typography>
           {loading ? <CircularProgress size={12} sx={{ color: BRAND.teal }} /> : null}
         </Stack>
         {history.length === 0 && !loading ? (
-          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>No commands issued yet.</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>No commands issued yet.</Typography>
         ) : (
           <Stack spacing={0.75}>
             {history.map((c) => (
@@ -195,15 +195,15 @@ export default function MobileCommandsPanel({ deviceId, platform, disabled = fal
                   bgcolor: BRAND.surface,
                 }}
               >
-                <Typography sx={{ fontSize: 13, fontWeight: 800, color: BRAND.dark, minWidth: 110 }}>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark, minWidth: 110 }}>
                   {c.type}
                 </Typography>
                 <StatusChip status={c.status} />
-                <Typography sx={{ fontSize: 12, color: "text.secondary", ml: "auto" }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", ml: "auto" }}>
                   {formatWhen(c.issued_at)}
                 </Typography>
                 {c.error ? (
-                  <Typography sx={{ fontSize: 12, color: "#b91c1c", flexBasis: "100%" }}>{c.error}</Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "#b91c1c", flexBasis: "100%" }}>{c.error}</Typography>
                 ) : null}
               </Box>
             ))}

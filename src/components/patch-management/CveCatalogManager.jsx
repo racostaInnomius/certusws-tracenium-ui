@@ -23,7 +23,7 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import CloudSyncOutlinedIcon from "@mui/icons-material/CloudSyncOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   listCveCatalog,
   createCveCatalog,
@@ -229,7 +229,7 @@ export default function CveCatalogManager({ canManage, notify }) {
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
           Known CVEs this tenant tracks, mapped to a product + affected version range. Detection
           flags installed software whose version falls inside the range.
         </Typography>
@@ -283,16 +283,16 @@ export default function CveCatalogManager({ canManage, notify }) {
 
       {/* NVD sync status line */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-        <CloudSyncOutlinedIcon sx={{ fontSize: 14, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
-        <Typography sx={{ fontSize: 12, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
+        <CloudSyncOutlinedIcon sx={{ fontSize: ICON.sm, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
+        <Typography sx={{ fontSize: TEXT.sm, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
           {syncStatusText(syncStatus)}
         </Typography>
       </Box>
 
       {/* CISA KEV refresh status line (global catalog) */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2 }}>
-        <GppMaybeOutlinedIcon sx={{ fontSize: 14, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
-        <Typography sx={{ fontSize: 12, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
+        <GppMaybeOutlinedIcon sx={{ fontSize: ICON.sm, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
+        <Typography sx={{ fontSize: TEXT.sm, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
           {kevStatusText(kevStatus)}
         </Typography>
       </Box>
@@ -326,31 +326,31 @@ export default function CveCatalogManager({ canManage, notify }) {
                 return (
                   <TableRow key={it.id} hover sx={{ opacity: it.isActive ? 1 : 0.55 }}>
                     <TableCell>
-                      <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: BRAND.dark }}>{it.cveId}</Typography>
+                      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>{it.cveId}</Typography>
                       {it.cvssScore != null ? (
-                        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>CVSS {Number(it.cvssScore).toFixed(1)}</Typography>
+                        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>CVSS {Number(it.cvssScore).toFixed(1)}</Typography>
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
+                      <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
                       {it.publisher ? (
-                        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>{it.publisher}</Typography>
+                        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{it.publisher}</Typography>
                       ) : null}
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" label={it.platform} sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
+                      <Chip size="small" label={it.platform} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" label={m.label} sx={{ height: 20, fontSize: 11, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
+                      <Chip size="small" label={m.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>{rangeLabel(it)}</Typography>
+                      <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>{rangeLabel(it)}</Typography>
                     </TableCell>
                     <TableCell>
                       {it.packageId == null ? (
-                        <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>none</Typography>
+                        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>none</Typography>
                       ) : (
-                        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>#{it.packageId}</Typography>
+                        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>#{it.packageId}</Typography>
                       )}
                     </TableCell>
                     {canManage ? (

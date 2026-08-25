@@ -25,7 +25,7 @@
 import { useMemo } from "react";
 import { Paper, Box, Typography, Skeleton, Stack } from "@mui/material";
 import HealthAndSafetyOutlinedIcon from "@mui/icons-material/HealthAndSafetyOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { scoreBandKey } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 
@@ -205,7 +205,7 @@ export default function HealthDistributionCard({
                   />
                   <Typography
                     sx={{
-                      fontSize: 12.5,
+                      fontSize: TEXT.sm,
                       color: BRAND.dark,
                       fontWeight: 600,
                       flex: 1,
@@ -215,7 +215,7 @@ export default function HealthDistributionCard({
                     <Typography
                       component="span"
                       sx={{
-                        fontSize: 11,
+                        fontSize: TEXT.xs,
                         color: BRAND.gray,
                         ml: 0.5,
                         fontWeight: 500,
@@ -226,7 +226,7 @@ export default function HealthDistributionCard({
                   </Typography>
                   <Typography
                     sx={{
-                      fontSize: 12.5,
+                      fontSize: TEXT.sm,
                       color: BRAND.dark,
                       fontWeight: 700,
                       minWidth: 24,

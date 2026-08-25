@@ -34,7 +34,7 @@ import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getComplianceCatalog } from "../../api/compliance";
 
@@ -78,14 +78,14 @@ function FrameworkChip({ fw }) {
     <Chip
       label={label}
       size="small"
-      icon={fw.referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: 12 }} /> : undefined}
+      icon={fw.referenceUrl ? <LaunchOutlinedIcon sx={{ fontSize: ICON.xs }} /> : undefined}
       onClick={fw.referenceUrl ? () => window.open(fw.referenceUrl, "_blank", "noopener,noreferrer") : undefined}
       clickable={Boolean(fw.referenceUrl)}
       sx={{
         bgcolor: BRAND.darkSoft,
         color: BRAND.dark,
         fontWeight: 600,
-        fontSize: 10.5,
+        fontSize: TEXT.xs,
         height: 20,
         border: `1px solid ${BRAND.border}`,
         "& .MuiChip-icon": { color: BRAND.dark, ml: "5px" },
@@ -118,23 +118,23 @@ function CheckRow({ check }) {
           </IconButton>
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{check.title}</Typography>
-          <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>{check.checkId}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{check.title}</Typography>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>{check.checkId}</Typography>
         </TableCell>
         <TableCell>
           <Chip
             size="small"
             label={check.platform}
-            sx={{ height: 20, fontSize: 10.5, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
           />
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontSize: 12, color: BRAND.dark, textTransform: "capitalize" }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, textTransform: "capitalize" }}>
             {prettyCategory(check.category)}
           </Typography>
         </TableCell>
         <TableCell>
-          <Chip size="small" label={m.label} sx={{ height: 20, fontSize: 10.5, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
+          <Chip size="small" label={m.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
         </TableCell>
         <TableCell>
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
@@ -149,12 +149,12 @@ function CheckRow({ check }) {
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ py: 1.5, pl: 5, pr: 2 }}>
               {check.description ? (
-                <Typography sx={{ fontSize: 12.5, color: BRAND.dark, mb: 1 }}>{check.description}</Typography>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, mb: 1 }}>{check.description}</Typography>
               ) : null}
               {check.remediationSummary ? (
                 <>
-                  <Typography sx={{ fontSize: 11, fontWeight: 800, color: BRAND.gray, mb: 0.3 }}>REMEDIATION</Typography>
-                  <Typography sx={{ fontSize: 12.5, color: BRAND.dark, mb: steps.length ? 0.5 : 0 }}>
+                  <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray, mb: 0.3 }}>REMEDIATION</Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, mb: steps.length ? 0.5 : 0 }}>
                     {check.remediationSummary}
                   </Typography>
                 </>
@@ -162,13 +162,13 @@ function CheckRow({ check }) {
               {steps.length ? (
                 <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
                   {steps.map((s, i) => (
-                    <Typography key={i} component="li" sx={{ fontSize: 12, color: BRAND.dark, mb: 0.2 }}>
+                    <Typography key={i} component="li" sx={{ fontSize: TEXT.sm, color: BRAND.dark, mb: 0.2 }}>
                       {s}
                     </Typography>
                   ))}
                 </Box>
               ) : null}
-              <Typography sx={{ fontSize: 11, color: BRAND.gray, mt: 1 }}>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1 }}>
                 Collector: {check.collectorPlugin || "—"}
                 {check.collectorVersionMin ? ` · min agent ${check.collectorVersionMin}` : ""}
                 {check.remediationType ? ` · remediation: ${check.remediationType}` : ""}
@@ -303,14 +303,14 @@ export function CatalogBrowser({ active = true, sx }) {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchOutlinedIcon sx={{ fontSize: 18, color: BRAND.gray }} />
+                  <SearchOutlinedIcon sx={{ fontSize: ICON.lg, color: BRAND.gray }} />
                 </InputAdornment>
               ),
             }}
           />
         </Stack>
 
-        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           {loading ? "Loading…" : `${filtered.length} of ${checks.length} checks`}
         </Typography>
 
@@ -353,8 +353,8 @@ export default function ComplianceCatalogDialog({ open, onClose }) {
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 1 }}>
         <MenuBookOutlinedIcon sx={{ color: BRAND.teal }} />
         <Box sx={{ flex: 1 }}>
-          <Typography sx={{ fontSize: 17, fontWeight: 800, color: BRAND.dark }}>Checks catalog</Typography>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>Checks catalog</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             Every control Tracenium evaluates, across platforms and frameworks.
           </Typography>
         </Box>

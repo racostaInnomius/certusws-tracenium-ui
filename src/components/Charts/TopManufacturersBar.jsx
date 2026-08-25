@@ -11,6 +11,7 @@ import {
   Tooltip,
   LabelList,
 } from "recharts";
+import { TEXT } from "../../theme/brand";
 
 
 
@@ -44,7 +45,7 @@ function BarShape(props) {
 
 // Stable references hoisted out of render (see OsVersionsBar for rationale).
 const CHART_MARGIN = { top: 8, right: 34, left: -32, bottom: 8 };
-const Y_TICK = { fontSize: 12 };
+const Y_TICK = { fontSize: TEXT.sm };
 const tooltipFormatter = (value) => [`${value}`, "Hosts"];
 const tooltipLabelFormatter = (label) => `Manufacturer: ${label}`;
 

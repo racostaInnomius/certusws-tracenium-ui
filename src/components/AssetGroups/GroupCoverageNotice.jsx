@@ -21,7 +21,7 @@ import {
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getCoverageTone, getCoveragePalette, formatNumber, formatPercent } from "./coverageDisplay";
 
 export default function GroupCoverageNotice({ coverage, loading, error, compact = false, onRefresh, onViewUngrouped }) {
@@ -104,14 +104,14 @@ export default function GroupCoverageNotice({ coverage, loading, error, compact 
           <Inventory2OutlinedIcon fontSize="small" />
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 800, color: BRAND.dark, lineHeight: 1.25 }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark, lineHeight: 1.25 }}>
             {loading
               ? "Checking group coverage…"
               : hasUngrouped
               ? `${formatNumber(ungroupedDevices)} device${ungroupedDevices === 1 ? "" : "s"} not assigned to any group`
               : "All known devices are assigned to at least one group"}
           </Typography>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray, lineHeight: 1.45, mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, lineHeight: 1.45, mt: 0.25 }}>
             {loading
               ? "Validating static and dynamic asset group coverage."
               : hasUngrouped

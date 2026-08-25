@@ -17,7 +17,7 @@ import "leaflet/dist/leaflet.css";
 // Side-effect import: registers L.markerClusterGroup on the Leaflet namespace.
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getPositionFreshness, formatPositionSource } from "./hostHelpers";
 
 // Leaflet's default marker icons resolve as bundler-relative URLs that Vite
@@ -219,10 +219,10 @@ export default function FleetLocationMap({
   if (loadError) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
           Could not load device positions
         </Typography>
-        <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 1 }}>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", mt: 1 }}>
           {loadError === "unavailable"
             ? "This control plane does not expose the fleet positions endpoint yet — it arrives with the next backend release."
             : "The request failed. Try refreshing; if it persists, check the control plane logs."}
@@ -234,10 +234,10 @@ export default function FleetLocationMap({
   if (!pins.length) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
-        <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
           No device is reporting a position yet
         </Typography>
-        <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 1 }}>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", mt: 1 }}>
           {withoutPosition > 0
             ? `${withoutPosition} device${withoutPosition === 1 ? "" : "s"} have no coordinates. `
             : ""}
@@ -260,25 +260,25 @@ export default function FleetLocationMap({
         <Chip
           size="small"
           label={`${gpsCount} device-reported`}
-          sx={{ height: 22, fontSize: 11.5, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: ROLE.positive }}
+          sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: ROLE.positive }}
         />
         <Chip
           size="small"
           label={`${siteCount} by site`}
-          sx={{ height: 22, fontSize: 11.5, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+          sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
         />
         {staleCount > 0 ? (
           <Chip
             size="small"
             variant="outlined"
             label={`${staleCount} last known`}
-            sx={{ height: 22, fontSize: 11.5, fontWeight: 700, color: "text.secondary" }}
+            sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary" }}
           />
         ) : null}
         {/* The count that keeps the map honest: five dots means something very
             different if the fleet is five or nineteen. */}
         {withoutPosition > 0 ? (
-          <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
             {withoutPosition} device{withoutPosition === 1 ? "" : "s"} without a position — not shown
           </Typography>
         ) : null}
@@ -316,7 +316,7 @@ export default function FleetLocationMap({
           }}
         >
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark }}>
               {clusterSelection.length} device{clusterSelection.length === 1 ? "" : "s"} at this location
             </Typography>
             <Typography
@@ -324,7 +324,7 @@ export default function FleetLocationMap({
               onClick={() => setClusterSelection(null)}
               sx={{
                 p: 0, border: 0, background: "none", cursor: "pointer",
-                fontSize: 12, fontWeight: 700, color: BRAND.teal,
+                fontSize: TEXT.sm, fontWeight: 700, color: BRAND.teal,
               }}
             >
               Close
@@ -352,13 +352,13 @@ export default function FleetLocationMap({
                   sx={{
                     p: 0, border: 0, background: "none",
                     cursor: onSelectDevice ? "pointer" : "default",
-                    fontSize: 13, fontWeight: 700, color: BRAND.dark,
+                    fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark,
                     textDecoration: onSelectDevice ? "underline" : "none",
                   }}
                 >
                   {d.hostname || d.agentId}
                 </Typography>
-                <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
                   {d.osPlatform || "—"} · {d.source === "gps" ? "device-reported" : d.siteName || d.city || "site"}
                 </Typography>
               </Stack>

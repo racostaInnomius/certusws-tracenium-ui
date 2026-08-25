@@ -21,7 +21,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { getBrowserInventory } from "../../api/inventoryDashboard";
 
 const MAX_VERSION_CHIPS = 4;
@@ -54,17 +54,17 @@ export default function BrowserInventoryPanel({ notify }) {
   return (
     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}`, mb: 3 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
-        <PublicOutlinedIcon sx={{ color: BRAND.teal, fontSize: 20 }} />
-        <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 15 }}>Browser inventory</Typography>
+        <PublicOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
+        <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>Browser inventory</Typography>
         {!loading ? (
           <Chip
             size="small"
             label={`${totalDevices} device${totalDevices === 1 ? "" : "s"}`}
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
           />
         ) : null}
         <Box sx={{ flex: 1 }} />
-        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>“Behind” = older than the newest version in your fleet</Typography>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>“Behind” = older than the newest version in your fleet</Typography>
       </Box>
 
       {loading ? (
@@ -91,13 +91,13 @@ export default function BrowserInventoryPanel({ notify }) {
                 return (
                   <TableRow key={f.family} hover>
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{f.family}</Typography>
+                      <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{f.family}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: 13, color: BRAND.dark }}>{f.deviceCount}</Typography>
+                      <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>{f.deviceCount}</Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>
+                      <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>
                         {f.latestVersion || "—"}
                       </Typography>
                     </TableCell>
@@ -106,13 +106,13 @@ export default function BrowserInventoryPanel({ notify }) {
                         <Chip
                           size="small"
                           label={`${f.behindCount} behind`}
-                          sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.alert?.warningSoft, color: BRAND.alert?.warning }}
+                          sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.alert?.warningSoft, color: BRAND.alert?.warning }}
                         />
                       ) : (
                         <Chip
                           size="small"
                           label="up to date"
-                          sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.alert?.successSoft, color: BRAND.alert?.success }}
+                          sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.alert?.successSoft, color: BRAND.alert?.success }}
                         />
                       )}
                     </TableCell>
@@ -125,7 +125,7 @@ export default function BrowserInventoryPanel({ notify }) {
                             label={`${v.version} · ${v.deviceCount}`}
                             sx={{
                               height: 20,
-                              fontSize: 11,
+                              fontSize: TEXT.xs,
                               fontFamily: "monospace",
                               bgcolor: v.outdated ? BRAND.alert?.warningSoft : BRAND.tealSoft,
                               color: v.outdated ? BRAND.alert?.warning : BRAND.tealText,
@@ -134,7 +134,7 @@ export default function BrowserInventoryPanel({ notify }) {
                         ))}
                         {extra > 0 ? (
                           <Tooltip title={f.versions.slice(MAX_VERSION_CHIPS).map((v) => `${v.version} (${v.deviceCount})`).join(", ")}>
-                            <Typography sx={{ fontSize: 11, color: BRAND.gray }}>+{extra} more</Typography>
+                            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>+{extra} more</Typography>
                           </Tooltip>
                         ) : null}
                       </Box>

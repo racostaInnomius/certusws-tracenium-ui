@@ -47,7 +47,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 
-import { BRAND, ROLE, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, ROLE, TEXT } from "../theme/brand";
 import { DataGrid } from "@mui/x-data-grid";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -350,7 +350,7 @@ function IMPACT_CHIP({ impact }) {
       size="small"
       sx={{
         height: 22,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         fontWeight: 700,
         bgcolor: cfg.bg,
         color: cfg.fg,
@@ -405,16 +405,16 @@ function ActionsList({ actions, pmpEnabled, onRun }) {
           }}
         >
           <RadioButtonUncheckedOutlinedIcon
-            sx={{ color: BRAND.gray, fontSize: 20, mt: { xs: 0, sm: 0.25 }, flexShrink: 0 }}
+            sx={{ color: BRAND.gray, fontSize: TEXT.xl, mt: { xs: 0, sm: 0.25 }, flexShrink: 0 }}
           />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
-              <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
                 {a.name}
               </Typography>
               <IMPACT_CHIP impact={a.impact} />
             </Box>
-            <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: 0.25 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.25 }}>
               {a.description}
             </Typography>
           </Box>
@@ -469,10 +469,10 @@ function CategoryPanel({ category, pmpEnabled, onRunAction }) {
           {category.icon}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontSize: 17, fontWeight: 800, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
             {category.label}
           </Typography>
-          <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", mt: 0.25 }}>
             {category.blurb}
           </Typography>
         </Box>
@@ -946,9 +946,9 @@ export default function PatchManagement({ onNavigate }) {
       minWidth: 90,
       renderCell: (params) =>
         params.row.rebootRequired ? (
-          <RestartAltOutlinedIcon sx={{ fontSize: 18, color: ROLE.critical }} />
+          <RestartAltOutlinedIcon sx={{ fontSize: ICON.lg, color: ROLE.critical }} />
         ) : (
-          <Typography sx={{ color: BRAND.gray, fontSize: 13 }}>—</Typography>
+          <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>
         )
     },
     {
@@ -985,7 +985,7 @@ export default function PatchManagement({ onNavigate }) {
               <Chip
                 label="PMP active"
                 size="small"
-                icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                 sx={{
                   bgcolor: ROLE.positiveSoft,
                   color: ROLE.positive,
@@ -998,7 +998,7 @@ export default function PatchManagement({ onNavigate }) {
               <Chip
                 label="PMP plugin disabled"
                 size="small"
-                icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                 sx={{
                   bgcolor: BRAND.cyanSoft,
                   color: BRAND.dark,
@@ -1118,10 +1118,10 @@ export default function PatchManagement({ onNavigate }) {
       {pmpEnabled ? (
         <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1.5 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Devices
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {devices.length} reporting
             </Typography>
           </Box>
@@ -1276,10 +1276,10 @@ export default function PatchManagement({ onNavigate }) {
             {/* Header */}
             <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 1.5, borderBottom: `1px solid ${BRAND.border}` }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 18 }}>
+                <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.xl }}>
                   {drawerDevice.hostname || drawerDevice.agentId.slice(0, 12)}
                 </Typography>
-                <Typography sx={{ color: "text.secondary", fontSize: 12.5 }}>
+                <Typography sx={{ color: "text.secondary", fontSize: TEXT.sm }}>
                   {drawerDevice.platform || "—"}
                   {drawerDevice.collectedAtUtc ? (
                     <> · last scan {new Date(drawerDevice.collectedAtUtc).toLocaleString("en-US", {
@@ -1345,9 +1345,9 @@ export default function PatchManagement({ onNavigate }) {
                 </Box>
               ) : drawerItems.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: "center" }}>
-                  <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 48, color: ROLE.positive, mb: 1 }} />
+                  <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON["3xl"], color: ROLE.positive, mb: 1 }} />
                   <Typography sx={{ color: BRAND.dark, fontWeight: 700 }}>No missing patches</Typography>
-                  <Typography sx={{ color: "text.secondary", fontSize: 13, mt: 0.5 }}>
+                  <Typography sx={{ color: "text.secondary", fontSize: TEXT.md, mt: 0.5 }}>
                     This device is up to date.
                   </Typography>
                 </Box>
@@ -1369,7 +1369,7 @@ export default function PatchManagement({ onNavigate }) {
                       disabled={dispatching}
                       sx={{ "&.Mui-checked": { color: BRAND.teal }, "&.MuiCheckbox-indeterminate": { color: BRAND.teal } }}
                     />
-                    <Typography sx={{ fontSize: 12, color: "text.secondary", flex: 1 }}>
+                    <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", flex: 1 }}>
                       {drawerItems.length} missing — select to install specific ones
                     </Typography>
                   </Box>
@@ -1409,19 +1409,19 @@ export default function PatchManagement({ onNavigate }) {
                             <Chip
                               size="small"
                               label={sev.label}
-                              sx={{ bgcolor: sev.bg, color: sev.fg, fontWeight: 700, height: 20, fontSize: 10.5 }}
+                              sx={{ bgcolor: sev.bg, color: sev.fg, fontWeight: 700, height: 20, fontSize: TEXT.xs }}
                             />
                             {item.hotfixId ? (
-                              <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: BRAND.dark }}>
+                              <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.dark }}>
                                 {item.hotfixId}
                               </Typography>
                             ) : null}
                           </Box>
-                          <Typography sx={{ fontSize: 13, color: BRAND.dark, mt: 0.5, wordBreak: "break-word" }}>
+                          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mt: 0.5, wordBreak: "break-word" }}>
                             {item.title || "(no title)"}
                           </Typography>
                           {item.source ? (
-                            <Typography sx={{ fontSize: 11, color: BRAND.gray, mt: 0.25 }}>
+                            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.25 }}>
                               source: {item.source}
                             </Typography>
                           ) : null}
@@ -1478,7 +1478,7 @@ export default function PatchManagement({ onNavigate }) {
               </Typography>
               {bulkDialog.plan && bulkDialog.plan.length > 0 ? (
                 <>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, mb: 1 }}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1 }}>
                     Will dispatch to {bulkDialog.plan.length} device{bulkDialog.plan.length === 1 ? "" : "s"}:
                   </Typography>
                   <Box
@@ -1503,19 +1503,19 @@ export default function PatchManagement({ onNavigate }) {
                           "&:last-child": { borderBottom: "none" }
                         }}
                       >
-                        <Typography sx={{ flex: 1, fontSize: 13, color: BRAND.dark, minWidth: 0 }} noWrap>
+                        <Typography sx={{ flex: 1, fontSize: TEXT.md, color: BRAND.dark, minWidth: 0 }} noWrap>
                           {p.hostname || p.agentId.slice(0, 12)}
-                          {p.platform ? <Typography component="span" sx={{ fontSize: 11, color: BRAND.gray, ml: 1 }}>{p.platform}</Typography> : null}
+                          {p.platform ? <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 1 }}>{p.platform}</Typography> : null}
                         </Typography>
                         <Chip
                           size="small"
                           label={`${p.kbCount} patch${p.kbCount === 1 ? "" : "es"}`}
-                          sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, height: 20, fontSize: 11 }}
+                          sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, height: 20, fontSize: TEXT.xs }}
                         />
                       </Box>
                     ))}
                   </Box>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 1.5 }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1.5 }}>
                     Each device will receive a <strong>patch_install</strong> job with its specific
                     KB list. Devices not listed have no matching patches.
                   </Typography>

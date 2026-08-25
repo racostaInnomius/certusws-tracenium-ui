@@ -43,7 +43,7 @@ import {
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 /**
  * Presentational confirm dialog. Branded to match PageHeader / panel
@@ -94,7 +94,7 @@ export default function ConfirmDialog({
           pb: 1,
           color: BRAND.dark,
           fontWeight: 800,
-          fontSize: 18,
+          fontSize: TEXT.xl,
           letterSpacing: -0.2,
         }}
       >
@@ -109,7 +109,7 @@ export default function ConfirmDialog({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              "& svg": { fontSize: 20 },
+              "& svg": { fontSize: TEXT.xl },
               flexShrink: 0,
             }}
           >
@@ -140,7 +140,7 @@ export default function ConfirmDialog({
             variant="body2"
             sx={{
               color: BRAND.dark,
-              fontSize: 14,
+              fontSize: TEXT.base,
               lineHeight: 1.55,
               whiteSpace: "pre-line",
             }}

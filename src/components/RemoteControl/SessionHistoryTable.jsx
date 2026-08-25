@@ -21,7 +21,7 @@ import {
 } from "@mui/material";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 
 const TYPE_LABEL = {
   shell: "Shell",
@@ -54,7 +54,7 @@ function ConsentCell({ consentRequired, consentOutcome }) {
     <Chip
       size="small"
       label={meta.label}
-      sx={{ height: 20, fontWeight: 700, fontSize: 11, bgcolor: meta.bg, color: meta.fg, border: `1px solid ${meta.fg}33` }}
+      sx={{ height: 20, fontWeight: 700, fontSize: TEXT.xs, bgcolor: meta.bg, color: meta.fg, border: `1px solid ${meta.fg}33` }}
     />
   );
 }
@@ -128,7 +128,7 @@ export default function SessionHistoryTable({
                     spacing={1}
                     sx={{ color: BRAND.gray, textAlign: "center" }}
                   >
-                    <HistoryOutlinedIcon sx={{ fontSize: 36, color: BRAND.gray }} />
+                    <HistoryOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray }} />
                     <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
                       {loading
                         ? "Loading session history…"
@@ -161,7 +161,7 @@ export default function SessionHistoryTable({
                         sx={{
                           height: 20,
                           fontWeight: 700,
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           bgcolor: status.bg,
                           color: status.fg,
                           border: `1px solid ${status.fg}33`
@@ -192,7 +192,7 @@ export default function SessionHistoryTable({
                           variant="text"
                           startIcon={
                             <PlayCircleOutlineOutlinedIcon
-                              sx={{ fontSize: 16 }}
+                              sx={{ fontSize: TEXT.lg }}
                             />
                           }
                           onClick={() => onReplay(s)}

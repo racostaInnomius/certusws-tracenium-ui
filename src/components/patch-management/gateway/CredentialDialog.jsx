@@ -29,6 +29,7 @@ import {
 } from "@mui/material";
 import { getGatewayPublicKey, provisionGatewayCredential } from "../../../api/patchManagement";
 import { sealCredential, formatFingerprint } from "./sealCredential";
+import { TEXT } from "../../../theme/brand";
 
 export default function CredentialDialog({ open, gateway, onClose, onDone, notify }) {
   const [loading, setLoading] = React.useState(false);
@@ -125,7 +126,7 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
               <Box
                 sx={{
                   fontFamily: "monospace",
-                  fontSize: 12,
+                  fontSize: TEXT.sm,
                   p: 1.25,
                   borderRadius: 1,
                   bgcolor: "action.hover",

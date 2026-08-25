@@ -9,7 +9,7 @@ import * as React from "react";
 import { Box, Chip, Collapse, Grid, IconButton, Paper, Stack, Typography } from "@mui/material";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 export function formatRelativeTime(isoString) {
   if (!isoString) return null;
@@ -166,7 +166,7 @@ function PatchRow({ patch }) {
                 p: 1,
                 bgcolor: BRAND.surfaceMuted,
                 borderRadius: 1,
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 fontFamily: "monospace",
                 color: BRAND.dark,
                 overflowX: "auto",

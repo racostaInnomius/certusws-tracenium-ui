@@ -73,7 +73,7 @@ import {
   // Sprint 6
   downloadFindingsPdf
 } from "../api/compliance";
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../theme/brand";
 import {
   ScoreBar,
   StatusChip,
@@ -633,7 +633,7 @@ export default function SecurityCompliance({ initialTab }) {
                     borderRadius: 1
                   }}
                 >
-                  <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
+                  <SettingsOutlinedIcon sx={{ fontSize: ICON.lg }} />
                 </IconButton>
               </Tooltip>
             ) : null}
@@ -662,7 +662,7 @@ export default function SecurityCompliance({ initialTab }) {
                   disabled={exportingCsv}
                   size="small"
                   variant="outlined"
-                  startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                  startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: ICON.md }} />}
                   sx={{ textTransform: "none" }}
                 >
                   {exportingCsv ? "Exporting…" : "Export CSV"}
@@ -689,7 +689,7 @@ export default function SecurityCompliance({ initialTab }) {
                   disabled={exportingPdf}
                   size="small"
                   variant="outlined"
-                  startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: 16 }} />}
+                  startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: ICON.md }} />}
                   sx={{ textTransform: "none" }}
                 >
                   {exportingPdf ? "Exporting…" : "Export PDF"}
@@ -888,7 +888,7 @@ export default function SecurityCompliance({ initialTab }) {
                     label={`Pack: ${frameworks.length} of ${data.totalFrameworks}`}
                     onClick={canManage ? () => setSettingsOpen(true) : undefined}
                     clickable={canManage}
-                    sx={{ ml: 1, height: 18, fontSize: 10.5, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                    sx={{ ml: 1, height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
                   />
                 </Tooltip>
               ) : null}
@@ -1010,7 +1010,7 @@ export default function SecurityCompliance({ initialTab }) {
           spacing={1}
           sx={{ mb: 1.5, flexWrap: "wrap", gap: 1, alignItems: "center" }}
         >
-          <FilterAltOutlinedIcon sx={{ fontSize: 18, color: BRAND.gray }} />
+          <FilterAltOutlinedIcon sx={{ fontSize: ICON.lg, color: BRAND.gray }} />
           <TextField
             select size="small" label="Status" value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -1154,7 +1154,7 @@ export default function SecurityCompliance({ initialTab }) {
                               color: BRAND.tealText,
                               fontWeight: 700,
                               height: 20,
-                              fontSize: 10,
+                              fontSize: TEXT.xs,
                               fontStyle: "italic"
                             }}
                           />

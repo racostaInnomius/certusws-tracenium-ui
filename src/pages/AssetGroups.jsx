@@ -54,7 +54,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 
-import { BRAND, ROLE, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, ROLE, TEXT } from "../theme/brand";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -269,7 +269,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
           gap: 1.25,
           color: BRAND.dark,
           fontWeight: 800,
-          fontSize: 18,
+          fontSize: TEXT.xl,
           pr: 5,
         }}
       >
@@ -356,8 +356,8 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                 control={<Radio sx={{ color: BRAND.teal, "&.Mui-checked": { color: BRAND.teal } }} />}
                 label={
                   <Box>
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>Static</Typography>
-                    <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>Static</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                       Pick devices manually below.
                     </Typography>
                   </Box>
@@ -368,8 +368,8 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                 control={<Radio sx={{ color: BRAND.teal, "&.Mui-checked": { color: BRAND.teal } }} />}
                 label={
                   <Box>
-                    <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>Dynamic</Typography>
-                    <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>Dynamic</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                       Defined by criteria — membership auto-updates.
                     </Typography>
                   </Box>
@@ -414,7 +414,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                   {previewState.loading ? (
                     <CircularProgress size={12} sx={{ color: BRAND.tealText }} />
                   ) : null}
-                  <Typography sx={{ fontSize: 13, color: BRAND.dark, ml: "auto" }}>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, ml: "auto" }}>
                     {previewState.count === null
                       ? "complete the predicates to evaluate"
                       : (
@@ -437,7 +437,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                         label={d.hostname || d.deviceId.slice(0, 12)}
                         sx={{
                           height: 20,
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           bgcolor: BRAND.surface,
                           border: `1px solid ${BRAND.border}`,
                           color: BRAND.dark,
@@ -445,7 +445,7 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
                       />
                     ))}
                     {previewState.count !== null && previewState.count > previewState.sample.length ? (
-                      <Typography sx={{ fontSize: 11, color: BRAND.gray, alignSelf: "center" }}>
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, alignSelf: "center" }}>
                         + {previewState.count - previewState.sample.length} more
                       </Typography>
                     ) : null}
@@ -804,7 +804,7 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
           ) : null}
 
           {jobType === "patch_scan" ? (
-            <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
               No additional parameters — agents will scan and report.
             </Typography>
           ) : null}
@@ -974,10 +974,10 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
       minWidth: 180,
       renderCell: (params) => (
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
             {params.row.hostname || params.row.deviceId.slice(0, 12)}
           </Typography>
-          <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
             {params.row.deviceId}
           </Typography>
         </Box>
@@ -994,7 +994,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
             label="online"
             sx={{
               height: 20,
-              fontSize: 11,
+              fontSize: TEXT.xs,
               bgcolor: ROLE.positiveSoft,
               color: ROLE.positive,
               fontWeight: 700,
@@ -1006,7 +1006,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
             label="offline"
             sx={{
               height: 20,
-              fontSize: 11,
+              fontSize: TEXT.xs,
               bgcolor: BRAND.darkSoft,
               color: BRAND.gray,
               fontWeight: 700,
@@ -1087,12 +1087,12 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
                 <GroupWorkOutlinedIcon fontSize="small" />
               </Box>
               <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, lineHeight: 1.2 }}>
+                <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, lineHeight: 1.2 }}>
                   {group.name}
                 </Typography>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
                   <KindChip kind={group.kind} />
-                  <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                     {memberRows.length} member(s)
                   </Typography>
                 </Stack>
@@ -1104,7 +1104,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
           </Box>
 
           {group.description ? (
-            <Typography sx={{ fontSize: 13, color: BRAND.dark, lineHeight: 1.55 }}>
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, lineHeight: 1.55 }}>
               {group.description}
             </Typography>
           ) : null}
@@ -1124,7 +1124,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
               >
                 Members
               </Typography>
-              <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                 {membersTotal} total · sorted by hostname
               </Typography>
             </Box>
@@ -1409,13 +1409,13 @@ export default function AssetGroups() {
       minWidth: 200,
       renderCell: (params) => (
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {params.row.name}
           </Typography>
           {params.row.description ? (
             <Typography
               sx={{
-                fontSize: 12,
+                fontSize: TEXT.sm,
                 color: BRAND.gray,
                 overflow: "hidden",
                 textOverflow: "ellipsis",
@@ -1446,14 +1446,14 @@ export default function AssetGroups() {
         if (params.value == null) {
           return (
             <Tooltip title="Open the group to evaluate its dynamic membership">
-              <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.gray }}>
+              <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.gray }}>
                 —
               </Typography>
             </Tooltip>
           );
         }
         return (
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
             {params.value}
           </Typography>
         );
@@ -1465,7 +1465,7 @@ export default function AssetGroups() {
       flex: 0.7,
       minWidth: 140,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 12.5, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
           {formatDate(params.value)}
         </Typography>
       ),
@@ -1523,10 +1523,10 @@ export default function AssetGroups() {
           }}
         >
           <Box>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Asset Groups
             </Typography>
-            <Typography sx={{ fontSize: 12.5, color: BRAND.gray, mt: 0.25 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }}>
               Organize the fleet into named buckets for filtering and bulk operations.
             </Typography>
           </Box>
@@ -1588,7 +1588,7 @@ export default function AssetGroups() {
           </Box>
         ) : groups.length === 0 ? (
           <Box sx={{ py: 6, textAlign: "center", color: BRAND.gray }}>
-            <GroupWorkOutlinedIcon sx={{ fontSize: 48, color: BRAND.gray, mb: 1 }} />
+            <GroupWorkOutlinedIcon sx={{ fontSize: ICON["3xl"], color: BRAND.gray, mb: 1 }} />
             <Typography variant="body2">
               No asset groups yet. {canManage ? 'Click "New group" to create your first one.' : ""}
             </Typography>

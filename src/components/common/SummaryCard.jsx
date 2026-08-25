@@ -25,7 +25,7 @@
 import * as React from "react";
 import { Box, Paper, Tooltip, Typography } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 export default function SummaryCard({
   title,
@@ -47,7 +47,7 @@ export default function SummaryCard({
         sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, cursor: "help" }}
       >
         <span>{title}</span>
-        <InfoOutlinedIcon sx={{ fontSize: 12, color: "text.secondary" }} />
+        <InfoOutlinedIcon sx={{ fontSize: ICON.xs, color: "text.secondary" }} />
       </Box>
     </Tooltip>
   ) : (
@@ -101,7 +101,7 @@ export default function SummaryCard({
         <Typography
           noWrap
           sx={{
-            fontSize: 12,
+            fontSize: TEXT.sm,
             color: "text.secondary",
             fontWeight: 600,
             letterSpacing: 0.3,
@@ -111,7 +111,7 @@ export default function SummaryCard({
         >
           {titleNode}
         </Typography>
-        <Typography noWrap sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.25 }}>
+        <Typography noWrap sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.25 }}>
           {value}
         </Typography>
       </Box>

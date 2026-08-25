@@ -84,6 +84,23 @@ const HEX_SELECTORS = [
   },
 ];
 
+const FONT_SIZE_SELECTOR = {
+  // `fontSize: 12` en un objeto sx. La escala vive en TEXT / ICON
+  // (src/theme/brand.js) y se derivó de los 925 usos que había sueltos: 26
+  // tamaños de texto distintos, nueve de ellos fracciones nacidas de ajustar
+  // a ojo. Sin esta regla vuelven solos.
+  //
+  // Sólo se restringe el literal NUMÉRICO: "0.9rem", "inherit" o una
+  // expresión calculada pasan, porque son casos que la escala no cubre.
+  // ⚠️ `raw`, NO `value`: en un literal numérico `value` es un Number y la
+  // regex de esquery no casa contra él — la regla quedaría inerte, que es
+  // exactamente el fallo que este fichero ya sufrió con los colores. `raw` es
+  // el texto del fuente, siempre string. Verificado con un fichero de prueba.
+  selector: "Property[key.name='fontSize'] > Literal[raw=/^[0-9.]+$/]",
+  message:
+    'fontSize numérico suelto. Usa TEXT.* para texto o ICON.* para iconos (src/theme/brand.js) — son escalas distintas: en MUI, fontSize sobre un <Icon> es su tamaño, no tipografía.',
+};
+
 const BRAND_SELECTOR = {
   selector: "VariableDeclarator[id.type='Identifier'][id.name='BRAND']",
   message:
@@ -204,14 +221,18 @@ export default defineConfig([
   // -----------------------------------------------------------------
   {
     files: ['src/**/*.{js,jsx}'],
-    ignores: ['src/theme/brand.js'],
+    // Los tests quedan fuera por lo mismo que en la regla de color: sus
+    // valores son fixtures, no UI. Y hay un caso concreto que lo justifica —
+    // xtermPackage.test.js configura un Terminal de xterm.js, cuyo `fontSize`
+    // es de OTRO sistema de diseño (el del emulador), no del nuestro.
+    ignores: ['src/theme/brand.js', '**/*.test.{js,jsx}', '**/__tests__/**'],
     rules: {
       // Note: when two overrides both set `no-restricted-syntax`,
       // ESLint concatenates the options arrays, so we need to repeat
       // the color rules here if we want them AND the BRAND rule to
       // compose. To keep things clean we only put the BRAND rule
       // here; the color rule is already applied via COLOR_SCOPED above.
-      'no-restricted-syntax': ['error', BRAND_SELECTOR, ICON_BUTTON_SELECTOR],
+      'no-restricted-syntax': ['error', BRAND_SELECTOR, ICON_BUTTON_SELECTOR, FONT_SIZE_SELECTOR],
     },
   },
 
@@ -251,6 +272,7 @@ export default defineConfig([
         ...HEX_SELECTORS,
         BRAND_SELECTOR,
         ICON_BUTTON_SELECTOR,
+        FONT_SIZE_SELECTOR,
       ],
     },
   },

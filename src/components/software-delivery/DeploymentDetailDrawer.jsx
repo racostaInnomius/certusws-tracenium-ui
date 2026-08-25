@@ -21,7 +21,7 @@ import RestoreOutlinedIcon from "@mui/icons-material/RestoreOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
-import { BRAND, ROLE, DATAGRID_SX } from "../../theme/brand";
+import { BRAND, DATAGRID_SX, ROLE, TEXT } from "../../theme/brand";
 import { listDeploymentResults, cancelDeployment } from "../../api/softwareDelivery";
 import { listDeploymentSnapshots, revertSnapshot } from "../../api/patchManagement";
 import {
@@ -58,7 +58,7 @@ function outcomeChip(outcome) {
       label={entry.label}
       sx={{
         height: 20,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         fontWeight: 700,
         bgcolor: entry.bg,
         color: entry.color,
@@ -80,7 +80,7 @@ function statusChip(status) {
     <Chip
       size="small"
       label={status}
-      sx={{ fontWeight: 700, fontSize: 12, bgcolor: e.bg, color: e.color }}
+      sx={{ fontWeight: 700, fontSize: TEXT.sm, bgcolor: e.bg, color: e.color }}
     />
   );
 }
@@ -225,7 +225,7 @@ export default function DeploymentDetailDrawer({
       flex: 1,
       minWidth: 220,
       renderCell: (params) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: BRAND.dark }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.dark }}>
           {params.row.deviceId}
         </Typography>
       ),
@@ -272,9 +272,9 @@ export default function DeploymentDetailDrawer({
       width: 70,
       renderCell: (params) =>
         params.row.exitCode == null ? (
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>
         ) : (
-          <Typography sx={{ fontFamily: "monospace", fontSize: 12 }}>
+          <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm }}>
             {params.row.exitCode}
           </Typography>
         ),
@@ -291,14 +291,14 @@ export default function DeploymentDetailDrawer({
             label={params.row.servedBy}
             sx={{
               fontFamily: "monospace",
-              fontSize: 11,
+              fontSize: TEXT.xs,
               fontWeight: 700,
               bgcolor: params.row.servedBy === "dp" ? BRAND.tealSoft : BRAND.darkSoft,
               color: params.row.servedBy === "dp" ? BRAND.tealText : BRAND.dark,
             }}
           />
         ) : (
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>
         ),
     },
     {
@@ -306,7 +306,7 @@ export default function DeploymentDetailDrawer({
       headerName: "Started",
       width: 140,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           {formatTime(params.row.startedAt)}
         </Typography>
       ),
@@ -316,7 +316,7 @@ export default function DeploymentDetailDrawer({
       headerName: "Finished",
       width: 140,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           {formatTime(params.row.finishedAt)}
         </Typography>
       ),
@@ -328,12 +328,12 @@ export default function DeploymentDetailDrawer({
       minWidth: 240,
       renderCell: (params) => {
         const text = params.row.stderrExcerpt;
-        if (!text) return <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>;
+        if (!text) return <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>;
         return (
           <Tooltip title={text} placement="left">
             <Typography
               sx={{
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 fontFamily: "monospace",
                 color: BRAND.gray,
                 whiteSpace: "nowrap",
@@ -364,15 +364,15 @@ export default function DeploymentDetailDrawer({
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
           <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
                 Deployment #{deployment.id}
               </Typography>
-              <Typography sx={{ fontSize: 13, color: BRAND.gray, mt: 0.25 }}>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.25 }}>
                 {pkg.name} v{pkg.version} · {pkg.platform}/{pkg.arch}/{(pkg.format || "").toUpperCase()}
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
                 {statusChip(deployment.status)}
-                <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                   Created {formatTime(deployment.createdAt)}
                   {deployment.finishedAt ? ` · finished ${formatTime(deployment.finishedAt)}` : ""}
                 </Typography>
@@ -408,7 +408,7 @@ export default function DeploymentDetailDrawer({
                   sx={{
                     height: 22,
                     fontWeight: 700,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     bgcolor: bg,
                     color: color,
                   }}
@@ -426,10 +426,10 @@ export default function DeploymentDetailDrawer({
               bgcolor: BRAND.surfaceMuted,
             }}
           >
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Target
             </Typography>
-            <Typography sx={{ fontSize: 13, color: BRAND.dark, mt: 0.25 }}>
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mt: 0.25 }}>
               {deployment.targetKind === "asset_group"
                 ? `Asset group #${deployment.assetGroupId ?? "?"}`
                 : `Device list (${(deployment.deviceIds || []).length})`}

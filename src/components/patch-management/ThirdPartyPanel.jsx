@@ -24,7 +24,7 @@ import {
 } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import UpgradeOutlinedIcon from "@mui/icons-material/UpgradeOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { getThirdPartyFleetFindings, remediateThirdParty } from "../../api/patchManagement";
 import { listFrom } from "../../api/shape";
 
@@ -76,7 +76,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
           Outdated third-party software across the fleet, matched against your catalog. Remediate
           deploys the linked package to the affected devices.
         </Typography>
@@ -110,13 +110,13 @@ export default function ThirdPartyPanel({ canManage, notify }) {
             {items.map((it) => (
               <TableRow key={it.catalogId} hover>
                 <TableCell>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
                 </TableCell>
                 <TableCell>
                   <Chip
                     size="small"
                     label={it.platform}
-                    sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+                    sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
                   />
                 </TableCell>
                 <TableCell>
@@ -125,7 +125,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
                     label={it.outdatedDeviceCount}
                     sx={{
                       height: 20,
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       fontWeight: 700,
                       bgcolor: BRAND.alert?.warningSoft,
                       color: BRAND.alert?.warning,
@@ -133,7 +133,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
                   />
                 </TableCell>
                 <TableCell>
-                  <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>
+                  <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>
                     {it.latestVersion}
                   </Typography>
                 </TableCell>
@@ -142,7 +142,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
                     <Chip
                       size="small"
                       label="No package linked"
-                      sx={{ height: 20, fontSize: 11, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
+                      sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
                     />
                   ) : canManage ? (
                     <Button
@@ -154,7 +154,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
                       Remediate
                     </Button>
                   ) : (
-                    <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>—</Typography>
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>—</Typography>
                   )}
                 </TableCell>
               </TableRow>
@@ -166,7 +166,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
       <Dialog open={Boolean(confirm)} onClose={() => (submitting ? null : setConfirm(null))} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>Remediate {confirm?.title}?</DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: 14, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, color: BRAND.dark }}>
             This deploys the linked package to update {confirm?.title} to{" "}
             <strong>{confirm?.latestVersion}</strong> on the{" "}
             <strong>{confirm?.outdatedDeviceCount}</strong> outdated device(s).

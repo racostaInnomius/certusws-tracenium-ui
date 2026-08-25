@@ -17,7 +17,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { getFindingHistory } from "../../api/compliance";
 import AsyncState from "../common/AsyncState";
 
@@ -138,7 +138,7 @@ export default function FindingHistoryDialog({ open, finding, onClose }) {
                   <Box
                     sx={{
                       mt: 0.5,
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       fontFamily: "monospace",
                       color: BRAND.dark,
                     }}

@@ -34,7 +34,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getJob } from "../../api/jobs";
 import { updateSearchParams } from "../../utils/browserState";
 
@@ -66,8 +66,8 @@ function statusChip(bucket, rawStatus) {
     <Chip
       size="small"
       icon={
-        bucket === "ok" ? <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />
-        : bucket === "error" ? <ErrorOutlineOutlinedIcon sx={{ fontSize: 14 }} />
+        bucket === "ok" ? <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />
+        : bucket === "error" ? <ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />
         : <CircularProgress size={10} thickness={6} sx={{ color: cfg.fg }} />
       }
       label={cfg.label}
@@ -75,7 +75,7 @@ function statusChip(bucket, rawStatus) {
         bgcolor: cfg.bg,
         color: cfg.fg,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         height: 22,
         "& .MuiChip-icon": { color: cfg.fg, ml: "6px" }
       }}
@@ -234,11 +234,11 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
       }}
     >
       <Box sx={{ display: "flex", alignItems: "center", px: 1.5, py: 1, borderBottom: `1px solid ${BRAND.border}` }}>
-        <Typography sx={{ flex: 1, fontWeight: 800, color: BRAND.dark, fontSize: 13 }}>
+        <Typography sx={{ flex: 1, fontWeight: 800, color: BRAND.dark, fontSize: TEXT.md }}>
           Jobs ({jobs.length})
         </Typography>
         <IconButton aria-label="Dismiss" size="small" onClick={onDismiss}>
-          <CloseOutlinedIcon sx={{ fontSize: 16 }} />
+          <CloseOutlinedIcon sx={{ fontSize: ICON.md }} />
         </IconButton>
       </Box>
       <Box sx={{ display: "flex", flexDirection: "column" }}>
@@ -262,10 +262,10 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
               }}
             >
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark, lineHeight: 1.3 }} noWrap>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark, lineHeight: 1.3 }} noWrap>
                   {j.label || `Job ${j.jobId.slice(0, 8)}`}
                 </Typography>
-                <Typography sx={{ fontSize: 10.5, color: BRAND.gray, fontFamily: "monospace" }} noWrap>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }} noWrap>
                   {j.jobId.slice(0, 8)}
                   {entry.error ? ` · ${entry.error}` : ""}
                 </Typography>
@@ -279,7 +279,7 @@ export default function JobTracker({ jobs, onAllDone, onDismiss, onNavigate }) {
                     onClick={() => goToJob(j.jobId)}
                     sx={{ p: 0.5, color: BRAND.gray, "&:hover": { color: BRAND.tealText } }}
                   >
-                    <ArrowForwardOutlinedIcon sx={{ fontSize: 15 }} />
+                    <ArrowForwardOutlinedIcon sx={{ fontSize: ICON.sm }} />
                   </IconButton>
                 </Tooltip>
               ) : null}

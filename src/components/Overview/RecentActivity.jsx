@@ -18,7 +18,7 @@ import {
   Skeleton,
   Link
 } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -169,7 +169,7 @@ function RecentHosts({ result, loading, onNavigate }) {
           component="button"
           onClick={() => onNavigate?.("assets")}
           underline="hover"
-          sx={{ fontSize: 12, color: BRAND.tealText, fontWeight: 600 }}
+          sx={{ fontSize: TEXT.sm, color: BRAND.tealText, fontWeight: 600 }}
         >
           View all →
         </Link>
@@ -309,7 +309,7 @@ function RecentJobs({ result, loading, onNavigate }) {
           component="button"
           onClick={() => onNavigate?.("jobs")}
           underline="hover"
-          sx={{ fontSize: 12, color: BRAND.tealText, fontWeight: 600 }}
+          sx={{ fontSize: TEXT.sm, color: BRAND.tealText, fontWeight: 600 }}
         >
           View all →
         </Link>

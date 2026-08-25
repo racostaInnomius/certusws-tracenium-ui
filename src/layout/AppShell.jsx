@@ -26,7 +26,7 @@ import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 import { AUTH_REQUIRED_EVENT, PERMISSION_DENIED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import { BRAND, NEUTRAL, ROLE } from "../theme/brand";
+import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
 import { useMsp } from "../msp/MspContext";
 import TenantSwitcher from "../msp/TenantSwitcher";
@@ -273,7 +273,7 @@ function NoInformationOverlay({ onNavigate }) {
                 border: `1px solid ${BRAND.tealSoftStrong}`,
               }}
             >
-              <Inventory2OutlinedIcon sx={{ fontSize: 34 }} />
+              <Inventory2OutlinedIcon sx={{ fontSize: ICON["2xl"] }} />
             </Box>
           </Box>
 
@@ -287,7 +287,7 @@ function NoInformationOverlay({ onNavigate }) {
           <Typography
             sx={{
               color: "text.secondary",
-              fontSize: 15.5,
+              fontSize: TEXT.lg,
               lineHeight: 1.65,
               maxWidth: 470,
               mx: "auto",
@@ -402,7 +402,7 @@ function UserInactivityDialog({
 
       <DialogContent sx={{ pt: 0.75 }}>
         <Stack spacing={2}>
-          <Typography sx={{ color: "text.secondary", fontSize: 14.5, lineHeight: 1.65 }}>
+          <Typography sx={{ color: "text.secondary", fontSize: TEXT.base, lineHeight: 1.65 }}>
             We have not detected activity for a while. Stay active to keep working,
             or sign out to end your session safely.
           </Typography>
@@ -417,10 +417,10 @@ function UserInactivityDialog({
             }}
           >
             <Stack direction="row" alignItems="baseline" justifyContent="space-between" spacing={2}>
-              <Typography sx={{ fontSize: 12, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.5 }}>
+              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.5 }}>
                 Auto sign-out in
               </Typography>
-              <Typography sx={{ fontSize: 28, lineHeight: 1, fontWeight: 900, color: safeCountdown <= 5 ? BRAND.alert.error : BRAND.tealText }}>
+              <Typography sx={{ fontSize: TEXT["3xl"], lineHeight: 1, fontWeight: 900, color: safeCountdown <= 5 ? BRAND.alert.error : BRAND.tealText }}>
                 {safeCountdown}s
               </Typography>
             </Stack>
@@ -540,7 +540,7 @@ function PermissionDeniedDialog({ open, message, onClose }) {
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0.75 }}>
-        <Typography sx={{ color: "text.secondary", fontSize: 14.5, lineHeight: 1.65 }}>
+        <Typography sx={{ color: "text.secondary", fontSize: TEXT.base, lineHeight: 1.65 }}>
           {message || "You don't have permission to do that. Ask a tenant admin to grant it."}
         </Typography>
       </DialogContent>

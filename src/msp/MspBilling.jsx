@@ -26,7 +26,7 @@ import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { fetchBilling, downloadBilling } from "./mspApi";
 
 function currentMonth() {
@@ -125,7 +125,7 @@ export default function MspBilling({ onClose }) {
               ["Total", money(gt.amountCents, run.msps[0]?.currency || "USD")],
             ].map(([label, value]) => (
               <Box key={label}>
-                <Typography sx={{ fontSize: 22, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>{value}</Typography>
+                <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>{value}</Typography>
                 <Typography variant="caption" sx={{ color: BRAND.gray }}>{label}</Typography>
               </Box>
             ))}

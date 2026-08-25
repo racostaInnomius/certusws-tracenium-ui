@@ -15,7 +15,7 @@ import {
   Divider, Stack, Typography,
 } from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON } from "../../theme/brand";
 import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS } from "./billingModel";
 
 const money = (cents, currency = "usd") =>
@@ -56,7 +56,7 @@ export default function ConfirmChangeDialog({
                 </Typography>
                 {!same && (
                   <>
-                    <ArrowForwardIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                    <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>
                       {describe(b)}
                     </Typography>
@@ -74,7 +74,7 @@ export default function ConfirmChangeDialog({
               <Typography variant="body2" color="text.disabled">
                 {INTERVAL_LABELS[current.interval]}
               </Typography>
-              <ArrowForwardIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+              <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
                 {INTERVAL_LABELS[next.interval]}
               </Typography>
@@ -90,7 +90,7 @@ export default function ConfirmChangeDialog({
               <Typography variant="body1" color="text.disabled" sx={{ textDecoration: "line-through" }}>
                 {money(beforeTotal, currency)}
               </Typography>
-              <ArrowForwardIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+              <ArrowForwardIcon sx={{ fontSize: ICON.md, color: "text.disabled" }} />
             </>
           )}
           <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark }}>

@@ -18,7 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const SHA256_RE = /^[0-9a-f]{64}$/i;
 
@@ -64,7 +64,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
       <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>Upload installer for AI intake</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
-          <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
             The file is verified (signature + threat-intel) before anything else, then AI proposes a
             silent-install configuration for your review. Nothing is distributed until you approve it.
           </Typography>
@@ -88,7 +88,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
               {file ? "Change file" : "Choose file…"}
             </Button>
             {file ? (
-              <Typography sx={{ mt: 1, fontSize: 13, color: BRAND.dark, fontWeight: 600 }}>
+              <Typography sx={{ mt: 1, fontSize: TEXT.md, color: BRAND.dark, fontWeight: 600 }}>
                 {file.name}{" "}
                 <span style={{ color: BRAND.gray, fontWeight: 400 }}>
                   ({Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB)
@@ -112,7 +112,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
               label="Declared SHA-256"
               value={hints.declaredSha256}
               onChange={(e) => update({ declaredSha256: e.target.value })}
-              inputProps={{ style: { fontFamily: "monospace", fontSize: 12 } }}
+              inputProps={{ style: { fontFamily: "monospace", fontSize: TEXT.sm } }}
             />
           </Box>
 
@@ -123,7 +123,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
                 borderRadius: 1,
                 bgcolor: BRAND.alert?.errorSoft,
                 color: BRAND.alert?.error,
-                fontSize: 13,
+                fontSize: TEXT.md,
                 fontWeight: 600,
               }}
             >

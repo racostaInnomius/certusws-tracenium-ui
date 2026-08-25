@@ -34,7 +34,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { CHART_CATEGORICAL } from "../../theme/chartPalette";
 import {
   getFleetComplianceTimeseries,
@@ -142,13 +142,13 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
   return (
     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}`, mb: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1.5 }}>
-        <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 15 }}>Compliance trend</Typography>
+        <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>Compliance trend</Typography>
         {delta ? (
           <Chip
             size="small"
             label={`${delta.diff >= 0 ? "▲ +" : "▼ "}${delta.diff} pts · now ${delta.current}/100`}
             sx={{
-              height: 22, fontSize: 11, fontWeight: 700,
+              height: 22, fontSize: TEXT.xs, fontWeight: 700,
               bgcolor: delta.diff >= 0 ? BRAND.alert?.successSoft : BRAND.alert?.errorSoft,
               color: delta.diff >= 0 ? BRAND.alert?.success : BRAND.alert?.error,
             }}
@@ -183,10 +183,10 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={fw.rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
-            <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: 10, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
-            <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${BRAND.border}` }} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <XAxis dataKey="label" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
+            <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+            <Tooltip contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }} />
+            <Legend wrapperStyle={{ fontSize: TEXT.xs }} />
             {fw.frameworks.map((f, i) => (
               <Line
                 key={f}
@@ -212,14 +212,14 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
+            <XAxis dataKey="label" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={32} />
             {view === "score" ? (
-              <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: 10, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+              <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
             ) : (
-              <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
+              <YAxis allowDecimals={false} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
             )}
             <Tooltip
-              contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${BRAND.border}` }}
+              contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }}
               labelFormatter={(_, p) => {
                 const iso = p?.[0]?.payload?.date;
                 return iso ? new Date(iso).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : "";
@@ -229,7 +229,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
               <Area type="monotone" dataKey="score" name="Avg score" stroke={BRAND.teal} strokeWidth={2} fill="url(#scpScoreFill)" isAnimationActive={false} connectNulls />
             ) : (
               <>
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend wrapperStyle={{ fontSize: TEXT.xs }} />
                 <Area type="monotone" dataKey="compliant" name="Compliant" stackId="d" stroke={BRAND.alert?.success} fill={BRAND.alert?.success} fillOpacity={0.5} isAnimationActive={false} />
                 <Area type="monotone" dataKey="nonCompliant" name="Non-compliant" stackId="d" stroke={BRAND.alert?.error} fill={BRAND.alert?.error} fillOpacity={0.5} isAnimationActive={false} />
               </>
@@ -243,7 +243,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
 
 const toggleSx = {
   "& .MuiToggleButton-root": {
-    textTransform: "none", px: 1.25, py: 0.25, fontSize: 12, fontWeight: 700, color: BRAND.gray, borderColor: BRAND.border,
+    textTransform: "none", px: 1.25, py: 0.25, fontSize: TEXT.sm, fontWeight: 700, color: BRAND.gray, borderColor: BRAND.border,
     "&.Mui-selected": { color: BRAND.teal, bgcolor: BRAND.tealSoft, "&:hover": { bgcolor: BRAND.tealSoft } },
   },
 };

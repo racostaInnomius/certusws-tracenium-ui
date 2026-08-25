@@ -17,7 +17,7 @@ import {
   Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   LINE_LABELS, LINE_HINTS, TIER_LABELS, TIER_ADDS, MDM_INCLUDES,
   availableTiers, estimateLine, usageWarning, suggestedQuantity,
@@ -53,7 +53,7 @@ function PlanCard({ tier, line, price, currency, interval, selected, onSelect })
     >
       <CardContent sx={{ py: 1.75 }}>
         {selected && (
-          <CheckIcon sx={{ position: "absolute", top: 10, right: 10, fontSize: 18, color: BRAND.teal }} />
+          <CheckIcon sx={{ position: "absolute", top: 10, right: 10, fontSize: ICON.lg, color: BRAND.teal }} />
         )}
         <Typography variant="body2" sx={{ fontWeight: 800, color: BRAND.dark }}>
           {TIER_LABELS[tier]}
@@ -77,7 +77,7 @@ function PlanCard({ tier, line, price, currency, interval, selected, onSelect })
               </Typography>
             )}
             {adds.map((p) => (
-              <Chip key={p} size="small" label={p.toUpperCase()} sx={{ height: 20, fontSize: 11 }} />
+              <Chip key={p} size="small" label={p.toUpperCase()} sx={{ height: 20, fontSize: TEXT.xs }} />
             ))}
           </Stack>
         ) : (

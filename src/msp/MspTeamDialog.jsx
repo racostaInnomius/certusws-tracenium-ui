@@ -29,7 +29,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import PersonRemoveOutlinedIcon from "@mui/icons-material/PersonRemoveOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { fetchMspOperators, addMspOperator, removeMspOperator } from "./mspApi";
 
 const ROLES = ["OWNER", "ADMIN", "USER"];
@@ -144,8 +144,8 @@ export default function MspTeamDialog({ open, mspId, mspName, onClose }) {
                         <Typography sx={{ fontWeight: 700, color: BRAND.dark }} noWrap>{op.email || op.subject}</Typography>
                         {op.email ? <Typography variant="caption" sx={{ color: BRAND.gray }} noWrap>{op.subject}</Typography> : null}
                       </Box>
-                      <Chip label={op.role} size="small" sx={{ bgcolor: rc.bg, color: rc.fg, fontWeight: 800, fontSize: 11 }} />
-                      {op.isActive ? null : <Chip label="inactive" size="small" sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontSize: 11 }} />}
+                      <Chip label={op.role} size="small" sx={{ bgcolor: rc.bg, color: rc.fg, fontWeight: 800, fontSize: TEXT.xs }} />
+                      {op.isActive ? null : <Chip label="inactive" size="small" sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontSize: TEXT.xs }} />}
                       <Tooltip title="Remove operator">
                         <span>
                           <IconButton aria-label="Remove operator" size="small" disabled={busy} onClick={() => doRemove(op.id)}

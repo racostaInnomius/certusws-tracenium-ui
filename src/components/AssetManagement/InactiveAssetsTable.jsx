@@ -34,7 +34,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { getInactiveAssets } from "../../api/inventoryDashboard";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { normalizePlatform, platformColor } from "../../utils/platform";
 import { formatDate } from "../../utils/format";
 import { listFrom } from "../../api/shape";
@@ -100,7 +100,7 @@ function PlatformChip({ platform }) {
       sx={{
         height: 20,
         fontWeight: 800,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         textTransform: useFixedCase ? "none" : "capitalize",
         bgcolor: style.bg,
         color: style.fg,
@@ -128,7 +128,7 @@ function InactiveSeverityChip({ inactiveDays }) {
           bgcolor: palette.bg,
           color: palette.fg,
           fontWeight: 900,
-          fontSize: 11,
+          fontSize: TEXT.xs,
         }}
       />
     </Tooltip>
@@ -146,7 +146,7 @@ function StatusChip({ status }) {
         bgcolor: ROLE.cautionSoft,
         color: ROLE.caution,
         fontWeight: 900,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         letterSpacing: 0.2,
       }}
     />
@@ -308,7 +308,7 @@ export default function InactiveAssetsTable({
 
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-              <ReportProblemOutlinedIcon sx={{ color: ROLE.caution, fontSize: 24 }} />
+              <ReportProblemOutlinedIcon sx={{ color: ROLE.caution, fontSize: ICON.xl }} />
               <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 900, color: BRAND.dark }}>
                 Inactive Assets
               </Typography>
@@ -323,7 +323,7 @@ export default function InactiveAssetsTable({
                 sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 900 }}
               />
             </Stack>
-            <Typography sx={{ mt: 0.4, fontSize: 13, color: "text.secondary" }}>
+            <Typography sx={{ mt: 0.4, fontSize: TEXT.md, color: "text.secondary" }}>
               Devices that have not communicated with Tracenium for more than {inactiveDays} days.
             </Typography>
           </Box>
@@ -502,7 +502,7 @@ export default function InactiveAssetsTable({
                 <TableCell sx={{ minWidth: 120 }}>
                   <PlatformChip platform={row.platform} />
                 </TableCell>
-                <TableCell sx={{ fontFamily: "monospace", fontSize: 12, minWidth: 150 }}>
+                <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 150 }}>
                   {displayText(row.serial)}
                 </TableCell>
                 <TableCell sx={{ minWidth: 190 }}>
@@ -510,17 +510,17 @@ export default function InactiveAssetsTable({
                 </TableCell>
                 <TableCell sx={{ minWidth: 145 }}>
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                       {formatInactiveDays(row.inactiveDays)}
                     </Typography>
                     <InactiveSeverityChip inactiveDays={row.inactiveDays} />
                   </Stack>
                 </TableCell>
-                <TableCell sx={{ fontFamily: "monospace", fontSize: 12, minWidth: 140 }}>
+                <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 140 }}>
                   {displayText(row.agentVersion)}
                 </TableCell>
                 <TableCell sx={{ minWidth: 220 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }} noWrap title={`${displayText(row.manufacturer)} / ${displayText(row.model)}`}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap title={`${displayText(row.manufacturer)} / ${displayText(row.model)}`}>
                     {displayText(row.manufacturer)} / {displayText(row.model)}
                   </Typography>
                 </TableCell>
@@ -538,7 +538,7 @@ export default function InactiveAssetsTable({
                     <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>
                       No inactive assets found
                     </Typography>
-                    <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+                    <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
                       Try changing the inactive-days threshold, platform filter, or search term.
                     </Typography>
                   </Stack>
@@ -577,7 +577,7 @@ export default function InactiveAssetsTable({
             border: 0,
             "& .MuiTablePagination-toolbar": { flexWrap: "wrap", rowGap: 1 },
             "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-              fontSize: 12,
+              fontSize: TEXT.sm,
               color: "text.secondary",
             },
           }}

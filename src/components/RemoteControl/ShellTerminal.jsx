@@ -47,7 +47,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 
-import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
+import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -90,7 +90,7 @@ export default function ShellTerminal({ session, device, onClose }) {
       cursorBlink: true,
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      fontSize: 13,
+      fontSize: TEXT.md,
       // Match the brand-dark surface for visual continuity with the
       // rest of the dashboard.
       theme: {
@@ -507,7 +507,7 @@ export default function ShellTerminal({ session, device, onClose }) {
             onClick={onClose}
             sx={{ color: NEUTRAL[500] }}
           >
-            <CloseOutlinedIcon sx={{ fontSize: 16 }} />
+            <CloseOutlinedIcon sx={{ fontSize: ICON.md }} />
           </IconButton>
         </Tooltip>
       </Box>

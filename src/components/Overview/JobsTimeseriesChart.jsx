@@ -24,7 +24,7 @@ import {
   CartesianGrid,
   Legend
 } from "recharts";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 function formatDay(isoDate) {
   if (!isoDate) return "";
@@ -178,12 +178,12 @@ export default function JobsTimeseriesChart({
               <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="day"
-                tick={{ fill: BRAND.dark, fontSize: 11 }}
+                tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
                 axisLine={{ stroke: BRAND.borderStrong }}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: BRAND.dark, fontSize: 11 }}
+                tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
                 axisLine={{ stroke: BRAND.borderStrong }}
                 tickLine={false}
                 allowDecimals={false}
@@ -192,11 +192,11 @@ export default function JobsTimeseriesChart({
                 contentStyle={{
                   borderRadius: 8,
                   border: `1px solid ${BRAND.border}`,
-                  fontSize: 12
+                  fontSize: TEXT.sm
                 }}
               />
               <Legend
-                wrapperStyle={{ fontSize: 12, color: BRAND.dark }}
+                wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
                 iconType="circle"
               />
               <Line

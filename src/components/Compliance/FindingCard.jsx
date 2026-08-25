@@ -29,7 +29,7 @@ import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import FindingExplanation from "./FindingExplanation";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import {
   SeverityChip,
   FrameworkChip,
@@ -203,9 +203,9 @@ export default function FindingCard({
                   size="small"
                   icon={
                     ackUntil ? (
-                      <ScheduleOutlinedIcon sx={{ fontSize: 12 }} />
+                      <ScheduleOutlinedIcon sx={{ fontSize: ICON.xs }} />
                     ) : (
-                      <VisibilityOutlinedIcon sx={{ fontSize: 12 }} />
+                      <VisibilityOutlinedIcon sx={{ fontSize: ICON.xs }} />
                     )
                   }
                   sx={{
@@ -213,7 +213,7 @@ export default function FindingCard({
                     color: BRAND.tealText,
                     fontWeight: 700,
                     height: 22,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     "& .MuiChip-icon": { color: BRAND.tealText }
                   }}
                 />
@@ -228,13 +228,13 @@ export default function FindingCard({
                 <Chip
                   label="Exception expired"
                   size="small"
-                  icon={<EventBusyOutlinedIcon sx={{ fontSize: 12 }} />}
+                  icon={<EventBusyOutlinedIcon sx={{ fontSize: ICON.xs }} />}
                   sx={{
                     bgcolor: ROLE.cautionSoft,
                     color: ROLE.caution,
                     fontWeight: 700,
                     height: 22,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     "& .MuiChip-icon": { color: ROLE.caution }
                   }}
                 />
@@ -287,7 +287,7 @@ export default function FindingCard({
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<VisibilityOffOutlinedIcon sx={{ fontSize: 14 }} />}
+                startIcon={<VisibilityOffOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                 onClick={() => onRevoke(finding)}
                 disabled={isPending}
                 sx={{ textTransform: "none" }}
@@ -299,8 +299,8 @@ export default function FindingCard({
                 <Button
                   size="small"
                   variant="outlined"
-                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: 14 }} />}
-                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                   onClick={(e) => setAckMenuAnchor(e.currentTarget)}
                   disabled={isPending}
                   sx={{ textTransform: "none" }}
@@ -323,9 +323,9 @@ export default function FindingCard({
                       }}
                     >
                       {preset.days == null ? (
-                        <VisibilityOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                        <VisibilityOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
                       ) : (
-                        <ScheduleOutlinedIcon sx={{ fontSize: 16, mr: 1 }} />
+                        <ScheduleOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
                       )}
                       <Typography variant="body2">
                         Acknowledge {preset.label}
@@ -340,7 +340,7 @@ export default function FindingCard({
                 <Button
                   size="small"
                   variant="outlined"
-                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: 14 }} />}
+                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                   onClick={(e) => setStatusMenuAnchor(e.currentTarget)}
                   disabled={isPending}
                   sx={{ textTransform: "none" }}
@@ -396,7 +396,7 @@ export default function FindingCard({
                   clickable={Boolean(onOpenVulnerabilities)}
                   sx={{
                     height: 24,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     fontWeight: 700,
                     bgcolor: ROLE.criticalSoft,
                     color: ROLE.critical,
@@ -417,7 +417,7 @@ export default function FindingCard({
                   size="small"
                   variant="contained"
                   disableElevation
-                  startIcon={<BuildOutlinedIcon sx={{ fontSize: 14 }} />}
+                  startIcon={<BuildOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                   onClick={() => onRemediate(finding)}
                   disabled={isPending}
                   sx={{
@@ -440,13 +440,13 @@ export default function FindingCard({
               >
                 <Chip
                   size="small"
-                  icon={<BuildOutlinedIcon sx={{ fontSize: 13 }} />}
+                  icon={<BuildOutlinedIcon sx={{ fontSize: ICON.xs }} />}
                   label={`Auto-fix available · ${baselineHint.mode}`}
                   onClick={onOpenBaselines || undefined}
                   clickable={Boolean(onOpenBaselines)}
                   sx={{
                     height: 24,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     fontWeight: 700,
                     bgcolor: BRAND.tealSoft,
                     color: BRAND.tealText,
@@ -460,7 +460,7 @@ export default function FindingCard({
                 <Button
                   size="small"
                   variant="text"
-                  startIcon={<AutoAwesomeOutlinedIcon sx={{ fontSize: 14 }} />}
+                  startIcon={<AutoAwesomeOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                   onClick={() => setExplainOpen((v) => !v)}
                   sx={{ textTransform: "none", color: BRAND.teal }}
                 >
@@ -471,7 +471,7 @@ export default function FindingCard({
             <Button
               size="small"
               variant="text"
-              startIcon={<HistoryOutlinedIcon sx={{ fontSize: 14 }} />}
+              startIcon={<HistoryOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               onClick={() => onShowHistory(finding)}
               disabled={isPending}
               sx={{ textTransform: "none" }}
@@ -518,7 +518,7 @@ export default function FindingCard({
                   p: 1,
                   borderRadius: 1,
                   bgcolor: BRAND.surfaceMuted,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   fontFamily: "monospace",
                   maxHeight: 200,
                   overflow: "auto",

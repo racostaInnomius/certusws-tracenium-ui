@@ -47,7 +47,7 @@ import { Switch, FormControlLabel, InputAdornment } from "@mui/material";
 import PageHeader from "../components/common/PageHeader";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import SectionPaper from "../components/common/SectionPaper";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import {
   fetchAdminMsps,
   createMsp as apiCreateMsp,
@@ -274,20 +274,20 @@ export default function MspAdmin({ onClose }) {
                             }}
                             sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}
                           >
-                            <DeleteOutlineOutlinedIcon sx={{ fontSize: 18 }} />
+                            <DeleteOutlineOutlinedIcon sx={{ fontSize: ICON.lg }} />
                           </IconButton>
                         </span>
                       </Tooltip>
                     </Stack>
                     <Stack direction="row" spacing={1.5}>
                       <Stack direction="row" spacing={0.5} alignItems="center">
-                        <DevicesOutlinedIcon sx={{ fontSize: 15, color: BRAND.gray }} />
+                        <DevicesOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray }} />
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
                           {m.clientCount} client{m.clientCount === 1 ? "" : "s"}
                         </Typography>
                       </Stack>
                       <Stack direction="row" spacing={0.5} alignItems="center">
-                        <GroupsOutlinedIcon sx={{ fontSize: 15, color: BRAND.gray }} />
+                        <GroupsOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray }} />
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
                           {m.operatorCount} operator{m.operatorCount === 1 ? "" : "s"}
                         </Typography>
@@ -311,7 +311,7 @@ export default function MspAdmin({ onClose }) {
         ) : (
           <SectionPaper variant="panel">
             <Box sx={{ py: 6, textAlign: "center" }}>
-              <BusinessOutlinedIcon sx={{ fontSize: 40, color: BRAND.gray, mb: 1 }} />
+              <BusinessOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray, mb: 1 }} />
               <Typography sx={{ color: BRAND.gray }}>
                 Select a partner to manage its clients and operators.
               </Typography>
@@ -664,10 +664,10 @@ function MspDetail({ msp, onChanged, onToast }) {
                   <Chip
                     label={op.role}
                     size="small"
-                    sx={{ bgcolor: rc.bg, color: rc.fg, fontWeight: 800, fontSize: 11 }}
+                    sx={{ bgcolor: rc.bg, color: rc.fg, fontWeight: 800, fontSize: TEXT.xs }}
                   />
                   {op.isActive ? null : (
-                    <Chip label="inactive" size="small" sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontSize: 11 }} />
+                    <Chip label="inactive" size="small" sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontSize: TEXT.xs }} />
                   )}
                   <Tooltip title="Remove operator">
                     <span>

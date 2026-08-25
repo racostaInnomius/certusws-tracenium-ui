@@ -31,7 +31,7 @@ import {
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 
 import { getTimeToCloseSummary } from "../../api/compliance";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 
 // Window options match what we offer in fleet-timeseries — 7d/30d/90d
@@ -153,7 +153,7 @@ export default function MttrCard({ reloadKey } = {}) {
               justifyContent: "center"
             }}
           >
-            <TimerOutlinedIcon sx={{ fontSize: 18 }} />
+            <TimerOutlinedIcon sx={{ fontSize: ICON.lg }} />
           </Box>
           <Box>
             <Typography

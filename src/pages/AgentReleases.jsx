@@ -30,7 +30,7 @@ import {
 import AgentReleaseDialog from "../components/agent-releases/AgentReleaseDialog";
 import DeleteAgentReleaseDialog from "../components/agent-releases/DeleteAgentReleaseDialog";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import UnattendedInstallDialog from "../components/agent-releases/UnattendedInstallDialog";
 
@@ -55,13 +55,13 @@ function SummaryCard({ title, value, accent = BRAND.teal }) {
         justifyContent: "space-between",
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
         {title}
       </Typography>
 
       <Typography
         sx={{
-          fontSize: 28,
+          fontSize: TEXT["3xl"],
           fontWeight: 800,
           color: accent,
           lineHeight: 1.1,

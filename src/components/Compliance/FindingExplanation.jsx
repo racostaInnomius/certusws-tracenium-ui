@@ -24,7 +24,7 @@ import {
 } from "@mui/material";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { explainFinding } from "../../api/compliance";
 
 const CONFIDENCE_META = {
@@ -86,8 +86,8 @@ export default function FindingExplanation({ findingId }) {
       aria-live="polite"
     >
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <AutoAwesomeOutlinedIcon sx={{ fontSize: 16, color: BRAND.teal }} />
-        <Typography sx={{ fontSize: 12, fontWeight: 800, color: BRAND.dark, flex: 1 }}>
+        <AutoAwesomeOutlinedIcon sx={{ fontSize: ICON.md, color: BRAND.teal }} />
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, flex: 1 }}>
           AI explanation
         </Typography>
         {state.data ? (
@@ -101,7 +101,7 @@ export default function FindingExplanation({ findingId }) {
             <Button
               size="small"
               onClick={() => load({ refresh: true })}
-              startIcon={<RefreshOutlinedIcon sx={{ fontSize: 14 }} />}
+              startIcon={<RefreshOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               sx={{ textTransform: "none", minWidth: 0, px: 1 }}
             >
               Regenerate
@@ -126,7 +126,7 @@ export default function FindingExplanation({ findingId }) {
           <Section label="What it means" text={ex.whatItMeans} />
           <Section label="Why it matters" text={ex.whyItMatters} />
           <Box>
-            <Typography sx={{ fontSize: 11, fontWeight: 800, color: BRAND.gray, textTransform: "uppercase" }}>
+            <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray, textTransform: "uppercase" }}>
               How to fix it here
             </Typography>
             <Box component="ol" sx={{ m: 0, pl: 2.5 }}>
@@ -140,7 +140,7 @@ export default function FindingExplanation({ findingId }) {
           <Section label="If ignored" text={ex.riskIfIgnored} />
           <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", gap: 0.5 }}>
             {conf ? (
-              <Chip size="small" label={conf.label} sx={{ height: 20, fontSize: 10.5, fontWeight: 700, bgcolor: conf.bg, color: conf.fg }} />
+              <Chip size="small" label={conf.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: conf.bg, color: conf.fg }} />
             ) : null}
             {ex.caveats ? (
               <Typography variant="caption" sx={{ color: BRAND.gray }}>
@@ -162,7 +162,7 @@ export default function FindingExplanation({ findingId }) {
 function Section({ label, text }) {
   return (
     <Box>
-      <Typography sx={{ fontSize: 11, fontWeight: 800, color: BRAND.gray, textTransform: "uppercase" }}>
+      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray, textTransform: "uppercase" }}>
         {label}
       </Typography>
       <Typography variant="body2" sx={{ color: BRAND.dark }}>

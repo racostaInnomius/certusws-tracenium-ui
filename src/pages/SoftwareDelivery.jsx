@@ -36,7 +36,7 @@ import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -237,11 +237,11 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       minWidth: 220,
       renderCell: (params) => (
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {params.row.name}
           </Typography>
           {params.row.vendor ? (
-            <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
               {params.row.vendor}
             </Typography>
           ) : null}
@@ -253,7 +253,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       headerName: "Version",
       width: 110,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 12, fontFamily: "monospace" }}>
+        <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace" }}>
           {p.row.version}
         </Typography>
       ),
@@ -267,17 +267,17 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           <Chip
             size="small"
             label={p.row.platform}
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
           />
           <Chip
             size="small"
             label={p.row.arch}
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
           />
           <Chip
             size="small"
             label={(p.row.format || "").toUpperCase()}
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.cyanSoft, color: BRAND.dark }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.cyanSoft, color: BRAND.dark }}
           />
         </Stack>
       ),
@@ -290,7 +290,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
         const r = p.row.detectionRule;
         if (!r) {
           return (
-            <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>
               none
             </Typography>
           );
@@ -302,7 +302,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
               label={r.type}
               sx={{
                 height: 20,
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 fontWeight: 700,
                 bgcolor: BRAND.darkSoft,
                 color: BRAND.dark,
@@ -324,7 +324,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
             label="active"
             sx={{
               height: 20,
-              fontSize: 11,
+              fontSize: TEXT.xs,
               fontWeight: 700,
               bgcolor: BRAND.alert?.successSoft,
               color: BRAND.alert?.success,
@@ -334,7 +334,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
           <Chip
             size="small"
             label="inactive"
-            sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
+            sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
           />
         ),
     },
@@ -368,7 +368,7 @@ function CatalogTab({ canManage, notify, onDeployFire }) {
       headerName: "Updated",
       width: 130,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
           {formatTime(p.row.updatedAt)}
         </Typography>
       ),
@@ -594,7 +594,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
       headerName: "#",
       width: 70,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>
           {p.row.id}
         </Typography>
       ),
@@ -608,10 +608,10 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
         const pkg = p.row.packageSnapshot || {};
         return (
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
               {pkg.name} <span style={{ color: BRAND.gray, fontWeight: 500 }}>v{pkg.version}</span>
             </Typography>
-            <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
               {pkg.platform}/{pkg.arch}/{(pkg.format || "").toUpperCase()}
             </Typography>
           </Box>
@@ -625,13 +625,13 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
       renderCell: (p) => {
         if (p.row.targetKind === "asset_group") {
           return (
-            <Typography sx={{ fontSize: 12 }}>
+            <Typography sx={{ fontSize: TEXT.sm }}>
               Group #{p.row.assetGroupId ?? "?"}
             </Typography>
           );
         }
         return (
-          <Typography sx={{ fontSize: 12 }}>
+          <Typography sx={{ fontSize: TEXT.sm }}>
             {p.row.deviceIds?.length ?? 0} device(s)
           </Typography>
         );
@@ -654,7 +654,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
           <Chip
             size="small"
             label={p.row.status}
-            sx={{ fontWeight: 700, fontSize: 11, height: 20, bgcolor: e.bg, color: e.color }}
+            sx={{ fontWeight: 700, fontSize: TEXT.xs, height: 20, bgcolor: e.bg, color: e.color }}
           />
         );
       },
@@ -680,7 +680,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
                   key={label}
                   size="small"
                   label={`${label}: ${n}`}
-                  sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: bg, color: color }}
+                  sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: bg, color: color }}
                 />
               ) : null
             )}
@@ -693,7 +693,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
       headerName: "Created",
       width: 130,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
           {formatTime(p.row.createdAt)}
         </Typography>
       ),
@@ -904,12 +904,12 @@ export default function SoftwareDelivery({ onNavigate }) {
             justifyContent="space-between"
           >
             <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 14 }}>
+              <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
                 {policyError
                   ? "Could not verify SDP entitlement"
                   : "Software Delivery plugin is disabled for this tenant"}
               </Typography>
-              <Typography sx={{ fontSize: 13, color: BRAND.gray, mt: 0.5 }}>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
                 {policyError
                   ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
                   : isAdmin

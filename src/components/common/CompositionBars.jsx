@@ -34,7 +34,7 @@ import {
 } from "@mui/material";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowRightRoundedIcon from "@mui/icons-material/KeyboardArrowRightRounded";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 function formatTotalValue(value) {
   const numericValue = Number(value || 0);
@@ -216,7 +216,7 @@ export default function CompositionBars({
                 label={`${formatTotalValue(total)} ${totalLabel}`}
                 sx={{
                   height: 22,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   fontWeight: 800,
                   bgcolor: BRAND.tealSoft,
                   color: BRAND.tealText,
@@ -280,7 +280,7 @@ export default function CompositionBars({
                 label={`${formatTotalValue(total)} ${totalLabel}`}
                 sx={{
                   height: 20,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   fontWeight: 700,
                   bgcolor: BRAND.tealSoft,
                   color: BRAND.tealText,
@@ -380,7 +380,7 @@ export default function CompositionBars({
                       : "minmax(0, 1fr) auto",
                     alignItems: "center",
                     columnGap: 1,
-                    fontSize: 12.5,
+                    fontSize: TEXT.sm,
                     cursor: rowClickable ? "pointer" : "inherit",
                     borderRadius: 1,
                     mx: hasChildren ? -0.5 : 0,
@@ -402,7 +402,7 @@ export default function CompositionBars({
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
                     <Typography
                       sx={{
-                        fontSize: 13,
+                        fontSize: TEXT.md,
                         fontWeight: 600,
                         color: BRAND.dark,
                         overflow: "hidden",
@@ -427,7 +427,7 @@ export default function CompositionBars({
                           label={row.badge.label}
                           sx={{
                             height: 17,
-                            fontSize: 10,
+                            fontSize: TEXT.xs,
                             fontWeight: 800,
                             flexShrink: 0,
                             bgcolor: row.badge.bg,
@@ -441,7 +441,7 @@ export default function CompositionBars({
                     {row.sub ? (
                       <Typography
                         sx={{
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           color: "text.secondary",
                           lineHeight: 1.2,
                           overflow: "hidden",
@@ -473,9 +473,9 @@ export default function CompositionBars({
                         }}
                       >
                         {expanded ? (
-                          <KeyboardArrowDownRoundedIcon sx={{ fontSize: 18 }} />
+                          <KeyboardArrowDownRoundedIcon sx={{ fontSize: ICON.lg }} />
                         ) : (
-                          <KeyboardArrowRightRoundedIcon sx={{ fontSize: 18 }} />
+                          <KeyboardArrowRightRoundedIcon sx={{ fontSize: ICON.lg }} />
                         )}
                       </IconButton>
                     </Tooltip>
@@ -488,11 +488,11 @@ export default function CompositionBars({
                     justifyContent="flex-end"
                     sx={{ flexShrink: 0, whiteSpace: "nowrap" }}
                   >
-                    <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                       {formatRowValue(value)}
                     </Typography>
                     {showPercentages ? (
-                      <Typography sx={{ fontSize: 11, color: "text.secondary", fontWeight: 500 }}>
+                      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", fontWeight: 500 }}>
                         {pct}%
                       </Typography>
                     ) : null}
@@ -591,7 +591,7 @@ export default function CompositionBars({
                               <Box sx={{ minWidth: 0 }}>
                                 <Typography
                                   sx={{
-                                    fontSize: 12,
+                                    fontSize: TEXT.sm,
                                     fontWeight: 700,
                                     color: BRAND.dark,
                                     overflow: "hidden",
@@ -606,7 +606,7 @@ export default function CompositionBars({
                                   <Typography
                                     sx={{
                                       mt: 0.1,
-                                      fontSize: 10.5,
+                                      fontSize: TEXT.xs,
                                       color: "text.secondary",
                                       lineHeight: 1.15,
                                       overflow: "hidden",
@@ -627,10 +627,10 @@ export default function CompositionBars({
                                 justifyContent="flex-end"
                                 sx={{ whiteSpace: "nowrap" }}
                               >
-                                <Typography sx={{ fontSize: 12, fontWeight: 800, color: BRAND.dark }}>
+                                <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark }}>
                                   {formatRowValue(childValue)}
                                 </Typography>
-                                <Typography sx={{ fontSize: 10.5, color: "text.secondary", fontWeight: 600 }}>
+                                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", fontWeight: 600 }}>
                                   {formatPercentValue(childPct)}
                                 </Typography>
                               </Stack>

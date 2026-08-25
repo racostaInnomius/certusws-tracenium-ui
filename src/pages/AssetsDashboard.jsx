@@ -76,7 +76,7 @@ import CompositionBars from "../components/common/CompositionBars";
 import { AgentVersionDonut, DonutCard } from "../components/Overview/FleetComposition";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, ROLE, TEXT } from "../theme/brand";
 import {
   HOST_SORT_FIELDS,
   readUrlFilters,
@@ -197,7 +197,7 @@ function AgentDetailWorkbench({
               />
               <Chip size="small" label={platform} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
             </Stack>
-            <Typography sx={{ mt: 0.5, fontSize: 12, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
+            <Typography sx={{ mt: 0.5, fontSize: TEXT.sm, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
               {agentId}
             </Typography>
           </Box>
@@ -207,7 +207,7 @@ function AgentDetailWorkbench({
 
       {error ? (
         <Paper elevation={0} sx={{ p: 1.5, mb: 2, borderRadius: 2, border: `1px solid ${ROLE.caution}55`, bgcolor: ROLE.cautionSoft }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             Some agent detail data could not be loaded. Showing the available device information.
           </Typography>
         </Paper>
@@ -251,7 +251,7 @@ function AgentDetailWorkbench({
           {loading ? (
             <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ py: 6 }}>
               <CircularProgress size={28} sx={{ color: BRAND.teal }} />
-              <Typography sx={{ fontSize: 13, color: "text.secondary" }}>Loading agent detail…</Typography>
+              <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Loading agent detail…</Typography>
             </Stack>
           ) : null}
 
@@ -1537,7 +1537,7 @@ const osVersionItems = React.useMemo(() => {
                     <Typography
                       sx={{
                         pt: { xs: 0, sm: "10px" },
-                        fontSize: 16,
+                        fontSize: TEXT.lg,
                         fontWeight: 800,
                         color: BRAND.dark,
                         flexShrink: 0,
@@ -1583,13 +1583,13 @@ const osVersionItems = React.useMemo(() => {
                         },
                         "& .MuiInputBase-input": {
                           py: 0,
-                          fontSize: 14,
+                          fontSize: TEXT.base,
                         },
                         "& .MuiFormHelperText-root": {
                           minHeight: 16,
                           mx: 0,
                           mt: 0.35,
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           color: "text.secondary",
                           lineHeight: 1.25,
                         },
@@ -1613,30 +1613,30 @@ const osVersionItems = React.useMemo(() => {
                           },
                           "& .MuiInputBase-input": {
                             py: 0,
-                            fontSize: 14,
+                            fontSize: TEXT.base,
                           },
                           "& .MuiFormHelperText-root": {
                             minHeight: 16,
                             mx: 0,
                             mt: 0.35,
-                            fontSize: 11,
+                            fontSize: TEXT.xs,
                             lineHeight: 1.25,
                           },
                         }}
                         SelectProps={{ displayEmpty: true }}
                       >
                         <MenuItem value="">
-                          <Typography sx={{ fontSize: 14, color: BRAND.gray }}>
+                          <Typography sx={{ fontSize: TEXT.base, color: BRAND.gray }}>
                             Filter by group…
                           </Typography>
                         </MenuItem>
                         {groupCatalog.map((g) => (
                           <MenuItem key={g.id} value={String(g.id)}>
                             <Stack direction="row" alignItems="center" spacing={1}>
-                              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                              <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>
                                 {g.name}
                               </Typography>
-                              <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+                              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                                 {g.kind === "dynamic" ? "dyn" : "static"}
                                 {Number.isFinite(g.memberCount)
                                   ? ` · ${g.memberCount}`
@@ -1651,7 +1651,7 @@ const osVersionItems = React.useMemo(() => {
                   <Typography
                     sx={{
                       pt: { xs: 0, md: "10px" },
-                      fontSize: 12,
+                      fontSize: TEXT.sm,
                       color: "text.secondary",
                       whiteSpace: "nowrap",
                       textAlign: { xs: "left", md: "right" },
@@ -1713,13 +1713,13 @@ const osVersionItems = React.useMemo(() => {
                 {deviceView === "map" ? (
                   <React.Suspense
                     fallback={
-                      <Typography sx={{ fontSize: 13, color: "text.secondary", py: 4, textAlign: "center" }}>
+                      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", py: 4, textAlign: "center" }}>
                         Loading map…
                       </Typography>
                     }
                   >
                     {fleetLocationsLoading && !fleetLocations ? (
-                      <Typography sx={{ fontSize: 13, color: "text.secondary", py: 4, textAlign: "center" }}>
+                      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", py: 4, textAlign: "center" }}>
                         Loading positions…
                       </Typography>
                     ) : (
@@ -1849,7 +1849,7 @@ const osVersionItems = React.useMemo(() => {
               <Typography
                 sx={{
                   color: "text.secondary",
-                  fontSize: 16,
+                  fontSize: TEXT.lg,
                   lineHeight: 1.6,
                   mb: 3,
                 }}
@@ -1859,7 +1859,7 @@ const osVersionItems = React.useMemo(() => {
               <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
                 <Inventory2OutlinedIcon
                   sx={{
-                    fontSize: 48,
+                    fontSize: TEXT["5xl"],
                     color: BRAND.tealSoftStrong,
                     animation: "pulse 2s infinite",
                     "@keyframes pulse": {

@@ -91,7 +91,7 @@ import FullscreenExitOutlinedIcon from "@mui/icons-material/FullscreenExitOutlin
 import MouseOutlinedIcon from "@mui/icons-material/MouseOutlined";
 import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 
-import { BRAND, NEUTRAL, ROLE } from "../../theme/brand";
+import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -241,7 +241,7 @@ function StatusChip({ state }) {
       label={label}
       sx={{
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         height: 20,
         bgcolor: bg,
         color,
@@ -1002,10 +1002,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         spacing={1}
         sx={{ px: 2, py: 1.5, bgcolor: BRAND.dark, flexShrink: 0 }}
       >
-        <DesktopWindowsOutlinedIcon sx={{ color: BRAND.teal, fontSize: 18 }} />
+        <DesktopWindowsOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: 13 }}
+          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: TEXT.md }}
         >
           Screen Share · {devLabel}
         </Typography>
@@ -1033,7 +1033,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
               }
               sx={{
                 textTransform: "none",
-                fontSize: 12,
+                fontSize: TEXT.sm,
                 py: 0.25,
                 ...(controlEnabled
                   ? {
@@ -1272,7 +1272,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
               label={rtt == null ? "RTT —" : `RTT ${rtt}ms`}
               sx={{
                 fontWeight: 700,
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 height: 20,
                 bgcolor: "rgba(255,255,255,0.06)",
                 color: rttColor(rtt, ROLE),
@@ -1417,7 +1417,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
               borderColor: ROLE.critical,
               color: ROLE.critical,
               textTransform: "none",
-              fontSize: 12,
+              fontSize: TEXT.sm,
               py: 0.25,
               "&:hover": { borderColor: ROLE.critical, bgcolor: ROLE.criticalSoft }
             }}

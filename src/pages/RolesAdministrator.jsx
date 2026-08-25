@@ -48,7 +48,7 @@ import {
   updateTenantRole,
   deleteTenantRole,
 } from "../api/roles";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -73,16 +73,16 @@ function RoleRow({ role, onEdit, onDelete }) {
     >
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
             {role.name}
           </Typography>
           {role.isSystem ? (
             <Tooltip title="Built-in role — can't be edited or deleted">
-              <LockOutlinedIcon sx={{ fontSize: 16, color: BRAND.gray }} />
+              <LockOutlinedIcon sx={{ fontSize: ICON.md, color: BRAND.gray }} />
             </Tooltip>
           ) : null}
         </Stack>
-        <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
           {count} capabilit{count === 1 ? "y" : "ies"} granted
         </Typography>
       </Box>
@@ -129,18 +129,18 @@ function CapabilityRow({ capability, granted, callerHasIt, onToggle }) {
       }}
     >
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography sx={{ fontSize: 13.5, fontWeight: 600, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
           {capability.label}
         </Typography>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
           {capability.description}
         </Typography>
         {!capability.entitled ? (
-          <Typography sx={{ fontSize: 11.5, color: BRAND.alert.warningText, mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.warningText, mt: 0.25 }}>
             Not included in your tenant's current plan
           </Typography>
         ) : !callerHasIt ? (
-          <Typography sx={{ fontSize: 11.5, color: BRAND.alert.warningText, mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.warningText, mt: 0.25 }}>
             You don't have this permission yourself
           </Typography>
         ) : null}
@@ -233,7 +233,7 @@ function RoleDialog({
               <Box key={group}>
                 <Typography
                   sx={{
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     fontWeight: 800,
                     letterSpacing: 0.5,
                     textTransform: "uppercase",

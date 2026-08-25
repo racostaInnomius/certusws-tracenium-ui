@@ -21,7 +21,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   listMaintenanceWindows,
   createMaintenanceWindow,
@@ -104,7 +104,7 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
           When deployments are allowed to dispatch. With no windows, deployments go out immediately.
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -147,16 +147,16 @@ export default function MaintenanceWindowsPanel({ canManage, notify }) {
           <TableBody>
             {items.map((it) => (
               <TableRow key={it.id} hover sx={{ opacity: it.enabled ? 1 : 0.55 }}>
-                <TableCell><Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{it.name}</Typography></TableCell>
-                <TableCell><Typography sx={{ fontSize: 13, color: BRAND.dark }}>{formatDays(it.daysOfWeek)}</Typography></TableCell>
-                <TableCell><Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>{formatTimeRange(it.startMinute, it.durationMinutes)}</Typography></TableCell>
-                <TableCell><Typography sx={{ fontSize: 12, color: BRAND.gray }}>{it.timezone}</Typography></TableCell>
+                <TableCell><Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{it.name}</Typography></TableCell>
+                <TableCell><Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>{formatDays(it.daysOfWeek)}</Typography></TableCell>
+                <TableCell><Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>{formatTimeRange(it.startMinute, it.durationMinutes)}</Typography></TableCell>
+                <TableCell><Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{it.timezone}</Typography></TableCell>
                 <TableCell>
                   <Chip
                     size="small"
                     label={it.enabled ? "Enabled" : "Disabled"}
                     sx={{
-                      height: 20, fontSize: 11, fontWeight: 700,
+                      height: 20, fontSize: TEXT.xs, fontWeight: 700,
                       bgcolor: it.enabled ? BRAND.alert?.successSoft : BRAND.darkSoft,
                       color: it.enabled ? BRAND.alert?.success : BRAND.gray,
                     }}

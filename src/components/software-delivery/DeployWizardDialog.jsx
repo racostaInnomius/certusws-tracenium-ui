@@ -38,7 +38,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listKnownDevices } from "../../api/jobs";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
@@ -284,7 +284,7 @@ export default function DeployWizardDialog({
                     }}
                   />
                 ) : null}
-                <Typography sx={{ fontSize: 12, color: BRAND.gray, ml: 1 }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, ml: 1 }}>
                   {pkg.detectionRule
                     ? `Detection: ${pkg.detectionRule.type}`
                     : "No detection rule (will install on every dispatch)"}
@@ -366,8 +366,8 @@ export default function DeployWizardDialog({
                 {groupCatalog.map((g) => (
                   <MenuItem key={g.id} value={String(g.id)}>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{g.name}</Typography>
-                      <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+                      <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>{g.name}</Typography>
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                         {g.kind === "dynamic" ? "dyn" : "static"}
                         {Number.isFinite(g.memberCount) ? ` · ${g.memberCount}` : ""}
                       </Typography>
@@ -477,13 +477,13 @@ export default function DeployWizardDialog({
                 <Typography sx={{ fontWeight: 700, color: BRAND.dark }}>
                   {pkg.name} <span style={{ color: BRAND.gray, fontWeight: 500 }}>v{pkg.version}</span>
                 </Typography>
-                <Typography sx={{ fontSize: 12, color: BRAND.gray, mt: 0.5 }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.5 }}>
                   {pkg.platform} / {pkg.arch} / {pkg.format.toUpperCase()}
                   {pkg.sizeBytes ? ` · ${formatBytes(pkg.sizeBytes)}` : ""}
                 </Typography>
                 <Typography
                   sx={{
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     fontFamily: "monospace",
                     color: BRAND.gray,
                     mt: 0.5,
@@ -508,7 +508,7 @@ export default function DeployWizardDialog({
                     <Typography sx={{ fontWeight: 700, color: BRAND.dark }}>
                       Asset group: {selectedGroup?.name || groupId}
                     </Typography>
-                    <Typography sx={{ fontSize: 12, color: BRAND.gray, mt: 0.5 }}>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.5 }}>
                       {selectedGroup?.kind === "dynamic"
                         ? "Dynamic — backend re-evaluates criteria at dispatch."
                         : "Static — current member list will be used."}
@@ -530,7 +530,7 @@ export default function DeployWizardDialog({
                           label={id}
                           sx={{
                             fontFamily: "monospace",
-                            fontSize: 11,
+                            fontSize: TEXT.xs,
                             bgcolor: BRAND.tealSoft,
                             color: BRAND.tealText,
                           }}
@@ -557,7 +557,7 @@ export default function DeployWizardDialog({
                 "& .MuiAlert-icon": { color: BRAND.alert?.warning },
               }}
             >
-              <Typography sx={{ fontSize: 13 }}>
+              <Typography sx={{ fontSize: TEXT.md }}>
                 Firing will create one <strong>{MODE_LABELS[mode].toLowerCase()}</strong> job per device.
                 {pkg.detectionRule
                   ? mode === "uninstall"

@@ -49,7 +49,7 @@ import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, ROLE, TEXT } from "../theme/brand";
 import { severityMeta } from "../theme/severity";
 import RuleNotifyEditor, { NotifyBadge } from "../components/Alerts/RuleNotifyEditor";
 import {
@@ -161,10 +161,10 @@ function SummaryCard({ title, value, icon, accent = BRAND.teal, tint = BRAND.tea
         {icon}
       </Box>
       <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
           {title}
         </Typography>
-        <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
+        <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>
           {value}
         </Typography>
         {subtext ? (
@@ -475,7 +475,7 @@ export default function Alerts() {
                         sx={{
                           fontFamily: "monospace",
                           color: e.deviceId ? BRAND.dark : BRAND.gray,
-                          fontSize: 12
+                          fontSize: TEXT.sm
                         }}
                       >
                         {e.deviceId || "—"}
@@ -716,7 +716,7 @@ function ManageRulesDrawer({
                         sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.tealText }}
                       />
                     </Stack>
-                    <Typography variant="body2" sx={{ color: BRAND.gray, fontSize: 13 }}>
+                    <Typography variant="body2" sx={{ color: BRAND.gray, fontSize: TEXT.md }}>
                       {t.description}
                     </Typography>
                     {/* Delivery config only exists once the template has a
@@ -729,7 +729,7 @@ function ManageRulesDrawer({
                           onClick={() =>
                             setNotifyOpenFor(notifyOpenFor === primary.id ? null : primary.id)
                           }
-                          sx={{ textTransform: "none", fontSize: 12, color: BRAND.tealText, minWidth: 0 }}
+                          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
                         >
                           {notifyOpenFor === primary.id ? "Hide" : "Email…"}
                         </Button>
@@ -813,7 +813,7 @@ function ManageRulesDrawer({
                         <Button
                           size="small"
                           onClick={() => setNotifyOpenFor(notifyOpenFor === r.id ? null : r.id)}
-                          sx={{ textTransform: "none", fontSize: 12, color: BRAND.tealText, minWidth: 0 }}
+                          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
                         >
                           {notifyOpenFor === r.id ? "Hide" : "Email…"}
                         </Button>
@@ -906,7 +906,7 @@ function EventDetailDrawer({ event, onClose }) {
             p: 1.5,
             bgcolor: BRAND.surfaceMuted,
             borderRadius: 2,
-            fontSize: 11,
+            fontSize: TEXT.xs,
             fontFamily: "monospace",
             color: BRAND.dark,
             overflowX: "auto",
@@ -925,7 +925,7 @@ function DetailRow({ label, value, mono = false }) {
     <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 600,
           minWidth: 82,
@@ -937,7 +937,7 @@ function DetailRow({ label, value, mono = false }) {
       </Typography>
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: TEXT.md,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
           wordBreak: "break-all",

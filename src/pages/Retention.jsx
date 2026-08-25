@@ -44,7 +44,7 @@ import {
   updateRetentionPolicy,
   runRetention,
 } from "../api/retention";
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND, ROLE, TEXT } from "../theme/brand";
 import { formatBytes } from "../utils/format";
 
 // Bind each policy field to:
@@ -342,10 +342,10 @@ export default function Retention({ onNavigate }) {
             <SectionPaper variant="panel" sx={{ p: 2.5, height: "100%" }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase" }}>
                     Cleanup worker
                   </Typography>
-                  <Typography sx={{ fontSize: 28, fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT["3xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1, mt: 0.5 }}>
                     {isEnabled ? "Enabled" : "Paused"}
                   </Typography>
                 </Box>
@@ -401,17 +401,17 @@ export default function Retention({ onNavigate }) {
                 <Chip
                   size="small"
                   label={`Preserve baseline: ${policy.preserveBaseline ? "yes" : "no"}`}
-                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600, fontSize: 11 }}
+                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600, fontSize: TEXT.xs }}
                 />
                 <Chip
                   size="small"
                   label={`Preserve latest: ${policy.preserveLatest ? "yes" : "no"}`}
-                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600, fontSize: 11 }}
+                  sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600, fontSize: TEXT.xs }}
                 />
                 <Chip
                   size="small"
                   label={`Batch: ${formatRows(Number(policy.batchSize ?? 0))}`}
-                  sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 600, fontSize: 11 }}
+                  sx={{ bgcolor: BRAND.darkSoft, color: BRAND.dark, fontWeight: 600, fontSize: TEXT.xs }}
                 />
               </Stack>
             </SectionPaper>
@@ -421,7 +421,7 @@ export default function Retention({ onNavigate }) {
           <Grid size={{ xs: 12, md: 7 }}>
             <SectionPaper variant="panel" sx={{ p: 2.5, height: "100%" }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-                <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+                <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
                   Per-table retention windows
                 </Typography>
                 {isDirty ? (
@@ -536,7 +536,7 @@ export default function Retention({ onNavigate }) {
                               key={r.table}
                               size="small"
                               label={`${r.table}: ${formatRows(Number(r.candidates))}`}
-                              sx={{ bgcolor: BRAND.surface, color: BRAND.dark, fontSize: 11 }}
+                              sx={{ bgcolor: BRAND.surface, color: BRAND.dark, fontSize: TEXT.xs }}
                             />
                           ))
                       : null}

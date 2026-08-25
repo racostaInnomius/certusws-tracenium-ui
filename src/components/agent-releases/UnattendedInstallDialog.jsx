@@ -22,7 +22,7 @@ import {
 } from "@mui/material";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   TOKEN_PLACEHOLDER,
   unattendedInstallCommand,
@@ -71,7 +71,7 @@ export default function UnattendedInstallDialog({ open, row, onClose, notify }) 
                   bgcolor: BRAND.darkSoft,
                   color: BRAND.dark,
                   fontFamily: "monospace",
-                  fontSize: 12,
+                  fontSize: TEXT.sm,
                   lineHeight: 1.7,
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-all",

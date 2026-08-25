@@ -36,7 +36,7 @@ import { DataGrid } from "@mui/x-data-grid";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 
-import { BRAND, DATAGRID_SX } from "../../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import SectionPaper from "../common/SectionPaper";
 import { getFindings } from "../../api/patchManagement";
@@ -52,7 +52,7 @@ function severityChip(severity) {
     <Chip
       size="small"
       label={severity || "—"}
-      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: e.bg, color: e.color }}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: e.bg, color: e.color }}
     />
   );
 }
@@ -138,10 +138,10 @@ export default function FindingsPanel({
       minWidth: 280,
       renderCell: (p) => (
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {p.row.title || p.row.checkId}
           </Typography>
-          <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
             {p.row.checkId}
           </Typography>
         </Box>
@@ -152,7 +152,7 @@ export default function FindingsPanel({
       headerName: "Devices",
       width: 100,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
           {p.row.devicesAffected}
         </Typography>
       ),
@@ -166,11 +166,11 @@ export default function FindingsPanel({
           <Tooltip title="The agent has a click-to-fix handler for this check">
             <Chip
               size="small"
-              icon={<VerifiedOutlinedIcon style={{ fontSize: 13 }} />}
+              icon={<VerifiedOutlinedIcon style={{ fontSize: ICON.xs }} />}
               label="ready"
               sx={{
                 height: 20,
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 fontWeight: 700,
                 bgcolor: BRAND.alert?.successSoft,
                 color: BRAND.alert?.success,
@@ -184,7 +184,7 @@ export default function FindingsPanel({
               label="manual"
               sx={{
                 height: 20,
-                fontSize: 11,
+                fontSize: TEXT.xs,
                 fontWeight: 700,
                 bgcolor: BRAND.darkSoft,
                 color: BRAND.gray,
@@ -200,12 +200,12 @@ export default function FindingsPanel({
       minWidth: 240,
       renderCell: (p) => {
         const text = p.row.remediationSummary;
-        if (!text) return <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>;
+        if (!text) return <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>;
         return (
           <Tooltip title={text} placement="left">
             <Typography
               sx={{
-                fontSize: 12, color: BRAND.dark,
+                fontSize: TEXT.sm, color: BRAND.dark,
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               }}
             >
@@ -220,7 +220,7 @@ export default function FindingsPanel({
       headerName: "Last detected",
       width: 130,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
           {formatTime(p.row.lastDetectedUtc)}
         </Typography>
       ),

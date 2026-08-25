@@ -74,7 +74,7 @@ import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 
@@ -150,7 +150,7 @@ function StatusChip({ state }) {
       label={label}
       sx={{
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         height: 20,
         bgcolor: bg,
         color,
@@ -183,9 +183,9 @@ function TransferRow({ transfer, onCancel }) {
     >
       <Stack direction="row" spacing={1} alignItems="center">
         {transfer.direction === "download" ? (
-          <DownloadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }} />
+          <DownloadOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.teal, flexShrink: 0 }} />
         ) : (
-          <UploadOutlinedIcon sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }} />
+          <UploadOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.teal, flexShrink: 0 }} />
         )}
         <Tooltip title={transfer.name} placement="top">
           <Typography
@@ -205,12 +205,12 @@ function TransferRow({ transfer, onCancel }) {
         </Tooltip>
         {transfer.status === "failed" ? (
           <Tooltip title={transfer.errorMsg || "Transfer failed"} placement="top">
-            <ErrorOutlineIcon sx={{ fontSize: 14, color: ROLE.critical, flexShrink: 0 }} />
+            <ErrorOutlineIcon sx={{ fontSize: ICON.sm, color: ROLE.critical, flexShrink: 0 }} />
           </Tooltip>
         ) : transfer.status === "completed" ? (
-          <CheckCircleOutlineIcon sx={{ fontSize: 14, color: ROLE.positive, flexShrink: 0 }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: ICON.sm, color: ROLE.positive, flexShrink: 0 }} />
         ) : transfer.status === "cancelled" ? (
-          <CancelOutlinedIcon sx={{ fontSize: 14, color: BRAND.gray, flexShrink: 0 }} />
+          <CancelOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray, flexShrink: 0 }} />
         ) : null}
         <Typography variant="caption" sx={{ color: BRAND.gray, whiteSpace: "nowrap", flexShrink: 0 }}>
           {transfer.status === "failed"
@@ -230,7 +230,7 @@ function TransferRow({ transfer, onCancel }) {
               onClick={() => onCancel?.(transfer.id)}
               sx={{ color: BRAND.gray, p: 0.25, flexShrink: 0 }}
             >
-              <CloseOutlinedIcon sx={{ fontSize: 13 }} />
+              <CloseOutlinedIcon sx={{ fontSize: ICON.xs }} />
             </IconButton>
           </Tooltip>
         )}
@@ -912,10 +912,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         spacing={1}
         sx={{ px: 2, py: 1.5, bgcolor: BRAND.dark, flexShrink: 0 }}
       >
-        <FolderOutlinedIcon sx={{ color: BRAND.teal, fontSize: 18 }} />
+        <FolderOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
         <Typography
           variant="body2"
-          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: 13 }}
+          sx={{ fontWeight: 700, color: BRAND.surface, flex: 1, fontSize: TEXT.md }}
         >
           File Manager · {devLabel}
         </Typography>
@@ -1030,7 +1030,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                       variant={isInsideRoots(currentPath, [r]) ? "filled" : "outlined"}
                       sx={{
                         maxWidth: 140,
-                        fontSize: 11,
+                        fontSize: TEXT.xs,
                         height: 22,
                         cursor: "pointer",
                         ...(isInsideRoots(currentPath, [r])
@@ -1063,7 +1063,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                 borderColor: BRAND.teal,
                 color: BRAND.teal,
                 textTransform: "none",
-                fontSize: 12,
+                fontSize: TEXT.sm,
                 "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft }
               }}
             >
@@ -1092,7 +1092,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                 borderBottom: `1px solid ${BRAND.border}`
               }}
             >
-              <LockOutlinedIcon sx={{ fontSize: 16, color: ROLE.caution }} />
+              <LockOutlinedIcon sx={{ fontSize: ICON.md, color: ROLE.caution }} />
               <Typography variant="caption" sx={{ color: ROLE.caution, fontWeight: 600 }}>
                 {pathNotice}
               </Typography>
@@ -1134,7 +1134,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                     pointerEvents: "none"
                   }}
                 >
-                  <CloudUploadOutlinedIcon sx={{ fontSize: 36, color: BRAND.teal }} />
+                  <CloudUploadOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.teal }} />
                   <Typography variant="body2" sx={{ color: BRAND.teal, fontWeight: 700 }}>
                     Drop files to upload to {currentPath}
                   </Typography>
@@ -1163,7 +1163,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                     onClick={handleDownloadSelected}
                     sx={{
                       textTransform: "none",
-                      fontSize: 12,
+                      fontSize: TEXT.sm,
                       color: BRAND.teal,
                       borderColor: BRAND.teal,
                       "&:hover": { bgcolor: BRAND.tealSoft }
@@ -1175,7 +1175,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                   <Button
                     size="small"
                     onClick={() => setSelected(new Set())}
-                    sx={{ textTransform: "none", fontSize: 12, color: BRAND.gray }}
+                    sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.gray }}
                   >
                     Clear
                   </Button>
@@ -1227,17 +1227,17 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                             sx={{ color: BRAND.gray, "&.Mui-checked": { color: BRAND.teal } }}
                           />
                         </TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12 }}>
+                        <TableCell sx={{ fontWeight: 700, color: BRAND.dark, fontSize: TEXT.sm }}>
                           Name
                         </TableCell>
                         <TableCell
                           align="right"
-                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12, width: 90 }}
+                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: TEXT.sm, width: 90 }}
                         >
                           Size
                         </TableCell>
                         <TableCell
-                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 12, width: 150 }}
+                          sx={{ fontWeight: 700, color: BRAND.dark, fontSize: TEXT.sm, width: 150 }}
                         >
                           Modified
                         </TableCell>
@@ -1283,15 +1283,15 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                                 />
                               )}
                             </TableCell>
-                            <TableCell sx={{ fontSize: 12 }}>
+                            <TableCell sx={{ fontSize: TEXT.sm }}>
                               <Stack direction="row" spacing={0.75} alignItems="center">
                                 {entry.isDir ? (
                                   <FolderOutlinedIcon
-                                    sx={{ fontSize: 15, color: BRAND.teal, flexShrink: 0 }}
+                                    sx={{ fontSize: TEXT.base, color: BRAND.teal, flexShrink: 0 }}
                                   />
                                 ) : (
                                   <InsertDriveFileOutlinedIcon
-                                    sx={{ fontSize: 15, color: BRAND.gray, flexShrink: 0 }}
+                                    sx={{ fontSize: TEXT.base, color: BRAND.gray, flexShrink: 0 }}
                                   />
                                 )}
                                 <Tooltip title={entry.name} placement="top">
@@ -1311,10 +1311,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                                 </Tooltip>
                               </Stack>
                             </TableCell>
-                            <TableCell align="right" sx={{ fontSize: 12, color: BRAND.gray }}>
+                            <TableCell align="right" sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                               {entry.isDir ? "—" : formatBytes(entry.size)}
                             </TableCell>
-                            <TableCell sx={{ fontSize: 12, color: BRAND.gray }}>
+                            <TableCell sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                               {entry.modifiedAt
                                 ? new Date(entry.modifiedAt).toLocaleString(undefined, {
                                     year: "numeric",
@@ -1337,7 +1337,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                                     }}
                                     sx={{ color: BRAND.teal }}
                                   >
-                                    <DownloadOutlinedIcon sx={{ fontSize: 15 }} />
+                                    <DownloadOutlinedIcon sx={{ fontSize: ICON.sm }} />
                                   </IconButton>
                                 </Tooltip>
                               )}

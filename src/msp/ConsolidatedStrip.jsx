@@ -22,7 +22,7 @@ import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsAc
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import SectionPaper from "../components/common/SectionPaper";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { fetchConsolidated } from "./mspApi";
 
 function Kpi({ icon, label, value, sub, accent = BRAND.teal, tint = BRAND.tealSoft }) {
@@ -39,7 +39,7 @@ function Kpi({ icon, label, value, sub, accent = BRAND.teal, tint = BRAND.tealSo
           {icon}
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 24, fontWeight: 800, color: BRAND.dark, lineHeight: 1.05 }}>
+          <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.05 }}>
             {value}
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
@@ -155,7 +155,7 @@ export default function ConsolidatedStrip({ onOpenClient }) {
                   </Typography>
                   {ex.reasons.map((r, i) => (
                     <Chip key={i} label={r} size="small"
-                      sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: 11 }} />
+                      sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: TEXT.xs }} />
                   ))}
                 </Box>
               ))}

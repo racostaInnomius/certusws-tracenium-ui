@@ -31,7 +31,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import UploadOutlinedIcon from "@mui/icons-material/UploadOutlined";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           size="small"
           value={dirFilter}
           onChange={(e) => setDirFilter(e.target.value)}
-          sx={{ fontSize: 12, height: 32, minWidth: 140 }}
+          sx={{ fontSize: TEXT.sm, height: 32, minWidth: 140 }}
         >
           <MenuItem value="all">All directions</MenuItem>
           <MenuItem value="download">Download</MenuItem>
@@ -122,7 +122,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           size="small"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          sx={{ fontSize: 12, height: 32, minWidth: 150 }}
+          sx={{ fontSize: TEXT.sm, height: 32, minWidth: 150 }}
         >
           <MenuItem value="all">All statuses</MenuItem>
           <MenuItem value="started">Active</MenuItem>
@@ -137,7 +137,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           value={filenameFilter}
           onChange={(e) => setFilenameFilter(e.target.value)}
           sx={{
-            "& .MuiInputBase-input": { fontSize: 12, py: "5px" },
+            "& .MuiInputBase-input": { fontSize: TEXT.sm, py: "5px" },
             minWidth: 180
           }}
         />
@@ -148,20 +148,20 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Started</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Filename</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Direction</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Remote path</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Started</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Filename</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Direction</TableCell>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Remote path</TableCell>
               <TableCell
-                sx={{ fontWeight: 700, fontSize: 12, width: 90 }}
+                sx={{ fontWeight: 700, fontSize: TEXT.sm, width: 90 }}
                 align="right"
               >
                 Size
               </TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12, width: 120 }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm, width: 120 }}>
                 Status
               </TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: 12, width: 110 }}>
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm, width: 110 }}>
                 Session
               </TableCell>
             </TableRow>
@@ -176,7 +176,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     spacing={1}
                     sx={{ color: BRAND.gray, textAlign: "center" }}
                   >
-                    <FolderOutlinedIcon sx={{ fontSize: 36, color: BRAND.gray }} />
+                    <FolderOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray }} />
                     <Typography
                       variant="body2"
                       sx={{ color: BRAND.dark, fontWeight: 600 }}
@@ -206,7 +206,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                 return (
                   <TableRow key={t.id ?? t.transferId} hover>
                     {/* Started */}
-                    <TableCell sx={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                    <TableCell sx={{ fontSize: TEXT.sm, whiteSpace: "nowrap" }}>
                       {t.startedAt
                         ? new Date(t.startedAt).toLocaleString(undefined, {
                             year: "numeric",
@@ -219,7 +219,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     </TableCell>
 
                     {/* Filename */}
-                    <TableCell sx={{ fontSize: 12, maxWidth: 200 }}>
+                    <TableCell sx={{ fontSize: TEXT.sm, maxWidth: 200 }}>
                       <Tooltip title={t.remotePath || t.filename || ""} placement="top">
                         <Typography
                           variant="caption"
@@ -239,15 +239,15 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     </TableCell>
 
                     {/* Direction */}
-                    <TableCell sx={{ fontSize: 12 }}>
+                    <TableCell sx={{ fontSize: TEXT.sm }}>
                       <Stack direction="row" spacing={0.5} alignItems="center">
                         {t.direction === "download" ? (
                           <DownloadOutlinedIcon
-                            sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }}
+                            sx={{ fontSize: TEXT.base, color: BRAND.teal, flexShrink: 0 }}
                           />
                         ) : (
                           <UploadOutlinedIcon
-                            sx={{ fontSize: 14, color: BRAND.teal, flexShrink: 0 }}
+                            sx={{ fontSize: TEXT.base, color: BRAND.teal, flexShrink: 0 }}
                           />
                         )}
                         <Typography
@@ -260,7 +260,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     </TableCell>
 
                     {/* Remote path */}
-                    <TableCell sx={{ fontSize: 12, maxWidth: 240 }}>
+                    <TableCell sx={{ fontSize: TEXT.sm, maxWidth: 240 }}>
                       <Tooltip title={t.remotePath || ""} placement="top">
                         <Typography
                           variant="caption"
@@ -282,7 +282,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     {/* Size */}
                     <TableCell
                       align="right"
-                      sx={{ fontSize: 12, color: BRAND.gray, whiteSpace: "nowrap" }}
+                      sx={{ fontSize: TEXT.sm, color: BRAND.gray, whiteSpace: "nowrap" }}
                     >
                       {t.status === "completed"
                         ? formatBytes(t.transferredBytes ?? t.sizeBytes)
@@ -300,7 +300,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                           sx={{
                             height: 20,
                             fontWeight: 700,
-                            fontSize: 11,
+                            fontSize: TEXT.xs,
                             bgcolor: sm.bg,
                             color: sm.fg,
                             border: `1px solid ${sm.fg}33`
@@ -325,7 +325,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                     </TableCell>
 
                     {/* Session ID (truncated) */}
-                    <TableCell sx={{ fontSize: 12, maxWidth: 110 }}>
+                    <TableCell sx={{ fontSize: TEXT.sm, maxWidth: 110 }}>
                       <Tooltip title={t.sessionId || ""} placement="top">
                         <Typography
                           variant="caption"

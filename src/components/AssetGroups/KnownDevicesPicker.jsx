@@ -21,7 +21,7 @@ import {
   Typography
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { listKnownDevices } from "../../api/jobs";
 import { listFrom } from "../../api/shape";
 
@@ -214,7 +214,7 @@ export default function KnownDevicesPicker({
         >
           Members
         </Typography>
-        <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
           <strong>{selectedIds.size}</strong> {selectedLabel} · {total} known
         </Typography>
       </Box>
@@ -299,7 +299,7 @@ export default function KnownDevicesPicker({
                     alignItems: "center",
                     justifyContent: "center",
                     color: "#fff",
-                    fontSize: 12,
+                    fontSize: TEXT.sm,
                     fontWeight: 800,
                     flexShrink: 0,
                   }}
@@ -316,7 +316,7 @@ export default function KnownDevicesPicker({
                   >
                     <Typography
                       sx={{
-                        fontSize: 13,
+                        fontSize: TEXT.md,
                         fontWeight: 700,
                         color: BRAND.dark,
                         overflow: "hidden",
@@ -340,7 +340,7 @@ export default function KnownDevicesPicker({
                         label={groupChipLabel}
                         sx={{
                           height: 20,
-                          fontSize: 10.5,
+                          fontSize: TEXT.xs,
                           fontWeight: 800,
                           border: `1px solid ${d.isGrouped ? `${BRAND.teal}66` : BRAND.border}`,
                           bgcolor: d.isGrouped ? BRAND.tealSoft : BRAND.surface,
@@ -354,7 +354,7 @@ export default function KnownDevicesPicker({
                   <Typography
                     sx={{
                       mt: 0.15,
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       color: BRAND.gray,
                       fontFamily: "monospace",
                       overflow: "hidden",
@@ -369,7 +369,7 @@ export default function KnownDevicesPicker({
                     <Typography
                       sx={{
                         mt: 0.25,
-                        fontSize: 11,
+                        fontSize: TEXT.xs,
                         color: BRAND.tealText,
                         fontWeight: 700,
                         overflow: "hidden",
@@ -396,7 +396,7 @@ export default function KnownDevicesPicker({
                       label={d.platform}
                       sx={{
                         height: 18,
-                        fontSize: 10.5,
+                        fontSize: TEXT.xs,
                         bgcolor: BRAND.darkSoft,
                         color: BRAND.dark,
                         fontWeight: 700,
@@ -409,7 +409,7 @@ export default function KnownDevicesPicker({
                       label="online"
                       sx={{
                         height: 18,
-                        fontSize: 10.5,
+                        fontSize: TEXT.xs,
                         bgcolor: ROLE.positiveSoft,
                         color: ROLE.positive,
                         fontWeight: 700,
@@ -430,7 +430,7 @@ export default function KnownDevicesPicker({
         justifyContent="space-between"
         sx={{ mt: 1 }}
       >
-        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           Page {page + 1} of {totalPages}
         </Typography>
         <Stack direction="row" spacing={1} justifyContent="flex-end">

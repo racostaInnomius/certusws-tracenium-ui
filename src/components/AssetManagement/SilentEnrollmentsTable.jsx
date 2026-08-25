@@ -34,7 +34,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import { listSilentEnrollments } from "../../api/devices";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 
 /**
  * Qué significa cada motivo y, sobre todo, A QUIÉN hay que mandarlo.
@@ -131,10 +131,10 @@ export default function SilentEnrollmentsTable({ onBack }) {
         sx={{ p: 2, gap: 1.5, borderBottom: `1px solid ${BRAND.border}` }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: 15 }}>
+          <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
             Enrolled, not reporting
           </Typography>
-          <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: 0.25 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.25 }}>
             These devices completed enrollment but have never sent an inventory snapshot, so they do
             not appear anywhere else in the portal.
           </Typography>
@@ -167,10 +167,10 @@ export default function SilentEnrollmentsTable({ onBack }) {
 
       {!loading && !error && rows.length === 0 ? (
         <Box sx={{ p: 4, textAlign: "center" }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
             Every enrolled device is reporting
           </Typography>
-          <Typography sx={{ fontSize: 13, color: "text.secondary", mt: 1 }}>
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", mt: 1 }}>
             Nothing to chase. A device shows up here once it has been enrolled for more than two
             hours without sending inventory.
           </Typography>
@@ -184,14 +184,14 @@ export default function SilentEnrollmentsTable({ onBack }) {
               <Chip
                 size="small"
                 label={`${counts.never} never connected — check firewall`}
-                sx={{ height: 22, fontSize: 11.5, fontWeight: 700, bgcolor: REASONS.never_connected.bg, color: REASONS.never_connected.tone }}
+                sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: REASONS.never_connected.bg, color: REASONS.never_connected.tone }}
               />
             ) : null}
             {counts.silent > 0 ? (
               <Chip
                 size="small"
                 label={`${counts.silent} connected but silent — check the agent`}
-                sx={{ height: 22, fontSize: 11.5, fontWeight: 700, bgcolor: REASONS.connected_silent.bg, color: REASONS.connected_silent.tone }}
+                sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: REASONS.connected_silent.bg, color: REASONS.connected_silent.tone }}
               />
             ) : null}
           </Stack>
@@ -213,7 +213,7 @@ export default function SilentEnrollmentsTable({ onBack }) {
                   return (
                     <TableRow key={r.deviceId} hover>
                       <TableCell>
-                        <Typography sx={{ fontWeight: 700, fontSize: 13, color: BRAND.dark }}>
+                        <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark }}>
                           {r.hostname || "(name unknown)"}
                         </Typography>
                         {/* El UUID va a la vista porque es lo que identifica al
@@ -221,7 +221,7 @@ export default function SilentEnrollmentsTable({ onBack }) {
                             botón de copiar, porque nadie lo transcribe a mano. */}
                         <Stack direction="row" spacing={0.5} alignItems="center">
                           <Typography
-                            sx={{ fontSize: 10.5, color: "text.secondary", fontFamily: "monospace" }}
+                            sx={{ fontSize: TEXT.xs, color: "text.secondary", fontFamily: "monospace" }}
                           >
                             {r.deviceId}
                           </Typography>
@@ -239,7 +239,7 @@ export default function SilentEnrollmentsTable({ onBack }) {
                                 color: "text.secondary",
                               }}
                             >
-                              <ContentCopyRoundedIcon sx={{ fontSize: 12 }} />
+                              <ContentCopyRoundedIcon sx={{ fontSize: ICON.xs }} />
                             </Box>
                           </Tooltip>
                         </Stack>
@@ -251,7 +251,7 @@ export default function SilentEnrollmentsTable({ onBack }) {
                             label={meta.label}
                             sx={{
                               height: 20,
-                              fontSize: 11,
+                              fontSize: TEXT.xs,
                               fontWeight: 800,
                               bgcolor: meta.bg,
                               color: meta.tone,
@@ -259,13 +259,13 @@ export default function SilentEnrollmentsTable({ onBack }) {
                           />
                         </Tooltip>
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12.5 }}>{r.agentVersion || "—"}</TableCell>
-                      <TableCell sx={{ fontSize: 12.5 }}>
+                      <TableCell sx={{ fontSize: TEXT.sm }}>{r.agentVersion || "—"}</TableCell>
+                      <TableCell sx={{ fontSize: TEXT.sm }}>
                         <Tooltip title={formatWhen(r.enrolledAt)} arrow>
                           <span>{formatAge(r.hoursSinceEnroll)} ago</span>
                         </Tooltip>
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12.5, color: r.lastSeenAt ? "inherit" : ROLE.critical }}>
+                      <TableCell sx={{ fontSize: TEXT.sm, color: r.lastSeenAt ? "inherit" : ROLE.critical }}>
                         {formatWhen(r.lastSeenAt)}
                       </TableCell>
                     </TableRow>

@@ -27,7 +27,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import AsyncState from "../components/common/AsyncState";
@@ -202,21 +202,21 @@ export default function LocationSites({ onNavigate }) {
                 }}
               >
                 <Typography
-                  sx={{ fontFamily: "monospace", fontSize: 13, color: BRAND.dark, minWidth: 150 }}
+                  sx={{ fontFamily: "monospace", fontSize: TEXT.md, color: BRAND.dark, minWidth: 150 }}
                 >
                   {row.cidr}
                 </Typography>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+                  <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
                     {row.siteName}
                     {row.city ? (
-                      <Typography component="span" sx={{ fontSize: 13, color: "text.secondary", ml: 1 }}>
+                      <Typography component="span" sx={{ fontSize: TEXT.md, color: "text.secondary", ml: 1 }}>
                         {row.city}
                       </Typography>
                     ) : null}
                   </Typography>
                   {row.description ? (
-                    <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+                    <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                       {row.description}
                     </Typography>
                   ) : null}
@@ -321,7 +321,7 @@ export default function LocationSites({ onNavigate }) {
               fullWidth
             />
             {fieldError.message && !fieldError.field ? (
-              <Typography sx={{ fontSize: 13, color: BRAND.alert.error }}>{fieldError.message}</Typography>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.error }}>{fieldError.message}</Typography>
             ) : null}
           </Stack>
         </DialogContent>

@@ -10,7 +10,7 @@
 import * as React from "react";
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 // Low confidence is the loud one — it means "look harder before you publish".
 const CONFIDENCE_META = {
@@ -34,19 +34,19 @@ export default function IntakeProposalBanner({ intake }) {
   return (
     <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.tealSoft, border: `1px solid ${BRAND.border}`, mt: 1 }}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
-        <AutoAwesomeOutlinedIcon sx={{ fontSize: 16, color: BRAND.tealText }} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>AI proposal</Typography>
+        <AutoAwesomeOutlinedIcon sx={{ fontSize: ICON.md, color: BRAND.tealText }} />
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>AI proposal</Typography>
         <Chip
           size="small"
           label={conf.label}
-          sx={{ height: 20, fontSize: 11, fontWeight: 800, bgcolor: conf.bg, color: conf.fg }}
+          sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: conf.bg, color: conf.fg }}
         />
-        <Typography sx={{ fontSize: 11, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
           · review + edit below before publishing; nothing is auto-applied
         </Typography>
       </Stack>
       {notes ? (
-        <Typography sx={{ fontSize: 12, color: BRAND.dark, mt: 1 }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, mt: 1 }}>
           <strong>Notes:</strong> {notes}
         </Typography>
       ) : null}

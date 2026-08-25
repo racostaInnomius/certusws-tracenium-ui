@@ -58,7 +58,7 @@ import { getPluginCoverageSummary } from "../api/overview";
 import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
 import OnlineDot from "../components/common/OnlineDot";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
@@ -310,7 +310,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
               mt: 1,
               "& .MuiInputBase-root": {
                 fontFamily: "monospace",
-                fontSize: 12.5,
+                fontSize: TEXT.sm,
                 bgcolor: BRAND.surface,
               },
             }}
@@ -1245,7 +1245,7 @@ function TenantTab(props) {
           sx={{ minWidth: 0 }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Tenant policy
             </Typography>
           </Box>
@@ -1341,10 +1341,10 @@ function TenantTab(props) {
           sx={{ minWidth: 0, overflow: "hidden" }}
         >
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
-            <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Rollout status
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {tenantStatus.length} devices tracked · click a row to edit override
             </Typography>
           </Box>
@@ -1433,7 +1433,7 @@ function DeviceTab(props) {
             color: "text.secondary",
           }}
         >
-          <InfoOutlinedIcon sx={{ fontSize: 32, color: BRAND.gray, mb: 1 }} />
+          <InfoOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray, mb: 1 }} />
           <Typography variant="body2">Select a device to inspect and edit its override.</Typography>
         </Paper>
       ) : (
@@ -1455,7 +1455,7 @@ function DeviceTab(props) {
               sx={{ minWidth: 0 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                   Device override
                 </Typography>
                 {hasOverride ? (
@@ -1552,7 +1552,7 @@ function DeviceTab(props) {
               sx={{ minWidth: 0, mb: 2 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                   Effective policy
                 </Typography>
                 {renderSourceChip(effectiveSource)}
@@ -1568,7 +1568,7 @@ function DeviceTab(props) {
               sx={{ minWidth: 0 }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
                   Sync status
                 </Typography>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -1579,7 +1579,7 @@ function DeviceTab(props) {
                     <Chip
                       label="Waiting for ACK…"
                       size="small"
-                      icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: 14 }} />}
+                      icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                       sx={{
                         bgcolor: BRAND.cyanSoft,
                         color: BRAND.tealText,

@@ -43,7 +43,7 @@ import StopCircleOutlinedIcon from "@mui/icons-material/StopCircleOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
-import { BRAND, DATAGRID_SX } from "../../theme/brand";
+import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { DataGrid } from "@mui/x-data-grid";
 import {
@@ -90,7 +90,7 @@ function outcomeChip(outcome) {
     <Chip
       size="small"
       label={e.label}
-      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: e.bg, color: e.color }}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: e.bg, color: e.color }}
     />
   );
 }
@@ -103,7 +103,7 @@ function severityChip(severity) {
     <Chip
       size="small"
       label={severity || "—"}
-      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: e.bg, color: e.color }}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: e.bg, color: e.color }}
     />
   );
 }
@@ -304,7 +304,7 @@ export default function FindingDetailDrawer({
       flex: 1,
       minWidth: 220,
       renderCell: (p) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: 12, color: BRAND.dark }}>
+        <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.dark }}>
           {p.row.deviceId}
         </Typography>
       ),
@@ -321,9 +321,9 @@ export default function FindingDetailDrawer({
       width: 70,
       renderCell: (p) =>
         p.row.exitCode == null ? (
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>
         ) : (
-          <Typography sx={{ fontSize: 12, fontFamily: "monospace" }}>{p.row.exitCode}</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace" }}>{p.row.exitCode}</Typography>
         ),
     },
     {
@@ -331,7 +331,7 @@ export default function FindingDetailDrawer({
       headerName: "Finished",
       width: 140,
       renderCell: (p) => (
-        <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           {formatTime(p.row.finishedAt)}
         </Typography>
       ),
@@ -343,12 +343,12 @@ export default function FindingDetailDrawer({
       minWidth: 240,
       renderCell: (p) => {
         const text = p.row.stderrExcerpt;
-        if (!text) return <Typography sx={{ fontSize: 12, color: BRAND.gray }}>—</Typography>;
+        if (!text) return <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>—</Typography>;
         return (
           <Tooltip title={text} placement="left">
             <Typography
               sx={{
-                fontSize: 11, fontFamily: "monospace", color: BRAND.gray,
+                fontSize: TEXT.xs, fontFamily: "monospace", color: BRAND.gray,
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
               }}
             >
@@ -381,15 +381,15 @@ export default function FindingDetailDrawer({
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Stack direction="row" spacing={1} alignItems="center">
                 {severityChip(finding.severity)}
-                <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
                   {finding.checkId}
                 </Typography>
               </Stack>
-              <Typography sx={{ fontSize: 17, fontWeight: 800, color: BRAND.dark, mt: 0.5 }}>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, mt: 0.5 }}>
                 {finding.title || finding.checkId}
               </Typography>
               {finding.description ? (
-                <Typography sx={{ fontSize: 13, color: BRAND.gray, mt: 0.5 }}>
+                <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
                   {finding.description}
                 </Typography>
               ) : null}
@@ -414,7 +414,7 @@ export default function FindingDetailDrawer({
               >
                 Remediation
               </Typography>
-              <Typography sx={{ fontSize: 13, color: BRAND.dark, mt: 0.25 }}>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, mt: 0.25 }}>
                 {finding.remediationSummary}
               </Typography>
             </Box>
@@ -525,7 +525,7 @@ export default function FindingDetailDrawer({
                           "&.MuiCheckbox-indeterminate": { color: BRAND.teal },
                         }}
                       />
-                      <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                         {selectedDeviceIds.size} of {devices.length} selected
                       </Typography>
                     </Box>
@@ -551,14 +551,14 @@ export default function FindingDetailDrawer({
                             sx={{ "&.Mui-checked": { color: BRAND.teal } }}
                           />
                           <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }}>
+                            <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
                               {d.hostname || d.agentId.slice(0, 16)}
                             </Typography>
-                            <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
+                            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
                               {d.agentId}
                             </Typography>
                           </Box>
-                          <Typography sx={{ fontSize: 11, color: BRAND.gray, ml: 1 }}>
+                          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 1 }}>
                             {d.platform || "—"}
                           </Typography>
                         </Box>
@@ -619,7 +619,7 @@ export default function FindingDetailDrawer({
           {mode === "progress" ? (
             <>
               <Box>
-                <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                   Remediation #{activeRemediationId} · mode:{" "}
                   <strong>{activeMode === "dry_run" ? "dry-run" : "apply"}</strong>
                 </Typography>
@@ -629,7 +629,7 @@ export default function FindingDetailDrawer({
                       key={k}
                       size="small"
                       label={`${k.replace(/_/g, " ")}: ${v}`}
-                      sx={{ height: 22, fontWeight: 700, fontSize: 11 }}
+                      sx={{ height: 22, fontWeight: 700, fontSize: TEXT.xs }}
                     />
                   ))}
                 </Stack>

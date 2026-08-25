@@ -9,7 +9,7 @@ import * as React from "react";
 import { Box, Breadcrumbs, Link, Typography } from "@mui/material";
 import NavigateNextOutlinedIcon from "@mui/icons-material/NavigateNextOutlined";
 import GridViewOutlinedIcon from "@mui/icons-material/GridViewOutlined";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import { useMsp } from "./MspContext";
 
 export default function HierarchyBreadcrumb() {
@@ -27,14 +27,14 @@ export default function HierarchyBreadcrumb() {
         onClick={exitTenant}
         sx={{
           display: "inline-flex", alignItems: "center", gap: 0.5,
-          color: BRAND.gray, fontWeight: 600, fontSize: 13,
+          color: BRAND.gray, fontWeight: 600, fontSize: TEXT.md,
         }}
       >
-        <GridViewOutlinedIcon sx={{ fontSize: 15 }} />
+        <GridViewOutlinedIcon sx={{ fontSize: ICON.sm }} />
         Portfolio
       </Link>
       <Box sx={{ display: "inline-flex", alignItems: "center" }}>
-        <Typography sx={{ color: BRAND.dark, fontWeight: 800, fontSize: 13, whiteSpace: "nowrap" }}>
+        <Typography sx={{ color: BRAND.dark, fontWeight: 800, fontSize: TEXT.md, whiteSpace: "nowrap" }}>
           {activeTenant.name || `Tenant ${activeTenant.id}`}
         </Typography>
       </Box>

@@ -40,7 +40,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listFrom } from "../api/shape";
 import { useAuthContext } from "../auth/AuthContext";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -63,13 +63,13 @@ function SummaryCard({ title, value, accent = BRAND.teal }) {
         justifyContent: "space-between",
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600 }}>
+      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", fontWeight: 600 }}>
         {title}
       </Typography>
 
       <Typography
         sx={{
-          fontSize: 28,
+          fontSize: TEXT["3xl"],
           fontWeight: 800,
           color: accent,
           lineHeight: 1.1,

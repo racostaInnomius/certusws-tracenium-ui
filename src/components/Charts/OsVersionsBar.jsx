@@ -11,6 +11,7 @@ import {
   Tooltip,
   LabelList,
 } from "recharts";
+import { TEXT } from "../../theme/brand";
 
 
 
@@ -48,7 +49,7 @@ function BarShape(props) {
 // Stable references hoisted out of render so recharts doesn't re-lay-out on
 // every parent re-render (the dashboard polls frequently).
 const CHART_MARGIN = { top: 8, right: 24, left: -12, bottom: 8 };
-const Y_TICK = { fontSize: 12 };
+const Y_TICK = { fontSize: TEXT.sm };
 const tooltipFormatter = (value) => [`${value}`, "Hosts"];
 const tooltipLabelFormatter = (label) => `OS: ${label}`;
 

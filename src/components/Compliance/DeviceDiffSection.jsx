@@ -13,7 +13,7 @@ import SwapHorizOutlinedIcon from "@mui/icons-material/SwapHorizOutlined";
 import DifferenceOutlinedIcon from "@mui/icons-material/DifferenceOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getDeviceFindingsDiff } from "../../api/compliance";
 import AsyncState from "../common/AsyncState";
 
@@ -100,7 +100,7 @@ export default function DeviceDiffSection({ agentId }) {
         }}
         onClick={() => setExpanded((v) => !v)}
       >
-        <DifferenceOutlinedIcon sx={{ fontSize: 18, color: BRAND.tealText }} />
+        <DifferenceOutlinedIcon sx={{ fontSize: ICON.lg, color: BRAND.tealText }} />
         <Typography
           variant="caption"
           sx={{
@@ -213,13 +213,13 @@ export default function DeviceDiffSection({ agentId }) {
                 title="New findings"
                 items={added.map((f) => `${f.severity ?? "?"} · ${f.checkId} — ${f.title ?? ""}`)}
                 color={ROLE.critical}
-                icon={<AddCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<AddCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               />
               <DiffBucket
                 title="Resolved"
                 items={removed.map((f) => `${f.severity ?? "?"} · ${f.checkId} — ${f.title ?? ""}`)}
                 color={ROLE.positive}
-                icon={<RemoveCircleOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<RemoveCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               />
               <DiffBucket
                 title="Severity changed"
@@ -227,7 +227,7 @@ export default function DeviceDiffSection({ agentId }) {
                   (c) => `${c.checkId}: ${c.before ?? "?"} → ${c.after ?? "?"}`
                 )}
                 color={ROLE.caution}
-                icon={<SwapHorizOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<SwapHorizOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               />
               <DiffBucket
                 title="Status changed"
@@ -235,7 +235,7 @@ export default function DeviceDiffSection({ agentId }) {
                   (c) => `${c.checkId}: ${c.before ?? "?"} → ${c.after ?? "?"}`
                 )}
                 color={ROLE.caution}
-                icon={<SwapHorizOutlinedIcon sx={{ fontSize: 14 }} />}
+                icon={<SwapHorizOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               />
             </Stack>
           </AsyncState>
@@ -267,7 +267,7 @@ function DiffBucket({ title, items, color, icon }) {
           m: 0,
           pl: 2.5,
           color: BRAND.dark,
-          fontSize: 13,
+          fontSize: TEXT.md,
           lineHeight: 1.55
         }}
       >

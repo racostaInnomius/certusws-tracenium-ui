@@ -38,7 +38,7 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 
 import PageHeader from "../components/common/PageHeader";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 import TokensAdministrator from "./TokensAdministrator";
@@ -146,7 +146,7 @@ function StepCard({ active, number, icon, title, body, actionLabel, onClick }) {
             borderRadius: "50%",
             bgcolor: active ? BRAND.teal : BRAND.tealSoftStrong,
             color: active ? BRAND.surface : BRAND.tealText,
-            fontSize: 13,
+            fontSize: TEXT.md,
             fontWeight: 700,
             display: "flex",
             alignItems: "center",
@@ -193,7 +193,7 @@ function StepCard({ active, number, icon, title, body, actionLabel, onClick }) {
             </Typography>
             <ArrowForwardRoundedIcon
               sx={{
-                fontSize: 16,
+                fontSize: TEXT.lg,
                 color: active ? BRAND.tealText : BRAND.gray,
               }}
             />

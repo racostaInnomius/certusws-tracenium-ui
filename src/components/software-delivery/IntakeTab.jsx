@@ -22,7 +22,7 @@ import {
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   listIntakes,
   uploadIntake,
@@ -200,10 +200,10 @@ export default function IntakeTab({ canManage, notify }) {
                     "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
                   }}
                 >
-                  <Typography sx={{ fontSize: 20, fontWeight: 800, lineHeight: 1, color: tone.color }}>
+                  <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, lineHeight: 1, color: tone.color }}>
                     {stage.count}
                   </Typography>
-                  <Typography sx={{ fontSize: 11, fontWeight: 600, color: BRAND.gray, mt: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT.xs, fontWeight: 600, color: BRAND.gray, mt: 0.5 }}>
                     {stage.label}
                   </Typography>
                 </Box>
@@ -220,7 +220,7 @@ export default function IntakeTab({ canManage, notify }) {
 
       {/* Toolbar */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
           Upload an installer — it's verified, then AI proposes an install config for your review.
         </Typography>
         <Box sx={{ flex: 1 }} />
@@ -272,10 +272,10 @@ export default function IntakeTab({ canManage, notify }) {
               return (
                 <TableRow key={it.id} hover>
                   <TableCell>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: BRAND.dark }}>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
                       {it.filename}
                     </Typography>
-                    <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace" }}>
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
                       {String(it.sha256 || "").slice(0, 12)}…
                     </Typography>
                   </TableCell>
@@ -283,7 +283,7 @@ export default function IntakeTab({ canManage, notify }) {
                     <Chip
                       size="small"
                       label={`${it.facts?.platform || "?"} · ${(it.facts?.format || "?").toUpperCase()}`}
-                      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
+                      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
                     />
                   </TableCell>
                   <TableCell>
@@ -295,11 +295,11 @@ export default function IntakeTab({ canManage, notify }) {
                     <Chip
                       size="small"
                       label={status.label}
-                      sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: status.bg, color: status.color }}
+                      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: status.bg, color: status.color }}
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography sx={{ fontSize: 12, color: BRAND.gray }}>{formatTime(it.createdAt)}</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{formatTime(it.createdAt)}</Typography>
                   </TableCell>
                   <TableCell align="right">
                     {canManage && isPending ? (
@@ -320,7 +320,7 @@ export default function IntakeTab({ canManage, notify }) {
                         </Button>
                       </>
                     ) : (
-                      <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>—</Typography>
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>—</Typography>
                     )}
                   </TableCell>
                 </TableRow>

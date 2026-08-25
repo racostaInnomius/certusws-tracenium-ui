@@ -22,7 +22,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import {
   listThirdPartyCatalog,
   createThirdPartyCatalog,
@@ -86,7 +86,7 @@ export default function ThirdPartyCatalogManager({ canManage, notify }) {
   return (
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
           The software this tenant tracks for third-party patching. Detection compares installed
           versions against each entry's latest version.
         </Typography>
@@ -131,22 +131,22 @@ export default function ThirdPartyCatalogManager({ canManage, notify }) {
             {items.map((it) => (
               <TableRow key={it.id} hover sx={{ opacity: it.isActive ? 1 : 0.55 }}>
                 <TableCell>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
                   {it.publisher ? (
-                    <Typography sx={{ fontSize: 11, color: BRAND.gray }}>{it.publisher}</Typography>
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{it.publisher}</Typography>
                   ) : null}
                 </TableCell>
                 <TableCell>
-                  <Chip size="small" label={it.platform} sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
+                  <Chip size="small" label={it.platform} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
                 </TableCell>
                 <TableCell>
-                  <Typography sx={{ fontSize: 12, fontFamily: "monospace", color: BRAND.dark }}>{it.latestVersion}</Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>{it.latestVersion}</Typography>
                 </TableCell>
                 <TableCell>
                   {it.packageId == null ? (
-                    <Typography sx={{ fontSize: 11, color: BRAND.gray, fontStyle: "italic" }}>none</Typography>
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>none</Typography>
                   ) : (
-                    <Typography sx={{ fontSize: 12, color: BRAND.dark }}>#{it.packageId}</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>#{it.packageId}</Typography>
                   )}
                 </TableCell>
                 <TableCell>
@@ -155,7 +155,7 @@ export default function ThirdPartyCatalogManager({ canManage, notify }) {
                     label={it.source === "sdp_intake" ? "SDP" : "Manual"}
                     sx={{
                       height: 20,
-                      fontSize: 11,
+                      fontSize: TEXT.xs,
                       fontWeight: 700,
                       bgcolor: it.source === "sdp_intake" ? BRAND.tealSoft : BRAND.darkSoft,
                       color: it.source === "sdp_intake" ? BRAND.tealText : BRAND.gray,

@@ -29,7 +29,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -160,7 +160,7 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
           {currentValue != null ? (
             <Typography
               sx={{
-                fontSize: 28,
+                fontSize: TEXT["3xl"],
                 fontWeight: 800,
                 color: BRAND.dark,
                 lineHeight: 1.1,
@@ -170,7 +170,7 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
               {currentValue}
               <Typography
                 component="span"
-                sx={{ fontSize: 14, color: BRAND.gray, ml: 0.5 }}
+                sx={{ fontSize: TEXT.base, color: BRAND.gray, ml: 0.5 }}
               >
                 /100
               </Typography>
@@ -185,7 +185,7 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
             bgcolor: dcolor.bg,
             color: dcolor.fg,
             fontWeight: 700,
-            fontSize: 11,
+            fontSize: TEXT.xs,
             "& .MuiChip-icon": { color: dcolor.fg },
           }}
         />
@@ -229,7 +229,7 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
               />
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 10, fill: BRAND.gray }}
+                tick={{ fontSize: TEXT.xs, fill: BRAND.gray }}
                 axisLine={false}
                 tickLine={false}
                 interval="preserveStartEnd"
@@ -238,14 +238,14 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
               <YAxis
                 domain={[0, 100]}
                 ticks={[0, 50, 100]}
-                tick={{ fontSize: 10, fill: BRAND.gray }}
+                tick={{ fontSize: TEXT.xs, fill: BRAND.gray }}
                 axisLine={false}
                 tickLine={false}
                 width={28}
               />
               <Tooltip
                 contentStyle={{
-                  fontSize: 12,
+                  fontSize: TEXT.sm,
                   borderRadius: 8,
                   border: `1px solid ${BRAND.border}`,
                 }}

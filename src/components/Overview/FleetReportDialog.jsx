@@ -37,7 +37,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { fetchFleetReport, downloadFleetReport } from "../../api/fleetReport";
 
 function ymd(d) {
@@ -55,7 +55,7 @@ const pctText = (v) => (v == null ? "—" : `${v}%`);
 function Kpi({ label, value, accent = BRAND.dark }) {
   return (
     <Box sx={{ flex: 1, minWidth: 100 }}>
-      <Typography sx={{ fontSize: 20, fontWeight: 800, color: accent, lineHeight: 1.1 }}>{value}</Typography>
+      <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: accent, lineHeight: 1.1 }}>{value}</Typography>
       <Typography variant="caption" sx={{ color: BRAND.gray }}>{label}</Typography>
     </Box>
   );
@@ -65,12 +65,12 @@ function SectionRows({ title, rows }) {
   if (!rows.length) return null;
   return (
     <Box sx={{ mb: 1.5 }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>{title}</Typography>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>{title}</Typography>
       <Stack spacing={0.4}>
         {rows.map(([label, value]) => (
-          <Stack key={label} direction="row" justifyContent="space-between" sx={{ fontSize: 12.5 }}>
-            <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>{label}</Typography>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: BRAND.dark }}>{value}</Typography>
+          <Stack key={label} direction="row" justifyContent="space-between" sx={{ fontSize: TEXT.sm }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{label}</Typography>
+            <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, color: BRAND.dark }}>{value}</Typography>
           </Stack>
         ))}
       </Stack>
@@ -207,11 +207,11 @@ export default function FleetReportDialog({ open, onClose }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: BRAND.gray }} minTickGap={24} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: BRAND.gray }} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11, fill: BRAND.gray }} />
+                    <XAxis dataKey="date" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} minTickGap={24} />
+                    <YAxis yAxisId="left" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} />
                     <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: TEXT.sm }} />
                     <Line yAxisId="left" type="monotone" dataKey="deviceCount" name="Devices" stroke={BRAND.teal} strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="compliancePct" name="Compliance %" stroke={BRAND.alert.success} strokeWidth={2} dot={false} connectNulls />
                   </LineChart>

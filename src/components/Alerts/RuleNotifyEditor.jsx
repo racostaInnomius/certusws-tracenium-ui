@@ -23,7 +23,7 @@ import {
 } from "@mui/material";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import NotificationsOffOutlinedIcon from "@mui/icons-material/NotificationsOffOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   parseRecipients,
   validateRecipients,
@@ -53,14 +53,14 @@ export function NotifyBadge({ notify }) {
       >
         <Chip
           size="small"
-          icon={<NotificationsOffOutlinedIcon sx={{ fontSize: 14 }} />}
+          icon={<NotificationsOffOutlinedIcon sx={{ fontSize: ICON.sm }} />}
           // "No email" stopped being accurate once a rule could target a
           // role: it read as "email is off" when what it means is "no
           // delivery at all". ADR-0007 names this state — console only —
           // and naming it is the point: today an unconfigured rule and a
           // deliberately quiet one look identical.
           label="Console only"
-          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray, fontWeight: 600, fontSize: 11 }}
+          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray, fontWeight: 600, fontSize: TEXT.xs }}
         />
       </Tooltip>
     );
@@ -70,9 +70,9 @@ export function NotifyBadge({ notify }) {
     <Tooltip title={summary} arrow>
       <Chip
         size="small"
-        icon={<NotificationsActiveOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<NotificationsActiveOutlinedIcon sx={{ fontSize: ICON.sm }} />}
         label={summary}
-        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, fontSize: 11 }}
+        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, fontSize: TEXT.xs }}
       />
     </Tooltip>
   );
@@ -167,7 +167,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
       </Typography>
 
       <Box sx={{ mb: 2 }}>
-        <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 0.75 }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.75 }}>
           Where each severity goes. <strong>Console cannot be switched off</strong> — the feed is
           the record; the other columns are deliveries.
         </Typography>
@@ -177,7 +177,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
           {NOTIFY_CHANNELS.map((channel) => (
             <Typography
               key={channel}
-              sx={{ fontSize: 11, fontWeight: 700, color: BRAND.gray, textAlign: "center", textTransform: "uppercase" }}
+              sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.gray, textAlign: "center", textTransform: "uppercase" }}
             >
               {channel}
               {PENDING_CHANNELS.includes(channel) ? " *" : ""}
@@ -186,7 +186,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
 
           {MATRIX_SEVERITIES.map((severity) => (
             <React.Fragment key={severity}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: BRAND.dark, pr: 1 }}>
+              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, color: BRAND.dark, pr: 1 }}>
                 {severity}
               </Typography>
               {NOTIFY_CHANNELS.map((channel) => {
@@ -202,7 +202,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
                         width: 54,
                         cursor: busy || locked ? "default" : "pointer",
                         fontWeight: 700,
-                        fontSize: 10.5,
+                        fontSize: TEXT.xs,
                         opacity: PENDING_CHANNELS.includes(channel) ? 0.45 : 1,
                         bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
                         color: on ? BRAND.tealText : BRAND.gray,
@@ -215,7 +215,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
           ))}
         </Box>
 
-        <Typography sx={{ fontSize: 11, color: BRAND.gray, mt: 0.75 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.75 }}>
           {mailSeverities.length === 0
             ? "Console only — nothing is delivered for this rule. That is a choice, and it reads as one."
             : `Email for ${mailSeverities.join(", ")}.`}
@@ -224,7 +224,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
       </Box>
 
       <Box sx={{ mb: 1.5 }}>
-        <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 0.75 }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.75 }}>
           Notify by role — the address comes from the member record, so someone who leaves
           the tenant stops being notified without anyone editing this rule.
         </Typography>
@@ -240,7 +240,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
                 sx={{
                   cursor: busy ? "default" : "pointer",
                   fontWeight: 700,
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
                   color: on ? BRAND.tealText : BRAND.gray,
                 }}
@@ -263,7 +263,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
           minRows={2}
           maxRows={6}
           placeholder={"ops@example.com\nsecurity@example.com"}
-          sx={{ flex: 1, minWidth: 0, "& textarea": { fontSize: 12.5 } }}
+          sx={{ flex: 1, minWidth: 0, "& textarea": { fontSize: TEXT.sm } }}
         />
       </Stack>
 

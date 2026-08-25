@@ -16,7 +16,7 @@
 import * as React from "react";
 import { Box, Chip, CircularProgress, Divider, Stack, Tooltip, Typography } from "@mui/material";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { getCdpCertificateDetail } from "../../api/cdp";
 
 const FAMILY_LABEL = {
@@ -29,12 +29,12 @@ const FAMILY_LABEL = {
 function Field({ label, children, mono }) {
   return (
     <Box sx={{ mb: 1.25 }}>
-      <Typography sx={{ fontSize: 11, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
         {label.toUpperCase()}
       </Typography>
       <Typography
         sx={{
-          fontSize: 12.5,
+          fontSize: TEXT.sm,
           color: BRAND.dark,
           wordBreak: "break-all",
           fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined,
@@ -67,7 +67,7 @@ function formatDate(value) {
 function OwnerChips({ owners }) {
   if (!Array.isArray(owners) || owners.length === 0) {
     return (
-      <Typography sx={{ fontSize: 12, color: BRAND.gray, fontStyle: "italic" }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontStyle: "italic" }}>
         No matching application found. That is an honest answer, not a failure — a wrong
         owner sends someone to renew a certificate that is not theirs.
       </Typography>
@@ -94,7 +94,7 @@ function OwnerChips({ owners }) {
               bgcolor: owner.confidence === "path" ? BRAND.tealSoftStrong : BRAND.surfaceMuted,
               color: BRAND.tealText,
               fontWeight: 700,
-              fontSize: 11,
+              fontSize: TEXT.xs,
             }}
           />
         </Tooltip>
@@ -113,7 +113,7 @@ function ChainSummary({ tls }) {
         <Chip
           size="small"
           label={`tcp/${tls.port}`}
-          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: 10.5 }}
+          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: TEXT.xs }}
         />
         <Tooltip
           arrow
@@ -134,16 +134,16 @@ function ChainSummary({ tls }) {
               bgcolor: ok ? BRAND.alert.successSoft : BRAND.alert.errorSoft,
               color: ok ? BRAND.alert.success : BRAND.alert.error,
               fontWeight: 700,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
             }}
           />
         </Tooltip>
-        <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
           {tls.chainDepth} certificate{tls.chainDepth === 1 ? "" : "s"} sent
         </Typography>
       </Stack>
       {tls.coversDeviceHostname === false && (
-        <Typography sx={{ fontSize: 11.5, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
           Does not cover this device&apos;s own hostname — normal for a proxy or virtual host,
           worth a look for a service that should present its own name.
         </Typography>
@@ -159,7 +159,7 @@ function RevocationChip({ revocation }) {
         <Chip
           size="small"
           label="revocation not checked"
-          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray, fontWeight: 600, fontSize: 10.5 }}
+          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray, fontWeight: 600, fontSize: TEXT.xs }}
         />
       </Tooltip>
     );
@@ -174,7 +174,7 @@ function RevocationChip({ revocation }) {
           bgcolor: revoked ? BRAND.alert.errorSoft : BRAND.alert.successSoft,
           color: revoked ? BRAND.alert.error : BRAND.alert.success,
           fontWeight: 700,
-          fontSize: 10.5,
+          fontSize: TEXT.xs,
         }}
       />
     </Tooltip>
@@ -208,7 +208,7 @@ export default function CertificateDetailDrawer({
   if (error) {
     return (
       <Box sx={{ p: 2 }}>
-        <Typography color="error" sx={{ fontSize: 13 }}>
+        <Typography color="error" sx={{ fontSize: TEXT.md }}>
           Failed to load certificate: {error}
         </Typography>
       </Box>
@@ -227,10 +227,10 @@ export default function CertificateDetailDrawer({
 
   return (
     <Box sx={{ p: 2, pt: 0, overflowY: "auto" }}>
-      <Typography sx={{ fontWeight: 800, fontSize: 16, color: BRAND.dark, wordBreak: "break-word" }}>
+      <Typography sx={{ fontWeight: 800, fontSize: TEXT.lg, color: BRAND.dark, wordBreak: "break-word" }}>
         {detail.subjectCN || `${detail.fingerprint256?.slice(0, 24)}…`}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: BRAND.gray, mb: 1 }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>
         issued by {detail.issuerCN || "unknown issuer"}
       </Typography>
 
@@ -245,7 +245,7 @@ export default function CertificateDetailDrawer({
         <Chip
           size="small"
           label={[detail.keyAlgorithm, detail.keySizeBits].filter(Boolean).join(" ")}
-          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: 10.5 }}
+          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: TEXT.xs }}
         />
         <Tooltip
           arrow
@@ -258,7 +258,7 @@ export default function CertificateDetailDrawer({
               bgcolor: family.tone === "good" ? BRAND.alert.successSoft : BRAND.alert.warningSoft,
               color: family.tone === "good" ? BRAND.alert.success : BRAND.alert.warningText,
               fontWeight: 700,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
             }}
           />
         </Tooltip>
@@ -279,14 +279,14 @@ export default function CertificateDetailDrawer({
             <Stack direction="row" alignItems="center" spacing={0.75}>
               {device.hasPrivateKey && (
                 <Tooltip arrow title="This device holds the private key — you renew this one">
-                  <KeyOutlinedIcon sx={{ fontSize: 15, color: BRAND.tealText }} />
+                  <KeyOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.tealText }} />
                 </Tooltip>
               )}
-              <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700 }}>
                 {device.host || device.agentId}
               </Typography>
             </Stack>
-            <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
               {device.storeName} · {device.storeScope}
             </Typography>
 
@@ -301,7 +301,7 @@ export default function CertificateDetailDrawer({
                       bgcolor: BRAND.alert.highSoft,
                       color: BRAND.alert.high,
                       fontWeight: 700,
-                      fontSize: 10,
+                      fontSize: TEXT.xs,
                     }}
                   />
                 </Tooltip>
@@ -312,14 +312,14 @@ export default function CertificateDetailDrawer({
 
             {device.tls?.process && (
               <Box sx={{ mt: 1 }}>
-                <Typography sx={{ fontSize: 11, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
                   SERVED BY
                 </Typography>
-                <Typography sx={{ fontSize: 12.5, wordBreak: "break-all" }}>
+                <Typography sx={{ fontSize: TEXT.sm, wordBreak: "break-all" }}>
                   {device.tls.process.name} (pid {device.tls.process.pid})
                 </Typography>
                 {device.tls.process.path && (
-                  <Typography sx={{ fontSize: 11, color: BRAND.gray, wordBreak: "break-all" }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, wordBreak: "break-all" }}>
                     {device.tls.process.path}
                   </Typography>
                 )}

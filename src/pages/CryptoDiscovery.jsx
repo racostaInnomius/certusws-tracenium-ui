@@ -60,7 +60,7 @@ import {
   AgilityBlockersPanel,
   CnsaPanel,
 } from "../components/CryptoDiscovery/PqcReadinessPanels";
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, TEXT } from "../theme/brand";
 import {
   getCdpSummary,
   getCdpDashboard,
@@ -85,7 +85,7 @@ function CertStatusChip({ status }) {
     <Chip
       size="small"
       label={meta.label}
-      sx={{ bgcolor: meta.soft, color: meta.color, fontWeight: 700, fontSize: 11 }}
+      sx={{ bgcolor: meta.soft, color: meta.color, fontWeight: 700, fontSize: TEXT.xs }}
     />
   );
 }
@@ -119,7 +119,7 @@ function FlagChips({ flags }) {
               bgcolor: BRAND.alert.highSoft,
               color: BRAND.alert.high,
               fontWeight: 700,
-              fontSize: 10,
+              fontSize: TEXT.xs,
             }}
           />
         </Tooltip>
@@ -506,7 +506,7 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
               }}
             />
           }
-          label={<Typography sx={{ fontSize: 13 }}>Show system roots</Typography>}
+          label={<Typography sx={{ fontSize: TEXT.md }}>Show system roots</Typography>}
         />
 
         {/* Drill-down filters arriving from the Dashboard tab. */}
@@ -610,10 +610,10 @@ function CdpDeviceDrawerContent({ agentId, host }) {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography sx={{ fontWeight: 800, fontSize: 16, color: BRAND.dark }}>
+      <Typography sx={{ fontWeight: 800, fontSize: TEXT.lg, color: BRAND.dark }}>
         {host || agentId}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: "text.secondary", mb: 1.5 }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
         Certificates discovered on this device
       </Typography>
       <FormControlLabel
@@ -624,7 +624,7 @@ function CdpDeviceDrawerContent({ agentId, host }) {
             onChange={(e) => setIncludeRoots(e.target.checked)}
           />
         }
-        label={<Typography sx={{ fontSize: 13 }}>Show system roots</Typography>}
+        label={<Typography sx={{ fontSize: TEXT.md }}>Show system roots</Typography>}
         sx={{ mb: 1 }}
       />
       {loadError ? (
@@ -633,9 +633,9 @@ function CdpDeviceDrawerContent({ agentId, host }) {
           {loadError}
         </Alert>
       ) : items === null ? (
-        <Typography sx={{ fontSize: 13, color: "text.secondary" }}>Loading…</Typography>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Loading…</Typography>
       ) : items.length === 0 ? (
-        <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+        <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
           No certificates reported.
         </Typography>
       ) : (
@@ -650,22 +650,22 @@ function CdpDeviceDrawerContent({ agentId, host }) {
               }}
             >
               <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
-                <Typography sx={{ fontWeight: 700, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {cert.subjectCN || `${cert.fingerprint256?.slice(0, 16)}…`}
                 </Typography>
                 <CertStatusChip status={cert.status} />
               </Stack>
-              <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                 {cert.issuerCN ? `Issued by ${cert.issuerCN}` : "Self-issued"} ·{" "}
                 {cert.storeName || cert.storeScope}
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: "wrap" }}>
-                <Typography sx={{ fontSize: 12 }}>
+                <Typography sx={{ fontSize: TEXT.sm }}>
                   Expires {formatDate(cert.notAfter)}
                 </Typography>
                 {cert.hasPrivateKey ? (
                   <Tooltip title="Device holds the private key" arrow>
-                    <KeyOutlinedIcon sx={{ fontSize: 14 }} />
+                    <KeyOutlinedIcon sx={{ fontSize: ICON.sm }} />
                   </Tooltip>
                 ) : null}
                 <FlagChips flags={cert.flags} />

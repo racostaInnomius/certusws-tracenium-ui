@@ -29,16 +29,16 @@ import {
 } from "recharts";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 // ── shared bits ──────────────────────────────────────────────────────
 
-const AXIS_TICK = { fontSize: 12, fill: BRAND.dark };
+const AXIS_TICK = { fontSize: TEXT.sm, fill: BRAND.dark };
 const GRID_STROKE = "rgba(190,190,190,0.35)";
 
 function PanelTitle({ children, hint }) {
   const title = (
-    <Typography sx={{ fontWeight: 700, fontSize: 14, color: BRAND.dark }}>{children}</Typography>
+    <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>{children}</Typography>
   );
   return (
     <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.5 }}>
@@ -55,7 +55,7 @@ function PanelTitle({ children, hint }) {
 
 function EmptyPanel({ children }) {
   return (
-    <Typography sx={{ color: BRAND.gray, fontSize: 13, py: 3, textAlign: "center" }}>
+    <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
       {children}
     </Typography>
   );
@@ -100,11 +100,11 @@ function HorizonTooltip({ active, payload }) {
         boxShadow: BRAND.shadow,
       }}
     >
-      <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{row.label}</Typography>
-      <Typography sx={{ fontSize: 12, color: BRAND.dark }}>
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md }}>{row.label}</Typography>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
         {row.count} certificate{row.count === 1 ? "" : "s"}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: BRAND.tealText }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.tealText }}>
         {row.withPrivateKey} with private key
       </Typography>
     </Box>
@@ -141,7 +141,7 @@ export function ExpiryHorizonPanel({ data, noExpiryDate }) {
             </ResponsiveContainer>
           </Box>
           {noExpiryDate > 0 && (
-            <Typography sx={{ fontSize: 12, color: BRAND.gray, mt: 1 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1 }}>
               + {noExpiryDate} with no expiry date recorded
             </Typography>
           )}
@@ -188,13 +188,13 @@ export function ActionRequiredPanel({ items, onSelect }) {
                   <Stack direction="row" alignItems="center" spacing={0.75}>
                     {row.hasPrivateKey && (
                       <Tooltip title="This device holds the private key — you renew this one" arrow>
-                        <KeyOutlinedIcon sx={{ fontSize: 15, color: BRAND.tealText }} />
+                        <KeyOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.tealText }} />
                       </Tooltip>
                     )}
                     <Typography
                       sx={{
                         fontWeight: 600,
-                        fontSize: 13,
+                        fontSize: TEXT.md,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -203,7 +203,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
                       {row.subjectCN || "(no common name)"}
                     </Typography>
                   </Stack>
-                  <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                     {row.issuerCN || "Unknown issuer"} · {row.deviceCount} device
                     {row.deviceCount === 1 ? "" : "s"}
                     {row.sampleHost ? ` · ${row.sampleHost}` : ""}
@@ -230,7 +230,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
                         ? BRAND.alert.high
                         : BRAND.alert.warningText,
                     fontWeight: 700,
-                    fontSize: 11,
+                    fontSize: TEXT.xs,
                     flexShrink: 0,
                   }}
                 />
@@ -314,12 +314,12 @@ export function HygienePanel({ flags, onSelect }) {
                 <Tooltip title={entry.hint} arrow>
                   <Typography
                     className="flag-label"
-                    sx={{ fontSize: 12.5, fontWeight: 600, cursor: "help" }}
+                    sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: "help" }}
                   >
                     {entry.label}
                   </Typography>
                 </Tooltip>
-                <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                   {entry.count}
                 </Typography>
               </Stack>
@@ -382,7 +382,7 @@ export function IssuersPanel({ issuers, onSelect }) {
                 <Typography
                   className="issuer-label"
                   sx={{
-                    fontSize: 12.5,
+                    fontSize: TEXT.sm,
                     fontWeight: 600,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -395,13 +395,13 @@ export function IssuersPanel({ issuers, onSelect }) {
                   {row.expiringSoon > 0 && (
                     <Tooltip title={`${row.expiringSoon} expiring within 30 days`} arrow>
                       <Typography
-                        sx={{ fontSize: 11, fontWeight: 700, color: BRAND.alert.warningText }}
+                        sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.alert.warningText }}
                       >
                         {row.expiringSoon}↑
                       </Typography>
                     </Tooltip>
                   )}
-                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{row.count}</Typography>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700 }}>{row.count}</Typography>
                 </Stack>
               </Stack>
               <LinearProgress
@@ -461,15 +461,15 @@ export function DistributionPanel({ distribution }) {
             return (
               <Box key={`${row.source}:${row.scope}`}>
                 <Stack direction="row" justifyContent="space-between" alignItems="baseline">
-                  <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>
+                  <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>
                     {SOURCE_LABELS[row.source] ?? row.source}
-                    <Typography component="span" sx={{ fontSize: 11.5, color: BRAND.gray, ml: 0.5 }}>
+                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
                       ({SCOPE_LABELS[row.scope] ?? row.scope})
                     </Typography>
                   </Typography>
-                  <Typography sx={{ fontSize: 13, fontWeight: 700 }}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700 }}>
                     {row.count}
-                    <Typography component="span" sx={{ fontSize: 11, color: BRAND.gray, ml: 0.5 }}>
+                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
                       {pct}%
                     </Typography>
                   </Typography>
@@ -527,7 +527,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
               <Box sx={{ minWidth: 0 }}>
                 <Typography
                   sx={{
-                    fontSize: 13,
+                    fontSize: TEXT.md,
                     fontWeight: 600,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -536,7 +536,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                 >
                   {row.host || row.agentId}
                 </Typography>
-                <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                   {row.total} certificate{row.total === 1 ? "" : "s"}
                 </Typography>
               </Box>
@@ -549,7 +549,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                       bgcolor: BRAND.alert.errorSoft,
                       color: BRAND.alert.error,
                       fontWeight: 700,
-                      fontSize: 10.5,
+                      fontSize: TEXT.xs,
                     }}
                   />
                 )}
@@ -561,7 +561,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                       bgcolor: BRAND.alert.warningSoft,
                       color: BRAND.alert.warningText,
                       fontWeight: 700,
-                      fontSize: 10.5,
+                      fontSize: TEXT.xs,
                     }}
                   />
                 )}
@@ -573,7 +573,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                       bgcolor: BRAND.alert.highSoft,
                       color: BRAND.alert.high,
                       fontWeight: 700,
-                      fontSize: 10.5,
+                      fontSize: TEXT.xs,
                     }}
                   />
                 )}

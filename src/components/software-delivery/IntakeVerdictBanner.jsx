@@ -7,7 +7,7 @@
 
 import * as React from "react";
 import { Box, Stack, Typography } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import VerdictBadge from "./VerdictBadge";
 
 function bgFor(verdict) {
@@ -26,17 +26,17 @@ export default function IntakeVerdictBanner({ intake }) {
     <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: bgFor(verdict), border: `1px solid ${BRAND.border}` }}>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
         <VerdictBadge verdict={verdict} />
-        <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
           Security verdict
         </Typography>
         {signer ? (
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>· signed by {signer}</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>· signed by {signer}</Typography>
         ) : null}
       </Stack>
       {reasons.length ? (
         <Box component="ul" sx={{ m: 0, mt: 1, pl: 2.5 }}>
           {reasons.map((r, i) => (
-            <Typography key={i} component="li" sx={{ fontSize: 12, color: BRAND.dark }}>
+            <Typography key={i} component="li" sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
               {r}
             </Typography>
           ))}

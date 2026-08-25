@@ -26,7 +26,7 @@ import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND, DATAGRID_SX } from "../../theme/brand";
+import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import { formatDate } from "../../utils/format";
 import { listUngroupedDevices } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
@@ -102,10 +102,10 @@ export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
         flex: 1,
         renderCell: (params) => (
           <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {params.row?.hostname || params.row?.deviceId || "—"}
             </Typography>
-            <Typography sx={{ fontSize: 11, color: BRAND.gray, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {params.row?.deviceId || "—"}
             </Typography>
           </Box>
@@ -117,7 +117,7 @@ export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
         width: 120,
         renderCell: (params) => (
           params.value ? (
-            <Chip size="small" label={params.value} sx={{ height: 22, fontSize: 11, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
+            <Chip size="small" label={params.value} sx={{ height: 22, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
           ) : "—"
         ),
       },
@@ -204,10 +204,10 @@ export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
                 <Inventory2OutlinedIcon fontSize="small" />
               </Box>
               <Box>
-                <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark, lineHeight: 1.2 }}>
+                <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, lineHeight: 1.2 }}>
                   Ungrouped devices
                 </Typography>
-                <Typography sx={{ fontSize: 12.5, color: BRAND.gray, mt: 0.25 }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }}>
                   Devices not assigned to any static or dynamic asset group.
                 </Typography>
               </Box>
@@ -272,7 +272,7 @@ export default function UngroupedDevicesDrawer({ open, onClose, notify }) {
                     boxShadow: BRAND.shadow,
                     zIndex: (theme) => theme.zIndex.modal + 60,
                     "& .MuiMenuItem-root": {
-                      fontSize: 13,
+                      fontSize: TEXT.md,
                       minHeight: 38,
                       "&.Mui-selected": {
                         bgcolor: BRAND.tealSoft,

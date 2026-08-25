@@ -23,7 +23,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { minutesToHHMM, hhmmToMinutes, durationFromTimes } from "./maintenanceWindowTime";
 
 const DAYS = [
@@ -130,7 +130,7 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
             </TextField>
           </Box>
 
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             Deployments created outside every window wait until the next one opens. An end time earlier than the start crosses midnight.
           </Typography>
 
@@ -140,7 +140,7 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
           />
 
           {error ? (
-            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: 13, fontWeight: 600 }}>
+            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: TEXT.md, fontWeight: 600 }}>
               {error}
             </Box>
           ) : null}

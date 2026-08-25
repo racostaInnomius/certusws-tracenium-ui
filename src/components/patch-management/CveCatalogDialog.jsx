@@ -19,7 +19,7 @@ import {
   Switch,
   FormControlLabel,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const PLATFORMS = ["windows", "macos", "linux"];
 const SEVERITIES = ["critical", "high", "medium", "low", "none"];
@@ -172,7 +172,7 @@ export default function CveCatalogDialog({ open, mode, entry, submitting, onClos
           />
 
           {error ? (
-            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: 13, fontWeight: 600 }}>
+            <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error, fontSize: TEXT.md, fontWeight: 600 }}>
               {error}
             </Box>
           ) : null}

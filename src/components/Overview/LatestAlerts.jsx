@@ -17,7 +17,7 @@ import { Paper, Box, Stack, Typography, ButtonBase, Chip, Skeleton } from "@mui/
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 
 // Matches the severity palette used inside the Alerts page so the two
@@ -123,7 +123,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
         <ButtonBase
           onClick={() => navigate()}
           sx={{
-            fontSize: 12,
+            fontSize: TEXT.sm,
             color: BRAND.teal,
             fontWeight: 600,
             "&:hover": { textDecoration: "underline" }
@@ -155,7 +155,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
           {/* The icon intentionally flips signal depending on whether
               there's ANY rule active — but from this payload alone we
               can't tell. We default to the neutral "all quiet" read. */}
-          <CheckCircleOutlineOutlinedIcon sx={{ color: ROLE.positive, fontSize: 32 }} />
+          <CheckCircleOutlineOutlinedIcon sx={{ color: ROLE.positive, fontSize: ICON["2xl"] }} />
           <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
             No alerts in the last 7 days
           </Typography>
@@ -167,7 +167,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
             onClick={() => navigate()}
             sx={{
               mt: 0.5,
-              fontSize: 12,
+              fontSize: TEXT.sm,
               color: BRAND.teal,
               fontWeight: 600
             }}
@@ -246,7 +246,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
                           bgcolor: style.bg,
                           color: style.fg,
                           fontWeight: 700,
-                          fontSize: 10,
+                          fontSize: TEXT.xs,
                           border: `1px solid ${style.fg}33`
                         }}
                       />
@@ -262,7 +262,7 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
                           variant="outlined"
                           sx={{
                             height: 18,
-                            fontSize: 10,
+                            fontSize: TEXT.xs,
                             fontWeight: 600,
                             color: BRAND.tealText,
                             borderColor: `${BRAND.teal}66`,

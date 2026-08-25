@@ -19,7 +19,7 @@
 import * as React from "react";
 import { Alert, Box, Chip, MenuItem, TextField, Tooltip, Typography } from "@mui/material";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import { BRAND } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 // Etiquetas legibles para los grupos derivados de la clave.
 const GROUP_LABELS = {
@@ -76,11 +76,11 @@ function SupervisionChip() {
     >
       <Chip
         size="small"
-        icon={<ShieldOutlinedIcon sx={{ fontSize: 14 }} />}
+        icon={<ShieldOutlinedIcon sx={{ fontSize: ICON.sm }} />}
         label="Requiere supervisión"
         sx={{
           height: 20,
-          fontSize: 10.5,
+          fontSize: TEXT.xs,
           fontWeight: 800,
           bgcolor: "rgba(234,179,8,0.14)",
           color: "#8a6d00",

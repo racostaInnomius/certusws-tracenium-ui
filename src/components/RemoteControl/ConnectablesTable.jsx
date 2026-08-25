@@ -33,7 +33,7 @@ import ElectricalServicesOutlinedIcon from "@mui/icons-material/ElectricalServic
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 function StatusChip({ online }) {
   return (
@@ -43,7 +43,7 @@ function StatusChip({ online }) {
       sx={{
         height: 20,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         bgcolor: online ? ROLE.positiveSoft : BRAND.surfaceMuted,
         color: online ? ROLE.positive : BRAND.gray,
         border: `1px solid ${online ? ROLE.positive : BRAND.gray}33`
@@ -60,7 +60,7 @@ function RcpBadge({ enabled }) {
       sx={{
         height: 20,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         bgcolor: enabled ? ROLE.positiveSoft : ROLE.cautionSoft,
         color: enabled ? ROLE.positive : ROLE.caution,
         border: `1px solid ${enabled ? ROLE.positive : ROLE.caution}33`

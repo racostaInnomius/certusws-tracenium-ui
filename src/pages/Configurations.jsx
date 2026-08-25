@@ -47,7 +47,7 @@ import JoinPartnerDialog from "../msp/JoinPartnerDialog";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { useAuthContext } from "../auth/AuthContext";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 
 // Canonical shell for the three Settings cards. Takes an icon box +
 // title + big value and an optional `footer` slot for a chip row.
@@ -95,7 +95,7 @@ function SettingsCard({
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             sx={{
-              fontSize: 12,
+              fontSize: TEXT.sm,
               color: "text.secondary",
               fontWeight: 600,
               letterSpacing: 0.3,
@@ -106,7 +106,7 @@ function SettingsCard({
             {title}
           </Typography>
           {valueHint ? (
-            <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
               {valueHint}
             </Typography>
           ) : null}
@@ -114,7 +114,7 @@ function SettingsCard({
         <ArrowForwardOutlinedIcon
           sx={{
             color: BRAND.gray,
-            fontSize: 18,
+            fontSize: TEXT.xl,
             flexShrink: 0,
             transition: "color 120ms ease, transform 120ms ease",
           }}
@@ -171,7 +171,7 @@ function StatChip({ label, count, variant = "teal", loading }) {
         bgcolor: s.bg,
         color: s.fg,
         fontWeight: 700,
-        fontSize: 11,
+        fontSize: TEXT.xs,
       }}
     />
   );

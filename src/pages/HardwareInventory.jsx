@@ -33,7 +33,7 @@ import {
 } from "../api/inventoryDashboard";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import { formatBytesToGb, formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
@@ -52,14 +52,14 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
         justifyContent: "space-between",
       }}
     >
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
         {title}
       </Typography>
 
       <Box>
         <Typography
           sx={{
-            fontSize: 28,
+            fontSize: TEXT["3xl"],
             fontWeight: 800,
             color: accent,
             lineHeight: 1.1,
@@ -70,7 +70,7 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
         </Typography>
 
         {subtitle ? (
-          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.75 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.75 }}>
             {subtitle}
           </Typography>
         ) : null}
@@ -171,7 +171,7 @@ const enterpriseDataGridSx = {
   },
   "& .MuiDataGrid-columnHeaderTitle": {
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: TEXT.base,
     color: BRAND.dark,
     lineHeight: 1.25,
   },
@@ -180,7 +180,7 @@ const enterpriseDataGridSx = {
     alignItems: "center",
     borderBottom: `1px solid ${BRAND.border}`,
     borderRight: "none",
-    fontSize: 14,
+    fontSize: TEXT.base,
     color: BRAND.dark,
     outline: "none !important",
     paddingTop: "0 !important",
@@ -213,7 +213,7 @@ const enterpriseDataGridSx = {
     color: BRAND.dark,
   },
   "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
-    fontSize: 13,
+    fontSize: TEXT.md,
   },
   "& .MuiLinearProgress-root": {
     backgroundColor: "rgba(27,166,166,0.15)",
@@ -249,7 +249,7 @@ const integratedFilterFieldSx = {
   },
   "& .MuiInputBase-input": {
     py: 1.05,
-    fontSize: 13.5,
+    fontSize: TEXT.md,
     color: BRAND.dark,
   },
   "& .MuiInputBase-input::placeholder": {
@@ -265,7 +265,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
         <Button
           size="small"
           variant="text"
-          startIcon={<FormatListBulletedIcon sx={{ fontSize: 16 }} />}
+          startIcon={<FormatListBulletedIcon sx={{ fontSize: ICON.md }} />}
           disabled={disabled}
           onClick={onClick}
           sx={{
@@ -273,7 +273,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
             py: 0.25,
             minWidth: "auto",
             borderRadius: 999,
-            fontSize: 11,
+            fontSize: TEXT.xs,
             fontWeight: 800,
             color: BRAND.tealText,
             whiteSpace: "nowrap",
@@ -536,7 +536,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
           <Box sx={{ minWidth: 0 }}>
             <Typography
               sx={{
-                fontSize: 13,
+                fontSize: TEXT.md,
                 fontWeight: 700,
                 color: BRAND.dark,
                 overflow: "hidden",
@@ -550,7 +550,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
             {params.row?.sub ? (
               <Typography
                 sx={{
-                  fontSize: 11,
+                  fontSize: TEXT.xs,
                   color: "text.secondary",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -571,7 +571,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
         align: "right",
         headerAlign: "right",
         renderCell: (params) => (
-          <Typography sx={{ fontSize: 13, fontWeight: 800, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark }}>
             {Number(params.value || 0)}
           </Typography>
         ),

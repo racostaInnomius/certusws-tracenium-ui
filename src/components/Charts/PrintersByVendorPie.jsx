@@ -9,6 +9,7 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
+import { TEXT } from "../../theme/brand";
 
 // Stable per-vendor color map. The backend (dashboard.service.ts:
 // PRINTER_VENDOR_CASE_SQL) classifies each device_printers row into
@@ -116,7 +117,7 @@ function VendorTooltip({ active, payload, total }) {
         px: 1.25,
         py: 0.75,
         boxShadow: 2,
-        fontSize: 12,
+        fontSize: TEXT.sm,
         lineHeight: 1.4,
       }}
     >

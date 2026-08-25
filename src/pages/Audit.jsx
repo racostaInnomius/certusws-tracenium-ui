@@ -47,7 +47,7 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-import { BRAND, DATAGRID_SX, NEUTRAL } from "../theme/brand";
+import { BRAND, DATAGRID_SX, NEUTRAL, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -91,7 +91,7 @@ function DetailRow({ label, value, mono = false }) {
     <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline" }}>
       <Typography
         sx={{
-          fontSize: 12,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 600,
           minWidth: 96,
@@ -104,7 +104,7 @@ function DetailRow({ label, value, mono = false }) {
       </Typography>
       <Typography
         sx={{
-          fontSize: 13,
+          fontSize: TEXT.md,
           color: BRAND.dark,
           fontFamily: mono ? "monospace" : "inherit",
           wordBreak: "break-all",
@@ -727,7 +727,7 @@ export default function Audit() {
                       sx={{
                         ml: 0.75,
                         height: 18,
-                        fontSize: 11,
+                        fontSize: TEXT.xs,
                         bgcolor: BRAND.tealSoft,
                         color: BRAND.tealText,
                         fontWeight: 700,
@@ -740,7 +740,7 @@ export default function Audit() {
 
                 <Typography
                   sx={{
-                    fontSize: 11.5,
+                    fontSize: TEXT.xs,
                     fontWeight: 700,
                     letterSpacing: 0.5,
                     textTransform: "uppercase",
@@ -847,7 +847,7 @@ export default function Audit() {
                           color: group.color,
                           fontWeight: 800,
                           letterSpacing: 0.5,
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           textTransform: "uppercase",
                           lineHeight: "28px",
                         }}
@@ -871,7 +871,7 @@ export default function Audit() {
                             component="span"
                             sx={{
                               ml: 1,
-                              fontSize: 11,
+                              fontSize: TEXT.xs,
                               color: BRAND.gray,
                               fontWeight: 600,
                             }}
@@ -949,10 +949,10 @@ export default function Audit() {
             flexWrap: "wrap",
           }}
         >
-          <Typography sx={{ fontSize: 16, fontWeight: 800, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
             Audit Events
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
             <strong>{totalRows}</strong> total
           </Typography>
         </Box>
@@ -1014,7 +1014,7 @@ export default function Audit() {
                 gap: 1,
               }}
             >
-              <Typography sx={{ fontSize: 18, fontWeight: 800, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
                 Event Detail
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -1048,7 +1048,7 @@ export default function Audit() {
                   <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <Typography
                       sx={{
-                        fontSize: 12,
+                        fontSize: TEXT.sm,
                         color: "text.secondary",
                         fontWeight: 600,
                         minWidth: 96,
@@ -1063,7 +1063,7 @@ export default function Audit() {
                       <EventTypeChip value={selectedEvent.event_type} />
                       <Typography
                         sx={{
-                          fontSize: 11,
+                          fontSize: TEXT.xs,
                           color: BRAND.gray,
                           fontFamily: "monospace",
                           overflow: "hidden",
@@ -1117,7 +1117,7 @@ export default function Audit() {
                     overflow: "auto",
                     maxHeight: 360,
                     fontFamily: "monospace",
-                    fontSize: 12,
+                    fontSize: TEXT.sm,
                     whiteSpace: "pre-wrap",
                     wordBreak: "break-word",
                   }}

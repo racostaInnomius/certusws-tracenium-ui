@@ -24,7 +24,7 @@ import CreateTokenDialog from "../components/tokens/CreateTokenDialog";
 import TokenCreatedDialog from "../components/tokens/TokenCreatedDialog";
 import RevokeTokenDialog from "../components/tokens/RevokeTokenDialog";
 
-import { BRAND, DATAGRID_SX } from "../theme/brand";
+import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -55,7 +55,7 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
     >
       <Typography
         sx={{
-          fontSize: 12.5,
+          fontSize: TEXT.sm,
           color: "text.secondary",
           fontWeight: 800,
           letterSpacing: 0.35,
@@ -73,7 +73,7 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
       <Box sx={{ pt: 1.6 }}>
         <Typography
           sx={{
-            fontSize: 28,
+            fontSize: TEXT["3xl"],
             fontWeight: 850,
             color: accent,
             lineHeight: 1.05,
@@ -87,7 +87,7 @@ function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
         {subtitle ? (
           <Typography
             sx={{
-              fontSize: 12,
+              fontSize: TEXT.sm,
               color: "text.secondary",
               mt: 0.6,
               lineHeight: 1.35,
@@ -141,12 +141,12 @@ function MetricGroup({ title, subtitle, children, accent = BRAND.teal }) {
             }}
           />
 
-          <Typography sx={{ fontSize: 15, fontWeight: 900, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 900, color: BRAND.dark }}>
             {title}
           </Typography>
         </Box>
 
-        <Typography sx={{ mt: 0.5, fontSize: 12, color: "text.secondary", pl: 2.25 }}>
+        <Typography sx={{ mt: 0.5, fontSize: TEXT.sm, color: "text.secondary", pl: 2.25 }}>
           {subtitle}
         </Typography>
       </Box>
@@ -804,10 +804,10 @@ const filteredRows = React.useMemo(() => {
           <Typography sx={{ fontWeight: 900, color: BRAND.dark, mb: 0.25 }}>
             {quotaStatusMeta.title}
           </Typography>
-          <Typography sx={{ fontSize: 13, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
             {quotaSummary.message || quotaStatusMeta.defaultMessage}
           </Typography>
-          <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
             Used agents: {quotaSummary.used} · Standard limit: {quotaSummary.standardLimit} · Upper limit: {quotaSummary.upperLimit} · Available capacity: {quotaSummary.creatableRemaining}
           </Typography>
         </Alert>

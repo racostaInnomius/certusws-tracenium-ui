@@ -23,7 +23,7 @@ import {
   Typography,
   Alert,
 } from "@mui/material";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const RULE_TYPES = [
   { value: "",                    label: "None (always install)" },
@@ -260,7 +260,7 @@ export default function DetectionRuleEditor({ value, onChange }) {
             "& .MuiAlert-icon": { color: BRAND.teal },
           }}
         >
-          <Typography sx={{ fontSize: 13 }}>
+          <Typography sx={{ fontSize: TEXT.md }}>
             Without a detection rule the installer will run on every deployment, even on devices that already have the package. The package's own installer should be idempotent for this to be safe.
           </Typography>
         </Alert>

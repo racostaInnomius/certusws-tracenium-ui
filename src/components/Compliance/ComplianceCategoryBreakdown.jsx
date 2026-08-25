@@ -30,7 +30,7 @@ import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import { listFrom } from "../../api/shape";
@@ -61,7 +61,7 @@ function PassRateBar({ rate }) {
       <Box sx={{ position: "relative", flex: 1, height: 8, borderRadius: 4, bgcolor: BRAND.surfaceMuted, overflow: "hidden" }}>
         <Box sx={{ position: "absolute", inset: 0, width: `${rate == null ? 0 : rate}%`, bgcolor: color, borderRadius: 4 }} />
       </Box>
-      <Typography sx={{ fontSize: 12, fontWeight: 700, color, minWidth: 34, textAlign: "right" }}>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color, minWidth: 34, textAlign: "right" }}>
         {rate == null ? "n/a" : `${rate}%`}
       </Typography>
     </Box>
@@ -94,16 +94,16 @@ function CategoryDrilldown({ category }) {
       </Box>
     );
   }
-  if (state.err) return <Box sx={{ py: 1.5, color: BRAND.alert?.error, fontSize: 12.5 }}>{state.err}</Box>;
+  if (state.err) return <Box sx={{ py: 1.5, color: BRAND.alert?.error, fontSize: TEXT.sm }}>{state.err}</Box>;
   if (state.devices.length === 0) {
-    return <Box sx={{ py: 1.5, color: BRAND.gray, fontSize: 12.5 }}>No devices are currently failing this category.</Box>;
+    return <Box sx={{ py: 1.5, color: BRAND.gray, fontSize: TEXT.sm }}>No devices are currently failing this category.</Box>;
   }
 
   return (
     <Box sx={{ py: 1 }}>
       <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-        <DevicesOutlinedIcon sx={{ fontSize: 15, color: BRAND.gray }} />
-        <Typography sx={{ fontSize: 12, fontWeight: 800, color: BRAND.gray }}>
+        <DevicesOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray }} />
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.gray }}>
           {state.devices.length} device{state.devices.length === 1 ? "" : "s"} failing this category
         </Typography>
       </Stack>
@@ -111,13 +111,13 @@ function CategoryDrilldown({ category }) {
         {state.devices.map((d) => (
           <Box key={d.agentId} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1, p: 1 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5, flexWrap: "wrap", gap: 0.5 }}>
-              <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: BRAND.dark }}>
+              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>
                 {d.hostname || d.agentId}
               </Typography>
               {d.platform ? (
-                <Chip size="small" label={d.platform} sx={{ height: 18, fontSize: 10, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
+                <Chip size="small" label={d.platform} sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
               ) : null}
-              <Typography sx={{ fontSize: 11.5, color: BRAND.gray }}>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
                 {d.failingChecks} failing
                 {d.highSeverityFails ? ` · ${d.highSeverityFails} critical/high` : ""}
               </Typography>
@@ -127,7 +127,7 @@ function CategoryDrilldown({ category }) {
                 const m = sevChip(c.severity);
                 return (
                   <Tooltip key={c.checkId} title={c.checkId} arrow>
-                    <Chip size="small" label={c.title || c.checkId} sx={{ height: 20, fontSize: 10.5, fontWeight: 600, bgcolor: m.bg, color: m.fg }} />
+                    <Chip size="small" label={c.title || c.checkId} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 600, bgcolor: m.bg, color: m.fg }} />
                   </Tooltip>
                 );
               })}
@@ -158,7 +158,7 @@ function BaselineCell({ row, bridge }) {
     // configurable" rather than "broken".
     return (
       <TableCell align="right">
-        <Typography sx={{ fontSize: 13, color: BRAND.gray }}>—</Typography>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>—</Typography>
       </TableCell>
     );
   }
@@ -175,7 +175,7 @@ function BaselineCell({ row, bridge }) {
             clickable
             sx={{
               height: 20,
-              fontSize: 10.5,
+              fontSize: TEXT.xs,
               fontWeight: 700,
               bgcolor: info.mode === "auto" ? BRAND.tealSoft : info.mode === "off" ? BRAND.surfaceMuted : BRAND.darkSoft,
               color: info.mode === "auto" ? BRAND.tealText : info.mode === "off" ? BRAND.gray : BRAND.dark,
@@ -189,7 +189,7 @@ function BaselineCell({ row, bridge }) {
               size="small"
               onClick={() => bridge.onSetAuto(row.category)}
             >
-              <BuildOutlinedIcon sx={{ fontSize: 15 }} />
+              <BuildOutlinedIcon sx={{ fontSize: ICON.sm }} />
             </IconButton>
           </Tooltip>
         ) : null}
@@ -216,33 +216,33 @@ function CategoryRow({ row, baselineBridge }) {
           ) : null}
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontSize: 13, fontWeight: 700, color: BRAND.dark, textTransform: "capitalize" }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, textTransform: "capitalize" }}>
             {prettyCategory(row.category)}
           </Typography>
-          {row.notApplicable ? <Typography sx={{ fontSize: 11, color: BRAND.gray }}>{row.notApplicable} n/a</Typography> : null}
+          {row.notApplicable ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{row.notApplicable} n/a</Typography> : null}
         </TableCell>
         <TableCell>
           <PassRateBar rate={row.passRate} />
         </TableCell>
         <TableCell align="right">
-          <Typography sx={{ fontSize: 13, color: ROLE.positive, fontWeight: 700 }}>{row.passed}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: ROLE.positive, fontWeight: 700 }}>{row.passed}</Typography>
         </TableCell>
         <TableCell align="right">
-          <Typography sx={{ fontSize: 13, color: row.failed ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>{row.failed}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: row.failed ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>{row.failed}</Typography>
         </TableCell>
         <TableCell align="right">
           {row.highSeverityFails ? (
             <Tooltip title="Failing checks at critical or high severity" arrow>
-              <Chip size="small" label={row.highSeverityFails} sx={{ height: 20, fontSize: 11, fontWeight: 800, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error }} />
+              <Chip size="small" label={row.highSeverityFails} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.alert?.errorSoft, color: BRAND.alert?.error }} />
             </Tooltip>
           ) : (
-            <Typography sx={{ fontSize: 13, color: BRAND.gray }}>0</Typography>
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>0</Typography>
           )}
         </TableCell>
         <TableCell align="right">
-          <Typography sx={{ fontSize: 13, color: row.devicesFailing ? BRAND.dark : BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.md, color: row.devicesFailing ? BRAND.dark : BRAND.gray }}>
             {row.devicesFailing}
-            {row.devices ? <Typography component="span" sx={{ fontSize: 11, color: BRAND.gray }}> / {row.devices}</Typography> : null}
+            {row.devices ? <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray }}> / {row.devices}</Typography> : null}
           </Typography>
         </TableCell>
         <BaselineCell row={row} bridge={baselineBridge} />
@@ -287,10 +287,10 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
   return (
     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-        <CategoryOutlinedIcon sx={{ color: BRAND.teal, fontSize: 20 }} />
+        <CategoryOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
         <Box>
-          <Typography sx={{ fontSize: 15, fontWeight: 800, color: BRAND.dark }}>Posture by category</Typography>
-          <Typography sx={{ fontSize: 12, color: BRAND.gray }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>Posture by category</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             Fleet pass rate per control category. Click a category with failures to see which devices fail it.
           </Typography>
         </Box>
@@ -301,9 +301,9 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
           <CircularProgress size={24} sx={{ color: BRAND.teal }} />
         </Box>
       ) : err ? (
-        <Box sx={{ py: 3, textAlign: "center", color: BRAND.alert?.error, fontSize: 13 }}>{err}</Box>
+        <Box sx={{ py: 3, textAlign: "center", color: BRAND.alert?.error, fontSize: TEXT.md }}>{err}</Box>
       ) : rows.length === 0 ? (
-        <Box sx={{ py: 3, textAlign: "center", color: BRAND.gray, fontSize: 13 }}>No compliance findings reported yet.</Box>
+        <Box sx={{ py: 3, textAlign: "center", color: BRAND.gray, fontSize: TEXT.md }}>No compliance findings reported yet.</Box>
       ) : (
         <Box sx={{ overflowX: "auto" }}>
           <Table size="small" sx={{ minWidth: 700 }}>

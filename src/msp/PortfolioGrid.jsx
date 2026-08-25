@@ -16,7 +16,7 @@ import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 import SectionPaper from "../components/common/SectionPaper";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import { fetchMspClients } from "./mspApi";
 
 // How many of an MSP's clients to preview inline on its card. Keeps the
@@ -37,7 +37,7 @@ function MetricChip({ label, value, tone = "neutral" }) {
     <Chip
       label={`${label}: ${value}`}
       size="small"
-      sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 700, fontSize: 11 }}
+      sx={{ bgcolor: s.bg, color: s.fg, fontWeight: 700, fontSize: TEXT.xs }}
     />
   );
 }
@@ -78,14 +78,14 @@ function ChildTenantCard({ client }) {
         minWidth: 0,
       }}
     >
-      <DevicesOutlinedIcon sx={{ fontSize: 13, color: BRAND.gray, flexShrink: 0 }} />
+      <DevicesOutlinedIcon sx={{ fontSize: ICON.xs, color: BRAND.gray, flexShrink: 0 }} />
       <Typography
         noWrap
-        sx={{ fontSize: 11.5, fontWeight: 600, color: BRAND.dark, flex: 1, minWidth: 0 }}
+        sx={{ fontSize: TEXT.xs, fontWeight: 600, color: BRAND.dark, flex: 1, minWidth: 0 }}
       >
         {client.name || `Tenant ${client.tenantId}`}
       </Typography>
-      <Typography sx={{ fontSize: 10.5, color: BRAND.gray, flexShrink: 0 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, flexShrink: 0 }}>
         {dash(client.deviceCount)} dev
       </Typography>
     </Box>
@@ -156,7 +156,7 @@ function PortfolioCard({ item, onSelect }) {
               </Typography>
             )}
           </Box>
-          <ArrowForwardOutlinedIcon sx={{ color: BRAND.gray, fontSize: 18, flexShrink: 0 }} />
+          <ArrowForwardOutlinedIcon sx={{ color: BRAND.gray, fontSize: ICON.lg, flexShrink: 0 }} />
         </Stack>
 
         {isMsp && childClients && childClients.length > 0 ? (
@@ -165,7 +165,7 @@ function PortfolioCard({ item, onSelect }) {
               <ChildTenantCard key={client.tenantId} client={client} />
             ))}
             {childClients.length > CHILD_PREVIEW_LIMIT ? (
-              <Typography sx={{ fontSize: 11, color: BRAND.gray, fontWeight: 600, textAlign: "center" }}>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 600, textAlign: "center" }}>
                 +{childClients.length - CHILD_PREVIEW_LIMIT} more
               </Typography>
             ) : null}
@@ -212,7 +212,7 @@ function GroupLabel({ children, count }) {
       >
         {children}
       </Typography>
-      <Typography sx={{ fontSize: 12, color: BRAND.gray, fontWeight: 600 }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontWeight: 600 }}>
         {count}
       </Typography>
     </Box>

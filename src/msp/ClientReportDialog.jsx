@@ -33,7 +33,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { fetchClientReport, downloadClientReport } from "./mspApi";
 
 function ymd(d) {
@@ -48,7 +48,7 @@ function rangeForDays(days) {
 function Kpi({ label, value, accent = BRAND.dark }) {
   return (
     <Box sx={{ flex: 1, minWidth: 92 }}>
-      <Typography sx={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1 }}>{value}</Typography>
+      <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: accent, lineHeight: 1.1 }}>{value}</Typography>
       <Typography variant="caption" sx={{ color: BRAND.gray }}>{label}</Typography>
     </Box>
   );
@@ -159,11 +159,11 @@ export default function ClientReportDialog({ open, clientId, clientName, onClose
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trend} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={BRAND.border} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: BRAND.gray }} minTickGap={24} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 11, fill: BRAND.gray }} />
-                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11, fill: BRAND.gray }} />
+                    <XAxis dataKey="date" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} minTickGap={24} />
+                    <YAxis yAxisId="left" tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} />
+                    <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} />
                     <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Legend wrapperStyle={{ fontSize: TEXT.sm }} />
                     <Line yAxisId="left" type="monotone" dataKey="deviceCount" name="Devices" stroke={BRAND.teal} strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="compliancePct" name="Compliance %" stroke={BRAND.alert.success} strokeWidth={2} dot={false} connectNulls />
                   </LineChart>

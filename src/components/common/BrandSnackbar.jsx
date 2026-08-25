@@ -43,7 +43,7 @@ import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 // Severity → visual contract. Filled background uses the brand
 // color (high saturation); the body text rides on BRAND.dark for
@@ -116,7 +116,7 @@ export default function BrandSnackbar({
         <Typography
           sx={{
             flex: 1,
-            fontSize: 13.5,
+            fontSize: TEXT.md,
             fontWeight: 600,
             color: fg,
             lineHeight: 1.45,

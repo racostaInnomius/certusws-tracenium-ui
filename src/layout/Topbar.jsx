@@ -7,7 +7,7 @@ import { getAlertsUnreadCount } from "../api/alerts";
 import { performLogout } from "../auth/logout";
 import { useMsp } from "../msp/MspContext";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 
 export const TOPBAR_HEIGHT = 56;
 export const CHROME_LINE_WIDTH = 3;
@@ -210,7 +210,7 @@ export default function Topbar({ onMenuClick }) {
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexShrink: 0 }}>
         <Typography
           sx={{
-            fontSize: 13,
+            fontSize: TEXT.md,
             fontWeight: 500,
             color: BRAND.surface,
             whiteSpace: "nowrap",

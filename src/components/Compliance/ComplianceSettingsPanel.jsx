@@ -42,7 +42,7 @@ import {
   updateComplianceSettings,
   getFrameworks
 } from "../../api/compliance";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import AsyncState from "../common/AsyncState";
 
 // Setting metadata — drives the form rows without per-row JSX
@@ -271,7 +271,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
             {allFrameworks.length > 0 ? (
               <Box>
                 <Divider sx={{ mb: 2 }} />
-                <Typography sx={{ fontWeight: 700, color: BRAND.dark, fontSize: 14 }}>
+                <Typography sx={{ fontWeight: 700, color: BRAND.dark, fontSize: TEXT.base }}>
                   Active frameworks (compliance pack)
                 </Typography>
                 <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
@@ -310,7 +310,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
                           <Stack direction="row" spacing={0.75} alignItems="center">
                             <Typography variant="body2">{f.shortName || f.framework}</Typography>
                             {f.family ? (
-                              <Chip size="small" label={f.family} sx={{ height: 18, fontSize: 10 }} />
+                              <Chip size="small" label={f.family} sx={{ height: 18, fontSize: TEXT.xs }} />
                             ) : null}
                           </Stack>
                         }

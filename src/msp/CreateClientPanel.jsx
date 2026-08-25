@@ -20,7 +20,7 @@ import {
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { fetchPendingClients, createManagedClient } from "./mspApi";
 
 export default function CreateClientPanel({ mspId, mspName, onSwitchToCodes }) {
@@ -162,7 +162,7 @@ export default function CreateClientPanel({ mspId, mspName, onSwitchToCodes }) {
               <Typography variant="caption" sx={{ color: BRAND.gray }} noWrap>
                 {p.adminEmail || p.adminSubject}
               </Typography>
-              <Chip label="pending" size="small" sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: 11 }} />
+              <Chip label="pending" size="small" sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: TEXT.xs }} />
             </Stack>
           ))}
         </Stack>

@@ -44,7 +44,7 @@ import { getTenantPolicy, saveTenantPolicy, pushTenantPolicy } from "../api/poli
 import { getPluginCoverageSummary } from "../api/overview";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -123,7 +123,7 @@ function CoverageChip({ pluginKey, coverage, total }) {
       <Chip
         label="coverage unavailable"
         size="small"
-        sx={{ height: 20, fontSize: 11, fontWeight: 700, bgcolor: "transparent", color: BRAND.gray }}
+        sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "transparent", color: BRAND.gray }}
       />
     );
   }
@@ -141,7 +141,7 @@ function CoverageChip({ pluginKey, coverage, total }) {
       size="small"
       sx={{
         height: 20,
-        fontSize: 11,
+        fontSize: TEXT.xs,
         fontWeight: 700,
         bgcolor: "transparent",
         color,
@@ -168,7 +168,7 @@ function PluginRow({ plugin, enabled, onToggle, readOnly, coverage, totalDevices
     >
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: "wrap", mb: 0.25 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 700, color: BRAND.dark }}>
+          <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
             {plugin.label} — {plugin.title}
           </Typography>
           {plugin.required ? (
@@ -177,7 +177,7 @@ function PluginRow({ plugin, enabled, onToggle, readOnly, coverage, totalDevices
               size="small"
               sx={{
                 height: 18,
-                fontSize: 10,
+                fontSize: TEXT.xs,
                 fontWeight: 800,
                 bgcolor: BRAND.tealSoft,
                 color: BRAND.tealText,
@@ -187,7 +187,7 @@ function PluginRow({ plugin, enabled, onToggle, readOnly, coverage, totalDevices
           ) : null}
           <CoverageChip pluginKey={plugin.key} coverage={coverage} total={totalDevices} />
         </Stack>
-        <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
           {plugin.description}
         </Typography>
       </Box>
