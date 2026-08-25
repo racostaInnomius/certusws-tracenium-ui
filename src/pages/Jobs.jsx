@@ -29,11 +29,7 @@ import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
-import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import HourglassBottomOutlinedIcon from "@mui/icons-material/HourglassBottomOutlined";
-import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AddCircleOutlineOutlinedIcon from "@mui/icons-material/AddCircleOutlineOutlined";
@@ -47,7 +43,6 @@ import JobsTimeseriesChart from "../components/Overview/JobsTimeseriesChart";
 import { BRAND, DATAGRID_SX, ICON, MONO, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import SummaryCard from "../components/common/SummaryCard";
 
 import { useAuthContext } from "../auth/AuthContext";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -74,6 +69,8 @@ import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
 import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
+import { deriveTriage, groupFailingDevices, groupFailureCauses } from "../utils/jobInsights";
+import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
@@ -345,120 +342,145 @@ function DetailRow({ label, value, mono = false }) {
  * track; everything else scales proportionally so the user reads
  * ranking at a glance. Empty windows render an honest hint.
  */
-function JobsByTypeCard({ windowDays, data, loading, typeLabels }) {
+/**
+ * Jobs by type, as a donut.
+ *
+ * Was a stack of horizontal bars. A donut answers the question this card is
+ * actually asked — "what is this tenant's job mix" — as one shape, and gives
+ * the total a natural home in the middle.
+ *
+ * Palette: CHART_CATEGORICAL from theme/chartPalette, NOT the brand teal ramp.
+ * Adjacent slices need perceptual separation; teal-on-teal-on-cyan reads as
+ * one blur at donut scale. That module exists for exactly this and already
+ * anchors its first entry to BRAND.teal, so the card still starts in brand.
+ *
+ * Clicking a slice or a legend row filters the history below.
+ */
+function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, selectedType }) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const total = Number(data?.total || 0);
-  const max = items.reduce((acc, it) => Math.max(acc, Number(it.count || 0)), 0) || 1;
+
+  // Donut geometry. A circle of circumference C drawn with stroke-dasharray
+  // `len C-len` and rotated by the running offset gives one arc per slice —
+  // no chart library, no extra chunk on a card that has never needed one.
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  // Cumulative offsets without mutating a variable across the map: the React
+  // Compiler rejects reassignment during render, and it is right to — a
+  // running `let` inside a render body is state pretending to be a local.
+  const slices = items.reduce((acc, row, i) => {
+    const share = total > 0 ? Number(row.count || 0) / total : 0;
+    const previous = acc[acc.length - 1];
+    acc.push({
+      type: row.type,
+      label: typeLabels?.get(row.type) || row.type,
+      count: row.count,
+      color: CHART_CATEGORICAL[i % CHART_CATEGORICAL.length],
+      len: share * C,
+      offset: previous ? previous.offset + previous.len : 0,
+    });
+    return acc;
+  }, []);
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        minWidth: 0,
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1,
-          mb: 1,
-        }}
-      >
-        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
-          Jobs by type — last {windowDays} day{Number(windowDays) === 1 ? "" : "s"}
+    <SectionPaper variant="panel" sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <Box sx={{ mb: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: BRAND.dark }}>
+          Jobs by type
         </Typography>
-        <Chip
-          size="small"
-          label={`${total} job${total === 1 ? "" : "s"}`}
-          sx={{
-            height: 20,
-            fontSize: TEXT.xs,
-            fontWeight: 700,
-            bgcolor: BRAND.tealSoft,
-            color: BRAND.tealText,
-          }}
-        />
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
+          Last {windowDays} day{Number(windowDays) === 1 ? "" : "s"} · click to filter
+        </Typography>
       </Box>
 
       {loading && items.length === 0 ? (
-        <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
-          Loading…
-        </Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>Loading…</Typography>
       ) : items.length === 0 ? (
-        <Box
-          sx={{
-            flex: 1,
-            minHeight: 160,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: BRAND.gray,
-          }}
-        >
-          <Typography variant="caption">No jobs in window</Typography>
+        <Box sx={{ flex: 1, minHeight: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>No jobs in window</Typography>
         </Box>
       ) : (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, mt: 0.5 }}>
-          {items.map((row) => {
-            const pct = Math.round((Number(row.count || 0) / max) * 100);
-            return (
-              <Box key={row.type} sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
-                <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: TEXT.sm }}>
-                  <Typography
-                    sx={{
-                      fontSize: TEXT.sm,
-                      fontWeight: 600,
-                      color: BRAND.dark,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      pr: 1,
-                    }}
-                  >
-                    {/* La etiqueta humana, igual que en la tabla. Esta tarjeta
-                        seguía imprimiendo el job_type crudo
-                        ("software_dp_prefetch"): el catálogo de 8 tipos se
-                        cableó al historial y a los filtros, y este sitio se
-                        quedó fuera. */}
-                    {typeLabels?.get(row.type) || row.type}
-                  </Typography>
-                  <Typography
-                    sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.teal, flexShrink: 0 }}
-                  >
-                    {row.count}
-                  </Typography>
-                </Box>
-                <Box
+        <Stack direction="row" spacing={2.5} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ position: "relative", width: 128, height: 128, flexShrink: 0 }}>
+            <svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Jobs by type">
+              <g transform="rotate(-90 64 64)">
+                {slices.map((s) => (
+                  <circle
+                    key={s.type}
+                    cx="64"
+                    cy="64"
+                    r={R}
+                    fill="none"
+                    stroke={s.color}
+                    strokeWidth={selectedType === s.type ? 24 : 20}
+                    strokeDasharray={`${s.len} ${C - s.len}`}
+                    strokeDashoffset={-s.offset}
+                    style={{ cursor: "pointer", transition: "stroke-width 120ms ease" }}
+                    onClick={() => onSelectType?.(s.type)}
+                  />
+                ))}
+              </g>
+            </svg>
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+              }}
+            >
+              <Typography sx={{ fontFamily: MONO, fontSize: TEXT["2xl"], fontWeight: 600, color: BRAND.dark, lineHeight: 1 }}>
+                {total}
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>jobs</Typography>
+            </Box>
+          </Box>
+
+          <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+            {slices.map((s) => {
+              const active = selectedType === s.type;
+              return (
+                <Stack
+                  key={s.type}
+                  direction="row"
+                  spacing={1.25}
+                  alignItems="center"
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  onClick={() => onSelectType?.(s.type)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectType?.(s.type);
+                    }
+                  }}
                   sx={{
-                    height: 6,
-                    borderRadius: 3,
-                    bgcolor: BRAND.darkSoft,
-                    overflow: "hidden",
+                    cursor: "pointer",
+                    borderRadius: 1,
+                    px: 0.75,
+                    py: 0.25,
+                    bgcolor: active ? BRAND.tealSoft : "transparent",
+                    "&:hover": { bgcolor: active ? BRAND.tealSoft : BRAND.surfaceMuted },
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: `${pct}%`,
-                      height: "100%",
-                      bgcolor: BRAND.teal,
-                      transition: "width 240ms ease",
-                    }}
-                  />
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
+                  <Box sx={{ width: 9, height: 9, borderRadius: 0.5, bgcolor: s.color, flexShrink: 0 }} />
+                  <Typography sx={{ flex: 1, fontSize: TEXT.md, color: BRAND.dark, minWidth: 0 }} noWrap>
+                    {s.label}
+                  </Typography>
+                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
+                    {s.count}
+                  </Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+        </Stack>
       )}
-    </Paper>
+    </SectionPaper>
   );
 }
 
@@ -731,6 +753,10 @@ export default function Jobs() {
   const [chartLoading, setChartLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState(initialFilters.status || "all");
   const [jobTypeFilter, setJobTypeFilter] = React.useState(initialFilters.type || "all");
+  // Which triage cell drives the history filter, or "" for none. Declared here
+  // with the other filters because `filteredRows` reads it — further down it
+  // was a TDZ error the build never sees and the page smoke test does.
+  const [triageFilter, setTriageFilter] = React.useState("");
   const [search, setSearch] = React.useState(initialFilters.search || "");
   // The just-dispatched job to flash once its row renders — cleared
   // after the animation plays so it never re-triggers on a later
@@ -1133,27 +1159,17 @@ export default function Jobs() {
           ? row.__jobs.some((j) => matchesRowSearch(j, q))
           : matchesRowSearch(row, q));
 
-      return matchesStatus && matchesJobType && matchesSearch;
+      // "Stuck" has no status of its own: it is pending/retrying that never
+      // left the queue. Without this predicate the triage cell would count
+      // rows the table could not then show.
+      const matchesStuck =
+        triageFilter !== "stuck" ||
+        (["pending", "retrying"].includes(String(row.status || "").toLowerCase()) &&
+          !row.sent_at);
+
+      return matchesStatus && matchesJobType && matchesSearch && matchesStuck;
     });
-  }, [groupedRows, deviceMap, deferredSearch, statusFilter, jobTypeFilter]);
-
-  const summary = React.useMemo(() => {
-    const total = tenantJobs.length;
-    const pending = tenantJobs.filter((job) =>
-      ["pending", "retrying", "sent", "running"].includes(String(job.status || "").toLowerCase())
-    ).length;
-    const completed = tenantJobs.filter(
-      (job) => String(job.status || "").toLowerCase() === "completed"
-    ).length;
-
-    return {
-      connectedDevices: connectedDeviceIds.length,
-      knownDevices: knownDevices.length,
-      total,
-      pending,
-      completed,
-    };
-  }, [connectedDeviceIds.length, knownDevices.length, tenantJobs]);
+  }, [groupedRows, deviceMap, deferredSearch, statusFilter, jobTypeFilter, triageFilter]);
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
@@ -1305,6 +1321,100 @@ export default function Jobs() {
     const totalText = `${total}${historyTruncated ? "+" : ""} total`;
     return live ? `${totalText} · ${live} in flight` : totalText;
   }, [tenantJobs, historyTruncated]);
+
+  // ── Failures, two lenses ──────────────────────────────────────────────
+  const [failureLens, setFailureLens] = React.useState("cause");
+
+  const failureLensRows = React.useMemo(() => {
+    if (failureLens === "device") {
+      return groupFailingDevices(tenantJobs, { deviceMap }).map((d) => ({
+        key: d.deviceId,
+        label: d.hostname,
+        count: d.count,
+        meta: d.lastAt ? formatDate(new Date(d.lastAt).toISOString()) : null,
+        // Search by hostname: it is what the row shows and what the search
+        // box matches. Falls back to the id for a device the roster lost.
+        term: d.hostname,
+        dot: d.count >= 3 ? BRAND.alert.error : BRAND.alert.warning,
+      }));
+    }
+    return groupFailureCauses(tenantJobs).map((c) => ({
+      key: c.cause,
+      label: c.cause,
+      count: c.count,
+      meta: null,
+      // The search box already matches last_error, so the normalized cause
+      // works as a term without adding a filter to the backend. "unreported"
+      // is a label, not a string in the data — searching it would match
+      // nothing, so it searches nothing and just clears.
+      term: c.cause === "unreported" ? "" : c.cause,
+      dot: c.count >= 3 ? BRAND.alert.error : BRAND.alert.warning,
+    }));
+  }, [failureLens, tenantJobs, deviceMap]);
+
+  // ── Triage ────────────────────────────────────────────────────────────
+  const triage = React.useMemo(() => deriveTriage(tenantJobs), [tenantJobs]);
+
+  const triageCells = React.useMemo(
+    () => [
+      {
+        key: "failed",
+        label: "FAILED · 24H",
+        value: triage.failed,
+        sub: "need review",
+        dot: BRAND.alert.error,
+        fg: triage.failed > 0 ? BRAND.alert.errorText : BRAND.dark,
+      },
+      {
+        key: "timeout",
+        label: "TIMED OUT · 24H",
+        value: triage.timedOut,
+        sub: "agent went quiet",
+        dot: BRAND.alert.error,
+        fg: triage.timedOut > 0 ? BRAND.alert.errorText : BRAND.dark,
+      },
+      {
+        key: "stuck",
+        label: "STUCK IN QUEUE",
+        value: triage.stuck,
+        sub: "never sent, >24h",
+        dot: BRAND.alert.warning,
+        fg: triage.stuck > 0 ? BRAND.alert.warningText : BRAND.dark,
+      },
+      {
+        key: "success",
+        label: "SUCCESS RATE",
+        // null (nothing terminal yet) prints as an em dash rather than 0%,
+        // which would read as "everything is failing".
+        value: triage.successRate === null ? "—" : `${triage.successRate}%`,
+        sub: triage.terminal ? `${triage.completed} of ${triage.terminal}` : "no finished jobs",
+        dot: BRAND.teal,
+        fg: BRAND.dark,
+      },
+    ],
+    [triage]
+  );
+
+  /**
+   * Clicking a triage cell filters the table below.
+   *
+   * This is what makes the band worth its space: every panel is an entry
+   * point into the history, not decoration. It reuses the status filter the
+   * page already has — nothing new in the backend.
+   *
+   * "success" is deliberately NOT a filter: it is a rate, not a set of rows.
+   * Clicking it clears instead, which is also what a second click on an
+   * active cell does.
+   */
+  const applyTriageFilter = React.useCallback((key) => {
+    setTriageFilter((current) => {
+      const next = current === key || key === "success" ? "" : key;
+      setStatusFilter(next === "failed" ? "failed" : next === "timeout" ? "timeout" : "all");
+      // `stuck` has no status of its own — it is pending/retrying that never
+      // left. The rows are surfaced through the dedicated flag below.
+      return next;
+    });
+  }, []);
 
   const selectedJobStatus = String(selectedJob?.status || "").toLowerCase();
   const canRetrySelectedJob = ["failed", "timeout", "cancelled"].includes(selectedJobStatus);
@@ -1636,53 +1746,70 @@ export default function Jobs() {
         }
       />
 
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-            <SummaryCard
-              title="Connected"
-              value={summary.connectedDevices}
-              icon={<LinkOutlinedIcon />}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-            <SummaryCard
-              title="Known Devices"
-              value={summary.knownDevices}
-              icon={<DevicesOtherOutlinedIcon />}
-              accent={BRAND.dark}
-              tint={BRAND.darkSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-            <SummaryCard
-              title="Total Jobs"
-              value={summary.total}
-              icon={<AssignmentOutlinedIcon />}
-              accent={BRAND.dark}
-              tint={BRAND.cyanSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-            <SummaryCard
-              title="Pending / Running"
-              value={summary.pending}
-              icon={<HourglassBottomOutlinedIcon />}
-              accent={BRAND.alert.high}
-              tint="rgba(199,121,43,0.14)"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-            <SummaryCard
-              title="Completed"
-              value={summary.completed}
-              icon={<TaskAltOutlinedIcon />}
-              accent={BRAND.tealText}
-              tint={BRAND.tealSoft}
-            />
-          </Grid>
-        </Grid>
-      </Box>
+      {/* ── Triage strip ────────────────────────────────────────────────
+          Replaces five KPI cards that between them said very little about
+          jobs: two measured the FLEET (connected / known devices, which
+          belong on Overview), two restated what the page heading now
+          carries (total, in flight), and NONE showed failures — the one
+          number on a jobs page that asks for a person.
+
+          `stuck` in particular exists nowhere else in the UI: jobs that
+          were never sent and have been waiting over a day. Two of them sat
+          on a dead endpoint for 46 hours and only surfaced by querying the
+          database by hand.
+
+          Each cell filters the history below — see `applyTriageFilter`. */}
+      <SectionPaper variant="panel" sx={{ p: 0, mb: 2, overflow: "hidden" }}>
+        <Stack direction={{ xs: "column", sm: "row" }} sx={{ minWidth: 0 }}>
+          {triageCells.map((cell) => {
+            const active = triageFilter === cell.key;
+            return (
+              <Box
+                key={cell.key}
+                role="button"
+                tabIndex={0}
+                aria-label={`${cell.label}: ${cell.value}. Filter the history`}
+                aria-pressed={active}
+                onClick={() => applyTriageFilter(cell.key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    applyTriageFilter(cell.key);
+                  }
+                }}
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  px: 2.25,
+                  py: 1.5,
+                  cursor: "pointer",
+                  borderRight: { sm: `1px solid ${BRAND.border}` },
+                  borderBottom: { xs: `1px solid ${BRAND.border}`, sm: "none" },
+                  "&:last-of-type": { borderRight: "none", borderBottom: "none" },
+                  bgcolor: active ? BRAND.tealSoft : "transparent",
+                  transition: "background-color 120ms ease",
+                  "&:hover": { bgcolor: active ? BRAND.tealSoft : BRAND.surfaceMuted },
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: cell.dot, flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: TEXT.xs, fontWeight: 600, letterSpacing: 0.6, color: TEXT_MUTED }}>
+                    {cell.label}
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1} alignItems="baseline">
+                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT["3xl"], fontWeight: 600, color: cell.fg, lineHeight: 1 }}>
+                    {cell.value}
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap>
+                    {cell.sub}
+                  </Typography>
+                </Stack>
+              </Box>
+            );
+          })}
+        </Stack>
+      </SectionPaper>
 
       {/* Jobs by status (timeseries) + Jobs by type (breakdown).
           The two share `chartWindowDays`; the chart's window toggle
@@ -1703,10 +1830,121 @@ export default function Jobs() {
             windowDays={chartWindowDays}
             data={jobsByType}
             typeLabels={jobTypeLabels}
+            selectedType={jobTypeFilter === "all" ? null : jobTypeFilter}
+            onSelectType={(type) =>
+              setJobTypeFilter((current) => (current === type ? "all" : type))
+            }
             loading={chartLoading || loadingJobs}
           />
         </Grid>
       </Grid>
+
+      {/* ── Failures, two lenses ─────────────────────────────────────────
+          "What is breaking" and "where is it breaking" are the same question
+          from two angles, so they share one panel with a toggle instead of
+          taking a slot each. Both feed the search box the page already has —
+          it matches last_error and hostname — so neither lens needs a new
+          backend filter.
+
+          Only rendered when something IS failing: a panel that spends most of
+          its life saying "nothing here" is the kind of decoration this
+          refactor is removing. */}
+      {failureLensRows.length > 0 ? (
+        <SectionPaper variant="panel" sx={{ p: 0, mb: 2, overflow: "hidden" }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            alignItems={{ sm: "center" }}
+            justifyContent="space-between"
+            sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${BRAND.border}` }}
+          >
+            <Box>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: BRAND.dark }}>
+                Failures
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
+                {failureLens === "cause"
+                  ? "What is breaking — click to search the history"
+                  : "Where it keeps breaking — click to search the history"}
+              </Typography>
+            </Box>
+            <Stack direction="row" sx={{ border: `1px solid ${BRAND.borderStrong}`, borderRadius: 2, overflow: "hidden", flexShrink: 0 }}>
+              {[
+                { key: "cause", label: "By cause" },
+                { key: "device", label: "By device" },
+              ].map((lens) => (
+                <Box
+                  key={lens.key}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={failureLens === lens.key}
+                  onClick={() => setFailureLens(lens.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setFailureLens(lens.key);
+                    }
+                  }}
+                  sx={{
+                    px: 1.75,
+                    minHeight: 34,
+                    display: "flex",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    fontSize: TEXT.md,
+                    fontWeight: failureLens === lens.key ? 700 : 400,
+                    color: failureLens === lens.key ? BRAND.dark : TEXT_MUTED,
+                    bgcolor: failureLens === lens.key ? BRAND.tealSoft : "transparent",
+                  }}
+                >
+                  {lens.label}
+                </Box>
+              ))}
+            </Stack>
+          </Stack>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+            {failureLensRows.map((row) => (
+              <Stack
+                key={row.key}
+                direction="row"
+                spacing={1.5}
+                alignItems="center"
+                role="button"
+                tabIndex={0}
+                aria-label={`${row.label}: ${row.count} failures. Search the history`}
+                onClick={() => setSearch(row.term)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSearch(row.term);
+                  }
+                }}
+                sx={{
+                  px: 2,
+                  py: 1.25,
+                  cursor: "pointer",
+                  borderBottom: `1px solid ${BRAND.border}`,
+                  "&:hover": { bgcolor: BRAND.surfaceMuted },
+                }}
+              >
+                <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: row.dot, flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, fontSize: TEXT.md, color: BRAND.dark, minWidth: 0 }} noWrap title={row.label}>
+                  {row.label}
+                </Typography>
+                {row.meta ? (
+                  <Typography sx={{ fontFamily: MONO, fontSize: TEXT.sm, color: TEXT_MUTED }}>
+                    {row.meta}
+                  </Typography>
+                ) : null}
+                <Typography sx={{ fontFamily: MONO, fontSize: TEXT.md, fontWeight: 600, color: row.dot }}>
+                  {row.count}
+                </Typography>
+              </Stack>
+            ))}
+          </Box>
+        </SectionPaper>
+      ) : null}
 
       <SectionPaper
         variant="panel"
