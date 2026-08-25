@@ -719,9 +719,16 @@ export default function Sidebar({
     ...(isPrivileged
       ? [{ label: "MDM / MAM", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" }]
       : []),
-    ...(isPrivileged
-      ? [{ label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> }]
-      : []),
+    // Jobs — like Alerts/Reports/Remote Control below, always visible
+    // (ADR-0011): the read endpoints (modules/orchestrator/jobs/jobs.routes.ts)
+    // have no role gate at all, any active member can already view
+    // this page. Dispatch/retry/cancel stay admin+capability gated
+    // server-side; a member without the "jobs" capability sees the
+    // page but gets the permission-denied popup on those actions, not
+    // a missing nav entry. Was previously wrapped in isPrivileged
+    // (OWNER/ADMIN only), which also hid it from any custom role
+    // granted "jobs" since isPrivileged only recognizes the 2 built-ins.
+    { label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> },
     ...(isPrivileged
       ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
       : []),
