@@ -19,6 +19,8 @@ import {
 import {
   AUTH_REQUIRED_EVENT,
   AuthError,
+  PERMISSION_DENIED_EVENT,
+  PermissionDeniedError,
   TEMPORARY_ERROR_EVENT,
   TemporaryServerError,
   clearApiCache,
@@ -33,6 +35,7 @@ import {
   invalidateApiCache,
   invalidateApiCachePrefix,
   isAuthError,
+  isPermissionDeniedError,
   prefetchApiGetJson,
   isTemporaryApiError,
   setApiCacheSessionScope,
@@ -136,6 +139,59 @@ describe("httpGetJson — error taxonomy", () => {
     });
 
     expect(authEvents).toHaveLength(0);
+  });
+
+  it("HTTP 403 with error PERMISSION_DENIED (ADR-0011) → PermissionDeniedError, dispatches the event", async () => {
+    respond(
+      "get",
+      "/api/v1/tenants/7/jobs",
+      { error: "PERMISSION_DENIED", message: "You don't have permission to use Jobs. Ask a tenant admin to grant it." },
+      { status: 403 }
+    );
+
+    const events = await captureEvents(PERMISSION_DENIED_EVENT, async () => {
+      const err = await httpGetJson("/api/v1/tenants/7/jobs").catch((e) => e);
+
+      expect(err).toBeInstanceOf(PermissionDeniedError);
+      expect(err.status).toBe(403);
+      expect(err.code).toBe("PERMISSION_DENIED");
+      expect(err.message).toBe("You don't have permission to use Jobs. Ask a tenant admin to grant it.");
+      expect(isPermissionDeniedError(err)).toBe(true);
+      expect(isAuthError(err)).toBe(false);
+      expect(isTemporaryApiError(err)).toBe(false);
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0].message).toBe("You don't have permission to use Jobs. Ask a tenant admin to grant it.");
+    expect(events[0].code).toBe("PERMISSION_DENIED");
+  });
+
+  it("PERMISSION_DENIED is NOT latched — every occurrence dispatches its own event", async () => {
+    // Unlike AUTH_REQUIRED_EVENT (a session-wide "please log in again"
+    // state), a permission denial is per-action — clicking three
+    // different gated buttons in a row deserves three notices.
+    respond("get", "/api/v1/one", { error: "PERMISSION_DENIED", message: "no jobs" }, { status: 403 });
+    respond("get", "/api/v1/two", { error: "PERMISSION_DENIED", message: "no alerts" }, { status: 403 });
+
+    const events = await captureEvents(PERMISSION_DENIED_EVENT, async () => {
+      await httpGetJson("/api/v1/one").catch(() => {});
+      await httpGetJson("/api/v1/two").catch(() => {});
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.message)).toEqual(["no jobs", "no alerts"]);
+  });
+
+  it("a plain 403 FORBIDDEN does NOT dispatch PERMISSION_DENIED_EVENT", async () => {
+    respond("get", "/api/v1/forbidden-plain", { error: "FORBIDDEN" }, { status: 403 });
+
+    const events = await captureEvents(PERMISSION_DENIED_EVENT, async () => {
+      const err = await httpGetJson("/api/v1/forbidden-plain").catch((e) => e);
+      expect(err).not.toBeInstanceOf(PermissionDeniedError);
+      expect(isPermissionDeniedError(err)).toBe(false);
+    });
+
+    expect(events).toHaveLength(0);
   });
 
   it("HTTP 4xx without body error code falls back to code HTTP_<status>", async () => {

@@ -14,6 +14,15 @@ vi.mock("../api/tenants", () => ({
   cancelPendingInvite: vi.fn(),
 }));
 
+// ADR-0011 — TenantMemberDialog's role selector now fetches the
+// tenant's role catalog. Mocked here so these pre-existing tests don't
+// depend on network fallback behavior for an endpoint they don't care
+// about; the dynamic-selector behavior itself has its own coverage in
+// RolesAdministrator.test.jsx and member-role-selector.test.jsx.
+vi.mock("../api/roles", () => ({
+  listTenantRoles: vi.fn().mockResolvedValue({ items: [] }),
+}));
+
 vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({
     auth: { tenantId: 7 },

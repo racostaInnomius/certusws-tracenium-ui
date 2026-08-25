@@ -24,6 +24,12 @@ const DEFAULT_STORAGE_MAX_AGE_MS = 10 * 60_000;
 
 export const TEMPORARY_ERROR_EVENT = "tracenium:temporary-server-error";
 export const AUTH_REQUIRED_EVENT = "tracenium:auth-required";
+// ADR-0011 (backend) — fired whenever any API call gets back a 403
+// PERMISSION_DENIED (a custom role attempting a capability it wasn't
+// granted). AppShell listens globally and shows a dialog with the
+// backend's own human-readable message — the product's explicit "don't
+// hide the feature, explain on attempt" requirement.
+export const PERMISSION_DENIED_EVENT = "tracenium:permission-denied";
 
 let authRedirectStarted = false;
 
@@ -78,6 +84,16 @@ export class AuthError extends Error {
     this.status = options.status ?? 401;
     this.body = options.body ?? null;
     this.code = options.code || "UNAUTHENTICATED";
+  }
+}
+
+export class PermissionDeniedError extends Error {
+  constructor(message = "PERMISSION_DENIED", options = {}) {
+    super(message);
+    this.name = "PermissionDeniedError";
+    this.status = options.status ?? 403;
+    this.body = options.body ?? null;
+    this.code = options.code || "PERMISSION_DENIED";
   }
 }
 
@@ -275,6 +291,24 @@ function emitAuthRequired(err, { url } = {}) {
       }
     }, 50);
   }
+}
+
+// Unlike emitAuthRequired, this has no "only once" latch — a permission
+// denial is a per-action event (the operator might click three
+// different gated buttons in a row, each deserves its own notice), not
+// a session-wide state change like needing to log in again.
+function emitPermissionDenied(err, { url } = {}) {
+  if (typeof window === "undefined") return;
+
+  const detail = {
+    url,
+    status: err?.status ?? 403,
+    code: err?.code || err?.body?.error || "PERMISSION_DENIED",
+    message: err?.body?.message || err?.message || "You don't have permission to do that.",
+    ts: now(),
+  };
+
+  window.dispatchEvent(new CustomEvent(PERMISSION_DENIED_EVENT, { detail }));
 }
 
 function withTimeout(ms = DEFAULT_TIMEOUT_MS) {
@@ -490,6 +524,11 @@ export function isAuthError(err) {
   return err?.status === 401 || code.includes("UNAUTHENTICATED");
 }
 
+export function isPermissionDeniedError(err) {
+  const code = String(err?.code || err?.body?.error || "").toUpperCase();
+  return err?.status === 403 && code === "PERMISSION_DENIED";
+}
+
 // 5xx statuses that are PERMANENT, not transient. 501 Not Implemented is
 // used deliberately by RCP "screen" (an unreleased feature) — retrying it
 // will never succeed. 505 HTTP Version Not Supported is likewise a
@@ -576,6 +615,17 @@ async function handleResponse(res, url = "") {
     throw err;
   }
 
+  if (res.status === 403 && getBodyErrorCode(body) === "PERMISSION_DENIED") {
+    const err = new PermissionDeniedError(body?.message, {
+      status: 403,
+      body,
+      code: "PERMISSION_DENIED",
+    });
+
+    emitPermissionDenied(err, { url });
+    throw err;
+  }
+
   if (
     !PERMANENT_5XX_STATUSES.has(res.status) &&
     (res.status === 503 || isRetryableBody(body) || res.status >= 500)
@@ -611,6 +661,15 @@ function toHumanError(err, url = "") {
   }
 
   if (err instanceof TemporaryServerError) {
+    return err;
+  }
+
+  // Already emitted inside handleResponse — pass through unchanged.
+  // (AuthError re-emits here too because callers can also construct/throw
+  // one directly without going through handleResponse; nothing else in
+  // this codebase throws a PermissionDeniedError except handleResponse,
+  // so there's no second emission site to cover here.)
+  if (err instanceof PermissionDeniedError) {
     return err;
   }
 
