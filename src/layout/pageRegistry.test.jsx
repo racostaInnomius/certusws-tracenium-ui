@@ -35,6 +35,7 @@ describe("PAGE_REGISTRY", () => {
       "retention",
       "session-settings",
       "location-sites",
+      "roles",
     ];
     for (const key of expected) {
       expect(PAGE_REGISTRY[key], `missing route: ${key}`).toBeTypeOf("function");

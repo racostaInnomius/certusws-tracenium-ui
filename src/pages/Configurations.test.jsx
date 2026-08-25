@@ -20,8 +20,20 @@ vi.mock("../api/locationSites", () => ({
 vi.mock("../msp/mspApi", () => ({
   fetchMyPartner: vi.fn().mockResolvedValue({ status: null }),
 }));
+vi.mock("../api/roles", () => ({
+  listTenantRoles: vi.fn().mockResolvedValue({ items: [] }),
+}));
+vi.mock("../auth/AuthContext", () => ({
+  useAuthContext: () => ({
+    auth: { tenantId: 7 },
+    loading: false,
+    refreshAuth: vi.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}));
 
 import Configurations from "./Configurations";
+import { listTenantRoles } from "../api/roles";
 
 afterEach(cleanup);
 
@@ -36,5 +48,25 @@ describe("Configurations (Settings) — Tenants card relocation", () => {
     expect(screen.queryByText("Tenant records · click to manage")).not.toBeInTheDocument();
     // "Tenants" (exact) as a card title — "Tenant members" must not false-match.
     expect(screen.queryByText("TENANTS")).not.toBeInTheDocument();
+  });
+});
+
+describe("Configurations (Settings) — Roles & permissions card (ADR-0011)", () => {
+  it("renders the card and navigates to the roles page on click", async () => {
+    listTenantRoles.mockResolvedValue({
+      items: [
+        { id: 1, name: "OWNER", isSystem: true, permissions: [] },
+        { id: 10, name: "IT Support", isSystem: false, permissions: ["jobs"] },
+      ],
+    });
+    const onNavigate = vi.fn();
+    render(<Configurations onNavigate={onNavigate} />);
+
+    const card = await screen.findByText("Roles & permissions");
+    // Only the 1 custom role counts — built-ins don't inflate the number.
+    await waitFor(() => expect(screen.getByText("1")).toBeInTheDocument());
+
+    card.closest("[class*='MuiPaper']").click();
+    expect(onNavigate).toHaveBeenCalledWith("roles");
   });
 });

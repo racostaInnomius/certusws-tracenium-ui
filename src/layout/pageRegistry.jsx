@@ -43,6 +43,7 @@ const Retention = React.lazy(() => import("../pages/Retention"));
 const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
 const CryptoDiscovery = React.lazy(() => import("../pages/CryptoDiscovery"));
 const LocationSites = React.lazy(() => import("../pages/LocationSites"));
+const RolesAdministrator = React.lazy(() => import("../pages/RolesAdministrator"));
 
 export const PAGE_REGISTRY = {
   // Assets keeps its welcome-state callback because the first-time
@@ -79,6 +80,7 @@ export const PAGE_REGISTRY = {
 
   tenants: () => <TenantsAdministrator mode="global" />,
   "tenant-members": () => <TenantsAdministrator mode="tenant" />,
+  roles: () => <RolesAdministrator />,
 
   welcome: (ctx) => <Welcome onNavigate={ctx.onNavigate} />,
 
