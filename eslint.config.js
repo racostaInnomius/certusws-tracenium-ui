@@ -53,6 +53,50 @@ const COLOR_SCOPED = [
   'src/components/software-delivery/**/*.{js,jsx}',
 ];
 
+// -----------------------------------------------------------------
+// Selectores de las guardas, como constantes componibles.
+//
+// ⚠️ POR QUÉ ESTÁN AQUÍ Y NO EN LÍNEA: en el config PLANO de ESLint, cuando
+// dos bloques que coinciden con el mismo fichero definen la MISMA regla, el
+// último REEMPLAZA las opciones del anterior — no las concatena. Este fichero
+// llegó a tener tres bloques definiendo `no-restricted-syntax`, y el
+// comentario que lo acompañaba afirmaba lo contrario ("ESLint concatenates the
+// options arrays"). Consecuencia: durante todo ese tiempo el bloque del
+// IconButton, que va último y cubre `src/**/*.jsx`, descartaba en silencio las
+// guardas de color y de BRAND duplicado. Ambas pasaban el lint con cero
+// errores porque no se estaban evaluando.
+//
+// La forma de componerlas es explícita: cada bloque enumera TODOS los
+// selectores que le aplican. Si añades una guarda nueva, añádela a los bloques
+// donde deba regir — no crees un cuarto bloque de `no-restricted-syntax`.
+const HEX_SELECTORS = [
+  {
+    selector:
+      "Literal[value=/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?$/]",
+    message:
+      'Hardcoded hex colors are forbidden here. Use BRAND / ROLE tokens from src/theme/brand.js. If you truly need a one-off color, disable this rule with a comment explaining why.',
+  },
+  {
+    selector:
+      "TemplateElement[value.cooked=/#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?(?![0-9a-fA-F])/]",
+    message:
+      'Template-literal string contains a hex color. Interpolate a BRAND token from src/theme/brand.js instead.',
+  },
+];
+
+const BRAND_SELECTOR = {
+  selector: "VariableDeclarator[id.type='Identifier'][id.name='BRAND']",
+  message:
+    "Declaring a local 'BRAND' is forbidden — import it from '../theme/brand' (or the appropriate relative path). Central tokens are the single source of truth.",
+};
+
+const ICON_BUTTON_SELECTOR = {
+  selector:
+    "JSXOpeningElement[name.name='IconButton']:not(:has(JSXAttribute[name.name='aria-label']))",
+  message:
+    'Icon-only <IconButton> needs an aria-label — screen readers otherwise announce it as just "button". A Tooltip title is a description, not an accessible name.',
+};
+
 export default defineConfig([
   globalIgnores([
     'dist',
@@ -145,34 +189,6 @@ export default defineConfig([
   // teal saturation), hardcoded hex strings silently drift out of
   // sync. A lint rule makes the break loud.
   // -----------------------------------------------------------------
-  {
-    files: COLOR_SCOPED,
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          // Matches Literal nodes whose value is a string looking like
-          // "#aabbcc" / "#abc" / "#aabbccdd". AST selectors don't
-          // support regex-matching on `.value` directly in standard
-          // ESLint, so we use the `regex` test via the selector's
-          // value predicate.
-          selector:
-            "Literal[value=/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?$/]",
-          message:
-            'Hardcoded hex colors are forbidden here. Use BRAND / ROLE tokens from src/theme/brand.js. If you truly need a one-off color, disable this rule with a comment explaining why.',
-        },
-        {
-          // Forbid template-literal strings that concat hex colors too.
-          // e.g. `1px solid #abc` in a `sx` — easy to sneak past the
-          // pure-literal check above.
-          selector:
-            "TemplateElement[value.cooked=/#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?([0-9a-fA-F]{2})?(?![0-9a-fA-F])/]",
-          message:
-            'Template-literal string contains a hex color. Interpolate a BRAND token from src/theme/brand.js instead.',
-        },
-      ],
-    },
-  },
 
   // -----------------------------------------------------------------
   // Fase 4 guardrail #2: no local `const BRAND = {...}` duplicates.
@@ -195,21 +211,7 @@ export default defineConfig([
       // the color rules here if we want them AND the BRAND rule to
       // compose. To keep things clean we only put the BRAND rule
       // here; the color rule is already applied via COLOR_SCOPED above.
-      'no-restricted-syntax': [
-        'error',
-        {
-          // `const BRAND = ...` at the top level of a file. Permissive:
-          // matches any Identifier named BRAND on the LHS of a
-          // VariableDeclarator — catches `const BRAND = {...}` and
-          // `let BRAND = ...` alike. Import destructuring uses
-          // `ImportSpecifier` AST nodes, not `VariableDeclarator`,
-          // so `import { BRAND } from ...` is correctly ignored.
-          selector:
-            "VariableDeclarator[id.type='Identifier'][id.name='BRAND']",
-          message:
-            "Declaring a local 'BRAND' is forbidden — import it from '../theme/brand' (or the appropriate relative path). Central tokens are the single source of truth.",
-        },
-      ],
+      'no-restricted-syntax': ['error', BRAND_SELECTOR, ICON_BUTTON_SELECTOR],
     },
   },
 
@@ -228,17 +230,23 @@ export default defineConfig([
   // alongside the icon, disable this rule inline with a comment
   // explaining why.
   // -----------------------------------------------------------------
+  // -----------------------------------------------------------------
+  // Guarda #1 (color) — VA LA ÚLTIMA A PROPÓSITO.
+  //
+  // COLOR_SCOPED es un subconjunto de `src/**`, y el bloque que va después
+  // gana. Si este bloque fuese antes que el de `src/**`, aquél reemplazaría
+  // `no-restricted-syntax` y la guarda de color volvería a quedar inerte —
+  // que es exactamente lo que pasaba. Por eso enumera también BRAND e
+  // IconButton: un bloque no hereda los selectores del anterior.
+  // -----------------------------------------------------------------
   {
-    files: ['src/**/*.jsx'],
+    files: COLOR_SCOPED,
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            "JSXOpeningElement[name.name='IconButton']:not(:has(JSXAttribute[name.name='aria-label']))",
-          message:
-            'Icon-only <IconButton> needs an aria-label — screen readers otherwise announce it as just "button". A Tooltip title is a description, not an accessible name.',
-        },
+        ...HEX_SELECTORS,
+        BRAND_SELECTOR,
+        ICON_BUTTON_SELECTOR,
       ],
     },
   },
