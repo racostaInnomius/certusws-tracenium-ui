@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, Box, Button, Card, CardContent, CircularProgress, Divider, Stack,
+  Alert, AlertTitle, Box, Button, Card, CardContent, CircularProgress, Divider, Stack,
   Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, ToggleButton,
   ToggleButtonGroup, Typography,
 } from "@mui/material";
@@ -45,6 +45,7 @@ export default function Billing() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [configured, setConfigured] = useState(true);
+  const [missingConfig, setMissingConfig] = useState([]);
   const [publishableKey, setPublishableKey] = useState(null);
   const [sub, setSub] = useState(null);
   const [invoices, setInvoices] = useState([]);
@@ -68,6 +69,7 @@ export default function Billing() {
     try {
       const data = await httpGetJson("/api/v1/billing/summary");
       setConfigured(Boolean(data?.configured));
+      setMissingConfig(data?.missingConfig ?? []);
       // La clave publicable la sirve el backend: la SPA se construye una sola
       // vez para todos los entornos, así que no puede llevarla horneada.
       setPublishableKey(data?.publishableKey ?? null);
@@ -168,14 +170,45 @@ export default function Billing() {
   }
 
   if (!configured) {
-    // Distinto de "no has contratado": esta instalación no tiene facturación
-    // conectada, y no hay nada que el usuario pueda hacer al respecto.
+    // Distinto de "no has contratado": esta instalación no tiene la facturación
+    // conectada.
+    //
+    // ⚠️ Aquí ponía "contacta con tu proveedor de servicio". A esta página sólo
+    // llega el OWNER, que en un despliegue propio ES el proveedor: era mandarlo
+    // a hablar consigo mismo, sin decirle qué falta. Ahora se nombra la
+    // variable ausente — nombres, nunca valores.
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>Billing</Typography>
-        <Alert severity="info">
-          La facturación no está habilitada en esta instalación. Contacta con tu
-          proveedor de servicio para contratar o cambiar de plan.
+        <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark, mb: 2 }}>
+          Billing
+        </Typography>
+        <Alert severity="warning">
+          <AlertTitle>La facturación no está configurada en este backend</AlertTitle>
+          {missingConfig.length > 0 ? (
+            <>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Faltan estas variables de entorno en el servidor que atiende{" "}
+                <code>/api/v1/billing</code>:
+              </Typography>
+              <Box component="ul" sx={{ pl: 2.5, my: 0.5 }}>
+                {missingConfig.map((k) => (
+                  <li key={k}>
+                    <code>{k}</code>
+                  </li>
+                ))}
+              </Box>
+              {/* El paso que se olvida: ponerlas no basta si el proceso no se
+                  reinicia — y entonces la pantalla sigue diciendo lo mismo y
+                  parece que el cambio no sirvió. */}
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Añádelas y reinicia el proceso: el valor se lee al arrancar.
+              </Typography>
+            </>
+          ) : (
+            <Typography variant="body2">
+              Contacta con tu proveedor de servicio para contratar o cambiar de plan.
+            </Typography>
+          )}
         </Alert>
       </Box>
     );

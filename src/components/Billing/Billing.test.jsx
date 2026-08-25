@@ -59,6 +59,37 @@ afterEach(cleanup);
 
 const ready = () => waitFor(() => expect(screen.getByText("Billing")).toBeTruthy());
 
+describe("backend sin configurar", () => {
+  it("NOMBRA la variable que falta, en vez de mandar al proveedor", async () => {
+    // A esta página sólo llega el OWNER, que en un despliegue propio ES el
+    // proveedor. "Contacta con tu proveedor" era mandarlo a hablar consigo
+    // mismo sin decirle qué arreglar.
+    summary.mockReturnValue({
+      configured: false,
+      missingConfig: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+      subscription: null,
+    });
+    render(<Billing />);
+    await ready();
+
+    expect(screen.getByText("STRIPE_SECRET_KEY")).toBeTruthy();
+    expect(screen.getByText("STRIPE_WEBHOOK_SECRET")).toBeTruthy();
+    // El paso que se olvida: ponerlas y no reiniciar deja la pantalla igual, y
+    // parece que el cambio no sirvió.
+    expect(screen.getByText(/reinicia el proceso/)).toBeTruthy();
+  });
+
+  it("sin lista de variables no inventa un diagnóstico", async () => {
+    // Un backend viejo no manda `missingConfig`. Enseñar una lista vacía sería
+    // afirmar que no falta nada, que es lo contrario de lo que pasa.
+    summary.mockReturnValue({ configured: false, subscription: null });
+    render(<Billing />);
+    await ready();
+
+    expect(screen.getByText(/Contacta con tu proveedor de servicio/)).toBeTruthy();
+  });
+});
+
 describe("la tarjeta va primero", () => {
   it("SIN tarjeta no se puede confirmar un cambio", async () => {
     // El backend lo rechaza, pero dejar pulsar el botón convierte un paso que
