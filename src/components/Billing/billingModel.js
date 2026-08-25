@@ -218,6 +218,47 @@ export function classifyChange(catalog, current, next) {
 }
 
 /**
+ * ¿El número de licencias elegido da para la flota que ya existe?
+ *
+ * Es la decisión más importante de la pantalla y se estaba tomando A CIEGAS: se
+ * pedía un número sin decir contra qué. Con el uso real delante, elegir de menos
+ * deja de ser un descubrimiento para el día que alguien no pueda dar de alta un
+ * equipo.
+ *
+ * Devuelve `null` cuando no hay nada que advertir — el caso normal no debe
+ * generar ruido.
+ */
+export function usageWarning(quantity, used) {
+  if (!Number.isFinite(used) || !Number.isFinite(quantity) || quantity < 1) return null;
+
+  if (used > graceCeiling(quantity)) {
+    return {
+      severity: "error",
+      message:
+        `Ya tienes ${used} equipos y con ${quantity} licencias el tope —margen ` +
+        `incluido— es ${graceCeiling(quantity)}. No podrás enrolar más, y los que ` +
+        `sobran quedan fuera de cobertura.`,
+    };
+  }
+  if (used > quantity) {
+    return {
+      severity: "warning",
+      message:
+        `Tienes ${used} equipos y estás contratando ${quantity} licencias. Entras ` +
+        `por el margen del 10% (hasta ${graceCeiling(quantity)}), pero sin holgura ` +
+        `para crecer.`,
+    };
+  }
+  return null;
+}
+
+/** Cuántas licencias sugerir a partir de lo que ya hay enrolado. */
+export function suggestedQuantity(used) {
+  if (!Number.isFinite(used) || used < 1) return 1;
+  return used;
+}
+
+/**
  * Cuántos equipos se pueden enrolar con N licencias.
  *
  * Es el techo de gracia de ADR-0005: el tope contratado más un 10%. Se calcula

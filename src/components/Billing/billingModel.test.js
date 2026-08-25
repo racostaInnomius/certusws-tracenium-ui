@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   TIERS,
+  usageWarning,
   pluginsIncludedIn,
   pricesFrom,
   availableTiers,
@@ -134,6 +135,35 @@ describe("margen de enrolamiento", () => {
     expect(graceCeiling(5)).toBe(6);
     expect(graceCeiling(1)).toBe(2);
     expect(graceCeiling(0)).toBe(0);
+  });
+});
+
+describe("aviso de licencias insuficientes", () => {
+  it("no dice nada cuando sobran licencias", () => {
+    // El caso normal no debe generar ruido.
+    expect(usageWarning(100, 40)).toBeNull();
+    expect(usageWarning(40, 40)).toBeNull();
+  });
+
+  it("avisa cuando la flota entra sólo por el margen", () => {
+    // 42 equipos con 40 licencias: cabe (tope 44) pero sin holgura.
+    const w = usageWarning(40, 42);
+    expect(w.severity).toBe("warning");
+    expect(w.message).toContain("44");
+  });
+
+  it("es un ERROR cuando ni con el margen cabe", () => {
+    // Esto no es un matiz: con 40 licencias y 60 equipos, 16 se quedan fuera
+    // de cobertura y el enrolamiento del siguiente falla.
+    const w = usageWarning(40, 60);
+    expect(w.severity).toBe("error");
+  });
+
+  it("sin dato de uso no inventa un aviso", () => {
+    // El contador puede fallar. Callar es mejor que asustar con un número que
+    // no tenemos.
+    expect(usageWarning(40, null)).toBeNull();
+    expect(usageWarning(40, undefined)).toBeNull();
   });
 });
 
