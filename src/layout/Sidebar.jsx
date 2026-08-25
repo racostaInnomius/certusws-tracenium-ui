@@ -378,9 +378,12 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
         boxShadow: "none",
       }}
     >
-      {/* Header: brand wordmark. Same height and bottom-border as the
-          Topbar so the cyan line is continuous across the sidebar and
-          the top of the main pane. */}
+      {/* Header: brand wordmark. Same height as the Topbar so the two
+          headers line up. The bottom line itself is only drawn here when
+          this renders inside the mobile temporary Drawer (< md) — at md+
+          (permanent sidebar, directly beside the Topbar) AppShell paints
+          one shared full-width line across both instead of each header
+          drawing its own; see the note in Topbar.jsx for why. */}
       <Box
         sx={{
           height: TOPBAR_HEIGHT,
@@ -389,7 +392,7 @@ function SidebarContent({ items, selected, onSelect, handleLogout, tenantName, t
           alignItems: "center",
           justifyContent: "center",
           px: 1,
-          borderBottom: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`,
+          borderBottom: { xs: `${CHROME_LINE_WIDTH}px solid ${BRAND.accentBrightLine}`, md: "none" },
         }}
       >
         <Box
