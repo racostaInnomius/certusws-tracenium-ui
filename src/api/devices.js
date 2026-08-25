@@ -43,3 +43,13 @@ export async function restoreDevice(deviceId, payload = {}) {
     payload
   );
 }
+/**
+ * Equipos que se enrolaron y nunca reportaron inventario.
+ *
+ * ⚠️ Estos equipos NO salen en la lista normal: esa se alimenta del inventario,
+ * así que un enrollment mudo es invisible en el portal. Ésta es la única vista
+ * donde aparecen.
+ */
+export async function listSilentEnrollments() {
+  return httpGetJson(`${DEVICES_BASE}/silent-enrollments`);
+}

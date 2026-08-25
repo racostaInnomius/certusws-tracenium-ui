@@ -62,13 +62,14 @@ import {
 } from "../api/inventoryDashboard";
 import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
-import { createDeviceDecommissionJob, getDeviceDecommissionJob } from "../api/devices";
+import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
 import { normalizePlatform, platformColor } from "../utils/platform";
 import { formatBytesToGb } from "../utils/format";
 import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
 import InactiveAssetsTable from "../components/AssetManagement/InactiveAssetsTable";
+import SilentEnrollmentsTable from "../components/AssetManagement/SilentEnrollmentsTable";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import CompositionBars from "../components/common/CompositionBars";
@@ -329,7 +330,30 @@ export default function AssetsDashboard({
   const [groupCatalog, setGroupCatalog] = React.useState([]);
   const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
   const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
-  const [assetWorkbenchView, setAssetWorkbenchView] = React.useState("devices"); // devices | inactive-assets
+  const [assetWorkbenchView, setAssetWorkbenchView] = React.useState("devices"); // devices | inactive-assets | silent-enrollments
+
+  /**
+   * Cuántos equipos se enrolaron y nunca reportaron.
+   *
+   * ⚠️ Se consulta desde aquí y no dentro de la tabla porque el punto es el
+   * AVISO: estos equipos no salen en ninguna otra pantalla, así que si la
+   * entrada sólo existiera dentro de su propia vista, nadie que no supiera
+   * buscarla se enteraría. El aviso vive donde la gente ya está mirando.
+   */
+  const [silentCount, setSilentCount] = React.useState(0);
+  React.useEffect(() => {
+    let cancelled = false;
+    listSilentEnrollments()
+      .then((res) => {
+        if (!cancelled) setSilentCount(Array.isArray(res?.items) ? res.items.length : 0);
+      })
+      // Silencioso a propósito: es un aviso accesorio y no puede romper la
+      // página principal de inventario si el endpoint falla.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // List ⇄ Map. Kept in the URL like the other filters on this page, so a map
   // an operator is looking at can be pasted to a colleague and survives a
@@ -941,6 +965,11 @@ export default function AssetsDashboard({
     setAssetWorkbenchView("inactive-assets");
   }, [handleCloseAgentDetail]);
 
+  const openSilentEnrollmentsWorkbench = React.useCallback(() => {
+    handleCloseAgentDetail();
+    setAssetWorkbenchView("silent-enrollments");
+  }, [handleCloseAgentDetail]);
+
   const openDevicesWorkbench = React.useCallback(() => {
     handleCloseAgentDetail();
     setAssetWorkbenchView("devices");
@@ -1200,7 +1229,7 @@ function osLifecycleBadge(row) {
 
   const tones = {
     critical: { bg: "rgba(198,40,40,.12)", fg: ROLE.critical },
-    warning: { bg: "rgba(176,120,24,.14)", fg: "#8A5E12" },
+    warning: { bg: "rgba(176,120,24,.14)", fg: BRAND.alert.high },
     muted: { bg: BRAND.surfaceMuted, fg: "text.secondary" },
   };
   const tone = tones[lc.tone] ?? tones.muted;
@@ -1457,6 +1486,8 @@ const osVersionItems = React.useMemo(() => {
                 onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
                 onBack={handleCloseAgentDetail}
               />
+            ) : assetWorkbenchView === "silent-enrollments" ? (
+              <SilentEnrollmentsTable onBack={openDevicesWorkbench} />
             ) : assetWorkbenchView === "inactive-assets" ? (
               <InactiveAssetsTable
                 assetGroups={groupCatalog}
@@ -1466,6 +1497,31 @@ const osVersionItems = React.useMemo(() => {
               />
             ) : (
               <>
+                {/* ⚠️ El aviso vive AQUÍ, en la tabla de equipos, y no dentro de
+                    su propia vista. Estos equipos no aparecen en ninguna otra
+                    pantalla del portal, así que una entrada escondida sólo la
+                    encontraría quien ya sabe que existe — que es precisamente
+                    quien no la necesita. */}
+                {silentCount > 0 ? (
+                  <Alert
+                    severity="warning"
+                    sx={{ mb: 1.5 }}
+                    action={
+                      <Button
+                        size="small"
+                        color="inherit"
+                        onClick={openSilentEnrollmentsWorkbench}
+                        sx={{ textTransform: "none", fontWeight: 800 }}
+                      >
+                        Review
+                      </Button>
+                    }
+                  >
+                    {silentCount} enrolled device{silentCount === 1 ? "" : "s"}{" "}
+                    {silentCount === 1 ? "has" : "have"} never reported inventory, so{" "}
+                    {silentCount === 1 ? "it does" : "they do"} not appear in the list below.
+                  </Alert>
+                ) : null}
                 <Stack
                   direction={{ xs: "column", md: "row" }}
                   alignItems={{ xs: "stretch", md: "flex-start" }}
