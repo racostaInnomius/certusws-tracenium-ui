@@ -63,14 +63,33 @@ function renderPage() {
   return render(<TenantsAdministrator mode="tenant" />);
 }
 
+/**
+ * Open the invite dialog.
+ *
+ * ⚠️ Waits for the button to be ENABLED, not merely present. "Add Member" is
+ * `disabled={!displayedTenant}` — it renders immediately, disabled, and only
+ * becomes clickable once the tenant load resolves. `findByText` settles as
+ * soon as the text node exists, so clicking on its heels lands on a disabled
+ * button, does nothing, and the following `findByRole("dialog")` then burns
+ * the full asyncUtilTimeout waiting for a dialog that was never going to open.
+ *
+ * That race is why these tests passed locally and failed intermittently in CI
+ * (a loaded runner resolves the fetch later, so the click lands first), and
+ * why raising asyncUtilTimeout on 2026-08-20 and testTimeout afterwards did
+ * not help: waiting longer for a dialog nobody opened cannot open it.
+ */
+async function openInviteDialog() {
+  const label = await screen.findByText("Add Member");
+  const button = label.closest("button") ?? label;
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  return screen.findByRole("dialog");
+}
+
 describe("TenantsAdministrator — invite a new member", () => {
   it("shows an Add Member button that opens the dialog in create mode with no Subject field", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText("Add Member")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText("Add Member"));
-
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openInviteDialog();
     expect(within(dialog).getByText("Invite Tenant Member")).toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Subject")).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Email/i)).toBeInTheDocument();
@@ -78,9 +97,7 @@ describe("TenantsAdministrator — invite a new member", () => {
 
   it("disables Send Invite until an email is entered", async () => {
     renderPage();
-    fireEvent.click(await screen.findByText("Add Member"));
-
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openInviteDialog();
     const sendButton = within(dialog).getByText("Send Invite");
     expect(sendButton).toBeDisabled();
 
@@ -99,9 +116,7 @@ describe("TenantsAdministrator — invite a new member", () => {
     });
 
     renderPage();
-    fireEvent.click(await screen.findByText("Add Member"));
-
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openInviteDialog();
     fireEvent.change(within(dialog).getByLabelText(/Email/i), {
       target: { value: "new.person@acme.com" },
     });
@@ -125,9 +140,7 @@ describe("TenantsAdministrator — invite a new member", () => {
     createTenantMember.mockRejectedValue(err);
 
     renderPage();
-    fireEvent.click(await screen.findByText("Add Member"));
-
-    const dialog = await screen.findByRole("dialog");
+    const dialog = await openInviteDialog();
     fireEvent.change(within(dialog).getByLabelText(/Email/i), {
       target: { value: "new.person@acme.com" },
     });
