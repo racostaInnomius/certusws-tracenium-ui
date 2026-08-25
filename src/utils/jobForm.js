@@ -93,3 +93,25 @@ export function resolveTypeFilter(raw, types) {
   const known = Array.isArray(types) && types.some((t) => t.jobType === value);
   return known ? value : "all";
 }
+
+/**
+ * Alterna la selección de los equipos VISIBLES (los que pasan el filtro
+ * actual), dejando intactos los que están seleccionados pero no visibles.
+ *
+ * Ese matiz es el que la hace segura: si el operador buscó "srv-", marcó
+ * todos, y luego busca "lap-", "Seleccionar todos" debe AÑADIR los portátiles
+ * sin descartar los servidores que ya eligió. Una implementación ingenua
+ * (`onChange(visibleIds)`) los perdería sin avisar.
+ *
+ * @param seleccion  ids ya seleccionados
+ * @param visibles   ids que pasan el filtro actual
+ */
+export function alternarSeleccionVisible(seleccion, visibles) {
+  const actual = Array.isArray(seleccion) ? seleccion : [];
+  const vis = Array.isArray(visibles) ? visibles : [];
+  if (vis.length === 0) return actual;
+
+  const todosElegidos = vis.every((id) => actual.includes(id));
+  if (todosElegidos) return actual.filter((id) => !vis.includes(id));
+  return [...new Set([...actual, ...vis])];
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildJobPayload, validateNumericField, resolveTypeFilter } from "./jobForm";
+import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "./jobForm";
 
 describe("buildJobPayload — the four creatable types", () => {
   it("agent_update carries a trimmed version", () => {
@@ -93,5 +93,42 @@ describe("resolveTypeFilter — incoming ?type= deep-links", () => {
     // rejected just because the list is momentarily absent.
     expect(resolveTypeFilter("agent_update", [])).toBe("all");
     expect(resolveTypeFilter("agent_update", undefined)).toBe("all");
+  });
+});
+
+describe("alternarSeleccionVisible — selección masiva de equipos", () => {
+  it("añade todos los visibles cuando no están todos elegidos", () => {
+    expect(alternarSeleccionVisible([], ["a", "b"])).toEqual(["a", "b"]);
+    expect(alternarSeleccionVisible(["a"], ["a", "b"])).toEqual(["a", "b"]);
+  });
+
+  it("los quita cuando ya estaban todos", () => {
+    expect(alternarSeleccionVisible(["a", "b"], ["a", "b"])).toEqual([]);
+  });
+
+  it("NO descarta lo seleccionado que quedó fuera del filtro", () => {
+    // El caso que hace segura la función. El operador busca "srv-", marca
+    // todos, luego busca "lap-": pulsar "Seleccionar todos" debe AÑADIR los
+    // portátiles conservando los servidores. Una implementación ingenua
+    // (onChange(visibles)) los perdería sin avisar.
+    expect(alternarSeleccionVisible(["srv-1", "srv-2"], ["lap-1"]))
+      .toEqual(["srv-1", "srv-2", "lap-1"]);
+  });
+
+  it("al quitar, sólo toca los visibles", () => {
+    expect(alternarSeleccionVisible(["srv-1", "lap-1"], ["lap-1"])).toEqual(["srv-1"]);
+  });
+
+  it("no duplica los que ya estaban", () => {
+    expect(alternarSeleccionVisible(["a", "b"], ["b", "c"])).toEqual(["a", "b", "c"]);
+  });
+
+  it("sin visibles no cambia nada — un filtro sin resultados no vacía la selección", () => {
+    expect(alternarSeleccionVisible(["a"], [])).toEqual(["a"]);
+  });
+
+  it("tolera entradas ausentes", () => {
+    expect(alternarSeleccionVisible(undefined, ["a"])).toEqual(["a"]);
+    expect(alternarSeleccionVisible(["a"], undefined)).toEqual(["a"]);
   });
 });

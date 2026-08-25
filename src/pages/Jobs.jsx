@@ -72,7 +72,7 @@ import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
-import { buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
+import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
 
 const FACT_TYPE_OPTIONS = [
@@ -168,6 +168,36 @@ function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, he
     [devices, value]
   );
 
+  // Texto de búsqueda, elevado a estado para que "Select all" sepa a qué se
+  // refiere "all": a lo que el operador está viendo, no a la flota entera.
+  const [query, setQuery] = React.useState("");
+
+  const matchesQuery = React.useCallback(
+    (o) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        (o.hostname || "").toLowerCase().includes(q) ||
+        (o.deviceId || "").toLowerCase().includes(q)
+      );
+    },
+    [query]
+  );
+
+  const visible = React.useMemo(() => devices.filter(matchesQuery), [devices, matchesQuery]);
+  const visibleIds = React.useMemo(() => visible.map((d) => d.deviceId), [visible]);
+  const todosVisiblesElegidos =
+    visibleIds.length > 0 && visibleIds.every((id) => value.includes(id));
+
+  // Por qué existe: medido en producción, 128 de 139 despachos multi-equipo
+  // llevaban UN SOLO equipo, y hubo 57 ráfagas de agent_update lanzadas de una
+  // en una por el mismo operador en la misma hora. El multi-select ya
+  // funcionaba —hubo un lote de 39 equipos— pero armarlo costaba 39 clics.
+  // Esto no cambia lo que se puede hacer; cambia lo que cuesta hacerlo.
+  const alternarVisibles = React.useCallback(() => {
+    onChange(alternarSeleccionVisible(value, visibleIds));
+  }, [onChange, value, visibleIds]);
+
   return (
     <Autocomplete
       multiple
@@ -180,15 +210,13 @@ function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, he
       onChange={(_e, next) => onChange(next.map((d) => d.deviceId))}
       isOptionEqualToValue={(opt, val) => opt.deviceId === val.deviceId}
       getOptionLabel={(opt) => opt.hostname || opt.deviceId}
-      filterOptions={(opts, state) => {
-        const q = state.inputValue.trim().toLowerCase();
-        if (!q) return opts;
-        return opts.filter(
-          (o) =>
-            (o.hostname || "").toLowerCase().includes(q) ||
-            (o.deviceId || "").toLowerCase().includes(q)
-        );
+      inputValue={query}
+      onInputChange={(_e, next, reason) => {
+        // `reset` lo dispara la propia selección; conservar el texto ahí es lo
+        // que permite elegir varios de una misma búsqueda sin reescribirla.
+        if (reason !== "reset") setQuery(next);
       }}
+      filterOptions={(opts) => opts.filter(matchesQuery)}
       noOptionsText="No matching devices"
       renderOption={(props, option, { selected }) => {
         const { key, ...optionProps } = props;
@@ -234,6 +262,45 @@ function DeviceCheckAutocomplete({ label, devices, value, onChange, disabled, he
           placeholder={value.length ? "" : "Type to search…"}
           helperText={helperText}
         />
+      )}
+      // Encabezado fijo de la lista con la acción de selección masiva. Va
+      // dentro del desplegable y no fuera para que aparezca justo donde el
+      // operador ya está mirando cuando decide a quién apunta.
+      ListboxProps={{ style: { paddingTop: 0 } }}
+      PaperComponent={({ children, ...rest }) => (
+        <Paper {...rest}>
+          {visibleIds.length > 0 ? (
+            <Box
+              onMouseDown={(e) => e.preventDefault()} // no robar el foco al input
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                px: 1.5,
+                py: 0.75,
+                borderBottom: `1px solid ${BRAND.border}`,
+                position: "sticky",
+                top: 0,
+                bgcolor: BRAND.surface,
+                zIndex: 1,
+              }}
+            >
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                {query.trim()
+                  ? `${visibleIds.length} coinciden con “${query.trim()}”`
+                  : `${visibleIds.length} equipos`}
+              </Typography>
+              <Button
+                size="small"
+                onClick={alternarVisibles}
+                sx={{ fontSize: TEXT.xs, fontWeight: 700, minWidth: 0 }}
+              >
+                {todosVisiblesElegidos ? "Quitar todos" : "Seleccionar todos"}
+              </Button>
+            </Box>
+          ) : null}
+          {children}
+        </Paper>
       )}
     />
   );
