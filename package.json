@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "lint:guardrails": "node scripts/lint-guardrails.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

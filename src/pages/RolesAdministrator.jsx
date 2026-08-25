@@ -67,7 +67,7 @@ function RoleRow({ role, onEdit, onDelete }) {
         p: 1.5,
         border: `1px solid ${BRAND.border}`,
         borderRadius: 2,
-        bgcolor: role.isSystem ? BRAND.darkSoft : "#ffffff",
+        bgcolor: role.isSystem ? BRAND.darkSoft : BRAND.surface,
         flexWrap: "wrap",
       }}
     >

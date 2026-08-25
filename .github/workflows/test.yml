@@ -23,6 +23,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Guardas del sistema de diseño. Va ANTES del build a propósito: es la
+      # comprobación más rápida y la que más veces va a fallar mientras el
+      # equipo se acostumbra a los tokens, así que conviene el feedback pronto.
+      #
+      # No es `npm run lint` completo porque el repo arrastra 7 errores ajenos
+      # a las guardas; bloquear con ellos obligaría a limpiar deuda no
+      # relacionada antes de poder proteger lo que ya está a cero. Ver
+      # scripts/lint-guardrails.mjs.
+      - name: Design-system guardrails
+        run: npm run lint:guardrails
+
       - name: Build
         run: npm run build
 
