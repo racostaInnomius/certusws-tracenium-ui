@@ -42,6 +42,7 @@ function row(over = {}) {
     graceDaysLeft: null,
     hasPaymentMethod: true,
     hasStripeSubscription: true,
+    billable: true,
     devices: 49,
     maxDevices: 55,
     ...over,
@@ -89,18 +90,47 @@ describe("lo que la tabla distingue", () => {
     expect(screen.getByText("using Enterprise")).toBeTruthy();
   });
 
-  it("cuenta cuántos piden atención", async () => {
-    // Para no tener que leer la tabla entera sólo para saber si hay algo que
-    // atender.
+  it("cuenta atención SÓLO sobre suscripciones que existen", async () => {
+    // Un tenant sin suscripción no tiene un pago fallido: tiene otra cosa, y se
+    // atiende de otra manera. Mezclarlos en un solo contador era decir "N need
+    // attention" sin decir de qué.
     serve([
       row(),
       row({ tenantId: "1", status: "past_due", graceDaysLeft: 3 }),
       row({ tenantId: "2", status: "canceled" }),
+      row({ tenantId: "3", status: "active", hasStripeSubscription: false }),
     ]);
     render(<StaffSubscriptions />);
     await ready();
 
     expect(screen.getByText("2 need attention")).toBeTruthy();
+    expect(screen.getByText("1 not billed")).toBeTruthy();
+  });
+
+  it("NO dice \"al día\" de quien nunca ha pagado", async () => {
+    // El fallo que se vio en producción: las filas del grandfathering nacieron
+    // en `active` para no quitarle plugins a nadie, y la tabla presentaba ese
+    // valor por defecto NUESTRO como un hecho de cobro.
+    serve([row({ status: "active", hasStripeSubscription: false })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.getByText("Not billed")).toBeTruthy();
+    expect(screen.getByText("granted, never charged")).toBeTruthy();
+  });
+
+  it("un tenant sin flota posible no es facturable ni se le puede conceder", async () => {
+    // NextGsys MSP: contenedor de acceso sin TenantDB. No sostiene equipos, así
+    // que no hay licencias que venderle ni plugins que conceder — ofrecer el
+    // botón sería prometer una acción sin efecto.
+    serve([row({ billable: false, hasStripeSubscription: false, devices: 0, maxDevices: null })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.getByText("Not billable")).toBeTruthy();
+    expect(screen.queryByText("Grant")).toBeNull();
+    expect(screen.queryByText("Extend")).toBeNull();
   });
 
   it("marca en rojo al que se pasó de su tope", async () => {

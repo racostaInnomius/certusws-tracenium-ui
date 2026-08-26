@@ -27,7 +27,7 @@ const TIER_LABELS = { starter: "Starter", professional: "Professional", enterpri
 /**
  * Cómo se lee el estado de pago de un vistazo.
  *
- * `severity` sólo decide el color: lo que el staff necesita es distinguir "va
+ * El tono sólo decide el color: lo que el staff necesita es distinguir "va
  * bien", "hay que llamarle" y "esto ya está cortado", no memorizar el
  * vocabulario de Stripe.
  */
@@ -41,6 +41,39 @@ const STATUS_VIEW = {
   incomplete_expired: { label: "Expired unpaid", tone: "error" },
   none: { label: "No subscription", tone: "default" },
 };
+
+/**
+ * ⚠️ EL ESTADO SÓLO ES UN HECHO DE PAGO SI HAY SUSCRIPCIÓN EN STRIPE.
+ *
+ * Esta tabla decía "Up to date" de todos los tenants, incluidos los que nunca
+ * han pagado nada. No era un fallo de cálculo: las filas del grandfathering
+ * nacieron en `active` para que ningún tenant perdiera sus plugins al desplegar
+ * el gate, y eso es un valor por defecto NUESTRO. Pintarlo como estado de pago
+ * afirma un cobro que no existe — justo la afirmación que esta pantalla se
+ * inventó para poder comprobar.
+ *
+ * Y un tenant sin flota posible —el contenedor de acceso de un MSP, sin
+ * TenantDB— no es que esté al día: es que no hay nada que cobrarle. El gate de
+ * enrolamiento ya lo trata como exento por la misma razón.
+ */
+function paymentView(row) {
+  if (!row.billable) {
+    return {
+      label: "Not billable",
+      tone: "default",
+      note: "no fleet — MSP or container tenant",
+    };
+  }
+  if (!row.hasStripeSubscription) {
+    return {
+      label: "Not billed",
+      tone: "warning",
+      note: row.status === "active" ? "granted, never charged" : `local status: ${row.status}`,
+    };
+  }
+  const view = STATUS_VIEW[row.status] ?? { label: row.status, tone: "default" };
+  return { ...view, note: null };
+}
 
 /** Prueba: la columna tiene tres estados, no dos. */
 function TrialCell({ row }) {
@@ -88,13 +121,23 @@ export default function StaffSubscriptions() {
 
   useEffect(() => { load(); }, [load]);
 
-  const attention = useMemo(
-    () =>
-      rows.filter(
+  // Tres cifras en vez de una, porque son tres poblaciones distintas y la
+  // pregunta del staff cambia según cuál mire. Un solo "N need attention"
+  // mezclaba "no paga" con "le falló la tarjeta", que no se atienden igual.
+  const tally = useMemo(() => {
+    const billable = rows.filter((r) => r.billable);
+    const billed = billable.filter((r) => r.hasStripeSubscription);
+    return {
+      billed: billed.length,
+      notBilled: billable.length - billed.length,
+      notBillable: rows.length - billable.length,
+      // Atención = problema de cobro REAL sobre una suscripción que existe.
+      // Un tenant sin suscripción no tiene un pago fallido, tiene otra cosa.
+      attention: billed.filter(
         (r) => !["active", "trialing"].includes(r.status) || (r.graceDaysLeft ?? 99) <= 5
       ).length,
-    [rows]
-  );
+    };
+  }, [rows]);
 
   const extend = async () => {
     setSaving(true);
@@ -122,11 +165,19 @@ export default function StaffSubscriptions() {
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
         <CardMembershipOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
         <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Subscriptions</Typography>
-        {/* Cuántos piden atención, para no tener que leer la tabla entera
-            cuando lo único que se quiere saber es si hay algo que atender. */}
-        {attention > 0 && (
-          <Chip size="small" color="warning" label={`${attention} need attention`} />
-        )}
+        {/* El reparto de un vistazo, sin tener que leer la tabla entera. */}
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+          <Chip size="small" color="success" variant="outlined" label={`${tally.billed} billed`} />
+          {tally.notBilled > 0 && (
+            <Chip size="small" color="warning" variant="outlined" label={`${tally.notBilled} not billed`} />
+          )}
+          {tally.notBillable > 0 && (
+            <Chip size="small" variant="outlined" label={`${tally.notBillable} not billable`} />
+          )}
+          {tally.attention > 0 && (
+            <Chip size="small" color="error" label={`${tally.attention} need attention`} />
+          )}
+        </Stack>
       </Stack>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
@@ -151,7 +202,7 @@ export default function StaffSubscriptions() {
             </TableHead>
             <TableBody>
               {rows.map((r) => {
-                const view = STATUS_VIEW[r.status] ?? { label: r.status, tone: "default" };
+                const view = paymentView(r);
                 const overCap = r.maxDevices != null && r.devices > r.maxDevices;
                 return (
                   <TableRow key={r.tenantId} hover>
@@ -184,7 +235,13 @@ export default function StaffSubscriptions() {
                         size="small"
                         label={view.label}
                         color={view.tone === "default" ? undefined : view.tone}
+                        variant={view.tone === "default" ? "outlined" : "filled"}
                       />
+                      {view.note && (
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          {view.note}
+                        </Typography>
+                      )}
                       {r.graceDaysLeft != null && (
                         <Typography
                           variant="caption"
@@ -199,29 +256,37 @@ export default function StaffSubscriptions() {
                     </TableCell>
 
                     <TableCell align="right">
-                      <Typography
-                        variant="body2"
-                        color={overCap ? "error.main" : "text.primary"}
-                        sx={{ fontWeight: overCap ? 700 : 400 }}
-                      >
-                        {r.devices} / {r.maxDevices ?? "—"}
-                      </Typography>
+                      {r.billable ? (
+                        <Typography
+                          variant="body2"
+                          color={overCap ? "error.main" : "text.primary"}
+                          sx={{ fontWeight: overCap ? 700 : 400 }}
+                        >
+                          {r.devices} / {r.maxDevices ?? "—"}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">—</Typography>
+                      )}
                     </TableCell>
 
                     <TableCell><TrialCell row={r} /></TableCell>
 
                     <TableCell align="right">
-                      <Tooltip title="Grant or extend full access — does not change what Stripe bills">
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setMonths(1);
-                            setTarget(r);
-                          }}
-                        >
-                          {r.trialDaysLeft > 0 ? "Extend" : "Grant"}
-                        </Button>
-                      </Tooltip>
+                      {/* Sin flota posible no hay plugins que conceder: ofrecer
+                          el botón sería prometer una acción sin efecto. */}
+                      {r.billable && (
+                        <Tooltip title="Grant or extend full access — does not change what Stripe bills">
+                          <Button
+                            size="small"
+                            onClick={() => {
+                              setMonths(1);
+                              setTarget(r);
+                            }}
+                          >
+                            {r.trialDaysLeft > 0 ? "Extend" : "Grant"}
+                          </Button>
+                        </Tooltip>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
