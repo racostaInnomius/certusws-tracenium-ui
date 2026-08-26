@@ -23,12 +23,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert, AlertTitle, Box, Button, Card, CardContent, CircularProgress, Divider, Stack,
-  Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, ToggleButton,
-  ToggleButtonGroup, Typography,
+  Alert, AlertTitle, Box, Button, CircularProgress, Stack, Tab, Table, TableBody,
+  TableCell, TableHead, TableRow, Tabs, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
+import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import { httpGetJson, httpPostJson } from "../../api/http";
 import { BRAND } from "../../theme/brand";
+import PageHeader from "../common/PageHeader";
+import SectionPaper from "../common/SectionPaper";
 import PaymentMethodCard from "./PaymentMethodCard";
 import SubscriptionSummary from "./SubscriptionSummary";
 import PlanPicker from "./PlanPicker";
@@ -90,8 +92,12 @@ export default function Billing() {
           endpoint: s.tier
             ? { tier: s.tier, quantity: s.quantity ?? s.licensedQuantity ?? s.usage?.endpoint ?? 1 }
             : null,
-          mdm: s.mdmTier
-            ? { tier: s.mdmTier, quantity: s.mdmQuantity ?? s.usage?.mdm ?? 1 }
+          // ⚠️ MDM sólo se preselecciona si hay CANTIDAD contratada. Con tier
+          // pero sin cantidad —lo que el grandfathering dejó en todos los
+          // tenants— se preseleccionaba 1, y quien entraba a tocar otra cosa
+          // se llevaba una licencia de móvil que no había pedido.
+          mdm: s.mdmTier && s.mdmQuantity > 0
+            ? { tier: s.mdmTier, quantity: s.mdmQuantity }
             : null,
         });
       }
@@ -122,15 +128,27 @@ export default function Billing() {
 
   const notice = useMemo(() => statusNotice(sub), [sub]);
 
+  // ⚠️ UNA LÍNEA SIN CANTIDAD NO ESTÁ CONTRATADA — es `null`, no "× 0".
+  //
+  // Representarla como `{tier, quantity: 0}` rompía dos cosas a la vez:
+  //
+  //   * el diálogo decía "Professional × 0 → Professional × 1", que no es lo
+  //     que ocurre; lo que ocurre es que se contrata una línea que no existía;
+  //   * y peor, `estimateTotal` no sabe poner precio a una cantidad 0, así que
+  //     devolvía null para TODO el estado actual. Sin coste anterior no hay
+  //     comparación posible, y añadir una licencia se clasificaba como BAJADA:
+  //     el diálogo ofrecía "Programar cambio" y avisaba de una reducción, para
+  //     un alta que Stripe iba a cobrar.
+  const asLine = (tier, quantity) =>
+    tier && Number.isFinite(quantity) && quantity > 0 ? { tier, quantity } : null;
+
   const current = useMemo(
     () =>
       sub
         ? {
             interval: sub.billingInterval ?? "monthly",
-            endpoint: sub.tier
-              ? { tier: sub.tier, quantity: sub.quantity ?? sub.licensedQuantity ?? 0 }
-              : null,
-            mdm: sub.mdmTier ? { tier: sub.mdmTier, quantity: sub.mdmQuantity ?? 0 } : null,
+            endpoint: asLine(sub.tier, sub.quantity ?? sub.licensedQuantity),
+            mdm: asLine(sub.mdmTier, sub.mdmQuantity),
           }
         : null,
     [sub]
@@ -189,10 +207,8 @@ export default function Billing() {
     // a hablar consigo mismo, sin decirle qué falta. Ahora se nombra la
     // variable ausente — nombres, nunca valores.
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark, mb: 2 }}>
-          Billing
-        </Typography>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <PageHeader title="Billing" icon={<CreditCardOutlinedIcon />} />
         <Alert severity="warning">
           <AlertTitle>La facturación no está configurada en este backend</AlertTitle>
           {missingConfig.length > 0 ? (
@@ -226,10 +242,14 @@ export default function Billing() {
   }
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1000 }}>
-      <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark, mb: 2 }}>
-        Billing
-      </Typography>
+    // El resto de páginas no ponen padding propio ni ancho máximo: el AppShell
+    // ya es el marco. Billing lo hacía y salía desalineada de todo lo demás.
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <PageHeader
+        title="Billing"
+        subtitle="Plan contratado, licencias y método de pago."
+        icon={<CreditCardOutlinedIcon />}
+      />
 
       {notice && <Alert severity={notice.severity} sx={{ mb: 2 }}>{notice.message}</Alert>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -241,7 +261,7 @@ export default function Billing() {
 
       <SubscriptionSummary sub={sub} estimate={beforeTotal} currency={currency} />
 
-      <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mb: 2 }}>
+      <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Plan" />
         <Tab label={`Facturas${invoices.length ? ` (${invoices.length})` : ""}`} />
       </Tabs>
@@ -263,27 +283,25 @@ export default function Billing() {
             </Alert>
           )}
 
-          <Card variant="outlined" sx={{ mb: 2.5 }}>
-            <CardContent>
-              <Typography variant="overline" color="text.secondary">
-                Periodicidad
-              </Typography>
-              {/* Una sola para toda la suscripción: Stripe rechaza mezclar
-                  mensual y anual entre los items de una misma. */}
-              <Box sx={{ mt: 0.5 }}>
-                <ToggleButtonGroup
-                  exclusive size="small" value={selection.interval}
-                  onChange={(_e, v) => v && setSelection((s) => ({ ...s, interval: v }))}
-                >
-                  {INTERVALS.map((i) => (
-                    <ToggleButton key={i} value={i} sx={{ px: 2.5 }}>
-                      {INTERVAL_LABELS[i]}
-                    </ToggleButton>
-                  ))}
-                </ToggleButtonGroup>
-              </Box>
-            </CardContent>
-          </Card>
+          <SectionPaper variant="panel">
+            <Typography variant="overline" color="text.secondary">
+              Periodicidad
+            </Typography>
+            {/* Una sola para toda la suscripción: Stripe rechaza mezclar
+                mensual y anual entre los items de una misma. */}
+            <Box sx={{ mt: 0.5 }}>
+              <ToggleButtonGroup
+                exclusive size="small" value={selection.interval}
+                onChange={(_e, v) => v && setSelection((s) => ({ ...s, interval: v }))}
+              >
+                {INTERVALS.map((i) => (
+                  <ToggleButton key={i} value={i} sx={{ px: 2.5 }}>
+                    {INTERVAL_LABELS[i]}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+          </SectionPaper>
 
           {LINES.map((line) => (
             <PlanPicker
@@ -298,46 +316,47 @@ export default function Billing() {
             />
           ))}
 
-          {/* La barra de cambios sólo existe cuando hay algo que confirmar. Un
-              botón permanentemente en pantalla no distingue "no he tocado nada"
-              de "tengo un cambio pendiente". */}
+          {/* ⚠️ ESTO ERA UNA BARRA `position: sticky` Y SE QUITÓ.
+              Flotaba sobre el contenido y tapaba justo las tarjetas de plan que
+              el usuario estaba comparando — el elemento que resume la decisión
+              escondía la decisión. Ninguna otra página de la consola flota nada
+              sobre su contenido.
+
+              Como bloque al final del formulario cumple lo mismo: sólo aparece
+              cuando hay algo que confirmar, así que sigue distinguiendo "no he
+              tocado nada" de "tengo un cambio pendiente". */}
           {change !== "none" && (
-            <Card
-              variant="outlined"
-              sx={{
-                position: "sticky", bottom: 16, zIndex: 2,
-                borderColor: BRAND.teal, bgcolor: "#f2f8f8",
-              }}
+            <SectionPaper
+              variant="panel"
+              sx={{ borderColor: BRAND.teal, bgcolor: BRAND.tealSoft ?? "#f2f8f8" }}
             >
-              <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  justifyContent="space-between"
-                  alignItems={{ sm: "center" }}
-                  spacing={1.5}
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ sm: "center" }}
+                spacing={1.5}
+              >
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {afterTotal !== null
+                      ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "año" : "mes"}`
+                      : "Selección incompleta"}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {change === "downgrade"
+                      ? "se aplica al cierre del ciclo"
+                      : "se cobra al confirmar"}
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  disabled={!hasCard || afterTotal === null}
+                  onClick={() => setConfirming(true)}
                 >
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {afterTotal !== null
-                        ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "año" : "mes"}`
-                        : "Selección incompleta"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {change === "downgrade"
-                        ? "se aplica al cierre del ciclo"
-                        : "se cobra al confirmar"}
-                    </Typography>
-                  </Box>
-                  <Button
-                    variant="contained"
-                    disabled={!hasCard || afterTotal === null}
-                    onClick={() => setConfirming(true)}
-                  >
-                    Revisar cambio
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
+                  Revisar cambio
+                </Button>
+              </Stack>
+            </SectionPaper>
           )}
 
           <ConfirmChangeDialog
@@ -354,16 +373,13 @@ export default function Billing() {
           />
         </>
       ) : (
-        <Card variant="outlined">
-          <CardContent>
-            {invoices.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Todavía no hay facturas.
-              </Typography>
-            ) : (
-              <>
-                <Divider sx={{ mb: 1 }} />
-                <Table size="small">
+        <SectionPaper variant="panel">
+          {invoices.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Todavía no hay facturas.
+            </Typography>
+          ) : (
+            <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>Número</TableCell>
@@ -390,11 +406,9 @@ export default function Billing() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
-              </>
-            )}
-          </CardContent>
-        </Card>
+            </Table>
+          )}
+        </SectionPaper>
       )}
     </Box>
   );

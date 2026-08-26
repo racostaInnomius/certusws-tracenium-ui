@@ -8,9 +8,21 @@
 //
 // Aquí va junto y en ese orden, que es el de las preguntas.
 
-import { Alert, Box, Card, CardContent, Chip, LinearProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, Chip, LinearProgress, Stack, Typography } from "@mui/material";
+import SectionPaper from "../common/SectionPaper";
 import { BRAND } from "../../theme/brand";
 import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS, graceCeiling } from "./billingModel";
+
+/** Los estados de Stripe, dichos en el idioma del usuario. */
+const STATUS_LABELS = {
+  trialing: "En prueba",
+  active: "Al día",
+  past_due: "Pago pendiente",
+  unpaid: "Sin pagar",
+  canceled: "Cancelada",
+  incomplete: "Pago sin completar",
+  incomplete_expired: "Caducada sin pagar",
+};
 
 const money = (cents, currency = "usd") =>
   new Intl.NumberFormat(undefined, { style: "currency", currency }).format((cents ?? 0) / 100);
@@ -82,8 +94,7 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
   const paid = sub?.status === "active" || sub?.status === "trialing";
 
   return (
-    <Card variant="outlined" sx={{ mb: 2.5 }}>
-      <CardContent>
+    <SectionPaper variant="panel">
         <Stack
           direction={{ xs: "column", md: "row" }}
           justifyContent="space-between"
@@ -135,9 +146,11 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
           </Box>
 
           <Box sx={{ textAlign: { md: "right" }, minWidth: 190 }}>
+            {/* El estado de Stripe es vocabulario suyo: "incomplete" no le dice
+                nada a quien lo lee, y menos aún qué hacer al respecto. */}
             <Chip
               size="small"
-              label={sub?.inTrial ? "En prueba" : paid ? "Al día" : (sub?.status ?? "sin plan")}
+              label={STATUS_LABELS[sub?.status] ?? (sub?.inTrial ? "En prueba" : "Sin plan")}
               color={paid ? "success" : "warning"}
               sx={{ mb: 1 }}
             />
@@ -172,7 +185,6 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
             licencias. Manda el primero hasta que se sincronicen.
           </Alert>
         )}
-      </CardContent>
-    </Card>
+    </SectionPaper>
   );
 }

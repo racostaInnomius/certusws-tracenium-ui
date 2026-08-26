@@ -12,7 +12,8 @@
 // quien sólo viene a mirar sus facturas—.
 
 import { useCallback, useState } from "react";
-import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import SectionPaper from "../common/SectionPaper";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { httpPostJson } from "../../api/http";
@@ -114,20 +115,17 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
   // enseñar un botón que no puede funcionar.
   if (!publishableKey) {
     return (
-      <Card variant="outlined" sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="subtitle1" gutterBottom>Método de pago</Typography>
-          <Alert severity="info">
-            El cobro con tarjeta no está habilitado en esta instalación.
-          </Alert>
-        </CardContent>
-      </Card>
+      <SectionPaper variant="panel">
+        <Typography variant="subtitle1" gutterBottom>Método de pago</Typography>
+        <Alert severity="info">
+          El cobro con tarjeta no está habilitado en esta instalación.
+        </Alert>
+      </SectionPaper>
     );
   }
 
   return (
-    <Card variant="outlined" sx={{ mb: 3 }}>
-      <CardContent>
+    <SectionPaper variant="panel">
         <Typography variant="subtitle1" gutterBottom>Método de pago</Typography>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -162,7 +160,6 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
             />
           </Elements>
         )}
-      </CardContent>
-    </Card>
+    </SectionPaper>
   );
 }

@@ -16,6 +16,7 @@
 import {
   Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography,
 } from "@mui/material";
+import SectionPaper from "../common/SectionPaper";
 import CheckIcon from "@mui/icons-material/Check";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
@@ -102,8 +103,7 @@ export default function PlanPicker({ line, prices, currency, interval, selection
   const suggestion = suggestedQuantity(used);
 
   return (
-    <Card variant="outlined" sx={{ mb: 2.5 }}>
-      <CardContent>
+    <SectionPaper variant="panel">
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 800, color: BRAND.dark }}>
@@ -198,7 +198,6 @@ export default function PlanPicker({ line, prices, currency, interval, selection
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+    </SectionPaper>
   );
 }

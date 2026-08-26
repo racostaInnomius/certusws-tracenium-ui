@@ -120,6 +120,45 @@ describe("el tope contratado frente al que se aplica", () => {
   });
 });
 
+describe("una línea sin cantidad NO está contratada", () => {
+  const conMdmFantasma = {
+    ...SUB,
+    mdmTier: "professional",   // el grandfathering se la regaló a todos...
+    mdmQuantity: null,         // ...pero nadie la contrató
+  };
+
+  it("no la preselecciona en 1", async () => {
+    // Ese 1 hacía que quien entraba a cambiar OTRA cosa se llevara una
+    // licencia de móvil que no había pedido. Pasó al probar el tenant 111.
+    summary.mockReturnValue({ configured: true, publishableKey: "pk", subscription: conMdmFantasma });
+    render(<Billing />);
+    await ready();
+
+    // Sólo el campo de Endpoints: la línea de MDM no tiene plan elegido.
+    expect(screen.getAllByLabelText("Licencias")).toHaveLength(1);
+  });
+
+  it("añadirla se cobra YA, no se programa como bajada", async () => {
+    // Con la línea como "Professional × 0", `estimateTotal` no sabía ponerle
+    // precio y devolvía null para todo el estado actual. Sin coste anterior no
+    // hay comparación, y el alta se clasificaba como BAJADA: el diálogo
+    // ofrecía "Programar cambio" para algo que Stripe iba a cobrar.
+    summary.mockReturnValue({ configured: true, publishableKey: "pk", subscription: conMdmFantasma });
+    render(<Billing />);
+    await ready();
+
+    // La última: el resumen y la tarjeta de Endpoints también dicen
+    // "Professional", y la de MDM es la que va más abajo en el DOM.
+    await userEvent.click(screen.getAllByText("Professional").at(-1));
+    await userEvent.click(await screen.findByRole("button", { name: /Revisar cambio/ }));
+
+    const dialogo = within(await screen.findByRole("dialog"));
+    expect(dialogo.getByText(/no contratada/)).toBeTruthy();
+    expect(dialogo.getByRole("button", { name: /Confirmar y pagar/ })).toBeTruthy();
+    expect(dialogo.queryByText(/La reducción se aplica/)).toBeNull();
+  });
+});
+
 describe("la tarjeta va primero", () => {
   it("SIN tarjeta no se puede confirmar un cambio", async () => {
     // El backend lo rechaza, pero dejar pulsar el botón convierte un paso que
