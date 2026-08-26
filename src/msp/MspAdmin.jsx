@@ -40,10 +40,7 @@ import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import LinkOffOutlinedIcon from "@mui/icons-material/LinkOffOutlined";
 import PersonRemoveOutlinedIcon from "@mui/icons-material/PersonRemoveOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import { Switch, FormControlLabel, InputAdornment } from "@mui/material";
 import PageHeader from "../components/common/PageHeader";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import SectionPaper from "../components/common/SectionPaper";
@@ -58,10 +55,7 @@ import {
   addMspOperator as apiAddOperator,
   removeMspOperator as apiRemoveOperator,
   deleteMsp as apiDeleteMsp,
-  fetchMspSettings,
-  saveMspSettings,
 } from "./mspApi";
-import MspBilling from "./MspBilling";
 import ClientReportDialog from "./ClientReportDialog";
 import ClaimCodesPanel from "./ClaimCodesPanel";
 import CreateClientPanel from "./CreateClientPanel";
@@ -86,7 +80,6 @@ export default function MspAdmin({ onClose }) {
 
   const [selected, setSelected] = React.useState(null); // { id, name }
   const [toast, setToast] = React.useState("");
-  const [billingOpen, setBillingOpen] = React.useState(false);
 
   // Create-MSP dialog
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -163,10 +156,6 @@ export default function MspAdmin({ onClose }) {
     [confirm, loadMsps]
   );
 
-  if (billingOpen) {
-    return <MspBilling onClose={() => setBillingOpen(false)} />;
-  }
-
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1200, mx: "auto" }}>
       <PageHeader
@@ -190,15 +179,6 @@ export default function MspAdmin({ onClose }) {
                 Back to portfolio
               </Button>
             ) : null}
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<ReceiptLongOutlinedIcon />}
-              onClick={() => setBillingOpen(true)}
-              sx={{ textTransform: "none", fontWeight: 800, borderColor: BRAND.teal, color: BRAND.tealText, "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft } }}
-            >
-              Billing
-            </Button>
             <Button
               size="small"
               variant="contained"
@@ -390,32 +370,18 @@ function MspDetail({ msp, onChanged, onToast }) {
   // Per-client report dialog
   const [reportClient, setReportClient] = React.useState(null); // { id, name } | null
 
-  // Settings form (billing rate + report delivery)
-  const [settings, setSettings] = React.useState(null);
-  const [savingSettings, setSavingSettings] = React.useState(false);
-  const [settingsError, setSettingsError] = React.useState("");
-
   const load = React.useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [cl, un, ops, st] = await Promise.all([
+      const [cl, un, ops] = await Promise.all([
         fetchMspClients(msp.id),
         fetchUnassignedClients(),
         fetchMspOperators(msp.id),
-        fetchMspSettings(msp.id),
       ]);
       setClients(cl?.items ?? []);
       setUnassigned(un?.clients ?? []);
       setOperators(ops?.operators ?? []);
-      // Seed the dollar input from the stored cents so an unedited save
-      // round-trips the existing price instead of clearing it.
-      const s = st?.settings ?? null;
-      setSettings(
-        s
-          ? { ...s, unitPriceInput: s.unitPriceCents != null ? String(s.unitPriceCents / 100) : "" }
-          : null
-      );
     } catch (err) {
       setError(err?.message || "Could not load this partner's detail.");
     } finally {
@@ -496,34 +462,6 @@ function MspDetail({ msp, onChanged, onToast }) {
       setBusy(false);
     }
   }, [msp.id, load, onChanged, onToast]);
-
-  const patchSettings = React.useCallback((partial) => {
-    setSettings((s) => ({ ...(s || {}), ...partial }));
-  }, []);
-
-  const doSaveSettings = React.useCallback(async () => {
-    if (!settings) return;
-    setSavingSettings(true);
-    setSettingsError("");
-    try {
-      // dollars in the field → cents on the wire.
-      const dollars = settings.unitPriceInput;
-      const unitPriceCents =
-        dollars == null || dollars === "" ? null : Math.round(Number(dollars) * 100);
-      const resp = await saveMspSettings(msp.id, {
-        unitPriceCents,
-        currency: (settings.currency || "USD").toUpperCase(),
-        reportEnabled: Boolean(settings.reportEnabled),
-        reportEmail: settings.reportEmail || null,
-      });
-      setSettings(resp?.settings ?? settings);
-      onToast?.("Settings saved.");
-    } catch (err) {
-      setSettingsError(err?.message || "Could not save settings.");
-    } finally {
-      setSavingSettings(false);
-    }
-  }, [settings, msp.id, onToast]);
 
   return (
     <Stack spacing={2}>
@@ -734,78 +672,6 @@ function MspDetail({ msp, onChanged, onToast }) {
             </Button>
           </Box>
         </Stack>
-      </SectionPaper>
-
-      {/* Settings — billing rate + scheduled report delivery */}
-      <SectionPaper variant="panel">
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-          <TuneOutlinedIcon fontSize="small" sx={{ color: BRAND.teal }} />
-          <Typography sx={{ fontWeight: 800, color: BRAND.dark }}>Billing &amp; reports</Typography>
-        </Stack>
-
-        {loading || !settings ? (
-          <Typography variant="body2" sx={{ color: BRAND.gray }}>Loading…</Typography>
-        ) : (
-          <Stack spacing={1.5}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-              <TextField
-                size="small"
-                type="number"
-                label="Price per device"
-                value={settings.unitPriceInput ?? ""}
-                onChange={(e) => patchSettings({ unitPriceInput: e.target.value })}
-                disabled={savingSettings}
-                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                sx={{ width: 180 }}
-                helperText="Blank = quantities only (no amount)."
-              />
-              <TextField
-                size="small"
-                label="Currency"
-                value={settings.currency ?? "USD"}
-                onChange={(e) => patchSettings({ currency: e.target.value.toUpperCase().slice(0, 3) })}
-                disabled={savingSettings}
-                sx={{ width: 110 }}
-                inputProps={{ maxLength: 3 }}
-              />
-            </Stack>
-
-            <Divider />
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={Boolean(settings.reportEnabled)}
-                  onChange={(e) => patchSettings({ reportEnabled: e.target.checked })}
-                  disabled={savingSettings}
-                />
-              }
-              label={<Typography variant="body2" sx={{ color: BRAND.dark }}>Email a monthly report to this partner</Typography>}
-            />
-            <TextField
-              size="small"
-              label="Report recipient email"
-              value={settings.reportEmail ?? ""}
-              onChange={(e) => patchSettings({ reportEmail: e.target.value })}
-              disabled={savingSettings || !settings.reportEnabled}
-              placeholder="ops@partner.example"
-              sx={{ maxWidth: 360 }}
-            />
-
-            {settingsError ? <Alert severity="error" onClose={() => setSettingsError("")}>{settingsError}</Alert> : null}
-            <Box>
-              <Button
-                variant="contained"
-                size="small"
-                disabled={savingSettings}
-                onClick={doSaveSettings}
-                sx={{ textTransform: "none", fontWeight: 800, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
-              >
-                {savingSettings ? "Saving…" : "Save settings"}
-              </Button>
-            </Box>
-          </Stack>
-        )}
       </SectionPaper>
 
       {/* Claim codes — invite an EXISTING client to self-attach */}

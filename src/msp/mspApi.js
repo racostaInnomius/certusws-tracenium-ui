@@ -10,7 +10,6 @@ import {
   httpGetJson,
   httpPostJson,
   httpPatchJson,
-  httpPutJson,
   httpDeleteJson,
   httpGetBlob,
 } from "../api/http";
@@ -115,15 +114,6 @@ export async function deleteMsp(mspId) {
   return httpDeleteJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}`);
 }
 
-/** Per-MSP settings (billing rate + report delivery). Vendor only. */
-export async function fetchMspSettings(mspId, options = {}) {
-  return httpGetJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/settings`, { cache: "no-store", ...options });
-}
-
-export async function saveMspSettings(mspId, body) {
-  return httpPutJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/settings`, body);
-}
-
 // ── F4 reports ────────────────────────────────────────────────────────
 
 /** Per-client report (identity + current metrics + trend + deltas). */
@@ -146,27 +136,6 @@ export async function downloadClientReport(clientId, fmt, { from, to } = {}) {
     `/api/v1/msp/reports/clients/${encodeURIComponent(clientId)}/export.${ext}${suffix}`
   );
   saveBlob(blob, filename || `tracenium-client-${clientId}.${ext}`);
-}
-
-// ── F4 billing ────────────────────────────────────────────────────────
-
-/** Billing run for a period (YYYY-MM). Optional mspId narrows to one MSP. */
-export async function fetchBilling({ period, mspId } = {}, options = {}) {
-  const qs = new URLSearchParams();
-  if (period) qs.set("period", period);
-  if (mspId != null) qs.set("mspId", String(mspId));
-  const suffix = qs.toString() ? `?${qs}` : "";
-  return httpGetJson(`/api/v1/msp/billing${suffix}`, { cache: "no-store", ...options });
-}
-
-/** Download the billing run for a period as CSV. */
-export async function downloadBilling({ period, mspId } = {}) {
-  const qs = new URLSearchParams();
-  if (period) qs.set("period", period);
-  if (mspId != null) qs.set("mspId", String(mspId));
-  const suffix = qs.toString() ? `?${qs}` : "";
-  const { blob, filename } = await httpGetBlob(`/api/v1/msp/billing/export.csv${suffix}`);
-  saveBlob(blob, filename || `tracenium-billing-${period || "current"}.csv`);
 }
 
 // ── Claim codes (self-service client-attach) ──────────────────────────
