@@ -34,6 +34,11 @@ export default function SecurityPolicySection({
   readOnly = false,
   evidenceByCapability = null,
   onShowEvidence = null,
+  // Gate de tier: `auto` hace que el agente REMEDIE en el endpoint, y eso lo
+  // habilita PMP (enterprise). Sin derecho la opción se deshabilita en vez de
+  // desaparecer, para que se vea QUE existe y qué plan hace falta — un menú al
+  // que le falta una opción sin explicación es peor que uno que dice por qué.
+  autoEntitled = true,
 }) {
   return (
       <Box
@@ -169,16 +174,17 @@ export default function SecurityPolicySection({
                   helperText={entry.mode == null ? "Inherits default" : ""}
                 >
                   <MenuItem value="">(inherit default)</MenuItem>
-                  {SECURITY_MODES.map((m) => (
-                    <MenuItem
-                      key={m.value}
-                      value={m.value}
-                      disabled={!cap.enforcer && m.value === "auto"}
-                    >
-                      {m.label}
-                      {!cap.enforcer && m.value === "auto" ? " (coming soon)" : ""}
-                    </MenuItem>
-                  ))}
+                  {SECURITY_MODES.map((m) => {
+                    const isAuto = m.value === "auto";
+                    const notBuilt = !cap.enforcer && isAuto;
+                    const notPaid = !autoEntitled && isAuto;
+                    return (
+                      <MenuItem key={m.value} value={m.value} disabled={notBuilt || notPaid}>
+                        {m.label}
+                        {notBuilt ? " (coming soon)" : notPaid ? " (requires Patch Management)" : ""}
+                      </MenuItem>
+                    );
+                  })}
                 </TextField>
               </Box>
 

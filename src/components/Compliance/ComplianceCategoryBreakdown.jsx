@@ -145,7 +145,14 @@ function CategoryDrilldown({ category }) {
 // pre-bridge table untouched.
 const MODE_CHIP = {
   auto: { label: "auto", title: "The agent fixes drift in this category automatically." },
-  "report-only": { label: "report-only", title: "Drift is detected and reported, never fixed. Click the wrench to enable auto-remediation." },
+  // Dos textos: el que invita a la llave inglesa sólo vale cuando la llave
+  // existe. Sin derecho a PMP no hay botón, y prometerlo en el tooltip sería el
+  // mismo "ofrecer lo que no se puede cumplir" que este gate viene a quitar.
+  "report-only": {
+    label: "report-only",
+    title: "Drift is detected and reported, never fixed. Click the wrench to enable auto-remediation.",
+    titleNoAuto: "Drift is detected and reported, never fixed. Auto-remediation requires Patch Management.",
+  },
   off: { label: "off", title: "The mapped baseline capabilities are disabled." },
 };
 
@@ -163,11 +170,18 @@ function BaselineCell({ row, bridge }) {
     );
   }
   const meta = MODE_CHIP[info.mode] ?? MODE_CHIP["report-only"];
-  const canAuto = info.autoUpgradable.length > 0;
+  // `onSetAuto` llega null cuando el tenant no tiene derecho a PMP (gate de
+  // tier): hay capacidades que PODRÍAN pasar a auto, pero remediar no entra en
+  // su plan, así que no se ofrece el botón. El chip de modo se queda: ver el
+  // estado del baseline es compliance, no remediación.
+  const canAuto = info.autoUpgradable.length > 0 && typeof bridge.onSetAuto === "function";
   return (
     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
       <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
-        <Tooltip title={`${meta.title} Capabilities: ${info.capabilities.map((c) => c.label).join(", ")}`} arrow>
+        <Tooltip
+          title={`${!canAuto && meta.titleNoAuto ? meta.titleNoAuto : meta.title} Capabilities: ${info.capabilities.map((c) => c.label).join(", ")}`}
+          arrow
+        >
           <Chip
             size="small"
             label={meta.label}

@@ -24,6 +24,7 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useAuthContext } from "../auth/AuthContext";
 import { useConfirm } from "../components/common/ConfirmDialog";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { BRAND } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import {
@@ -55,6 +56,11 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // El modo `auto` remedia en el endpoint: lo habilita PMP (enterprise). Sin
+  // derecho la opción se deshabilita con el motivo, no se oculta.
+  const { isEntitled } = usePluginCatalog();
+  const autoEntitled = isEntitled("pmp");
 
   const [policyRow, setPolicyRow] = React.useState(null);
   // SecurityPolicySection is props-driven against `form.security`, so we
@@ -260,6 +266,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
         </Alert>
 
         <SecurityPolicySection
+          autoEntitled={autoEntitled}
           form={form}
           onChange={setForm}
           readOnly={loading}

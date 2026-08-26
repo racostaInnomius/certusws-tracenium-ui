@@ -82,6 +82,7 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useConfirm } from "../components/common/ConfirmDialog";
 // Fase C — the posture side of the capability↔category bridge: mode
 // chips on the category breakdown, "auto-fix available" hints on
@@ -193,6 +194,13 @@ export default function SecurityCompliance({ initialTab }) {
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // Gates de tier — remediar lo habilita PMP (enterprise); SCP (professional)
+  // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
+  // no se sepa, así que un backend viejo o un parpadeo NO esconde la acción a
+  // quien sí pagó; el control de verdad es el 402 de la API.
+  const { isEntitled } = usePluginCatalog();
+  const canRemediate = canManage && isEntitled("pmp");
 
   // Sprint 2 item 1 — tenant-configured score bands (85/60 defaults).
   // Single cached fetch shared by every band-colored surface below.
@@ -425,7 +433,7 @@ export default function SecurityCompliance({ initialTab }) {
   // touch anything outside the security block.
   const handleSetCategoryAuto = React.useCallback(
     async (category) => {
-      if (!canManage || !tenantId) return;
+      if (!canRemediate || !tenantId) return;
       const info = securityForm ? baselineModeForCategory(securityForm, category) : null;
       const targets = info?.autoUpgradable ?? [];
       if (!targets.length) return;
@@ -471,7 +479,7 @@ export default function SecurityCompliance({ initialTab }) {
         });
       }
     },
-    [canManage, tenantId, securityForm, confirmDialog, showToast]
+    [canRemediate, tenantId, securityForm, confirmDialog, showToast]
   );
 
   // Sprint 4 — one-click remediation on the open device. Delegates to
@@ -528,10 +536,13 @@ export default function SecurityCompliance({ initialTab }) {
     if (!canManage || !securityForm) return null;
     return {
       modeForCategory,
-      onSetAuto: handleSetCategoryAuto,
+      // Sin derecho a PMP no se ofrece "poner en auto": ese modo hace que el
+      // agente REMEDIE, y es justo lo que este plan no incluye. Los chips de
+      // modo siguen visibles — ver el estado del baseline es compliance.
+      onSetAuto: canRemediate ? handleSetCategoryAuto : null,
       onConfigure: () => setTab("baselines"),
     };
-  }, [canManage, securityForm, modeForCategory, handleSetCategoryAuto]);
+  }, [canManage, canRemediate, securityForm, modeForCategory, handleSetCategoryAuto]);
 
   // Sprint 4/6 — CSV/PDF export. Downloads go through httpGetBlob (see
   // api/compliance.js) rather than a plain `<a href>` so an MSP operator's

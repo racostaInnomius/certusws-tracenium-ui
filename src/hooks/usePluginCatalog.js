@@ -47,7 +47,13 @@ export function usePluginCatalog() {
     CACHE_KEY,
     async () => {
       const resp = await getPluginCatalog();
-      return Array.isArray(resp?.catalog) ? resp.catalog : [];
+      return {
+        catalog: Array.isArray(resp?.catalog) ? resp.catalog : [],
+        // null = el backend no pudo resolver los derechos. Distinto de []
+        // ("no tienes ninguno"): con null la UI no debe esconder nada, o un
+        // parpadeo dejaría la consola inservible.
+        entitled: Array.isArray(resp?.entitled) ? resp.entitled : null,
+      };
     },
     {
       staleMs: STALE_MS,
@@ -57,9 +63,39 @@ export function usePluginCatalog() {
 
   // `data` is null while the first network round-trip is in flight.
   // Callers can safely render with `catalog` always being an array.
+  // Se saca a una local para que la dependencia del memo coincida con lo que
+  // realmente se lee (el React Compiler rechaza depender de `fetched?.data`
+  // mientras dentro se accede a `fetched.data.catalog`).
+  const payload = fetched?.data;
   const catalog = useMemo(
-    () => (Array.isArray(fetched?.data) ? fetched.data : []),
-    [fetched?.data]
+    () => (Array.isArray(payload?.catalog) ? payload.catalog : []),
+    [payload]
+  );
+
+  /**
+   * Plugins a los que ESTE tenant tiene derecho por su suscripción
+   * (ADR-0010). `null` mientras carga o si el backend no pudo resolverlo.
+   *
+   * ⚠️ No confundir con "habilitado": un plugin puede estar en la política y
+   * no estar contratado. Derecho = lo que el plan incluye.
+   */
+  const entitled = useMemo(() => {
+    const list = payload?.entitled;
+    return Array.isArray(list) ? new Set(list.map((k) => String(k).toLowerCase())) : null;
+  }, [payload]);
+
+  /**
+   * ¿El tenant tiene derecho a este plugin?
+   *
+   * Devuelve `true` mientras no se sepa (cargando, o el backend no pudo
+   * resolverlo). Esto es una PISTA de UI, no un control: los cierres reales
+   * son el gate de rutas (402) y el recorte de la política al proyectarla al
+   * agente. Esconder de más por un parpadeo deja tirado a quien sí pagó;
+   * mostrar de más cuesta un 402 que explica qué contratar.
+   */
+  const isEntitled = useCallback(
+    (key) => (entitled ? entitled.has(String(key).toLowerCase()) : true),
+    [entitled]
   );
 
   /**
@@ -112,6 +148,8 @@ export function usePluginCatalog() {
 
   return {
     catalog,
+    entitled,
+    isEntitled,
     loading: Boolean(fetched?.loading),
     error: fetched?.error ?? null,
     refetch: fetched?.refetch ?? (async () => {}),
