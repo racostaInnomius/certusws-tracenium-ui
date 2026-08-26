@@ -33,11 +33,12 @@ import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
-import MaintenanceWindowsPanel from "../components/patch-management/MaintenanceWindowsPanel";
-import GatewayPanel from "../components/patch-management/gateway/GatewayPanel";
 import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
+import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/ConfigurePanel";
+import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
@@ -321,25 +322,19 @@ const CATEGORIES = [
     actions: [],
   },
   {
-    // Maintenance windows: tenant config for WHEN deployments dispatch.
-    // Rendered by MaintenanceWindowsPanel — no `actions`.
-    key: "maintenance",
-    label: "Maintenance",
-    icon: <ScheduleOutlinedIcon />,
+    // Rendered by ConfigurePanel — no `actions`. One entry for everything you
+    // set up once: maintenance windows, the vCenter gateway, and the two
+    // catalogs. They used to be siblings of the daily work in this same row,
+    // which made a setting look like a problem to fix.
+    key: "settings",
+    label: "Configure",
+    icon: <SettingsOutlinedIcon />,
     blurb:
-      "Restrict when patch and software deployments are allowed to dispatch — e.g. overnight only. No windows means immediate dispatch.",
-    actions: [],
-  },
-  {
-    // Rendered by GatewayPanel — no `actions`.
-    key: "gateway",
-    label: "Virtual infrastructure",
-    icon: <HubOutlinedIcon />,
-    blurb:
-      "Snapshot virtual machines in vCenter before patching them, so a bad patch can be rolled back. Physical hosts and VMs with no gateway patch as usual.",
+      "Windows, gateways and catalogs — the parts of Patch Management you set up once and rarely revisit.",
     actions: [],
   },
 ];
+
 
 function IMPACT_CHIP({ impact }) {
   const map = {
@@ -539,13 +534,18 @@ export default function PatchManagement({ onNavigate }) {
   // Deep-linkable via ?pmTab= (same pattern as ?settingsTab= / ?scpTab=).
   // Sprint 4: the SCP drawer's cross.vulnerability.* findings link here
   // with pmTab=vulnerabilities so "go see the KEVs" is one click.
-  const [tab, setTab] = React.useState(() => {
-    const fromUrl = getSearchParam("pmTab", "");
-    return CATEGORIES.some((c) => c.key === fromUrl) ? fromUrl : CATEGORIES[0].key;
+  const TAB_KEYS = CATEGORIES.map((c) => c.key);
+  const initial = resolvePmTab(getSearchParam("pmTab", ""), TAB_KEYS, {
+    defaultTab: CATEGORIES[0].key,
+    defaultSection: CONFIG_SECTIONS[0].key,
   });
+  const [tab, setTab] = React.useState(initial.tab);
+  const [configSection, setConfigSection] = React.useState(initial.configSection);
   React.useEffect(() => {
-    updateSearchParams({ pmTab: tab === CATEGORIES[0].key ? "" : tab });
-  }, [tab]);
+    updateSearchParams({
+      pmTab: pmTabSearchValue(tab, configSection, CATEGORIES[0].key),
+    });
+  }, [tab, configSection]);
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
   const { auth } = useAuthContext();
@@ -1215,15 +1215,12 @@ export default function PatchManagement({ onNavigate }) {
               canManage={canManage}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
-          ) : tab === "maintenance" ? (
-            <MaintenanceWindowsPanel
-              canManage={canManage}
-              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
-            />
-          ) : tab === "gateway" ? (
-            <GatewayPanel
+          ) : tab === "settings" ? (
+            <ConfigurePanel
               canManage={canManage}
               devices={devices}
+              section={configSection}
+              onSectionChange={setConfigSection}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
           ) : (
