@@ -56,7 +56,7 @@ function SetupForm({ onDone, onCancel }) {
     if (err) {
       // El mensaje de Stripe está escrito para el titular de la tarjeta
       // ("tu tarjeta fue rechazada") y dice más que cualquier texto nuestro.
-      setError(err.message ?? "No se pudo guardar el método de pago.");
+      setError(err.message ?? "Could not save the payment method.");
       setBusy(false);
       return;
     }
@@ -80,9 +80,9 @@ function SetupForm({ onDone, onCancel }) {
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
       <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
         <Button type="submit" variant="contained" disabled={!stripe || busy}>
-          {busy ? "Guardando…" : "Guardar tarjeta"}
+          {busy ? "Saving…" : "Save card"}
         </Button>
-        <Button onClick={onCancel} disabled={busy}>Cancelar</Button>
+        <Button onClick={onCancel} disabled={busy}>Cancel</Button>
       </Stack>
     </Box>
   );
@@ -102,10 +102,10 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
       // El SetupIntent nace en el servidor: es lo que autoriza a guardar una
       // tarjeta contra ESTE customer, y por eso no puede crearlo el navegador.
       const r = await httpPostJson("/api/v1/billing/setup-intent", {});
-      if (!r?.clientSecret) throw new Error("El servidor no devolvió un SetupIntent.");
+      if (!r?.clientSecret) throw new Error("The server did not return a SetupIntent.");
       setClientSecret(r.clientSecret);
     } catch (err) {
-      setError(err?.message ?? "No se pudo preparar el formulario de pago.");
+      setError(err?.message ?? "Could not prepare the payment form.");
     } finally {
       setLoading(false);
     }
@@ -116,9 +116,9 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
   if (!publishableKey) {
     return (
       <SectionPaper variant="panel">
-        <Typography variant="subtitle1" gutterBottom>Método de pago</Typography>
+        <Typography variant="subtitle1" gutterBottom>Payment method</Typography>
         <Alert severity="info">
-          El cobro con tarjeta no está habilitado en esta instalación.
+          Card payments are not enabled on this installation.
         </Alert>
       </SectionPaper>
     );
@@ -126,20 +126,20 @@ export default function PaymentMethodCard({ publishableKey, hasPaymentMethod, on
 
   return (
     <SectionPaper variant="panel">
-        <Typography variant="subtitle1" gutterBottom>Método de pago</Typography>
+        <Typography variant="subtitle1" gutterBottom>Payment method</Typography>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-        {saved && <Alert severity="success" sx={{ mb: 2 }}>Método de pago actualizado.</Alert>}
+        {saved && <Alert severity="success" sx={{ mb: 2 }}>Payment method updated.</Alert>}
 
         {!clientSecret ? (
           <Stack direction="row" spacing={2} alignItems="center">
             <Typography variant="body2" color="text.secondary">
               {hasPaymentMethod
-                ? "Hay una tarjeta guardada para los cobros recurrentes."
-                : "Aún no hay una tarjeta guardada."}
+                ? "A card is on file for recurring charges."
+                : "No card on file yet."}
             </Typography>
             <Button variant="outlined" onClick={open} disabled={loading}>
-              {loading ? <CircularProgress size={20} /> : hasPaymentMethod ? "Cambiar tarjeta" : "Añadir tarjeta"}
+              {loading ? <CircularProgress size={20} /> : hasPaymentMethod ? "Change card" : "Add card"}
             </Button>
           </Stack>
         ) : (

@@ -118,7 +118,7 @@ export default function Billing() {
         setInvoices([]);
       }
     } catch (err) {
-      setError(err?.message ?? "No se pudo cargar la información de facturación.");
+      setError(err?.message ?? "Could not load billing information.");
     } finally {
       setLoading(false);
     }
@@ -188,7 +188,7 @@ export default function Billing() {
       await load();
     } catch (err) {
       setConfirming(false);
-      setError(err?.message ?? "No se pudo actualizar la suscripción.");
+      setError(err?.message ?? "Could not update the subscription.");
     } finally {
       setSaving(false);
     }
@@ -210,11 +210,11 @@ export default function Billing() {
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <PageHeader title="Billing" icon={<CreditCardOutlinedIcon />} />
         <Alert severity="warning">
-          <AlertTitle>La facturación no está configurada en este backend</AlertTitle>
+          <AlertTitle>Billing is not configured on this backend</AlertTitle>
           {missingConfig.length > 0 ? (
             <>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                Faltan estas variables de entorno en el servidor que atiende{" "}
+                These environment variables are missing on the server handling{" "}
                 <code>/api/v1/billing</code>:
               </Typography>
               <Box component="ul" sx={{ pl: 2.5, my: 0.5 }}>
@@ -228,12 +228,12 @@ export default function Billing() {
                   reinicia — y entonces la pantalla sigue diciendo lo mismo y
                   parece que el cambio no sirvió. */}
               <Typography variant="body2" sx={{ mt: 1 }}>
-                Añádelas y reinicia el proceso: el valor se lee al arrancar.
+                Add them and restart the process: values are read at startup.
               </Typography>
             </>
           ) : (
             <Typography variant="body2">
-              Contacta con tu proveedor de servicio para contratar o cambiar de plan.
+              Contact your service provider to subscribe or change plan.
             </Typography>
           )}
         </Alert>
@@ -247,7 +247,7 @@ export default function Billing() {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <PageHeader
         title="Billing"
-        subtitle="Plan contratado, licencias y método de pago."
+        subtitle="Subscribed plan, licenses and payment method."
         icon={<CreditCardOutlinedIcon />}
       />
 
@@ -255,7 +255,7 @@ export default function Billing() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {saved && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSaved(null)}>
-          Suscripción actualizada.
+          Subscription updated.
         </Alert>
       )}
 
@@ -263,7 +263,7 @@ export default function Billing() {
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Plan" />
-        <Tab label={`Facturas${invoices.length ? ` (${invoices.length})` : ""}`} />
+        <Tab label={`Invoices${invoices.length ? ` (${invoices.length})` : ""}`} />
       </Tabs>
 
       {tab === 0 ? (
@@ -278,14 +278,14 @@ export default function Billing() {
               decir por qué convierte un paso que falta en un fallo aparente. */}
           {!hasCard && (
             <Alert severity="info" sx={{ mb: 2.5 }}>
-              Guarda una tarjeta para poder contratar. Sin método de pago la
-              suscripción no llega a activarse.
+              Save a card before subscribing. Without a payment method the
+              subscription never activates.
             </Alert>
           )}
 
           <SectionPaper variant="panel">
             <Typography variant="overline" color="text.secondary">
-              Periodicidad
+              Billing period
             </Typography>
             {/* Una sola para toda la suscripción: Stripe rechaza mezclar
                 mensual y anual entre los items de una misma. */}
@@ -339,13 +339,13 @@ export default function Billing() {
                 <Box>
                   <Typography variant="body2" sx={{ fontWeight: 700 }}>
                     {afterTotal !== null
-                      ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "año" : "mes"}`
-                      : "Selección incompleta"}
+                      ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "yr" : "mo"}`
+                      : "Incomplete selection"}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {change === "downgrade"
-                      ? "se aplica al cierre del ciclo"
-                      : "se cobra al confirmar"}
+                      ? "applies at the end of the cycle"
+                      : "charged on confirm"}
                   </Typography>
                 </Box>
                 <Button
@@ -353,7 +353,7 @@ export default function Billing() {
                   disabled={!hasCard || afterTotal === null}
                   onClick={() => setConfirming(true)}
                 >
-                  Revisar cambio
+                  Review change
                 </Button>
               </Stack>
             </SectionPaper>
@@ -376,16 +376,16 @@ export default function Billing() {
         <SectionPaper variant="panel">
           {invoices.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              Todavía no hay facturas.
+              No invoices yet.
             </Typography>
           ) : (
             <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Número</TableCell>
-                      <TableCell>Fecha</TableCell>
-                      <TableCell>Estado</TableCell>
-                      <TableCell align="right">Importe</TableCell>
+                      <TableCell>Number</TableCell>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell align="right">Amount</TableCell>
                       <TableCell />
                     </TableRow>
                   </TableHead>

@@ -76,7 +76,7 @@ describe("backend sin configurar", () => {
     expect(screen.getByText("STRIPE_WEBHOOK_SECRET")).toBeTruthy();
     // El paso que se olvida: ponerlas y no reiniciar deja la pantalla igual, y
     // parece que el cambio no sirvió.
-    expect(screen.getByText(/reinicia el proceso/)).toBeTruthy();
+    expect(screen.getByText(/restart the process/)).toBeTruthy();
   });
 
   it("sin lista de variables no inventa un diagnóstico", async () => {
@@ -86,7 +86,7 @@ describe("backend sin configurar", () => {
     render(<Billing />);
     await ready();
 
-    expect(screen.getByText(/Contacta con tu proveedor de servicio/)).toBeTruthy();
+    expect(screen.getByText(/Contact your service provider/)).toBeTruthy();
   });
 });
 
@@ -102,7 +102,7 @@ describe("el tope contratado frente al que se aplica", () => {
     render(<Billing />);
     await ready();
 
-    expect(await screen.findByText(/El tope que aplica el enrolamiento es/)).toBeTruthy();
+    expect(await screen.findByText(/Enrollment enforces a cap of/)).toBeTruthy();
   });
 
   it("sin cantidad contratada NO preselecciona 1", async () => {
@@ -116,7 +116,7 @@ describe("el tope contratado frente al que se aplica", () => {
     render(<Billing />);
     await ready();
 
-    expect(screen.getAllByLabelText("Licencias")[0].value).toBe("55");
+    expect(screen.getAllByLabelText("Licenses")[0].value).toBe("55");
   });
 });
 
@@ -135,7 +135,7 @@ describe("una línea sin cantidad NO está contratada", () => {
     await ready();
 
     // Sólo el campo de Endpoints: la línea de MDM no tiene plan elegido.
-    expect(screen.getAllByLabelText("Licencias")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Licenses")).toHaveLength(1);
   });
 
   it("añadirla se cobra YA, no se programa como bajada", async () => {
@@ -150,12 +150,12 @@ describe("una línea sin cantidad NO está contratada", () => {
     // La última: el resumen y la tarjeta de Endpoints también dicen
     // "Professional", y la de MDM es la que va más abajo en el DOM.
     await userEvent.click(screen.getAllByText("Professional").at(-1));
-    await userEvent.click(await screen.findByRole("button", { name: /Revisar cambio/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Review change/ }));
 
     const dialogo = within(await screen.findByRole("dialog"));
-    expect(dialogo.getByText(/no contratada/)).toBeTruthy();
-    expect(dialogo.getByRole("button", { name: /Confirmar y pagar/ })).toBeTruthy();
-    expect(dialogo.queryByText(/La reducción se aplica/)).toBeNull();
+    expect(dialogo.getByText(/not subscribed/)).toBeTruthy();
+    expect(dialogo.getByRole("button", { name: /Confirm and pay/ })).toBeTruthy();
+    expect(dialogo.queryByText(/The reduction takes effect/)).toBeNull();
   });
 });
 
@@ -171,10 +171,10 @@ describe("la tarjeta va primero", () => {
     render(<Billing />);
     await ready();
 
-    expect(screen.getByText(/Guarda una tarjeta para poder contratar/)).toBeTruthy();
+    expect(screen.getByText(/Save a card before subscribing/)).toBeTruthy();
 
     await userEvent.click(screen.getAllByText("Enterprise")[0]);
-    const boton = await screen.findByRole("button", { name: /Revisar cambio/ });
+    const boton = await screen.findByRole("button", { name: /Review change/ });
     expect(boton).toBeDisabled();
   });
 });
@@ -186,7 +186,7 @@ describe("la barra de cambios", () => {
     render(<Billing />);
     await ready();
 
-    expect(screen.queryByRole("button", { name: /Revisar cambio/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Review change/ })).toBeNull();
   });
 
   it("aparece al cambiar de plan, y confirma en dos pasos", async () => {
@@ -194,12 +194,12 @@ describe("la barra de cambios", () => {
     await ready();
 
     await userEvent.click(screen.getAllByText("Enterprise")[0]);
-    await userEvent.click(await screen.findByRole("button", { name: /Revisar cambio/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Review change/ }));
 
     // El diálogo enseña el ANTES y el DESPUÉS: "de $300 a $500" responde la
     // pregunta real, que dos cifras en pantallas distintas no responden.
     const dialogo = within(await screen.findByRole("dialog"));
-    expect(dialogo.getByText(/Confirmar cambio de plan/)).toBeTruthy();
+    expect(dialogo.getByText(/Confirm plan change/)).toBeTruthy();
     // El importe viejo tachado junto al nuevo. Se busca DENTRO del diálogo:
     // la cabecera enseña el mismo número, y confundirlos daría un test que
     // pasa sin que el diálogo diga nada.
@@ -209,7 +209,7 @@ describe("la barra de cambios", () => {
     // Nada se ha mandado todavía: el segundo gesto es el que cobra.
     expect(httpPostJson).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByRole("button", { name: /Confirmar y pagar/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Confirm and pay/ }));
     await waitFor(() => expect(httpPostJson).toHaveBeenCalled());
 
     const [, body] = httpPostJson.mock.calls[0];
@@ -226,7 +226,7 @@ describe("licencias frente a flota real", () => {
     render(<Billing />);
     await ready();
 
-    const licencias = screen.getAllByLabelText("Licencias")[0];
+    const licencias = screen.getAllByLabelText("Licenses")[0];
     // Borrar y teclear: si el campo forzara el mínimo en cada tecla, esto
     // acabaría en 110 en vez de 10 — que fue justo el bug que este test
     // destapó al escribirlo.
@@ -234,20 +234,20 @@ describe("licencias frente a flota real", () => {
     await userEvent.type(licencias, "10");
     expect(licencias.value).toBe("10");
 
-    expect(await screen.findByText(/Ya tienes 43 equipos/)).toBeTruthy();
+    expect(await screen.findByText(/You already have 43 devices/)).toBeTruthy();
   });
 
   it("ofrece adoptar el número real de equipos", async () => {
     render(<Billing />);
     await ready();
 
-    const licencias = screen.getAllByLabelText("Licencias")[0];
+    const licencias = screen.getAllByLabelText("Licenses")[0];
     await userEvent.clear(licencias);
     await userEvent.type(licencias, "10");
 
     // Sin atajo, "tienes 43" es un dato que hay que teclear a mano — y ahí es
     // donde se cuela el 4 o el 430.
-    await userEvent.click(await screen.findByRole("button", { name: /usar 43/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /use 43/ }));
     expect(licencias.value).toBe("43");
   });
 });

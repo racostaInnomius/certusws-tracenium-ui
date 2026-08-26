@@ -15,13 +15,13 @@ import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS, graceCeiling } from "
 
 /** Los estados de Stripe, dichos en el idioma del usuario. */
 const STATUS_LABELS = {
-  trialing: "En prueba",
-  active: "Al día",
-  past_due: "Pago pendiente",
-  unpaid: "Sin pagar",
-  canceled: "Cancelada",
-  incomplete: "Pago sin completar",
-  incomplete_expired: "Caducada sin pagar",
+  trialing: "Trial",
+  active: "Up to date",
+  past_due: "Payment pending",
+  unpaid: "Unpaid",
+  canceled: "Canceled",
+  incomplete: "Payment not completed",
+  incomplete_expired: "Expired unpaid",
 };
 
 const money = (cents, currency = "usd") =>
@@ -45,13 +45,13 @@ function UsageBar({ used, quantity }) {
     <Box sx={{ minWidth: 190, flex: 1 }}>
       <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
         <Typography variant="caption" color="text.secondary">
-          {used} de {quantity} licencias
+          {used} of {quantity} licenses
         </Typography>
         <Typography
           variant="caption"
           color={beyondGrace ? "error.main" : over ? "warning.main" : "text.secondary"}
         >
-          tope {graceCeiling(quantity)}
+          cap {graceCeiling(quantity)}
         </Typography>
       </Stack>
       <LinearProgress
@@ -103,12 +103,12 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
         >
           <Box sx={{ flex: 1 }}>
             <Typography variant="overline" color="text.secondary">
-              Tu plan
+              Your plan
             </Typography>
 
             {lines.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                Todavía no has contratado ninguna línea.
+                You haven't subscribed to any line yet.
               </Typography>
             ) : (
               <Stack spacing={1.5} sx={{ mt: 1 }}>
@@ -150,7 +150,7 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
                 nada a quien lo lee, y menos aún qué hacer al respecto. */}
             <Chip
               size="small"
-              label={STATUS_LABELS[sub?.status] ?? (sub?.inTrial ? "En prueba" : "Sin plan")}
+              label={STATUS_LABELS[sub?.status] ?? (sub?.inTrial ? "Trial" : "No plan")}
               color={paid ? "success" : "warning"}
               sx={{ mb: 1 }}
             />
@@ -161,18 +161,18 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
                 {money(estimate, currency)}
                 <Typography component="span" variant="caption" color="text.secondary">
                   {" "}
-                  /{sub?.billingInterval === "yearly" ? "año" : "mes"}
+                  /{sub?.billingInterval === "yearly" ? "yr" : "mo"}
                 </Typography>
               </Typography>
             )}
             {sub?.currentPeriodEnd && (
               <Typography variant="caption" color="text.secondary" display="block">
-                próximo cobro {new Date(sub.currentPeriodEnd).toLocaleDateString()}
+                next charge {new Date(sub.currentPeriodEnd).toLocaleDateString()}
               </Typography>
             )}
             {sub?.billingInterval && (
               <Typography variant="caption" color="text.secondary" display="block">
-                facturación {(INTERVAL_LABELS[sub.billingInterval] ?? "").toLowerCase()}
+                {(INTERVAL_LABELS[sub.billingInterval] ?? "").toLowerCase()} billing
               </Typography>
             )}
           </Box>
@@ -180,9 +180,9 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
 
         {mismatch && (
           <Alert severity="warning" sx={{ mt: 2 }}>
-            El tope que aplica el enrolamiento es <strong>{mismatch.cap}</strong>, pero
-            la suscripción tiene contratadas <strong>{mismatch.contracted}</strong>{" "}
-            licencias. Manda el primero hasta que se sincronicen.
+            Enrollment enforces a cap of <strong>{mismatch.cap}</strong>, but the
+            subscription has <strong>{mismatch.contracted}</strong> licenses. The
+            first one wins until they are reconciled.
           </Alert>
         )}
     </SectionPaper>

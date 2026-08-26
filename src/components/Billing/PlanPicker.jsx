@@ -62,7 +62,7 @@ function PlanCard({ tier, line, price, currency, interval, selected, onSelect })
         <Typography variant="h6" sx={{ fontWeight: 800, my: 0.25 }}>
           {money(price, currency)}
           <Typography component="span" variant="caption" color="text.secondary">
-            {" "}/equipo/{interval === "yearly" ? "año" : "mes"}
+            {" "}/device/{interval === "yearly" ? "yr" : "mo"}
           </Typography>
         </Typography>
 
@@ -74,7 +74,7 @@ function PlanCard({ tier, line, price, currency, interval, selected, onSelect })
           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
             {tier !== "starter" && (
               <Typography variant="caption" color="text.secondary">
-                todo lo anterior +
+                everything above +
               </Typography>
             )}
             {adds.map((p) => (
@@ -111,21 +111,21 @@ export default function PlanPicker({ line, prices, currency, interval, selection
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {LINE_HINTS[line]}
-              {Number.isFinite(used) ? ` · tienes ${used} enrolados` : ""}
+              {Number.isFinite(used) ? ` · ${used} enrolled` : ""}
             </Typography>
           </Box>
           {/* Dar de baja una línea tiene que ser una decisión tomable AQUÍ, no
               la ausencia de selección en un desplegable. */}
           {sel && (
             <Button size="small" color="inherit" onClick={() => onChange(null)}>
-              No contratar
+              Remove
             </Button>
           )}
         </Stack>
 
         {tiers.length === 0 ? (
           <Alert severity="warning">
-            No hay precios configurados en Stripe para esta línea y periodicidad.
+            No prices configured in Stripe for this line and billing period.
           </Alert>
         ) : (
           <>
@@ -156,7 +156,7 @@ export default function PlanPicker({ line, prices, currency, interval, selection
                 <TextField
                   size="small"
                   type="number"
-                  label="Licencias"
+                  label="Licenses"
                   value={sel.quantity}
                   // ⚠️ El vacío se DEJA PASAR mientras se escribe. Forzar el
                   // mínimo en cada tecla hacía que borrar el campo lo dejara en
@@ -180,12 +180,12 @@ export default function PlanPicker({ line, prices, currency, interval, selection
                     el 14 o el 1430. */}
                 {Number.isFinite(used) && used > 0 && sel.quantity !== suggestion && (
                   <Button size="small" onClick={() => onChange({ ...sel, quantity: suggestion })}>
-                    usar {suggestion}
+                    use {suggestion}
                   </Button>
                 )}
                 {subtotal !== null && (
                   <Typography variant="body2" color="text.secondary">
-                    {money(subtotal, currency)}/{interval === "yearly" ? "año" : "mes"}
+                    {money(subtotal, currency)}/{interval === "yearly" ? "yr" : "mo"}
                   </Typography>
                 )}
               </Stack>

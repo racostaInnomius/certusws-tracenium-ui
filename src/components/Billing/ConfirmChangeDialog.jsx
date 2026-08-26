@@ -22,18 +22,18 @@ const money = (cents, currency = "usd") =>
   new Intl.NumberFormat(undefined, { style: "currency", currency }).format((cents ?? 0) / 100);
 
 const describe = (sel) =>
-  sel ? `${TIER_LABELS[sel.tier] ?? sel.tier} × ${sel.quantity}` : "no contratada";
+  sel ? `${TIER_LABELS[sel.tier] ?? sel.tier} × ${sel.quantity}` : "not subscribed";
 
 export default function ConfirmChangeDialog({
   open, onClose, onConfirm, busy,
   current, next, change, beforeTotal, afterTotal, currency,
 }) {
-  const perPeriod = next?.interval === "yearly" ? "/año" : "/mes";
+  const perPeriod = next?.interval === "yearly" ? "/yr" : "/mo";
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
-        {change === "new" ? "Confirmar contratación" : "Confirmar cambio de plan"}
+        {change === "new" ? "Confirm subscription" : "Confirm plan change"}
       </DialogTitle>
 
       <DialogContent>
@@ -69,7 +69,7 @@ export default function ConfirmChangeDialog({
           {current && next && current.interval !== next.interval && (
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Typography variant="body2" sx={{ minWidth: 110, fontWeight: 700 }}>
-                Facturación
+                Billing
               </Typography>
               <Typography variant="body2" color="text.disabled">
                 {INTERVAL_LABELS[current.interval]}
@@ -106,29 +106,29 @@ export default function ConfirmChangeDialog({
             una reclamación. */}
         {(change === "upgrade" || change === "new") && (
           <Alert severity="info">
-            Se cobrará ahora la diferencia, prorrateada por lo que queda del ciclo.
+            The difference is charged now, prorated for the rest of the cycle.
           </Alert>
         )}
         {change === "downgrade" && (
           <Alert severity="warning">
-            La reducción se aplica al cierre del ciclo actual, sin devolución. Los
-            datos de los plugins que dejes de contratar se conservan 90 días.
+            The reduction takes effect at the end of the current cycle, with no
+            refund. Data from plugins you drop is kept for 90 days.
           </Alert>
         )}
 
         <Box sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary">
-            El importe final lo calcula Stripe e incluye impuestos y prorrateos.
+            Stripe computes the final amount, including taxes and prorations.
           </Typography>
         </Box>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy} color="inherit">
-          Cancelar
+          Cancel
         </Button>
         <Button onClick={onConfirm} disabled={busy} variant="contained">
-          {busy ? "Procesando…" : change === "downgrade" ? "Programar cambio" : "Confirmar y pagar"}
+          {busy ? "Processing…" : change === "downgrade" ? "Schedule change" : "Confirm and pay"}
         </Button>
       </DialogActions>
     </Dialog>

@@ -257,7 +257,7 @@ describe("avisos de estado", () => {
       NOW
     );
     expect(n.severity).toBe("warning");
-    expect(n.message).toContain("12 días");
+    expect(n.message).toContain("12 days");
   });
 
   it("pasa a error cuando la gracia se agotó", () => {
@@ -266,7 +266,7 @@ describe("avisos de estado", () => {
       NOW
     );
     expect(n.severity).toBe("error");
-    expect(n.message).toContain("suspendida");
+    expect(n.message).toContain("suspended");
   });
 
   it("durante el trial dice a qué plan se caerá", () => {

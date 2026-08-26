@@ -22,8 +22,8 @@ export const LINE_LABELS = {
 };
 
 export const LINE_HINTS = {
-  endpoint: "PCs, portátiles y servidores",
-  mdm: "móviles gestionados — incluye su inventario",
+  endpoint: "PCs, laptops and servers",
+  mdm: "managed mobiles — inventory included",
 };
 
 /** Debe coincidir con licensing/tiers.ts del backend. Orden = rango. */
@@ -43,8 +43,8 @@ export const LINE_TIERS = {
 export const INTERVALS = ["monthly", "yearly"];
 
 export const INTERVAL_LABELS = {
-  monthly: "Mensual",
-  yearly: "Anual",
+  monthly: "Monthly",
+  yearly: "Yearly",
 };
 
 export const TIER_LABELS = {
@@ -108,7 +108,7 @@ export const TIER_ADDS = {
  * móviles no pasan por ese camino, y su inventario viene con el propio plan de
  * MDM — por eso un cliente sólo-MDM no necesita comprar endpoints.
  */
-export const MDM_INCLUDES = ["Inventario de móviles", "Perfiles y políticas", "Comandos remotos"];
+export const MDM_INCLUDES = ["Mobile inventory", "Profiles and policies", "Remote commands"];
 
 export function tierRank(tier) {
   return TIERS.indexOf(tier);
@@ -235,18 +235,18 @@ export function usageWarning(quantity, used) {
     return {
       severity: "error",
       message:
-        `Ya tienes ${used} equipos y con ${quantity} licencias el tope —margen ` +
-        `incluido— es ${graceCeiling(quantity)}. No podrás enrolar más, y los que ` +
-        `sobran quedan fuera de cobertura.`,
+        `You already have ${used} devices, and ${quantity} licenses cap you at ` +
+        `${graceCeiling(quantity)} including the margin. You won't be able to ` +
+        `enroll more, and the extras fall outside coverage.`,
     };
   }
   if (used > quantity) {
     return {
       severity: "warning",
       message:
-        `Tienes ${used} equipos y estás contratando ${quantity} licencias. Entras ` +
-        `por el margen del 10% (hasta ${graceCeiling(quantity)}), pero sin holgura ` +
-        `para crecer.`,
+        `You have ${used} devices and are buying ${quantity} licenses. You fit ` +
+        `within the 10% margin (up to ${graceCeiling(quantity)}), but with no ` +
+        `room to grow.`,
     };
   }
   return null;
@@ -287,15 +287,15 @@ export function statusNotice(sub, now = new Date()) {
       ? {
           severity: "warning",
           message:
-            `No pudimos cobrar el último recibo. Actualiza el método de pago: ` +
-            `quedan ${daysLeft} día${daysLeft === 1 ? "" : "s"} antes de que se ` +
-            `suspendan los plugins.`,
+            `We couldn't charge your last invoice. Update the payment method: ` +
+            `${daysLeft} day${daysLeft === 1 ? "" : "s"} left before plugins are ` +
+            `suspended.`,
         }
       : {
           severity: "error",
           message:
-            "La suscripción está suspendida por falta de pago. Actualiza el " +
-            "método de pago para restablecer el servicio.",
+            "The subscription is suspended for non-payment. Update the payment " +
+            "method to restore service.",
         };
   }
 
@@ -304,16 +304,15 @@ export function statusNotice(sub, now = new Date()) {
     return {
       severity: "info",
       message:
-        `Estás probando todos los plugins. Quedan ${days} día${days === 1 ? "" : "s"} ` +
-        `de prueba; después se mantendrán los de tu plan ` +
-        `${TIER_LABELS[sub.tier] ?? ""}.`.trim(),
+        `You're trialing every plugin. ${days} day${days === 1 ? "" : "s"} left; ` +
+        `after that you keep the ones in your ${TIER_LABELS[sub.tier] ?? ""} plan.`.trim(),
     };
   }
 
   if (sub.cancelAtPeriodEnd && sub.currentPeriodEnd) {
     return {
       severity: "warning",
-      message: `La suscripción no se renovará. El servicio continúa hasta el ${new Date(
+      message: `The subscription won't renew. Service continues until ${new Date(
         sub.currentPeriodEnd
       ).toLocaleDateString()}.`,
     };
