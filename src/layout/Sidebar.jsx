@@ -729,9 +729,18 @@ export default function Sidebar({
     // (OWNER/ADMIN only), which also hid it from any custom role
     // granted "jobs" since isPrivileged only recognizes the 2 built-ins.
     { label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> },
-    ...(isPrivileged
-      ? [{ label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> }]
-      : []),
+    // Audit/PKI/Device Enrollment — ADR-0011 Phase 3: their backend
+    // routes now gate on requireCapability("audit_log"/"pki"/
+    // "enrollment") instead of requireRole(OWNER,ADMIN), so like Jobs
+    // above, hiding them behind isPrivileged would block a custom role
+    // explicitly granted one of these even though the server would let
+    // them in. Unconditional now; a member without the capability sees
+    // the page's own "you don't have permission" message (or the
+    // permission-denied popup on the underlying API calls) instead of a
+    // missing nav entry.
+    { label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> },
+    { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
+    { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
     { label: "Alerts", key: "alerts", icon: <NotificationsOutlinedIcon /> },
     // ADR-0008 F1a — always visible for any active member; the catalog
     // itself is gated server-side per report type (GET /reports/types),
@@ -739,14 +748,13 @@ export default function Sidebar({
     { label: "Reports", key: "reports", icon: <SummarizeOutlinedIcon /> },
 
     // ── Administration group ───────────────────────────────
+    // Still OWNER/ADMIN-only: Plugin Control/Billing/Settings' backend
+    // routes are NOT capability-wired yet (still plain requireRole) —
+    // see ADR-0011 Phase 3's remaining scope.
     ...(isPrivileged
       ? [
           { type: "divider", key: "divider-admin", label: "Administration" },
-          { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
-          { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
           // Plugin Control — tenant-wide enable/disable for plugins.
-          // Inserted between PKI and Settings as agreed; visually
-          // groups with the other admin surfaces.
           { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
           // Agent Settings is NOT a separate entry: it's the second
           // division inside Settings (?settingsTab=agent). Both are
