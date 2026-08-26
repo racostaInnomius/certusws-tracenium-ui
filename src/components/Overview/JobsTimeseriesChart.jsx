@@ -219,7 +219,7 @@ export default function JobsTimeseriesChart({
                 {/* Declaration order is bottom-to-top in a Recharts stack, so
                     Failed is declared last to land on top of the column. */}
                 <Bar dataKey="completed" name="Completed" stackId="s" fill={ROLE.positive} />
-                <Bar dataKey="inFlight" name="In flight" stackId="s" fill={BRAND.cyan} />
+                <Bar dataKey="inFlight" name="In flight" stackId="s" fill={BRAND.cyanText} />
                 <Bar dataKey="failed" name="Failed" stackId="s" fill={ROLE.critical} radius={[3, 3, 0, 0]} />
               </BarChart>
             ) : (

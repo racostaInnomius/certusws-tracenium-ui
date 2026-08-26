@@ -81,7 +81,7 @@ describe("JobsTimeseriesChart · variant", () => {
     // stops being the one that grows into empty space — which is the whole
     // reason the stack is here rather than three lines.
     const fills = bars.map((b) => b.querySelector("path,rect")?.getAttribute("fill"));
-    expect(fills).toEqual([ROLE.positive, BRAND.cyan, ROLE.critical]);
+    expect(fills).toEqual([ROLE.positive, BRAND.cyanText, ROLE.critical]);
   });
 
   it("renders the same heading in both variants", () => {

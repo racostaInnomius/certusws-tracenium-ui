@@ -501,8 +501,8 @@ function JobsByTypeCard({ windowDays, data, loading, typeLabels, onSelectType, s
  */
 const STATUS_DOT = {
   completed: { label: "Completed", color: BRAND.teal },
-  running: { label: "Running", color: BRAND.cyan },
-  sent: { label: "Sent", color: BRAND.cyan },
+  running: { label: "Running", color: BRAND.cyanText },
+  sent: { label: "Sent", color: BRAND.cyanText },
   pending: { label: "Pending", color: BRAND.alert.warning },
   retrying: { label: "Retrying", color: BRAND.alert.warning },
   failed: { label: "Failed", color: BRAND.alert.error },
@@ -549,7 +549,7 @@ function renderBatchStatusChip(row) {
   let color;
   if (done < total) {
     label = "Running";
-    color = BRAND.cyan;
+    color = BRAND.cyanText;
   } else if (failed === 0) {
     label = "Completed";
     color = BRAND.teal;
