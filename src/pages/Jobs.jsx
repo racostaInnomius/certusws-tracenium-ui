@@ -63,6 +63,7 @@ import {
   listAssetGroups,
 } from "../api/assetGroups";
 import { listFrom } from "../api/shape";
+import { getMyCapabilities } from "../api/roles";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
@@ -586,9 +587,40 @@ export default function Jobs() {
   const confirm = useConfirm();
 
   const tenantId = auth?.tenantId;
-  const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const canManageJobs = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // ADR-0011 Phase 2: whether this page renders at all is driven by the
+  // caller's own effective capabilities (custom or built-in role), not a
+  // hardcoded OWNER/ADMIN name check — a custom role granted "jobs" (e.g.
+  // "IT Support") gets in, same as OWNER/ADMIN, and so does a built-in
+  // USER (BUILTIN_ROLE_SEED_PERMISSIONS already grants USER "jobs" — it
+  // was only this page's own gate that never honored that). Dispatch/
+  // retry/cancel remain admin+capability gated server-side regardless
+  // (requireTenantAdmin + requireCapability("jobs") in
+  // jobs.routes.ts) — a member who can view but not dispatch will get
+  // today's existing error handling on those actions; splitting that out
+  // into its own finer-grained gate is Phase 4, not this pass.
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = isActiveMember && myPermissions === null;
+  const canManageJobs = isActiveMember && Boolean(myPermissions?.has("jobs"));
 
   // Jobs metadata (known devices + job types): a parameterless on-mount fetch,
   // routed through useCachedFetch for stale-while-revalidate + dedup +
@@ -1716,11 +1748,21 @@ export default function Jobs() {
     }
   };
 
+  if (capabilitiesLoading) {
+    // Avoids a flash of the "restricted" message below while the
+    // caller's own permission set is still in flight.
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
   if (!canManageJobs) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
         <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
-          Jobs management is restricted to active tenant admins and owners.
+          You don't have permission to view jobs. Ask a tenant admin to grant the Jobs capability.
         </Alert>
       </Box>
     );
