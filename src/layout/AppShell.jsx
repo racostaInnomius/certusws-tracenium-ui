@@ -1113,15 +1113,28 @@ export default function AppShell() {
     refreshLicenseState();
   }, [refreshLicenseState, activeTenantKey]);
 
-  // The three things D6 keeps reachable while blocked:
+  // The four things kept reachable while blocked:
   //   1. the adjustment screen  -> LicenseBlockedScreen, rendered below
-  //   2. device removal         -> the Assets page, allowed through here
-  //   3. logout                 -> Topbar, which always renders
+  //   2. device removal         -> the Assets page (ADR-0005 D6)
+  //   3. subscribing            -> the Billing page (ADR-0010)
+  //   4. logout                 -> Topbar, which always renders
   // Everything else is replaced by the blocked screen.
-  const DEVICE_REMOVAL_PAGE = "assets";
+  //
+  // ⚠️ BILLING TIENE QUE PASAR, Y NO ES UN DETALLE.
+  //
+  // El bloqueo tiene ahora dos motivos: un ajuste de licencias sin responder
+  // (D6) y una prueba vencida sin contratar (ADR-0010). Para el segundo, la
+  // ÚNICA salida es pagar — y se paga en Billing. Dejarla detrás del bloqueo
+  // convierte la palanca comercial en un callejón sin salida: le pedimos al
+  // cliente que contrate y le escondemos el sitio donde hacerlo.
+  //
+  // Es la misma clase de error que el gate de facturación ya cometió una vez
+  // (el candado sin llave de ADR-0010 D7), y por eso la página de Billing
+  // tampoco lleva gate de entitlement.
+  const ESCAPE_HATCHES = ["assets", "billing"];
   const licenseBlocked =
     licenseState?.consoleBlocked === true && !inPortfolioMode && !mspResolving;
-  const showLicenseBlock = licenseBlocked && selectedPage !== DEVICE_REMOVAL_PAGE;
+  const showLicenseBlock = licenseBlocked && !ESCAPE_HATCHES.includes(selectedPage);
 
   const shouldShowNoInformationOverlay =
     !inPortfolioMode &&
