@@ -38,6 +38,16 @@ export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) 
   const [error, setError] = React.useState("");
   const [needsAdmin, setNeedsAdmin] = React.useState(false);
 
+  // ⚠️ EL BLOQUEO TIENE DOS MOTIVOS Y NO SE ARREGLAN IGUAL.
+  //
+  // Uno es un ajuste de licencias sin responder (ADR-0005 D6): se resuelve con
+  // un clic o borrando equipos. El otro es una prueba que venció sin que nadie
+  // contratara (ADR-0010): sólo se resuelve pagando.
+  //
+  // Enseñar "ajusta tus licencias" a quien lo que tiene es una prueba vencida
+  // lo manda a arreglar algo que no está roto — y el sitio donde SÍ puede
+  // arreglarlo ni siquiera aparece.
+  const trialExpired = state?.blockReason === "trial_expired";
   const adj = state?.adjustment ?? null;
   const previous = adj?.previousMaxDevices ?? state?.maxDevices ?? 0;
   const proposed = adj?.proposedMaxDevices ?? state?.used ?? 0;
@@ -107,76 +117,122 @@ export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) 
             </Box>
             <Box>
               <Typography variant="h6" sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.2 }}>
-                Your license needs attention
+                {trialExpired ? "Your trial has ended" : "Your license needs attention"}
               </Typography>
               <Typography variant="body2" sx={{ color: BRAND.tealText }}>
-                The console is paused until this is resolved.
+                {trialExpired
+                  ? "The console is paused until you choose a plan."
+                  : "The console is paused until this is resolved."}
               </Typography>
             </Box>
           </Stack>
 
-          <Typography variant="body2" sx={{ color: BRAND.dark }}>
-            On {formatDate(adj?.detectedAt)} this tenant had{" "}
-            <strong>{adj?.fleetAtDetection ?? state?.used}</strong> devices enrolled against{" "}
-            <strong>{previous}</strong> licenses. We asked you to choose by{" "}
-            {formatDate(adj?.dueAt)} and haven&apos;t heard back, so the console is on hold.
-            Your devices are still managed and still reporting — nothing was turned off on
-            the endpoints.
-          </Typography>
+          {trialExpired ? (
+            <>
+              <Typography variant="body2" sx={{ color: BRAND.dark }}>
+                Your {formatDate(state?.trialEndedAt)} trial has finished. Your devices
+                stay enrolled and keep reporting their inventory, but the rest of the
+                plugins are paused until there is an active plan.
+              </Typography>
 
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 2,
-              backgroundColor: BRAND.tealSoft,
-              border: `1px solid ${BRAND.border}`,
-            }}
-          >
-            <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
-              Option 1 — adjust your licenses
-            </Typography>
-            <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
-              Set your licensed device count to {proposed}, matching what you are actually
-              using. This records the change; no payment is taken here.
-            </Typography>
-          </Box>
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: BRAND.tealSoft,
+                  border: `1px solid ${BRAND.border}`,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+                  Choose a plan
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+                  Everything you configured during the trial is still here — policies,
+                  groups, enrolled devices. Subscribing turns the plugins back on where you
+                  left them; nothing has to be set up again.
+                </Typography>
+              </Box>
 
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: 2,
-              border: `1px solid ${BRAND.border}`,
-            }}
-          >
-            <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
-              Option 2 — remove devices
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                <Button
+                  variant="contained"
+                  onClick={() => onNavigate?.("billing")}
+                  sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+                >
+                  Go to Billing
+                </Button>
+                <Button variant="outlined" onClick={() => onNavigate?.("assets")}>
+                  Manage devices
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <>
+            <Typography variant="body2" sx={{ color: BRAND.dark }}>
+              On {formatDate(adj?.detectedAt)} this tenant had{" "}
+              <strong>{adj?.fleetAtDetection ?? state?.used}</strong> devices enrolled against{" "}
+              <strong>{previous}</strong> licenses. We asked you to choose by{" "}
+              {formatDate(adj?.dueAt)} and haven&apos;t heard back, so the console is on hold.
+              Your devices are still managed and still reporting — nothing was turned off on
+              the endpoints.
             </Typography>
-            <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
-              Bring the fleet back to {previous} devices or fewer. The console unlocks as
-              soon as you do — you don&apos;t need to come back here.
-            </Typography>
-          </Box>
 
-          {error ? (
-            <Typography variant="caption" sx={{ color: ROLE.critical }}>
-              {error}
-            </Typography>
-          ) : null}
-
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-            <Button
-              variant="contained"
-              onClick={handleAccept}
-              disabled={busy || !adj || needsAdmin}
-              startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
-              sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: BRAND.tealSoft,
+                border: `1px solid ${BRAND.border}`,
+              }}
             >
-              {busy ? "Applying…" : `Set my licenses to ${proposed}`}
-            </Button>
-            <Button variant="outlined" onClick={() => onNavigate?.("assets")} disabled={busy}>
-              Manage devices
-            </Button>
-          </Stack>
+              <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+                Option 1 — adjust your licenses
+              </Typography>
+              <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+                Set your licensed device count to {proposed}, matching what you are actually
+                using. This records the change; no payment is taken here.
+              </Typography>
+            </Box>
+
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                border: `1px solid ${BRAND.border}`,
+              }}
+            >
+              <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+                Option 2 — remove devices
+              </Typography>
+              <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+                Bring the fleet back to {previous} devices or fewer. The console unlocks as
+                soon as you do — you don&apos;t need to come back here.
+              </Typography>
+            </Box>
+
+            {error ? (
+              <Typography variant="caption" sx={{ color: ROLE.critical }}>
+                {error}
+              </Typography>
+            ) : null}
+
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              <Button
+                variant="contained"
+                onClick={handleAccept}
+                disabled={busy || !adj || needsAdmin}
+                startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
+                sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+              >
+                {busy ? "Applying…" : `Set my licenses to ${proposed}`}
+              </Button>
+              <Button variant="outlined" onClick={() => onNavigate?.("assets")} disabled={busy}>
+                Manage devices
+              </Button>
+            </Stack>
+
+            </>
+          )}
 
           {needsAdmin ? (
             // A viewer still sees why the console is locked and can still
