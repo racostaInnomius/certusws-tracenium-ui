@@ -37,6 +37,7 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 
 // Mirrors session-settings.service.ts SESSION_SETTINGS_LIMITS. Keeping
 // these in sync is a manual responsibility — defense in depth lives
@@ -47,26 +48,38 @@ const MIN_MINUTES = 5;
 const MAX_MINUTES = 480;
 const DEFAULT_MINUTES = 30;
 
-// Decide whether the current user can edit the setting. The backend is
-// the source of truth (requireRole gate on PUT), but mirroring the
-// check here lets us disable the form instead of letting a USER role
-// fill it in and get a 403 on Save.
-function canEditSessionSettings(auth) {
-  // TenantMember role comes through /api/bootstrap as one of
-  // OWNER | ADMIN | USER. The first two have admin rights for tenant-
-  // wide settings.
-  const role =
-    auth?.tenantMember?.role ??
-    auth?.tenantMember?.Role ??
-    auth?.tenant_member?.role ??
-    auth?.tenant_member?.Role ??
-    null;
-  return role === "OWNER" || role === "ADMIN" || auth?.globalRole === "admin_master";
-}
-
 export default function SessionSettings({ onNavigate }) {
   const { auth } = useAuthContext();
-  const canEdit = canEditSessionSettings(auth);
+  const tenantId = auth?.tenantId;
+  const isGlobalAdmin = auth?.globalRole === "admin_master";
+
+  // Decide whether the current user can edit the setting. The backend
+  // is the source of truth (requireCapability("session_settings") gate
+  // on PUT, ADR-0011 Phase 3), but mirroring the check here lets us
+  // disable the form instead of letting a member without it fill the
+  // form in and get a 403 on Save. Defaults to disabled while the fetch
+  // is in flight (myPermissions still null) — fail-closed, not a flash
+  // of an enabled button that then locks.
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const canEdit = isGlobalAdmin || Boolean(myPermissions?.has("session_settings"));
 
   const [loading, setLoading] = React.useState(true);
   const [view, setView] = React.useState(null);
