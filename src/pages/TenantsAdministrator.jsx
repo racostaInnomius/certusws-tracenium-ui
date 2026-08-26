@@ -44,6 +44,7 @@ import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
+import StaffSubscriptions from "../components/Billing/StaffSubscriptions";
 import { formatDate } from "../utils/format";
 
 // Fase 2 — SummaryCard aligned with the Tokens page version. Same
@@ -1163,6 +1164,13 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
               />
             </Box>
           </SectionPaper>
+
+          {/* Suscripciones — sólo en la vista global, que es la de staff.
+              En modo tenant esta pantalla la abre un OWNER para gestionar SUS
+              miembros, y no tiene por qué ver el estado de pago de nadie. */}
+          <Box sx={{ mb: 2 }}>
+            <StaffSubscriptions />
+          </Box>
         </>
       )}
 
