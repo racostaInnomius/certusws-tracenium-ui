@@ -590,6 +590,13 @@ function emitTemporaryError(err, { url, cacheKey, hasCachedData } = {}) {
 
 async function handleResponse(res, url = "") {
   if (res.ok) {
+    // A 204 (or any empty 2xx body) has nothing to parse, and res.json()
+    // rejects on an empty stream. Without this, a successful DELETE — which
+    // the gateway endpoints answer with 204 — surfaced to the caller as a
+    // thrown SyntaxError and was reported to the operator as a failure.
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return null;
+    }
     return res.json();
   }
 

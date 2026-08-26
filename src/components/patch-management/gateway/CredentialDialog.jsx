@@ -51,19 +51,21 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
     setUsername("");
     setPassword("");
     setError("");
+    // These endpoints return the entity itself, with no `{ ok, data }`
+    // envelope; http.js throws on any non-2xx, so a resolved value is the
+    // success case. Checking `res.ok` treated every success as a failure.
     getGatewayPublicKey(gateway.id)
-      .then((res) => {
+      .then((data) => {
         if (cancelled) return;
-        if (!res?.ok) {
-          setLoadError(
-            res?.data?.message ||
-              "Could not fetch the gateway certificate. The gateway must connect at least once before a credential can be sealed for it."
-          );
-          return;
-        }
-        setCertInfo(res.data);
+        setCertInfo(data);
       })
-      .catch(() => !cancelled && setLoadError("Could not fetch the gateway certificate."))
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(
+          err?.body?.message ||
+            "Could not fetch the gateway certificate. The gateway must connect at least once before a credential can be sealed for it."
+        );
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -78,16 +80,15 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
       const envelope = await sealCredential({ username, password }, certInfo.certPem);
       // Drop the plaintext from component state the moment it is sealed.
       setPassword("");
-      const res = await provisionGatewayCredential(gateway.id, envelope);
-      if (!res?.ok) {
-        setError(res?.data?.message || "The control plane rejected the sealed credential.");
-        return;
-      }
+      await provisionGatewayCredential(gateway.id, envelope);
       notify?.("success", "Credential sealed and sent. The gateway will verify it and report back — watch the health column.");
       onDone?.();
       onClose?.();
     } catch (e) {
-      setError(e?.message || "Could not seal the credential.");
+      // Two very different failures land here: the browser-side sealing, and
+      // the control plane refusing the envelope. The server's own message is
+      // the more specific one whenever there is one.
+      setError(e?.body?.message || e?.message || "Could not seal the credential.");
     } finally {
       setSubmitting(false);
     }

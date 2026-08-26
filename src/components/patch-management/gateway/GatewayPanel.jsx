@@ -9,6 +9,23 @@
 // operator exactly where they were before (ADR-0001 C-bis).
 
 import React from "react";
+
+/**
+ * Best available human text for a failed request.
+ *
+ * http.js throws on any non-2xx and attaches the parsed body, so the server's
+ * own `message` is the most specific thing we have. The fallback matters:
+ * a 500 from the gateway endpoints carries `{ error: "internal_error" }` with
+ * no message at all, and saying "rejected" there would be a guess — the server
+ * did not reject anything, it failed.
+ */
+function errorMessage(err, fallback) {
+  const fromBody = err?.body?.message;
+  if (typeof fromBody === "string" && fromBody.trim()) return fromBody.trim();
+  if (err?.status >= 500) return `${fallback} (server error ${err.status})`;
+  return fallback;
+}
+
 import {
   Alert,
   Box,
@@ -127,12 +144,16 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
     setLoading(true);
     setError("");
     try {
-      const res = await listGateways();
-      if (!res?.ok) {
-        setError(res?.data?.message || "Could not load gateways.");
-        return;
-      }
-      setGateways(res.data?.gateways ?? []);
+      // The gateway endpoints answer with the entity itself, not with an
+      // `{ ok, data }` envelope — only some of the older modules put an `ok`
+      // field inside their JSON. http.js already throws on any non-2xx, so a
+      // returned value IS the success case. Testing `res.ok` here reported
+      // every successful call as a failure: the gateway was created, its
+      // policy was synced, and the operator was told it had been rejected.
+      const data = await listGateways();
+      setGateways(data?.gateways ?? []);
+    } catch (err) {
+      setError(errorMessage(err, "Could not load gateways."));
     } finally {
       setLoading(false);
     }
@@ -143,10 +164,12 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
   }, [load]);
 
   const save = async (payload) => {
-    const res = editing
-      ? await updateGateway(editing.id, payload)
-      : await createGateway(payload);
-    if (!res?.ok) throw new Error(res?.data?.message || "The control plane rejected the gateway.");
+    try {
+      if (editing) await updateGateway(editing.id, payload);
+      else await createGateway(payload);
+    } catch (err) {
+      throw new Error(errorMessage(err, "The control plane rejected the gateway."));
+    }
     notify?.("success", editing ? "Gateway updated." : "Gateway registered.");
     await load();
   };
@@ -155,8 +178,11 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
     if (!window.confirm(`Remove ${gw.name}? The host will stop acting as a gateway and forget its vCenter credential.`)) {
       return;
     }
-    const res = await deleteGateway(gw.id);
-    if (!res?.ok) return notify?.("error", "Could not remove the gateway.");
+    try {
+      await deleteGateway(gw.id);
+    } catch (err) {
+      return notify?.("error", errorMessage(err, "Could not remove the gateway."));
+    }
     notify?.("success", "Gateway removed.");
     await load();
   };
@@ -164,8 +190,11 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
   const test = async (gw) => {
     setBusyId(gw.id);
     try {
-      const res = await verifyGateway(gw.id);
-      if (!res?.ok) return notify?.("error", "Could not queue the verification.");
+      try {
+        await verifyGateway(gw.id);
+      } catch (err) {
+        return notify?.("error", errorMessage(err, "Could not queue the verification."));
+      }
       notify?.("info", "Verification queued — the gateway will report back shortly.");
       // The gateway answers asynchronously; refresh shortly after.
       setTimeout(load, 4000);
