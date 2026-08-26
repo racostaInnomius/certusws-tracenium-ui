@@ -9,10 +9,17 @@
 //      Click a row → FindingDetailDrawer.
 //
 // Filters per tab are passed in by the page:
-//   tls    → { category: "cryptography" }
+//   tls    → { category: "crypto,cryptography" }
 //   smb    → { category: "network_sharing", checkIdContains: "smb" }
 //   shares → { category: "network_sharing", checkIdContains: "share" }
-//   other  → no category filter; the page passes a multi-category
+//   other  → { categoriesNotIn: <every category another tab claims> }
+//
+// `category` is a LIST because the catalog's taxonomy and these tabs are not
+// one-to-one. TLS is the case that proves it: the catalog has BOTH `crypto`
+// (certificates, SSH MACs — the real bucket) and `cryptography` (one Linux
+// password-hash check). The tab named itself after the second and showed a
+// single, unrelated finding while the first stayed invisible.
+//   other  → previously `firewall`, which hid 65% of open findings; the page passes a multi-category
 //            shape via `categoryIn` (if provided we'd handle it by
 //            firing N parallel requests — Phase 1 just uses the
 //            single-`category` form by passing the largest bucket
@@ -80,6 +87,7 @@ export default function FindingsPanel({
   _tabKey,        // "tls" | "smb" | "shares" | "other"  (used only for friendly labels)
   // Filters passed to /findings
   category,
+  categoriesNotIn,
   checkIdContains,
   // Capability
   canManage,
@@ -100,6 +108,7 @@ export default function FindingsPanel({
     try {
       const params = {};
       if (category) params.category = category;
+      if (categoriesNotIn) params.categoriesNotIn = categoriesNotIn;
       if (checkIdContains) params.checkIdContains = checkIdContains;
       const res = await getFindings(params);
       setItems(listFrom(res, { context: "patchFindings" }));
@@ -118,7 +127,7 @@ export default function FindingsPanel({
     } finally {
       setLoading(false);
     }
-  }, [category, checkIdContains, notify]);
+  }, [category, categoriesNotIn, checkIdContains, notify]);
 
   React.useEffect(() => {
     load();

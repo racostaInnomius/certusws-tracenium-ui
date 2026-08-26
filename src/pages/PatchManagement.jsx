@@ -73,6 +73,12 @@ import { listFrom } from "../api/shape";
 //    each compliance check has a matching remediation action here. When
 //    the PMP plugin lands, each remediation maps to a tenant-level
 //    automation (e.g. "apply baseline" or "install KB").
+/**
+ * Categories another tab already shows. "Other" is defined as the complement,
+ * so anything the catalog adds later surfaces here instead of vanishing.
+ */
+const OTHER_EXCLUDES = "crypto,cryptography,network_sharing";
+
 const CATEGORIES = [
   {
     key: "patches",
@@ -1224,19 +1230,27 @@ export default function PatchManagement({ onNavigate }) {
             <FindingsPanel
               tabKey={tab}
               category={
-                tab === "tls"    ? "cryptography"
+                // TLS covers BOTH catalog categories. `crypto` holds the real
+                // work (weak certificate keys and signatures, expired certs,
+                // non-standard roots, SSH MACs); `cryptography` holds a single
+                // Linux password-hash check. This tab used to name only the
+                // second, so it displayed one unrelated finding while 203 rows
+                // of certificate problems stayed invisible.
+                tab === "tls"    ? "crypto,cryptography"
                 : tab === "smb"  ? "network_sharing"
                 : tab === "shares" ? "network_sharing"
-                : tab === "other" ? "firewall"
-                  // ^^^ Phase 1: "other" surfaces firewall findings
-                  // only — the catalog also has antimalware /
-                  // disk_encryption / identity_policy / integrity in
-                  // this bucket but the agent has no auto-fix for
-                  // them yet. Phase 2: backend grows
-                  // `categoriesNotIn` and we drop the firewall-only
-                  // narrowing here, so "other" lists everything that
-                  // isn't tls/smb/shares.
                 : undefined
+              }
+              categoriesNotIn={
+                // "Other" is a complement, not a category. Naming `firewall`
+                // here made it a fourth narrow tab and hid everything the
+                // catalog grew afterwards — patching (which carries the KEV
+                // checks), identity_policy, disk_encryption, network_hardening,
+                // filesystem_hardening, integrity, antimalware: 636 of 984 open
+                // findings across the fleet, none of them reachable from this
+                // page. Excluding what the other tabs claim means a new catalog
+                // category shows up here by default instead of disappearing.
+                tab === "other" ? OTHER_EXCLUDES : undefined
               }
               checkIdContains={
                 // Split the shared `network_sharing` catalog category
