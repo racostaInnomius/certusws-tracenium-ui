@@ -60,15 +60,26 @@ afterEach(cleanup);
 const ready = () => waitFor(() => expect(screen.getByText("Subscriptions")).toBeTruthy());
 
 describe("lo que la tabla distingue", () => {
-  it("sin prueba muestra un guion, no cero días", async () => {
+  it("sin prueba lo dice, no muestra cero días", async () => {
     // Los tenants heredados nunca tuvieron prueba. "0 días" haría creer que se
     // les agotó — otra conversación comercial completamente distinta.
     serve([row({ trialDaysLeft: null })]);
     render(<StaffSubscriptions />);
     await ready();
 
-    expect(screen.getByText("—")).toBeTruthy();
+    expect(screen.getByText("no trial")).toBeTruthy();
     expect(screen.queryByText(/0 days left/)).toBeNull();
+  });
+
+  it("la cuenta atrás lleva también la FECHA de fin", async () => {
+    // Los días sueltos no dejan planificar: lo que se apunta para llamar al
+    // cliente es el día.
+    serve([row({ trialDaysLeft: 89, trialEndsAt: "2026-11-24T00:00:00.000Z" })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.getByText("89 days left")).toBeTruthy();
+    expect(screen.getByText(/^until /)).toBeTruthy();
   });
 
   it("una prueba agotada dice cuándo terminó", async () => {
@@ -173,7 +184,10 @@ describe("conceder acceso", () => {
     expect(dialogo.getByText(/on top of the 60 days/)).toBeTruthy();
   });
 
-  it("manda los meses elegidos al tenant correcto", async () => {
+  it("conceder por primera vez ofrece LA prueba: 3 meses", async () => {
+    // Conceder y ampliar no son la misma operación: la primera es dar la prueba
+    // estándar, la segunda un mes más. Un único valor por defecto obligaría a
+    // corregirlo a mano en el caso más frecuente de los dos.
     render(<StaffSubscriptions />);
     await ready();
 
@@ -183,7 +197,19 @@ describe("conceder acceso", () => {
     await waitFor(() => expect(post).toHaveBeenCalled());
     const [url, body] = post.mock.calls[0];
     expect(url).toContain("/billing/admin/subscriptions/111/trial");
-    expect(body).toEqual({ months: 1 });
+    expect(body).toEqual({ months: 3 });
+  });
+
+  it("ampliar una prueba viva ofrece 1 mes", async () => {
+    serve([row({ trialDaysLeft: 40, trialEndsAt: "2026-10-05T00:00:00.000Z" })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    await userEvent.click(screen.getByText("Extend"));
+    await userEvent.click(await screen.findByRole("button", { name: /Grant access/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0][1]).toEqual({ months: 1 });
   });
 
   it("nada se manda hasta confirmar", async () => {

@@ -75,12 +75,20 @@ function paymentView(row) {
   return { ...view, note: null };
 }
 
+/** La prueba estándar de alta. Debe coincidir con TRIAL_MONTHS del backend. */
+const TRIAL_MONTHS = 3;
+
 /** Prueba: la columna tiene tres estados, no dos. */
 function TrialCell({ row }) {
+  // Sin flota posible no hay plugins que conceder, así que una cuenta atrás
+  // ahí no significaría nada.
+  if (!row.billable) {
+    return <Typography variant="body2" color="text.secondary">—</Typography>;
+  }
   // Sin fecha NO es "cero días": es que este tenant nunca tuvo prueba. Son dos
   // conversaciones comerciales distintas y la tabla no puede confundirlas.
   if (row.trialDaysLeft === null) {
-    return <Typography variant="body2" color="text.secondary">—</Typography>;
+    return <Typography variant="body2" color="text.secondary">no trial</Typography>;
   }
   if (row.trialDaysLeft <= 0) {
     return (
@@ -90,9 +98,16 @@ function TrialCell({ row }) {
     );
   }
   return (
-    <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.tealText }}>
-      {row.trialDaysLeft} day{row.trialDaysLeft === 1 ? "" : "s"} left
-    </Typography>
+    <>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.tealText }}>
+        {row.trialDaysLeft} day{row.trialDaysLeft === 1 ? "" : "s"} left
+      </Typography>
+      {/* Los días solos no dejan planificar: "hasta el 26 de noviembre" es lo
+          que se apunta en el calendario para llamar al cliente. */}
+      <Typography variant="caption" color="text.secondary">
+        until {new Date(row.trialEndsAt).toLocaleDateString()}
+      </Typography>
+    </>
   );
 }
 
@@ -279,7 +294,11 @@ export default function StaffSubscriptions() {
                           <Button
                             size="small"
                             onClick={() => {
-                              setMonths(1);
+                              // Conceder por primera vez es dar LA prueba —tres
+                              // meses—; ampliar una que ya corre suele ser un
+                              // mes más. El valor por defecto es el de cada
+                              // caso, no uno solo para los dos.
+                              setMonths(r.trialDaysLeft > 0 ? 1 : TRIAL_MONTHS);
                               setTarget(r);
                             }}
                           >
