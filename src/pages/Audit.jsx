@@ -55,6 +55,7 @@ import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
 import { listFrom } from "../api/shape";
+import { getMyCapabilities } from "../api/roles";
 
 /**
  * Render an event_type cell with a category-tinted chip and the
@@ -197,9 +198,35 @@ export default function Audit() {
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
-  const tenantMemberRole = String(auth?.tenantMember?.role || "");
+  const tenantId = auth?.tenantId;
   const tenantMemberIsActive = auth?.tenantMember?.isActive === true;
-  const canAccess = tenantMemberIsActive && ["OWNER", "ADMIN"].includes(tenantMemberRole);
+
+  // ADR-0011 Phase 3: gate on the "audit_log" capability (custom or
+  // built-in role) instead of a hardcoded OWNER/ADMIN name check — see
+  // the same fix already applied to Jobs.jsx. BUILTIN_ROLE_SEED_PERMISSIONS
+  // grants OWNER/ADMIN this capability and withholds it from USER, so
+  // built-in-role behavior is unchanged.
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = tenantMemberIsActive && myPermissions === null;
+  const canAccess = tenantMemberIsActive && Boolean(myPermissions?.has("audit_log"));
 
   const [rows, setRows] = React.useState([]);
   const [summary, setSummary] = React.useState(null);
@@ -504,11 +531,19 @@ export default function Audit() {
     return {};
   }, [isMdDown, isSmDown]);
 
+  if (capabilitiesLoading) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ color: "text.secondary" }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
   if (!canAccess) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
         <Alert severity="warning" sx={{ borderRadius: 3 }}>
-          Audit access is restricted to active tenant admins and owners.
+          You don't have permission to view the audit log. Ask a tenant admin to grant the Audit Log capability.
         </Alert>
       </Box>
     );
