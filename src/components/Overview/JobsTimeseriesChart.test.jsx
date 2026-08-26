@@ -69,10 +69,10 @@ describe("JobsTimeseriesChart · variant", () => {
     const bars = [...container.querySelectorAll(".recharts-bar")];
     expect(bars).toHaveLength(3);
 
-    // Recharts paints the rectangles through its enter animation, so the
-    // <path> inside each layer does not exist on the first commit.
+    // Recharts paints the segments through its enter animation, so the <rect>
+    // inside each layer does not exist on the first commit.
     await waitFor(() =>
-      expect(container.querySelector(".recharts-rectangle")).toBeTruthy()
+      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
     );
 
     // Declaration order is bottom-to-top in a Recharts stack, and the layers
@@ -80,8 +80,51 @@ describe("JobsTimeseriesChart · variant", () => {
     // reach the DOM: if someone reorders the <Bar> elements, the red band
     // stops being the one that grows into empty space — which is the whole
     // reason the stack is here rather than three lines.
-    const fills = bars.map((b) => b.querySelector("path,rect")?.getAttribute("fill"));
+    const fills = bars.map((b) =>
+      b.querySelector(".recharts-bar-rectangle rect")?.getAttribute("fill")
+    );
     expect(fills).toEqual([ROLE.positive, BRAND.cyanText, ROLE.critical]);
+  });
+
+  it("drops the grid and the Y axis — the frame is what read as a spreadsheet", async () => {
+    const { container } = renderChart({ variant: "stacked" });
+    await waitFor(() =>
+      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
+    );
+    expect(container.querySelector(".recharts-cartesian-grid")).toBeNull();
+    expect(container.querySelector(".recharts-yAxis")).toBeNull();
+    // The day labels stay: a stack with no x labels cannot be read at all.
+    expect(container.querySelector(".recharts-xAxis")).toBeTruthy();
+  });
+
+  it("keeps a one-job segment visible instead of subtracting it away", async () => {
+    // The gap between segments is carved out of each segment's own height, so
+    // without a floor a single failure inside a big day would shrink to
+    // nothing — the one segment that must never disappear.
+    const { container } = render(
+      <div style={{ width: 600, height: 220 }}>
+        <JobsTimeseriesChart
+          variant="stacked"
+          loading={false}
+          result={{
+            status: "fulfilled",
+            value: {
+              windowDays: 7,
+              buckets: [{ bucket: "2026-08-19", completed: 400, failed: 1, inFlight: 0 }],
+            },
+          }}
+        />
+      </div>
+    );
+    await waitFor(() =>
+      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
+    );
+
+    const failed = [...container.querySelectorAll(".recharts-bar-rectangle rect")].find(
+      (r) => r.getAttribute("fill") === ROLE.critical
+    );
+    expect(failed).toBeTruthy();
+    expect(Number(failed.getAttribute("height"))).toBeGreaterThanOrEqual(3);
   });
 
   it("renders the same heading in both variants", () => {

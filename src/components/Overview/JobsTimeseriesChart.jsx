@@ -11,12 +11,18 @@
 //     tile among many and the question is "did more fail today than
 //     usual?", read independently of total volume.
 //
-//   "stacked" — stacked bars, used by the Jobs page. There the chart is
+//   "stacked" — segmented stack, used by the Jobs page. There the chart is
 //     the page's own subject sitting above the history it summarises, and
 //     the question becomes "how much of the day's work failed": a
 //     proportion, which a stack shows as a band and three lines do not.
 //     The failed series sits on top so its band is the one that grows into
 //     empty space instead of being squeezed between the other two.
+//
+//     Deliberately frameless — no grid, no Y axis, each segment its own
+//     rounded pill with air between them. The frame, not the bar, is what
+//     made the original read like a spreadsheet: gridlines and a numeric
+//     axis took more of the eye than the data did. The exact counts move
+//     into the tooltip, which is the trade this shape makes.
 //
 // Failed uses the red role color in both.
 
@@ -36,7 +42,7 @@ import {
   CartesianGrid,
   Legend
 } from "recharts";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 function formatDay(isoDate) {
   if (!isoDate) return "";
@@ -47,6 +53,40 @@ function formatDay(isoDate) {
     day: "numeric",
     timeZone: "UTC"
   });
+}
+
+// Air between the segments of a stack, and the rounding that makes each one
+// read as its own pill rather than a slice of one solid column.
+const SEGMENT_GAP = 3;
+// A hairline floor. One failed job out of sixty is barely two pixels tall on
+// this plot, and it is precisely the segment that must not vanish — the whole
+// reason the failed series is here. Without the floor, subtracting the gap
+// would erase it.
+const SEGMENT_MIN = 3;
+
+/**
+ * One segment of the stack. Recharts hands us the rectangle it computed;
+ * we shrink it from the top by the gap and round the corners.
+ *
+ * Shrinking from the TOP (not centering) keeps every segment sitting on the
+ * one below it, so the column still totals what the data says. The gap always
+ * belongs to the segment above.
+ */
+function StackSegment({ x, y, width, height, fill }) {
+  if (!(height > 0) || !(width > 0)) return null;
+  const h = Math.max(height - SEGMENT_GAP, SEGMENT_MIN);
+  const r = Math.min(3, width / 2, h / 2);
+  return (
+    <rect
+      x={x}
+      y={y + height - h}
+      width={width}
+      height={h}
+      rx={r}
+      ry={r}
+      fill={fill}
+    />
+  );
 }
 
 export default function JobsTimeseriesChart({
@@ -190,19 +230,17 @@ export default function JobsTimeseriesChart({
         <Box sx={{ height: 220 }}>
           <ResponsiveContainer width="100%" height="100%">
             {variant === "stacked" ? (
-              <BarChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }} barCategoryGap="22%">
-                <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
+              <BarChart data={data} margin={{ top: 8, right: 4, bottom: 4, left: 4 }} barCategoryGap="26%">
+                {/* No CartesianGrid and no YAxis on purpose — see the header
+                    comment. The day labels stay, without an axis rule under
+                    them, because a stack with no x labels is unreadable. */}
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
-                  axisLine={{ stroke: BRAND.borderStrong }}
+                  tick={{ fill: TEXT_MUTED, fontSize: TEXT.xs }}
+                  axisLine={false}
                   tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: BRAND.dark, fontSize: TEXT.xs }}
-                  axisLine={{ stroke: BRAND.borderStrong }}
-                  tickLine={false}
-                  allowDecimals={false}
+                  tickMargin={6}
+                  height={26}
                 />
                 <Tooltip
                   cursor={{ fill: BRAND.surfaceMuted }}
@@ -213,14 +251,16 @@ export default function JobsTimeseriesChart({
                   }}
                 />
                 <Legend
+                  verticalAlign="bottom"
+                  height={26}
                   wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
                   iconType="square"
                 />
                 {/* Declaration order is bottom-to-top in a Recharts stack, so
                     Failed is declared last to land on top of the column. */}
-                <Bar dataKey="completed" name="Completed" stackId="s" fill={ROLE.positive} />
-                <Bar dataKey="inFlight" name="In flight" stackId="s" fill={BRAND.cyanText} />
-                <Bar dataKey="failed" name="Failed" stackId="s" fill={ROLE.critical} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="completed" name="Completed" stackId="s" fill={ROLE.positive} shape={<StackSegment />} maxBarSize={46} />
+                <Bar dataKey="inFlight" name="In flight" stackId="s" fill={BRAND.cyanText} shape={<StackSegment />} maxBarSize={46} />
+                <Bar dataKey="failed" name="Failed" stackId="s" fill={ROLE.critical} shape={<StackSegment />} maxBarSize={46} />
               </BarChart>
             ) : (
               <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
