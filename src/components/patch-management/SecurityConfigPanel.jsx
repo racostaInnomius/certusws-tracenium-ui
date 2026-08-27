@@ -22,6 +22,8 @@ export default function SecurityConfigPanel({
   domain,
   onDomainChange,
   refreshNonce,
+  openCheckId,
+  onOpened,
 }) {
   // Controlled when the page deep-links a slice (?pmTab=tls still resolves
   // here), uncontrolled otherwise.
@@ -87,6 +89,8 @@ export default function SecurityConfigPanel({
         canManage={canManage}
         notify={notify}
         refreshNonce={refreshNonce}
+        openCheckId={openCheckId}
+        onOpened={onOpened}
       />
     </Box>
   );

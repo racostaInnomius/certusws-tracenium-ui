@@ -166,3 +166,31 @@ describe("robustness", () => {
     expect(byPriority(a, a)).toBe(0);
   });
 });
+
+describe("the queue can route to what it recommends", () => {
+  it("carries the category so the caller knows which surface renders it", () => {
+    // Without this the button switched tabs to a page that did not contain
+    // the row it had just promised — the reason "See finding" looked broken.
+    expect(fromFinding(finding({ category: "firewall" })).category).toBe("firewall");
+    expect(fromFinding(finding({ category: "patching" })).category).toBe("patching");
+  });
+
+  it("keeps the id addressable — it is the checkId the panel matches on", () => {
+    expect(fromFinding(finding({ checkId: "windows.smb.v1_disabled" })).id)
+      .toBe("windows.smb.v1_disabled");
+  });
+
+  it("tolerates a finding with no category rather than dropping it", () => {
+    // An uncategorised finding still belongs in the queue; it simply routes to
+    // the catch-all surface.
+    const item = fromFinding(finding({ category: undefined }));
+    expect(item.category).toBeNull();
+    expect(item.id).toBeTruthy();
+  });
+
+  it("does not put a category on a CVE", () => {
+    // CVEs route by kind, not category; inventing one would be a lie the
+    // router could act on.
+    expect(fromExposure(cve({})).category).toBeUndefined();
+  });
+});

@@ -89,6 +89,10 @@ export default function FindingsPanel({
   category,
   categoriesNotIn,
   checkIdContains,
+  // A checkId to open as soon as it is loaded — how the priority queue hands
+  // an operator straight to the finding it just recommended.
+  openCheckId,
+  onOpened,
   // Capability
   canManage,
   // Side-effects
@@ -128,6 +132,19 @@ export default function FindingsPanel({
       setLoading(false);
     }
   }, [category, categoriesNotIn, checkIdContains, notify]);
+
+  // Open the requested finding once the rows are in. Deliberately keyed on the
+  // loaded items rather than fired on mount: asking for a row before the fetch
+  // resolves would silently do nothing, which is exactly how the queue's
+  // buttons looked broken.
+  React.useEffect(() => {
+    if (!openCheckId || items.length === 0) return;
+    const match = items.find((i) => i.checkId === openCheckId);
+    if (!match) return;
+    setDrawerFinding(match);
+    setDrawerOpen(true);
+    onOpened?.();
+  }, [openCheckId, items, onOpened]);
 
   React.useEffect(() => {
     load();

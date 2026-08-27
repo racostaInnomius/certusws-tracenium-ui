@@ -400,6 +400,35 @@ export default function PatchManagement({ onNavigate }) {
   // The queue needs both halves of "what is wrong": exposed CVEs and open
   // findings. Both endpoints already existed and are already what the
   // Vulnerabilities and Security configuration surfaces read.
+  // Which finding the queue asked us to open, cleared once the panel has it.
+  const [pendingCheckId, setPendingCheckId] = React.useState(null);
+
+  /**
+   * Take the operator to the row the queue just recommended — the actual row,
+   * not the page it lives on.
+   *
+   * Switching tabs alone was the bug: if you were already on that tab, the
+   * button did nothing visible, and even when it did switch you were left to
+   * find the finding yourself in a list of two hundred.
+   */
+  const handleOpenFromQueue = React.useCallback((item) => {
+    if (item.kind === "cve") {
+      // Exposure has no per-CVE detail view, so its tab is as far as we can
+      // honestly take you.
+      setTab("vulnerabilities");
+      return;
+    }
+    setPendingCheckId(item.id);
+    if (item.category === PATCHING_CATEGORY) {
+      setTab("patches");
+      return;
+    }
+    // Show everything, so the requested finding is guaranteed to be in the
+    // list rather than filtered out by whichever slice was last selected.
+    setSecurityDomain(DEFAULT_DOMAIN);
+    setTab("security");
+  }, []);
+
   const [queue, setQueue] = React.useState({ exposures: [], findings: [], loading: true });
   React.useEffect(() => {
     let cancelled = false;
@@ -965,7 +994,7 @@ export default function PatchManagement({ onNavigate }) {
             exposures={queue.exposures}
             findings={queue.findings}
             loading={queue.loading}
-            onOpen={(item) => setTab(item.kind === "cve" ? "vulnerabilities" : "security")}
+            onOpen={handleOpenFromQueue}
           />
 
           {/* The counters stay, but underneath and smaller. They are context
@@ -1132,6 +1161,8 @@ export default function PatchManagement({ onNavigate }) {
                 <FindingsPanel
                   tabKey="patches"
                   category={PATCHING_CATEGORY}
+                  openCheckId={pendingCheckId}
+                  onOpened={() => setPendingCheckId(null)}
                   canManage={canManage}
                   notify={(severity, message) => setSnackbar({ open: true, severity, message })}
                 />
@@ -1158,6 +1189,8 @@ export default function PatchManagement({ onNavigate }) {
           ) : tab === "security" ? (
             <SecurityConfigPanel
               canManage={canManage}
+              openCheckId={pendingCheckId}
+              onOpened={() => setPendingCheckId(null)}
               domain={securityDomain}
               onDomainChange={setSecurityDomain}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}

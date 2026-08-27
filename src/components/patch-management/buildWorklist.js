@@ -46,6 +46,11 @@ export function fromFinding(finding) {
     kind: "finding",
     id: finding.checkId,
     title: finding.title || finding.checkId,
+    // Carried so the queue can route to the surface that actually renders it:
+    // `patching` findings live on the Patches tab, everything else on Security
+    // configuration. Without this the button lands you on a page that does not
+    // contain the row it promised.
+    category: finding.category ?? null,
     severity: finding.severity ?? "unknown",
     // Config findings carry no CVSS. Left null rather than faked, so a CVE
     // with a real score outranks them at equal severity — which is the honest
