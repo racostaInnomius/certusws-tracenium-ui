@@ -19,6 +19,7 @@ import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import {
   listAgentReleases,
   createAgentRelease,
@@ -105,11 +106,35 @@ export default function AgentReleases({ embedded = false }) {
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
-  const tenantRole = auth?.tenantMember?.role;
+  const tenantId = auth?.tenantId;
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
+  // ADR-0011 Phase 3: gate on the "agent_releases" capability instead
+  // of a hardcoded role==="ADMIN" check — that old check excluded
+  // OWNER too, breaking the superset convention every other capability
+  // follows. Defaults to disabled while the fetch is in flight
+  // (fail-closed, not a flash of an enabled control).
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
   const canEditAgentReleases =
-    isActiveMember && String(tenantRole ?? "") === "ADMIN";
+    isActiveMember && Boolean(myPermissions?.has("agent_releases"));
 
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
