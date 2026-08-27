@@ -147,6 +147,15 @@ const FIELDS = [
     min: 1,
     max: 3650,
   },
+  // ── Audit trail — control DB. Blank = never (opt-in). ──
+  {
+    key: "securityEventsDays",
+    table: "security_events",
+    label: "Audit trail",
+    hint: "Everything the Audit page shows: enrollments, policy pushes, rejected connections, security-drift outcomes. This is compliance evidence, so it has no window until you set one. Connections that were rejected before we could identify the tenant have no tenant to attribute them to and are never swept by this. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
 ];
 
 function formatRows(n) {
