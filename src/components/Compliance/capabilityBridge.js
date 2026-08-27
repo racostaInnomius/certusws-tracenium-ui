@@ -11,12 +11,17 @@
 // The map is GROUNDED IN THE CATALOG SEEDS, not in intuition — each
 // entry lists the `category` values of the actual checks the capability
 // governs (verified against modules/db/migrations/*compliance_catalog*
-// on 2026-08-13). Two catalog quirks to preserve until the backend
-// unifies them:
-//   - 'crypto' AND 'cryptography' both exist (linux ssh crypto seeds
-//     use the former, SCHANNEL/password-hash the latter);
-//   - ssh checks split between 'identity_policy' (auth behavior) and
-//     'crypto' (algorithm strength).
+// on 2026-08-13, re-verified 2026-08-27).
+//
+// Ya no hay dos cubos de cripto: la migración 20260827 fusionó 'crypto'
+// en 'cryptography' porque el desglose por categoría los pintaba uno al
+// lado del otro y nadie sabía cuál era cuál — no había criterio que los
+// separase, sólo el orden en que se sembraron.
+//
+// Un reparto que SÍ se conserva porque significa algo: los checks de ssh
+// caen en 'identity_policy' (comportamiento de autenticación) y en
+// 'cryptography' (fuerza de los algoritmos). Son dos preguntas distintas
+// sobre el mismo servicio.
 //
 // This is a UI-side crosswalk of CATEGORIES. The finer-grained
 // checkId-level detection↔remediation crosswalk (namespaces still
@@ -27,7 +32,7 @@ import { SECURITY_CAPABILITIES } from "../Policies/policyTransforms";
 
 export const CAPABILITY_TO_CATEGORIES = {
   firewall: ["firewall"],
-  ssh: ["identity_policy", "crypto"],
+  ssh: ["identity_policy", "cryptography"],
   tls: ["cryptography"],
   smb: ["network_sharing"],
   gatekeeper: ["integrity"],

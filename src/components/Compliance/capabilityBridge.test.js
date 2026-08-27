@@ -35,7 +35,7 @@ describe("map integrity", () => {
     expect(categoriesForCapability("firewall")).toEqual(["firewall"]);
     expect(categoriesForCapability("tls")).toContain("cryptography");
     expect(categoriesForCapability("ssh")).toEqual(
-      expect.arrayContaining(["identity_policy", "crypto"])
+      expect.arrayContaining(["identity_policy", "cryptography"])
     );
     expect(categoriesForCapability("filevault")).toEqual(["disk_encryption"]);
     expect(categoriesForCapability("usb")).toEqual([]);
@@ -101,17 +101,18 @@ describe("baselineModeForCategory", () => {
 describe("evidenceForCapability", () => {
   const items = [
     { category: "identity_policy", failed: 5, highSeverityFails: 2, devicesFailing: 3, devices: 40 },
-    { category: "crypto", failed: 1, highSeverityFails: 0, devicesFailing: 1, devices: 40 },
+    // 20260827 fusionó 'crypto' en 'cryptography': ya no hay dos cubos.
+    { category: "cryptography", failed: 1, highSeverityFails: 0, devicesFailing: 1, devices: 40 },
     { category: "patching", failed: 9, highSeverityFails: 9, devicesFailing: 9, devices: 40 },
   ];
 
   it("aggregates across the capability's mapped categories only", () => {
-    const ev = evidenceForCapability(items, "ssh"); // identity_policy + crypto
+    const ev = evidenceForCapability(items, "ssh"); // identity_policy + cryptography
     expect(ev.failed).toBe(6);
     expect(ev.highSeverityFails).toBe(2);
     expect(ev.devicesFailing).toBe(4);
     expect(ev.devices).toBe(40);
-    expect(ev.categories).toEqual(expect.arrayContaining(["identity_policy", "crypto"]));
+    expect(ev.categories).toEqual(expect.arrayContaining(["identity_policy", "cryptography"]));
   });
 
   it("returns null when no mapped category reported", () => {
