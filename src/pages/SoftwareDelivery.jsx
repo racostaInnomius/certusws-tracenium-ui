@@ -41,6 +41,7 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import {
   listPackages,
   createPackage,
@@ -777,10 +778,31 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
 export default function SoftwareDelivery() {
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
-  const tenantRole = auth?.tenantMember?.role;
   const isActive = auth?.tenantMember?.isActive === true;
-  const isAdmin =
-    isActive && (String(tenantRole ?? "") === "ADMIN" || String(tenantRole ?? "") === "OWNER");
+  // ADR-0011 Phase 3: was a hardcoded ADMIN/OWNER role check — now
+  // reads the caller's effective permission set so a custom role
+  // holding software_delivery can manage too. The backend enforces
+  // the same split (software-delivery.routes.ts requireCapability
+  // ("software_delivery")); this only decides what to render.
+  // Defaults to false while the fetch is in flight (fail-closed).
+  const [myPermissions, setMyPermissions] = React.useState(null);
+  React.useEffect(() => {
+    if (!tenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+  const isAdmin = isActive && Boolean(myPermissions?.has("software_delivery"));
 
   // Plugin catalog from the backend — needed for the required-plugin
   // semantics in getEnabledPluginSet (AMP is always enabled even if
