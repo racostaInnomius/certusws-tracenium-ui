@@ -62,6 +62,7 @@ import RefreshControl, { useAutoRefresh } from "../components/common/RefreshCont
 import JobTracker from "../components/common/JobTracker";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import { getTenantPolicy } from "../api/policies";
 import {
   getPatchSummary,
@@ -421,15 +422,36 @@ export default function PatchManagement({ onNavigate }) {
     return () => { cancelled = true; };
   }, [tenantId]);
 
-  // PMv2 — admin-gating for the new remediation actions (apply +
+  // PMv2 — capability-gating for the new remediation actions (apply +
   // dry-run + cancel). Reads stay open for any tenant member, same
   // pattern as SDP. `canManage` derives from `pmpEnabled` further
   // below so we do the AND there, not here.
-  const tenantRole = auth?.tenantMember?.role;
+  //
+  // ADR-0011 Phase 3: was a hardcoded ADMIN/OWNER role check — now
+  // reads the caller's effective permission set so a custom role
+  // holding patch_management can manage too. The backend enforces the
+  // same split (patch-management.routes.ts requireCapability
+  // ("patch_management")); this only decides what to render. Defaults
+  // to false while the fetch is in flight (fail-closed).
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const isAdmin =
-    isActiveMember
-    && (String(tenantRole ?? "") === "ADMIN" || String(tenantRole ?? "") === "OWNER");
+  const [myPermissions, setMyPermissions] = React.useState(null);
+  React.useEffect(() => {
+    if (!tenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+  const isAdmin = isActiveMember && Boolean(myPermissions?.has("patch_management"));
 
   // Tenant policy — the source of truth for "is PMP active". Cached
   // so toggling between pages doesn't flash the placeholder while
