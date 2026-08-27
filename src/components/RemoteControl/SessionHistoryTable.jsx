@@ -182,9 +182,25 @@ export default function SessionHistoryTable({
                           stale hasTranscript flag from the list
                           payload). Only suppress for active sessions
                           since the transcript is still being uploaded. */}
-                      {s.status === "active" || !onReplay ? (
+                      {/* Replay solo para shell. El transcript es la salida del
+                          terminal: `screen-session.ts` y la sesión de ficheros
+                          no graban nada, así que ofrecer el botón ahí llevaba
+                          siempre al vacío ("No transcript chunks were
+                          recorded"). El operador no distingue eso de una
+                          grabación perdida, y acaba dudando de la auditoría
+                          entera — que sí funciona, en las sesiones de shell.
+                          Grabar vídeo de una sesión de pantalla es otra
+                          decisión, de coste y de retención, no un arreglo de
+                          esta tabla. */}
+                      {s.status === "active" || !onReplay || s.type !== "shell" ? (
                         <span style={{ color: BRAND.gray }}>
-                          {s.status === "active" ? "In progress" : "—"}
+                          {s.status === "active"
+                            ? "In progress"
+                            : s.type === "screen"
+                              ? "Not recorded"
+                              : s.type === "file"
+                                ? "See transfers"
+                                : "—"}
                         </span>
                       ) : (
                         <Button
