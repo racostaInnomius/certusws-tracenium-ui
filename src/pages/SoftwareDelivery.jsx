@@ -774,7 +774,7 @@ function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAut
 
 // ── Page shell ────────────────────────────────────────────────────
 
-export default function SoftwareDelivery({ onNavigate }) {
+export default function SoftwareDelivery() {
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
   const tenantRole = auth?.tenantMember?.role;
@@ -789,8 +789,11 @@ export default function SoftwareDelivery({ onNavigate }) {
 
   // Plugin entitlement gate. SDP is opt-in per tenant — if the
   // tenant's policy doesn't list "sdp" in `plugins.enabled[]`, we
-  // render the page in read-only mode with a banner pointing to
-  // Plugin Control. This mirrors how the backend gates writes
+  // render the page in read-only mode with an informational banner.
+  // There's no more in-app self-service toggle for this (Plugin
+  // Control was retired — turning a plugin on/off is no longer a
+  // tenant-side action); Billing shows the same "included, not active"
+  // status for context. This mirrors how the backend gates writes
   // (403 SOFTWARE_DELIVERY_PLUGIN_DISABLED on POST /:id/deploy).
   //
   // Tri-valued state during load:
@@ -865,18 +868,6 @@ export default function SoftwareDelivery({ onNavigate }) {
     setActiveTab(TAB_INDEX.deployments);
   }, []);
 
-  const goToPluginControl = () => {
-    if (typeof onNavigate === "function") {
-      onNavigate("plugin-control");
-    } else if (typeof window !== "undefined") {
-      // AppShell passes onNavigate; this fallback covers a direct
-      // route or embedded usage.
-      const url = new URL(window.location.href);
-      url.searchParams.set("page", "plugin-control");
-      window.location.href = url.toString();
-    }
-  };
-
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
@@ -897,42 +888,18 @@ export default function SoftwareDelivery({ onNavigate }) {
             borderLeft: `4px solid ${BRAND.alert?.warning || BRAND.teal}`,
           }}
         >
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={1.5}
-            alignItems={{ xs: "flex-start", sm: "center" }}
-            justifyContent="space-between"
-          >
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-                {policyError
-                  ? "Could not verify SDP entitlement"
-                  : "Software Delivery plugin is disabled for this tenant"}
-              </Typography>
-              <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
-                {policyError
-                  ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
-                  : isAdmin
-                    ? "Enable SDP from Plugin Control to start managing the catalog and deploying software to the fleet. Reads stay open."
-                    : "Ask an ADMIN to enable SDP from Plugin Control. Reads stay open."}
-              </Typography>
-            </Box>
-            {isAdmin && !policyError ? (
-              <Button
-                variant="contained"
-                onClick={goToPluginControl}
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 700,
-                  bgcolor: BRAND.teal,
-                  "&:hover": { bgcolor: BRAND.tealHover },
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Open Plugin Control
-              </Button>
-            ) : null}
-          </Stack>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
+              {policyError
+                ? "Could not verify SDP entitlement"
+                : "Software Delivery isn't active for this tenant"}
+            </Typography>
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
+              {policyError
+                ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
+                : "It's included in your plan, but activation isn't a self-service toggle anymore — contact your Tracenium account team to have it turned on. Reads stay open in the meantime."}
+            </Typography>
+          </Box>
         </SectionPaper>
       ) : null}
 

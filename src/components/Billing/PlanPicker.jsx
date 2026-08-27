@@ -13,6 +13,7 @@
 //    —de ella depende que puedas enrolar equipos— y no se decía cuántos tienes.
 //    Ahora el número real está al lado, con un atajo para adoptarlo.
 
+import { useState } from "react";
 import {
   Alert, Box, Button, Card, CardContent, Chip, Stack, TextField, Typography,
 } from "@mui/material";
@@ -20,8 +21,8 @@ import SectionPaper from "../common/SectionPaper";
 import CheckIcon from "@mui/icons-material/Check";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
-  LINE_LABELS, LINE_HINTS, TIER_LABELS, TIER_ADDS, MDM_INCLUDES,
-  availableTiers, estimateLine, usageWarning, suggestedQuantity,
+  LINE_LABELS, LINE_HINTS, TIER_LABELS, MDM_INCLUDES,
+  availableTiers, estimateLine, usageWarning, suggestedQuantity, pluginsIncludedIn,
 } from "./billingModel";
 
 const money = (cents, currency = "usd") =>
@@ -31,8 +32,19 @@ const money = (cents, currency = "usd") =>
     minimumFractionDigits: (cents ?? 0) % 100 === 0 ? 0 : 2,
   }).format((cents ?? 0) / 100);
 
-function PlanCard({ tier, line, price, currency, interval, selected, onSelect }) {
-  const adds = line === "endpoint" ? TIER_ADDS[tier] : null;
+function PlanCard({ tier, line, price, currency, interval, selected, onSelect, catalog }) {
+  // Every plugin the tier includes, ACCUMULATED (not just what it adds
+  // over the one below) — this card stands alone in a comparison, so
+  // "everything above +" framing doesn't apply the way it does reading
+  // top-to-bottom in a chart.
+  const includedKeys = line === "endpoint" ? pluginsIncludedIn(tier) : null;
+  const [expandedKey, setExpandedKey] = useState(null);
+  const expanded = expandedKey ? (catalog || []).find((p) => p.key === expandedKey) : null;
+
+  const toggleChip = (e, key) => {
+    e.stopPropagation(); // don't also select this tier — the chip has its own click meaning
+    setExpandedKey((prev) => (prev === key ? null : key));
+  };
 
   return (
     <Card
@@ -66,36 +78,82 @@ function PlanCard({ tier, line, price, currency, interval, selected, onSelect })
           </Typography>
         </Typography>
 
-        {/* Se enseña lo que el nivel AÑADE, no la lista completa: los planes
-            son aditivos y "Professional = Starter + SCP + RCP" es como se
-            explican. Una lista íntegra por plan escondería que subir nunca
-            quita nada. */}
-        {adds ? (
-          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
-            {tier !== "starter" && (
-              <Typography variant="caption" color="text.secondary">
-                everything above +
-              </Typography>
+        {/* Full accumulated list, not just what this tier adds over the
+            one below — a card standing alone in a side-by-side
+            comparison needs to say what it IS, not what changed.
+            Clicking a chip expands its detail (title + description)
+            right below, tab-style: one open at a time per card. */}
+        {includedKeys ? (
+          <Box sx={{ mt: 0.75 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 800, letterSpacing: 0.4, display: "block", mb: 0.5 }}
+            >
+              WHAT&apos;S INCLUDED ({includedKeys.length} PLUGIN{includedKeys.length === 1 ? "" : "S"})
+            </Typography>
+            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+              {includedKeys.map((key) => (
+                <Chip
+                  key={key}
+                  size="small"
+                  label={key.toUpperCase()}
+                  onClick={(e) => toggleChip(e, key)}
+                  sx={{
+                    height: 22,
+                    fontSize: TEXT.xs,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    bgcolor: expandedKey === key ? BRAND.teal : undefined,
+                    color: expandedKey === key ? "#fff" : undefined,
+                    "&:hover": { bgcolor: expandedKey === key ? BRAND.tealHover : BRAND.tealSoft },
+                  }}
+                />
+              ))}
+            </Stack>
+            {expanded && (
+              <Box sx={{ mt: 1, pt: 1, borderTop: `1px dashed ${BRAND.border}` }}>
+                <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>
+                  {expanded.label} — {expanded.title}
+                  {expanded.required ? (
+                    <Typography
+                      component="span"
+                      sx={{ ml: 0.75, fontSize: TEXT.xs, fontWeight: 800, color: BRAND.tealText }}
+                    >
+                      Required
+                    </Typography>
+                  ) : null}
+                </Typography>
+                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.25 }}>
+                  {expanded.description}
+                </Typography>
+              </Box>
             )}
-            {adds.map((p) => (
-              <Chip key={p} size="small" label={p.toUpperCase()} sx={{ height: 20, fontSize: TEXT.xs }} />
-            ))}
-          </Stack>
+          </Box>
         ) : (
-          <Stack spacing={0.25} sx={{ mt: 0.75 }}>
-            {MDM_INCLUDES.map((f) => (
-              <Typography key={f} variant="caption" color="text.secondary">
-                · {f}
-              </Typography>
-            ))}
-          </Stack>
+          <Box sx={{ mt: 0.75 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 800, letterSpacing: 0.4, display: "block", mb: 0.5 }}
+            >
+              WHAT&apos;S INCLUDED ({MDM_INCLUDES.length} FEATURE{MDM_INCLUDES.length === 1 ? "" : "S"})
+            </Typography>
+            <Stack spacing={0.25}>
+              {MDM_INCLUDES.map((f) => (
+                <Typography key={f} variant="caption" color="text.secondary">
+                  · {f}
+                </Typography>
+              ))}
+            </Stack>
+          </Box>
         )}
       </CardContent>
     </Card>
   );
 }
 
-export default function PlanPicker({ line, prices, currency, interval, selection, used, onChange }) {
+export default function PlanPicker({ line, prices, currency, interval, selection, used, onChange, catalog }) {
   const tiers = availableTiers(prices, line);
   const sel = selection ?? null;
   const subtotal = sel ? estimateLine(prices, line, sel.tier, sel.quantity) : null;
@@ -139,6 +197,7 @@ export default function PlanPicker({ line, prices, currency, interval, selection
                   currency={currency}
                   interval={interval}
                   selected={sel?.tier === tier}
+                  catalog={catalog}
                   onSelect={() =>
                     onChange({ tier, quantity: sel?.quantity ?? suggestion })
                   }

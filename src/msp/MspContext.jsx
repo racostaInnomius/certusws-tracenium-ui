@@ -55,7 +55,7 @@ export function MspProvider({ children }) {
   // changes. Nothing else re-fetches it (AuthGate only runs at mount), so
   // without this the shell keeps the bootstrap taken in portfolio mode, where
   // there IS no tenant: `auth.tenantId` stays undefined and `auth.tenantMember`
-  // stays null. Pages key off both (PluginControl, Policies, Jobs,
+  // stays null. Pages key off both (Billing, Policies, Jobs,
   // SoftwareDelivery, PatchManagement, Sidebar…), so they silently render as
   // "no tenant / no permissions" — data never loads and every control is
   // disabled, even though the user really is inside a tenant as OWNER.

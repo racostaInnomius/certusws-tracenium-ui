@@ -35,6 +35,7 @@ import PaymentMethodCard from "./PaymentMethodCard";
 import SubscriptionSummary from "./SubscriptionSummary";
 import PlanPicker from "./PlanPicker";
 import ConfirmChangeDialog from "./ConfirmChangeDialog";
+import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 import {
   LINES, INTERVALS, INTERVAL_LABELS,
   pricesFrom, currencyOf, estimateTotal, classifyChange, statusNotice,
@@ -54,6 +55,12 @@ export default function Billing() {
   // Los precios vienen de Stripe. La UI los llevaba escritos a mano, y con
   // mensual y anual —el anual lleva descuento— eso garantizaba cifras falsas.
   const [catalog, setCatalog] = useState([]);
+  // Plugin catalog (label/title/description/tier_required) — the retired
+  // Plugin Control page's data source, now feeding SubscriptionSummary's
+  // "what's included" section and PlanPicker's per-tier detail. Named
+  // distinctly from `catalog` above (Stripe's PRICE catalog) — same word,
+  // two different backends.
+  const { catalog: pluginCatalog } = usePluginCatalog();
 
   const [tab, setTab] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -313,6 +320,7 @@ export default function Billing() {
               selection={selection[line]}
               used={sub?.usage?.[line] ?? null}
               onChange={(patch) => setLine(line, patch)}
+              catalog={pluginCatalog}
             />
           ))}
 

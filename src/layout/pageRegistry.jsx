@@ -24,7 +24,6 @@ const Welcome = React.lazy(() => import("../pages/Welcome"));
 const AgentReleases = React.lazy(() => import("../pages/AgentReleases"));
 const SoftwareDelivery = React.lazy(() => import("../pages/SoftwareDelivery"));
 const DeviceEnrollment = React.lazy(() => import("../pages/DeviceEnrollment"));
-const PluginControl = React.lazy(() => import("../pages/PluginControl"));
 const Billing = React.lazy(() => import("../components/Billing/Billing"));
 const Jobs = React.lazy(() => import("../pages/Jobs"));
 // SecurityBaselines is no longer mounted directly — Fase B folded it
@@ -60,12 +59,6 @@ export const PAGE_REGISTRY = {
   // Device Enrollment is the combined surface — sidebar entry for
   // operators ("download installer + mint a token in the same flow").
   enrollment: () => <DeviceEnrollment />,
-
-  // Plugin Control — tenant-wide plugin enablement, split out of
-  // Policies so the "what's on" knob is separated from the "how it
-  // behaves" knobs. Admin-scoped at the UI layer; backend hardening
-  // (whitelist + role middleware) is Phase 2.
-  "plugin-control": () => <PluginControl />,
 
   // Billing (ADR-0010). Sin gate de entitlement A PROPÓSITO: si un tenant
   // pierde derechos por impago, ésta es la única pantalla donde puede

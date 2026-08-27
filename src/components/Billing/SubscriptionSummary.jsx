@@ -11,7 +11,9 @@
 import { Alert, Box, Chip, LinearProgress, Stack, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND } from "../../theme/brand";
+import { useAuthContext } from "../../auth/AuthContext";
 import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS, graceCeiling } from "./billingModel";
+import PluginInclusion from "./PluginInclusion";
 
 /** Los estados de Stripe, dichos en el idioma del usuario. */
 const STATUS_LABELS = {
@@ -72,6 +74,9 @@ function UsageBar({ used, quantity }) {
 }
 
 export default function SubscriptionSummary({ sub, estimate, currency }) {
+  const { auth } = useAuthContext();
+  const tenantId = auth?.tenantId;
+
   const lines = LINES.map((line) => ({
     line,
     tier: line === "endpoint" ? sub?.tier : sub?.mdmTier,
@@ -113,33 +118,41 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
             ) : (
               <Stack spacing={1.5} sx={{ mt: 1 }}>
                 {lines.map(({ line, tier, quantity, used }) => (
-                  <Stack
-                    key={line}
-                    direction={{ xs: "column", sm: "row" }}
-                    spacing={2}
-                    alignItems={{ sm: "center" }}
-                  >
-                    <Box sx={{ minWidth: 230 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {LINE_LABELS[line]}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {TIER_LABELS[tier] ?? "—"}
-                      </Typography>
-                    </Box>
-                    {/* Cada línea con SU uso: los topes son independientes, y un
-                        único número escondería que las licencias de PC no
-                        sirven para enrolar un móvil.
+                  <Box key={line}>
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={2}
+                      alignItems={{ sm: "center" }}
+                    >
+                      <Box sx={{ minWidth: 230 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {LINE_LABELS[line]}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {TIER_LABELS[tier] ?? "—"}
+                        </Typography>
+                      </Box>
+                      {/* Cada línea con SU uso: los topes son independientes, y un
+                          único número escondería que las licencias de PC no
+                          sirven para enrolar un móvil.
 
-                        Para endpoints se mide contra el tope EFECTIVO, que es
-                        el que decide si un alta pasa. Dibujar la barra contra
-                        lo contratado enseñaría una holgura que el enrolamiento
-                        no va a respetar. */}
-                    <UsageBar
-                      used={used}
-                      quantity={line === "endpoint" ? (cap ?? quantity) : quantity}
-                    />
-                  </Stack>
+                          Para endpoints se mide contra el tope EFECTIVO, que es
+                          el que decide si un alta pasa. Dibujar la barra contra
+                          lo contratado enseñaría una holgura que el enrolamiento
+                          no va a respetar. */}
+                      <UsageBar
+                        used={used}
+                        quantity={line === "endpoint" ? (cap ?? quantity) : quantity}
+                      />
+                    </Stack>
+                    {/* Plugin inclusion (retired Plugin Control's content) hangs
+                        specifically off Endpoint — that's the line
+                        tier_required actually applies to; MDM has its own
+                        fixed feature set (MDM_INCLUDES), not this catalog. */}
+                    {line === "endpoint" ? (
+                      <PluginInclusion tenantId={tenantId} tier={tier} />
+                    ) : null}
+                  </Box>
                 ))}
               </Stack>
             )}
