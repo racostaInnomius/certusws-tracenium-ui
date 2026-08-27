@@ -123,13 +123,13 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(await screen.findByText(/9 of 12 devices/)).toBeInTheDocument();
     // Framework table reads res.items[] and the pack chip reads packActive/totalFrameworks
-    expect(await screen.findByText("Pack: 2 of 12")).toBeInTheDocument();
+    expect(await screen.findByText("Tracking 2 of 12")).toBeInTheDocument();
     expect(screen.getByText("CIS Win11")).toBeInTheDocument();
     // Device table reads res.items[].hostname
     expect(screen.getByText("WS-ALPHA")).toBeInTheDocument();
     expect(screen.getByText("WS-BETA")).toBeInTheDocument();
     // Tabs present (Fase B)
-    expect(screen.getByRole("tab", { name: /Posture/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Fleet status/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Baselines/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Catalog/ })).toBeInTheDocument();
   });

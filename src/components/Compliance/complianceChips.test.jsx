@@ -17,7 +17,7 @@ describe("StatusChip", () => {
     expect(screen.getByText("Pass")).toBeInTheDocument();
     cleanup();
     render(<StatusChip status="insufficient_data" />);
-    expect(screen.getByText("No data")).toBeInTheDocument(); // distinct from Unknown
+    expect(screen.getByText("Not enough data")).toBeInTheDocument(); // distinct from Unknown
     cleanup();
     render(<StatusChip status="something-else" />);
     expect(screen.getByText("Unknown")).toBeInTheDocument(); // fallback

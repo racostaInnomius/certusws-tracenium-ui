@@ -814,8 +814,15 @@ export default function SecurityCompliance({ initialTab }) {
         }}
       >
         <Tab
+          // La etiqueta cambia; el `value` NO: `?scpTab=posture` vive en
+          // enlaces guardados y en la barra de direcciones de la gente.
+          //
+          // Y no se llama "Status" a secas porque esta misma pantalla ya tiene
+          // un filtro "Status" (el de los equipos): dos cosas distintas con el
+          // mismo nombre a un palmo de distancia es justo el tipo de ruido que
+          // esta pasada viene a quitar.
           value="posture"
-          label="Posture"
+          label="Fleet status"
           icon={<GppGoodOutlinedIcon fontSize="small" />}
           iconPosition="start"
           sx={{ gap: 0.75 }}
@@ -1024,12 +1031,12 @@ export default function SecurityCompliance({ initialTab }) {
                   list, so nobody wonders where the other frameworks went. */}
               {data?.packActive ? (
                 <Tooltip
-                  title={`This tenant's compliance pack shows ${frameworks.length} of ${data.totalFrameworks} catalog frameworks. Change it in Compliance settings.`}
+                  title={`You track ${frameworks.length} of the ${data.totalFrameworks} frameworks in the catalog. Change that in Compliance settings.`}
                   arrow
                 >
                   <Chip
                     size="small"
-                    label={`Pack: ${frameworks.length} of ${data.totalFrameworks}`}
+                    label={`Tracking ${frameworks.length} of ${data.totalFrameworks}`}
                     onClick={canManage ? () => setSettingsOpen(true) : undefined}
                     clickable={canManage}
                     sx={{ ml: 1, height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
@@ -1063,7 +1070,7 @@ export default function SecurityCompliance({ initialTab }) {
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Compliant</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Non-compliant</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Avg score</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>Pass / Applicable</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700 }}>Checks passed</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1233,7 +1240,7 @@ export default function SecurityCompliance({ initialTab }) {
                 <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Score</TableCell>
                 {selectedFramework ? (
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>Pass / Applicable</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>Checks passed</TableCell>
                 ) : null}
                 {/* Patch-level chip: count + days-since-latest, color coded.
                     Intentionally sits between pass/applicable and last report

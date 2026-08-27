@@ -160,7 +160,7 @@ export default function MttrCard({ reloadKey } = {}) {
               variant="subtitle1"
               sx={{ color: BRAND.dark, fontWeight: 700 }}
             >
-              Time to close
+              Average time to fix
             </Typography>
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
               How long findings take from open to resolved, by severity

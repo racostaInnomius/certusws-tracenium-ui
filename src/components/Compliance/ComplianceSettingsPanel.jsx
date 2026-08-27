@@ -272,7 +272,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
               <Box>
                 <Divider sx={{ mb: 2 }} />
                 <Typography sx={{ fontWeight: 700, color: BRAND.dark, fontSize: TEXT.base }}>
-                  Active frameworks (compliance pack)
+                  Frameworks you track
                 </Typography>
                 <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
                   Choose which frameworks appear in the framework table, filter and trend. Scores

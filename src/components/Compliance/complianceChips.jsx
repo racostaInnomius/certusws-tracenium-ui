@@ -24,7 +24,7 @@ import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
 export const STATUS_META = {
   pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.positive, bg: ROLE.positiveSoft },
   fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.critical, bg: ROLE.criticalSoft },
-  not_applicable: { label: "N/A", icon: <BlockOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  not_applicable: { label: "Not assessed", icon: <BlockOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
   info: { label: "Info", icon: <InfoOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.teal, bg: BRAND.tealSoft },
   error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.caution, bg: ROLE.cautionSoft },
   unknown: { label: "Unknown", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
@@ -32,7 +32,7 @@ export const STATUS_META = {
   // threshold of applicable rules) — distinct from "Unknown" (evaluator/
   // evidence problem). Same neutral gray; the label tells the operator whether
   // to wait or investigate.
-  insufficient_data: { label: "No data", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
+  insufficient_data: { label: "Not enough data", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
 };
 
 // Operator-declared remediation state (mirrors the backend CHECK constraint on
