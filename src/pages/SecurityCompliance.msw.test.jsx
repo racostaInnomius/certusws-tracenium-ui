@@ -103,6 +103,9 @@ function mountPage({ settings = SETTINGS } = {}) {
   respond("get", `${BASE}/settings`, settings);
   // Fase C policy read for the baseline bridge — minimal valid envelope.
   respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+  // ADR-0011 Phase 3 — canManage now comes from this endpoint instead
+  // of MOCK_AUTH's role directly; ADMIN holds security_compliance.
+  respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
   return render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
 }
 
