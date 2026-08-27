@@ -18,7 +18,7 @@ import { Box, Stack, Typography, CircularProgress, Tooltip } from "@mui/material
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import CameraAltOutlinedIcon from "@mui/icons-material/CameraAltOutlined";
 import UndoOutlinedIcon from "@mui/icons-material/UndoOutlined";
-import { BRAND, TEXT, ROLE } from "../../theme/brand";
+import { BRAND, ICON, TEXT, ROLE } from "../../theme/brand";
 import { getActionOutlook } from "../../api/patchManagement";
 
 function Line({ icon, children, tone }) {
@@ -120,7 +120,7 @@ export default function ActionOutlookNotice({ deviceIds = [] }) {
       </Line>
 
       {blocked.length > 0 ? (
-        <Line icon={<span style={{ fontSize: 14 }}>⛔</span>} tone={ROLE.critical}>
+        <Line icon={<span style={{ fontSize: ICON.sm }}>⛔</span>} tone={ROLE.critical}>
           {blocked.length} device{blocked.length === 1 ? "" : "s"} will be skipped entirely:{" "}
           {blocked.map((b) => b.reason).join("; ")}
         </Line>

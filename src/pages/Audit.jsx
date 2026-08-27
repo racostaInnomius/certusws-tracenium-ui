@@ -47,7 +47,7 @@ import {
   updateSearchParams,
 } from "../utils/browserState";
 
-import { BRAND, DATAGRID_SX, NEUTRAL, TEXT } from "../theme/brand";
+import { BRAND, DATAGRID_SX, NEUTRAL, TEXT, TEXT_MUTED } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
@@ -192,6 +192,11 @@ export default function Audit() {
     page: Math.max(Number(getSearchParam("auditPage", "0")) || 0, 0),
     pageSize: Math.max(Number(getSearchParam("auditPageSize", "10")) || 10, 1),
     eventId: getSearchParam("auditEventId", ""),
+    // El carril arranca en "admin" salvo que la URL diga otra cosa. Es el
+    // único default de esta página que cambia lo que se ve al abrirla, y
+    // es deliberado: medido en producción, 97,7% de los eventos son el
+    // bucle de política y ~50 al mes son acciones de personas.
+    lane: getSearchParam("auditLane", "admin"),
   });
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
@@ -267,6 +272,14 @@ export default function Audit() {
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
   const [selectedEventId, setSelectedEventId] = React.useState(initialParamsRef.current.eventId);
+  const [lane, setLane] = React.useState(
+    initialParamsRef.current.lane === "system" ? "system" : "admin"
+  );
+  // Cuántos eventos hay en el OTRO carril, para que la pestaña inactiva
+  // diga qué te estás perdiendo. Se pide aparte —un COUNT— en vez de
+  // restar del total: una resta sale mal en cuanto los filtros cambien y
+  // nadie la podría comprobar mirando la pantalla.
+  const [otherLaneCount, setOtherLaneCount] = React.useState(null);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -277,13 +290,14 @@ export default function Audit() {
   const deferredCorrelationId = React.useDeferredValue(correlationId);
 
   const queryParams = React.useMemo(() => ({
+    lane,
     deviceId: deferredDeviceId || undefined,
     eventType: eventType || undefined,
     outcome: outcome !== "all" ? outcome : undefined,
     correlationId: deferredCorrelationId || undefined,
     from: toIsoOrUndefined(from),
     to: toIsoOrUndefined(to),
-  }), [deferredCorrelationId, deferredDeviceId, eventType, from, outcome, to]);
+  }), [deferredCorrelationId, deferredDeviceId, eventType, from, lane, outcome, to]);
 
   const hasInvalidDateRange = React.useMemo(() => {
     if (!from || !to) return false;
@@ -295,7 +309,7 @@ export default function Audit() {
 
   React.useEffect(() => {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, [deviceId, eventType, outcome, correlationId, from, to]);
+  }, [deviceId, eventType, outcome, correlationId, from, to, lane]);
 
   // Timeseries for the chart. Default window is 7 days — matches the
   // Overview's default so a user jumping between pages sees the same
@@ -408,6 +422,19 @@ export default function Audit() {
     };
   }, [canAccess, hasInvalidDateRange, paginationModel.page, paginationModel.pageSize, queryParams, refreshNonce, selectedEventId]);
 
+  // Recuento del carril contrario. Va en su propio efecto y falla en
+  // silencio: es un adorno del selector, y si el backend aún no entiende
+  // `lane` la página tiene que seguir funcionando igual.
+  React.useEffect(() => {
+    if (!canAccess || hasInvalidDateRange) return;
+    let cancelled = false;
+    const other = lane === "admin" ? "system" : "admin";
+    getAuditSummary({ ...queryParams, lane: other })
+      .then((r) => { if (!cancelled) setOtherLaneCount(Number(r?.total ?? 0)); })
+      .catch(() => { if (!cancelled) setOtherLaneCount(null); });
+    return () => { cancelled = true; };
+  }, [canAccess, hasInvalidDateRange, lane, queryParams, refreshNonce]);
+
   React.useEffect(() => {
     updateSearchParams({
       auditDeviceId: deviceId,
@@ -419,12 +446,16 @@ export default function Audit() {
       auditPage: paginationModel.page,
       auditPageSize: paginationModel.pageSize,
       auditEventId: selectedEvent?.id ?? selectedEventId,
+      // Vacío cuando es el default, para no ensuciar cada URL compartida
+      // con el carril que ya es el de todos.
+      auditLane: lane === "admin" ? "" : lane,
     });
   }, [
     correlationId,
     deviceId,
     eventType,
     from,
+    lane,
     outcome,
     paginationModel.page,
     paginationModel.pageSize,
@@ -601,6 +632,63 @@ export default function Audit() {
           </>
         }
       />
+
+      {/* ── Carriles ────────────────────────────────────────────────────
+          Medido en producción (30 d, ya sin las sesiones gRPC que dejamos
+          de escribir): de 5.531 eventos, 5.404 son `policy_ack_ok` y
+          `policy_hello_drift_detected` — 97,7%. Debajo quedan ~50 acciones
+          administrativas al mes, una de cada cien filas, y son las que
+          alguien viene a buscar.
+
+          El filtro vive en el backend (audit-lanes.ts) y no aquí: la lista
+          de tipos de máquina re-escrita en el frontend es exactamente el
+          patrón que ya hizo divergir SOURCE_LABEL y VALID_SOURCES en esta
+          misma app.
+
+          Un toggle, no un borrado: el carril de sistema conserva sus
+          filas, su export y su retención. */}
+      <SectionPaper variant="panel" sx={{ p: 0, mb: 2, overflow: "hidden", width: "fit-content", maxWidth: "100%" }}>
+        <Box sx={{ display: "flex" }}>
+          {[
+            { key: "admin", label: "Administrative actions", hint: "Lo que hizo una persona o un job del control plane." },
+            { key: "system", label: "System activity", hint: "El bucle de política y las sesiones de los agentes." },
+          ].map((tab, i) => {
+            const active = lane === tab.key;
+            const count = active ? summary?.total : otherLaneCount;
+            return (
+              <Tooltip key={tab.key} title={tab.hint} placement="bottom" arrow>
+                <Box
+                  role="tab"
+                  tabIndex={0}
+                  aria-selected={active}
+                  onClick={() => setLane(tab.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLane(tab.key); }
+                  }}
+                  sx={{
+                    px: 2, py: 1.25, cursor: "pointer", minHeight: 40,
+                    display: "flex", alignItems: "center", gap: 1,
+                    borderLeft: i > 0 ? `1px solid ${BRAND.border}` : "none",
+                    bgcolor: active ? BRAND.tealSoft : "transparent",
+                    "&:hover": { bgcolor: active ? BRAND.tealSoft : BRAND.surfaceMuted },
+                  }}
+                >
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: active ? 700 : 400, color: active ? BRAND.dark : TEXT_MUTED, whiteSpace: "nowrap" }}>
+                    {tab.label}
+                  </Typography>
+                  {/* Sin número mientras no se sepa: un 0 de relleno
+                      diría "no hay nada aquí", que es otra cosa. */}
+                  {Number.isFinite(count) ? (
+                    <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
+                      {count.toLocaleString()}
+                    </Typography>
+                  ) : null}
+                </Box>
+              </Tooltip>
+            );
+          })}
+        </Box>
+      </SectionPaper>
 
       {/* KPI strip — 4 cards in a single uniform row, then the
           timeseries chart full-width below.
