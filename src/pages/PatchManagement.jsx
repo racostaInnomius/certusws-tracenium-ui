@@ -36,9 +36,12 @@ import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
 import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/ConfigurePanel";
 import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
+import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
+import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
@@ -126,180 +129,15 @@ const CATEGORIES = [
     ],
   },
   {
-    key: "tls",
-    label: "TLS & Ciphers",
-    icon: <HttpsOutlinedIcon />,
+    // Rendered by SecurityConfigPanel — no `actions`. Replaces the TLS, SMB,
+    // Shared Folders and Other tabs, which were four slices of one question
+    // and between them never covered the whole of it.
+    key: "security",
+    label: "Security configuration",
+    icon: <ShieldOutlinedIcon />,
     blurb:
-      "Harden SChannel to meet tenant baseline: enable modern protocols, disable deprecated ones and weak ciphers.",
-    actions: [
-      {
-        id: "tls.enable_1_2",
-        name: "Enable TLS 1.2",
-        description: "Ensures the minimum recommended version is available to all services.",
-        impact: "reboot",
-      },
-      {
-        id: "tls.enable_1_3",
-        name: "Enable TLS 1.3",
-        description: "Enables TLS 1.3 on hosts that support it.",
-        impact: "reboot",
-      },
-      {
-        id: "tls.disable_1_0_1_1",
-        name: "Disable TLS 1.0 and 1.1",
-        description:
-          "Turns off deprecated protocol versions via SChannel registry settings.",
-        impact: "reboot",
-      },
-      {
-        id: "tls.disable_ssl",
-        name: "Disable SSL 2.0 / 3.0",
-        description: "Hard-disable obsolete protocols at server and client.",
-        impact: "reboot",
-      },
-      {
-        id: "tls.disable_weak_ciphers",
-        name: "Disable weak cipher suites",
-        description:
-          "Removes RC4, DES, 3DES, NULL, EXPORT and anonymous DH suites from the cipher order.",
-        impact: "reboot",
-      },
-    ],
-  },
-  {
-    key: "smb",
-    label: "SMB",
-    icon: <HubOutlinedIcon />,
-    blurb:
-      "Harden the Server Message Block stack — disable legacy protocol, enforce signing, block anonymous access.",
-    actions: [
-      {
-        id: "smb.disable_v1",
-        name: "Disable SMBv1",
-        description:
-          "Removes the SMB1 feature / protocol from the device. Mitigates EternalBlue family.",
-        impact: "reboot",
-      },
-      {
-        id: "smb.require_server_signing",
-        name: "Require SMB signing (server side)",
-        description: "Blocks unsigned inbound SMB sessions.",
-        impact: "none",
-      },
-      {
-        id: "smb.require_client_signing",
-        name: "Require SMB signing (client side)",
-        description: "Signs every outbound SMB session from this host.",
-        impact: "none",
-      },
-      {
-        id: "smb.enable_encryption",
-        name: "Enable SMB 3.x encryption",
-        description:
-          "Turn on transport encryption for all shares (or selected sensitive shares).",
-        impact: "none",
-      },
-      {
-        id: "smb.disable_guest",
-        name: "Disable guest / anonymous SMB",
-        description:
-          "Blocks anonymous access to shares and named pipes.",
-        impact: "none",
-      },
-    ],
-  },
-  {
-    key: "shares",
-    label: "Shared Folders",
-    icon: <FolderSharedOutlinedIcon />,
-    blurb:
-      "Fix share and NTFS permissions flagged by Security Compliance — remove open grants and reconcile mismatches.",
-    actions: [
-      {
-        id: "shares.remove_everyone",
-        name: "Remove Everyone ACE",
-        description:
-          "Strip the Everyone principal from every share where Security Compliance flagged it.",
-        impact: "access",
-      },
-      {
-        id: "shares.lock_auth_users",
-        name: "Reduce Authenticated Users rights",
-        description:
-          "Downgrade Full Control to Read on shares where the tenant baseline requires it.",
-        impact: "access",
-      },
-      {
-        id: "shares.reconcile_share_ntfs",
-        name: "Reconcile share vs NTFS permissions",
-        description:
-          "Align effective permissions where share-level and NTFS-level ACLs disagree.",
-        impact: "access",
-      },
-      {
-        id: "shares.remove_unexpected",
-        name: "Remove unexpected hidden shares",
-        description:
-          "Delete `$`-suffixed shares that are not part of the tenant baseline.",
-        impact: "access",
-      },
-    ],
-  },
-  {
-    key: "other",
-    label: "Other",
-    icon: <TuneOutlinedIcon />,
-    blurb:
-      "Generic host-hardening remediations driven by Security Compliance findings.",
-    actions: [
-      {
-        id: "other.enable_bitlocker",
-        name: "Enable BitLocker on OS volume",
-        description:
-          "Turn on full-disk encryption with the key-protection mode defined in the policy.",
-        impact: "reboot",
-      },
-      {
-        id: "other.enable_defender_rt",
-        name: "Enable Defender real-time protection",
-        description:
-          "Re-enable RTP if disabled and refresh signatures to the latest intel.",
-        impact: "none",
-      },
-      {
-        id: "other.enable_firewall",
-        name: "Enable Windows Firewall profiles",
-        description:
-          "Activate Firewall on Domain, Private and Public profiles.",
-        impact: "none",
-      },
-      {
-        id: "other.raise_uac",
-        name: "Raise UAC level",
-        description: "Set UAC to 'Always notify' (or the tenant baseline level).",
-        impact: "none",
-      },
-      {
-        id: "other.enable_lsa_protection",
-        name: "Enable LSA protection / Credential Guard",
-        description:
-          "Harden LSASS on supported hosts against credential theft.",
-        impact: "reboot",
-      },
-      {
-        id: "other.rotate_local_admin",
-        name: "Rotate local administrator account",
-        description: "Rename / disable / rotate password per tenant policy.",
-        impact: "access",
-      },
-      {
-        id: "other.set_ps_policy",
-        name: "Set PowerShell execution policy",
-        description:
-          "Apply tenant baseline (AllSigned / Restricted).",
-        impact: "none",
-      },
-    ],
+      "Everything misconfigured across the fleet — encryption, sharing, firewall, identity — with a filter instead of four tabs.",
+    actions: [],
   },
   {
     // Third-party patching: rendered by ThirdPartyPanel (not the legacy
@@ -538,14 +376,18 @@ export default function PatchManagement({ onNavigate }) {
   const initial = resolvePmTab(getSearchParam("pmTab", ""), TAB_KEYS, {
     defaultTab: CATEGORIES[0].key,
     defaultSection: CONFIG_SECTIONS[0].key,
+    defaultDomain: DEFAULT_DOMAIN,
   });
   const [tab, setTab] = React.useState(initial.tab);
   const [configSection, setConfigSection] = React.useState(initial.configSection);
+  const [securityDomain, setSecurityDomain] = React.useState(initial.securityDomain);
   React.useEffect(() => {
     updateSearchParams({
-      pmTab: pmTabSearchValue(tab, configSection, CATEGORIES[0].key),
+      pmTab: pmTabSearchValue(
+        tab, configSection, CATEGORIES[0].key, securityDomain, DEFAULT_DOMAIN
+      ),
     });
-  }, [tab, configSection]);
+  }, [tab, configSection, securityDomain]);
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
   const { auth } = useAuthContext();
@@ -1200,11 +1042,36 @@ export default function PatchManagement({ onNavigate }) {
               wires into bulkInstall / bulkScan. The other tabs are
               the v2 surface: real findings + click-to-fix. */}
           {tab === "patches" ? (
-            <CategoryPanel
-              category={activeCategory}
-              pmpEnabled={pmpEnabled}
-              onRunAction={handleRunCategoryAction}
-            />
+            <Box>
+              {/* The v1 action catalog still runs the fleet-wide install and
+                  scan, so it stays until those have a home in the findings
+                  shape — dropping working buttons is not a refactor.
+                  Underneath it, the same `patching` findings every other
+                  domain now renders: this is where the KEV checks live
+                  (cross.vulnerability.no_kev), and without this they would be
+                  unreachable again the moment Security configuration stopped
+                  claiming them. */}
+              <CategoryPanel
+                category={activeCategory}
+                pmpEnabled={pmpEnabled}
+                onRunAction={handleRunCategoryAction}
+              />
+              <Box sx={{ mt: 3 }}>
+                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, mb: 0.5 }}>
+                  Findings
+                </Typography>
+                <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
+                  Missing updates and exposed vulnerabilities, including the CISA
+                  KEV checks.
+                </Typography>
+                <FindingsPanel
+                  tabKey="patches"
+                  category={PATCHING_CATEGORY}
+                  canManage={canManage}
+                  notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+                />
+              </Box>
+            </Box>
           ) : tab === "third-party" ? (
             <ThirdPartyTab
               canManage={canManage}
@@ -1223,45 +1090,18 @@ export default function PatchManagement({ onNavigate }) {
               onSectionChange={setConfigSection}
               notify={(severity, message) => setSnackbar({ open: true, severity, message })}
             />
-          ) : (
-            <FindingsPanel
-              tabKey={tab}
-              category={
-                // TLS covers BOTH catalog categories. `crypto` holds the real
-                // work (weak certificate keys and signatures, expired certs,
-                // non-standard roots, SSH MACs); `cryptography` holds a single
-                // Linux password-hash check. This tab used to name only the
-                // second, so it displayed one unrelated finding while 203 rows
-                // of certificate problems stayed invisible.
-                tab === "tls"    ? "crypto,cryptography"
-                : tab === "smb"  ? "network_sharing"
-                : tab === "shares" ? "network_sharing"
-                : undefined
-              }
-              categoriesNotIn={
-                // "Other" is a complement, not a category. Naming `firewall`
-                // here made it a fourth narrow tab and hid everything the
-                // catalog grew afterwards — patching (which carries the KEV
-                // checks), identity_policy, disk_encryption, network_hardening,
-                // filesystem_hardening, integrity, antimalware: 636 of 984 open
-                // findings across the fleet, none of them reachable from this
-                // page. Excluding what the other tabs claim means a new catalog
-                // category shows up here by default instead of disappearing.
-                tab === "other" ? OTHER_EXCLUDES : undefined
-              }
-              checkIdContains={
-                // Split the shared `network_sharing` catalog category
-                // between the SMB and Shares tabs. Catalog's checkId
-                // naming convention puts "smb" or "share" in the
-                // last segment, so a substring match is unambiguous.
-                tab === "smb"    ? "smb"
-                : tab === "shares" ? "share"
-                : undefined
-              }
+          ) : tab === "security" ? (
+            <SecurityConfigPanel
               canManage={canManage}
-              notify={(severity, message) =>
-                setSnackbar({ open: true, severity, message })
-              }
+              domain={securityDomain}
+              onDomainChange={setSecurityDomain}
+              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+            />
+          ) : (
+            <CategoryPanel
+              category={activeCategory}
+              pmpEnabled={pmpEnabled}
+              onRunAction={handleRunCategoryAction}
             />
           )}
         </Box>

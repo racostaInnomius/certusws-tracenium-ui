@@ -15,22 +15,25 @@ import {
   resolvePmTab,
   pmTabSearchValue,
   MOVED_TO_SETTINGS,
+  MOVED_TO_SECURITY,
   SETTINGS_TAB,
+  SECURITY_TAB,
 } from "./resolvePmTab";
 
-/** The bar after phase 2. */
+/** The bar after phase 3. */
 const TAB_KEYS = [
   "patches",
-  "tls",
-  "smb",
-  "shares",
-  "other",
+  "security",
   "third-party",
   "vulnerabilities",
   "settings",
 ];
 
-const FALLBACKS = { defaultTab: "patches", defaultSection: "maintenance" };
+const FALLBACKS = {
+  defaultTab: "patches",
+  defaultSection: "maintenance",
+  defaultDomain: "all",
+};
 
 describe("links that existed before the move", () => {
   it.each(Object.keys(MOVED_TO_SETTINGS))("?pmTab=%s still lands on its section", (key) => {
@@ -98,5 +101,49 @@ describe("what goes back into the URL", () => {
       const written = pmTabSearchValue(key, "maintenance", "patches");
       expect(resolvePmTab(written, TAB_KEYS, FALLBACKS).tab).toBe(key);
     }
+  });
+});
+
+describe("the four findings tabs that became one surface", () => {
+  it.each(Object.keys(MOVED_TO_SECURITY))("?pmTab=%s selects its slice", (key) => {
+    const { tab, securityDomain } = resolvePmTab(key, TAB_KEYS, FALLBACKS);
+    expect(tab).toBe(SECURITY_TAB);
+    expect(securityDomain).toBe(MOVED_TO_SECURITY[key]);
+  });
+
+  it("keeps every old findings link off the default tab", () => {
+    // Four tabs collapsed into one; landing on Patches instead would look
+    // like the link simply stopped working.
+    for (const key of Object.keys(MOVED_TO_SECURITY)) {
+      expect(resolvePmTab(key, TAB_KEYS, FALLBACKS).tab).not.toBe(FALLBACKS.defaultTab);
+    }
+  });
+
+  it("opens the surface showing everything when no slice is named", () => {
+    // The inversion that matters: the default is now the whole picture, not
+    // one slice with the rest invisible.
+    expect(resolvePmTab("security", TAB_KEYS, FALLBACKS).securityDomain).toBe("all");
+  });
+
+  it("round-trips every slice through the URL", () => {
+    for (const key of Object.keys(MOVED_TO_SECURITY)) {
+      const domain = MOVED_TO_SECURITY[key];
+      const written = pmTabSearchValue(SECURITY_TAB, "maintenance", "patches", domain, "all");
+      const back = resolvePmTab(written, TAB_KEYS, FALLBACKS);
+      expect(back.tab).toBe(SECURITY_TAB);
+      expect(back.securityDomain).toBe(domain);
+    }
+  });
+
+  it("writes the bare tab key for the everything slice", () => {
+    // ?pmTab=security is the honest URL for "show me everything", and it
+    // survives a rename of the default slice.
+    expect(pmTabSearchValue(SECURITY_TAB, "maintenance", "patches", "all", "all")).toBe(SECURITY_TAB);
+    expect(pmTabSearchValue(SECURITY_TAB, "maintenance", "patches", undefined, "all")).toBe(SECURITY_TAB);
+  });
+
+  it("does not confuse a settings link with a security one", () => {
+    expect(resolvePmTab("gateway", TAB_KEYS, FALLBACKS).tab).toBe(SETTINGS_TAB);
+    expect(resolvePmTab("tls", TAB_KEYS, FALLBACKS).tab).toBe(SECURITY_TAB);
   });
 });

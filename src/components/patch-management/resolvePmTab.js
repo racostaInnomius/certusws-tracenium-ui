@@ -21,22 +21,38 @@ export const MOVED_TO_SETTINGS = {
 };
 
 export const SETTINGS_TAB = "settings";
+export const SECURITY_TAB = "security";
+
+/**
+ * Tabs that became slices of the Security configuration surface.
+ *
+ * `?pmTab=tls` was a real link; it now selects the encryption slice of one
+ * page rather than opening a tab that no longer exists.
+ */
+export const MOVED_TO_SECURITY = {
+  tls: "crypto",
+  smb: "smb",
+  shares: "shares",
+  other: "rest",
+};
 
 /**
  * @param fromUrl   raw ?pmTab= value
  * @param tabKeys   keys currently in the tab bar
  * @param fallbacks { defaultTab, defaultSection }
  */
-export function resolvePmTab(fromUrl, tabKeys, { defaultTab, defaultSection }) {
+export function resolvePmTab(fromUrl, tabKeys, { defaultTab, defaultSection, defaultDomain }) {
   const raw = typeof fromUrl === "string" ? fromUrl.trim() : "";
+  const base = { configSection: defaultSection, securityDomain: defaultDomain };
 
-  const movedTo = MOVED_TO_SETTINGS[raw];
-  if (movedTo) return { tab: SETTINGS_TAB, configSection: movedTo };
+  const movedToSettings = MOVED_TO_SETTINGS[raw];
+  if (movedToSettings) return { ...base, tab: SETTINGS_TAB, configSection: movedToSettings };
 
-  if (tabKeys.includes(raw)) {
-    return { tab: raw, configSection: defaultSection };
-  }
-  return { tab: defaultTab, configSection: defaultSection };
+  const movedToSecurity = MOVED_TO_SECURITY[raw];
+  if (movedToSecurity) return { ...base, tab: SECURITY_TAB, securityDomain: movedToSecurity };
+
+  if (tabKeys.includes(raw)) return { ...base, tab: raw };
+  return { ...base, tab: defaultTab };
 }
 
 /**
@@ -46,7 +62,15 @@ export function resolvePmTab(fromUrl, tabKeys, { defaultTab, defaultSection }) {
  * setting stays one link instead of "open Configure, then click the third
  * item". The default tab writes nothing, keeping the bare URL clean.
  */
-export function pmTabSearchValue(tab, configSection, defaultTab) {
+export function pmTabSearchValue(tab, configSection, defaultTab, securityDomain, defaultDomain) {
   if (tab === SETTINGS_TAB) return configSection;
+  if (tab === SECURITY_TAB) {
+    // The default slice writes the tab key, not "all": a bare ?pmTab=security
+    // is the honest URL for "show me everything", and it survives a rename of
+    // the default slice.
+    if (!securityDomain || securityDomain === defaultDomain) return SECURITY_TAB;
+    const legacy = Object.entries(MOVED_TO_SECURITY).find(([, d]) => d === securityDomain);
+    return legacy ? legacy[0] : SECURITY_TAB;
+  }
   return tab === defaultTab ? "" : tab;
 }
