@@ -24,8 +24,8 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
-import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
@@ -56,6 +56,7 @@ import RefreshControl, { useAutoRefresh } from "../components/common/RefreshCont
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
 import { listFrom } from "../api/shape";
 import { resolveActor } from "../utils/auditActor";
+import { formatRelative } from "../utils/format";
 import { getMyCapabilities } from "../api/roles";
 
 /**
@@ -751,25 +752,28 @@ export default function Audit() {
         </Box>
       </SectionPaper>
 
-      {/* KPI strip — 4 cards in a single uniform row, then the
-          timeseries chart full-width below.
-          Why 4 instead of the previous 6:
-            * Total = OK + Rejected + Error, so showing all four is
-              redundant when Rejected/Error are zero (the common
-              case). Folded Rejected+Error into a single "Failures"
-              card with an inline breakdown.
-            * Side-by-side cards + chart at md=7/5 left the chart
-              cramped and the bottom-row card ("Devices seen") at
-              a different height because it lacked `stretch`. A
-              single full-width chart shows the histogram shape much
-              better and fixes the asymmetry by removing the layout
-              that caused it. */}
+      {/* ── KPI ─────────────────────────────────────────────────────────
+          Cuatro tarjetas que responden preguntas de AUDITORÍA, no
+          preguntas sobre el tamaño de la tabla.
+
+          Las anteriores eran Total events / Failures / Last 24h /
+          Devices seen. "Total events" y "Devices seen" miden la tabla:
+          con el ruido dentro eran ~100% churn de sesión, y sin él son
+          casi constantes — un número que no se mueve no informa de nada.
+
+          Las cuatro de ahora siguen el carril activo, así que en
+          "System activity" cuentan otra cosa y lo dicen. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
             <SummaryCard
               stretch
-              title="Total events"
+              title={lane === "system" ? "System events" : "Actions"}
+              titleHint={
+                lane === "system"
+                  ? "Eventos del bucle de política y de las sesiones de agentes que encajan con los filtros."
+                  : "Acciones administrativas que encajan con los filtros actuales. El carril de sistema se cuenta aparte."
+              }
               value={summary?.total ?? 0}
               icon={<AssessmentOutlinedIcon />}
               accent={BRAND.dark}
@@ -777,25 +781,47 @@ export default function Audit() {
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
-            {/* Failures = Rejected + Error. Tooltip on the title
-                spells out the breakdown so an operator scanning a
-                non-zero count knows whether to chase rejections
-                (auth / policy) or errors (transport / runtime).
-                When zero, the card stays neutral-tinted; when
-                positive we lean error-tinted to draw the eye. */}
+            {/* Cuántas PERSONAS distintas actuaron. Sale de
+                actor_subject, nunca de `peer` — ver auditActor.js.
+
+                Un 0 aquí es información, no un hueco: en el carril de
+                sistema significa "esto no lo hizo nadie, lo hizo la
+                flota", y en el administrativo, sobre datos anteriores al
+                27-ago-2026, significa que la identidad no se guardaba.
+                Por eso el hint cambia según el carril en vez de mostrar
+                siempre la misma frase. */}
+            <SummaryCard
+              stretch
+              title="Who acted"
+              titleHint={
+                lane === "system"
+                  ? "Siempre 0: los eventos de máquina no tienen persona detrás."
+                  : "Personas distintas con al menos una acción en la ventana. Los eventos anteriores al 27-ago-2026 no registraban quién, y no cuentan aquí."
+              }
+              value={summary?.distinct_actors ?? 0}
+              icon={<PersonOutlineOutlinedIcon />}
+              accent={BRAND.teal}
+              tint={BRAND.tealSoft}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
+            {/* Rechazos y errores. Se mantiene del diseño anterior
+                porque sí responde una pregunta —qué se denegó— y en el
+                carril administrativo es donde viven los enrolamientos
+                rechazados. */}
             {(() => {
               const rejected = summary?.rejected_count ?? 0;
               const errors = summary?.error_count ?? 0;
               const failures = rejected + errors;
-              const breakdown =
-                failures > 0
-                  ? `Rejected: ${rejected} · Error: ${errors}`
-                  : "No rejected or errored events.";
               return (
                 <SummaryCard
                   stretch
-                  title="Failures"
-                  titleHint={`Sum of rejected + error outcomes. ${breakdown}`}
+                  title="Rejected or failed"
+                  titleHint={
+                    failures > 0
+                      ? `Rechazados: ${rejected} · Errores: ${errors}. Un enrolamiento rechazado vive en el carril administrativo aunque su tipo de evento sea de sesión.`
+                      : "Ningún evento rechazado ni errado con estos filtros."
+                  }
                   value={failures}
                   icon={<BlockOutlinedIcon />}
                   accent={failures > 0 ? BRAND.alert.error : BRAND.gray}
@@ -805,22 +831,23 @@ export default function Audit() {
             })()}
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
+            {/* Cuándo fue lo último. En una página que a veces pasa días
+                sin una sola acción, "hace 6 d" dice más que cualquier
+                conteo — y distingue "no hay actividad" de "no cargó".
+
+                El relativo se calcula aquí: el backend manda el instante
+                a propósito, porque un "hace 14 h" cocinado en el servidor
+                envejece en la pantalla sin que nadie lo note. */}
             <SummaryCard
               stretch
-              title="Last 24h"
-              value={summary?.last_24h ?? 0}
+              title="Last activity"
+              titleHint={
+                summary?.last_event_at
+                  ? formatDate(summary.last_event_at)
+                  : "Sin eventos que encajen con los filtros."
+              }
+              value={summary?.last_event_at ? formatRelative(summary.last_event_at) : "\u2014"}
               icon={<ScheduleOutlinedIcon />}
-              accent={BRAND.teal}
-              tint={BRAND.tealSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex", minHeight: { xs: 88, sm: 96 } }}>
-            <SummaryCard
-              stretch
-              title="Devices seen"
-              titleHint="Distinct device IDs that ever appeared in the audit log — can exceed the current fleet because events from rejected/removed devices are retained."
-              value={summary?.unique_devices ?? 0}
-              icon={<DevicesOtherOutlinedIcon />}
               accent={BRAND.dark}
               tint={BRAND.cyanSoft}
             />

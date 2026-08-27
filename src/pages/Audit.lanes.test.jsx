@@ -117,6 +117,39 @@ describe("Audit — carriles", () => {
     });
   });
 
+  it("los KPI siguen el carril: 'Actions' en admin, 'System events' en system", async () => {
+    // Las tarjetas cuentan cosas distintas en cada carril y tienen que
+    // decirlo. Un rótulo fijo sobre un número que cambia de significado es
+    // peor que no tener la tarjeta.
+    const user = userEvent.setup();
+    mount();
+    expect(await screen.findByText("Actions")).toBeInTheDocument();
+    expect(screen.queryByText("System events")).toBeNull();
+
+    await user.click(screen.getByText("System activity"));
+
+    expect(await screen.findByText("System events")).toBeInTheDocument();
+    expect(screen.queryByText("Actions")).toBeNull();
+  });
+
+  it("no queda ninguna tarjeta que mida el tamaño de la tabla", async () => {
+    // "Total events" y "Devices seen" medían la tabla, no la postura: con
+    // el ruido dentro eran ~100% churn de sesión y sin él son casi
+    // constantes. Si vuelven, este test lo dice.
+    mount();
+    await screen.findByText("Actions");
+    expect(screen.queryByText("Total events")).toBeNull();
+    expect(screen.queryByText("Devices seen")).toBeNull();
+  });
+
+  it("con eventos pero sin actor registrado, 'Who acted' enseña 0", async () => {
+    // Las 172.406 filas históricas no guardaban quién. Un 0 aquí es
+    // información —"no se sabe"—, y es lo que hay que enseñar en vez de
+    // esconder la tarjeta.
+    mount();
+    expect(await screen.findByText("Who acted")).toBeInTheDocument();
+  });
+
   it("respeta ?auditLane=system al entrar por un enlace", async () => {
     window.history.replaceState({}, "", "/?auditLane=system");
     const { eventCalls } = mount();
