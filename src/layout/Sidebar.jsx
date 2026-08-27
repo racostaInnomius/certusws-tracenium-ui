@@ -33,7 +33,6 @@ import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
-import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -716,9 +715,14 @@ export default function Sidebar({
     // Device Management (MDM/MAM) sits with the operational surfaces,
     // not under Administration: it's a product area in its own right
     // (first-party MDM lands here), not a configuration knob.
-    ...(isPrivileged
-      ? [{ label: "MDM / MAM", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" }]
-      : []),
+    //
+    // ADR-0011 Phase 3: unconditional now — its backend routes
+    // (mobile-commands issue, policies domain PATCH for
+    // "device-management"/"mdm-*") gate on the "device_management"
+    // capability instead of requireRole(OWNER,ADMIN), so hiding this
+    // behind isPrivileged would block a custom role explicitly granted
+    // it. Same pattern as Jobs/Audit/PKI/Device Enrollment above.
+    { label: "MDM / MAM", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" },
     // Jobs — like Alerts/Reports/Remote Control below, always visible
     // (ADR-0011): the read endpoints (modules/orchestrator/jobs/jobs.routes.ts)
     // have no role gate at all, any active member can already view
@@ -748,14 +752,14 @@ export default function Sidebar({
     { label: "Reports", key: "reports", icon: <SummarizeOutlinedIcon /> },
 
     // ── Administration group ───────────────────────────────
-    // Still OWNER/ADMIN-only: Plugin Control/Billing/Settings' backend
-    // routes are NOT capability-wired yet (still plain requireRole) —
-    // see ADR-0011 Phase 3's remaining scope.
+    // Still OWNER/ADMIN-only: Billing/Settings' backend routes are NOT
+    // capability-wired yet (still plain requireRole) — see ADR-0011
+    // Phase 3's remaining scope. Plugin Control used to live here — it
+    // was retired once entitlements made manual per-plugin toggling
+    // obsolete; what's included/active now lives in Billing instead.
     ...(isPrivileged
       ? [
           { type: "divider", key: "divider-admin", label: "Administration" },
-          // Plugin Control — tenant-wide enable/disable for plugins.
-          { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
           // Agent Settings is NOT a separate entry: it's the second
           // division inside Settings (?settingsTab=agent). Both are
           // tenant-scoped configuration, and splitting them meant

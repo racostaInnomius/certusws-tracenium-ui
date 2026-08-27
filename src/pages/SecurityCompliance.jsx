@@ -81,6 +81,7 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useConfirm } from "../components/common/ConfirmDialog";
 // Fase C — the posture side of the capability↔category bridge: mode
@@ -185,15 +186,37 @@ const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
 const SCP_TABS = ["posture", "baselines", "catalog"];
 
 export default function SecurityCompliance({ initialTab }) {
-  // RBAC — same convention as SecurityBaselines.jsx: ADMIN/OWNER may
-  // mutate (finding lifecycle, bulk ops, settings) and pull evidence
-  // exports; USER is read-only. The backend enforces the same split
-  // (compliance.routes.ts requireTenantAdmin), so this only decides
-  // what to render — never rely on it as the security boundary.
+  // ADR-0011 Phase 3 — gate on the "security_compliance" capability
+  // instead of a hardcoded OWNER/ADMIN name check (was: ADMIN/OWNER may
+  // mutate, USER is read-only). The backend enforces the same split
+  // (compliance.routes.ts requireCapability("security_compliance")),
+  // so this only decides what to render — never rely on it as the
+  // security boundary. Defaults to false while the fetch is in flight
+  // (fail-closed, same as every other page migrated this phase).
   const { auth } = useAuthContext();
-  const tenantRole = String(auth?.tenantMember?.role || "");
+  const tenantId = auth?.tenantId;
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const canManage = isActiveMember && Boolean(myPermissions?.has("security_compliance"));
 
   // Gates de tier — remediar lo habilita PMP (enterprise); SCP (professional)
   // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
@@ -229,7 +252,6 @@ export default function SecurityCompliance({ initialTab }) {
   // Posture tab renders exactly as before the bridge existed — no
   // chips, no hints. `policyRefresh` bumps after a set-to-auto patch.
   const confirmDialog = useConfirm();
-  const tenantId = auth?.tenantId;
   const [securityForm, setSecurityForm] = React.useState(null);
   const [policyRefresh, setPolicyRefresh] = React.useState(0);
   React.useEffect(() => {

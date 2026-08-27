@@ -29,6 +29,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
@@ -79,9 +80,33 @@ export default function DeviceManagement({ onNavigate }) {
   const confirm = useConfirm();
 
   const tenantId = auth?.tenantId;
-  const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // ADR-0011 Phase 3: gate on the "device_management" capability
+  // instead of a hardcoded OWNER/ADMIN name check — see the same fix
+  // already applied to Jobs.jsx/Audit.jsx/PKI.jsx/SecurityBaselines.jsx.
+  // Defaults to disabled while the fetch is in flight (fail-closed).
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = isActiveMember && myPermissions === null;
+  const canManage = isActiveMember && Boolean(myPermissions?.has("device_management"));
 
   const [policyRow, setPolicyRow] = React.useState(null);
   // ManagedAppSection is props-driven against `form.managedApp`.
@@ -269,11 +294,19 @@ export default function DeviceManagement({ onNavigate }) {
     }
   };
 
+  if (capabilitiesLoading) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ color: "text.secondary" }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
   if (!canManage) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
         <Alert severity="warning" sx={{ borderRadius: 3 }}>
-          Device management is restricted to active tenant admins and owners.
+          You don't have permission to view device management. Ask a tenant admin to grant the Device Management capability.
         </Alert>
       </Box>
     );

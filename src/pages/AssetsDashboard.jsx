@@ -57,6 +57,8 @@ import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
+import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import {
   getHardwareInventoryDetail,
   getSoftwareInventoryHostApps,
@@ -301,6 +303,36 @@ export default function AssetsDashboard({
   onNavigateToHardwareInventory,
   suppressEmptyStateOverlay = false,
 }) {
+  // ADR-0011 Phase 3: gate on the "assets_view" capability — the
+  // backend routes exclusive to this tab (hardware/software inventory
+  // detail, inactive assets, per-device printers/detail) now require
+  // it; the ones this page shares with Overview (summary, hosts) stay
+  // open regardless. Defaults to disabled while the fetch is in
+  // flight (fail-closed).
+  const { auth } = useAuthContext();
+  const tenantId = auth?.tenantId;
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = myPermissions === null;
+  const canViewAssets = Boolean(myPermissions?.has("assets_view"));
+
   // Set<agent_id> of devices currently connected (has an active
   // gRPC session in the last heartbeat window). Drives the "Online
   // now" KPI and the traffic-light dot on each row in the hosts
@@ -1321,6 +1353,24 @@ const osVersionItems = React.useMemo(() => {
       versionCount: versionSet.size,
     };
   }, [summary, hosts, connectedIds]);
+
+  if (capabilitiesLoading) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ color: "text.secondary" }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
+  if (!canViewAssets) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Alert severity="warning" sx={{ borderRadius: 3 }}>
+          You don't have permission to view the asset dashboard. Ask a tenant admin to grant the Asset Management capability.
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box

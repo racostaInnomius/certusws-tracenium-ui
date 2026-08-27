@@ -116,9 +116,12 @@ import IntervalScheduleCard from "../components/Policies/IntervalScheduleCard";
 
 // ── PolicyForm — collection intervals + collapsible advanced JSON.
 //
-// Plugin enable/disable used to live here as a row of switches. It
-// moved to the new Plugin Control page so this surface is now strictly
-// about HOW enabled plugins behave, not WHICH plugins are on. The form
+// Plugin enable/disable used to live here as a row of switches, then
+// moved to a dedicated Plugin Control page, which was itself later
+// retired once entitlements made manual per-plugin toggling obsolete —
+// what's included/active is now informational, in Billing. This
+// surface stays strictly about HOW enabled plugins behave, not WHICH
+// plugins are on. The form
 // still tracks `form.plugins` internally because the conditional
 // schedule panels (Compliance / Patch) check it to decide whether to
 // render — that state is populated read-only from the loaded policy by
@@ -149,7 +152,7 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
   // currently-loaded policy. We render it as a chip strip at the top of
   // the form so the operator can see at a glance what configuration
   // panels apply ("compliance shows because SCP is on") without having
-  // to bounce to Plugin Control to check.
+  // to bounce to Billing to check.
   const enabledPluginsSummary = catalog.filter(
     (p) => p.required || Boolean(form.plugins?.[p.key])
   );
@@ -193,8 +196,8 @@ function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJso
           )}
         </Box>
         <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.75, display: "block" }}>
-          Toggle plugins on or off in <strong>Plugin Control</strong>. The settings
-          below apply to plugins that are currently enabled.
+          See what's included in your plan and what's currently active in <strong>Billing</strong>.
+          The settings below apply to plugins that are currently enabled.
         </Typography>
       </Box>
 
@@ -578,9 +581,9 @@ export default function AgentSettings({ embedded = false }) {
       delete slice.mam;
       delete slice.managedApp;
       // Opt-locking: send the version we loaded the policy at as
-      // If-Match. If Plugin Control (or another operator) wrote in the
-      // meantime, backend returns 409 and we surface a non-blocking
-      // notice + reload so the user can re-apply on top of fresh state.
+      // If-Match. If another operator wrote in the meantime, backend
+      // returns 409 and we surface a non-blocking notice + reload so
+      // the user can re-apply on top of fresh state.
       const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
       await patchTenantPolicyDomain(tenantId, "agent-config", slice, { expectedVersion });
       showSnack("Agent settings saved", "success");
@@ -1052,7 +1055,7 @@ export default function AgentSettings({ embedded = false }) {
       ) : (
         <PageHeader
           title="Agent Settings"
-          subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. Enable plugins under Plugin Control; security remediation lives in Security Baselines; mobile/MAM in Device Management."
+          subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. What's included/active lives in Billing; security remediation lives in Security Baselines; mobile/MAM in Device Management."
           icon={<TuneOutlinedIcon />}
           actions={
             <RefreshControl

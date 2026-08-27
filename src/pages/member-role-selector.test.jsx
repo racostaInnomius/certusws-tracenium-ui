@@ -61,7 +61,15 @@ function renderPage() {
 }
 
 async function openMemberDialog() {
-  fireEvent.click(await screen.findByText("Add Member"));
+  // "Add Member" is disabled until getTenantById's promise resolves and
+  // `tenantDetails` state updates (displayedTenant). findByText only
+  // waits for the TEXT to exist, not for that follow-up render — the
+  // button can still be disabled the instant it appears, and clicking a
+  // disabled button is a no-op, so waiting for the text alone is a race
+  // that happened to usually win locally but not under CI's timing.
+  const button = await screen.findByText("Add Member");
+  await waitFor(() => expect(button.closest("button")).not.toBeDisabled());
+  fireEvent.click(button);
   return screen.findByRole("dialog");
 }
 

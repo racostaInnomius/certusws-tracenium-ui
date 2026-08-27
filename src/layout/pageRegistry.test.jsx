@@ -11,7 +11,6 @@ describe("PAGE_REGISTRY", () => {
       "assets",
       "configurations",
       "enrollment",
-      "plugin-control",
       "billing",
       "tokens",
       "tenants",

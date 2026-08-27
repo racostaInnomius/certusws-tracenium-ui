@@ -57,7 +57,15 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const ready = () => waitFor(() => expect(screen.getByText("Subscriptions")).toBeTruthy());
+// "Subscriptions" (el encabezado) está siempre presente, incluso mientras
+// carga: no sirve como señal de que la tabla ya tiene datos. La señal real es
+// que el spinner de carga (role="progressbar") ya se fue — antes de eso, las
+// filas todavía no existen y un assert sobre su contenido es una carrera.
+const ready = () =>
+  waitFor(() => {
+    expect(screen.getByText("Subscriptions")).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
 
 describe("lo que la tabla distingue", () => {
   it("sin prueba lo dice, no muestra cero días", async () => {
