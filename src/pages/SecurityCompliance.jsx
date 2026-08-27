@@ -108,6 +108,7 @@ import { CatalogBrowser } from "../components/Compliance/ComplianceCatalogDialog
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
 import WhatToFixFirst from "../components/Compliance/WhatToFixFirst";
+import FirstVisitNote from "../components/Compliance/FirstVisitNote";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
@@ -890,6 +891,8 @@ export default function SecurityCompliance({ initialTab }) {
           "Devices reporting" + "Compliant" stay because they're
           framework-specific — they don't appear on Overview but make
           sense as drill-down context here. */}
+      <FirstVisitNote />
+
       {(() => {
         const avgScore = summary?.avgScore;
         // Sprint 1/2 — the exception-adjusted fleet average. Shown as a
@@ -1012,8 +1015,48 @@ export default function SecurityCompliance({ initialTab }) {
         </AccordionDetails>
       </Accordion>
 
-      {/* Framework switcher + per-framework summary ------------------------ */}
-      <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
+      {/* ── Frameworks ────────────────────────────────────────────────────
+          Plegada por defecto: "¿cómo vamos en CIS?" es la pregunta del
+          auditor, no la del operador de turno, y hasta ahora iba por delante
+          de sus equipos.
+
+          Lo que NO se pliega es la consecuencia: el selector filtra la tabla
+          de equipos y los exports de toda la página, así que si hay un
+          framework activo la sección se abre sola y lo anuncia en la
+          cabecera. Un filtro escondido que cambia lo que ves es peor que una
+          sección de más. */}
+      <Accordion
+        defaultExpanded={Boolean(selectedFramework)}
+        disableGutters
+        elevation={0}
+        sx={{
+          mb: 2,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          "&::before": { display: "none" },
+          bgcolor: BRAND.surface,
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+              Frameworks
+            </Typography>
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
+              how you score against CIS, NIST and the rest
+            </Typography>
+            {selectedFramework ? (
+              <Chip
+                size="small"
+                label={`Filtering by ${
+                  frameworks.find((f) => f.framework === selectedFramework)?.shortName || selectedFramework
+                }`}
+                sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+              />
+            ) : null}
+          </Stack>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0 }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           justifyContent="space-between"
@@ -1124,7 +1167,8 @@ export default function SecurityCompliance({ initialTab }) {
             </TableBody>
           </Table>
         </TableContainer>
-      </SectionPaper>
+        </AccordionDetails>
+      </Accordion>
 
       {/* Fleet posture by control category (firewall, crypto, patching, …) —
           the fleet analogue of the drawer's per-device category grouping.
