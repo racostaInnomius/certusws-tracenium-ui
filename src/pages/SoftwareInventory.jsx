@@ -2,6 +2,7 @@ import * as React from "react";
 import Grid from "@mui/material/Grid";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
+  Alert,
   Box,
   Paper,
   Typography,
@@ -37,6 +38,8 @@ import {
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
 import { listFrom } from "../api/shape";
+import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
@@ -329,6 +332,34 @@ function RankingViewAllButton({ disabled = false, onClick }) {
 export default function SoftwareInventory() {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
+
+  // ADR-0011 Phase 3: gate on the "assets_view" capability — see the
+  // same fix in AssetsDashboard.jsx. Also covers BrowserInventoryPanel
+  // below, whose own endpoint requires the same capability now.
+  // Defaults to disabled while the fetch is in flight (fail-closed).
+  const { auth } = useAuthContext();
+  const tenantId = auth?.tenantId;
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = myPermissions === null;
+  const canViewAssets = Boolean(myPermissions?.has("assets_view"));
 
   const [summary, setSummary] = React.useState(null);
   const [rankings, setRankings] = React.useState(null);
@@ -823,6 +854,24 @@ export default function SoftwareInventory() {
       }}
     />
   );
+
+  if (capabilitiesLoading) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ color: "text.secondary" }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
+  if (!canViewAssets) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Alert severity="warning" sx={{ borderRadius: 3 }}>
+          You don't have permission to view software inventory. Ask a tenant admin to grant the Asset Management capability.
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ px: 0, py: 0 }}>
