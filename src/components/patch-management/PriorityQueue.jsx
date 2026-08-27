@@ -10,7 +10,7 @@
 import * as React from "react";
 import { Box, Chip, Stack, Typography, Button, CircularProgress, Tooltip } from "@mui/material";
 import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
-import { BRAND, TEXT, ROLE } from "../../theme/brand";
+import { BRAND, TEXT, ICON, ROLE } from "../../theme/brand";
 import { buildWorklist } from "./buildWorklist";
 
 const SEVERITY_TONE = {
@@ -124,7 +124,7 @@ export default function PriorityQueue({
                     <Tooltip title="The agent can apply this fix" arrow>
                       <Chip
                         size="small"
-                        icon={<BoltOutlinedIcon sx={{ fontSize: 14 }} />}
+                        icon={<BoltOutlinedIcon sx={{ fontSize: ICON.sm }} />}
                         label="One-click fix"
                         sx={{
                           height: 20,
