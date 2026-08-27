@@ -21,16 +21,6 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -40,6 +30,7 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SectionPaper from "../common/SectionPaper";
 import SummaryCard from "../common/SummaryCard";
 import CompositionBars from "../common/CompositionBars";
+import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { platformColor } from "../../utils/platform";
 import {
@@ -298,7 +289,9 @@ export default function OverviewTab({ onNavigateTab }) {
                   Per-device outcomes by day
                 </Typography>
               </Box>
-              <ToggleButtonGroup
+              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" gap={1}>
+                <InstallsLegend />
+                <ToggleButtonGroup
                 size="small"
                 exclusive
                 value={windowKey}
@@ -307,7 +300,8 @@ export default function OverviewTab({ onNavigateTab }) {
                 <ToggleButton value="7d" sx={{ textTransform: "none", px: 1.5 }}>7d</ToggleButton>
                 <ToggleButton value="30d" sx={{ textTransform: "none", px: 1.5 }}>30d</ToggleButton>
                 <ToggleButton value="90d" sx={{ textTransform: "none", px: 1.5 }}>90d</ToggleButton>
-              </ToggleButtonGroup>
+                </ToggleButtonGroup>
+              </Stack>
             </Stack>
 
             <Box sx={{ height: 220 }}>
@@ -326,37 +320,7 @@ export default function OverviewTab({ onNavigateTab }) {
                   No installs completed in this window
                 </Box>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
-                    <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fill: BRAND.dark, fontSize: TEXT.xs }} tickLine={false} />
-                    <YAxis tick={{ fill: BRAND.dark, fontSize: TEXT.xs }} tickLine={false} allowDecimals={false} />
-                    <RechartsTooltip
-                      contentStyle={{
-                        borderRadius: 8,
-                        border: `1px solid ${BRAND.border}`,
-                        fontSize: TEXT.sm,
-                      }}
-                    />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: TEXT.sm }} />
-                    <Line
-                      type="monotone"
-                      dataKey="succeeded"
-                      name="Succeeded"
-                      stroke={ROLE.positive}
-                      strokeWidth={2.5}
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="failed"
-                      name="Failed"
-                      stroke={ROLE.critical}
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <InstallsOverTimeChart data={chartData} />
               )}
             </Box>
           </SectionPaper>
