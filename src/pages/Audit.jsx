@@ -55,6 +55,7 @@ import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
 import { listFrom } from "../api/shape";
+import { resolveActor } from "../utils/auditActor";
 import { getMyCapabilities } from "../api/roles";
 
 /**
@@ -533,6 +534,56 @@ export default function Audit() {
       renderCell: (params) => renderOutcomeChip(params.value),
     },
     {
+      // Quién. Va justo después del evento porque es la segunda pregunta
+      // que se hace, antes que sobre qué equipo.
+      //
+      // `actor_email` lo resuelve el backend contra TenantMember;
+      // `actor_subject` es el identificador durable y sobrevive a que esa
+      // persona deje de ser miembro. Cuando no hay actor la respuesta es
+      // "—", y es la respuesta correcta: un evento de máquina no tiene
+      // persona detrás, y las 172.406 filas históricas nunca la
+      // registraron.
+      //
+      // ⚠️ NO cae de vuelta a `peer`. Esa columna mezcla sujetos OIDC,
+      // etiquetas de scripts de operaciones y direcciones de red; es
+      // exactamente cómo un cambio de permisos de rol acabó mostrándose
+      // como `9`. Un hueco honesto es mejor que un dato que no lo es.
+      field: "actor",
+      headerName: "Who",
+      minWidth: 180,
+      flex: 0.8,
+      sortable: false,
+      valueGetter: (_v, row) => resolveActor(row).label,
+      renderCell: (params) => {
+        const { known, subject } = resolveActor(params.row);
+        return (
+          <Tooltip
+            title={
+              known
+                ? subject
+                  ? `subject ${subject}`
+                  : ""
+                : "Sin actor registrado. Los eventos de máquina no tienen persona detrás, y las filas anteriores al 27-ago-2026 nunca lo guardaron."
+            }
+            placement="top"
+            arrow
+          >
+            <Typography
+              sx={{
+                fontSize: TEXT.md,
+                color: known ? BRAND.dark : TEXT_MUTED,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {params.value}
+            </Typography>
+          </Tooltip>
+        );
+      },
+    },
+    {
       field: "device_id",
       headerName: "Device",
       minWidth: 200,
@@ -540,12 +591,22 @@ export default function Audit() {
       valueGetter: (_v, row) => getHostname(row.device_id),
     },
     { field: "correlation_id", headerName: "Correlation", minWidth: 220, flex: 0.9 },
-    { field: "peer", headerName: "Peer", minWidth: 160, flex: 0.6, valueGetter: (_v, row) => row.peer || " - " },
-    { field: "reason", headerName: "Reason", minWidth: 200, flex: 0.8, valueGetter: (_v, row) => row.reason || " - " },
+    {
+      // "Peer" vuelve a significar sólo eso: la dirección del cliente.
+      // Antes de este refactor también llevaba la identidad del usuario.
+      field: "peer",
+      headerName: "Peer",
+      minWidth: 160,
+      flex: 0.6,
+      valueGetter: (_v, row) => row.peer || "\u2014",
+    },
+    { field: "reason", headerName: "Reason", minWidth: 200, flex: 0.8, valueGetter: (_v, row) => row.reason || "\u2014" },
   ];
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
+      // `actor` sobrevive al recorte y `peer` no: en una pantalla estrecha
+      // "quién" vale más que la dirección del cliente.
       return {
         peer: false,
         reason: false,
@@ -1198,6 +1259,15 @@ export default function Audit() {
                       </Typography>
                     </Box>
                   </Box>
+                  {/* Quién, antes que sobre qué. Se enseñan las dos
+                      formas: el email es legible pero deja de resolver
+                      cuando esa persona sale del tenant; el subject es el
+                      identificador durable y es lo que hay que citar en un
+                      ticket. */}
+                  <DetailRow label="Who" value={resolveActor(selectedEvent).label} />
+                  {selectedEvent.actor_email && selectedEvent.actor_subject ? (
+                    <DetailRow label="Subject" value={selectedEvent.actor_subject} mono />
+                  ) : null}
                   <DetailRow label="Host" value={getHostname(selectedEvent.device_id)} />
                   <DetailRow label="Device ID" value={selectedEvent.device_id || "—"} mono />
                   <DetailRow label="Correlation" value={selectedEvent.correlation_id || "—"} mono />
