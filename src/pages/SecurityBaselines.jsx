@@ -23,6 +23,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useAuthContext } from "../auth/AuthContext";
+import { getMyCapabilities } from "../api/roles";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { BRAND } from "../theme/brand";
@@ -53,9 +54,33 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const confirm = useConfirm();
 
   const tenantId = auth?.tenantId;
-  const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
-  const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
+
+  // ADR-0011 Phase 3: gate on the "security_compliance" capability
+  // instead of a hardcoded OWNER/ADMIN name check — see the same fix
+  // already applied to Jobs.jsx/Audit.jsx/PKI.jsx. Defaults to
+  // disabled while the fetch is in flight (fail-closed).
+  const [myPermissions, setMyPermissions] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => {
+        if (!alive) return;
+        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setMyPermissions(new Set());
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  const capabilitiesLoading = isActiveMember && myPermissions === null;
+  const canManage = isActiveMember && Boolean(myPermissions?.has("security_compliance"));
 
   // El modo `auto` remedia en el endpoint: lo habilita PMP (enterprise). Sin
   // derecho la opción se deshabilita con el motivo, no se oculta.
@@ -212,11 +237,19 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     }
   };
 
+  if (capabilitiesLoading) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
+        <Typography sx={{ color: "text.secondary" }}>Loading…</Typography>
+      </Box>
+    );
+  }
+
   if (!canManage) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
         <Alert severity="warning" sx={{ borderRadius: 3 }}>
-          Security baselines are restricted to active tenant admins and owners.
+          You don't have permission to view security baselines. Ask a tenant admin to grant the Security Compliance capability.
         </Alert>
       </Box>
     );
