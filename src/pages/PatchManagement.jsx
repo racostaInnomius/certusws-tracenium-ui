@@ -38,6 +38,7 @@ import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/
 import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
+import PriorityQueue from "../components/patch-management/PriorityQueue";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -65,6 +66,8 @@ import { getTenantPolicy } from "../api/policies";
 import {
   getPatchSummary,
   getPatchDevices,
+  getVulnerabilityExposure,
+  getFindings,
   getDeviceScanItems,
   bulkInstall,
   bulkScan
@@ -392,6 +395,32 @@ export default function PatchManagement({ onNavigate }) {
 
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
+
+  // The queue needs both halves of "what is wrong": exposed CVEs and open
+  // findings. Both endpoints already existed and are already what the
+  // Vulnerabilities and Security configuration surfaces read.
+  const [queue, setQueue] = React.useState({ exposures: [], findings: [], loading: true });
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [exp, fnd] = await Promise.allSettled([
+        getVulnerabilityExposure(),
+        getFindings({ limit: 200 }),
+      ]);
+      if (cancelled) return;
+      setQueue({
+        // One source failing must not blank the other: a half-populated queue
+        // is still a queue, and an empty one would read as "nothing to do".
+        // Both shapes are read the way their own panels read them rather than
+        // guessed at — `listFrom` warns on drift instead of quietly yielding [].
+        exposures: exp.status === "fulfilled" ? (Array.isArray(exp.value?.cves) ? exp.value.cves : []) : [],
+        findings: fnd.status === "fulfilled" ? listFrom(fnd.value, { context: "patchFindings" }) : [],
+        loading: false,
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [tenantId]);
+
   // PMv2 — admin-gating for the new remediation actions (apply +
   // dry-run + cancel). Reads stay open for any tenant member, same
   // pattern as SDP. `canManage` derives from `pmpEnabled` further
@@ -910,6 +939,20 @@ export default function PatchManagement({ onNavigate }) {
           zeros on a real fleet. */}
       {pmpEnabled ? (
         <Box sx={{ mb: 2 }}>
+          <PriorityQueue
+            exposures={queue.exposures}
+            findings={queue.findings}
+            loading={queue.loading}
+            onOpen={(item) => setTab(item.kind === "cve" ? "vulnerabilities" : "security")}
+          />
+
+          {/* The counters stay, but underneath and smaller. They are context
+              for the queue above — "how big is this fleet, how much is
+              outstanding" — not the answer to what to do next, which is what
+              they were being asked to be when they sat at the top alone. */}
+          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 3, mb: 1 }}>
+            Fleet totals
+          </Typography>
           <Grid container spacing={2} alignItems="stretch">
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
               <SummaryCard
