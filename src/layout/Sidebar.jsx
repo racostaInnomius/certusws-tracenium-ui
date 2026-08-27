@@ -33,7 +33,6 @@ import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
-import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -748,14 +747,14 @@ export default function Sidebar({
     { label: "Reports", key: "reports", icon: <SummarizeOutlinedIcon /> },
 
     // ── Administration group ───────────────────────────────
-    // Still OWNER/ADMIN-only: Plugin Control/Billing/Settings' backend
-    // routes are NOT capability-wired yet (still plain requireRole) —
-    // see ADR-0011 Phase 3's remaining scope.
+    // Still OWNER/ADMIN-only: Billing/Settings' backend routes are NOT
+    // capability-wired yet (still plain requireRole) — see ADR-0011
+    // Phase 3's remaining scope. Plugin Control used to live here — it
+    // was retired once entitlements made manual per-plugin toggling
+    // obsolete; what's included/active now lives in Billing instead.
     ...(isPrivileged
       ? [
           { type: "divider", key: "divider-admin", label: "Administration" },
-          // Plugin Control — tenant-wide enable/disable for plugins.
-          { label: "Plugin Control", key: "plugin-control", icon: <ExtensionOutlinedIcon /> },
           // Agent Settings is NOT a separate entry: it's the second
           // division inside Settings (?settingsTab=agent). Both are
           // tenant-scoped configuration, and splitting them meant

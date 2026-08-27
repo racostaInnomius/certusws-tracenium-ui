@@ -42,7 +42,7 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-const DISABLED_BANNER = /plugin is disabled for this tenant/i;
+const DISABLED_BANNER = /isn't active for this tenant/i;
 
 /** The exact envelope the backend returns (policies.controller.ts). */
 function policyEnvelope(enabledPlugins) {
@@ -67,7 +67,7 @@ function mountWithPolicy(enabledPlugins) {
   respond("get", /\/api\/v1\/policies\/tenants\/.*\/policy.*/, policyEnvelope(enabledPlugins));
   // Everything else the tabs fan out to — empty collections.
   respond("get", /\/api\/v1\/software-delivery.*/, { ok: true, items: [] });
-  return render(<SoftwareDelivery onNavigate={vi.fn()} />);
+  return render(<SoftwareDelivery />);
 }
 
 describe("SoftwareDelivery — plugin entitlement gate", () => {

@@ -16,18 +16,46 @@ import userEvent from "@testing-library/user-event";
 const summary = vi.fn();
 const httpPostJson = vi.fn(async () => ({ status: "active" }));
 
-vi.mock("../../api/http", () => ({
-  httpGetJson: vi.fn(async (url) => {
-    if (url.includes("summary")) return summary();
-    if (url.includes("catalog")) return { prices: CATALOG };
-    return { invoices: [] };
-  }),
-  httpPostJson: (...a) => httpPostJson(...a),
-}));
+// Plugin catalog fixture for PluginInclusion (the retired Plugin
+// Control page's content, now folded into SubscriptionSummary) — a
+// small but representative slice of the real backend catalog.
+const PLUGIN_CATALOG = [
+  { key: "amp", label: "AMP", title: "Asset Management", description: "Hardware and software inventory.", required: true, tier_required: "starter" },
+  { key: "scp", label: "SCP", title: "Security Compliance", description: "Compliance facts feeding the Security Compliance page.", tier_required: "professional" },
+  { key: "pmp", label: "PMP", title: "Patch Management", description: "Patch scan and install.", tier_required: "enterprise" },
+];
+
+vi.mock("../../api/http", async (importOriginal) => {
+  // Real module still backs everything usePluginCatalog's cached-fetch
+  // machinery needs (registerCacheClearListener, getApiCacheSessionScope,
+  // etc.) — only httpGetJson/httpPostJson are overridden.
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    httpGetJson: vi.fn(async (url) => {
+      if (url.includes("summary")) return summary();
+      // "catalog" alone is ambiguous — billing's price catalog and the
+      // plugin catalog are two different endpoints that both match it.
+      if (url.includes("billing/catalog")) return { prices: CATALOG };
+      if (url.includes("plugins/catalog")) return { catalog: PLUGIN_CATALOG };
+      if (url.includes("/policy")) return { policy: { policy_json: { plugins: { enabled: ["scp"] } } } };
+      if (url.includes("plugin-coverage")) return { total: 10, byPlugin: [{ plugin: "scp", count: 7 }] };
+      return { invoices: [] };
+    }),
+    httpPostJson: (...a) => httpPostJson(...a),
+  };
+});
 
 // Stripe.js no se carga en jsdom, y no hace falta: lo que se prueba aquí es la
 // pantalla, no el iframe de la tarjeta.
 vi.mock("./PaymentMethodCard", () => ({ default: () => null }));
+
+// SubscriptionSummary now reads tenantId (for PluginInclusion's policy
+// fetch) via useAuthContext — this page previously needed no auth
+// context at all, so no mock for it existed yet.
+vi.mock("../../auth/AuthContext", () => ({
+  useAuthContext: () => ({ auth: { tenantId: 7 } }),
+}));
 
 const CATALOG = [
   { line: "endpoint", tier: "starter", interval: "monthly", unitAmount: 200, currency: "usd" },
@@ -249,5 +277,57 @@ describe("licencias frente a flota real", () => {
     // donde se cuela el 4 o el 430.
     await userEvent.click(await screen.findByRole("button", { name: /use 43/ }));
     expect(licencias.value).toBe("43");
+  });
+});
+
+describe("what's included — the retired Plugin Control page's content", () => {
+  it("shows active/included/locked status per plugin once expanded", async () => {
+    render(<Billing />);
+    await ready();
+
+    // Collapsed by default — the detail shouldn't compete with the
+    // reason most people open Billing (amount, card, plan).
+    expect(screen.queryByText("AMP — Asset Management")).toBeNull();
+
+    // Count is entitled plugins only (AMP + SCP at "professional"), not
+    // the fixture catalog's full length — PMP (enterprise-only) is
+    // still shown below, locked, but doesn't count toward "included".
+    await userEvent.click(await screen.findByText(/What's included \(2 plugins\)/));
+
+    // AMP: required, always on, regardless of the tenant's own policy.
+    expect(await screen.findByText("AMP — Asset Management")).toBeTruthy();
+    expect(screen.getByText("Required")).toBeTruthy();
+    // SCP: professional-tier, enabled in the fixture policy, with
+    // coverage from the fixture's plugin-coverage summary.
+    expect(screen.getByText("SCP — Security Compliance")).toBeTruthy();
+    expect(screen.getByText("7 / 10 reporting")).toBeTruthy();
+    // PMP: enterprise-only — SUB.tier is "professional", so this is
+    // locked, not just "not active".
+    expect(screen.getByText("PMP — Patch Management")).toBeTruthy();
+    expect(screen.getByText(/Requires enterprise/)).toBeTruthy();
+  });
+
+  it("expands a plugin chip's detail on the plan comparison card, tab-style", async () => {
+    render(<Billing />);
+    await ready();
+
+    // Same fixture catalog backs the plan-picker cards' chip expansion.
+    // Not shown until a chip is clicked.
+    expect(screen.queryByText("Compliance facts feeding the Security Compliance page.")).toBeNull();
+
+    // SCP is included from Professional up, so its chip appears on
+    // both the Professional and Enterprise cards — the first one in
+    // DOM order is Professional's.
+    const scpChip = screen.getAllByText("SCP")[0];
+    await userEvent.click(scpChip);
+    expect(
+      await screen.findByText("Compliance facts feeding the Security Compliance page.")
+    ).toBeTruthy();
+
+    // Click again to close — this is a toggle, not a one-way reveal.
+    await userEvent.click(scpChip);
+    expect(
+      screen.queryByText("Compliance facts feeding the Security Compliance page.")
+    ).toBeNull();
   });
 });
