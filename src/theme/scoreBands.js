@@ -52,6 +52,27 @@ export function scoreBandKey(score, bands = DEFAULT_BANDS) {
   return "critical";
 }
 
+/**
+ * La banda EN PALABRAS, que es lo que faltaba: un `81%` a secas no le dice a
+ * nadie si eso es bueno. El color ya existía; decirlo es lo que convierte el
+ * número en una lectura.
+ *
+ * `null` (sin datos suficientes) tiene su propio texto: no es una banda mala,
+ * es la ausencia de veredicto, y pintarla como "crítico" sería mentir.
+ */
+export function scoreBandLabel(score, bands = DEFAULT_BANDS) {
+  switch (scoreBandKey(score, bands)) {
+    case "good":
+      return "On track";
+    case "warning":
+      return "Needs attention";
+    case "critical":
+      return "Action required";
+    default:
+      return "Not enough data yet";
+  }
+}
+
 /** ROLE color for a score (positive/caution/critical), null when unscored. */
 export function scoreBandRole(score, bands = DEFAULT_BANDS) {
   const key = scoreBandKey(score, bands);

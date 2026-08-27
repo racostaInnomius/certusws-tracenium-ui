@@ -31,6 +31,8 @@ vi.mock("../components/Compliance/ComplianceTrendChart", () => ({ default: () =>
 vi.mock("../components/Compliance/MttrCard", () => ({ default: () => <div data-testid="mttr" /> }));
 vi.mock("../components/Compliance/ComplianceCategoryBreakdown", () => ({ default: () => <div data-testid="categories" /> }));
 vi.mock("./SecurityBaselines", () => ({ default: () => <div data-testid="baselines" /> }));
+// Trae su propio fetch y tiene su propia suite.
+vi.mock("../components/Compliance/WhatToFixFirst", () => ({ default: () => <div data-testid="fixfirst" /> }));
 
 import SecurityCompliance from "./SecurityCompliance";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
@@ -110,17 +112,13 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
   it("renders hero KPIs, framework table, device table and the pack chip from the real shapes", async () => {
     mountPage();
     // Hero reads res.summary.*
-    // Hero KPI card reads res.summary.devicesReporting ("12" also appears
-    // in the framework table, so scope to the card by its title). The
-    // title and its value can render a tick apart (title is static markup,
-    // the value updates once the summary fetch resolves) — under CI load
-    // that gap was wide enough for a synchronous getByText right after the
-    // title's findByText to lose the race and see the KPI's loading
-    // placeholder ("—") instead. findByText for the value too closes it.
-    const kpiTitle = await screen.findByText("Devices reporting", { selector: "p,span,div,h6" });
-    const kpiCard = kpiTitle.closest(".MuiCard-root, .MuiPaper-root");
-    expect(await within(kpiCard).findByText("12")).toBeInTheDocument();
-    expect(await screen.findByText("81%")).toBeInTheDocument(); // avgScore rounded
+    // Titular único (sustituye a los cuatro KPIs): el score, su banda EN
+    // PALABRAS y el contexto en una línea. Con las bandas 90/70 del tenant,
+    // 81 cae en "needs attention" — que es justo lo que un `81%` a secas no
+    // le decía a nadie.
+    expect(await screen.findByText("81%")).toBeInTheDocument();
+    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+    expect(await screen.findByText(/9 of 12 devices/)).toBeInTheDocument();
     // Framework table reads res.items[] and the pack chip reads packActive/totalFrameworks
     expect(await screen.findByText("Pack: 2 of 12")).toBeInTheDocument();
     expect(screen.getByText("CIS Win11")).toBeInTheDocument();

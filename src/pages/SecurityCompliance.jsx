@@ -23,13 +23,15 @@
 
 import * as React from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
   Drawer,
-  Grid,
   IconButton,
   MenuItem,
   Select,
@@ -48,10 +50,7 @@ import {
   Typography
 } from "@mui/material";
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
-import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
-import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 // Sprint 4 — diff + export
 import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 // Sprint 5 — settings panel trigger
@@ -90,7 +89,7 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 // policy domain without leaving the Posture tab.
 import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
 // Sprint 4 — one-click fix from the finding card (crosswalk-gated).
-import { remediate as remediateFinding } from "../api/patchManagement";
+import { remediate as remediateFinding, getDevicesAffectedByCheck } from "../api/patchManagement";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -99,18 +98,19 @@ import {
 import { baselineModeForCategory } from "../components/Compliance/capabilityBridge";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import SharedSummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
 import { PatchChip, formatRelativeTime } from "../components/Compliance/PatchLevel";
 import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
 import { CatalogBrowser } from "../components/Compliance/ComplianceCatalogDialog";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
+import WhatToFixFirst from "../components/Compliance/WhatToFixFirst";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
-import { scoreBandRole, scoreBandSoftRole } from "../theme/scoreBands";
+import { scoreBandRole, scoreBandLabel } from "../theme/scoreBands";
 
 // ---------- constants --------------------------------------------------------
 
@@ -424,6 +424,57 @@ export default function SecurityCompliance({ initialTab }) {
   const [toast, setToast] = React.useState(null);
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
+
+  // "Fix N" desde "What to fix first": remedia el control en TODOS los equipos
+  // que lo incumplen, que es la acción que hoy está enterrada a dos clics
+  // dentro del panel de un equipo — y hay que repetirla equipo por equipo.
+  //
+  // Los device ids no se adivinan: se piden al backend, que es quien sabe
+  // quién falla ese control ahora mismo. Enviar una lista obsoleta remediaría
+  // equipos que ya están bien.
+  const handleRemediateCheck = React.useCallback(
+    async (row) => {
+      if (!canRemediate || !row?.checkId) return;
+      const ok = await confirmDialog({
+        title: `Fix this on ${row.deviceCount} ${row.deviceCount === 1 ? "device" : "devices"}?`,
+        body:
+          `The agent will apply its fix for "${row.title || row.checkId}" on every device ` +
+          "that currently fails it. Some fixes need a reboot to fully take effect; each " +
+          "finding is marked remediated once its agent confirms, and the next scan verifies it.",
+        confirmText: `Fix ${row.deviceCount}`,
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        const affected = await getDevicesAffectedByCheck(row.checkId);
+        const deviceIds = (Array.isArray(affected?.devices) ? affected.devices : [])
+          .map((d) => d.agentId || d.agent_id)
+          .filter(Boolean);
+        if (deviceIds.length === 0) {
+          showToast({
+            severity: "info",
+            message: "No devices are failing this control any more — nothing to do.",
+          });
+          return;
+        }
+        const res = await remediateFinding({ checkId: row.checkId, mode: "apply", deviceIds });
+        const id = res?.remediation?.id;
+        showToast({
+          severity: "success",
+          message: id
+            ? `Remediation #${id} queued for ${deviceIds.length} devices.`
+            : `Remediation queued for ${deviceIds.length} devices.`,
+        });
+        setRefreshToken((n) => n + 1);
+      } catch (e) {
+        showToast({
+          severity: "error",
+          message: e?.body?.message || e?.message || "Could not queue the remediation.",
+        });
+      }
+    },
+    [canRemediate, confirmDialog, showToast]
+  );
 
   // Fase C — "Set to auto-remediate" from a category row. Re-reads the
   // policy immediately before patching (not the cached securityForm) so
@@ -817,60 +868,120 @@ export default function SecurityCompliance({ initialTab }) {
         // raw score: the delta IS the weight of the vetted exceptions.
         const avgAdjusted = summary?.avgScoreAdjusted;
         const complianceAccent = scoreBandRole(avgScore, bands) ?? BRAND.teal;
-        const complianceTint = scoreBandSoftRole(avgScore, bands) ?? BRAND.tealSoft;
         const criticalHigh =
           (summary?.openFindings?.critical ?? 0) +
           (summary?.openFindings?.high ?? 0);
-        const findingsAccent = criticalHigh > 0 ? ROLE.critical : ROLE.positive;
-        const findingsTint = criticalHigh > 0 ? ROLE.criticalSoft : ROLE.positiveSoft;
         return (
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <SharedSummaryCard
-                title="Devices reporting"
-                value={summary?.devicesReporting ?? "—"}
-                icon={<DevicesOutlinedIcon fontSize="small" />}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <SharedSummaryCard
-                title="Compliance"
-                value={avgScore != null ? `${Math.round(avgScore)}%` : "—"}
-                icon={<ShieldOutlinedIcon fontSize="small" />}
-                accent={complianceAccent}
-                tint={complianceTint}
-                titleHint={
-                  avgAdjusted != null && avgScore != null && Math.round(avgAdjusted) !== Math.round(avgScore)
-                    ? `Adjusted for accepted exceptions: ${Math.round(avgAdjusted)}%. The gap vs the raw score is the weight of acknowledged / risk-accepted findings.`
-                    : "Raw evaluator score. When exceptions (acks, risk-accepted) exist, the adjusted average appears here."
-                }
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <SharedSummaryCard
-                title="Compliant"
-                value={summary?.statusBreakdown?.compliant ?? 0}
-                icon={<VerifiedOutlinedIcon fontSize="small" />}
-                accent={ROLE.positive}
-                tint={ROLE.positiveSoft}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <SharedSummaryCard
-                title="Critical findings"
-                value={criticalHigh}
-                icon={<ReportProblemOutlinedIcon fontSize="small" />}
-                accent={findingsAccent}
-                tint={findingsTint}
-              />
-            </Grid>
-          </Grid>
+          /* ── Titular único ───────────────────────────────────────────
+             Antes había cuatro KPIs compitiendo, y tres eran la misma
+             verdad en tres formatos (media, equipos, hallazgos): nadie
+             nuevo sabía cuál era EL número. Ahora hay un titular con su
+             banda en palabras —`81%` a secas no dice si eso es bueno— y
+             el resto pasa a ser contexto de una línea, con los números
+             que llevan a algún sitio convertidos en enlaces. */
+          <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
+            <Stack
+              direction="row"
+              spacing={1.5}
+              alignItems="baseline"
+              useFlexGap
+              sx={{ flexWrap: "wrap" }}
+            >
+              <Typography
+                sx={{
+                  fontSize: TEXT["5xl"],
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: complianceAccent,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {avgScore != null ? `${Math.round(avgScore)}%` : "—"}
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: complianceAccent }}>
+                {scoreBandLabel(avgScore, bands)}
+              </Typography>
+            </Stack>
+
+            <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: BRAND.dark }}>
+                {summary?.statusBreakdown?.compliant ?? 0} of {summary?.devicesReporting ?? 0} devices
+              </Box>{" "}
+              in good standing
+              {criticalHigh > 0 ? (
+                <>
+                  {" · "}
+                  <Box
+                    component="span"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setScoreBandFilter("critical")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setScoreBandFilter("critical");
+                      }
+                    }}
+                    sx={{
+                      color: ROLE.critical,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textUnderlineOffset: 2,
+                    }}
+                  >
+                    {criticalHigh} critical findings
+                  </Box>
+                </>
+              ) : null}
+              {avgAdjusted != null && avgScore != null && Math.round(avgAdjusted) !== Math.round(avgScore) ? (
+                <> · {Math.round(avgAdjusted)}% once accepted exceptions are excluded</>
+              ) : null}
+              {" · your thresholds: "}
+              {bands.goodMin}% on track / {bands.warningMin}% needs attention
+            </Typography>
+          </SectionPaper>
         );
       })()}
 
+      {/* ── "¿Qué arreglo primero?" ─────────────────────────────────────
+          Va inmediatamente después del titular y ANTES que todo lo demás:
+          es la única sección que dice qué HACER. La tendencia responde la
+          pregunta del CIO y la tabla de frameworks la del auditor; ninguna
+          de las dos es la pregunta del operador de turno, y hasta ahora
+          ambas iban por delante de sus equipos. */}
+      <WhatToFixFirst
+        reloadKey={refreshToken}
+        onOpenCheck={() => setTab("catalog")}
+        onRemediate={canRemediate ? handleRemediateCheck : null}
+      />
+
       {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
-          view. Backed by the fleet-timeseries endpoint. */}
-      <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} reloadKey={refreshToken} />
+          view. Backed by the fleet-timeseries endpoint. Plegada: sigue estando,
+          deja de competir por la primera pantalla. */}
+      <Accordion
+        disableGutters
+        elevation={0}
+        sx={{
+          mb: 2,
+          border: `1px solid ${BRAND.border}`,
+          borderRadius: 2,
+          "&::before": { display: "none" },
+          bgcolor: BRAND.surface,
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+            Trend over time
+            <Box component="span" sx={{ fontWeight: 400, color: BRAND.gray, ml: 1 }}>
+              are we improving?
+            </Box>
+          </Typography>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0 }}>
+          <ComplianceTrendChart notify={(severity, message) => showToast({ severity, message })} reloadKey={refreshToken} />
+        </AccordionDetails>
+      </Accordion>
 
       {/* Framework switcher + per-framework summary ------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>

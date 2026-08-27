@@ -43,6 +43,15 @@ export async function getCategorySummary() {
   return httpGetJson(`${BASE}/category-summary`);
 }
 
+// "What to fix first" — los controles que MÁS equipos incumplen en la flota.
+// Es la única agregación por control que existe: el resto de la página agrega
+// por severidad, framework, categoría o equipo, y ninguna responde "¿qué
+// arreglo primero?". Cada fila trae `agentRemediable`, que el backend ya cruza
+// con el derecho a PMP — SCP enseña el hallazgo, PMP es quien lo arregla.
+export async function getTopFailingChecks({ limit } = {}) {
+  return httpGetJson(`${BASE}/top-failing-checks${buildQuery({ limit })}`);
+}
+
 // Drill-in for a category: devices FAILING at least one check in the category,
 // with the failing checks. Powers the category-breakdown expand-in-place.
 export async function getCategoryDevices(category) {
