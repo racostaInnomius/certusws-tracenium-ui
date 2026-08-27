@@ -61,6 +61,16 @@ export async function getFindings(params = {}) {
   return httpGetJson(`${BASE}/findings${buildQuery(params)}`);
 }
 
+// What pressing the button would actually do, for a specific set of devices:
+// when it would dispatch (maintenance windows), which of them get a vCenter
+// snapshot first, and whether the whole thing could be undone. Read-only — the
+// same rules the dispatcher applies, asked ahead of time.
+export async function getActionOutlook(deviceIds = []) {
+  return httpGetJson(
+    `${BASE}/action-outlook${buildQuery({ deviceIds: deviceIds.join(",") })}`
+  );
+}
+
 // Per-finding drilldown: which devices currently fail this checkId.
 // Used by the drawer's "Step 1 - target" preview before apply.
 export async function getDevicesAffectedByCheck(checkId) {

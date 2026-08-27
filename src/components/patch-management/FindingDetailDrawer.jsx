@@ -46,6 +46,7 @@ import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { DataGrid } from "@mui/x-data-grid";
+import ActionOutlookNotice from "./ActionOutlookNotice";
 import {
   getDevicesAffectedByCheck,
   remediate,
@@ -566,6 +567,15 @@ export default function FindingDetailDrawer({
                     })}
                   </>
                 )}
+              </Box>
+
+              {/* What pressing these buttons would actually do — when it
+                  dispatches, what gets snapshotted, whether it can be undone.
+                  Directly above the buttons on purpose: it answers the
+                  questions people ask themselves in the second before they
+                  click, and it used to live two tabs away. */}
+              <Box sx={{ pt: 1 }}>
+                <ActionOutlookNotice deviceIds={Array.from(selectedDeviceIds)} />
               </Box>
 
               {/* Action bar */}
