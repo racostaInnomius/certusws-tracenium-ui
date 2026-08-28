@@ -51,6 +51,7 @@ export const PAGE_REGISTRY = {
     <Assets
       onAssetsEmptyStateChange={ctx.onAssetsEmptyStateChange}
       suppressEmptyStateOverlay
+      onNavigate={ctx.onNavigate}
     />
   ),
 

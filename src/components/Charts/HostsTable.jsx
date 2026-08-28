@@ -8,9 +8,14 @@ import * as React from "react";
 import {
   Box,
   Button,
+  ButtonGroup,
   Checkbox,
   Chip,
   LinearProgress,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -26,6 +31,19 @@ import { BRAND, TEXT } from "../../theme/brand";
 import { normalizePlatform, platformLabel, platformColor } from "../../utils/platform";
 import OnlineDot from "../common/OnlineDot";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
+import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
+import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+
+// Same page keys pageRegistry.jsx dispatches on, same icons Sidebar.jsx
+// uses for these three entries — keeps the menu recognizable as "the
+// same three pages" rather than inventing a fourth visual language.
+const DEVICE_ACTION_LINKS = [
+  { key: "patch", label: "Patch Management", icon: <SystemUpdateAltOutlinedIcon fontSize="small" /> },
+  { key: "remote-control", label: "Remote Control", icon: <DesktopWindowsOutlinedIcon fontSize="small" /> },
+  { key: "jobs", label: "Jobs", icon: <AssignmentOutlinedIcon fontSize="small" /> },
+];
 
 function PlatformChip({ platform }) {
   const normalized = normalizePlatform(platform);
@@ -186,6 +204,77 @@ function DecommissionStatusChip({ job, row }) {
 }
 
 
+// Split button: the primary action (Delete) keeps the exact behavior and
+// disabled logic it always had; the caret opens a menu of plain links to
+// the pages that already own patching / remote control / job history for
+// this device. Those links never disable — they're navigation, not an
+// action performed here, so there's nothing about this row's state that
+// should block getting to that page (the destination page is the one
+// that gates what you can do once you're there).
+function RowActions({ row, canDelete, rowLocked, checked, onDeleteDevice, onOpenInPage }) {
+  const [anchorEl, setAnchorEl] = React.useState(null);
+
+  const tone = canDelete
+    ? { bgcolor: BRAND.alert.error, "&:hover": { bgcolor: BRAND.alert.errorHover } }
+    : { borderColor: BRAND.border, color: BRAND.gray };
+
+  return (
+    <>
+      <ButtonGroup
+        size="small"
+        variant={canDelete ? "contained" : "outlined"}
+        color="error"
+        sx={{ borderRadius: 1.5 }}
+      >
+        <Tooltip
+          title={
+            rowLocked
+              ? "Device decommission is in progress. Status is shown on this row."
+              : checked
+              ? "Create a device decommission job."
+              : "Select the checkbox to enable delete."
+          }
+          arrow
+        >
+          <span>
+            <Button
+              disabled={!canDelete}
+              startIcon={<DeleteOutlineRoundedIcon />}
+              onClick={() => onDeleteDevice?.(row)}
+              sx={{ minWidth: 96, textTransform: "none", fontWeight: 800, ...tone }}
+            >
+              Delete
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title="Go to this device in another page" arrow>
+          <Button
+            aria-label="More actions for this device"
+            onClick={(event) => setAnchorEl(event.currentTarget)}
+            sx={{ px: 0.25, minWidth: 28, ...tone }}
+          >
+            <ArrowDropDownIcon fontSize="small" />
+          </Button>
+        </Tooltip>
+      </ButtonGroup>
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
+        {DEVICE_ACTION_LINKS.map((action) => (
+          <MenuItem
+            key={action.key}
+            onClick={() => {
+              setAnchorEl(null);
+              onOpenInPage?.(action.key, row);
+            }}
+          >
+            <ListItemIcon>{action.icon}</ListItemIcon>
+            <ListItemText>{action.label}</ListItemText>
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
+}
+
 function SortableHeadCell({ field, label, sortModel, onSortChange, sx }) {
   const activeSort = sortModel?.[0] || { field: "hostname", sort: "asc" };
   const active = activeSort.field === field;
@@ -217,6 +306,7 @@ export default function HostsTable({
   decommissionFadingIds = new Set(),
   onToggleDecommissionSelection,
   onDeleteDevice,
+  onOpenInPage,
   onRowClick,
   loading = false,
   page = 0,
@@ -286,7 +376,7 @@ export default function HostsTable({
                 sortModel={sortModel}
                 onSortChange={onSortChange}
               />
-              <TableCell sx={{ fontWeight: 700, width: 150, textAlign: "right" }}>
+              <TableCell sx={{ fontWeight: 700, width: 170, textAlign: "right" }}>
                 Action
               </TableCell>
             </TableRow>
@@ -439,44 +529,14 @@ export default function HostsTable({
                     {displayText(localIp)}
                   </TableCell>
                   <TableCell align="right" onClick={(event) => event.stopPropagation()}>
-                    <Tooltip
-                      title={
-                        rowLocked
-                          ? "Device decommission is in progress. Status is shown on this row."
-                          : checked
-                          ? "Create a device decommission job."
-                          : "Select the checkbox to enable delete."
-                      }
-                      arrow
-                    >
-                      <span>
-                        <Button
-                          size="small"
-                          variant={canDelete ? "contained" : "outlined"}
-                          color="error"
-                          disabled={!canDelete}
-                          startIcon={<DeleteOutlineRoundedIcon />}
-                          onClick={() => onDeleteDevice?.(r)}
-                          sx={{
-                            minWidth: 112,
-                            textTransform: "none",
-                            fontWeight: 800,
-                            borderRadius: 1.5,
-                            ...(canDelete
-                              ? {
-                                  bgcolor: BRAND.alert.error,
-                                  "&:hover": { bgcolor: BRAND.alert.errorHover },
-                                }
-                              : {
-                                  borderColor: BRAND.border,
-                                  color: BRAND.gray,
-                                }),
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </span>
-                    </Tooltip>
+                    <RowActions
+                      row={r}
+                      canDelete={canDelete}
+                      rowLocked={rowLocked}
+                      checked={checked}
+                      onDeleteDevice={onDeleteDevice}
+                      onOpenInPage={onOpenInPage}
+                    />
                   </TableCell>
                 </TableRow>
               );

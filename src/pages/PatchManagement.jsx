@@ -451,6 +451,36 @@ export default function PatchManagement({ onNavigate }) {
     return () => { cancelled = true; };
   }, [tenantId]);
 
+  // Deep-link flash: Asset Management's "Actions" menu links here with
+  // `?highlightAgentId=<agentId>` so the operator lands on the exact
+  // device row instead of hunting for it. `hadIncomingHighlight` is read
+  // once, synchronously, because DataGrid's `initialState` only applies on
+  // mount — the pageSize bump has to be decided before the effect below
+  // runs. Same shape as Jobs.jsx's highlightJobId deep link.
+  const hadIncomingHighlight = React.useMemo(
+    () => Boolean(getSearchParam("highlightAgentId", "")),
+    []
+  );
+  const [highlightAgentId, setHighlightAgentId] = React.useState("");
+  React.useEffect(() => {
+    const id = getSearchParam("highlightAgentId", "");
+    if (!id) return undefined;
+    updateSearchParams({ highlightAgentId: null });
+    setHighlightAgentId(id);
+    const scrollTimer = window.setTimeout(() => {
+      document.getElementById("patch-devices-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 150);
+    const clearTimer = window.setTimeout(() => setHighlightAgentId(""), 2600);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+    // Mount-only — a one-shot "just arrived" flash.
+  }, []);
+
   // PMv2 — capability-gating for the new remediation actions (apply +
   // dry-run + cancel). Reads stay open for any tenant member, same
   // pattern as SDP. `canManage` derives from `pmpEnabled` further
@@ -1058,7 +1088,7 @@ export default function PatchManagement({ onNavigate }) {
           install path, those tabs become per-device action launchers
           rather than placeholders. */}
       {pmpEnabled ? (
-        <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
+        <SectionPaper id="patch-devices-panel" variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1.5 }}>
             <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Devices
@@ -1076,10 +1106,25 @@ export default function PatchManagement({ onNavigate }) {
               disableRowSelectionOnClick
               onRowClick={(params) => openDrawer(params.row)}
               pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+              initialState={{
+                pagination: { paginationModel: { pageSize: hadIncomingHighlight ? 50 : 10 } }
+              }}
+              // Row-level pulse for the device we just arrived to highlight
+              // (see the deep-link effect above) — same treatment Jobs.jsx
+              // gives a just-dispatched job.
+              getRowClassName={(params) =>
+                params.row.agentId === highlightAgentId ? "tracenium-flash-row" : ""
+              }
               sx={{
                 ...DATAGRID_SX,
-                "& .MuiDataGrid-row": { cursor: "pointer" }
+                "& .MuiDataGrid-row": { cursor: "pointer" },
+                "@keyframes traceniumFlash": {
+                  "0%, 100%": { backgroundColor: "transparent" },
+                  "25%, 75%": { backgroundColor: BRAND.tealSoft }
+                },
+                "& .tracenium-flash-row": {
+                  animation: "traceniumFlash 1.2s ease-in-out 2"
+                }
               }}
             />
           </Box>
