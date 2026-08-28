@@ -25,6 +25,7 @@ import {
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import FlashOnOutlinedIcon from "@mui/icons-material/FlashOnOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -170,6 +171,30 @@ export default function RemoteControl() {
   const load = refetch;
 
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "rcAutoRefresh");
+
+  // Deep-link flash: Asset Management's "Actions" menu links here with
+  // `?highlightAgentId=<agentId>` so the operator lands on the exact
+  // device row in ConnectablesTable instead of hunting for it. Same
+  // one-shot-mount-effect shape as Jobs.jsx's highlightJobId deep link.
+  const [highlightDeviceId, setHighlightDeviceId] = React.useState("");
+  React.useEffect(() => {
+    const id = getSearchParam("highlightAgentId", "");
+    if (!id) return undefined;
+    updateSearchParams({ highlightAgentId: null });
+    setHighlightDeviceId(id);
+    const scrollTimer = window.setTimeout(() => {
+      document.getElementById("remote-control-connectables")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 150);
+    const clearTimer = window.setTimeout(() => setHighlightDeviceId(""), 2600);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+    // Mount-only — a one-shot "just arrived" flash.
+  }, []);
 
   // RCP M1.S2 — shell session envelope (ShellTerminal drawer).
   const [activeSession, setActiveSession] = React.useState(null);
@@ -347,6 +372,7 @@ export default function RemoteControl() {
             devices={devices}
             loading={loading}
             onConnect={(device, type) => handleConnect(device, type)}
+            highlightDeviceId={highlightDeviceId}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>

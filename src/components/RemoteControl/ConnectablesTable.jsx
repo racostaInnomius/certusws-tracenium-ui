@@ -70,7 +70,7 @@ function RcpBadge({ enabled }) {
 }
 
 // onConnect(device, type) where type is "shell" | "file" | "screen"
-export default function ConnectablesTable({ devices, loading, onConnect }) {
+export default function ConnectablesTable({ devices, loading, onConnect, highlightDeviceId = "" }) {
   const [search, setSearch] = React.useState("");
 
   const filtered = React.useMemo(() => {
@@ -84,6 +84,7 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
 
   return (
     <Paper
+      id="remote-control-connectables"
       elevation={0}
       sx={{
         p: 2,
@@ -118,7 +119,21 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
       />
 
       <TableContainer sx={{ flex: 1 }}>
-        <Table size="small">
+        <Table
+          size="small"
+          sx={{
+            // Row-level pulse for the device we just arrived to highlight
+            // (see RemoteControl.jsx's deep-link effect) — same treatment
+            // Jobs.jsx gives a just-dispatched job.
+            "@keyframes traceniumFlash": {
+              "0%, 100%": { backgroundColor: "transparent" },
+              "25%, 75%": { backgroundColor: BRAND.tealSoft }
+            },
+            "& .tracenium-flash-row": {
+              animation: "traceniumFlash 1.2s ease-in-out 2"
+            }
+          }}
+        >
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>Host</TableCell>
@@ -167,7 +182,15 @@ export default function ConnectablesTable({ devices, loading, onConnect }) {
                   : "Start a screen share session.";
 
                 return (
-                  <TableRow key={d.deviceId} hover>
+                  <TableRow
+                    key={d.deviceId}
+                    hover
+                    className={
+                      highlightDeviceId && String(d.deviceId) === String(highlightDeviceId)
+                        ? "tracenium-flash-row"
+                        : undefined
+                    }
+                  >
                     <TableCell>
                       <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
                         {d.hostname || d.deviceId}
