@@ -891,9 +891,13 @@ export default function Jobs() {
     const known = jobsMeta.known ?? [];
     const types = jobsMeta.types ?? [];
     setSelectedDeviceIds((current) => {
-      const stillValid = current.filter((id) => known.some((item) => item.deviceId === id));
-      if (stillValid.length > 0) return stillValid;
-      return known[0]?.deviceId ? [known[0].deviceId] : [];
+      // Drop selections that no longer exist in the catalogue; otherwise
+      // leave the picker exactly as the operator left it. Deliberately no
+      // "pick known[0] as a default" fallback — dispatching a job is a
+      // real action against a real device, and defaulting to whichever
+      // one happened to load first risks a job landing on the wrong
+      // machine if the operator doesn't notice the field was prefilled.
+      return current.filter((id) => known.some((item) => item.deviceId === id));
     });
     setJobType((current) => {
       // Only creatable types are valid selections for the form. A default
