@@ -256,16 +256,11 @@ export default function Overview() {
       </Box>
 
       {/* Row 2 — Fleet composition (3 donuts, md:8: OS Platform, Agent
-          Versions, Patch Coverage) + Plugin coverage (md:4). Moved above
-          Attention/Audit — these are the cards operators want first, so
-          they sit higher than the timeseries below.
-          Previously the right column stacked LatestAlerts ON TOP OF
-          PluginCoverageStrip which made it ~280px taller than the three
-          compact donuts on the left — the mismatch showed up as an ugly
-          empty band under the donuts. PluginCoverageStrip has moved down
-          next to the Jobs chart (Row 4) so both rows have balanced
-          heights and the dashboard reads as a tight grid instead of a
-          misaligned patchwork. */}
+          Versions, Patch Coverage) + Attention required (md:4). These are
+          the cards operators want first, so they sit above the
+          timeseries below. Attention and Plugin coverage swapped slots
+          with each other (not full rows) so Fleet composition and Audit
+          timeseries stay put — only those two cards moved. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 8 }}>
           <Suspense fallback={<ChartSlot height={360} />}>
@@ -285,19 +280,21 @@ export default function Overview() {
           </Suspense>
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
-          <PluginCoverageStrip
-            result={results?.pluginCoverage}
-            loading={loading}
+          <AttentionPanel
+            results={results}
+            onNavigate={navigateWithQuery}
           />
         </Grid>
       </Grid>
 
-      {/* Row 3 — Attention + Audit timeseries (side by side on md+) */}
+      {/* Row 3 — Plugin coverage + Audit timeseries (side by side on md+).
+          See the Row 2 note above — Plugin coverage swapped down here
+          with Attention required. */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, md: 5 }}>
-          <AttentionPanel
-            results={results}
-            onNavigate={navigateWithQuery}
+          <PluginCoverageStrip
+            result={results?.pluginCoverage}
+            loading={loading}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
