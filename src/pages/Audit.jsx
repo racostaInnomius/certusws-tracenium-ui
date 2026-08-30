@@ -56,6 +56,7 @@ import RefreshControl, { useAutoRefresh } from "../components/common/RefreshCont
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
 import { listFrom } from "../api/shape";
 import { resolveActor } from "../utils/auditActor";
+import { describeEvent, describeEventText } from "../utils/auditSentence";
 import { formatRelative } from "../utils/format";
 import { getMyCapabilities } from "../api/roles";
 
@@ -65,7 +66,10 @@ import { getMyCapabilities } from "../api/roles";
  * who already know "POLICY_TENANT_PUSHED" by name and want to
  * confirm what they're looking at.
  */
-function EventTypeChip({ value, dense = false }) {
+// Sigue en uso en el panel de detalle: ahí el chip con el tipo crudo es
+// el dato que se quiere, no un resumen. En la tabla lo sustituyó la
+// frase de `auditSentence`.
+function EventTypeChip({ value }) {
   const meta = getEventTypeMeta(value);
   return (
     <Tooltip title={meta.raw || "—"} placement="top" arrow>
@@ -76,7 +80,7 @@ function EventTypeChip({ value, dense = false }) {
           bgcolor: meta.tint,
           color: meta.color,
           fontWeight: 700,
-          fontSize: dense ? 11 : 12,
+          fontSize: TEXT.sm,
           border: `1px solid ${meta.color}55`,
           maxWidth: "100%",
           "& .MuiChip-label": {
@@ -521,11 +525,52 @@ export default function Audit() {
       renderCell: (params) => formatDate(params.value),
     },
     {
-      field: "event_type",
-      headerName: "Event Type",
-      minWidth: 200,
-      flex: 0.9,
-      renderCell: (params) => <EventTypeChip value={params.value} dense />,
+      // ── Qué pasó, como frase ──────────────────────────────────────
+      //
+      // Sustituye al chip de tipo. La tabla tenía siete columnas y para
+      // responder "qué pasó aquí" había que recomponer cuatro de ellas.
+      // Con ~50 acciones administrativas al mes esa densidad no compra
+      // nada: no hay que escanear miles de filas, hay que leer cincuenta.
+      //
+      // El tipo crudo sigue disponible en el tooltip y en el panel de
+      // detalle — quien ya conoce `POLICY_TENANT_PUSHED` por su nombre no
+      // pierde nada.
+      field: "what",
+      headerName: "What happened",
+      minWidth: 300,
+      flex: 1.6,
+      sortable: false,
+      valueGetter: (_v, row) => describeEventText(row, { getHostname }),
+      renderCell: (params) => {
+        const { known, segments } = describeEvent(params.row, { getHostname });
+        return (
+          <Tooltip title={params.row?.event_type || ""} placement="top" arrow>
+            <Typography
+              component="span"
+              sx={{
+                fontSize: TEXT.md,
+                // Atenuado cuando no hay plantilla y estamos enseñando el
+                // nombre del evento: se distingue "esto es una frase" de
+                // "esto es lo mejor que sé decir".
+                color: known ? BRAND.dark : TEXT_MUTED,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {segments.map((seg, i) => (
+                <Box
+                  key={i}
+                  component="span"
+                  sx={{ fontWeight: seg.strong ? 700 : 400 }}
+                >
+                  {seg.text}
+                </Box>
+              ))}
+            </Typography>
+          </Tooltip>
+        );
+      },
     },
     {
       field: "outcome",
@@ -606,8 +651,9 @@ export default function Audit() {
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
-      // `actor` sobrevive al recorte y `peer` no: en una pantalla estrecha
-      // "quién" vale más que la dirección del cliente.
+      // `what` y `actor` sobreviven al recorte; `peer` no. En una
+      // pantalla estrecha, "qué pasó" y "quién" valen más que la
+      // dirección del cliente y el id de correlación.
       return {
         peer: false,
         reason: false,
