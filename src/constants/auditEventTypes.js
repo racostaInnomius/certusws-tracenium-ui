@@ -42,6 +42,13 @@ const EVENT_TYPE_CATALOG = {
   POLICY_DEVICE_CONFIG_CHANGED:    { label: "Device: config changed",          category: "Policies" },
   POLICY_DEVICE_DELETED:           { label: "Device override removed",         category: "Policies" },
   POLICY_DEVICE_PUSHED:            { label: "Device policy pushed",            category: "Policies" },
+  // El dominio de seguridad y el de MDM se separaron del bloque de
+  // configuración cuando Policies se partió en tres páginas; classifyChange
+  // los emite con `scope` TENANT o DEVICE, así que existen los cuatro.
+  POLICY_TENANT_SECURITY_CHANGED:  { label: "Tenant: security changed",        category: "Policies" },
+  POLICY_TENANT_MDM_CHANGED:       { label: "Tenant: device mgmt changed",     category: "Policies" },
+  POLICY_DEVICE_SECURITY_CHANGED:  { label: "Device: security changed",        category: "Policies" },
+  POLICY_DEVICE_MDM_CHANGED:       { label: "Device: device mgmt changed",     category: "Policies" },
   // Legacy lowercase variants from earlier instrumentation. Same
   // category so they group with the SCREAMING_SNAKE Phase 2.B types.
   // Heads-up: `policy_ack_ok` is the highest-volume event in the
@@ -58,6 +65,7 @@ const EVENT_TYPE_CATALOG = {
   cert_renew_issued:      { label: "Cert renew issued",            category: "PKI" },
   cert_renew_activated:   { label: "Cert renew activated",         category: "PKI" },
   cert_expired:           { label: "Certificate expired",          category: "PKI" },
+  DEVICE_CERTIFICATES_REVOKED: { label: "Device certificates revoked", category: "PKI" },
 
   // ── gRPC stream lifecycle ────────────────────────────────────────
   grpc_connect:               { label: "gRPC connected",               category: "gRPC" },
@@ -67,6 +75,50 @@ const EVENT_TYPE_CATALOG = {
 
   // ── Facts ingestion ──────────────────────────────────────────────
   facts_scp_rejected:     { label: "SCP facts rejected",           category: "Facts" },
+
+  // ── Identidad: miembros y roles del tenant ───────────────────────
+  TENANT_MEMBER_INVITED:           { label: "Member invited",                 category: "Identity" },
+  TENANT_MEMBER_INVITE_CANCELED:   { label: "Invite canceled",                category: "Identity" },
+  TENANT_MEMBER_ROLE_ASSIGNED:     { label: "Member role assigned",           category: "Identity" },
+  TENANT_MEMBER_DELETED:           { label: "Member removed",                 category: "Identity" },
+  TENANT_ROLE_CREATED:             { label: "Role created",                   category: "Identity" },
+  TENANT_ROLE_PERMISSIONS_CHANGED: { label: "Role permissions changed",       category: "Identity" },
+  TENANT_ROLE_DELETED:             { label: "Role deleted",                   category: "Identity" },
+
+  // ── Ciclo de vida del equipo ─────────────────────────────────────
+  // Una baja son cuatro eventos (requested → started → completed/failed)
+  // a propósito: el estado intermedio es donde se queda un equipo cuando
+  // algo se atasca, y sin sus tres filas no se distingue de uno que nadie
+  // dio de baja.
+  DEVICE_DECOMMISSION_REQUESTED:   { label: "Decommission requested",         category: "Devices" },
+  DEVICE_DECOMMISSION_STARTED:     { label: "Decommission started",           category: "Devices" },
+  DEVICE_DECOMMISSION_COMPLETED:   { label: "Decommission completed",         category: "Devices" },
+  DEVICE_DECOMMISSION_FAILED:      { label: "Decommission failed",            category: "Devices" },
+  DEVICE_RESTORED:                 { label: "Device restored",                category: "Devices" },
+  DEVICE_PURGE_STARTED:            { label: "Purge started",                  category: "Devices" },
+  DEVICE_PURGE_COMPLETED:          { label: "Purge completed",                category: "Devices" },
+  MOBILE_COMMAND_ISSUED:           { label: "Mobile command issued",          category: "Devices" },
+  MOBILE_COMMAND_ACKED:            { label: "Mobile command acknowledged",    category: "Devices" },
+
+  // ── Seguridad: deriva y remediación ──────────────────────────────
+  // Los cuatro tienen plantilla de alerta apuntándoles (ver
+  // alert_rule_templates), así que aparecen en el feed de Alerts además
+  // de aquí.
+  SECURITY_DRIFT_DETECTED:              { label: "Security drift detected",        category: "Security" },
+  SECURITY_DRIFT_REMEDIATED:            { label: "Security drift remediated",      category: "Security" },
+  SECURITY_DRIFT_REMEDIATION_FAILED:    { label: "Remediation failed",             category: "Security" },
+  SECURITY_DRIFT_REMEDIATION_REBOOTING: { label: "Remediation: reboot pending",    category: "Security" },
+  SECURITY_POLICY_UNENFORCEABLE:        { label: "Policy not enforceable",         category: "Security" },
+
+  // ── Facturación, derechos e informes ─────────────────────────────
+  TRIAL_EXTENDED:         { label: "Trial extended",               category: "Billing" },
+  ENTITLEMENTS_REDUCED:   { label: "Entitlements reduced",         category: "Billing" },
+  REPORT_RUN:             { label: "Report generated",             category: "Billing" },
+  REPORT_EMAILED:         { label: "Report emailed",               category: "Billing" },
+
+  // ── Software y gateway de IA ─────────────────────────────────────
+  sdp_self_service_install: { label: "Self-service install",       category: "Other" },
+  AI_GATEWAY_CALL:          { label: "AI gateway call",            category: "Other" },
 };
 
 // Per-category appearance — single source of truth for chip color
@@ -82,6 +134,10 @@ const CATEGORY_META = {
   PKI:      { color: BRAND.alert.warningText, tint: BRAND.alert.warningSoft },
   gRPC:     { color: BRAND.cyanText,        tint: BRAND.cyanSoft || BRAND.tealSoft },
   Facts:    { color: BRAND.alert.errorText, tint: BRAND.alert.errorSoft },
+  Identity: { color: BRAND.dark,            tint: BRAND.cyanSoft  },
+  Devices:  { color: BRAND.tealText,        tint: BRAND.darkSoft  },
+  Security: { color: BRAND.alert.errorText, tint: BRAND.alert.errorSoft },
+  Billing:  { color: BRAND.alert.warningText, tint: BRAND.darkSoft },
   Other:    { color: BRAND.dark,            tint: BRAND.darkSoft  },
 };
 
@@ -89,7 +145,17 @@ const CATEGORY_META = {
 // Policies first because Phase 2.B added many policy events and ops
 // people are most likely to look for them right now. Other goes
 // last so unclassified rows land at the bottom.
-export const CATEGORY_ORDER = ["Policies", "PKI", "gRPC", "Facts", "Other"];
+export const CATEGORY_ORDER = [
+  "Identity",
+  "Policies",
+  "Security",
+  "Devices",
+  "PKI",
+  "Billing",
+  "gRPC",
+  "Facts",
+  "Other",
+];
 
 /**
  * Look up display metadata for a raw event_type string.

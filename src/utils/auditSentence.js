@@ -15,11 +15,14 @@
 //
 // ⚠️ LA REGLA QUE NO SE PUEDE ROMPER: un tipo sin plantilla NO produce una
 // frase vacía ni una a medias. Cae a la etiqueta del catálogo, y si
-// tampoco está ahí, al token crudo. Comprobado el 2026-08-27: de los 24
-// tipos vivos en producción, 14 no estaban en el catálogo de la UI —el
-// mismo patrón de enum re-listado a mano que ya hizo divergir
-// SOURCE_LABEL y VALID_SOURCES—, así que la caída no es un caso teórico:
-// hoy es la mayoría.
+// tampoco está ahí, al token crudo humanizado.
+//
+// La caída no es un camino excepcional, es el normal: sólo se escriben
+// plantillas para lo que aporta algo por encima de la etiqueta, así que la
+// mayoría de los 56 tipos del backend pasan por aquí. Cuando se escribió
+// esto, además, 14 de los 24 tipos vivos en producción ni siquiera
+// estaban en el catálogo de la UI y caían al token crudo — ya están todos,
+// y auditEventTypes.test.js impide que vuelva a pasar.
 
 import { getEventTypeMeta } from "../constants/auditEventTypes";
 

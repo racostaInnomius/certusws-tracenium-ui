@@ -21,9 +21,14 @@ const TIPOS_EN_PRODUCCION = [
 
 describe("describeEvent — la caída, que es lo que más importa", () => {
   it("NINGUNO de los 24 tipos vivos produce una frase vacía", () => {
-    // La regla del módulo. Un tipo sin plantilla tiene que decir algo:
-    // hoy 14 de estos 24 ni siquiera están en el catálogo de la UI, así
-    // que la caída no es un caso raro, es la mayoría.
+    // La regla del módulo. Un tipo sin plantilla tiene que decir algo.
+    //
+    // Cuando se escribió esto, 14 de estos 24 ni siquiera estaban en el
+    // catálogo de la UI y caían al token crudo humanizado. Ya están todos
+    // (ver auditEventTypes.test.js), así que hoy la caída aterriza en una
+    // etiqueta decente — pero sigue siendo el camino de la mayoría de las
+    // filas, porque sólo se escriben plantillas para lo que aporta algo
+    // por encima de la etiqueta.
     for (const event_type of TIPOS_EN_PRODUCCION) {
       const text = describeEventText({ event_type, details: null }, deps);
       expect(text.trim(), event_type).not.toBe("");
