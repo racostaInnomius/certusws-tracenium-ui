@@ -260,6 +260,7 @@ export default function SoftwareDelivery() {
           canManage={canManage}
           notify={notify}
           onDeployFire={handleDeployFired}
+          onNavigateTab={(key) => setActiveTab(TAB_INDEX[key] ?? 0)}
         />
       ) : activeTab === 2 ? (
         <DeploymentsTab
