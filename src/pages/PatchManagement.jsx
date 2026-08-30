@@ -397,9 +397,6 @@ export default function PatchManagement({ onNavigate }) {
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
 
-  // The queue needs both halves of "what is wrong": exposed CVEs and open
-  // findings. Both endpoints already existed and are already what the
-  // Vulnerabilities and Security configuration surfaces read.
   // Which finding the queue asked us to open, cleared once the panel has it.
   const [pendingCheckId, setPendingCheckId] = React.useState(null);
 
@@ -429,27 +426,33 @@ export default function PatchManagement({ onNavigate }) {
     setTab("security");
   }, []);
 
-  const [queue, setQueue] = React.useState({ exposures: [], findings: [], loading: true });
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [exp, fnd] = await Promise.allSettled([
-        getVulnerabilityExposure(),
-        getFindings({ limit: 200 }),
-      ]);
-      if (cancelled) return;
-      setQueue({
-        // One source failing must not blank the other: a half-populated queue
-        // is still a queue, and an empty one would read as "nothing to do".
-        // Both shapes are read the way their own panels read them rather than
-        // guessed at — `listFrom` warns on drift instead of quietly yielding [].
-        exposures: exp.status === "fulfilled" ? (Array.isArray(exp.value?.cves) ? exp.value.cves : []) : [],
-        findings: fnd.status === "fulfilled" ? listFrom(fnd.value, { context: "patchFindings" }) : [],
-        loading: false,
-      });
-    })();
-    return () => { cancelled = true; };
-  }, [tenantId]);
+  // The queue needs both halves of "what is wrong": exposed CVEs and open
+  // findings. Both endpoints already existed and are what the Vulnerabilities
+  // and Security configuration surfaces read.
+  //
+  // Through useCachedFetch rather than a bare effect, because this is the
+  // first thing on the page and it was showing a spinner on every single
+  // visit. The page's own summary and device list already work this way: last
+  // known answer immediately, quiet refresh behind it. A queue that makes you
+  // wait to be told what is urgent is a queue people stop opening.
+  const queueLoader = React.useCallback(async () => {
+    const [exp, fnd] = await Promise.allSettled([
+      getVulnerabilityExposure(),
+      getFindings({ limit: 200 }),
+    ]);
+    // One source failing must not blank the other: a half-populated queue is
+    // still a queue, and an empty one reads as "nothing to do".
+    return {
+      exposures: exp.status === "fulfilled" && Array.isArray(exp.value?.cves) ? exp.value.cves : [],
+      findings: fnd.status === "fulfilled" ? listFrom(fnd.value, { context: "patchFindings" }) : [],
+    };
+  }, []);
+
+  const {
+    data: queueData,
+    loading: queueLoading,
+    refreshing: queueRefreshing,
+  } = useCachedFetch(`patchManagement:queue:${tenantId || "none"}`, queueLoader);
 
   // Deep-link flash: Asset Management's "Actions" menu links here with
   // `?highlightAgentId=<agentId>` so the operator lands on the exact
@@ -1021,9 +1024,12 @@ export default function PatchManagement({ onNavigate }) {
       {pmpEnabled ? (
         <Box sx={{ mb: 2 }}>
           <PriorityQueue
-            exposures={queue.exposures}
-            findings={queue.findings}
-            loading={queue.loading}
+            exposures={queueData?.exposures}
+            findings={queueData?.findings}
+            // Only a cold start blocks. A refresh with cache in hand keeps the
+            // list on screen and says so quietly.
+            loading={queueLoading}
+            refreshing={queueRefreshing}
             onOpen={handleOpenFromQueue}
           />
 

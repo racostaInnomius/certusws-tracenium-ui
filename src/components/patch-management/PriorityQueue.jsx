@@ -30,7 +30,12 @@ function toneFor(severity) {
 export default function PriorityQueue({
   exposures,
   findings,
+  // Cold start: nothing cached, so there is genuinely nothing to show yet.
   loading = false,
+  // Revalidating with cached data already on screen. Never blocks the list —
+  // hiding a perfectly good answer behind a spinner is what made this section
+  // feel slow on every visit.
+  refreshing = false,
   limit = 6,
   onOpen,
 }) {
@@ -72,6 +77,12 @@ export default function PriorityQueue({
         <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
           Ordered by exploitation, then severity, then how far it reaches
         </Typography>
+        {refreshing ? (
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            <CircularProgress size={11} sx={{ color: BRAND.teal }} />
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>Updating</Typography>
+          </Stack>
+        ) : null}
       </Stack>
 
       <Box
