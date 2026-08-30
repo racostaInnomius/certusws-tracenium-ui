@@ -707,6 +707,13 @@ export default function Jobs() {
     const rawSearch = params.get("search") || "";
     const rawType = (params.get("type") || "").toLowerCase();
     const highlightJobId = params.get("highlightJobId") || "";
+    // Asset Management's "Actions" menu links here with
+    // `?highlightAgentId=<agentId>` — unlike highlightJobId (one exact
+    // row), a device can have any number of job rows, so this narrows
+    // the list via the search box (which already matches device_id —
+    // see filteredRows below) instead of pointing at a single row.
+    // highlightJobId wins if somehow both are present.
+    const highlightAgentId = highlightJobId ? "" : (params.get("highlightAgentId") || "");
     const statusMap = {
       in_flight: "running",
       pending: "pending",
@@ -719,13 +726,14 @@ export default function Jobs() {
       cancelled: "cancelled"
     };
     return {
-      status: highlightJobId ? "all" : (statusMap[rawStatus] || "all"),
+      status: (highlightJobId || highlightAgentId) ? "all" : (statusMap[rawStatus] || "all"),
       // Type is validated against the catalogue once it loads (below), not
       // here — the catalogue isn't available on first render. An unknown
       // value just leaves the filter at "all" via that guard.
-      type: highlightJobId ? "all" : (rawType || "all"),
-      search: highlightJobId ? "" : rawSearch.trim(),
-      highlightJobId
+      type: (highlightJobId || highlightAgentId) ? "all" : (rawType || "all"),
+      search: highlightJobId ? "" : (highlightAgentId || rawSearch.trim()),
+      highlightJobId,
+      highlightAgentId
     };
   }, []);
 
@@ -794,6 +802,12 @@ export default function Jobs() {
   // after the animation plays so it never re-triggers on a later
   // re-render (filter change, refresh poll, etc).
   const [highlightRowId, setHighlightRowId] = React.useState(initialFilters.highlightJobId || "");
+  // Same idea as highlightRowId, but for a device deep-link: every row
+  // still visible after the search-box narrowing (see initialFilters
+  // above) pulses once, rather than a single exact row.
+  const [highlightDeviceId, setHighlightDeviceId] = React.useState(
+    initialFilters.highlightAgentId || ""
+  );
   // The backend caps the history window and reports when older jobs exist
   // beyond it. Surfaced as a banner so the operator knows the list — and
   // therefore the filters and search that run over it — is not the whole
@@ -1070,6 +1084,29 @@ export default function Jobs() {
     if (!initialFilters.highlightJobId) return;
     updateSearchParams({ highlightJobId: null });
     return flashAndScrollToRow(initialFilters.highlightJobId);
+    // Intentionally mount-only — this is a one-shot "just arrived"
+    // flash, not a live sync with any state that changes later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Deep-link flash: Asset Management's "Actions" menu links here with
+  // `?highlightAgentId=`. initialFilters already narrowed `search` to
+  // that device (see above), so this only needs to clear the URL param
+  // and scroll+pulse — the filtering did the "locate it" work.
+  React.useEffect(() => {
+    if (!initialFilters.highlightAgentId) return undefined;
+    updateSearchParams({ highlightAgentId: null });
+    const scrollTimer = window.setTimeout(() => {
+      document.getElementById("tenant-job-history-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 150);
+    const clearTimer = window.setTimeout(() => setHighlightDeviceId(""), 2600);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
     // Intentionally mount-only — this is a one-shot "just arrived"
     // flash, not a live sync with any state that changes later.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2519,18 +2556,27 @@ export default function Jobs() {
               // Row-level pulse for the job we just arrived to highlight
               // (see the mount effect above) — plays twice then the
               // class stops being applied once highlightRowId clears.
+              // Device deep-links pulse every row still visible after the
+              // search-box narrowing instead of one exact id.
               getRowClassName={(params) =>
-                params.row.job_id === highlightRowId ? "tracenium-job-flash-row" : ""
+                params.row.job_id === highlightRowId ||
+                (highlightDeviceId && String(params.row.device_id || "") === highlightDeviceId)
+                  ? "tracenium-job-flash-row"
+                  : ""
               }
               onRowClick={(params) => selectRow(params.row)}
               pageSizeOptions={[10, 25, 50]}
               initialState={{
                 pagination: {
-                  // A fresh deep-linked job is virtually always the most
-                  // recent row (default sort is newest-first), but a
-                  // bigger first page removes any doubt it's visible
-                  // without the operator having to page through.
-                  paginationModel: { pageSize: initialFilters.highlightJobId ? 50 : 10, page: 0 },
+                  // A fresh deep-linked job (or device) is virtually always
+                  // among the most recent rows (default sort is
+                  // newest-first), but a bigger first page removes any
+                  // doubt it's visible without the operator having to page
+                  // through.
+                  paginationModel: {
+                    pageSize: (initialFilters.highlightJobId || initialFilters.highlightAgentId) ? 50 : 10,
+                    page: 0
+                  },
                 },
               }}
               columnVisibilityModel={columnVisibilityModel}

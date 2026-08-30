@@ -68,6 +68,7 @@ import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
 import { normalizePlatform, platformColor } from "../utils/platform";
 import { formatBytesToGb } from "../utils/format";
+import { updateSearchParams } from "../utils/browserState";
 import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
@@ -302,6 +303,7 @@ export default function AssetsDashboard({
   refreshNonce = 0,
   onNavigateToHardwareInventory,
   suppressEmptyStateOverlay = false,
+  onNavigate,
 }) {
   // ADR-0011 Phase 3: gate on the "assets_view" capability — the
   // backend routes exclusive to this tab (hardware/software inventory
@@ -671,6 +673,22 @@ export default function AssetsDashboard({
     setDecommissionConfirmation("");
     setDecommissionReason("");
   }, []);
+
+  // "More actions" on a device row — Patch Management / Remote Control /
+  // Jobs are plain links, not in-page actions: they hand the device off to
+  // the page that owns that workflow. `highlightAgentId` rides along in the
+  // URL so the destination flashes the matching record on arrival (each
+  // page reads and clears it on mount — see PatchManagement.jsx,
+  // RemoteControl.jsx and Jobs.jsx).
+  const navigateToDeviceAction = React.useCallback(
+    (pageKey, host) => {
+      const deviceId = getHostDeviceId(host);
+      if (!deviceId) return;
+      updateSearchParams({ highlightAgentId: deviceId });
+      onNavigate?.(pageKey);
+    },
+    [onNavigate]
+  );
 
   const closeDecommissionDialog = React.useCallback(() => {
     if (decommissionSubmitting) return;
@@ -1792,6 +1810,7 @@ const osVersionItems = React.useMemo(() => {
                   decommissionFadingIds={decommissionFadingDeviceIds}
                   onToggleDecommissionSelection={toggleHostForDecommission}
                   onDeleteDevice={openDecommissionDialog}
+                  onOpenInPage={navigateToDeviceAction}
                   onRowClick={handleAgentSelect}
                   loading={loading}
                   page={hostsPaginationModel.page}

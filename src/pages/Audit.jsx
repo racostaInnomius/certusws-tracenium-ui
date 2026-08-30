@@ -322,12 +322,12 @@ export default function Audit() {
     if (!canAccess) return;
     let cancelled = false;
     setLoadingTimeseries(true);
-    getAuditTimeseries(7)
+    getAuditTimeseries(7, lane)
       .then((v) => { if (!cancelled) setAuditTimeseries(v); })
       .catch(() => { if (!cancelled) setAuditTimeseries(null); })
       .finally(() => { if (!cancelled) setLoadingTimeseries(false); });
     return () => { cancelled = true; };
-  }, [canAccess]);
+  }, [canAccess, lane]);
 
   // Load the device catalog once so we can show hostnames instead of UUIDs.
   React.useEffect(() => {
@@ -860,6 +860,10 @@ export default function Audit() {
           (same shape it gets on the Overview page); we adapt here so
           the chart component stays untouched. */}
       <Box sx={{ mb: 2 }}>
+        {/* Por categoría, no por outcome: con un 98,4% de `ok` la pila por
+            resultado es una línea plana que ningún dato real puede mover.
+            Overview conserva el eje de outcome — ahí la tarjeta es una
+            entre muchas y la pregunta es "¿algo se está rechazando?". */}
         <AuditTimeseriesChart
           result={
             auditTimeseries
@@ -867,6 +871,8 @@ export default function Audit() {
               : null
           }
           loading={loadingTimeseries}
+          variant="category"
+          lane={lane}
         />
       </Box>
 

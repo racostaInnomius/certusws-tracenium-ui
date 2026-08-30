@@ -86,8 +86,12 @@ export async function getPluginCoverageDevices(plugin) {
 import { getComplianceSummary, getFleetComplianceTimeseries } from "./compliance";
 export { getComplianceSummary, getFleetComplianceTimeseries };
 
-export async function getAuditTimeseries(windowDays = 7) {
-  return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d`);
+export async function getAuditTimeseries(windowDays = 7, lane) {
+  // `lane` es opcional: Overview no lo manda y sigue viendo toda la
+  // actividad, la página de Audit sí para que la gráfica enseñe lo mismo
+  // que la tabla de debajo.
+  const laneQs = lane ? `&lane=${encodeURIComponent(lane)}` : "";
+  return httpGetJson(`/api/v1/security/audit/timeseries?window=${windowDays}d${laneQs}`);
 }
 
 export async function getJobsTimeseries(windowDays = 7) {

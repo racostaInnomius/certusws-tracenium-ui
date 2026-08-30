@@ -13,13 +13,35 @@
 // the SVG assertable; everything else comes from the real library.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 
 vi.mock("recharts", async () => {
   const actual = await vi.importActual("recharts");
-  const { cloneElement } = await import("react");
+  const { cloneElement, createElement } = await import("react");
+
+  // Bars with their enter animation OFF.
+  //
+  // These tests used to `waitFor` the <rect> that Recharts paints THROUGH
+  // that animation. In isolation it lands in ~2 s; under the full suite
+  // with four workers it does not, and three of them failed at 8.2-8.5 s —
+  // the asyncUtilTimeout — while passing on their own. A test that depends
+  // on how loaded the machine is fails for a reason that has nothing to do
+  // with the code.
+  //
+  // The fix is to remove the dependency, not to raise the timeout: waiting
+  // longer for an animation is still waiting for an animation. Nothing here
+  // is about the animation, so it is switched off and the geometry is read
+  // on the first commit.
+  //
+  // Object.assign copies Recharts' statics (displayName above all) —
+  // without them the chart does not recognise the child as a Bar and
+  // renders an empty plot.
+  const Bar = (props) => createElement(actual.Bar, { ...props, isAnimationActive: false });
+  Object.assign(Bar, actual.Bar);
+
   return {
     ...actual,
+    Bar,
     // What the real container does once it has measured: hand the chart an
     // explicit width and height. Here the measurement is skipped, not faked.
     ResponsiveContainer: ({ children }) =>
@@ -64,16 +86,11 @@ describe("JobsTimeseriesChart · variant", () => {
     expect(container.querySelector(".recharts-line")).toBeNull();
   });
 
-  it("stacks all three series on one column, failed on top", async () => {
+  it("stacks all three series on one column, failed on top", () => {
     const { container } = renderChart({ variant: "stacked" });
     const bars = [...container.querySelectorAll(".recharts-bar")];
     expect(bars).toHaveLength(3);
 
-    // Recharts paints the segments through its enter animation, so the <rect>
-    // inside each layer does not exist on the first commit.
-    await waitFor(() =>
-      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
-    );
 
     // Declaration order is bottom-to-top in a Recharts stack, and the layers
     // come out in that order. Asserted by fill because the dataKey does not
@@ -86,18 +103,15 @@ describe("JobsTimeseriesChart · variant", () => {
     expect(fills).toEqual([ROLE.positive, BRAND.cyanText, ROLE.critical]);
   });
 
-  it("drops the grid and the Y axis — the frame is what read as a spreadsheet", async () => {
+  it("drops the grid and the Y axis — the frame is what read as a spreadsheet", () => {
     const { container } = renderChart({ variant: "stacked" });
-    await waitFor(() =>
-      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
-    );
     expect(container.querySelector(".recharts-cartesian-grid")).toBeNull();
     expect(container.querySelector(".recharts-yAxis")).toBeNull();
     // The day labels stay: a stack with no x labels cannot be read at all.
     expect(container.querySelector(".recharts-xAxis")).toBeTruthy();
   });
 
-  it("keeps a one-job segment visible instead of subtracting it away", async () => {
+  it("keeps a one-job segment visible instead of subtracting it away", () => {
     // The gap between segments is carved out of each segment's own height, so
     // without a floor a single failure inside a big day would shrink to
     // nothing — the one segment that must never disappear.
@@ -116,10 +130,6 @@ describe("JobsTimeseriesChart · variant", () => {
         />
       </div>
     );
-    await waitFor(() =>
-      expect(container.querySelector(".recharts-bar-rectangle rect")).toBeTruthy()
-    );
-
     const failed = [...container.querySelectorAll(".recharts-bar-rectangle rect")].find(
       (r) => r.getAttribute("fill") === ROLE.critical
     );

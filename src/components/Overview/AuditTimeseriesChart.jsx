@@ -9,6 +9,7 @@
 // traffic dominates on a healthy day; rejected/error visually stick out
 // as red/amber, which is exactly the at-a-glance signal a CISO wants.
 
+import * as React from "react";
 import { useEffect, useState } from "react";
 import { Paper, Typography, Box, Skeleton, Stack } from "@mui/material";
 import {
@@ -22,6 +23,7 @@ import {
   Legend
 } from "recharts";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { CHART_CATEGORICAL } from "../../theme/chartPalette";
 import { getAuditTimeseries } from "../../api/overview";
 import WindowToggle from "./WindowToggle";
 
@@ -38,7 +40,28 @@ function formatDay(isoDate) {
   });
 }
 
-export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
+export default function AuditTimeseriesChart({
+  result,
+  loading,
+  onNavigate,
+  // "outcome" (por defecto) | "category".
+  //
+  // Overview sigue apilando por outcome: ahí la tarjeta es una entre
+  // muchas y la pregunta es "¿algo se está rechazando?".
+  //
+  // En la página de Audit ese eje no sirve. Medido en la control DB el
+  // 2026-08-27: el 98,4% de los eventos son `ok`, así que la serie es una
+  // línea plana que ningún dato real puede mover. Por categoría —Policy,
+  // Identity, Devices & PKI…— un pico significa algo.
+  //
+  // Las categorías NO se listan aquí: llegan como claves dentro de cada
+  // bucket. Una familia nueva en el backend aparece en la gráfica sin
+  // tocar este fichero, que es lo contrario de lo que pasó con
+  // SOURCE_LABEL y VALID_SOURCES.
+  variant = "outcome",
+  // El carril, para que la gráfica enseñe lo mismo que la tabla de abajo.
+  lane,
+}) {
   // The parent always fetches 7d into `result`. When the user toggles
   // the window we override with our own fetch; while that's inflight
   // we show a skeleton. Toggling back to 7d drops the override and
@@ -67,7 +90,7 @@ export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
     }
     let cancelled = false;
     setToggling(true);
-    getAuditTimeseries(windowDays)
+    getAuditTimeseries(windowDays, lane)
       .then((v) => {
         if (!cancelled) setOverride(v);
       })
@@ -80,19 +103,42 @@ export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
     return () => {
       cancelled = true;
     };
-  }, [windowDays, parentWindow]);
+  }, [windowDays, parentWindow, lane]);
 
   const value = override ?? parentValue;
   const buckets = Array.isArray(value?.buckets) ? value.buckets : [];
-  const hasData = buckets.some(
-    (b) => (b.ok ?? 0) + (b.rejected ?? 0) + (b.error ?? 0) > 0
-  );
+  const byCategory = variant === "category";
+
+  // Las series salen de los datos, no de una lista local. Se recorren
+  // TODOS los buckets y no sólo el primero: una categoría que sólo
+  // aparece el día 6 tiene que salir igual, y mirar sólo el primer día es
+  // la forma silenciosa de perderla.
+  //
+  // Se descartan las que están a cero en toda la ventana — con ~50
+  // acciones al mes, la mitad de las familias no tiene nada, y una
+  // leyenda con seis entradas de las que cuatro son invisibles miente
+  // sobre lo que hay.
+  const series = React.useMemo(() => {
+    if (!byCategory) return null;
+    const totals = new Map();
+    for (const b of buckets) {
+      for (const [name, n] of Object.entries(b.categories || {})) {
+        totals.set(name, (totals.get(name) || 0) + Number(n || 0));
+      }
+    }
+    return [...totals.entries()].filter(([, n]) => n > 0).map(([name]) => name);
+  }, [buckets, byCategory]);
+
+  const hasData = byCategory
+    ? buckets.some((b) => Object.values(b.categories || {}).some((n) => Number(n) > 0))
+    : buckets.some((b) => (b.ok ?? 0) + (b.rejected ?? 0) + (b.error ?? 0) > 0);
 
   const data = buckets.map((b) => ({
     day: formatDay(b.bucket),
     ok: b.ok ?? 0,
     rejected: b.rejected ?? 0,
-    error: b.error ?? 0
+    error: b.error ?? 0,
+    ...(b.categories || {})
   }));
 
   const effectiveLoading = loading || toggling;
@@ -129,7 +175,7 @@ export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
           variant="subtitle2"
           sx={{ color: BRAND.dark, fontWeight: 700 }}
         >
-          Audit events — last {windowDays} day{windowDays === 1 ? "" : "s"}
+          {byCategory ? "Activity by area" : "Audit events"} — last {windowDays} day{windowDays === 1 ? "" : "s"}
         </Typography>
         <WindowToggle
           value={windowDays}
@@ -180,9 +226,24 @@ export default function AuditTimeseriesChart({ result, loading, onNavigate }) {
                 wrapperStyle={{ fontSize: TEXT.sm, color: BRAND.dark }}
                 iconType="circle"
               />
-              <Bar dataKey="ok"       name="OK"       stackId="events" fill={ROLE.positive} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="rejected" name="Rejected" stackId="events" fill={ROLE.caution}  radius={[0, 0, 0, 0]} />
-              <Bar dataKey="error"    name="Error"    stackId="events" fill={ROLE.critical} radius={[4, 4, 0, 0]} />
+              {byCategory ? (
+                series.map((name, i) => (
+                  <Bar
+                    key={name}
+                    dataKey={name}
+                    name={name}
+                    stackId="events"
+                    fill={CHART_CATEGORICAL[i % CHART_CATEGORICAL.length]}
+                    radius={i === series.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))
+              ) : (
+                <>
+                  <Bar dataKey="ok"       name="OK"       stackId="events" fill={ROLE.positive} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="rejected" name="Rejected" stackId="events" fill={ROLE.caution}  radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="error"    name="Error"    stackId="events" fill={ROLE.critical} radius={[4, 4, 0, 0]} />
+                </>
+              )}
             </BarChart>
           </ResponsiveContainer>
         </Box>

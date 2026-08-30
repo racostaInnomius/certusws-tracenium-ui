@@ -58,7 +58,7 @@ const TAB_SX = {
   "&.Mui-selected": { color: BRAND.dark },
 };
 
-export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false }) {
+export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false, onNavigate }) {
   const [activeTab, setActiveTab] = React.useState(0);
   // Set right before jumping to the Hardware Inventory tab from a
   // Dashboard "OS versions" row click, so that tab's search box opens
@@ -190,6 +190,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
           refreshNonce={refreshNonce}
           onNavigateToHardwareInventory={navigateToHardwareInventory}
           suppressEmptyStateOverlay={suppressEmptyStateOverlay}
+          onNavigate={onNavigate}
         />
       </TabPanel>
 
