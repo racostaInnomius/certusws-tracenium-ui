@@ -1347,12 +1347,18 @@ const osVersionItems = React.useMemo(() => {
     [agentVersions]
   );
 
-  // KPI values derived from the loaded data. `onlineCount` is the
-  // intersection of connected IDs and the raw hosts list so a
-  // connected device that isn't in the dashboard/hosts response
-  // (shouldn't happen, but belt-and-suspenders) doesn't inflate the
-  // number. OS-platform + agent-version cardinality come straight
-  // from the summary + hosts aggregates.
+  // KPI values derived from the loaded data. `onlineCount` used to be
+  // the intersection of connectedIds and the raw `hosts` list — but
+  // `hosts` is the paginated `/dashboard/hosts` page (default 25 rows),
+  // not the tenant's full roster, so the tile only ever counted online
+  // devices that happened to be on the currently-loaded page. Same
+  // page-scoped-tally bug the `byVersion` donut had (see comment above)
+  // — 8 vs. an operator's manual ~26 on a >25-host tenant is exactly
+  // this. `connectedIds` itself already comes from a live,
+  // tenant-scoped, unpaginated backend query (device-liveness.ts), so
+  // it's the correct count as-is; no intersection needed.
+  // OS-platform + agent-version cardinality come straight from the
+  // summary + hosts aggregates.
   const kpis = React.useMemo(() => {
     const activeHosts = Number(summary?.activeHosts ?? hosts.length ?? 0);
     const versionSet = new Set(
@@ -1360,10 +1366,7 @@ const osVersionItems = React.useMemo(() => {
         .map((h) => String(h.agent_version || "").trim())
         .filter(Boolean)
     );
-    const onlineCount = hosts.reduce(
-      (acc, h) => acc + (connectedIds.has(String(h.agent_id)) ? 1 : 0),
-      0
-    );
+    const onlineCount = connectedIds.size;
     return {
       activeHosts,
       onlineCount,
