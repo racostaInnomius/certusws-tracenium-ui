@@ -255,33 +255,17 @@ export default function Overview() {
         />
       </Box>
 
-      {/* Row 2 — Attention + Audit timeseries (side by side on md+) */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, md: 5 }}>
-          <AttentionPanel
-            results={results}
-            onNavigate={navigateWithQuery}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Suspense fallback={<ChartSlot height={320} />}>
-            <AuditTimeseriesChart
-              result={results?.auditTimeseries}
-              loading={loading}
-              onNavigate={navigateWithQuery}
-            />
-          </Suspense>
-        </Grid>
-      </Grid>
-
-      {/* Row 3 — Fleet composition (3 donuts, md:8) + Latest alerts
-          (md:4). Previously the right column stacked LatestAlerts ON
-          TOP OF PluginCoverageStrip which made it ~280px taller than
-          the three compact donuts on the left — the mismatch showed up
-          as an ugly empty band under the donuts. PluginCoverageStrip
-          has moved down next to the Jobs chart (Row 4) so both rows
-          have balanced heights and the dashboard reads as a tight
-          grid instead of a misaligned patchwork. */}
+      {/* Row 2 — Fleet composition (3 donuts, md:8: OS Platform, Agent
+          Versions, Patch Coverage) + Plugin coverage (md:4). Moved above
+          Attention/Audit — these are the cards operators want first, so
+          they sit higher than the timeseries below.
+          Previously the right column stacked LatestAlerts ON TOP OF
+          PluginCoverageStrip which made it ~280px taller than the three
+          compact donuts on the left — the mismatch showed up as an ugly
+          empty band under the donuts. PluginCoverageStrip has moved down
+          next to the Jobs chart (Row 4) so both rows have balanced
+          heights and the dashboard reads as a tight grid instead of a
+          misaligned patchwork. */}
       <Grid container spacing={2} sx={{ mb: 2 }} alignItems="stretch">
         <Grid size={{ xs: 12, md: 8 }}>
           <Suspense fallback={<ChartSlot height={360} />}>
@@ -305,6 +289,25 @@ export default function Overview() {
             result={results?.pluginCoverage}
             loading={loading}
           />
+        </Grid>
+      </Grid>
+
+      {/* Row 3 — Attention + Audit timeseries (side by side on md+) */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <AttentionPanel
+            results={results}
+            onNavigate={navigateWithQuery}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Suspense fallback={<ChartSlot height={320} />}>
+            <AuditTimeseriesChart
+              result={results?.auditTimeseries}
+              loading={loading}
+              onNavigate={navigateWithQuery}
+            />
+          </Suspense>
         </Grid>
       </Grid>
 
