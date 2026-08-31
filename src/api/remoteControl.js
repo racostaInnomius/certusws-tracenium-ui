@@ -39,8 +39,17 @@ export async function getRemoteSessions(params = {}) {
 //
 // Error envelopes (HTTP 4xx) carry { error, message }. The UI maps
 // them to friendly toasts in pages/RemoteControl.jsx:handleConnect.
-export async function startRemoteSession({ deviceId, type }) {
-  return httpPostJson(`${BASE}/sessions`, { deviceId, type });
+// ADR-0009 fase 1 — `reason` y `ticketRef` son obligatorios. El backend
+// responde 400 REASON_REQUIRED / TICKET_REF_REQUIRED si faltan, y NO
+// llega a abrir la sesión.
+export async function startRemoteSession({ deviceId, type, reason, ticketRef }) {
+  return httpPostJson(`${BASE}/sessions`, { deviceId, type, reason, ticketRef });
+}
+
+// El expediente: quién ha entrado, a qué y por qué. Cubre todas las
+// capacidades, no solo las de RCP.
+export async function listAccessRequests(params = {}) {
+  return httpGetJson(`${BASE}/access-requests${buildQuery(params)}`);
 }
 
 // M2.S1 — list file transfer audit records for a session.

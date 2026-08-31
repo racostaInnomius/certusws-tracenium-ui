@@ -14,12 +14,18 @@
 import * as React from "react";
 import {
   Box,
+  Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
   Grid,
   Paper,
   Skeleton,
   Stack,
+  TextField,
   Typography
 } from "@mui/material";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -128,6 +134,78 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
 
 // ---------- page ------------------------------------------------------------
 
+/**
+ * Pide el expediente antes de abrir una sesion privilegiada.
+ *
+ * ADR-0009 fase 1. El backend rechaza con 400 si falta cualquiera de los
+ * dos, asi que validar aqui no es duplicar: es evitarle al operador un
+ * viaje de ida y vuelta en mitad de una incidencia.
+ *
+ * El minimo de 10 caracteres del motivo no es celo: esta fase existe
+ * para RECOGER el dato con el que se decidira que capacidades exigiran
+ * vistobueno, y un expediente lleno de "x" calibraria esa politica sobre
+ * ruido.
+ */
+function ExpedienteDialog({ pending, onCancel, onConfirm }) {
+  const [reason, setReason] = React.useState("");
+  const [ticketRef, setTicketRef] = React.useState("");
+
+  React.useEffect(() => {
+    if (pending) {
+      setReason("");
+      setTicketRef("");
+    }
+  }, [pending]);
+
+  const reasonOk = reason.trim().length >= 10;
+  const ticketOk = ticketRef.trim().length >= 3;
+
+  return (
+    <Dialog open={Boolean(pending)} onClose={onCancel} maxWidth="sm" fullWidth>
+      <DialogTitle>Acceso a {pending?.device?.hostname || pending?.device?.deviceId}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
+          Queda registrado quien accede, a que equipo y por que. Se guarda junto a la sesion.
+        </Typography>
+        <TextField
+          autoFocus
+          fullWidth
+          multiline
+          minRows={2}
+          margin="dense"
+          label="Motivo"
+          placeholder="Que se va a hacer y por que hace falta este acceso"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          error={reason.length > 0 && !reasonOk}
+          helperText={
+            reason.length > 0 && !reasonOk ? "Describe el motivo (minimo 10 caracteres)" : " "
+          }
+        />
+        <TextField
+          fullWidth
+          margin="dense"
+          label="Ticket"
+          placeholder="TCK-4821, INC0012345, jira/OPS-77…"
+          value={ticketRef}
+          onChange={(e) => setTicketRef(e.target.value)}
+          helperText="El ticket bajo el que se realiza el acceso"
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onCancel}>Cancelar</Button>
+        <Button
+          variant="contained"
+          disabled={!reasonOk || !ticketOk}
+          onClick={() => onConfirm({ reason: reason.trim(), ticketRef: ticketRef.trim() })}
+        >
+          Conectar
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function RemoteControl() {
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
 
@@ -211,6 +289,10 @@ export default function RemoteControl() {
   // transcript itself.
   const [replaySession, setReplaySession] = React.useState(null);
 
+  // ADR-0009 fase 1 — expediente pendiente. `null` = no hay dialogo
+  // abierto; { device, type } = esperando motivo y ticket.
+  const [expedienteFor, setExpedienteFor] = React.useState(null);
+
   /**
    * Click handler for Connect buttons in the ConnectablesTable.
    * Calls POST /sessions; on success opens the appropriate drawer:
@@ -225,9 +307,26 @@ export default function RemoteControl() {
    *   - 429 / RCP_TOO_MANY_SESSIONS       — concurrency cap hit
    *   - 403 / FORBIDDEN                   — caller lacks ADMIN/OWNER here
    */
-  const handleConnect = async (device, type = "shell") => {
+  /**
+   * ADR-0009 fase 1 — el expediente se pide ANTES de conectar.
+   *
+   * No es un paso decorativo: `reason` y `ticketRef` quedan escritos
+   * junto a la sesión, y son los datos con los que se calibrará qué
+   * capacidades exigirán vistobueno en la fase 2. Pedirlos después de
+   * abrir la sesión los convertiría en opcionales de hecho.
+   */
+  const handleConnect = (device, type = "shell") => {
+    setExpedienteFor({ device, type });
+  };
+
+  const doConnect = async (device, type, expediente) => {
     try {
-      const res = await startRemoteSession({ deviceId: device.deviceId, type });
+      const res = await startRemoteSession({
+        deviceId: device.deviceId,
+        type,
+        reason: expediente.reason,
+        ticketRef: expediente.ticketRef
+      });
       if (!res?.ok) {
         notify("error", res?.message || "Failed to start session");
         return;
@@ -523,6 +622,15 @@ export default function RemoteControl() {
           </Box>
         ) : null}
       </Drawer>
+      <ExpedienteDialog
+        pending={expedienteFor}
+        onCancel={() => setExpedienteFor(null)}
+        onConfirm={(expediente) => {
+          const pend = expedienteFor;
+          setExpedienteFor(null);
+          if (pend) doConnect(pend.device, pend.type, expediente);
+        }}
+      />
     </Box>
   );
 }
