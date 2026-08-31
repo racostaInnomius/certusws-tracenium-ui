@@ -68,6 +68,7 @@ import {
   listCdpCertificates,
   listCdpDevices,
   listCdpDeviceCertificates,
+  listCdpTrustAnchors,
 } from "../api/cdp";
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -678,6 +679,136 @@ function CdpDeviceDrawerContent({ agentId, host }) {
   );
 }
 
+
+/**
+ * Anclas de confianza.
+ *
+ * Un ancla es una CA en la que el equipo CREE: todo lo que firme se
+ * acepta. Es lo mas sensible que inventaria CDP, y hasta ahora un
+ * hallazgo sobre anclas solo aparecia como una linea en el feed de
+ * alertas, que es efimero. Aqui el administrador las ve todas.
+ *
+ * Solo lectura a proposito. Quitar la confianza a una raiz es una
+ * capacidad de ESCRITURA con alcance de flota —desconfiar de la CA
+ * equivocada rompe TLS en todos los equipos a la vez— y tiene su propia
+ * puerta en ADR-0011 decision 10. Un boton aqui seria saltarsela.
+ */
+function CdpTrustAnchorsTab({ refreshNonce }) {
+  const [loadError, setLoadError] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [data, setData] = React.useState({ items: [], counts: {} });
+  const [onlyFindings, setOnlyFindings] = React.useState(true);
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    listCdpTrustAnchors()
+      .then((resp) => { if (alive) { setData(resp || { items: [], counts: {} }); setLoadError(null); } })
+      .catch((err) => { if (alive) setLoadError(err?.message || "No se pudieron cargar las anclas"); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [refreshNonce]);
+
+  const counts = data.counts || {};
+  const isFinding = (r) =>
+    Boolean(r.distrusted) ||
+    (r.actionable && r.novelDeviceCount > 0 && r.novelDeviceCount * 2 <= r.deviceCount);
+
+  const rows = (data.items || [])
+    .filter((r) => (onlyFindings ? isFinding(r) : true))
+    .map((r) => ({ id: r.fingerprint256, ...r }));
+
+  const columns = [
+    {
+      field: "subjectCN",
+      headerName: "Autoridad certificadora",
+      flex: 2,
+      minWidth: 260,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+          <Typography variant="body2" noWrap sx={{ fontWeight: params.row.distrusted ? 600 : 400 }}>
+            {params.row.subjectCN || "(sin nombre)"}
+          </Typography>
+          {params.row.distrusted && (
+            <Chip size="small" label="Desconfiada" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error }} />
+          )}
+          {!params.row.actionable && (
+            <Chip size="small" variant="outlined" label="Bundle del fabricante" />
+          )}
+        </Box>
+      ),
+    },
+    {
+      field: "deviceCount",
+      headerName: "Equipos",
+      width: 110,
+      renderCell: (params) =>
+        params.row.novelDeviceCount > 0
+          ? `${params.row.deviceCount} (${params.row.novelDeviceCount} nueva)`
+          : params.row.deviceCount,
+    },
+    { field: "signatureAlgorithm", headerName: "Firma", width: 170 },
+    {
+      field: "distrusted",
+      headerName: "Por que importa",
+      flex: 3,
+      minWidth: 300,
+      renderCell: (params) =>
+        params.row.distrusted ? (
+          <Typography variant="caption" sx={{ color: BRAND.alert.error }}>
+            {params.row.distrusted}
+          </Typography>
+        ) : params.row.novelDeviceCount > 0 ? (
+          <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+            Aparecio en {params.row.novelDeviceCount} de {params.row.deviceCount} equipos despues
+            de que ya estuvieran inventariados
+          </Typography>
+        ) : null,
+    },
+  ];
+
+  return (
+    <Box>
+      {loadError && <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert>}
+
+      <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
+        <Typography variant="body2" sx={{ color: BRAND.textMuted }}>
+          {counts.total ?? 0} anclas · <strong>{counts.distrusted ?? 0}</strong> desconfiadas ·{" "}
+          {counts.novel ?? 0} aparecidas en una minoria de equipos
+        </Typography>
+        <Button size="small" variant="outlined" onClick={() => setOnlyFindings((v) => !v)}>
+          {onlyFindings ? "Ver todas" : "Ver solo hallazgos"}
+        </Button>
+      </Box>
+
+      {/*
+        Se explica por que hay anclas que no son accionables, en vez de
+        esconderlas: en el bundle que envia Apple conviven a proposito CAs
+        que Apple ya desconfia, y la confianza real vive en trust settings
+        que no recolectamos. Ocultarlas dejaria al administrador buscando
+        una CA que sabe que esta ahi.
+      */}
+      {(counts.vendorBundleOnly ?? 0) > 0 && !onlyFindings && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {counts.vendorBundleOnly} anclas aparecen solo en bundles que envia el fabricante
+          (el llavero de raices de Apple, o el <code>cacerts</code> de una JVM). Ahi la presencia
+          no significa confianza: el sistema operativo las trae y decide su estado por separado.
+        </Alert>
+      )}
+
+      <Box sx={{ height: 560 }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          loading={loading}
+          disableRowSelectionOnClick
+          initialState={{ sorting: { sortModel: [{ field: "deviceCount", sort: "desc" }] } }}
+        />
+      </Box>
+    </Box>
+  );
+}
+
 function CdpDevicesTab({ refreshNonce }) {
   const [loadError, setLoadError] = React.useState(null);
   const [rows, setRows] = React.useState([]);
@@ -869,6 +1000,7 @@ export default function CryptoDiscovery() {
         <Tab label="Post-quantum" />
         <Tab label="Certificates" />
         <Tab label="Devices" />
+        <Tab label="Trust anchors" />
       </Tabs>
 
       <TabPanel value={tab} index={0}>
@@ -886,6 +1018,9 @@ export default function CryptoDiscovery() {
       </TabPanel>
       <TabPanel value={tab} index={3}>
         <CdpDevicesTab refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={4}>
+        <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
       </TabPanel>
     </Box>
   );
