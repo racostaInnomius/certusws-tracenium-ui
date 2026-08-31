@@ -45,6 +45,10 @@ function row(over = {}) {
     billable: true,
     devices: 49,
     maxDevices: 55,
+    outstandingCents: 0,
+    outstandingCurrency: null,
+    outstandingInvoices: 0,
+    daysOverdue: 0,
     ...over,
   };
 }
@@ -137,6 +141,42 @@ describe("lo que la tabla distingue", () => {
     expect(screen.queryByText("Up to date")).toBeNull();
     expect(screen.getByText("Not billed")).toBeTruthy();
     expect(screen.getByText("granted, never charged")).toBeTruthy();
+  });
+
+  it("la DEUDA manda sobre el estado de Stripe", async () => {
+    // ⚠️ Segunda vez que esta columna podía mentir por la misma razón. Un
+    // tenant que no pagó agosto y sí septiembre vuelve a `active` —la
+    // suscripción no recuerda ciclos— así que el estado diría "Up to date" con
+    // un mes entero sin cobrar. Es justo el cliente que hay que ver aquí.
+    serve([
+      row({
+        status: "active",
+        hasStripeSubscription: true,
+        outstandingCents: 55_400,
+        outstandingCurrency: "usd",
+        outstandingInvoices: 1,
+        daysOverdue: 40,
+      }),
+    ]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.queryByText("Up to date")).toBeNull();
+    expect(screen.getByText(/Owes/)).toBeTruthy();
+    expect(screen.getByText(/40d overdue/)).toBeTruthy();
+  });
+
+  it("cuenta al moroso silencioso entre los que necesitan atención", async () => {
+    // Sin esto sería el único impago que no aparece en el contador, porque su
+    // `status` es idéntico al de un cliente al día.
+    serve([
+      row({ tenantId: "1", status: "active", outstandingCents: 20_000, outstandingInvoices: 1, daysOverdue: 30 }),
+      row({ tenantId: "2" }),
+    ]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.getByText("1 need attention")).toBeTruthy();
   });
 
   it("un tenant sin flota posible no es facturable ni se le puede conceder", async () => {

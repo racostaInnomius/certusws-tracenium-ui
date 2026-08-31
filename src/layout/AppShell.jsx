@@ -36,6 +36,7 @@ const TenantsAdministrator = React.lazy(() => import("../pages/TenantsAdministra
 
 import { renderPage } from "./pageRegistry";
 import LicenseBlockedScreen from "../components/Licensing/LicenseBlockedScreen";
+import PaymentDueBanner from "../components/Licensing/PaymentDueBanner";
 import { getLicenseState } from "../api/licensing";
 
 
@@ -1249,6 +1250,16 @@ export default function AppShell() {
                   userSelect: shouldShowNoInformationOverlay ? "none" : "auto",
                 }}
               >
+                {/* La deuda, mientras la consola todavía funciona. Va DENTRO
+                    del main y por encima del contenido para que acompañe a
+                    cualquier página: el correo del rechazo lo recibe quien
+                    figura como OWNER, que no siempre es quien está aquí.
+                    Desaparece solo al pagar — se deriva de las facturas
+                    abiertas, no de un flag que alguien tenga que apagar. */}
+                {!mspResolving && !inPortfolioMode && !showLicenseBlock && licenseState?.payment ? (
+                  <PaymentDueBanner payment={licenseState.payment} onNavigate={handleSelect} />
+                ) : null}
+
                 {mspResolving ? (
                   <PageFallback />
                 ) : inPortfolioMode ? (

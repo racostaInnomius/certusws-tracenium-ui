@@ -41,8 +41,9 @@ import {
   pricesFrom, currencyOf, estimateTotal, classifyChange, statusNotice,
 } from "./billingModel";
 
-const money = (cents, currency = "usd") =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency }).format((cents ?? 0) / 100);
+import { formatMoney } from "./money";
+
+const money = (cents, currency = "usd") => formatMoney(cents, currency);
 
 export default function Billing() {
   const [loading, setLoading] = useState(true);

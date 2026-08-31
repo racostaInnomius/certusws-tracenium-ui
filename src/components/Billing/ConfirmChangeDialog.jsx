@@ -18,8 +18,9 @@ import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { BRAND, ICON } from "../../theme/brand";
 import { LINES, LINE_LABELS, TIER_LABELS, INTERVAL_LABELS } from "./billingModel";
 
-const money = (cents, currency = "usd") =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency }).format((cents ?? 0) / 100);
+import { formatMoney } from "./money";
+
+const money = (cents, currency = "usd") => formatMoney(cents, currency);
 
 const describe = (sel) =>
   sel ? `${TIER_LABELS[sel.tier] ?? sel.tier} × ${sel.quantity}` : "not subscribed";

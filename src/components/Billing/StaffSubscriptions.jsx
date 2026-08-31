@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import CardMembershipOutlinedIcon from "@mui/icons-material/CardMembershipOutlined";
 import { httpGetJson, httpPostJson } from "../../api/http";
+import { formatMoney } from "./money";
 import { BRAND } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 
@@ -71,6 +72,24 @@ function paymentView(row) {
       note: row.status === "active" ? "granted, never charged" : `local status: ${row.status}`,
     };
   }
+  // ⚠️ LA DEUDA MANDA SOBRE EL ESTADO, y es la segunda vez que esta columna
+  // podía mentir por la misma razón: presentar un valor que no es un hecho de
+  // cobro como si lo fuera.
+  //
+  // Un tenant que no pagó agosto y sí septiembre vuelve a `active` en Stripe —la
+  // suscripción no recuerda ciclos— así que el estado diría "Up to date" con un
+  // mes entero sin cobrar. Las facturas abiertas sí lo recuerdan, y son lo que
+  // esta pantalla existe para poder ver.
+  if (row.outstandingCents > 0) {
+    return {
+      label: `Owes ${formatMoney(row.outstandingCents, row.outstandingCurrency)}`,
+      tone: row.daysOverdue >= 14 ? "error" : "warning",
+      note:
+        `${row.outstandingInvoices} unpaid ` +
+        `${row.outstandingInvoices === 1 ? "invoice" : "invoices"} · ${row.daysOverdue}d overdue`,
+    };
+  }
+
   const view = STATUS_VIEW[row.status] ?? { label: row.status, tone: "default" };
   return { ...view, note: null };
 }
@@ -154,8 +173,15 @@ export default function StaffSubscriptions() {
       notBillable: rows.length - billable.length,
       // Atención = problema de cobro REAL sobre una suscripción que existe.
       // Un tenant sin suscripción no tiene un pago fallido, tiene otra cosa.
+      //
+      // La deuda cuenta aunque el estado sea `active`: es el que pagó el mes en
+      // curso arrastrando el anterior, y sin esto sería el único caso de
+      // impago que no aparece en el contador.
       attention: billed.filter(
-        (r) => !["active", "trialing"].includes(r.status) || (r.graceDaysLeft ?? 99) <= 5
+        (r) =>
+          r.outstandingCents > 0 ||
+          !["active", "trialing"].includes(r.status) ||
+          (r.graceDaysLeft ?? 99) <= 5
       ).length,
     };
   }, [rows]);

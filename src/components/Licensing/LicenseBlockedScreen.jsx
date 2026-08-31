@@ -24,6 +24,7 @@ import {
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { acceptLicenseAdjustment } from "../../api/licensing";
+import { formatMoney } from "../Billing/money";
 
 function formatDate(iso) {
   if (!iso) return "";
@@ -38,16 +39,22 @@ export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) 
   const [error, setError] = React.useState("");
   const [needsAdmin, setNeedsAdmin] = React.useState(false);
 
-  // ⚠️ EL BLOQUEO TIENE DOS MOTIVOS Y NO SE ARREGLAN IGUAL.
+  // ⚠️ EL BLOQUEO TIENE TRES MOTIVOS Y NO SE ARREGLAN IGUAL.
   //
-  // Uno es un ajuste de licencias sin responder (ADR-0005 D6): se resuelve con
-  // un clic o borrando equipos. El otro es una prueba que venció sin que nadie
-  // contratara (ADR-0010): sólo se resuelve pagando.
+  //   · ajuste de licencias sin responder (ADR-0005 D6) -> un clic, o borrar
+  //     equipos;
+  //   · prueba vencida sin contratar (ADR-0010)          -> elegir un plan;
+  //   · factura vencida (ADR-0010)                       -> pagar ESA factura.
   //
-  // Enseñar "ajusta tus licencias" a quien lo que tiene es una prueba vencida
-  // lo manda a arreglar algo que no está roto — y el sitio donde SÍ puede
-  // arreglarlo ni siquiera aparece.
+  // El tercero no se resuelve en la pantalla de Billing: ahí se contrata el
+  // ciclo vivo, no se reabre uno pasado. La deuda se salda en el enlace que
+  // sirve Stripe, y por eso este caso es el único que manda fuera del portal.
+  //
+  // Enseñar el mensaje equivocado manda al cliente a arreglar algo que no está
+  // roto, y el sitio donde SÍ puede arreglarlo ni siquiera aparece.
+  const paymentOverdue = state?.blockReason === "payment_overdue";
   const trialExpired = state?.blockReason === "trial_expired";
+  const payment = state?.payment ?? null;
   const adj = state?.adjustment ?? null;
   const previous = adj?.previousMaxDevices ?? state?.maxDevices ?? 0;
   const proposed = adj?.proposedMaxDevices ?? state?.used ?? 0;
@@ -117,17 +124,87 @@ export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) 
             </Box>
             <Box>
               <Typography variant="h6" sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.2 }}>
-                {trialExpired ? "Your trial has ended" : "Your license needs attention"}
+                {paymentOverdue
+                  ? "Your account has an unpaid balance"
+                  : trialExpired
+                  ? "Your trial has ended"
+                  : "Your license needs attention"}
               </Typography>
               <Typography variant="body2" sx={{ color: BRAND.tealText }}>
-                {trialExpired
+                {paymentOverdue
+                  ? "The console is paused until the balance is settled."
+                  : trialExpired
                   ? "The console is paused until you choose a plan."
                   : "The console is paused until this is resolved."}
               </Typography>
             </Box>
           </Stack>
 
-          {trialExpired ? (
+          {paymentOverdue ? (
+            <>
+              <Typography variant="body2" sx={{ color: BRAND.dark }}>
+                There {payment?.invoiceCount === 1 ? "is" : "are"}{" "}
+                <strong>{payment?.invoiceCount ?? 1}</strong> unpaid{" "}
+                {payment?.invoiceCount === 1 ? "invoice" : "invoices"} totalling{" "}
+                <strong>{formatMoney(payment?.outstandingCents, payment?.currency)}</strong>
+                {payment?.limitedOn ? `, overdue since ${formatDate(payment.limitedOn)}` : ""}.
+                Your devices stay enrolled and keep reporting their inventory — nothing
+                has been deleted.
+              </Typography>
+
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: BRAND.tealSoft,
+                  border: `1px solid ${BRAND.border}`,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600, mb: 0.5 }}>
+                  Paying restores access immediately
+                </Typography>
+                <Typography variant="caption" sx={{ color: BRAND.tealText, display: "block" }}>
+                  {/* No hay job que "levantar": el bloqueo se deriva de las
+                      facturas abiertas, así que en cuanto Stripe marca la
+                      factura pagada, la siguiente carga de la consola ya no
+                      bloquea. Decirlo evita la llamada de "he pagado, ¿cuánto
+                      tarda?". */}
+                  The console unlocks on your next page load once the payment clears — there's
+                  nothing else to do and nothing to set up again.
+                </Typography>
+              </Box>
+
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                {/* ⚠️ Sale del portal a propósito. Una factura VENCIDA se salda
+                    en la página que sirve Stripe; nuestra pantalla de Billing
+                    cobra el ciclo vivo y no reabre uno pasado, así que mandar
+                    ahí sería mandar a un sitio donde no se puede hacer. */}
+                {payment?.payUrl ? (
+                  <Button
+                    variant="contained"
+                    component="a"
+                    href={payment.payUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+                  >
+                    Pay the outstanding invoice
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    onClick={() => onNavigate?.("billing")}
+                    sx={{ backgroundColor: BRAND.teal, "&:hover": { backgroundColor: BRAND.tealText } }}
+                  >
+                    Go to Billing
+                  </Button>
+                )}
+                <Button variant="outlined" onClick={() => onNavigate?.("billing")}>
+                  Billing settings
+                </Button>
+              </Stack>
+            </>
+          ) : trialExpired ? (
             <>
               <Typography variant="body2" sx={{ color: BRAND.dark }}>
                 Your {formatDate(state?.trialEndedAt)} trial has finished. Your devices
