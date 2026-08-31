@@ -62,6 +62,7 @@ import RefreshControl, { useAutoRefresh } from "../components/common/RefreshCont
 import JobTracker from "../components/common/JobTracker";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import { getTenantPolicy } from "../api/policies";
 import {
@@ -395,7 +396,10 @@ export default function PatchManagement({ onNavigate }) {
   const activeCategory = CATEGORIES.find((c) => c.key === tab) ?? CATEGORIES[0];
 
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
 
   // Which finding the queue asked us to open, cleared once the panel has it.
   const [pendingCheckId, setPendingCheckId] = React.useState(null);

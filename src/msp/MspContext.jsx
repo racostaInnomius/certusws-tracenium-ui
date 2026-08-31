@@ -183,3 +183,16 @@ export function useMsp() {
   if (!ctx) throw new Error("useMsp must be used inside MspProvider");
   return ctx;
 }
+
+/**
+ * Same context, but `null` instead of a throw when there is no provider.
+ *
+ * `useMsp` throwing is right for the portfolio UI, which is meaningless
+ * without the provider. It is wrong for shared plumbing like
+ * `useEffectiveTenantId`, which every page calls: the page tests mount pages
+ * standalone with only AuthContext mocked, and a throw there would force every
+ * one of them to wrap in an MspProvider to test something unrelated to MSP.
+ */
+export function useMspOptional() {
+  return React.useContext(MspContext);
+}

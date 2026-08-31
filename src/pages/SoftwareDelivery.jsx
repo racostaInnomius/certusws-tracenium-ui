@@ -25,6 +25,7 @@ import { useAuthContext } from "../auth/AuthContext";
 import { getMyCapabilities } from "../api/roles";
 import { getTenantPolicy } from "../api/policies";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 import CatalogTab from "../components/software-delivery/CatalogTab";
 import DeploymentsTab from "../components/software-delivery/DeploymentsTab";
@@ -56,7 +57,11 @@ const TAB_SX = {
 
 export default function SoftwareDelivery() {
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId`. While the operator navigates the vendor/MSP
+  // portfolio the selected tenant lives in the MSP context, and `auth` does
+  // not have it — which made this page report the plugin as inactive for
+  // tenants that had it enabled all along. See useEffectiveTenantId.
+  const tenantId = useEffectiveTenantId();
   const isActive = auth?.tenantMember?.isActive === true;
   // ADR-0011 Phase 3: was a hardcoded ADMIN/OWNER role check — now
   // reads the caller's effective permission set so a custom role
@@ -191,14 +196,22 @@ export default function SoftwareDelivery() {
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-              {policyError
-                ? "Could not verify SDP entitlement"
-                : "Software Delivery isn't active for this tenant"}
+              {/* ⚠️ THREE STATES, NOT TWO. "We don't know which tenant" is not
+                  "this tenant isn't entitled", and reporting the first as the
+                  second is what sent a whole investigation into subscriptions
+                  and policy rows that were correct the entire time. */}
+              {!tenantId
+                ? "No tenant selected"
+                : policyError
+                  ? "Could not verify SDP entitlement"
+                  : "Software Delivery isn't active for this tenant"}
             </Typography>
             <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
-              {policyError
-                ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
-                : "It's included in your plan, but activation isn't a self-service toggle anymore — contact your Tracenium account team to have it turned on. Reads stay open in the meantime."}
+              {!tenantId
+                ? "Pick a tenant from the portfolio to see its Software Delivery. Nothing here is a statement about what any tenant has enabled."
+                : policyError
+                  ? "We couldn't fetch the tenant policy. Page is read-only until the check succeeds. Refresh or reach out to support if this persists."
+                  : "It's included in your plan, but activation isn't a self-service toggle anymore — contact your Tracenium account team to have it turned on. Reads stay open in the meantime."}
             </Typography>
           </Box>
         </SectionPaper>
