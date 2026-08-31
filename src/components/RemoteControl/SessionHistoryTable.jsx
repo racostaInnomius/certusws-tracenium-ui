@@ -192,7 +192,17 @@ export default function SessionHistoryTable({
                           Grabar vídeo de una sesión de pantalla es otra
                           decisión, de coste y de retención, no un arreglo de
                           esta tabla. */}
-                      {s.status === "active" || !onReplay || s.type !== "shell" ? (
+                      {/* ADR-0012: las sesiones de PANTALLA ya pueden tener
+                          grabación, pero solo se ofrece el botón cuando el
+                          backend confirma que hay una SUBIDA (hasRecording).
+                          La fila de la grabación se crea al entregar la clave
+                          y el vídeo sube después, a veces días después: ofrecer
+                          "Replay" en ese hueco llevaría al mismo vacío que
+                          motivó quitar el botón de aquí en su día, y el
+                          operador no lo distingue de una grabación perdida. */}
+                      {s.status === "active" ||
+                      !onReplay ||
+                      (s.type !== "shell" && !(s.type === "screen" && s.hasRecording)) ? (
                         <span style={{ color: BRAND.gray }}>
                           {s.status === "active"
                             ? "In progress"

@@ -59,6 +59,7 @@ const ShellTerminal = React.lazy(() => import("../components/RemoteControl/Shell
 const TranscriptReplayDialog = React.lazy(() => import("../components/RemoteControl/TranscriptReplayDialog"));
 const FileBrowserPanel = React.lazy(() => import("../components/RemoteControl/FileBrowserPanel"));
 const ScreenShareViewer = React.lazy(() => import("../components/RemoteControl/ScreenShareViewer"));
+const RecordingReplayDialog = React.lazy(() => import("../components/RemoteControl/RecordingReplayDialog"));
 
 // Centered fallback while a session drawer's heavy body loads.
 function SessionLoading() {
@@ -541,7 +542,22 @@ export default function RemoteControl() {
 
       {/* RCP M1.S3 — transcript replay dialog. Mounted only when a replay is
           selected so its lazy chunk doesn't load on page mount. */}
-      {replaySession ? (
+      {/* Dos reproductores, elegidos por el tipo de sesión. Una de shell
+          replica la salida del terminal; una de pantalla reconstruye
+          fotogramas sobre un canvas (ADR-0012). Comparten el botón de la
+          tabla pero no tienen nada más en común, y fusionarlos habría dado un
+          componente con dos mitades excluyentes. */}
+      {replaySession && replaySession.type === "screen" ? (
+        <React.Suspense fallback={null}>
+          <RecordingReplayDialog
+            open
+            session={replaySession}
+            onClose={() => setReplaySession(null)}
+          />
+        </React.Suspense>
+      ) : null}
+
+      {replaySession && replaySession.type !== "screen" ? (
         <React.Suspense fallback={null}>
           <TranscriptReplayDialog
             open={Boolean(replaySession)}

@@ -726,6 +726,74 @@ async function fetchGetJson(url, options) {
   }
 }
 
+/**
+ * GET de un cuerpo NDJSON, línea a línea.
+ *
+ * Existe aparte de httpGetJson porque una grabación de pantalla puede pesar
+ * cientos de megas: parsearla como un único JSON obligaría a tenerla entera en
+ * memoria dos veces —el texto y el objeto— y a esperar al último byte antes de
+ * pintar el primer fotograma.
+ *
+ * `onLine` recibe cada objeto ya parseado, en ORDEN. El orden no es un detalle:
+ * los fotogramas parciales se pintan encima del anterior, así que uno que se
+ * adelante corrompe todo lo que viene detrás.
+ *
+ * Una línea que no parsea se ignora y se sigue: el backend escribe una por
+ * fotograma y un corte a mitad de la última es el final normal de una
+ * respuesta interrumpida, no un error que deba tirar lo ya recibido.
+ */
+export async function httpGetNdjson(url, onLine, options = {}) {
+  const timeout = withTimeout(options.timeoutMs ?? 120000);
+  try {
+    const res = await fetch(`${API_BASE}${url}`, {
+      method: "GET",
+      credentials: "include",
+      headers: withTenantHeader(),
+      signal: options.signal ?? timeout.signal,
+    });
+    if (!res.ok) {
+      // Los errores de este endpoint vienen en JSON aunque la respuesta feliz
+      // sea NDJSON; se deja que handleResponse los normalice como el resto.
+      return await handleResponse(res, url);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("streaming no soportado por este navegador");
+
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        try {
+          onLine(JSON.parse(line));
+        } catch {
+          /* línea partida o corrupta: se ignora y se sigue */
+        }
+      }
+    }
+    const tail = buf.trim();
+    if (tail) {
+      try {
+        onLine(JSON.parse(tail));
+      } catch {
+        /* última línea incompleta */
+      }
+    }
+    return { ok: true };
+  } catch (err) {
+    throw toHumanError(err, url);
+  } finally {
+    timeout.done();
+  }
+}
+
 export async function httpGetJson(url, options = {}) {
   const normalizedOptions = normalizeGetOptions(url, options);
   const cacheKey = buildCacheKey(url);
