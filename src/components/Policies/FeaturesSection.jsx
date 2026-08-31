@@ -425,6 +425,100 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
               );
             })()}
 
+            {/* ── Grabación de sesiones de pantalla (ADR-0012) ────────
+                Gateado igual que el consentimiento, y por un motivo
+                DISTINTO que conviene no confundir.
+
+                Encender el consentimiento sobre la flota actual BLOQUEA
+                todas las sesiones (el backend falla cerrado si el agente
+                no sabe preguntar). Encender la grabación no rompe nada:
+                los agentes que no conocen la bandera simplemente la
+                ignoran. El daño es otro y es peor de detectar — el
+                interruptor diría "grabando" y no se grabaría nada, así
+                que un administrador creería tener vídeo de sesiones que
+                nunca existió. Una función de auditoría que miente sobre
+                sí misma es peor que no tenerla.
+
+                Operable para APAGAR aunque esté gateado, por la misma
+                razón que el de consentimiento: nunca se puede dejar a un
+                tenant sin forma de revertir. */}
+            {(() => {
+              const recordOn = Boolean(form?.features?.remoteRecordScreen);
+              return (
+                <Box sx={{ mt: 1.5 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={recordOn}
+                        onChange={(e) =>
+                          onChange({
+                            ...form,
+                            features: {
+                              ...(form.features || {}),
+                              remoteRecordScreen: e.target.checked,
+                            },
+                          })
+                        }
+                        disabled={readOnly || !recordOn}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, color: recordOn ? BRAND.dark : BRAND.gray }}
+                        >
+                          Record screen sessions{" "}
+                          <Chip
+                            size="small"
+                            label="Not available yet"
+                            sx={{
+                              ml: 1,
+                              height: 18,
+                              fontSize: TEXT.xs,
+                              fontWeight: 700,
+                              bgcolor: BRAND.surfaceMuted,
+                              color: BRAND.gray,
+                            }}
+                          />
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                          Would record screen-sharing sessions for audit: encrypted on
+                          the endpoint, uploaded after the session, kept 3 months. No
+                          agent build records yet, so turning this on would show
+                          &quot;recording&quot; without producing any recording. Applies
+                          only to screen sharing — the shell already keeps a transcript.
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ alignItems: "flex-start", mx: 0 }}
+                  />
+
+                  {recordOn && (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        mt: 1,
+                        ml: 0.5,
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: ROLE.criticalSoft,
+                        border: `1px solid ${ROLE.critical}33`,
+                      }}
+                    >
+                      <Typography variant="caption" sx={{ color: ROLE.critical, fontWeight: 600 }}>
+                        This is on, but no deployed agent can record — sessions are NOT
+                        being recorded despite what this switch says. Switch it off until
+                        an agent build with recording support is rolled out.
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
+              );
+            })()}
+
             {/* ── rcp.file confinement ────────────────────────────────
                 Only meaningful while file transfer is on. The agent
                 enforces a secure default set of roots plus a

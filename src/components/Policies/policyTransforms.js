@@ -449,6 +449,11 @@ export function readFormFromPolicy(policy, catalog = []) {
       remoteFile:   pickFeature(policy, "remoteFile"),    // rcp.file   (M2.S1)
       remoteScreen: pickFeature(policy, "remoteScreen"),  // rcp.screen (M3.S1)
       remoteRequireConsent: pickFeature(policy, "remoteRequireConsent"), // user-attended approval
+      // Grabación de sesiones de pantalla (ADR-0012). Apagado por defecto;
+      // los agentes anteriores al soporte ignoran la bandera, así que
+      // encenderla sobre una flota antigua no graba nada — de ahí que el
+      // interruptor esté gateado en FeaturesSection.
+      remoteRecordScreen: pickFeature(policy, "remoteRecordScreen"),
       // Device Info flyout (support widget) — the always-visible
       // top-center tab on Windows endpoints. Off by default; the
       // Device Info tab inside the tray status window is NOT gated by
@@ -617,6 +622,9 @@ export function formToPolicy(form, catalog = []) {
     }
     if (form?.features?.remoteRequireConsent !== null && form?.features?.remoteRequireConsent !== undefined) {
       features.remoteRequireConsent = Boolean(form.features.remoteRequireConsent);
+    }
+    if (form?.features?.remoteRecordScreen !== null && form?.features?.remoteRecordScreen !== undefined) {
+      features.remoteRecordScreen = Boolean(form.features.remoteRecordScreen);
     }
   }
   if (Object.keys(features).length > 0) {

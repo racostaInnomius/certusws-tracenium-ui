@@ -60,8 +60,12 @@ describe("FeaturesSection", () => {
     });
 
     it("is labelled as unavailable", () => {
+      // getAllByText, no getByText: desde ADR-0012 hay un segundo control
+      // gateado igual (grabación de pantalla) con el mismo chip. Buscar "el"
+      // chip encontraría dos y fallaría por ambigüedad, no por regresión.
       render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
-      expect(screen.getByText("Not available yet")).toBeInTheDocument();
+      expect(screen.getAllByText("Not available yet").length).toBeGreaterThan(0);
+      expect(screen.getByRole("switch", { name: /Require user consent/i })).toBeDisabled();
     });
 
     it("stays switchable when already on, so it can be undone", () => {
@@ -76,6 +80,48 @@ describe("FeaturesSection", () => {
     it("warns that sessions are being blocked while it is on", () => {
       render(<FeaturesSection form={withConsent(true)} onChange={() => {}} catalog={rcpCatalog} />);
       expect(screen.getByText(/Remote control is currently blocked/i)).toBeInTheDocument();
+    });
+
+    // ── Grabación de pantalla (ADR-0012) ──────────────────────────
+    //
+    // Gateado igual que el consentimiento pero por un daño DISTINTO.
+    // Encender el consentimiento sobre la flota actual bloquea todas las
+    // sesiones; encender la grabación no rompe nada — y eso es peor de
+    // detectar: el interruptor diría "grabando" y no se grabaría nada, así
+    // que un administrador creería tener vídeo que nunca existió.
+    describe("Record screen sessions (not yet implementable)", () => {
+      const withRecording = (on) => ({
+        plugins: { rcp: true },
+        features: { remoteRecordScreen: on },
+      });
+
+      it("cannot be switched on", () => {
+        render(<FeaturesSection form={withRecording(false)} onChange={() => {}} catalog={rcpCatalog} />);
+        expect(screen.getByRole("switch", { name: /Record screen sessions/i })).toBeDisabled();
+      });
+
+      it("stays switchable when already on, so it can be undone", () => {
+        // Nunca se puede dejar a un tenant sin forma de revertir.
+        const onChange = vi.fn();
+        render(<FeaturesSection form={withRecording(true)} onChange={onChange} catalog={rcpCatalog} />);
+        const sw = screen.getByRole("switch", { name: /Record screen sessions/i });
+        expect(sw).toBeEnabled();
+        fireEvent.click(sw);
+        expect(onChange.mock.calls[0][0].features.remoteRecordScreen).toBe(false);
+      });
+
+      it("avisa de que NO se está grabando aunque esté encendido", () => {
+        // El aviso que evita que alguien cuente con una prueba inexistente.
+        render(<FeaturesSection form={withRecording(true)} onChange={() => {}} catalog={rcpCatalog} />);
+        expect(screen.getByText(/sessions are NOT\s+being recorded/i)).toBeInTheDocument();
+      });
+
+      it("dice que solo afecta a screen sharing", () => {
+        // El shell ya deja transcript; prometer que esto lo cubre sería
+        // sugerir una cobertura de auditoría que no existe.
+        render(<FeaturesSection form={withRecording(false)} onChange={() => {}} catalog={rcpCatalog} />);
+        expect(screen.getByText(/only to screen sharing/i)).toBeInTheDocument();
+      });
     });
 
     it("shows no warning while it is off", () => {
