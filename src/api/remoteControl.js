@@ -6,7 +6,7 @@
 // when the plugin lands the UI picks up real data without code
 // changes here.
 
-import { httpGetJson, httpPostJson } from "./http";
+import { httpGetJson, httpPostJson, httpPutJson } from "./http";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/remote-control";
@@ -65,4 +65,37 @@ export async function getSessionFileTransfers(sessionId, params = {}) {
 // Returns { ok, total, items: FileTransferRecord[] }.
 export async function getAllFileTransfers(params = {}) {
   return httpGetJson(`${BASE}/file-transfers${buildQuery(params)}`);
+}
+
+// ── ADR-0009 fase 2 — política de acceso y cola de aprobación ────────
+
+/** La matriz (clase de equipo × capacidad) → requiere visto bueno. */
+export async function getAccessPolicy() {
+  return httpGetJson(`${BASE}/access-policy`);
+}
+
+/**
+ * Enciende o apaga UNA celda.
+ *
+ * Una por petición y no la matriz entera: un guardado masivo desde una
+ * pantalla con datos viejos apagaría en silencio lo que otro
+ * administrador acabara de encender.
+ */
+export async function setAccessPolicyCell({ capability, deviceClass, requiresApproval, jitMinutes }) {
+  return httpPutJson(`${BASE}/access-policy`, {
+    capability,
+    deviceClass,
+    requiresApproval,
+    jitMinutes
+  });
+}
+
+/** Solicitudes esperando decisión. */
+export async function listPendingApprovals() {
+  return httpGetJson(`${BASE}/approvals`);
+}
+
+/** Aprobar o denegar. El aprobador lo pone el backend desde la sesión. */
+export async function decideApproval(requestId, approve) {
+  return httpPostJson(`${BASE}/approvals/${encodeURIComponent(requestId)}`, { approve });
 }

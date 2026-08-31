@@ -13,8 +13,11 @@
 
 import * as React from "react";
 import {
+  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -43,7 +46,11 @@ import {
   getConnectableDevices,
   getRemoteSessions,
   getAllFileTransfers,
-  startRemoteSession
+  startRemoteSession,
+  listPendingApprovals,
+  decideApproval,
+  getAccessPolicy,
+  setAccessPolicyCell
 } from "../api/remoteControl";
 
 import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
@@ -147,6 +154,192 @@ function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
  * vistobueno, y un expediente lleno de "x" calibraria esa politica sobre
  * ruido.
  */
+
+/**
+ * Cola de aprobación — ADR-0009 fase 2.
+ *
+ * Se muestra SOLO cuando hay algo pendiente. Un panel permanentemente
+ * vacío en la pantalla que más se usa se vuelve invisible en una semana,
+ * y entonces no avisa el día que sí hay algo.
+ *
+ * ⚠️ Aprobar es conceder root a otra persona durante una ventana. Por eso
+ * la fila muestra el expediente completo —quién, a qué equipo, por qué y
+ * bajo qué ticket— en vez de un identificador: quien aprueba a ciegas no
+ * está aprobando, está firmando.
+ */
+export function ApprovalQueue({ refreshNonce, notify }) {
+  const [items, setItems] = React.useState([]);
+  const [busy, setBusy] = React.useState("");
+
+  const cargar = React.useCallback(() => {
+    listPendingApprovals()
+      .then((r) => setItems(r?.items ?? []))
+      .catch(() => setItems([]));
+  }, []);
+
+  React.useEffect(() => { cargar(); }, [cargar, refreshNonce]);
+
+  const decidir = async (requestId, approve) => {
+    setBusy(requestId);
+    try {
+      const r = await decideApproval(requestId, approve);
+      if (r?.ok) {
+        notify("success", approve ? "Acceso aprobado" : "Acceso denegado");
+      } else {
+        // El backend responde 409 cuando el ESTADO no admite la
+        // decisión: ya resuelta, caducada, o es la propia solicitud del
+        // aprobador. Son situaciones distintas y el mensaje lo dice.
+        notify("error", r?.message || "No se pudo registrar la decisión");
+      }
+    } catch (e) {
+      notify("error", e?.message || "No se pudo registrar la decisión");
+    } finally {
+      setBusy("");
+      cargar();
+    }
+  };
+
+  if (!items.length) return null;
+
+  return (
+    <Card sx={{ mb: 2, border: `1px solid ${BRAND.alert.warningText}` }}>
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+          {items.length} acceso(s) esperando visto bueno
+        </Typography>
+        {items.map((it) => (
+          <Box
+            key={it.requestId}
+            sx={{
+              display: "flex", gap: 2, alignItems: "center",
+              py: 1, borderTop: `1px solid ${BRAND.border}`, flexWrap: "wrap"
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 260 }}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {it.operatorUserId} → {it.capability} en {it.deviceId}
+              </Typography>
+              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                {it.reason} · ticket {it.ticketRef}
+                {it.expiresAt ? ` · caduca ${new Date(it.expiresAt).toLocaleTimeString()}` : ""}
+              </Typography>
+            </Box>
+            <Button
+              size="small"
+              disabled={busy === it.requestId}
+              onClick={() => decidir(it.requestId, false)}
+            >
+              Denegar
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={busy === it.requestId}
+              onClick={() => decidir(it.requestId, true)}
+            >
+              Aprobar
+            </Button>
+          </Box>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * La matriz de política — ADR-0009 fase 2.
+ *
+ * `(clase de equipo × capacidad) → requiere visto bueno`. Se muestra
+ * COMPLETA, con todo apagado de fábrica, para que el administrador vea
+ * qué combinaciones existen en vez de enfrentarse a una lista vacía.
+ *
+ * Incluye las capacidades de CDP porque comparten la misma matriz
+ * (ADR-0011 dec. 5 y 10), aunque su botón todavía no exista.
+ */
+export function AccessPolicyDialog({ open, onClose, notify }) {
+  const [rows, setRows] = React.useState([]);
+  const [busy, setBusy] = React.useState("");
+
+  React.useEffect(() => {
+    if (!open) return;
+    getAccessPolicy()
+      .then((r) => setRows(r?.items ?? []))
+      .catch(() => setRows([]));
+  }, [open]);
+
+  const alternar = async (row) => {
+    const clave = `${row.capability}:${row.deviceClass}`;
+    setBusy(clave);
+    try {
+      await setAccessPolicyCell({
+        capability: row.capability,
+        deviceClass: row.deviceClass,
+        requiresApproval: !row.requiresApproval,
+        jitMinutes: row.jitMinutes
+      });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.capability === row.capability && r.deviceClass === row.deviceClass
+            ? { ...r, requiresApproval: !r.requiresApproval }
+            : r
+        )
+      );
+    } catch (e) {
+      notify("error", e?.message || "No se pudo guardar la política");
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const capacidades = [...new Set(rows.map((r) => r.capability))];
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Política de acceso privilegiado</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 2, color: BRAND.textMuted }}>
+          Qué capacidades exigen visto bueno de otra persona antes de ejercerse.
+          Entrar a un servidor y entrar a un portátil no son la misma operación.
+        </Typography>
+        {capacidades.map((cap) => (
+          <Box key={cap} sx={{ mb: 1.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{cap}</Typography>
+            {rows
+              .filter((r) => r.capability === cap)
+              .map((r) => (
+                <Box
+                  key={r.deviceClass}
+                  sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1 }}
+                >
+                  <Typography variant="caption" sx={{ width: 90, color: BRAND.textMuted }}>
+                    {r.deviceClass === "server" ? "Servidores" : "Endpoints"}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant={r.requiresApproval ? "contained" : "outlined"}
+                    disabled={busy === `${r.capability}:${r.deviceClass}`}
+                    onClick={() => alternar(r)}
+                  >
+                    {r.requiresApproval ? "Exige visto bueno" : "Sin visto bueno"}
+                  </Button>
+                </Box>
+              ))}
+          </Box>
+        ))}
+        {!rows.length && (
+          <Alert severity="info">
+            Sin política cargada. Si acabas de desplegar, la migración que siembra la
+            matriz puede no haberse aplicado todavía.
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cerrar</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function ExpedienteDialog({ pending, onCancel, onConfirm }) {
   const [reason, setReason] = React.useState("");
   const [ticketRef, setTicketRef] = React.useState("");
@@ -293,6 +486,7 @@ export default function RemoteControl() {
   // ADR-0009 fase 1 — expediente pendiente. `null` = no hay dialogo
   // abierto; { device, type } = esperando motivo y ticket.
   const [expedienteFor, setExpedienteFor] = React.useState(null);
+  const [policyOpen, setPolicyOpen] = React.useState(false);
 
   /**
    * Click handler for Connect buttons in the ConnectablesTable.
@@ -328,6 +522,19 @@ export default function RemoteControl() {
         reason: expediente.reason,
         ticketRef: expediente.ticketRef
       });
+      // ADR-0009 fase 2 — el gate responde 202 con ok:false. NO es un
+      // fallo: la solicitud quedó en cola esperando vistobueno. Tratarlo
+      // como error diría "Failed to start session" a alguien cuya
+      // petición se registró correctamente, y le haría reintentar en
+      // bucle generando una solicitud pendiente por intento.
+      if (res?.status === "pending_approval") {
+        notify(
+          "info",
+          `Acceso en cola: ${res.message || "requiere visto bueno"}. ` +
+            `Solicitud ${String(res.requestId || "").slice(0, 8)}…`
+        );
+        return;
+      }
       if (!res?.ok) {
         notify("error", res?.message || "Failed to start session");
         return;
@@ -408,14 +615,24 @@ export default function RemoteControl() {
         }
         icon={<DesktopWindowsOutlinedIcon />}
         actions={
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={load}
-            loading={loading || refreshing}
-          />
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            <Button size="small" variant="outlined" onClick={() => setPolicyOpen(true)}>
+              Política de acceso
+            </Button>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={load}
+              loading={loading || refreshing}
+            />
+          </Box>
         }
       />
+
+      {/* ADR-0009 fase 2 — la cola va ARRIBA del todo y solo aparece si
+          hay algo pendiente: alguien está esperando para entrar a un
+          equipo, y enterrarlo bajo los KPIs sería llegar tarde. */}
+      <ApprovalQueue refreshNonce={refreshSeconds} notify={notify} />
 
       {/* Row 1 — Hero KPIs */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -638,6 +855,11 @@ export default function RemoteControl() {
           </Box>
         ) : null}
       </Drawer>
+      <AccessPolicyDialog
+        open={policyOpen}
+        onClose={() => setPolicyOpen(false)}
+        notify={notify}
+      />
       <ExpedienteDialog
         pending={expedienteFor}
         onCancel={() => setExpedienteFor(null)}
