@@ -5,7 +5,7 @@
 // (/api/v1/security/certificates), which covers the agent's own
 // mTLS/PKI identity certs.
 
-import { httpGetJson } from "./http";
+import { httpGetJson, httpPostJson } from "./http";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/cdp";
@@ -52,4 +52,19 @@ export async function listCdpExpiring(params = {}) {
 // lectura — la remediación es una capacidad aparte (ADR-0011 dec. 10).
 export async function listCdpTrustAnchors() {
   return httpGetJson(`${BASE}/trust-anchors`);
+}
+
+/**
+ * Quitar la confianza a un ancla en un equipo. ADR-0011 decisión 10.
+ *
+ * Puede responder 202 con `status: "pending_approval"` si la política
+ * del tenant exige visto bueno — NO es un error.
+ */
+export async function distrustAnchor({ deviceId, thumbprint, reason, ticketRef }) {
+  return httpPostJson(`${BASE}/trust-anchors/distrust`, {
+    deviceId,
+    thumbprint,
+    reason,
+    ticketRef
+  });
 }

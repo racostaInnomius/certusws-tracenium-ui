@@ -69,6 +69,7 @@ import {
   listCdpDevices,
   listCdpDeviceCertificates,
   listCdpTrustAnchors,
+  distrustAnchor,
 } from "../api/cdp";
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -693,11 +694,114 @@ function CdpDeviceDrawerContent({ agentId, host }) {
  * equivocada rompe TLS en todos los equipos a la vez— y tiene su propia
  * puerta en ADR-0011 decision 10. Un boton aqui seria saltarsela.
  */
+
+/**
+ * Quitar la confianza a un ancla. ADR-0011 decisión 10.
+ *
+ * ⚠️ UN EQUIPO POR VEZ, a propósito. Desconfiar de la raíz equivocada
+ * —la que firma Windows Update, o la nuestra— rompe TLS en todos los
+ * equipos a la vez. Una acción masiva merece su propia decisión de
+ * producto, no colarse por la puerta de una individual.
+ *
+ * El expediente (motivo + ticket) es obligatorio como en cualquier
+ * capacidad privilegiada, y la respuesta puede ser 202 "pendiente de
+ * visto bueno" si la política del tenant lo exige: eso NO es un error.
+ */
+function DistrustAnchorDialog({ anchor, onClose, onDone }) {
+  const [deviceId, setDeviceId] = React.useState("");
+  const [reason, setReason] = React.useState("");
+  const [ticketRef, setTicketRef] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+
+  React.useEffect(() => {
+    if (anchor) {
+      setDeviceId(anchor.agentIds?.[0] || "");
+      setReason("");
+      setTicketRef("");
+      setMsg(null);
+    }
+  }, [anchor]);
+
+  const puede = deviceId && reason.trim().length >= 10 && ticketRef.trim().length >= 3;
+
+  const enviar = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await distrustAnchor({
+        deviceId,
+        thumbprint: anchor.fingerprint256,
+        reason: reason.trim(),
+        ticketRef: ticketRef.trim()
+      });
+      if (r?.status === "pending_approval") {
+        setMsg({ sev: "info", text: `En cola: ${r.message || "requiere visto bueno"}` });
+      } else if (r?.ok) {
+        setMsg({ sev: "success", text: "Enviado al equipo. El inventario lo confirmará." });
+        onDone?.();
+      } else {
+        setMsg({ sev: "error", text: r?.message || "No se pudo enviar" });
+      }
+    } catch (e) {
+      setMsg({ sev: "error", text: e?.message || "No se pudo enviar" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={Boolean(anchor)} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Dejar de confiar en «{anchor?.subjectCN}»</DialogTitle>
+      <DialogContent>
+        {/*
+          Se dice lo que HACE de verdad. "Eliminar" sería mentir: en
+          Windows el certificado sigue en Root y se añade a Disallowed,
+          porque el trust store se repuebla bajo demanda y un borrado se
+          desharía solo.
+        */}
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          El certificado no se borra: se marca como <strong>no confiable</strong>.
+          En Windows entra en <code>Disallowed</code>; en macOS se le pone una
+          denegación de confianza. Es reversible.
+        </Alert>
+
+        <TextField
+          select fullWidth margin="dense" label="Equipo"
+          value={deviceId} onChange={(e) => setDeviceId(e.target.value)}
+          helperText={`Un equipo por petición · ${anchor?.deviceCount ?? 0} lo tienen`}
+        >
+          {(anchor?.agentIds || []).map((id) => (
+            <MenuItem key={id} value={id}>{id}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          fullWidth multiline minRows={2} margin="dense" label="Motivo"
+          value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder="Por qué esta CA no debe ser de confianza en este equipo"
+        />
+        <TextField
+          fullWidth margin="dense" label="Ticket"
+          value={ticketRef} onChange={(e) => setTicketRef(e.target.value)}
+        />
+        {msg && <Alert severity={msg.sev} sx={{ mt: 2 }}>{msg.text}</Alert>}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cerrar</Button>
+        <Button variant="contained" color="warning" disabled={!puede || busy} onClick={enviar}>
+          Dejar de confiar
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function CdpTrustAnchorsTab({ refreshNonce }) {
   const [loadError, setLoadError] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [data, setData] = React.useState({ items: [], counts: {} });
   const [onlyFindings, setOnlyFindings] = React.useState(true);
+  const [distrustFor, setDistrustFor] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -749,6 +853,21 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
     },
     { field: "signatureAlgorithm", headerName: "Firma", width: 170 },
     {
+      field: "accion",
+      headerName: "",
+      width: 130,
+      sortable: false,
+      renderCell: (params) =>
+        // Solo donde la presencia significa confianza. En el bundle que
+        // envía Apple no hay nada que retirar: el sistema operativo
+        // decide su estado por separado.
+        params.row.actionable ? (
+          <Button size="small" onClick={() => setDistrustFor(params.row)}>
+            No confiar
+          </Button>
+        ) : null,
+    },
+    {
       field: "distrusted",
       headerName: "Por que importa",
       flex: 3,
@@ -769,6 +888,11 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
 
   return (
     <Box>
+      <DistrustAnchorDialog
+        anchor={distrustFor}
+        onClose={() => setDistrustFor(null)}
+        onDone={() => setDistrustFor(null)}
+      />
       {loadError && <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert>}
 
       <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
