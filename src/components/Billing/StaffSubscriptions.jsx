@@ -75,8 +75,14 @@ function paymentView(row) {
   return { ...view, note: null };
 }
 
-/** La prueba estándar de alta. Debe coincidir con TRIAL_MONTHS del backend. */
-const TRIAL_MONTHS = 3;
+/**
+ * La prueba estándar de alta. Debe coincidir con TRIAL_MONTHS del backend, que
+ * es quien la siembra al nacer el tenant. Aquí sólo decide qué viene
+ * preseleccionado en el diálogo; el mes que realmente se concede es el que se
+ * mande, así que una divergencia no rompe nada — sólo hace que el valor por
+ * defecto deje de ser "lo estándar".
+ */
+const TRIAL_MONTHS = 1;
 
 /** Prueba: la columna tiene tres estados, no dos. */
 function TrialCell({ row }) {
@@ -294,11 +300,12 @@ export default function StaffSubscriptions() {
                           <Button
                             size="small"
                             onClick={() => {
-                              // Conceder por primera vez es dar LA prueba —tres
-                              // meses—; ampliar una que ya corre suele ser un
-                              // mes más. El valor por defecto es el de cada
-                              // caso, no uno solo para los dos.
-                              setMonths(r.trialDaysLeft > 0 ? 1 : TRIAL_MONTHS);
+                              // Un mes en los dos casos: es lo que dura la
+                              // prueba de alta y es el tramo con el que se
+                              // amplía. Cuando eran tres, conceder y ampliar
+                              // tenían valores distintos; ahora coinciden y
+                              // distinguirlos sólo sería ceremonia.
+                              setMonths(TRIAL_MONTHS);
                               setTarget(r);
                             }}
                           >

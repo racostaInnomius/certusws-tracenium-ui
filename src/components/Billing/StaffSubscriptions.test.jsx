@@ -192,10 +192,9 @@ describe("conceder acceso", () => {
     expect(dialogo.getByText(/on top of the 60 days/)).toBeTruthy();
   });
 
-  it("conceder por primera vez ofrece LA prueba: 3 meses", async () => {
-    // Conceder y ampliar no son la misma operación: la primera es dar la prueba
-    // estándar, la segunda un mes más. Un único valor por defecto obligaría a
-    // corregirlo a mano en el caso más frecuente de los dos.
+  it("conceder por primera vez ofrece LA prueba: 1 mes", async () => {
+    // El default tiene que ser la prueba estándar, no un número cualquiera:
+    // es el caso frecuente y nadie debería corregirlo a mano cada vez.
     render(<StaffSubscriptions />);
     await ready();
 
@@ -205,7 +204,7 @@ describe("conceder acceso", () => {
     await waitFor(() => expect(post).toHaveBeenCalled());
     const [url, body] = post.mock.calls[0];
     expect(url).toContain("/billing/admin/subscriptions/111/trial");
-    expect(body).toEqual({ months: 3 });
+    expect(body).toEqual({ months: 1 });
   });
 
   it("ampliar una prueba viva ofrece 1 mes", async () => {
