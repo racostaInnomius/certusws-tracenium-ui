@@ -272,6 +272,84 @@ export default function CertificateDetailDrawer({
       </Field>
       {detail.san?.length > 0 && <Field label="Subject alternative names">{detail.san.join(", ")}</Field>}
 
+      {/* ── Mitad post-cuántica de un certificado híbrido "catalyst" ──
+          Sección propia y NO un chip más en Cryptography, porque son dos
+          hechos distintos: arriba se dice qué protege este certificado
+          hoy (su mitad clásica, quantum-broken), aquí qué DECLARA además.
+
+          Sólo aparece cuando el certificado es catalyst. Hoy eso es 0 de
+          10.277 en toda la flota: la sección existe para el día que deje
+          de serlo, y su ausencia es la respuesta correcta mientras tanto. */}
+      {detail.hybrid && (
+        <>
+          <SectionHeading>Hybrid (catalyst)</SectionHeading>
+          <Box
+            sx={{
+              border: `1px solid ${BRAND.alert.warningSoft}`,
+              borderLeft: `3px solid ${BRAND.alert.warning}`,
+              borderRadius: 1,
+              bgcolor: BRAND.alert.warningSoft,
+              p: 1.25,
+              mb: 1.5,
+            }}
+          >
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, lineHeight: 1.55 }}>
+              This certificate <strong>declares</strong> a second, post-quantum key and
+              signature in non-critical X.509 extensions. <strong>Nobody has verified
+              them</strong> — not us, and almost certainly not the stacks that validate
+              this certificate: they treat these extensions as optional and ignore them.
+              What protects this certificate today is its classical half, above.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5, mb: 1 }}>
+            {[
+              { label: "Alt signature", oid: detail.hybrid.altSignatureOid, fam: detail.hybrid.altSigFamily },
+              { label: "Alt key", oid: detail.hybrid.altPublicKeyOid, fam: detail.hybrid.altKeyFamily },
+            ]
+              .filter((x) => x.oid)
+              .map((x) => {
+                const fam = FAMILY_LABEL[x.fam] ?? FAMILY_LABEL.unknown;
+                return (
+                  <Tooltip key={x.label} arrow title={`${x.label} algorithm OID: ${x.oid}`}>
+                    <Chip
+                      size="small"
+                      label={`${x.label}: ${fam.text}`}
+                      sx={{
+                        bgcolor: BRAND.surfaceMuted,
+                        color: BRAND.dark,
+                        fontWeight: 700,
+                        fontSize: TEXT.xs,
+                      }}
+                    />
+                  </Tooltip>
+                );
+              })}
+          </Stack>
+          {/* El OID crudo se enseña siempre, igual que en Cryptography: un
+              algoritmo que el catálogo aún no nombra —composite, hoy sin
+              OID asignado en firme— sigue siendo inspeccionable en vez de
+              aparecer como un hueco. */}
+          {detail.hybrid.altSignatureOid && (
+            <Field label="Alt signature algorithm (OID)" mono>
+              {detail.hybrid.altSignatureOid}
+            </Field>
+          )}
+          {detail.hybrid.altPublicKeyOid && (
+            <Field label="Alt public key algorithm (OID)" mono>
+              {detail.hybrid.altPublicKeyOid}
+            </Field>
+          )}
+          {/* La firma alternativa puede venir sin un algoritmo legible, y
+              eso NO lo hace menos híbrido. Decir "no hay nada" ahí sería
+              el falso negativo que este trabajo vino a cerrar. */}
+          {detail.hybrid.altSignatureDeclared && !detail.hybrid.altSignatureOid && (
+            <Field label="Alt signature">
+              Present, but its algorithm could not be read
+            </Field>
+          )}
+        </>
+      )}
+
       <SectionHeading>On {detail.devices?.length ?? 0} device(s)</SectionHeading>
       <Stack divider={<Divider />} spacing={0}>
         {(detail.devices ?? []).map((device) => (
