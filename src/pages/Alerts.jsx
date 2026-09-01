@@ -93,7 +93,8 @@ const SOURCE_LABEL = {
   software_change:    "Software change",
   cdp_cert_expiry:    "Endpoint cert expiry",
   cdp_weak_crypto:    "Certificate hygiene",
-  cdp_trust_anchor:   "Trust anchor"
+  cdp_trust_anchor:   "Trust anchor",
+  disk_capacity:      "Disk capacity"
 };
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"];
