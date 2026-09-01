@@ -42,6 +42,7 @@ import FleetOverviewCards from "../components/AssetManagement/FleetOverviewCards
 import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import { formatBytesToGb, formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
+import { rankingSubtitle } from "../utils/rankingSubtitle";
 
 /**
  * Cómo se nombra cada filtro cuando ya está aplicado.
@@ -60,23 +61,6 @@ const FLEET_FILTER_LABELS = {
   disk_unknown: "Not reporting disk",
   low_memory: "Under the memory floor",
 };
-
-/**
- * El subtítulo de la ventana "View all".
- *
- * ⚠️ Antes decía siempre "Complete ranking". El backend limitaba a 6 filas y
- * la UI ofrecía "View all" a partir de la sexta: con 24 modelos de CPU
- * distintos, esa ventana mostraba seis y afirmaba que eran todos. Ahora el
- * ranking viaja con su total real y la frase sólo promete lo que entrega.
- */
-function rankingSubtitle(items, total, noun) {
-  const shown = Array.isArray(items) ? items.length : 0;
-  const all = Number(total || 0);
-  if (all > shown) {
-    return `Showing the top ${shown} of ${all} ${noun}.`;
-  }
-  return `All ${shown} ${noun} in the fleet.`;
-}
 
 function SectionCard({ title, children, action }) {
   return (
@@ -259,7 +243,7 @@ const integratedFilterFieldSx = {
 
 function RankingViewAllButton({ disabled = false, onClick }) {
   return (
-    <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
+    <Tooltip title={disabled ? "No ranking data available" : "View the full list"}>
       <span>
         <Button
           size="small"
@@ -902,7 +886,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
                 {rankingDialog?.title || "Ranking"}
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-                {rankingDialog?.subtitle || "Complete ranking list"}
+                {rankingDialog?.subtitle || "Ranking"}
               </Typography>
             </Box>
 

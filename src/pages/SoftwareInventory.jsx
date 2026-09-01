@@ -45,6 +45,7 @@ import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 import { formatDate } from "../utils/format";
+import { rankingSubtitle } from "../utils/rankingSubtitle";
 import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
 
 
@@ -300,7 +301,7 @@ const integratedFilterFieldSx = {
 
 function RankingViewAllButton({ disabled = false, onClick }) {
   return (
-    <Tooltip title={disabled ? "No ranking data available" : "View complete ranking"}>
+    <Tooltip title={disabled ? "No ranking data available" : "View the full list"}>
       <span>
         <Button
           size="small"
@@ -957,7 +958,7 @@ export default function SoftwareInventory() {
                 showPercentages={false}
                 headerExtra={renderViewAllButton({
                   title: "Top installed apps",
-                  subtitle: "Complete application ranking by detected installs.",
+                  subtitle: rankingSubtitle(topInstalledAppsRows, rankings?.topInstalledAppsDistinct, "applications"),
                   items: topInstalledAppsRows,
                   totalValue: topInstalledAppsTotal,
                   totalLabel: "installs",
@@ -982,7 +983,7 @@ export default function SoftwareInventory() {
                 totalValue={topPublishersTotal}
                 headerExtra={renderViewAllButton({
                   title: "Top publishers",
-                  subtitle: "Complete publisher ranking by detected applications.",
+                  subtitle: rankingSubtitle(topPublishersRows, rankings?.topPublishersDistinct, "publishers"),
                   items: topPublishersRows,
                   totalValue: topPublishersTotal,
                   totalLabel: "apps",
@@ -1007,7 +1008,7 @@ export default function SoftwareInventory() {
                 totalValue={topSourcesTotal}
                 headerExtra={renderViewAllButton({
                   title: "Top sources",
-                  subtitle: "Complete software source ranking.",
+                  subtitle: rankingSubtitle(topSourcesRows, rankings?.topSourcesDistinct, "sources"),
                   items: topSourcesRows,
                   totalValue: topSourcesTotal,
                   totalLabel: "apps",
@@ -1032,7 +1033,7 @@ export default function SoftwareInventory() {
                 totalValue={appsPerDeviceTotal}
                 headerExtra={renderViewAllButton({
                   title: "Apps per device",
-                  subtitle: "Complete device ranking by installed applications.",
+                  subtitle: rankingSubtitle(appsPerDeviceRows, rankings?.appsPerDeviceDistinct, "devices"),
                   items: appsPerDeviceRows,
                   totalValue: appsPerDeviceTotal,
                   totalLabel: "apps",
@@ -1352,7 +1353,7 @@ export default function SoftwareInventory() {
                 {rankingDialog?.title || "Ranking"}
               </Typography>
               <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.25 }}>
-                {rankingDialog?.subtitle || "Complete ranking list"}
+                {rankingDialog?.subtitle || "Ranking"}
               </Typography>
             </Box>
 
