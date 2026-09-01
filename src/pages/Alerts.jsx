@@ -50,6 +50,7 @@ import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 
 import { BRAND, ROLE, TEXT } from "../theme/brand";
+import { formatOpenFor } from "../utils/alertAge";
 import { severityMeta } from "../theme/severity";
 import RuleNotifyEditor, { NotifyBadge } from "../components/Alerts/RuleNotifyEditor";
 import {
@@ -115,6 +116,52 @@ function formatRelativeTime(iso) {
   const months = Math.round(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.round(months / 12)}y ago`;
+}
+
+/**
+ * Desde cuándo lleva abierta una alerta.
+ *
+ * Tres estados, y el tercero importa tanto como los otros dos:
+ *
+ *   · con edad — lo normal;
+ *   · vieja — pasado el umbral, en ámbar: el dato por el que existe la
+ *     columna es "esto lleva tres semanas y nadie lo ha mirado";
+ *   · SIN edad — el barrido horario aún no la ha visto. Se pinta "—" con
+ *     su explicación y no un "0m", porque no saberlo no es lo mismo que
+ *     saber que acaba de abrirse. Es también el estado de todo el feed
+ *     durante la primera hora tras desplegar.
+ */
+function OpenForCell({ firstSeenAt }) {
+  const age = formatOpenFor(firstSeenAt);
+
+  if (!age) {
+    return (
+      <Typography
+        variant="body2"
+        sx={{ color: BRAND.gray }}
+        title="Not recorded yet — the hourly sweep hasn't seen this alert."
+      >
+        —
+      </Typography>
+    );
+  }
+
+  return (
+    <Typography
+      variant="body2"
+      sx={{
+        color: age.stale ? BRAND.alert.high : BRAND.dark,
+        fontWeight: age.stale ? 700 : 600
+      }}
+      title={
+        age.stale
+          ? `Open for ${age.days} days — first seen ${new Date(firstSeenAt).toLocaleString()}`
+          : `First seen ${new Date(firstSeenAt).toLocaleString()}`
+      }
+    >
+      {age.text}
+    </Typography>
+  );
 }
 
 function SeverityChip({ severity }) {
@@ -434,6 +481,16 @@ export default function Alerts() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700 }}>When</TableCell>
+                {/*
+                  Columna aparte y no un añadido a "When": son dos datos
+                  distintos. "When" viene de la condición —la fecha de
+                  caducidad del certificado, por ejemplo—, y "Open for"
+                  dice desde cuándo la vemos. Una alerta puede llevar tres
+                  semanas abierta y traer un "When" de hace un rato.
+                */}
+                <TableCell sx={{ fontWeight: 700 }} title="How long this alert has been open — first seen by the hourly sweep, not the condition's own timestamp.">
+                  Open for
+                </TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Severity</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Source</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Device</TableCell>
@@ -444,7 +501,7 @@ export default function Alerts() {
             <TableBody>
               {filteredEvents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: BRAND.gray, py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ color: BRAND.gray, py: 4 }}>
                     {rules.some((r) => r.enabled)
                       ? "No matching events in the selected window."
                       : "No rules enabled — open Manage Rules to pick what you want to be notified about."}
@@ -465,6 +522,9 @@ export default function Alerts() {
                       <Typography variant="caption" sx={{ color: BRAND.gray }}>
                         {new Date(e.occurredAt).toLocaleString()}
                       </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <OpenForCell firstSeenAt={e.firstSeenAt} />
                     </TableCell>
                     <TableCell>
                       <SeverityChip severity={e.severity} />
@@ -889,6 +949,20 @@ function EventDetailDrawer({ event, onClose }) {
           <Stack spacing={0.5}>
             <DetailRow label="Device" value={event.deviceId || "—"} mono />
             <DetailRow label="Occurred" value={new Date(event.occurredAt).toLocaleString()} />
+            {/*
+              Dos filas y no una: "Occurred" es cuándo pasó según la
+              condición, "Open for" desde cuándo la vemos. En una alerta
+              vieja los dos valores se contradicen a propósito, y verlos
+              juntos es lo que explica por qué.
+            */}
+            <DetailRow
+              label="Open for"
+              value={(() => {
+                const age = formatOpenFor(event.firstSeenAt);
+                if (!age) return "not recorded yet";
+                return `${age.text} · first seen ${new Date(event.firstSeenAt).toLocaleString()}`;
+              })()}
+            />
             <DetailRow label="Source ID" value={event.sourceEventId} mono />
             <DetailRow label="Rule" value={event.rule?.name || "—"} />
           </Stack>
