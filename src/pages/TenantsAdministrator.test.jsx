@@ -1,3 +1,8 @@
+// ⚠️ El tenant id llega como STRING desde useEffectiveTenantId.
+// El contexto MSP ya guardaba `String(id)`, así que sin normalizar el hook
+// devolvería string en ámbito MSP y número fuera de él — la incoherencia que
+// rompe cualquier comparación por identidad. Por el cable no cambia nada:
+// estas APIs hacen `encodeURIComponent(tenantId)` y 7 y "7" dan la misma URL.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 
@@ -123,7 +128,7 @@ describe("TenantsAdministrator — invite a new member", () => {
     fireEvent.click(within(dialog).getByText("Send Invite"));
 
     await waitFor(() =>
-      expect(createTenantMember).toHaveBeenCalledWith(7, {
+      expect(createTenantMember).toHaveBeenCalledWith("7", {
         email: "new.person@acme.com",
         role: "USER",
       })
@@ -196,7 +201,7 @@ describe("TenantsAdministrator — pending invites in the members grid", () => {
     expect(within(dialog).getByText(/withdraw the invite/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel Invite" }));
 
-    await waitFor(() => expect(cancelPendingInvite).toHaveBeenCalledWith(7, 42));
+    await waitFor(() => expect(cancelPendingInvite).toHaveBeenCalledWith("7", 42));
     expect(await screen.findByText(/Invite canceled successfully/i)).toBeInTheDocument();
   });
 });

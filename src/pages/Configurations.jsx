@@ -46,7 +46,7 @@ import { fetchMyPartner } from "../msp/mspApi";
 import JoinPartnerDialog from "../msp/JoinPartnerDialog";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { BRAND, TEXT } from "../theme/brand";
 
 // Canonical shell for the three Settings cards. Takes an icon box +
@@ -186,8 +186,10 @@ const AgentSettings = React.lazy(() => import("./AgentSettings"));
 const SETTINGS_TABS = ["tenant", "agent"];
 
 export default function Configurations({ onNavigate, initialTab }) {
-  const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   // Seeded once from the prop (set by the `agent-settings` / `policies`
   // route aliases) or the URL, then kept in the URL so a reload and the
   // back button both land on the same division.

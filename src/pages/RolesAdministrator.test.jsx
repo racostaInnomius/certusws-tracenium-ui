@@ -1,4 +1,9 @@
 // src/pages/RolesAdministrator.test.jsx
+// ⚠️ El tenant id llega como STRING desde useEffectiveTenantId.
+// El contexto MSP ya guardaba `String(id)`, así que sin normalizar el hook
+// devolvería string en ámbito MSP y número fuera de él — la incoherencia que
+// rompe cualquier comparación por identidad. Por el cable no cambia nada:
+// estas APIs hacen `encodeURIComponent(tenantId)` y 7 y "7" dan la misma URL.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 
@@ -110,7 +115,7 @@ describe("RolesAdministrator — create", () => {
     fireEvent.click(within(dialog).getByText("Create role"));
 
     await waitFor(() =>
-      expect(createTenantRole).toHaveBeenCalledWith(7, { name: "Support Lead", permissions: ["jobs"] })
+      expect(createTenantRole).toHaveBeenCalledWith("7", { name: "Support Lead", permissions: ["jobs"] })
     );
     expect(await screen.findByText(/role created/i)).toBeInTheDocument();
   });
@@ -131,7 +136,7 @@ describe("RolesAdministrator — create", () => {
     fireEvent.click(within(dialog).getByText("Save changes"));
 
     await waitFor(() =>
-      expect(updateTenantRole).toHaveBeenCalledWith(7, 10, {
+      expect(updateTenantRole).toHaveBeenCalledWith("7", 10, {
         name: "IT Support",
         permissions: ["jobs", "alerts", "reports"],
       })
@@ -188,7 +193,7 @@ describe("RolesAdministrator — delete", () => {
     expect(
       await screen.findByText(/3 members currently have this role — reassign them first/i)
     ).toBeInTheDocument();
-    expect(deleteTenantRole).toHaveBeenCalledWith(7, 10);
+    expect(deleteTenantRole).toHaveBeenCalledWith("7", 10);
   });
 
   it("deletes an unused custom role", async () => {

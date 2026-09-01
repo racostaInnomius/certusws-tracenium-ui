@@ -39,6 +39,7 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import {
   deleteDevicePolicy,
@@ -361,7 +362,10 @@ export default function AgentSettings({ embedded = false }) {
     catalog: pluginCatalog,
   } = usePluginCatalog();
 
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");

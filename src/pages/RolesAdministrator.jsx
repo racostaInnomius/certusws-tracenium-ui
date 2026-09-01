@@ -50,6 +50,7 @@ import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
   listTenantRoles,
   listCapabilities,
@@ -342,7 +343,10 @@ function DeleteRoleDialog({ open, role, submitting, error, onClose, onConfirm })
 
 export default function RolesAdministrator() {
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   // Same simple pattern PKI.jsx and others already use — this page
   // doesn't need Sidebar's deeper multi-shape lookup since AuthContext
   // is already resolved by the time an OWNER/ADMIN reaches this page

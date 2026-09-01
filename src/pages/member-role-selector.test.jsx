@@ -6,6 +6,11 @@
 // own IsSystem DESC, Name ASC — which alphabetizes to ADMIN, OWNER,
 // USER), custom roles follow below a divider, and the dialog still
 // works before the roles fetch resolves.
+// ⚠️ El tenant id llega como STRING desde useEffectiveTenantId.
+// El contexto MSP ya guardaba `String(id)`, así que sin normalizar el hook
+// devolvería string en ámbito MSP y número fuera de él — la incoherencia que
+// rompe cualquier comparación por identidad. Por el cable no cambia nada:
+// estas APIs hacen `encodeURIComponent(tenantId)` y 7 y "7" dan la misma URL.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
@@ -99,7 +104,7 @@ describe("TenantMemberDialog — dynamic role selector", () => {
 
     renderPage();
     const dialog = await openMemberDialog();
-    await waitFor(() => expect(listTenantRoles).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(listTenantRoles).toHaveBeenCalledWith("7"));
     fireEvent.mouseDown(within(dialog).getByLabelText("Role"));
 
     const listbox = await screen.findByRole("listbox");
@@ -120,7 +125,7 @@ describe("TenantMemberDialog — dynamic role selector", () => {
 
     renderPage();
     const dialog = await openMemberDialog();
-    await waitFor(() => expect(listTenantRoles).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(listTenantRoles).toHaveBeenCalledWith("7"));
     fireEvent.mouseDown(within(dialog).getByLabelText("Role"));
 
     const listbox = await screen.findByRole("listbox");

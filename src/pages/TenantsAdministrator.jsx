@@ -38,7 +38,7 @@ import {
 import { listTenantRoles } from "../api/roles";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listFrom } from "../api/shape";
-import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
@@ -455,10 +455,12 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
-  const { auth } = useAuthContext();
 
   const isTenantMode = mode === "tenant";
-  const currentTenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const currentTenantId = useEffectiveTenantId();
 
   // Tenants list (global mode only): a parameterless on-mount fetch, routed
   // through useCachedFetch for stale-while-revalidate + dedup + last-known-good.
