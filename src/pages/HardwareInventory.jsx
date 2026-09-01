@@ -39,6 +39,7 @@ import { getMyCapabilities } from "../api/roles";
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import FleetOverviewCards from "../components/AssetManagement/FleetOverviewCards";
+import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import { formatBytesToGb, formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
 
@@ -59,6 +60,23 @@ const FLEET_FILTER_LABELS = {
   disk_unknown: "Not reporting disk",
   low_memory: "Under the memory floor",
 };
+
+/**
+ * El subtítulo de la ventana "View all".
+ *
+ * ⚠️ Antes decía siempre "Complete ranking". El backend limitaba a 6 filas y
+ * la UI ofrecía "View all" a partir de la sexta: con 24 modelos de CPU
+ * distintos, esa ventana mostraba seis y afirmaba que eran todos. Ahora el
+ * ranking viaja con su total real y la frase sólo promete lo que entrega.
+ */
+function rankingSubtitle(items, total, noun) {
+  const shown = Array.isArray(items) ? items.length : 0;
+  const all = Number(total || 0);
+  if (all > shown) {
+    return `Showing the top ${shown} of ${all} ${noun}.`;
+  }
+  return `All ${shown} ${noun} in the fleet.`;
+}
 
 function SectionCard({ title, children, action }) {
   return (
@@ -458,18 +476,6 @@ export default function HardwareInventory({ initialSearch = "" }) {
     [rankings?.topManufacturers]
   );
 
-  const topCpuModelsRows = React.useMemo(
-    () =>
-      normalizeRankingRows(
-        (rankings?.topCpuModels || []).map((item) => ({
-          ...item,
-          color: BRAND.teal,
-        })),
-        BRAND.teal
-      ),
-    [rankings?.topCpuModels]
-  );
-
   const topPlatformsRows = React.useMemo(
     () =>
       normalizeRankingRows(
@@ -482,19 +488,21 @@ export default function HardwareInventory({ initialSearch = "" }) {
     [rankings?.topPlatforms]
   );
 
-  const highestDiskUsageRows = React.useMemo(
-    () =>
-      normalizeRankingRows(
-        (rankings?.highestDiskUsage || []).map((item) => ({
-          ...item,
-          value: Number(item.value || 0),
-          color: BRAND.alert.error,
-          sub: `${Number(item.value || 0).toFixed(1)}% used`,
-        })),
-        BRAND.alert.error
-      ),
-    [rankings?.highestDiskUsage]
-  );
+  const diskUnknownCount = Number(summary?.fleet?.attention?.diskUnknown || 0);
+
+  /**
+   * Cuando hay una sola plataforma, el ranking se colapsa a esta línea.
+   *
+   * `null` significa "hay más de una, dibuja la tarjeta". La decisión de qué
+   * es informativo vive junto al dato y no en el maquetado: dos filas o más
+   * tienen forma; una sola es una etiqueta.
+   */
+  const platformSummaryLine = React.useMemo(() => {
+    const rows = topPlatformsRows;
+    if (rows.length !== 1) return null;
+    const only = rows[0];
+    return `${only.label} · ${only.value} device${only.value === 1 ? "" : "s"}`;
+  }, [topPlatformsRows]);
 
   const openRankingDialog = React.useCallback((config) => {
     setRankingDialog(config);
@@ -647,7 +655,47 @@ export default function HardwareInventory({ initialSearch = "" }) {
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
+          {/* Distribución de disco. Reemplaza a "Highest disk usage": lo que
+              se quiere saber no es quiénes son los ocho más llenos, sino
+              cuántos vienen detrás de los que ya cruzaron el umbral. */}
+          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <DistributionHistogram
+                title="Disk usage"
+                subtitle="How close the rest of the fleet is to the threshold"
+                buckets={summary?.fleet?.distribution?.disk}
+                activeFilter={fleetFilter}
+                onSelect={selectFleetFilter}
+                emptyLabel="No disk usage data"
+                footnote={
+                  diskUnknownCount > 0
+                    ? `${diskUnknownCount} device${diskUnknownCount === 1 ? "" : "s"} not reporting disk`
+                    : null
+                }
+                onFootnoteClick={() => selectFleetFilter("disk_unknown")}
+              />
+            </Box>
+          </Grid>
+
+          {/* Distribución de memoria. Reemplaza a "Top CPU models", que con 24
+              modelos distintos en 53 equipos era cola larga: el top-5 cubría
+              una minoría y el resto quedaba invisible. */}
+          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <DistributionHistogram
+                title="Installed memory"
+                subtitle="Where the fleet sits, and how much of it is at the floor"
+                buckets={summary?.fleet?.distribution?.memory}
+                activeFilter={fleetFilter}
+                onSelect={selectFleetFilter}
+                emptyLabel="No memory data"
+              />
+            </Box>
+          </Grid>
+
+          {/* Manufacturers sí es un ranking: hay dispersión real (9 marcas en
+              la flota del 111) y la pregunta es de orden, no de forma. */}
+          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
               <CompositionBars
                 title="Top manufacturers"
@@ -658,7 +706,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
                 maxItems={5}
                 headerExtra={renderViewAllButton({
                   title: "Top manufacturers",
-                  subtitle: "Complete manufacturer ranking by reporting hosts.",
+                  subtitle: rankingSubtitle(topManufacturersRows, rankings?.topManufacturersTotal, "manufacturers"),
                   items: topManufacturersRows,
                   totalLabel: "hosts",
                   labelHeader: "Manufacturer",
@@ -667,72 +715,60 @@ export default function HardwareInventory({ initialSearch = "" }) {
               />
             </Box>
           </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top CPU models"
-                items={topCpuModelsRows}
-                totalLabel="devices"
-                emptyLabel="No CPU model data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Top CPU models",
-                  subtitle: "Complete CPU model ranking by devices.",
-                  items: topCpuModelsRows,
-                  totalLabel: "devices",
-                  labelHeader: "CPU Model",
-                  valueHeader: "Devices",
-                })}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Top platforms"
-                items={topPlatformsRows}
-                totalLabel="devices"
-                emptyLabel="No platform data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Top platforms",
-                  subtitle: "Complete platform ranking by devices.",
-                  items: topPlatformsRows,
-                  totalLabel: "devices",
-                  labelHeader: "Platform",
-                  valueHeader: "Devices",
-                })}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
-                title="Highest disk usage"
-                items={highestDiskUsageRows}
-                totalLabel="% cumulative"
-                emptyLabel="No disk usage data"
-                minHeight={260}
-                maxItems={5}
-                headerExtra={renderViewAllButton({
-                  title: "Highest disk usage",
-                  subtitle: "Complete device ranking by disk usage percentage.",
-                  items: highestDiskUsageRows,
-                  totalLabel: "% cumulative",
-                  labelHeader: "Device",
-                  valueHeader: "Usage %",
-                })}
-              />
-            </Box>
-          </Grid>
         </Grid>
       </Box>
 
+      {/* ⚠️ Platforms colapsa a una línea cuando hay una sola.
+          Un ranking de una fila no es un ranking, es una etiqueta: en el
+          tenant 111 esa tarjeta gastaba un cuarto de la fila para decir
+          "windows 53". El dato NO se oculta —eso sería peor— pero deja de
+          ocupar el espacio de una gráfica que no tiene nada que graficar. */}
+      {platformSummaryLine ? (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            px: 2,
+            py: 1.25,
+            borderRadius: 3,
+            border: `1px solid ${BRAND.border}`,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Platform</Typography>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark }}>
+            {platformSummaryLine}
+          </Typography>
+        </Paper>
+      ) : (
+        <Box sx={{ mb: 2 }}>
+          <Grid container spacing={2} alignItems="stretch">
+            <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+              <Box sx={{ width: "100%" }}>
+                <CompositionBars
+                  title="Platforms"
+                  items={topPlatformsRows}
+                  totalLabel="devices"
+                  emptyLabel="No platform data"
+                  minHeight={260}
+                  maxItems={5}
+                  headerExtra={renderViewAllButton({
+                    title: "Platforms",
+                    subtitle: rankingSubtitle(topPlatformsRows, rankings?.topPlatformsTotal, "platforms"),
+                    items: topPlatformsRows,
+                    totalLabel: "devices",
+                    labelHeader: "Platform",
+                    valueHeader: "Devices",
+                  })}
+                />
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
+      )}
 
       <SectionCard
         title="Hardware Inventory Detail"
