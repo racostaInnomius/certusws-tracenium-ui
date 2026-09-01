@@ -46,6 +46,7 @@ import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
@@ -58,6 +59,7 @@ import {
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
+import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import {
   PqcHorizonPanel,
   PqcFamilyPanel,
@@ -1116,6 +1118,37 @@ export default function CryptoDiscovery() {
   // the child re-applies even when the same filter is picked twice.
   const [certFilter, setCertFilter] = React.useState(null);
 
+  // ADR-0011 fase 3 — emisión e instalación.
+  const [issuanceOpen, setIssuanceOpen] = React.useState(false);
+  const [issuanceDevices, setIssuanceDevices] = React.useState([]);
+
+  // Los equipos se cargan al ABRIR, no al montar la página: es una
+  // acción puntual y la lista solo la necesita el desplegable. Cargarla
+  // siempre sería una consulta por cada visita a Crypto Discovery para
+  // algo que casi nadie va a usar.
+  React.useEffect(() => {
+    if (!issuanceOpen) return;
+    let vivo = true;
+    listCdpDevices({ page: 1, pageSize: 500 })
+      .then((r) => {
+        if (!vivo) return;
+        const items = r?.items || r?.devices || [];
+        setIssuanceDevices(
+          items.map((d) => ({ id: d.agentId ?? d.agent_id, name: d.host ?? d.hostname }))
+            .filter((d) => d.id)
+        );
+      })
+      .catch(() => {
+        // Sin lista el operador puede seguir: el diálogo acepta un id
+        // escrito. Un fallo al poblar un desplegable no bloquea la
+        // operación.
+        if (vivo) setIssuanceDevices([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [issuanceOpen]);
+
   const drillDown = React.useCallback((filter) => {
     setCertFilter({ ...filter });
     // Certificates moved to index 2 when the Post-quantum tab landed.
@@ -1129,11 +1162,28 @@ export default function CryptoDiscovery() {
         subtitle="X.509 certificates discovered on managed devices — inventory, expiry and hygiene"
         icon={<WorkspacePremiumOutlinedIcon />}
         actions={
-          <Tooltip title="Refresh" arrow>
-            <IconButton aria-label="Refresh" onClick={() => setRefreshNonce((n) => n + 1)}>
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
+          <Stack direction="row" spacing={1} alignItems="center">
+            {/*
+              ADR-0011 fase 3. Va en la cabecera y no dentro de una
+              pestaña porque no pertenece a ninguna: emitir cruza los
+              certificados (lo que se crea) y los equipos (dónde), y
+              esconderla en una de las dos la haría invisible desde la
+              otra.
+            */}
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AddCircleOutlineIcon />}
+              onClick={() => setIssuanceOpen(true)}
+            >
+              Emitir certificado
+            </Button>
+            <Tooltip title="Refresh" arrow>
+              <IconButton aria-label="Refresh" onClick={() => setRefreshNonce((n) => n + 1)}>
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         }
       />
 
@@ -1164,6 +1214,17 @@ export default function CryptoDiscovery() {
       <TabPanel value={tab} index={4}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
       </TabPanel>
+
+      <CertIssuanceDialog
+        open={issuanceOpen}
+        devices={issuanceDevices}
+        onClose={() => {
+          setIssuanceOpen(false);
+          // El inventario es quien confirma que el certificado llegó, así
+          // que se refresca al cerrar.
+          setRefreshNonce((n) => n + 1);
+        }}
+      />
     </Box>
   );
 }

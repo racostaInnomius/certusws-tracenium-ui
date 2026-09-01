@@ -68,3 +68,61 @@ export async function distrustAnchor({ deviceId, thumbprint, reason, ticketRef }
     ticketRef
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// ADR-0011 fase 3 — emisión e instalación de certificados de HOJA
+// ─────────────────────────────────────────────────────────────────────
+//
+// Dos pasos, y son dos porque en medio está la CA del cliente. Nosotros
+// no firmamos: el equipo genera la clave y su CSR, alguien lo lleva a su
+// CA —ADCS, ACME, la que ya sea ancla en ese equipo— y vuelve con el
+// certificado. Ver la cabecera de `cert-install.service.ts` en el
+// backend para por qué el alcance es ese.
+//
+// Las dos pueden responder 202 con `status: "pending_approval"` si la
+// política del tenant exige visto bueno. Eso NO es un error.
+
+/**
+ * Paso 1 — crear la clave EN EL EQUIPO y pedirle su CSR.
+ *
+ * La clave privada no viaja: nace en el llavero (macOS), en el KSP
+ * (Windows) o en un fichero restringido (Linux), y lo único que sale es
+ * la petición de firma. El `keyId` que devuelve es lo que hay que
+ * guardar: sin él no se puede instalar después el certificado firmado.
+ */
+export async function generateCdpCsr({
+  deviceId, subject, dnsNames, uris, eku, reason, ticketRef
+}) {
+  return httpPostJson(`${BASE}/certificates/csr`, {
+    deviceId,
+    subject,
+    dnsNames,
+    uris,
+    eku,
+    reason,
+    ticketRef
+  });
+}
+
+/**
+ * Paso 2 — instalar el certificado ya firmado.
+ *
+ * Puede responder 202 con `status: "held_for_window"`: fuera de la
+ * ventana de mantenimiento del tenant NO se crea el job. Tampoco es un
+ * error — instalar un certificado obliga a recargar el servicio que lo
+ * usa, así que se espera o se marca `ignoreWindow`.
+ */
+export async function installCdpCert({
+  deviceId, keyId, certPem, chainPems, destination, reason, ticketRef, ignoreWindow
+}) {
+  return httpPostJson(`${BASE}/certificates/install`, {
+    deviceId,
+    keyId,
+    certPem,
+    chainPems,
+    destination,
+    reason,
+    ticketRef,
+    ignoreWindow
+  });
+}
