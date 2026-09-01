@@ -19,6 +19,7 @@ import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import {
   listAgentReleases,
@@ -106,7 +107,10 @@ export default function AgentReleases({ embedded = false }) {
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
   // ADR-0011 Phase 3: gate on the "agent_releases" capability instead

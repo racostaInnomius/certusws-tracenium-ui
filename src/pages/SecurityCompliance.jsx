@@ -81,6 +81,7 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useConfirm } from "../components/common/ConfirmDialog";
@@ -195,7 +196,10 @@ export default function SecurityCompliance({ initialTab }) {
   // security boundary. Defaults to false while the fetch is in flight
   // (fail-closed, same as every other page migrated this phase).
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
   const [myPermissions, setMyPermissions] = React.useState(null);

@@ -37,6 +37,7 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 
 // Mirrors session-settings.service.ts SESSION_SETTINGS_LIMITS. Keeping
@@ -50,7 +51,10 @@ const DEFAULT_MINUTES = 30;
 
 export default function SessionSettings({ onNavigate }) {
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const isGlobalAdmin = auth?.globalRole === "admin_master";
 
   // Decide whether the current user can edit the setting. The backend
