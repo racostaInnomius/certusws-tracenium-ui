@@ -45,6 +45,7 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
@@ -586,7 +587,10 @@ export default function Jobs() {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
 
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
   // ADR-0011 Phase 2: whether this page renders at all is driven by the

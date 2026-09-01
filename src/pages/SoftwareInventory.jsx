@@ -38,7 +38,7 @@ import {
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
 import { listFrom } from "../api/shape";
-import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
@@ -337,8 +337,10 @@ export default function SoftwareInventory() {
   // same fix in AssetsDashboard.jsx. Also covers BrowserInventoryPanel
   // below, whose own endpoint requires the same capability now.
   // Defaults to disabled while the fetch is in flight (fail-closed).
-  const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const [myPermissions, setMyPermissions] = React.useState(null);
 
   React.useEffect(() => {

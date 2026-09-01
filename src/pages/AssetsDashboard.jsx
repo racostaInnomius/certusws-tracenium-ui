@@ -58,6 +58,7 @@ import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import {
   getHardwareInventoryDetail,
@@ -312,7 +313,10 @@ export default function AssetsDashboard({
   // open regardless. Defaults to disabled while the fetch is in
   // flight (fail-closed).
   const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const [myPermissions, setMyPermissions] = React.useState(null);
 
   React.useEffect(() => {

@@ -40,6 +40,7 @@ import {
 import { getAuditTimeseries } from "../api/overview";
 import { listKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
   downloadTextFile,
   getSearchParam,
@@ -209,7 +210,10 @@ export default function Audit() {
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
   const { auth } = useAuthContext();
 
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const tenantMemberIsActive = auth?.tenantMember?.isActive === true;
 
   // ADR-0011 Phase 3: gate on the "audit_log" capability (custom or

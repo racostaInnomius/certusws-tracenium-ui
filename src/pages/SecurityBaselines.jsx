@@ -23,6 +23,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
@@ -53,7 +54,10 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
 
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const isActiveMember = auth?.tenantMember?.isActive === true;
 
   // ADR-0011 Phase 3: gate on the "security_compliance" capability

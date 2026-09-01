@@ -33,7 +33,7 @@ import {
   getHardwareInventoryDetail,
 } from "../api/inventoryDashboard";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { useAuthContext } from "../auth/AuthContext";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
@@ -295,8 +295,10 @@ export default function HardwareInventory({ initialSearch = "" }) {
   // ADR-0011 Phase 3: gate on the "assets_view" capability — see the
   // same fix in AssetsDashboard.jsx. Defaults to disabled while the
   // fetch is in flight (fail-closed).
-  const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
+  // portfolio navigation the selected tenant lives in the MSP context and
+  // `auth` does not carry it, so this read silently resolved to nothing.
+  const tenantId = useEffectiveTenantId();
   const [myPermissions, setMyPermissions] = React.useState(null);
 
   React.useEffect(() => {
