@@ -330,21 +330,22 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             {/* User-attended approval — gates ALL rcp.* sessions on
                 end-user consent at the endpoint.
 
-                ⚠️ NOT FUNCTIONAL YET. The backend gate, the policy flag and
-                the agent-side plumbing all exist, but no agent build
-                registers a real ConsentPrompter (see
-                agent-w/src/plugins/rcp/consent-prompt.ts — the default fails
-                closed by design). So no agent advertises `rcp.consent`, and
-                the backend refuses every consent-required session with 409.
-                Turning this on today does not add a prompt; it stops remote
-                control working entirely.
+                YA FUNCIONA, con la condición de abajo. El aviso nativo existe
+                en las tres plataformas (bandeja .NET en Windows, app de estado
+                en macOS, helper X11 en Linux) y el agente anuncia rcp.consent
+                cuando puede preguntar.
 
-                We show it disabled-but-visible rather than hiding it,
-                because hiding solves nothing for a tenant that already has
-                the flag set in policy — the value persists and keeps
-                blocking sessions with no way to see why. For that same
-                reason the switch stays operable while it is ON: an operator
-                must always be able to turn it back off. */}
+                ⚠️ El gate sigue siendo REAL, solo que ahora es por DISPOSITIVO
+                y no global: el backend falla cerrado ante un agente que no
+                sabe preguntar, así que en una flota mixta los equipos con
+                agente antiguo verán sus sesiones RECHAZADAS, no sin aviso.
+                Por eso el interruptor se puede encender pero lo acompaña una
+                advertencia mientras está ON — el riesgo no desaparece hasta
+                que toda la flota esté al día, y quien lo enciende tiene que
+                saberlo.
+
+                Requiere agente ≥ el build que registra el prompter; los
+                anteriores no anuncian rcp.consent. */}
             {(() => {
               const consentOn = Boolean(form?.features?.remoteRequireConsent);
               return (
@@ -363,8 +364,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                             },
                           })
                         }
-                        // Can be switched OFF, never ON, until an agent can prompt.
-                        disabled={readOnly || !consentOn}
+                        disabled={readOnly}
                       />
                     }
                     label={
@@ -377,24 +377,12 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                           <Typography component="span" variant="caption" sx={{ color: BRAND.gray, ml: 0.5 }}>
                             (rcp.consent)
                           </Typography>
-                          <Chip
-                            size="small"
-                            label="Not available yet"
-                            sx={{
-                              ml: 1,
-                              height: 18,
-                              fontSize: TEXT.xs,
-                              fontWeight: 700,
-                              bgcolor: BRAND.surfaceMuted,
-                              color: BRAND.gray,
-                            }}
-                          />
                         </Typography>
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                          Would prompt the logged-in user to approve before any remote
-                          session opens. No agent build can show that prompt yet, so
-                          the setting can&apos;t be enabled — with it on, every remote
-                          session is refused rather than prompted.
+                          Prompts the logged-in user to approve before a remote session
+                          opens, and again before an operator can control the device.
+                          Requires an agent build that can show the prompt: on devices
+                          with an older agent, sessions are refused instead.
                         </Typography>
                       </Box>
                     }
@@ -415,9 +403,11 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                       }}
                     >
                       <Typography variant="caption" sx={{ color: ROLE.critical, fontWeight: 600 }}>
-                        Remote control is currently blocked for the devices this policy
-                        applies to. Every session is being refused because no agent can
-                        obtain the user&apos;s approval. Switch this off to restore access.
+                        Devices whose agent cannot show the prompt will have every
+                        remote session REFUSED — not opened without asking. Check that
+                        the agent is up to date across the devices this policy applies
+                        to before relying on this. Switching it off restores access
+                        immediately.
                       </Typography>
                     </Stack>
                   )}

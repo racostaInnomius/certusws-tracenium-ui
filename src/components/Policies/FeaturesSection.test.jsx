@@ -44,28 +44,43 @@ describe("FeaturesSection", () => {
 
   // ── Consent gate ────────────────────────────────────────────────
   //
-  // The whole consent chain exists (policy flag, backend gate, agent
-  // plumbing) except the native prompt itself, so enabling it today just
-  // makes the backend refuse every session. The control therefore has to be
-  // one-way: never switchable ON, always switchable OFF.
-  describe("Require user consent (not yet implementable)", () => {
+  // Ya es utilizable: el aviso nativo existe en las tres plataformas y el
+  // agente anuncia rcp.consent cuando puede preguntar. El gate dejó de ser
+  // global y pasó a ser POR DISPOSITIVO — y eso es justo lo que hay que
+  // seguir protegiendo aquí. En una flota mixta, encenderlo hace que los
+  // equipos con agente antiguo vean sus sesiones RECHAZADAS, no abiertas sin
+  // preguntar. El interruptor se puede encender; la advertencia es lo que
+  // impide que se encienda a ciegas.
+  describe("Require user consent", () => {
     const withConsent = (on) => ({
       plugins: { rcp: true },
       features: { remoteRequireConsent: on },
     });
 
-    it("cannot be switched on", () => {
-      render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
-      expect(screen.getByRole("switch", { name: /Require user consent/i })).toBeDisabled();
+    it("SE PUEDE encender", () => {
+      const onChange = vi.fn();
+      render(<FeaturesSection form={withConsent(false)} onChange={onChange} catalog={rcpCatalog} />);
+      const sw = screen.getByRole("switch", { name: /Require user consent/i });
+      expect(sw).toBeEnabled();
+      fireEvent.click(sw);
+      expect(onChange.mock.calls[0][0].features.remoteRequireConsent).toBe(true);
     });
 
-    it("is labelled as unavailable", () => {
-      // getAllByText, no getByText: desde ADR-0012 hay un segundo control
-      // gateado igual (grabación de pantalla) con el mismo chip. Buscar "el"
-      // chip encontraría dos y fallaría por ambigüedad, no por regresión.
+    it("ya NO se marca como no disponible", () => {
+      // El chip que queda en la sección es el de GRABACIÓN, que sigue gateada.
+      // Este test moriría si alguien volviera a marcar el consentimiento como
+      // indisponible sin querer.
       render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
-      expect(screen.getAllByText("Not available yet").length).toBeGreaterThan(0);
-      expect(screen.getByRole("switch", { name: /Require user consent/i })).toBeDisabled();
+      const label = screen.getByRole("switch", { name: /Require user consent/i })
+        .closest("label");
+      expect(label?.textContent || "").not.toMatch(/Not available yet/i);
+    });
+
+    it("dice que hace falta un agente que sepa preguntar", () => {
+      // Sin esto, un administrador lo enciende creyendo que todos sus equipos
+      // van a preguntar, y lo que obtiene es la mitad de la flota sin acceso.
+      render(<FeaturesSection form={withConsent(false)} onChange={() => {}} catalog={rcpCatalog} />);
+      expect(screen.getByText(/older agent/i)).toBeInTheDocument();
     });
 
     it("stays switchable when already on, so it can be undone", () => {
@@ -77,9 +92,11 @@ describe("FeaturesSection", () => {
       expect(onChange.mock.calls[0][0].features.remoteRequireConsent).toBe(false);
     });
 
-    it("warns that sessions are being blocked while it is on", () => {
+    it("mientras está ON advierte del riesgo en flota mixta", () => {
+      // La advertencia es lo único que separa "decisión informada" de
+      // "sorpresa el lunes por la mañana".
       render(<FeaturesSection form={withConsent(true)} onChange={() => {}} catalog={rcpCatalog} />);
-      expect(screen.getByText(/Remote control is currently blocked/i)).toBeInTheDocument();
+      expect(screen.getByText(/REFUSED/)).toBeInTheDocument();
     });
 
     // ── Grabación de pantalla (ADR-0012) ──────────────────────────
