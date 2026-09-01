@@ -193,7 +193,14 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
 
   const s = summary ?? {};
   const cards = [
-    { title: "Certificates", value: s.totalCerts ?? "…", icon: <BadgeOutlinedIcon /> },
+    {
+      title: "End-entity certificates",
+      value: s.totalCerts ?? "…",
+      icon: <BadgeOutlinedIcon />,
+      hint: `The certificates that expire and take a service down with them. CA certificates (${
+        (s.caCerts ?? 0).toLocaleString()
+      }) are counted separately — you review those under Trust anchors, you don't renew them.`,
+    },
     {
       title: "With private key",
       value: s.withPrivateKey ?? "…",
@@ -207,12 +214,18 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
       accent: BRAND.alert.warningText,
       tint: BRAND.alert.warningSoft,
     },
+    // Caducado-con-clave va DELANTE de caducado a secas, y no es cosmética:
+    // son 7 sobre 549. Un certificado caducado sin clave privada rara vez
+    // es una incidencia; con clave es una identidad viva que ya no vale.
     {
-      title: "Expired",
-      value: s.expired ?? "…",
+      title: "Expired, with private key",
+      value: s.expiredWithKey ?? "…",
       icon: <EventBusyOutlinedIcon />,
       accent: BRAND.alert.error,
       tint: BRAND.alert.errorSoft,
+      hint: `A live identity that stopped being valid — the shortest actionable list on this page. ${
+        (s.expired ?? 0).toLocaleString()
+      } end-entity certificates are expired in total.`,
     },
     {
       title: "Hygiene flags",
