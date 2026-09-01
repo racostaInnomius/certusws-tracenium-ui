@@ -34,6 +34,14 @@ jobs:
       - name: Design-system guardrails
         run: npm run lint:guardrails
 
+      # Componentes JSX usados sin importar. Aislado del lint completo por el
+      # mismo motivo que las guardas: el repo arrastra errores ajenos. Esta
+      # regla concreta está a cero y su incumplimiento es una página en blanco
+      # en producción con el build en verde — la pestaña Trust anchors estuvo
+      # así desde su commit. Ver scripts/lint-undef.mjs.
+      - name: No undefined JSX components
+        run: npm run lint:undef
+
       - name: Build
         run: npm run build
 

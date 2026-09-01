@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint:guardrails": "node scripts/lint-guardrails.mjs"
+    "lint:guardrails": "node scripts/lint-guardrails.mjs",
+    "lint:undef": "node scripts/lint-undef.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
