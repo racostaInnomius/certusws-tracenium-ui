@@ -38,49 +38,27 @@ import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
+import FleetOverviewCards from "../components/AssetManagement/FleetOverviewCards";
 import { formatBytesToGb, formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
 
-function SummaryCard({ title, value, accent = BRAND.teal, subtitle }) {
-  return (
-    <Paper
-      sx={{
-        p: 2,
-        minHeight: 120,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
-        {title}
-      </Typography>
-
-      <Box>
-        <Typography
-          sx={{
-            fontSize: TEXT["3xl"],
-            fontWeight: 800,
-            color: accent,
-            lineHeight: 1.1,
-            mt: 1,
-          }}
-        >
-          {value}
-        </Typography>
-
-        {subtitle ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.75 }}>
-            {subtitle}
-          </Typography>
-        ) : null}
-      </Box>
-    </Paper>
-  );
-}
+/**
+ * Cómo se nombra cada filtro cuando ya está aplicado.
+ *
+ * ⚠️ Una tabla filtrada que no dice que lo está miente sobre el tamaño de la
+ * flota: alguien que llega con el filtro puesto lee "5 equipos" y se va
+ * pensando que la empresa tiene cinco.
+ */
+const FLEET_FILTER_LABELS = {
+  laptop: "Laptops",
+  desktop: "Desktops",
+  server: "Servers",
+  unknown: "Unclassified devices",
+  virtual: "Virtual machines",
+  disk_high: "Disk usage over threshold",
+  disk_unknown: "Not reporting disk",
+  low_memory: "Under the memory floor",
+};
 
 function SectionCard({ title, children, action }) {
   return (
@@ -355,10 +333,21 @@ export default function HardwareInventory({ initialSearch = "" }) {
 
   const [search, setSearch] = React.useState(initialSearch);
 
+  // Filtro que aplican las tarjetas de arriba. "all" es la flota entera.
+  const [fleetFilter, setFleetFilter] = React.useState("all");
+
   const [paginationModel, setPaginationModel] = React.useState({
     page: 0,
     pageSize: 10,
   });
+
+  // Volver a hacer clic en la tarjeta activa quita el filtro. Sin esto, la
+  // única forma de volver a la flota completa sería adivinar cuál de los
+  // controles la representa.
+  const selectFleetFilter = React.useCallback((key) => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    setFleetFilter((prev) => (prev === key ? "all" : key));
+  }, []);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -371,6 +360,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
       setLoadingDetail(true);
       const res = await getHardwareInventoryDetail({
         search: search || undefined,
+        fleetFilter: fleetFilter && fleetFilter !== "all" ? fleetFilter : undefined,
         page: paginationModel.page + 1,
         pageSize: paginationModel.pageSize,
       });
@@ -391,7 +381,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
 
   React.useEffect(() => {
     loadDetail();
-  }, [search, paginationModel.page, paginationModel.pageSize]);
+  }, [search, fleetFilter, paginationModel.page, paginationModel.pageSize]);
 
   const refreshAll = () => {
     reloadSummary();
@@ -648,25 +638,12 @@ export default function HardwareInventory({ initialSearch = "" }) {
 
   return (
     <Box sx={{ px: 0, py: 0 }}>
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
-            <SummaryCard
-              title="Devices"
-              value={loadingSummary ? "..." : Number(summary?.devices || 0)}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6, lg: 6 }}>
-            <SummaryCard
-              title="Avg Memory"
-              value={loadingSummary ? "..." : `${Number(summary?.avgMemoryGb || 0).toFixed(1)} GB`}
-              accent={BRAND.tealText}
-            />
-          </Grid>
-
-        </Grid>
-      </Box>
+      <FleetOverviewCards
+        fleet={summary?.fleet}
+        loading={loadingSummary}
+        activeFilter={fleetFilter}
+        onSelect={selectFleetFilter}
+      />
 
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
@@ -757,7 +734,25 @@ export default function HardwareInventory({ initialSearch = "" }) {
       </Box>
 
 
-      <SectionCard title="Hardware Inventory Detail">
+      <SectionCard
+        title="Hardware Inventory Detail"
+        action={
+          fleetFilter !== "all" ? (
+            <Chip
+              size="small"
+              label={`${FLEET_FILTER_LABELS[fleetFilter] || fleetFilter} · ${totalRows}`}
+              onDelete={() => selectFleetFilter("all")}
+              sx={{
+                height: 26,
+                fontWeight: 800,
+                fontSize: TEXT.xs,
+                bgcolor: BRAND.tealSoft,
+                color: BRAND.tealText,
+              }}
+            />
+          ) : null
+        }
+      >
         <Box
           sx={{
             mb: 1.5,
