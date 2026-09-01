@@ -416,22 +416,20 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             })()}
 
             {/* ── Grabación de sesiones de pantalla (ADR-0012) ────────
-                Gateado igual que el consentimiento, y por un motivo
-                DISTINTO que conviene no confundir.
+                Graba SOLO las sesiones de pantalla: cifrada en el endpoint
+                con una clave que ese equipo no conserva, subida después de
+                la sesión, y retenida 3 meses.
 
-                Encender el consentimiento sobre la flota actual BLOQUEA
-                todas las sesiones (el backend falla cerrado si el agente
-                no sabe preguntar). Encender la grabación no rompe nada:
-                los agentes que no conocen la bandera simplemente la
-                ignoran. El daño es otro y es peor de detectar — el
-                interruptor diría "grabando" y no se grabaría nada, así
-                que un administrador creería tener vídeo de sesiones que
-                nunca existió. Una función de auditoría que miente sobre
-                sí misma es peor que no tenerla.
+                ⚠️ Un agente que no conozca la bandera la IGNORA en silencio.
+                No rompe nada —a diferencia del consentimiento, que rechaza
+                sesiones— y por eso es más difícil de detectar: el interruptor
+                diría "grabando" y esos equipos no grabarían. Una función de
+                auditoría que miente sobre sí misma es peor que no tenerla, así
+                que la advertencia mientras está ON lo dice.
 
-                Operable para APAGAR aunque esté gateado, por la misma
-                razón que el de consentimiento: nunca se puede dejar a un
-                tenant sin forma de revertir. */}
+                Necesita agente Y backend al día: el endpoint entrega la clave
+                al control plane y sin quien la reciba la grabación se
+                descarta. */}
             {(() => {
               const recordOn = Boolean(form?.features?.remoteRecordScreen);
               return (
@@ -450,7 +448,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                             },
                           })
                         }
-                        disabled={readOnly || !recordOn}
+                        disabled={readOnly}
                       />
                     }
                     label={
@@ -459,26 +457,14 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                           variant="body2"
                           sx={{ fontWeight: 600, color: recordOn ? BRAND.dark : BRAND.gray }}
                         >
-                          Record screen sessions{" "}
-                          <Chip
-                            size="small"
-                            label="Not available yet"
-                            sx={{
-                              ml: 1,
-                              height: 18,
-                              fontSize: TEXT.xs,
-                              fontWeight: 700,
-                              bgcolor: BRAND.surfaceMuted,
-                              color: BRAND.gray,
-                            }}
-                          />
+                          Record screen sessions
                         </Typography>
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                          Would record screen-sharing sessions for audit: encrypted on
-                          the endpoint, uploaded after the session, kept 3 months. No
-                          agent build records yet, so turning this on would show
-                          &quot;recording&quot; without producing any recording. Applies
-                          only to screen sharing — the shell already keeps a transcript.
+                          Records screen-sharing sessions for audit: encrypted on the
+                          endpoint, uploaded after the session ends, kept 3 months, and
+                          replayable from the session history. The consent prompt tells
+                          the user they are being recorded. Applies only to screen
+                          sharing — the shell already keeps a transcript.
                         </Typography>
                       </Box>
                     }
@@ -499,9 +485,10 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
                       }}
                     >
                       <Typography variant="caption" sx={{ color: ROLE.critical, fontWeight: 600 }}>
-                        This is on, but no deployed agent can record — sessions are NOT
-                        being recorded despite what this switch says. Switch it off until
-                        an agent build with recording support is rolled out.
+                        Devices with an older agent IGNORE this and record nothing,
+                        silently. Check that the agent is up to date across the devices
+                        this policy applies to before treating these recordings as
+                        complete audit evidence.
                       </Typography>
                     </Stack>
                   )}

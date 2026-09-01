@@ -106,15 +106,19 @@ describe("FeaturesSection", () => {
     // sesiones; encender la grabación no rompe nada — y eso es peor de
     // detectar: el interruptor diría "grabando" y no se grabaría nada, así
     // que un administrador creería tener vídeo que nunca existió.
-    describe("Record screen sessions (not yet implementable)", () => {
+    describe("Record screen sessions", () => {
       const withRecording = (on) => ({
         plugins: { rcp: true },
         features: { remoteRecordScreen: on },
       });
 
-      it("cannot be switched on", () => {
-        render(<FeaturesSection form={withRecording(false)} onChange={() => {}} catalog={rcpCatalog} />);
-        expect(screen.getByRole("switch", { name: /Record screen sessions/i })).toBeDisabled();
+      it("SE PUEDE encender", () => {
+        const onChange = vi.fn();
+        render(<FeaturesSection form={withRecording(false)} onChange={onChange} catalog={rcpCatalog} />);
+        const sw = screen.getByRole("switch", { name: /Record screen sessions/i });
+        expect(sw).toBeEnabled();
+        fireEvent.click(sw);
+        expect(onChange.mock.calls[0][0].features.remoteRecordScreen).toBe(true);
       });
 
       it("stays switchable when already on, so it can be undone", () => {
@@ -127,10 +131,21 @@ describe("FeaturesSection", () => {
         expect(onChange.mock.calls[0][0].features.remoteRecordScreen).toBe(false);
       });
 
-      it("avisa de que NO se está grabando aunque esté encendido", () => {
-        // El aviso que evita que alguien cuente con una prueba inexistente.
+      it("avisa de que los agentes antiguos NO graban, en silencio", () => {
+        // El daño difícil de detectar: a diferencia del consentimiento —que
+        // rechaza sesiones y se nota— un agente que ignora la bandera no rompe
+        // nada. El interruptor diría "grabando" y esos equipos no grabarían, y
+        // alguien contaría con una prueba que no existe.
         render(<FeaturesSection form={withRecording(true)} onChange={() => {}} catalog={rcpCatalog} />);
-        expect(screen.getByText(/sessions are NOT\s+being recorded/i)).toBeInTheDocument();
+        expect(screen.getByText(/IGNORE this and record nothing/i)).toBeInTheDocument();
+      });
+
+      it("dice que se graba cifrado y con retención", () => {
+        // Es lo que un administrador necesita para decidir si puede activarlo
+        // en su jurisdicción.
+        render(<FeaturesSection form={withRecording(false)} onChange={() => {}} catalog={rcpCatalog} />);
+        expect(screen.getByText(/encrypted on the/i)).toBeInTheDocument();
+        expect(screen.getByText(/3 months/i)).toBeInTheDocument();
       });
 
       it("dice que solo afecta a screen sharing", () => {
