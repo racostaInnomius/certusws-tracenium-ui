@@ -21,6 +21,8 @@ import {
   Stack,
   TextField,
   Typography,
+  Alert,
+  AlertTitle,
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -34,6 +36,7 @@ import AsyncState from "../components/common/AsyncState";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { listFrom } from "../api/shape";
+import { findDivergentSites, isRuleDivergent } from "../utils/locationSiteChecks";
 import {
   listLocationSites,
   createLocationSite,
@@ -146,6 +149,12 @@ export default function LocationSites({ onNavigate }) {
     }
   }
 
+  // ⚠️ Un sitio no puede estar en dos lugares. Ver locationSiteChecks: en el
+  // tenant 111 una de las cinco reglas de "Mountainside IG" tenia la longitud
+  // sin signo, y dos equipos de esa VLAN aparecian en Asia. Nadie ve un signo
+  // que falta en un formulario; se descubrio persiguiendo el sintoma.
+  const conflictos = React.useMemo(() => findDivergentSites(items), [items]);
+
   return (
     <Box>
       <PageHeader
@@ -176,6 +185,24 @@ export default function LocationSites({ onNavigate }) {
         }
       />
 
+      {conflictos.length > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+          <AlertTitle sx={{ fontWeight: 800 }}>
+            {conflictos.length === 1
+              ? "One site is mapped to two different places"
+              : `${conflictos.length} sites are mapped to two different places`}
+          </AlertTitle>
+          {conflictos.map((c) => (
+            <Typography key={c.siteName} sx={{ fontSize: TEXT.md, mb: 0.5 }}>
+              <strong>{c.siteName}</strong> has rules {c.maxDistanceKm.toLocaleString()} km apart
+              {" — "}
+              {c.farthest.map((r) => r.cidr).join(" vs ")}. One of them is wrong; a device on the
+              wrong range is pinned on the other side of the world.
+            </Typography>
+          ))}
+        </Alert>
+      ) : null}
+
       <SectionPaper variant="panel">
         <AsyncState
           loading={loading}
@@ -196,9 +223,15 @@ export default function LocationSites({ onNavigate }) {
                 alignItems={{ xs: "flex-start", sm: "center" }}
                 sx={{
                   p: 1.25,
-                  border: `1px solid ${BRAND.border}`,
+                  // La fila implicada se marca: el aviso de arriba dice QUE
+                  // sitio, y esto dice CUAL regla hay que abrir.
+                  border: isRuleDivergent(row, conflictos)
+                    ? `1px solid ${BRAND.alert.warningText}`
+                    : `1px solid ${BRAND.border}`,
                   borderRadius: 2,
-                  bgcolor: BRAND.surface,
+                  bgcolor: isRuleDivergent(row, conflictos)
+                    ? BRAND.alert.warningSoft
+                    : BRAND.surface,
                 }}
               >
                 <Typography
