@@ -84,7 +84,18 @@ export function resolveMode(entry, defaultMode) {
  *     if ALL are off; otherwise mixed states render as "report-only"
  *     (the conservative truthful summary: something detects, not all fix).
  */
-export function baselineModeForCategory(securityForm, category) {
+/**
+ * `isAutoAvailable(cap)` decide si una capability puede remediar en `auto`.
+ * Por defecto lee el flag estático `enforcer`; el llamador que tenga la matriz
+ * del backend (usePluginCatalog().capabilityAuto) la pasa y el flag pasa a ser
+ * solo la red de seguridad. Sin este parámetro el puente seguiría diciendo lo
+ * que la UI cree, no lo que el agente sabe hacer.
+ */
+export function baselineModeForCategory(
+  securityForm,
+  category,
+  isAutoAvailable = (cap) => Boolean(cap?.enforcer)
+) {
   const caps = capabilitiesForCategory(category);
   if (!caps.length) return null;
 
@@ -92,7 +103,7 @@ export function baselineModeForCategory(securityForm, category) {
     cap,
     mode: resolveMode(securityForm?.capabilities?.[cap.key], securityForm?.defaultMode),
   }));
-  const enforceable = entries.filter((e) => e.cap.enforcer);
+  const enforceable = entries.filter((e) => isAutoAvailable(e.cap));
 
   let mode;
   if (entries.every((e) => e.mode === "off")) {

@@ -269,7 +269,7 @@ export default function SecurityCompliance({ initialTab }) {
   // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
   // no se sepa, así que un backend viejo o un parpadeo NO esconde la acción a
   // quien sí pagó; el control de verdad es el 402 de la API.
-  const { isEntitled } = usePluginCatalog();
+  const { isEntitled, capabilityAuto } = usePluginCatalog();
   const canRemediate = canManage && isEntitled("pmp");
 
   // Sprint 2 item 1 — tenant-configured score bands (85/60 defaults).
@@ -319,7 +319,10 @@ export default function SecurityCompliance({ initialTab }) {
   }, [canManage, tenantId, policyRefresh, tab]);
 
   const modeForCategory = React.useCallback(
-    (category) => (securityForm ? baselineModeForCategory(securityForm, category) : null),
+    (category) =>
+      securityForm
+        ? baselineModeForCategory(securityForm, category, (cap) => capabilityAuto(cap.key, cap.enforcer))
+        : null,
     [securityForm]
   );
 
@@ -594,7 +597,9 @@ export default function SecurityCompliance({ initialTab }) {
   const handleSetCategoryAuto = React.useCallback(
     async (category) => {
       if (!canRemediate || !tenantId) return;
-      const info = securityForm ? baselineModeForCategory(securityForm, category) : null;
+      const info = securityForm
+        ? baselineModeForCategory(securityForm, category, (cap) => capabilityAuto(cap.key, cap.enforcer))
+        : null;
       const targets = info?.autoUpgradable ?? [];
       if (!targets.length) return;
       const labels = targets.map((c) => c.label).join(", ");

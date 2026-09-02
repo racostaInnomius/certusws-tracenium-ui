@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { SECURITY_CAPABILITIES, SECURITY_MODES } from "./policyTransforms";
+import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 
 // Fase C — `evidenceByCapability` (optional): live posture evidence per
 // capability key, shape { failed, highSeverityFails, devicesFailing,
@@ -40,6 +41,12 @@ export default function SecurityPolicySection({
   // que le falta una opción sin explicación es peor que uno que dice por qué.
   autoEntitled = true,
 }) {
+  // La matriz de remediación de PMP decide si `auto` hace algo en cada card.
+  // El flag estático `enforcer` de policyTransforms queda como red cuando el
+  // backend aún no la sirve. Hasta hoy el flag era la única fuente, se
+  // escribía a mano, y decía «auto coming soon» del único handler validado en
+  // producción. Cacheado por useCachedFetch: no añade una petición.
+  const { capabilityAuto } = usePluginCatalog();
   return (
       <Box
         sx={{
@@ -112,7 +119,7 @@ export default function SecurityPolicySection({
                 border: `1px solid ${BRAND.border}`,
                 borderRadius: 1.5,
                 bgcolor: "#ffffff",
-                opacity: cap.enforcer ? 1 : 0.85,
+                opacity: capabilityAuto(cap.key, cap.enforcer) ? 1 : 0.85,
               }}
             >
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 1 }}>
@@ -124,7 +131,7 @@ export default function SecurityPolicySection({
                     {cap.osTags.map((t) => (
                       <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
                     ))}
-                    {!cap.enforcer && (
+                    {!capabilityAuto(cap.key, cap.enforcer) && (
                       <Chip
                         label="auto coming soon"
                         size="small"
@@ -176,7 +183,7 @@ export default function SecurityPolicySection({
                   <MenuItem value="">(inherit default)</MenuItem>
                   {SECURITY_MODES.map((m) => {
                     const isAuto = m.value === "auto";
-                    const notBuilt = !cap.enforcer && isAuto;
+                    const notBuilt = !capabilityAuto(cap.key, cap.enforcer) && isAuto;
                     const notPaid = !autoEntitled && isAuto;
                     return (
                       <MenuItem key={m.value} value={m.value} disabled={notBuilt || notPaid}>

@@ -123,8 +123,11 @@ export const SECURITY_CAPABILITIES = [
   {
     key: "firewall",
     label: "Host firewall",
-    description: "Ensure the host's local firewall is enabled. ufw on Debian/Ubuntu, firewalld on RHEL family, Windows Defender Firewall on Windows.",
-    osTags: ["Linux", "Windows"],
+    description: "Ensure the host's local firewall is enabled. ufw on Debian/Ubuntu, firewalld on RHEL family, Windows Defender Firewall on Windows, the application firewall (socketfilterfw) on macOS.",
+    // macOS faltaba aquí — y es la única plataforma donde este handler se ha
+    // visto funcionar en producción (3 Macs, 2026-08-26). El test de contrato
+    // del backend (remediation-matrix.test) compara estos tags con la matriz.
+    osTags: ["Linux", "Windows", "macOS"],
     enforcer: true,
     fields: [
       { key: "required", label: "Required to be enabled", type: "boolean", default: true },
