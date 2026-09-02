@@ -37,6 +37,7 @@ import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getComplianceCatalog } from "../../api/compliance";
+import { categoryLabel, categoryDescription } from "./categoryMeta";
 
 // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
 const SEV_META = {
@@ -60,10 +61,6 @@ function frameworkFamily(framework) {
   if (f.startsWith("nist_800_53")) return "NIST";
   if (f.startsWith("stig_")) return "STIG";
   return f;
-}
-
-function prettyCategory(c) {
-  return String(c || "").replace(/_/g, " ");
 }
 
 function FrameworkChip({ fw }) {
@@ -129,9 +126,15 @@ function CheckRow({ check }) {
           />
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, textTransform: "capitalize" }}>
-            {prettyCategory(check.category)}
-          </Typography>
+          {/* Same definitions as "Posture by category" — the catalog is
+              where an operator goes to find out what a category is, so
+              it would be perverse for the explanation to live only on
+              the other screen. */}
+          <Tooltip title={categoryDescription(check.category) || ""} arrow placement="top-start">
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
+              {categoryLabel(check.category)}
+            </Typography>
+          </Tooltip>
         </TableCell>
         <TableCell>
           <Chip size="small" label={m.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
@@ -269,8 +272,8 @@ export function CatalogBrowser({ active = true, sx }) {
           >
             <MenuItem value="all">All categories</MenuItem>
             {categories.map((c) => (
-              <MenuItem key={c} value={c} sx={{ textTransform: "capitalize" }}>
-                {prettyCategory(c)}
+              <MenuItem key={c} value={c}>
+                {categoryLabel(c)}
               </MenuItem>
             ))}
           </TextField>

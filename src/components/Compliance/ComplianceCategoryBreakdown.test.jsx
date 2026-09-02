@@ -50,8 +50,11 @@ describe("ComplianceCategoryBreakdown", () => {
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown />);
 
-    expect(await screen.findByText("firewall")).toBeInTheDocument();
-    expect(screen.getByText("network sharing")).toBeInTheDocument(); // underscore → space
+    expect(await screen.findByText("Firewall")).toBeInTheDocument();
+    // Display labels now come from categoryMeta.js, so the rendered
+    // text is "Network sharing", not the raw key with its underscore
+    // swapped for a space.
+    expect(screen.getByText("Network sharing")).toBeInTheDocument();
     expect(screen.getByText("11%")).toBeInTheDocument();
     expect(screen.getByText("96%")).toBeInTheDocument();
   });
@@ -88,7 +91,7 @@ describe("ComplianceCategoryBreakdown", () => {
       ],
     });
     render(<ComplianceCategoryBreakdown />);
-    const firewallCell = await screen.findByText("firewall");
+    const firewallCell = await screen.findByText("Firewall");
     const row = firewallCell.closest("tr");
     // Expand the firewall row (it has failures → expandable).
     fireEvent.click(within(row).getByRole("button"));
@@ -102,7 +105,7 @@ describe("ComplianceCategoryBreakdown", () => {
   it("does not fetch drill-in devices until a category is expanded", async () => {
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown />);
-    await screen.findByText("firewall");
+    await screen.findByText("Firewall");
     expect(getCategoryDevices).not.toHaveBeenCalled();
   });
 });
@@ -124,7 +127,7 @@ describe("gate de tier — el botón de auto-remediar", () => {
   it("con derecho: se ofrece el botón", async () => {
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown baselineBridge={{ ...bridgeBase, onSetAuto: vi.fn() }} />);
-    await screen.findByText("firewall");
+    await screen.findByText("Firewall");
     expect(screen.queryAllByLabelText(/^Enable auto-remediation for /i).length).toBeGreaterThan(0);
   });
 
@@ -132,7 +135,7 @@ describe("gate de tier — el botón de auto-remediar", () => {
     // Ver el estado del baseline es compliance; cambiarlo a auto es remediación.
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown baselineBridge={{ ...bridgeBase, onSetAuto: null }} />);
-    await screen.findByText("firewall");
+    await screen.findByText("Firewall");
     expect(screen.queryAllByLabelText(/^Enable auto-remediation for /i)).toHaveLength(0);
     // …y el tooltip del chip deja de invitar a una llave inglesa que ya no está.
     expect(screen.queryAllByLabelText(/Click the wrench/i)).toHaveLength(0);

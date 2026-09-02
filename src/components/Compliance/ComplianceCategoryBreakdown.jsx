@@ -34,10 +34,7 @@ import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import { listFrom } from "../../api/shape";
-
-function prettyCategory(c) {
-  return String(c || "uncategorized").replace(/_/g, " ");
-}
+import { categoryLabel, categoryDescription } from "./categoryMeta";
 
 // Sprint 2 item 1 — pass rates use the SAME tenant-configured bands as
 // scores (both are "percent of checks passing"). This was one of the
@@ -212,6 +209,32 @@ function BaselineCell({ row, bridge }) {
   );
 }
 
+function CategoryName({ category }) {
+  const description = categoryDescription(category);
+  const name = (
+    <Typography
+      component="span"
+      sx={{
+        fontSize: TEXT.md,
+        fontWeight: 700,
+        color: BRAND.dark,
+        // No textTransform: the labels are real display strings now
+        // ("Identity policy"), and `capitalize` would title-case them
+        // into "Identity Policy".
+        ...(description ? { cursor: "help", borderBottom: `1px dotted ${BRAND.border}` } : null)
+      }}
+    >
+      {categoryLabel(category)}
+    </Typography>
+  );
+  if (!description) return name;
+  return (
+    <Tooltip title={description} arrow placement="top-start">
+      {name}
+    </Tooltip>
+  );
+}
+
 function CategoryRow({ row, baselineBridge }) {
   const [open, setOpen] = React.useState(false);
   const expandable = row.failed > 0;
@@ -230,9 +253,11 @@ function CategoryRow({ row, baselineBridge }) {
           ) : null}
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, textTransform: "capitalize" }}>
-            {prettyCategory(row.category)}
-          </Typography>
+          {/* The category names are Tracenium's vocabulary, not an
+              industry standard, so each carries its own definition.
+              A category we have no description for renders plainly
+              rather than opening an empty tooltip. */}
+          <CategoryName category={row.category} />
           {row.notApplicable ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{row.notApplicable} n/a</Typography> : null}
         </TableCell>
         <TableCell>
