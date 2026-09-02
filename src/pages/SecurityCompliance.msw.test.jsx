@@ -68,6 +68,9 @@ const FRAMEWORKS = {
     // mapped broadly (92 of 94).
     { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11", mappedChecks: 11, catalogChecks: 94 },
     { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
+    // SOC 2 maps every catalog check, so the coverage warning stays
+    // silent — which is exactly why it needs a caveat of its own.
+    { framework: "soc2_tsc_2017", family: "AICPA", shortName: "SOC 2 TSC", mappedChecks: 94, catalogChecks: 94 },
   ],
   packActive: true,
   totalFrameworks: 12,
@@ -137,7 +140,8 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(await screen.findByText(/9 of 12 devices/)).toBeInTheDocument();
     // Framework table reads res.items[] and the pack chip reads packActive/totalFrameworks
-    expect(await screen.findByText("Tracking 2 of 12")).toBeInTheDocument();
+    // Three in the fixture since SOC 2 joined it.
+    expect(await screen.findByText("Tracking 3 of 12")).toBeInTheDocument();
     expect(screen.getByText("CIS Win11")).toBeInTheDocument();
     // Device table reads res.items[].hostname
     expect(screen.getByText("WS-ALPHA")).toBeInTheDocument();
@@ -339,6 +343,38 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
       expect(screen.queryByRole("combobox", { name: "Filter by framework" })).toBeNull()
     );
     expect(screen.queryByRole("button", { name: "Compliance settings" })).toBeNull();
+  });
+
+  // ── SOC 2 no es un estándar de configuración ──────────────────────
+  // Salió en una demo. Un 94% contra SOC 2 se lee como "estamos listos
+  // para la auditoría", y no lo es: SOC 2 lo emite un auditor sobre la
+  // organización, y sus criterios de gobierno, RRHH y proveedores no
+  // tienen evidencia de endpoint. La cobertura no lo va a avisar —
+  // están los 94 checks mapeados — así que el aviso es aparte.
+  it("caveats an attestation framework under the headline", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.queryByText(/attestation an auditor issues/)).toBeNull();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    fireEvent.click(await screen.findByRole("option", { name: "SOC 2 TSC" }));
+
+    expect(await screen.findByText(/attestation an auditor issues about your organisation/)).toBeInTheDocument();
+  });
+
+  it("does not caveat a framework that IS a configuration standard", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    fireEvent.click(await screen.findByRole("option", { name: "CIS Win11" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Measured against CIS Win11/)).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/attestation an auditor issues/)).toBeNull();
   });
 
   it("says nothing about coverage when the backend does not report it", async () => {

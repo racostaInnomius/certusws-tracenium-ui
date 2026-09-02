@@ -126,6 +126,26 @@ import { scoreBandRole, scoreBandLabel } from "../theme/scoreBands";
 const FRAMEWORK_COVERAGE_THIN_BELOW = 0.4;
 
 /**
+ * Frameworks that are NOT configuration standards.
+ *
+ * CIS, STIG and PCI DSS tell you how to configure a machine, so a score
+ * against them means roughly what it looks like it means. SOC 2 does
+ * not: it is an attestation a CPA issues about an organisation, and most
+ * of its criteria — governance, HR, vendor management, change control —
+ * have no endpoint evidence at all. What Tracenium can evidence is the
+ * logical-access and operations subset of the Common Criteria.
+ *
+ * That distinction has to reach the screen. Coverage alone will not
+ * carry it: every catalog check maps to some SOC 2 criterion, so the
+ * "narrow coverage" flag stays silent and a 94% reads as "we are ready
+ * for our SOC 2". Nobody is ready for SOC 2 because of a device score.
+ */
+const ATTESTATION_FRAMEWORK_NOTE = {
+  soc2_tsc_2017:
+    "SOC 2 is an attestation an auditor issues about your organisation, not a device configuration standard. This score covers only the logical-access and operations criteria (CC6, CC7) that endpoint evidence can support — governance, HR, vendor management and change control are outside it.",
+};
+
+/**
  * "N of M controls mapped" under a framework's name, flagged when the
  * mapping is thin. Silent when we have no coverage figures — an older
  * backend simply omits them, and a missing number must not turn into a
@@ -1186,6 +1206,15 @@ export default function SecurityCompliance({ initialTab }) {
               </Stack>
             ) : null}
 
+            {/* Un score contra una atestación no significa lo que
+                parece. Va bajo el número, no en un tooltip: el número es
+                lo que la gente lee, y lo que se llevan de una demo. */}
+            {scoped && ATTESTATION_FRAMEWORK_NOTE[selectedFramework] ? (
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.75, maxWidth: 780 }}>
+                {ATTESTATION_FRAMEWORK_NOTE[selectedFramework]}
+              </Typography>
+            ) : null}
+
             <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.75 }}>
               <Box component="span" sx={{ fontWeight: 700, color: BRAND.dark }}>
                 {devicesGood} of {devicesTotal} devices
@@ -1394,6 +1423,13 @@ export default function SecurityCompliance({ initialTab }) {
                           {f.framework}
                         </Typography>
                         <CoverageNote coverage={frameworkCoverage.get(f.framework)} />
+                        {ATTESTATION_FRAMEWORK_NOTE[f.framework] ? (
+                          <Tooltip arrow placement="bottom-start" title={ATTESTATION_FRAMEWORK_NOTE[f.framework]}>
+                            <Typography variant="caption" sx={{ color: BRAND.gray, cursor: "help" }}>
+                              Attestation — partial evidence
+                            </Typography>
+                          </Tooltip>
+                        ) : null}
                       </Stack>
                     </TableCell>
                     <TableCell align="right">{f.devicesReporting}</TableCell>
