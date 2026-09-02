@@ -43,6 +43,7 @@ const CONTROLS = [
     devicesPassing: 0,
     devicesFailing: 0,
     devicesNotAssessed: 50,
+    notAssessedReasons: ["path 'screenLock.screenSaverSecure' not reported"],
     status: "not_assessed",
   },
   {
@@ -93,6 +94,16 @@ describe("FrameworkControlsPanel", () => {
     const row = (await screen.findByText("19.1.3.3")).closest("tr");
     expect(within(row).getByText("Not assessed")).toBeInTheDocument();
     expect(within(row).queryByText("Met")).toBeNull();
+  });
+
+  it("says WHY a control could not be assessed", async () => {
+    // Without the reason, "Not assessed" reads as a verdict Tracenium
+    // chose. It is the opposite: evidence that never arrived.
+    getFrameworkControls.mockResolvedValue(ok(CONTROLS));
+    render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
+
+    const row = (await screen.findByText("19.1.3.3")).closest("tr");
+    expect(within(row).getByText(/screenLock\.screenSaverSecure' not reported/)).toBeInTheDocument();
   });
 
   it("shows the checks behind a verdict, so it can be argued with", async () => {

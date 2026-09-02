@@ -54,7 +54,7 @@ const STATUS_META = {
     label: "Not assessed",
     fg: BRAND.gray,
     bg: BRAND.darkSoft,
-    help: "No device produced usable evidence for this control — it is neither met nor failed.",
+    help: "No device reported the evidence this control needs, so it is neither met nor failed. The reason is shown under the control — usually the agent is not sending that value.",
   },
 };
 
@@ -194,6 +194,16 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
                   <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
                     {row.checks.map((c) => c.checkId).join(" · ")}
                   </Typography>
+                  {/* Por qué no se pudo evaluar. Sin esto "Not assessed"
+                      se lee como un veredicto que Tracenium eligió, y es
+                      lo contrario: evidencia que nunca llegó. El motivo
+                      lo escribe el evaluador en cada hallazgo y hasta
+                      ahora no salía a ninguna pantalla. */}
+                  {row.notAssessedReasons?.length ? (
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert?.warningText }}>
+                      {row.notAssessedReasons.join(" · ")}
+                    </Typography>
+                  ) : null}
                 </Stack>
               </TableCell>
               <TableCell>
