@@ -53,7 +53,10 @@ export default function BulkFindingToolbar({
         >
           {hasSelection
             ? `${selectedCount} of ${totalCount} selected`
-            : `Select all (${totalCount} findings)`}
+            /* Singular matters now: the device drawer opens filtered to
+               failures, so a one-item list is common rather than a rare
+               edge. "Select all (1 findings)" reads as a bug. */
+            : `Select all (${totalCount} finding${totalCount === 1 ? "" : "s"})`}
         </Typography>
         {hasSelection ? (
           <>

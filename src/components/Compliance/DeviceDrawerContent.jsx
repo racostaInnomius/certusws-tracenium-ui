@@ -28,7 +28,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
-import { BRAND, ICON } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   StatusChip,
   ScoreBar,
@@ -121,9 +121,35 @@ export default function DeviceDrawerContent({
     [SEVERITY_RANK, STATUS_RANK]
   );
 
+  // ── Sólo lo que falla, por defecto ─────────────────────────────────
+  // El panel listaba los ~94 controles evaluados, y en un equipo típico
+  // la mayoría pasan o no aplican. Quien lo abre viene a ver qué está
+  // mal: enseñarle primero 60 filas verdes convierte la respuesta en una
+  // búsqueda. El resto sigue estando, a un clic — no se oculta nada, se
+  // ordena la pregunta.
+  //
+  // Un equipo SIN fallos no debe abrir en vacío: ahí el filtro se relaja
+  // solo, porque "no hay nada que arreglar" se dice mejor enseñando los
+  // controles que pasan que con una lista vacía.
+  const [failuresOnly, setFailuresOnly] = React.useState(true);
+
+  const failingCount = React.useMemo(
+    () => findings.filter((f) => f.status === "fail" || f.status === "error").length,
+    [findings]
+  );
+  const showOnlyFailures = failuresOnly && failingCount > 0;
+
+  const visibleFindings = React.useMemo(
+    () =>
+      showOnlyFailures
+        ? findings.filter((f) => f.status === "fail" || f.status === "error")
+        : findings,
+    [findings, showOnlyFailures]
+  );
+
   const byCategory = React.useMemo(() => {
     const groups = new Map();
-    for (const f of findings) {
+    for (const f of visibleFindings) {
       const key = f.category || "other";
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(f);
@@ -151,7 +177,7 @@ export default function DeviceDrawerContent({
       }
       return nameA.localeCompare(nameB);
     });
-  }, [findings, findingSortKey]);
+  }, [visibleFindings, findingSortKey]);
 
   const statusCounts = React.useMemo(() => {
     const c = { pass: 0, fail: 0, not_applicable: 0, info: 0, error: 0 };
@@ -192,7 +218,12 @@ export default function DeviceDrawerContent({
     handleBulkRevoke,
     handleBulkChangeStatus,
     confirmBulkStatusChange,
-  } = useBulkSelection({ findings, resetKey: agentId, onToast, onRequestRefetch });
+    // La selección masiva opera SOBRE LO VISIBLE. Con el filtro de fallos
+    // activo, un "select all" sobre la lista completa marcaría hallazgos
+    // que el operador no tiene delante — y "acknowledge" sobre algo que
+    // no has visto es exactamente lo que un registro de compliance no
+    // puede permitirse.
+  } = useBulkSelection({ findings: visibleFindings, resetKey: agentId, onToast, onRequestRefetch });
 
   if (!agentId) return null;
 
@@ -406,7 +437,7 @@ export default function DeviceDrawerContent({
               + this toolbar are the single bulk surface. */}
           {canManage && findings.length > 0 ? (
             <BulkFindingToolbar
-              totalCount={findings.length}
+              totalCount={visibleFindings.length}
               selectedCount={selectedIds.size}
               onSelectAll={selectAll}
               onClear={clearSelection}
@@ -458,6 +489,25 @@ export default function DeviceDrawerContent({
               </MenuItem>
             ))}
           </Menu>
+
+          {/* Qué se está mirando, y cómo ver el resto. Va justo encima de
+              la lista para que el filtro y su efecto se lean juntos. */}
+          {failingCount > 0 ? (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, flexWrap: "wrap" }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                {showOnlyFailures
+                  ? `Showing ${failingCount} failing of ${findings.length} evaluated controls`
+                  : `Showing all ${findings.length} evaluated controls`}
+              </Typography>
+              <Button
+                size="small"
+                onClick={() => setFailuresOnly((v) => !v)}
+                sx={{ textTransform: "none", color: BRAND.teal }}
+              >
+                {showOnlyFailures ? "Show all" : "Show only failures"}
+              </Button>
+            </Stack>
+          ) : null}
 
           {/* Findings grouped by category --------------------------------- */}
           {byCategory.map(([category, items]) => (

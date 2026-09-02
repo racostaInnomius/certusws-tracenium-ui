@@ -295,11 +295,26 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
           <DetailRow label="Updated" value={formatDate(env.updatedAt)} />
         </Box>
 
+        {/* Dos preguntas que hizo un usuario nuevo y la página no
+            respondía: por qué esta lista es tan corta comparada con el
+            catálogo, y si mueve el score. Ambas nacen de leer Baselines
+            como "una parte de SCP" cuando es el otro eje: SCP mide, esto
+            exige. Decirlo aquí es más barato que dejar que cada operador
+            lo deduzca — y hasta ahora ninguno lo deducía. */}
         <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
-          Modes are per-capability. <strong>report-only</strong> (the default) reads
-          the endpoint state and reports drift without changing anything;{" "}
-          <strong>auto</strong> lets the agent remediate. Capabilities marked
-          "coming soon" persist your intent but have no remediator yet.
+          These are the states you <strong>require</strong> of your endpoints — a
+          different thing from the controls Security Compliance{" "}
+          <strong>measures</strong>. The list is short because
+          it covers only what the agent knows how to enforce, and{" "}
+          <strong>nothing here changes your compliance score</strong>: the score
+          comes from the evidence your devices report, whether or not you have
+          set a baseline for it.
+          <Box component="span" sx={{ display: "block", mt: 1 }}>
+            Modes are per-capability. <strong>report-only</strong> (the default) reads
+            the endpoint state and reports drift without changing anything;{" "}
+            <strong>auto</strong> lets the agent remediate. Capabilities marked
+            "coming soon" persist your intent but have no remediator yet.
+          </Box>
         </Alert>
 
         <SecurityPolicySection

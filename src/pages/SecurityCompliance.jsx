@@ -116,6 +116,45 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
 import { scoreBandRole, scoreBandLabel } from "../theme/scoreBands";
 
+// Below this share of the catalog, a framework score is computed on so
+// few controls that reading it as a posture is a mistake. 40% is a
+// judgement call, not a standard: it separates the three frameworks we
+// have mapped broadly (82-92 of 94 checks) from the six we have barely
+// mapped at all (4-15).
+const FRAMEWORK_COVERAGE_THIN_BELOW = 0.4;
+
+/**
+ * "N of M controls mapped" under a framework's name, flagged when the
+ * mapping is thin. Silent when we have no coverage figures — an older
+ * backend simply omits them, and a missing number must not turn into a
+ * scary one.
+ */
+function CoverageNote({ coverage }) {
+  if (!coverage || !coverage.total) return null;
+  const { mapped, total } = coverage;
+  const thin = mapped / total < FRAMEWORK_COVERAGE_THIN_BELOW;
+  return (
+    <Tooltip
+      arrow
+      placement="bottom-start"
+      title={
+        thin
+          ? `Only ${mapped} of the ${total} controls Tracenium evaluates are mapped to this framework, so its score reflects a narrow slice of your posture rather than the whole standard.`
+          : `${mapped} of the ${total} controls Tracenium evaluates are mapped to this framework.`
+      }
+    >
+      <Typography
+        variant="caption"
+        // warningText, not `warning`: the plain amber (#F4D37D) is a fill
+        // colour and washes out as text on the white surface.
+        sx={{ color: thin ? BRAND.alert.warningText : BRAND.gray, fontWeight: thin ? 700 : 400, cursor: "help" }}
+      >
+        {mapped} of {total} controls mapped{thin ? " — narrow coverage" : ""}
+      </Typography>
+    </Tooltip>
+  );
+}
+
 // ---------- constants --------------------------------------------------------
 
 // ── Sprint 3 — remediation lifecycle ────────────────────────────────
@@ -283,6 +322,12 @@ export default function SecurityCompliance({ initialTab }) {
   );
 
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
+
+  // Which control the Catalog tab should land on. Clicking a row in
+  // "What to fix first" used to switch tabs and drop the operator at the
+  // top of all 94 checks, leaving them to remember what they had clicked
+  // and search for it by hand.
+  const [focusCheckId, setFocusCheckId] = React.useState(null);
 
   // Deep-link filters (pre-populated from URL, user can clear via
   // chips). Client-side only — we already have the full device list
@@ -670,6 +715,19 @@ export default function SecurityCompliance({ initialTab }) {
     return map;
   }, [frameworks]);
 
+  // Cuánto del catálogo mapea a cada estándar. Sin esto, elegir CIS
+  // Windows 11 daba un score calculado sobre 11 de 94 controles con nada
+  // en pantalla que lo dijera — y quien comparaba el catálogo con el
+  // framework concluía, razonablemente, que el catálogo venía recortado.
+  // No lo está: lo que está incompleto son los mapeos de CIS y STIG.
+  const frameworkCoverage = React.useMemo(() => {
+    const map = new Map();
+    for (const f of frameworks) {
+      if (f.catalogChecks) map.set(f.framework, { mapped: f.mappedChecks ?? 0, total: f.catalogChecks });
+    }
+    return map;
+  }, [frameworks]);
+
   const selectedFrameworkLabel = selectedFramework
     ? frameworkLabels.get(selectedFramework) || selectedFramework
     : "All frameworks (weighted)";
@@ -923,7 +981,12 @@ export default function SecurityCompliance({ initialTab }) {
 
       {effectiveTab === "catalog" ? (
         <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
-          <CatalogBrowser active sx={{ height: "72vh" }} />
+          <CatalogBrowser
+            active
+            sx={{ height: "72vh" }}
+            focusCheckId={focusCheckId}
+            onClearFocus={() => setFocusCheckId(null)}
+          />
         </SectionPaper>
       ) : null}
 
@@ -1086,7 +1149,10 @@ export default function SecurityCompliance({ initialTab }) {
         reloadKey={refreshToken}
         framework={selectedFramework}
         frameworkLabel={selectedFrameworkLabel}
-        onOpenCheck={() => setTab("catalog")}
+        onOpenCheck={(row) => {
+          setFocusCheckId(row?.checkId ?? null);
+          setTab("catalog");
+        }}
         onRemediate={canRemediate ? handleRemediateCheck : null}
       />
 
@@ -1234,6 +1300,7 @@ export default function SecurityCompliance({ initialTab }) {
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
                           {f.framework}
                         </Typography>
+                        <CoverageNote coverage={frameworkCoverage.get(f.framework)} />
                       </Stack>
                     </TableCell>
                     <TableCell align="right">{f.devicesReporting}</TableCell>

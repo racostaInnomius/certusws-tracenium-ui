@@ -47,6 +47,14 @@ function errorMessageFor(err) {
   if (err?.status === 502 || code === "AI_INVALID_OUTPUT") {
     return "The model returned something we couldn't validate. Try again.";
   }
+  // A deployment fault, and one the operator cannot act on — so say what is
+  // wrong and who fixes it, rather than inviting a retry that cannot work.
+  // Until 2026-09-02 this surfaced as the HTTP layer's generic "Unable to
+  // refresh data. Showing last available data.", which was both unhelpful
+  // and untrue: no explanation had ever been generated to fall back on.
+  if (code === "AI_NOT_CONFIGURED") {
+    return "Explanations are unavailable: this server has no AI credential configured. Retrying will not help — contact your Tracenium administrator.";
+  }
   return err?.body?.message || err?.message || "Failed to generate an explanation.";
 }
 

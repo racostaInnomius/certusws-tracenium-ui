@@ -61,8 +61,10 @@ const SUMMARY = {
 const FRAMEWORKS = {
   ok: true,
   frameworks: [
-    { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11" },
-    { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53" },
+    // Coverage mirrors prod: CIS is barely mapped (11 of 94), NIST is
+    // mapped broadly (92 of 94).
+    { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11", mappedChecks: 11, catalogChecks: 94 },
+    { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
   ],
   packActive: true,
   totalFrameworks: 12,
@@ -221,5 +223,37 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
     expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument();
+  });
+
+  // ── Cobertura de mapeo por framework ──────────────────────────────
+  // Elegir CIS Windows 11 da un score sobre 11 de 94 controles. Sin
+  // decirlo, se lee como una postura CIS — y quien compara el catálogo
+  // con el framework concluye que el catálogo viene recortado.
+  it("flags a framework whose mapping covers little of the catalog", async () => {
+    mountPage();
+    await waitFor(() => expect(screen.getByText("CIS Win11")).toBeInTheDocument());
+
+    expect(screen.getByText(/11 of 94 controls mapped — narrow coverage/)).toBeInTheDocument();
+    // The broadly-mapped one states its coverage without the warning.
+    expect(screen.getByText("92 of 94 controls mapped")).toBeInTheDocument();
+  });
+
+  it("says nothing about coverage when the backend does not report it", async () => {
+    // An older backend omits the counts; a missing number must not turn
+    // into a scary one.
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, {
+      ...FRAMEWORKS,
+      frameworks: [{ framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53" }],
+    });
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.queryByText(/controls mapped/)).not.toBeInTheDocument();
   });
 });

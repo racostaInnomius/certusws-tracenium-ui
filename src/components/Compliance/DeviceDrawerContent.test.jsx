@@ -65,16 +65,49 @@ describe("DeviceDrawerContent", () => {
 
     // Header uses the device hostname.
     expect(screen.getByRole("heading", { name: "host-a" })).toBeInTheDocument();
-    // FindingCard rendered both findings (checkId + title).
+    // The drawer opens on failures only (see below), so cis:1.1 (fail)
+    // is on screen and cis:2.2 (pass) is a click away.
     expect(screen.getByText("cis:1.1")).toBeInTheDocument();
     expect(screen.getByText("Check one")).toBeInTheDocument();
-    expect(screen.getByText("cis:2.2")).toBeInTheDocument();
-    // BulkFindingToolbar rendered (findings.length > 0) — asserts the import resolved.
-    expect(screen.getByText("Select all (2 findings)")).toBeInTheDocument();
-    // Status counts line from statusCounts memo.
+    expect(screen.queryByText("cis:2.2")).not.toBeInTheDocument();
+    // BulkFindingToolbar counts what is VISIBLE, not what was fetched.
+    expect(screen.getByText("Select all (1 finding)")).toBeInTheDocument();
+    // Status counts still describe everything evaluated — the filter
+    // changes the list, not the summary.
     expect(screen.getByText(/1 pass · 1 fail/)).toBeInTheDocument();
     // FleetRankingLine (eager) fired its fetch with the agent id.
     await waitFor(() => expect(getDeviceFleetRanking).toHaveBeenCalledWith("agent-1"));
+  });
+
+  // ── El panel abre por lo que falla ────────────────────────────────
+  // Listaba los ~94 controles evaluados y en un equipo típico la mayoría
+  // pasan o no aplican. Quien abre el panel viene a ver qué está mal.
+  it("opens showing only failures, and can widen to everything", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    render(<DeviceDrawerContent {...baseProps} data={deviceData} />);
+
+    expect(screen.getByText(/Showing 1 failing of 2 evaluated controls/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+    expect(screen.getByText("cis:1.1")).toBeInTheDocument();
+    expect(screen.getByText("cis:2.2")).toBeInTheDocument();
+    expect(screen.getByText(/Showing all 2 evaluated controls/)).toBeInTheDocument();
+  });
+
+  it("does not open an empty panel on a device with nothing failing", () => {
+    // Relaxing the filter here is the point: "nothing to fix" reads
+    // better as a list of passing controls than as a blank panel.
+    const allPassing = {
+      ...deviceData,
+      findings: deviceData.findings.map((f) => ({ ...f, status: "pass" })),
+    };
+    render(<DeviceDrawerContent {...baseProps} data={allPassing} />);
+
+    expect(screen.getByText("cis:1.1")).toBeInTheDocument();
+    expect(screen.getByText("cis:2.2")).toBeInTheDocument();
+    // And no toggle to offer, since there is nothing to filter out.
+    expect(screen.queryByRole("button", { name: /Show (all|only failures)/ })).not.toBeInTheDocument();
   });
 
   it("wires the close button", () => {
@@ -87,8 +120,11 @@ describe("DeviceDrawerContent", () => {
   it("selecting all then opening the actions menu shows bulk transitions", async () => {
     render(<DeviceDrawerContent {...baseProps} data={deviceData} />);
     // Select all via the toolbar checkbox, then open the Actions menu.
+    // "All" means the visible list — with the failures-only default that
+    // is 1 of the 2 fetched findings, which is the whole point: a bulk
+    // acknowledge must never reach a finding the operator cannot see.
     fireEvent.click(screen.getByRole("checkbox", { name: "Select all findings" }));
-    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 selected")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /actions/i }));
     // Menu (bulk transitions) rendered — asserts Menu/MenuItem/RemediationStatusChip resolved.
     await waitFor(() =>

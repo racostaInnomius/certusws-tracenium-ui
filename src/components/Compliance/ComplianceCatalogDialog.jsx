@@ -98,13 +98,33 @@ function FrameworkChip({ fw }) {
   );
 }
 
-function CheckRow({ check }) {
-  const [open, setOpen] = React.useState(false);
+function CheckRow({ check, focused = false }) {
+  // A row arrived at from "What to fix first" opens already expanded and
+  // tinted: the operator clicked a specific control and should land on
+  // its remediation steps, not on a list they now have to re-scan.
+  const [open, setOpen] = React.useState(focused);
+  const rowRef = React.useRef(null);
   const m = sevMeta(check.severity);
   const steps = Array.isArray(check.remediationDetails?.steps) ? check.remediationDetails.steps : [];
+
+  React.useEffect(() => {
+    if (!focused || !rowRef.current) return;
+    setOpen(true);
+    // The catalog list scrolls inside its own box; without this the row
+    // can be highlighted below the fold and read as "nothing happened".
+    rowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focused]);
+
   return (
     <>
-      <TableRow hover sx={{ "& > *": { borderBottom: open ? "none" : undefined } }}>
+      <TableRow
+        ref={rowRef}
+        hover
+        sx={{
+          "& > *": { borderBottom: open ? "none" : undefined },
+          ...(focused ? { bgcolor: BRAND.tealSoft } : null),
+        }}
+      >
         <TableCell sx={{ width: 34, pr: 0 }}>
           <IconButton
             aria-label={open ? "Collapse" : "Expand"}
@@ -191,7 +211,7 @@ function CheckRow({ check }) {
 // fetch trigger — pass true for an always-mounted tab. `sx` merges onto
 // the root flex column (the tab passes a height; the dialog fills its
 // DialogContent).
-export function CatalogBrowser({ active = true, sx }) {
+export function CatalogBrowser({ active = true, sx, focusCheckId = null, onClearFocus }) {
   const [loading, setLoading] = React.useState(false);
   const [checks, setChecks] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -200,6 +220,16 @@ export function CatalogBrowser({ active = true, sx }) {
   const [severity, setSeverity] = React.useState("all");
   const [family, setFamily] = React.useState("all");
   const [q, setQ] = React.useState("");
+
+  // Arriving from "What to fix first": seed the search with the check id
+  // the operator clicked. Before this the tab just opened on the full
+  // 94-row catalog and left them to remember what they had clicked.
+  // Reusing the existing search rather than adding a second filtering
+  // path keeps one story about how this list narrows — and leaves the
+  // operator somewhere they can widen from.
+  React.useEffect(() => {
+    if (focusCheckId) setQ(focusCheckId);
+  }, [focusCheckId]);
 
   React.useEffect(() => {
     if (!active) return;
@@ -313,9 +343,22 @@ export function CatalogBrowser({ active = true, sx }) {
           />
         </Stack>
 
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-          {loading ? "Loading…" : `${filtered.length} of ${checks.length} checks`}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+            {loading ? "Loading…" : `${filtered.length} of ${checks.length} checks`}
+          </Typography>
+          {focusCheckId ? (
+            <Chip
+              size="small"
+              label="Showing one control"
+              onDelete={() => {
+                setQ("");
+                if (onClearFocus) onClearFocus();
+              }}
+              sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+            />
+          ) : null}
+        </Stack>
 
         <Box sx={{ flex: 1, overflow: "auto", border: `1px solid ${BRAND.border}`, borderRadius: 1 }}>
           {loading ? (
@@ -340,7 +383,7 @@ export function CatalogBrowser({ active = true, sx }) {
               </TableHead>
               <TableBody>
                 {filtered.map((c) => (
-                  <CheckRow key={c.checkId} check={c} />
+                  <CheckRow key={c.checkId} check={c} focused={c.checkId === focusCheckId} />
                 ))}
               </TableBody>
             </Table>
