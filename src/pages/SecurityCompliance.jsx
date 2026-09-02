@@ -44,6 +44,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   Tabs,
   TextField,
   Tooltip,
@@ -364,6 +365,11 @@ export default function SecurityCompliance({ initialTab }) {
       totalFrameworks: Number(byKey.frameworks?.totalFrameworks) || 0,
       frameworkSummary: Array.isArray(byKey.frameworkSummary?.items) ? byKey.frameworkSummary.items : [],
       devices: Array.isArray(byKey.devices?.items) ? byKey.devices.items : [],
+      // El backend recorta a 2000 equipos. Si lo hace hay que decirlo:
+      // una lista incompleta presentada como completa es peor que una
+      // tabla larga.
+      devicesTruncated: Boolean(byKey.devices?.truncated),
+      deviceRowCap: Number(byKey.devices?.rowCap) || null,
       failedSections,
     };
   }, [selectedFramework]);
@@ -681,6 +687,34 @@ export default function SecurityCompliance({ initialTab }) {
       }, bands),
     [devices, platformFilter, statusFilter, versionBucketFilter, scoreBandFilter, bands]
   );
+
+  // ── Paginación de la tabla de equipos ──────────────────────────────
+  // Se renderizaban TODAS las filas. Con 21 y 50 equipos no se nota;
+  // con varios cientos sí, y el operador que preguntó lo hizo pensando
+  // en crecer. El transporte no es el problema (medido: 0,8 kB por
+  // equipo, el summary_payload se resume en el servidor y nunca viaja),
+  // así que la respuesta es paginar el RENDER, no la petición.
+  //
+  // En cliente y no en servidor a propósito: los cuatro filtros de esta
+  // sección son de cliente, y paginar en el backend los dejaría
+  // aplicándose sólo sobre la página visible — un filtro que miente es
+  // peor que una tabla larga. El día que un tenant no quepa en una
+  // carga, filtros y paginación se mueven juntos al servidor.
+  const [devicePage, setDevicePage] = React.useState(0);
+  const [devicesPerPage, setDevicesPerPage] = React.useState(25);
+
+  // Cualquier cambio de filtro puede dejar la página actual fuera de
+  // rango, y una tabla vacía con "37 of 120 devices" arriba se lee como
+  // avería. Volver a la primera es además lo que el operador espera:
+  // acaba de reformular la pregunta.
+  React.useEffect(() => {
+    setDevicePage(0);
+  }, [statusFilter, platformFilter, versionBucketFilter, scoreBandFilter, selectedFramework]);
+
+  const pagedDevices = React.useMemo(() => {
+    const start = devicePage * devicesPerPage;
+    return filteredDevices.slice(start, start + devicesPerPage);
+  }, [filteredDevices, devicePage, devicesPerPage]);
 
   return (
     <Box sx={{ pb: 6 }}>
@@ -1360,7 +1394,7 @@ export default function SecurityCompliance({ initialTab }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredDevices.map((d) => {
+                pagedDevices.map((d) => {
                   const useFw = Boolean(selectedFramework && d.frameworkScore);
                   const score = useFw ? d.frameworkScore.score : d.overallScore;
                   const passed = useFw ? d.frameworkScore.passed : null;
@@ -1483,6 +1517,32 @@ export default function SecurityCompliance({ initialTab }) {
             </TableBody>
           </Table>
         </TableContainer>
+
+        {data?.devicesTruncated ? (
+          <Alert severity="warning" sx={{ mt: 1.5 }}>
+            Showing the first {data.deviceRowCap ?? filteredDevices.length} devices — your fleet has more.
+            Narrow the filters above to see the rest.
+          </Alert>
+        ) : null}
+
+        {/* Sólo aparece cuando hay más de una página: en una flota de
+            veinte equipos un control de paginación es ruido. */}
+        {filteredDevices.length > devicesPerPage ? (
+          <TablePagination
+            component="div"
+            count={filteredDevices.length}
+            page={devicePage}
+            onPageChange={(_e, p) => setDevicePage(p)}
+            rowsPerPage={devicesPerPage}
+            onRowsPerPageChange={(e) => {
+              setDevicesPerPage(Number(e.target.value));
+              setDevicePage(0);
+            }}
+            rowsPerPageOptions={[25, 50, 100]}
+            labelRowsPerPage="Devices per page"
+            sx={{ color: BRAND.gray }}
+          />
+        ) : null}
       </SectionPaper>
 
       {/* Drawer: device drill-down ---------------------------------------- */}

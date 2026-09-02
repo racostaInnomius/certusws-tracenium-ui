@@ -166,4 +166,60 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     // …and the rest still rendered.
     expect(screen.getByText("WS-ALPHA")).toBeInTheDocument();
   });
+
+  // ── La tabla de equipos ya no se pinta entera ─────────────────────
+  // Se renderizaban todas las filas. A 21 y 50 equipos no se nota; el
+  // operador preguntó pensando en crecer, y tenía razón.
+  it("paginates the device table instead of rendering every row", async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      agentId: `dev-${i}`,
+      hostname: `WS-${String(i).padStart(3, "0")}`,
+      platform: "windows",
+      agentVersion: "1.1.49",
+      overallStatus: "fail",
+      overallScore: 40 + i,
+      overallScoreAdjusted: null,
+      scoresByFramework: {},
+      patchSummary: null,
+      collectedAtUtc: "2026-09-01T00:00:00Z",
+    }));
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, FRAMEWORKS);
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, { ok: true, framework: null, count: 60, items: many });
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    // Primera página: 25 filas. La 26ª existe en los datos y no en el DOM.
+    await waitFor(() => expect(screen.getByText("WS-000")).toBeInTheDocument());
+    expect(screen.getByText("WS-024")).toBeInTheDocument();
+    expect(screen.queryByText("WS-025")).not.toBeInTheDocument();
+    // El recuento sigue hablando del conjunto completo, no de la página.
+    expect(screen.getByText(/60 of 60 devices/)).toBeInTheDocument();
+  });
+
+  it("says so when the backend truncated the device list", async () => {
+    // Una lista incompleta presentada como completa es la clase de
+    // mentira que hace que nadie se fíe del resto de la página.
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, FRAMEWORKS);
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, { ...DEVICES, truncated: true, rowCap: 2000 });
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    await waitFor(() =>
+      expect(screen.getByText(/Showing the first 2000 devices/)).toBeInTheDocument()
+    );
+  });
+
+  it("stays quiet about truncation when the list is complete", async () => {
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.queryByText(/Showing the first/)).not.toBeInTheDocument();
+  });
 });
