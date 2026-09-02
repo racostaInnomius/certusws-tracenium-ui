@@ -202,8 +202,22 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
                 Confirm the gateway's identity
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Compare this fingerprint with the one shown on the gateway host
-                itself. If they differ, stop — something is impersonating the gateway.
+                Compare it with the fingerprint the gateway host reports for itself.
+                If they differ, stop — something is impersonating the gateway.
+              </Typography>
+              {/*
+                ADR-0013 (A). Decir DÓNDE mirar es lo que convierte esta casilla
+                en una comprobación de verdad: hasta ahora pedía comparar contra
+                algo que el equipo no enseñaba en ninguna parte, así que se
+                marcaba por trámite. Y el fichero se nombra primero porque un
+                gateway de vCenter suele ser un servidor sin escritorio, donde
+                la bandeja no existe.
+              */}
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
+                On the gateway host: <code>tray-status.json</code> in the agent data
+                directory, under <code>gateway.credentialKeyFingerprint</code> — or the
+                agent log line “vCenter credential key fingerprint”. On a desktop it is
+                also in the Tracenium tray, under Device info.
               </Typography>
               <Box
                 sx={{
