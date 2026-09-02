@@ -377,6 +377,86 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(screen.queryByText(/attestation an auditor issues/)).toBeNull();
   });
 
+  // ── El default sale del pack, no de una constante ─────────────────
+  // "No es común que una empresa quiera validar su compliance contra
+  //  todos los frameworks; normalmente es contra 1."
+  it("opens on the tenant's framework when they track exactly one", async () => {
+    respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, {
+      ...FRAMEWORKS,
+      frameworks: [
+        { framework: "nist_csf_2.0", family: "NIST", shortName: "NIST CSF 2.0", mappedChecks: 82, catalogChecks: 94 },
+      ],
+    });
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    expect(await screen.findByText(/Measured against NIST CSF 2.0/)).toBeInTheDocument();
+  });
+
+  it("stays on the weighted view when they track several", async () => {
+    // Picking one for them would be inventing which standard they care
+    // about. The fixture tracks three.
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.queryByText(/Measured against/)).toBeNull();
+  });
+
+  it("lets the operator leave the defaulted framework", async () => {
+    // Without the touched flag the effect re-imposes the default on
+    // every data refresh and "All frameworks" becomes unreachable.
+    const { fireEvent } = await import("@testing-library/react");
+    respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, {
+      ...FRAMEWORKS,
+      frameworks: [
+        { framework: "nist_csf_2.0", family: "NIST", shortName: "NIST CSF 2.0", mappedChecks: 82, catalogChecks: 94 },
+      ],
+    });
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    await screen.findByText(/Measured against NIST CSF 2.0/);
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    fireEvent.click(await screen.findByRole("option", { name: "All frameworks (weighted)" }));
+
+    await waitFor(() => expect(screen.queryByText(/Measured against/)).toBeNull());
+  });
+
+  it("names the platform a single-OS benchmark is measured against", async () => {
+    // "11 of 94" implied 83 missing Windows controls when 64 of them are
+    // macOS and Linux checks a Windows benchmark can never map.
+    respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, {
+      ...FRAMEWORKS,
+      frameworks: [
+        { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11", mappedChecks: 11, catalogChecks: 30, scopePlatform: "windows" },
+        { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94, scopePlatform: null },
+      ],
+    });
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    expect(await screen.findByText(/11 of 30 Windows controls mapped — narrow coverage/)).toBeInTheDocument();
+    // A cross-platform standard has no platform to name.
+    expect(screen.getByText("92 of 94 controls mapped")).toBeInTheDocument();
+  });
+
   it("says nothing about coverage when the backend does not report it", async () => {
     // An older backend omits the counts; a missing number must not turn
     // into a scary one.

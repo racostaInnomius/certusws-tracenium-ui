@@ -151,18 +151,27 @@ const ATTESTATION_FRAMEWORK_NOTE = {
  * backend simply omits them, and a missing number must not turn into a
  * scary one.
  */
+const PLATFORM_LABEL = { windows: "Windows", macos: "macOS", linux: "Linux" };
+
 function CoverageNote({ coverage }) {
   if (!coverage || !coverage.total) return null;
-  const { mapped, total } = coverage;
+  const { mapped, total, platform } = coverage;
   const thin = mapped / total < FRAMEWORK_COVERAGE_THIN_BELOW;
+  // ⚠️ The denominator is per platform, and the first version of this got
+  // it wrong: it measured CIS Windows 11 against all 94 catalog checks,
+  // which implied 83 missing Windows controls when 64 of them are macOS
+  // and Linux checks that a Windows benchmark can never map. The backend
+  // now scopes the denominator; this just has to name it, because "11 of
+  // 30" invites the question "thirty what?".
+  const scope = platform ? `${PLATFORM_LABEL[platform] || platform} controls` : "controls";
   return (
     <Tooltip
       arrow
       placement="bottom-start"
       title={
         thin
-          ? `Only ${mapped} of the ${total} controls Tracenium evaluates are mapped to this framework, so its score reflects a narrow slice of your posture rather than the whole standard.`
-          : `${mapped} of the ${total} controls Tracenium evaluates are mapped to this framework.`
+          ? `Only ${mapped} of the ${total} ${scope} Tracenium evaluates are mapped to this framework, so its score reflects a narrow slice of your posture rather than the whole standard.`
+          : `${mapped} of the ${total} ${scope} Tracenium evaluates are mapped to this framework.`
       }
     >
       <Typography
@@ -171,7 +180,7 @@ function CoverageNote({ coverage }) {
         // colour and washes out as text on the white surface.
         sx={{ color: thin ? BRAND.alert.warningText : BRAND.gray, fontWeight: thin ? 700 : 400, cursor: "help" }}
       >
-        {mapped} of {total} controls mapped{thin ? " — narrow coverage" : ""}
+        {mapped} of {total} {scope} mapped{thin ? " — narrow coverage" : ""}
       </Typography>
     </Tooltip>
   );
@@ -348,6 +357,23 @@ export default function SecurityCompliance({ initialTab }) {
 
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
 
+  // ── El default sale del pack del tenant, no de una constante ───────
+  // Una empresa no audita contra diez estándares: audita contra uno. El
+  // ponderado de "All frameworks" es la vista más completa de la postura
+  // real, pero no es la pregunta que trae a nadie a esta pantalla — la
+  // pregunta es "¿cómo vamos en el nuestro?".
+  //
+  // Se deriva de los frameworks que el tenant ha marcado en Compliance
+  // settings en vez de fijar aquí un NIST: si sigue exactamente uno, ése
+  // ES su estándar y la página abre en él. Con varios (o ninguno) el
+  // ponderado sigue siendo lo honesto, porque elegir por ellos sería
+  // inventar cuál les importa.
+  //
+  // `frameworkTouched` protege la elección del operador: sin él, este
+  // efecto volvería a imponer el default en cada recarga de datos, y
+  // volver a "All frameworks" a mano sería imposible.
+  const [frameworkTouched, setFrameworkTouched] = React.useState(false);
+
   // Which control the Catalog tab should land on. Clicking a row in
   // "What to fix first" used to switch tabs and drop the operator at the
   // top of all 94 checks, leaving them to remember what they had clicked
@@ -491,6 +517,11 @@ export default function SecurityCompliance({ initialTab }) {
   // pattern. Without these, downstream useMemo deps see a fresh `[]`
   // on every render and re-run.
   const frameworks = React.useMemo(() => data?.frameworks ?? [], [data]);
+
+  React.useEffect(() => {
+    if (frameworkTouched || selectedFramework) return;
+    if (frameworks.length === 1) setSelectedFramework(frameworks[0].framework);
+  }, [frameworks, frameworkTouched, selectedFramework]);
   const frameworkSummary = React.useMemo(() => data?.frameworkSummary ?? [], [data]);
   const devices = React.useMemo(() => data?.devices ?? [], [data]);
   const errorMsg = error ? error?.message || "Failed to load compliance data" : null;
@@ -779,7 +810,13 @@ export default function SecurityCompliance({ initialTab }) {
   const frameworkCoverage = React.useMemo(() => {
     const map = new Map();
     for (const f of frameworks) {
-      if (f.catalogChecks) map.set(f.framework, { mapped: f.mappedChecks ?? 0, total: f.catalogChecks });
+      if (f.catalogChecks) {
+        map.set(f.framework, {
+          mapped: f.mappedChecks ?? 0,
+          total: f.catalogChecks,
+          platform: f.scopePlatform ?? null,
+        });
+      }
     }
     return map;
   }, [frameworks]);
@@ -983,7 +1020,10 @@ export default function SecurityCompliance({ initialTab }) {
           ) : null}
           <Select
             value={selectedFramework}
-            onChange={(e) => setSelectedFramework(e.target.value)}
+            onChange={(e) => {
+              setFrameworkTouched(true);
+              setSelectedFramework(e.target.value);
+            }}
             size="small"
             displayEmpty
             inputProps={{ "aria-label": "Filter by framework" }}
@@ -1199,7 +1239,10 @@ export default function SecurityCompliance({ initialTab }) {
                   <Chip
                     size="small"
                     label={`Measured against ${selectedFrameworkLabel}`}
-                    onDelete={() => setSelectedFramework("")}
+                    onDelete={() => {
+                      setFrameworkTouched(true);
+                      setSelectedFramework("");
+                    }}
                     sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
                   />
                 ) : null}
@@ -1391,7 +1434,21 @@ export default function SecurityCompliance({ initialTab }) {
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Compliant</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Non-compliant</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Avg score</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 700 }}>Checks passed</TableCell>
+                {/* NO se llama "Checks passed": es la SUMA de la flota,
+                    no un recuento de controles. CIS Windows 11 mostraba
+                    "156 / 362" al lado de "11 of 30 controls mapped" y
+                    cualquiera concluye que el benchmark tiene 362
+                    controles. Son 50 equipos × ~7 checks aplicables cada
+                    uno: evaluaciones, no controles. */}
+                <TableCell align="right" sx={{ fontWeight: 700 }}>
+                  <Tooltip
+                    arrow
+                    placement="bottom"
+                    title="Every check we ran against this framework, added up across all reporting devices — not the number of controls in the standard. A fleet of 50 machines each evaluating 7 applicable checks gives 350."
+                  >
+                    <Box component="span" sx={{ cursor: "help" }}>Check results (fleet)</Box>
+                  </Tooltip>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1407,12 +1464,18 @@ export default function SecurityCompliance({ initialTab }) {
                     key={f.framework}
                     hover
                     sx={{ cursor: "pointer" }}
-                    onClick={() => setSelectedFramework(f.framework)}
+                    onClick={() => {
+                      setFrameworkTouched(true);
+                      setSelectedFramework(f.framework);
+                    }}
                     selected={f.framework === selectedFramework}
                     tabIndex={0}
                     role="button"
                     aria-label={`Filter by ${frameworkLabels.get(f.framework) || f.framework}`}
-                    onKeyDown={rowKeyHandler(() => setSelectedFramework(f.framework))}
+                    onKeyDown={rowKeyHandler(() => {
+                      setFrameworkTouched(true);
+                      setSelectedFramework(f.framework);
+                    })}
                   >
                     <TableCell>
                       <Stack>
@@ -1446,6 +1509,11 @@ export default function SecurityCompliance({ initialTab }) {
                     </TableCell>
                     <TableCell align="right" sx={{ color: BRAND.dark }}>
                       {f.totalPassed} / {f.totalApplicable}
+                      {f.devicesReporting > 0 ? (
+                        <Typography variant="caption" sx={{ display: "block", color: BRAND.gray, fontWeight: 400 }}>
+                          {(f.totalApplicable / f.devicesReporting).toFixed(1)} checks per device
+                        </Typography>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 ))
