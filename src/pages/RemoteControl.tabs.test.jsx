@@ -92,8 +92,20 @@ beforeEach(() => {
   // second test would be served from the first test's cache and the loader
   // would never run — the assertions would pass for the wrong reason.
   clearCachedFetch();
+  // The device counts are deliberately unreachable from the 4-device fixture
+  // below, so any test that passes by counting locally instead of reading the
+  // server's numbers shows up immediately.
   getRemoteControlSummary.mockResolvedValue({
-    summary: { connectableDevices: 214, activeSessions: 2, sessionsLast7d: 31, avgDurationSec: 480 }
+    summary: {
+      connectableDevices: 214,
+      readyNow: 38,
+      rcpCapable: 96,
+      fleetTotal: 214,
+      activeSessions: 2,
+      sessionsLast7d: 31,
+      avgDurationSec: 480,
+      deniedByUser7d: 3
+    }
   });
   getConnectableDevices.mockResolvedValue({ items: DEVICES });
   getRemoteSessions.mockResolvedValue({ items: [], total: 0 });
@@ -146,18 +158,50 @@ describe("lazy loading per tab", () => {
 });
 
 describe("the KPI strip", () => {
-  it("⚠️ ignores summary.connectableDevices and derives the real number", async () => {
-    // The backend counts EVERY active enrolment with no capability filter —
-    // its own comment says "We don't filter by rcp capability here to keep
-    // this query cheap" — and the old card labelled that 214 "with rcp
-    // enabled". Of the four devices here three advertise a capability and
-    // two of those are online, so the card reads 2 / 3 over a fleet of 4.
-    // If 214 ever shows up here again, this test is why it shouldn't.
+  it("⚠️ reads the server's three numbers instead of the legacy field", async () => {
+    // connectableDevices counts EVERY active enrolment with no capability
+    // filter, and the old card labelled that 214 "with rcp enabled". The
+    // fleet size is still worth showing — as the fleet size, in the subtitle
+    // — while the headline is what can actually be worked on right now.
     render(<RemoteControl />);
 
     await screen.findByText("Ready now");
-    expect(screen.queryByText("214")).toBeNull();
+    expect(screen.getByText("38")).toBeTruthy();
+    expect(screen.getByText(/\/ 96/)).toBeTruthy();
+    expect(screen.getByText(/214 devices in the fleet/)).toBeTruthy();
+  });
+
+  it("shows how many sessions the endpoint user refused", async () => {
+    // ADR-0012's number. It appeared on no screen at all before this.
+    render(<RemoteControl />);
+    expect(await screen.findByText(/3 refused by the user/)).toBeTruthy();
+  });
+
+  it("stays silent about refusals when there are none", async () => {
+    // With consent switched off this is always zero, and a permanent
+    // "0 refused" reads as reassurance about a question nobody asked.
+    getRemoteControlSummary.mockResolvedValue({
+      summary: { readyNow: 1, rcpCapable: 1, fleetTotal: 1, sessionsLast7d: 4, deniedByUser7d: 0 }
+    });
+    render(<RemoteControl />);
+
+    await screen.findByText("Last 7 days");
+    expect(screen.queryByText(/refused by the user/)).toBeNull();
+  });
+
+  it("⚠️ falls back to counting locally when the backend is a version behind", async () => {
+    // The portal and the API deploy separately. Without the fallback the new
+    // bundle renders "0 / 0 · 0 devices" over a table full of devices — a
+    // fresh lie in place of the one being removed.
+    getRemoteControlSummary.mockResolvedValue({
+      summary: { connectableDevices: 214, activeSessions: 0, sessionsLast7d: 0 }
+    });
+    render(<RemoteControl />);
+
+    await screen.findByText("Ready now");
+    // Derived from the fixture: 3 devices advertise a capability, 2 online.
     expect(screen.getByText(/4 devices in the fleet/)).toBeTruthy();
+    expect(screen.getByText(/\/ 3/)).toBeTruthy();
   });
 });
 

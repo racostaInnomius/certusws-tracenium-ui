@@ -18,7 +18,8 @@ import {
   matchesSearch,
   filterDevices,
   countWithoutRcp,
-  platformLabel
+  platformLabel,
+  fleetNumbers
 } from "./rcpMethods";
 
 function device(over = {}) {
@@ -127,6 +128,44 @@ describe("summarizeFleet", () => {
 
   it("returns zeros with no list", () => {
     expect(summarizeFleet(null)).toEqual({ readyNow: 0, rcpCapable: 0, fleetTotal: 0 });
+  });
+});
+
+describe("fleetNumbers", () => {
+  const fleet = [
+    device({ deviceId: "a", online: true, capabilities: ["rcp", "rcp.shell"] }),
+    device({ deviceId: "b", online: false, capabilities: ["rcp", "rcp.shell"] })
+  ];
+
+  it("prefers the server's count over the browser's", () => {
+    // The server counts every enrolled device; the browser can only count
+    // what it was sent. Deliberately different numbers here so a regression
+    // that silently keeps deriving locally shows up as 1/2/2.
+    const r = fleetNumbers(
+      { readyNow: 38, rcpCapable: 96, fleetTotal: 214 },
+      fleet
+    );
+    expect(r).toEqual({ readyNow: 38, rcpCapable: 96, fleetTotal: 214, source: "server" });
+  });
+
+  it("⚠️ keeps a real zero from the server instead of falling back", () => {
+    // A tenant where nothing is ready legitimately returns 0. A truthiness
+    // check would throw that away and count a device list that, once
+    // /devices paginates, isn't even the whole fleet.
+    const r = fleetNumbers({ readyNow: 0, rcpCapable: 0, fleetTotal: 214 }, fleet);
+    expect(r.source).toBe("server");
+    expect(r.fleetTotal).toBe(214);
+  });
+
+  it("falls back to the browser when the backend hasn't rolled forward", () => {
+    // The portal and the API deploy separately. Without this the new bundle
+    // would render "0 / 0 · 0 devices" over a table full of devices.
+    const r = fleetNumbers({ activeSessions: 2 }, fleet);
+    expect(r).toEqual({ readyNow: 1, rcpCapable: 2, fleetTotal: 2, source: "browser" });
+  });
+
+  it("falls back when there is no summary at all", () => {
+    expect(fleetNumbers(null, fleet).source).toBe("browser");
   });
 });
 

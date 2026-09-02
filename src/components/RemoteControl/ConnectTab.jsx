@@ -17,11 +17,11 @@
 //     no idea how many sessions it averages tells you nothing, so it merges
 //     into the 7-day card.
 //
-// ⚠️ readyNow / rcpCapable / fleetTotal are derived HERE, in the browser,
-// from the full device list. That is only correct while /devices returns the
-// whole fleet. When phase 3 paginates it, these three must move to
-// /devices/facets — counting a page and calling it the fleet would be the
-// very bug this replaces. summarizeFleet() carries the same warning.
+// readyNow / rcpCapable / fleetTotal now come from /summary, counted in SQL
+// over every enrolled device. They used to be derived here from the device
+// list, which was only correct while /devices returns the whole fleet —
+// fleetNumbers() keeps that as a fallback for the window where the portal is
+// newer than the API, and says which of the two it used.
 
 import * as React from "react";
 import { Box, Grid, Paper, Skeleton, Stack, Typography } from "@mui/material";
@@ -31,7 +31,7 @@ import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import ConnectablesTable from "./ConnectablesTable";
 import NoRemoteControlCard from "./NoRemoteControlCard";
-import { summarizeFleet } from "./rcpMethods";
+import { fleetNumbers } from "./rcpMethods";
 import { useConnectableDevices, useRemoteControlSummary } from "./useRemoteControlData";
 
 function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClick }) {
@@ -130,14 +130,21 @@ export default function ConnectTab({
     refetchSummary();
   }, [refreshNonce, refetchDevices, refetchSummary]);
 
-  const fleet = React.useMemo(() => summarizeFleet(devices), [devices]);
+  const fleet = React.useMemo(() => fleetNumbers(summary, devices), [summary, devices]);
 
   const active = Number(summary?.activeSessions ?? 0);
   const last7d = Number(summary?.sessionsLast7d ?? 0);
   const avg = durationLabel(summary?.avgDurationSec ?? null);
+  const denied = Number(summary?.deniedByUser7d ?? 0);
 
   // No device has a capability: the table would be an empty box with three
   // filters on top. The card explains it and says where to fix it.
+  //
+  // Gated on the device list having FINISHED loading and not on rcpCapable
+  // alone, because /summary can land first and rcpCapable is 0 until it
+  // does — without the guard the card flashes over a fleet that has plugins.
+  // The card covers both shapes of empty (no devices, or devices with no
+  // capability), so it must not also require devices.length === 0.
   const showEmptyState = !devicesLoading && fleet.rcpCapable === 0;
 
   return (
@@ -159,7 +166,14 @@ export default function ConnectTab({
             icon={DesktopWindowsOutlinedIcon}
             accent={BRAND.teal}
             tint={BRAND.tealSoft}
-            loading={devicesLoading && devices.length === 0}
+            // The count comes from /summary now, so the card is ready as
+            // soon as that lands — waiting on the device list would leave it
+            // blank while a long list downloads behind it.
+            loading={
+              fleet.source === "server"
+                ? summaryLoading && !summary
+                : devicesLoading && devices.length === 0
+            }
           />
         </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -181,9 +195,24 @@ export default function ConnectTab({
             title="Last 7 days"
             value={last7d}
             subtitle={
-              last7d > 0
-                ? [`${last7d === 1 ? "session" : "sessions"}`, avg].filter(Boolean).join(" · ")
-                : "no sessions yet"
+              <>
+                {last7d > 0
+                  ? [`${last7d === 1 ? "session" : "sessions"}`, avg]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "no sessions yet"}
+                {/* ADR-0012's number, which until now appeared on no screen
+                    at all: how often the person at the endpoint said no.
+                    Rendered only when it isn't zero — with consent switched
+                    off it is always zero, and a permanent "0 refused" would
+                    read as reassurance about a question nobody is asking. */}
+                {denied > 0 ? (
+                  <Box component="span" sx={{ color: ROLE.caution, fontWeight: 700 }}>
+                    {" · "}
+                    {denied} refused by the user
+                  </Box>
+                ) : null}
+              </>
             }
             icon={HistoryOutlinedIcon}
             accent={BRAND.teal}

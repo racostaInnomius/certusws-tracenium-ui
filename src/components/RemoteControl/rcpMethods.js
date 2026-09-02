@@ -127,15 +127,22 @@ export function availableMethods(device) {
 }
 
 /**
- * The three numbers in the KPI strip.
+ * The three numbers in the KPI strip, counted in the browser.
  *
- * ⚠️ This is computed in the browser because `/devices` currently returns
- * the whole fleet unpaginated. That's acceptable at today's scale and it's
- * what lets phase 1 ship without touching the backend, but it is this
- * screen's known ceiling: phase 3 moves to server-side `page`/`pageSize`/
- * `search`, and then these numbers must come from `/devices/facets`.
- * Counting over a page would be counting 25 devices and calling it the
- * fleet — exactly the bug this function exists to fix in the old card.
+ * ⚠️ This is now a FALLBACK, not the source. The backend returns `readyNow`,
+ * `rcpCapable` and `fleetTotal` on `/summary`, counted in SQL over the whole
+ * fleet; `fleetNumbers()` below prefers those and only falls back here.
+ *
+ * It stays for one reason: the portal and the API deploy separately, and a
+ * browser running the new bundle against a backend that hasn't rolled
+ * forward would otherwise render "0 / 0 · 0 devices" over a table full of
+ * devices — a fresh lie in place of the one being removed.
+ *
+ * ⚠️ Counting here is only correct while `/devices` returns the whole fleet.
+ * When phase 3 paginates it, this fallback starts counting a PAGE and
+ * calling it the fleet, which is the same class of bug all over again. By
+ * then every backend will be returning the real numbers, so the fallback
+ * should be deleted rather than fixed.
  */
 export function summarizeFleet(devices) {
   const list = Array.isArray(devices) ? devices : [];
@@ -147,6 +154,30 @@ export function summarizeFleet(devices) {
     if (d?.online) readyNow += 1;
   }
   return { readyNow, rcpCapable, fleetTotal: list.length };
+}
+
+/**
+ * The three KPI numbers, from the server when it offers them.
+ *
+ * The server counts in SQL over every enrolled device; the browser can only
+ * count what it was sent. So the server wins whenever it answers, and
+ * `summarizeFleet` covers the window where the portal is newer than the API.
+ *
+ * The check is `readyNow != null` rather than a truthiness test on purpose:
+ * a tenant where genuinely nothing is ready returns 0, and `0 ||` would
+ * throw that real zero away and quietly fall back to counting a device list
+ * that may not even be complete.
+ */
+export function fleetNumbers(summary, devices) {
+  if (summary && summary.readyNow != null) {
+    return {
+      readyNow: Number(summary.readyNow ?? 0),
+      rcpCapable: Number(summary.rcpCapable ?? 0),
+      fleetTotal: Number(summary.fleetTotal ?? 0),
+      source: "server"
+    };
+  }
+  return { ...summarizeFleet(devices), source: "browser" };
 }
 
 /** How many devices can serve each method right now. */
