@@ -48,8 +48,11 @@ export async function getCategorySummary() {
 // por severidad, framework, categoría o equipo, y ninguna responde "¿qué
 // arreglo primero?". Cada fila trae `agentRemediable`, que el backend ya cruza
 // con el derecho a PMP — SCP enseña el hallazgo, PMP es quien lo arregla.
-export async function getTopFailingChecks({ limit } = {}) {
-  return httpGetJson(`${BASE}/top-failing-checks${buildQuery({ limit })}`);
+// `framework` narrows the list to controls that map to that standard, so
+// picking one on the page changes the first thing an operator reads
+// rather than only the sections that are folded away.
+export async function getTopFailingChecks({ limit, framework } = {}) {
+  return httpGetJson(`${BASE}/top-failing-checks${buildQuery({ limit, framework })}`);
 }
 
 // Drill-in for a category: devices FAILING at least one check in the category,

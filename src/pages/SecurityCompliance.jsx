@@ -704,6 +704,29 @@ export default function SecurityCompliance({ initialTab }) {
         actions={
           effectiveTab !== "posture" ? undefined : (
           <Stack direction="row" spacing={1} alignItems="center">
+            {/* ── El selector de framework vive aquí ──────────────────
+                Estaba dentro del acordeón "Frameworks", que además está
+                plegado por defecto. Un filtro que gobierna el titular,
+                "What to fix first", la tabla de equipos y los exports no
+                puede vivir escondido dentro de una de las secciones que
+                filtra: el operador lo elegía y, con las demás secciones
+                cerradas, no veía cambiar nada. La cabecera es donde se
+                buscan los filtros globales. */}
+            <Select
+              value={selectedFramework}
+              onChange={(e) => setSelectedFramework(e.target.value)}
+              size="small"
+              displayEmpty
+              inputProps={{ "aria-label": "Filter by framework" }}
+              sx={{ minWidth: 220, bgcolor: BRAND.surface }}
+            >
+              <MenuItem value="">All frameworks (weighted)</MenuItem>
+              {frameworks.map((f) => (
+                <MenuItem key={f.framework} value={f.framework}>
+                  {f.shortName || f.framework}
+                </MenuItem>
+              ))}
+            </Select>
             {/* Fase B: the "Baselines" button (Fase A) and the catalog
                 icon-button both became tabs — the header now only hosts
                 posture-scoped actions (settings, exports, refresh). */}
@@ -898,15 +921,38 @@ export default function SecurityCompliance({ initialTab }) {
       <FirstVisitNote />
 
       {(() => {
-        const avgScore = summary?.avgScore;
+        // ── El titular obedece al framework ───────────────────────────
+        // Elegir un estándar y ver el mismo número gigante es la razón
+        // por la que el filtro parecía no hacer nada. `frameworkSummary`
+        // ya trae el score, los equipos y los controles fallidos de cada
+        // framework — no hace falta backend nuevo, sólo leerlo aquí.
+        //
+        // Lo que NO existe por framework: la nota ajustada por
+        // excepciones y el recuento de hallazgos críticos. En vez de
+        // arrastrar los globales (que dirían otra cosa que el titular),
+        // se sustituyen por los controles fallidos de ese framework, que
+        // es el dato equivalente y sí está.
+        const fwRow = selectedFramework
+          ? frameworkSummary.find((f) => f.framework === selectedFramework) || null
+          : null;
+        const scoped = Boolean(selectedFramework);
+
+        const avgScore = scoped ? fwRow?.avgScore ?? null : summary?.avgScore;
         // Sprint 1/2 — the exception-adjusted fleet average. Shown as a
         // tooltip on the Compliance card whenever it diverges from the
         // raw score: the delta IS the weight of the vetted exceptions.
-        const avgAdjusted = summary?.avgScoreAdjusted;
+        const avgAdjusted = scoped ? null : summary?.avgScoreAdjusted;
         const complianceAccent = scoreBandRole(avgScore, bands) ?? BRAND.teal;
-        const criticalHigh =
-          (summary?.openFindings?.critical ?? 0) +
-          (summary?.openFindings?.high ?? 0);
+        const criticalHigh = scoped
+          ? 0
+          : (summary?.openFindings?.critical ?? 0) +
+            (summary?.openFindings?.high ?? 0);
+        const devicesTotal = scoped
+          ? fwRow?.devicesReporting ?? 0
+          : summary?.devicesReporting ?? 0;
+        const devicesGood = scoped
+          ? fwRow?.devicesCompliant ?? 0
+          : summary?.statusBreakdown?.compliant ?? 0;
         return (
           /* ── Titular único ───────────────────────────────────────────
              Antes había cuatro KPIs compitiendo, y tres eran la misma
@@ -939,9 +985,22 @@ export default function SecurityCompliance({ initialTab }) {
               </Typography>
             </Stack>
 
+            {/* Qué estás mirando, y cómo salir de ahí. Sin esta línea el
+                titular filtrado es indistinguible del global. */}
+            {scoped ? (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75, flexWrap: "wrap" }}>
+                <Chip
+                  size="small"
+                  label={`Measured against ${selectedFrameworkLabel}`}
+                  onDelete={() => setSelectedFramework("")}
+                  sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                />
+              </Stack>
+            ) : null}
+
             <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.75 }}>
               <Box component="span" sx={{ fontWeight: 700, color: BRAND.dark }}>
-                {summary?.statusBreakdown?.compliant ?? 0} of {summary?.devicesReporting ?? 0} devices
+                {devicesGood} of {devicesTotal} devices
               </Box>{" "}
               in good standing
               {criticalHigh > 0 ? (
@@ -970,6 +1029,9 @@ export default function SecurityCompliance({ initialTab }) {
                   </Box>
                 </>
               ) : null}
+              {scoped && (fwRow?.totalFailed ?? 0) > 0 ? (
+                <> · {fwRow.totalFailed} failing controls in this framework</>
+              ) : null}
               {avgAdjusted != null && avgScore != null && Math.round(avgAdjusted) !== Math.round(avgScore) ? (
                 <> · {Math.round(avgAdjusted)}% once accepted exceptions are excluded</>
               ) : null}
@@ -988,6 +1050,8 @@ export default function SecurityCompliance({ initialTab }) {
           ambas iban por delante de sus equipos. */}
       <WhatToFixFirst
         reloadKey={refreshToken}
+        framework={selectedFramework}
+        frameworkLabel={selectedFrameworkLabel}
         onOpenCheck={() => setTab("catalog")}
         onRemediate={canRemediate ? handleRemediateCheck : null}
       />
@@ -1073,7 +1137,7 @@ export default function SecurityCompliance({ initialTab }) {
               Posture by framework
             </Typography>
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
-              Scoring uses the severity weights defined by each framework. Switch to filter the device table below.
+              Scoring uses the severity weights defined by each framework. The picker in the page header filters this table, the headline, and what to fix first.
               {/* Sprint 4 — say so when a compliance pack is trimming the
                   list, so nobody wonders where the other frameworks went. */}
               {data?.packActive ? (
@@ -1092,20 +1156,8 @@ export default function SecurityCompliance({ initialTab }) {
               ) : null}
             </Typography>
           </Box>
-          <Select
-            value={selectedFramework}
-            onChange={(e) => setSelectedFramework(e.target.value)}
-            size="small"
-            displayEmpty
-            sx={{ minWidth: 260 }}
-          >
-            <MenuItem value="">All frameworks (weighted)</MenuItem>
-            {frameworks.map((f) => (
-              <MenuItem key={f.framework} value={f.framework}>
-                {f.shortName || f.framework}
-              </MenuItem>
-            ))}
-          </Select>
+          {/* El selector se mudó a la cabecera de la página: gobierna
+              cuatro secciones, no sólo ésta. */}
         </Stack>
 
         <TableContainer>

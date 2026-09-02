@@ -8,6 +8,12 @@
 // tenía que abrir equipos uno a uno para descubrir que diecisiete compartían el
 // mismo problema. Esto es lo que convierte el tablero en herramienta.
 //
+// `framework` / `frameworkLabel`: cuando la portada tiene un estándar
+// seleccionado, esta lista se acota a los controles que mapean a él. Antes el
+// filtro sólo alcanzaba a la tabla de equipos y a los exports — ambos
+// plegados — así que el operador elegía un framework y no veía cambiar nada.
+// Lo primero que se lee tiene que responder al filtro, o el filtro no existe.
+//
 // El gate de tier vive en el dato, no aquí: el backend devuelve
 // `agentRemediable` ya cruzado con el derecho a PMP, así que esta lista sólo
 // decide el VERBO. Sin PMP la fila no desaparece ni se apaga — dice "Show me
@@ -49,7 +55,7 @@ function SeverityRail({ severity }) {
   );
 }
 
-export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate }) {
+export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, framework, frameworkLabel }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -58,7 +64,7 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate }) 
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
-    getTopFailingChecks({ limit: HOW_MANY })
+    getTopFailingChecks({ limit: HOW_MANY, framework: framework || undefined })
       .then((res) => {
         if (!alive) return;
         setItems(Array.isArray(res?.items) ? res.items : []);
@@ -76,7 +82,7 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate }) 
     return () => {
       alive = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, framework]);
 
   const handleFix = React.useCallback(
     async (row) => {
@@ -98,7 +104,9 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate }) 
           What to fix first
         </Typography>
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-          Most-failed controls across your fleet
+          {framework
+            ? `Most-failed ${frameworkLabel || framework} controls across your fleet`
+            : "Most-failed controls across your fleet"}
         </Typography>
       </Stack>
 
@@ -112,7 +120,9 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate }) 
         </Typography>
       ) : items.length === 0 ? (
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-          Nothing is failing right now. Every evaluated control passes on every reporting device.
+          {framework
+            ? `Nothing mapped to ${frameworkLabel || framework} is failing right now. Other standards may still have findings — clear the filter to see them.`
+            : "Nothing is failing right now. Every evaluated control passes on every reporting device."}
         </Typography>
       ) : (
         <Stack divider={<Box sx={{ borderBottom: `1px solid ${BRAND.border}` }} />}>
