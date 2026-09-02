@@ -110,7 +110,7 @@ describe("pestaña Trust anchors", () => {
     await abrirPestaña();
 
     await waitFor(
-      () => expect(screen.getByRole("button", { name: /no confiar/i })).toBeTruthy(),
+      () => expect(screen.getByRole("button", { name: /stop trusting/i })).toBeTruthy(),
       { timeout: 4000 }
     );
   });
@@ -128,7 +128,7 @@ describe("pestaña Trust anchors", () => {
     await abrirPestaña();
 
     await waitFor(
-      () => expect(screen.getByText(/184 anclas/)).toBeTruthy(),
+      () => expect(screen.getByText(/184 anchors/)).toBeTruthy(),
       { timeout: 4000 }
     );
   });
@@ -158,7 +158,7 @@ describe("pestaña Trust anchors", () => {
     // El total sigue siendo scaneable por su cuenta.
     expect(screen.getByText("11")).toBeTruthy();
     // Y la parte reciente dice explícitamente que sale de ese total.
-    expect(screen.getByText(/1 de ellos reciente/)).toBeTruthy();
+    expect(screen.getByText(/1 of them recent/)).toBeTruthy();
     // La forma vieja, ambigua, no puede volver.
     expect(screen.queryByText("11 (1 nueva)")).toBeNull();
   });
@@ -174,10 +174,10 @@ describe("pestaña Trust anchors", () => {
     await abrirPestaña();
 
     await waitFor(
-      () => expect(screen.getByText(/Ya estaba en 10 equipos desde su inventariado/)).toBeTruthy(),
+      () => expect(screen.getByText(/Already on 10 devices since they were inventoried/)).toBeTruthy(),
       { timeout: 4000 }
     );
-    expect(screen.getByText(/en 1 de los 11 apareció después/)).toBeTruthy();
+    expect(screen.getByText(/on 1 of the 11 it appeared later/)).toBeTruthy();
   });
 
   it("sin recientes no inventa una segunda línea", async () => {
@@ -195,7 +195,7 @@ describe("pestaña Trust anchors", () => {
     await abrirPestaña();
 
     await waitFor(() => expect(screen.getByText("18")).toBeTruthy(), { timeout: 4000 });
-    expect(screen.queryByText(/de ellos reciente/)).toBeNull();
+    expect(screen.queryByText(/of them recent/)).toBeNull();
   });
 
   it("un fallo de carga se dice, no se calla", async () => {

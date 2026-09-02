@@ -756,15 +756,15 @@ function DistrustAnchorDialog({ anchor, onClose, onDone }) {
         ticketRef: ticketRef.trim()
       });
       if (r?.status === "pending_approval") {
-        setMsg({ sev: "info", text: `En cola: ${r.message || "requiere visto bueno"}` });
+        setMsg({ sev: "info", text: `Queued: ${r.message || "waiting for approval"}` });
       } else if (r?.ok) {
-        setMsg({ sev: "success", text: "Enviado al equipo. El inventario lo confirmará." });
+        setMsg({ sev: "success", text: "Sent to the device. The next inventory will confirm it." });
         onDone?.();
       } else {
-        setMsg({ sev: "error", text: r?.message || "No se pudo enviar" });
+        setMsg({ sev: "error", text: r?.message || "Couldn't send" });
       }
     } catch (e) {
-      setMsg({ sev: "error", text: e?.message || "No se pudo enviar" });
+      setMsg({ sev: "error", text: e?.message || "Couldn't send" });
     } finally {
       setBusy(false);
     }
@@ -772,7 +772,7 @@ function DistrustAnchorDialog({ anchor, onClose, onDone }) {
 
   return (
     <Dialog open={Boolean(anchor)} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Dejar de confiar en «{anchor?.subjectCN}»</DialogTitle>
+      <DialogTitle>Stop trusting “{anchor?.subjectCN}”</DialogTitle>
       <DialogContent>
         {/*
           Se dice lo que HACE de verdad. "Eliminar" sería mentir: en
@@ -781,35 +781,37 @@ function DistrustAnchorDialog({ anchor, onClose, onDone }) {
           desharía solo.
         */}
         <Alert severity="warning" sx={{ mb: 2 }}>
-          El certificado no se borra: se marca como <strong>no confiable</strong>.
-          En Windows entra en <code>Disallowed</code>; en macOS se le pone una
-          denegación de confianza. Es reversible.
+          The certificate is not deleted — it is marked <strong>untrusted</strong>.
+          On Windows it goes into <code>Disallowed</code>; on macOS it gets a
+          trust denial. This is reversible.
         </Alert>
 
         <TextField
-          select fullWidth margin="dense" label="Equipo"
+          select fullWidth margin="dense" label="Device"
           value={deviceId} onChange={(e) => setDeviceId(e.target.value)}
-          helperText={`Un equipo por petición · ${anchor?.deviceCount ?? 0} lo tienen`}
+          helperText={`One device per request · ${anchor?.deviceCount ?? 0} trust this CA`}
         >
           {(anchor?.agentIds || []).map((id) => (
             <MenuItem key={id} value={id}>{id}</MenuItem>
           ))}
         </TextField>
         <TextField
-          fullWidth multiline minRows={2} margin="dense" label="Motivo"
+          fullWidth multiline minRows={2} margin="dense" label="Reason"
           value={reason} onChange={(e) => setReason(e.target.value)}
-          placeholder="Por qué esta CA no debe ser de confianza en este equipo"
+          placeholder="Why this CA should not be trusted on this device"
+          helperText="At least 10 characters"
         />
         <TextField
           fullWidth margin="dense" label="Ticket"
           value={ticketRef} onChange={(e) => setTicketRef(e.target.value)}
+          helperText="At least 3 characters"
         />
         {msg && <Alert severity={msg.sev} sx={{ mt: 2 }}>{msg.text}</Alert>}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
+        <Button onClick={onClose}>Close</Button>
         <Button variant="contained" color="warning" disabled={!puede || busy} onClick={enviar}>
-          Dejar de confiar
+          Stop trusting
         </Button>
       </DialogActions>
     </Dialog>
@@ -828,7 +830,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
     setLoading(true);
     listCdpTrustAnchors()
       .then((resp) => { if (alive) { setData(resp || { items: [], counts: {} }); setLoadError(null); } })
-      .catch((err) => { if (alive) setLoadError(err?.message || "No se pudieron cargar las anclas"); })
+      .catch((err) => { if (alive) setLoadError(err?.message || "Couldn't load trust anchors"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [refreshNonce]);
@@ -845,28 +847,28 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
   const columns = [
     {
       field: "subjectCN",
-      headerName: "Autoridad certificadora",
+      headerName: "Certificate authority",
       flex: 2,
       minWidth: 260,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
           <Typography variant="body2" noWrap sx={{ fontWeight: params.row.distrusted ? 600 : 400 }}>
-            {params.row.subjectCN || "(sin nombre)"}
+            {params.row.subjectCN || "(no name)"}
           </Typography>
           {params.row.distrusted && (
-            <Chip size="small" label="Desconfiada" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error }} />
+            <Chip size="small" label="Distrusted" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error }} />
           )}
           {!params.row.actionable && (
-            <Chip size="small" variant="outlined" label="Bundle del fabricante" />
+            <Chip size="small" variant="outlined" label="Vendor bundle" />
           )}
         </Box>
       ),
     },
     {
       field: "deviceCount",
-      headerName: "Equipos",
+      headerName: "Devices",
       description:
-        "Equipos que confían en esta CA hoy. Si hay una segunda línea, dice en cuántos de ESOS mismos equipos apareció después de que el equipo ya estuviera inventariado.",
+        "Devices that trust this CA today. A second line, when present, says on how many of THOSE SAME devices it appeared after the device was already inventoried.",
       width: 130,
       // ⚠️ El recuento "nuevo" es un SUBCONJUNTO del total, no un
       // añadido: sale de un FILTER sobre las mismas filas que cuentan el
@@ -882,14 +884,13 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
           <Typography variant="body2">{params.row.deviceCount}</Typography>
           {params.row.novelDeviceCount > 0 && (
             <Typography variant="caption" sx={{ color: TEXT_MUTED, display: "block" }}>
-              {params.row.novelDeviceCount} de ellos reciente
-              {params.row.novelDeviceCount > 1 ? "s" : ""}
+              {params.row.novelDeviceCount} of them recent
             </Typography>
           )}
         </Box>
       ),
     },
-    { field: "signatureAlgorithm", headerName: "Firma", width: 170 },
+    { field: "signatureAlgorithm", headerName: "Signature", width: 170 },
     {
       field: "accion",
       headerName: "",
@@ -901,13 +902,13 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
         // decide su estado por separado.
         params.row.actionable ? (
           <Button size="small" onClick={() => setDistrustFor(params.row)}>
-            No confiar
+            Stop trusting
           </Button>
         ) : null,
     },
     {
       field: "distrusted",
-      headerName: "Por qué importa",
+      headerName: "Why it matters",
       flex: 3,
       minWidth: 300,
       renderCell: (params) =>
@@ -916,14 +917,14 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
             {params.row.distrusted}
           </Typography>
         ) : params.row.novelDeviceCount > 0 ? (
-          // "de los N equipos que ya la tenían" cierra la lectura
-          // aditiva: el subconjunto queda explícito en la propia frase,
-          // no sólo en la columna de al lado.
+          // Los dos sumandos, y que sumen el total, es lo que cierra la
+          // lectura aditiva: el subconjunto queda explícito en la propia
+          // frase y no sólo en la columna de al lado.
           <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
-            Ya estaba en {params.row.deviceCount - params.row.novelDeviceCount} equipo
-            {params.row.deviceCount - params.row.novelDeviceCount === 1 ? "" : "s"} desde su
-            inventariado; en {params.row.novelDeviceCount} de los {params.row.deviceCount} apareció
-            después
+            Already on {params.row.deviceCount - params.row.novelDeviceCount} device
+            {params.row.deviceCount - params.row.novelDeviceCount === 1 ? "" : "s"} since they were
+            inventoried; on {params.row.novelDeviceCount} of the {params.row.deviceCount} it
+            appeared later
           </Typography>
         ) : null,
     },
@@ -940,11 +941,11 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
 
       <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
         <Typography variant="body2" sx={{ color: TEXT_MUTED }}>
-          {counts.total ?? 0} anclas · <strong>{counts.distrusted ?? 0}</strong> desconfiadas ·{" "}
-          {counts.novel ?? 0} aparecidas en una minoria de equipos
+          {counts.total ?? 0} anchors · <strong>{counts.distrusted ?? 0}</strong> distrusted ·{" "}
+          {counts.novel ?? 0} appeared on a minority of devices
         </Typography>
         <Button size="small" variant="outlined" onClick={() => setOnlyFindings((v) => !v)}>
-          {onlyFindings ? "Ver todas" : "Ver solo hallazgos"}
+          {onlyFindings ? "Show all" : "Show findings only"}
         </Button>
       </Box>
 
@@ -957,9 +958,9 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
       */}
       {(counts.vendorBundleOnly ?? 0) > 0 && !onlyFindings && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          {counts.vendorBundleOnly} anclas aparecen solo en bundles que envia el fabricante
-          (el llavero de raices de Apple, o el <code>cacerts</code> de una JVM). Ahi la presencia
-          no significa confianza: el sistema operativo las trae y decide su estado por separado.
+          {counts.vendorBundleOnly} anchors appear only in vendor-shipped bundles (Apple&apos;s
+          root keychain, or a JVM&apos;s <code>cacerts</code>). Presence there does not mean
+          trust: the OS ships them and decides their state separately.
         </Alert>
       )}
 
