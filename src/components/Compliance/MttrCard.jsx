@@ -4,9 +4,18 @@
 // (`GET /security/compliance/time-to-close`). One row per severity
 // bucket, showing p50/p90 in days plus the sample size we computed
 // it from. The sample-size column matters because percentiles on
-// fewer than ~5 closed findings are statistical noise; we render
+// fewer than ~5 remediated findings are statistical noise; we render
 // those buckets faded so operators don't read "p50: 0.3 days" as a
-// signal when it's really "we've closed 1 critical this quarter".
+// signal when it's really "we've fixed 1 critical this quarter".
+//
+// 2026-09-01 — the endpoint now counts only findings that closed as
+// 'pass' (actually remediated) AND that lived longer than one
+// evaluation cycle. Sample sizes here dropped by roughly 80% and the
+// medians grew from hours to days; that is the correction, not a
+// regression. Copy in this card was rewritten to match what the
+// number means, and the discarded sub-cycle closures are shown as a
+// footnote rather than swallowed — they are the fingerprint of a
+// flapping check, which is worth seeing.
 //
 // Place in the SCP page right under the framework table — operators
 // who land on the page wanting "are we trending better?" see this
@@ -58,7 +67,7 @@ const SEVERITY_META = {
 
 // Renderer for a percentile value:
 //   - null    → "—" (no closed findings in window)
-//   - < 1 day → "<1d" (sub-day MTTR — common for ack-and-resolve flows)
+//   - < 1 day → "<1d" (a control fixed within the same day)
 //   - else    → integer-rounded days, "Nd"
 function fmtDays(d) {
   if (d == null || !Number.isFinite(d)) return "—";
@@ -118,11 +127,22 @@ export default function MttrCard({ reloadKey } = {}) {
         bySeverity.get(sev) ?? {
           severity: sev,
           sampleSize: 0,
+          churnExcluded: 0,
           medianDays: null,
           p90Days: null
         }
     );
   }, [data]);
+
+  // Closures the backend threw out for being shorter than one
+  // evaluation cycle. Surfacing the total is the point: a large number
+  // here means checks are flapping, which is a defect in the evidence
+  // pipeline rather than a property of the fleet. Hiding it would make
+  // the medians look clean and leave the actual problem invisible.
+  const churnExcluded = useMemo(
+    () => (data?.bySeverity ?? []).reduce((n, b) => n + (b.churnExcluded ?? 0), 0),
+    [data]
+  );
 
   return (
     <Paper
@@ -156,14 +176,26 @@ export default function MttrCard({ reloadKey } = {}) {
             <TimerOutlinedIcon sx={{ fontSize: ICON.lg }} />
           </Box>
           <Box>
-            <Typography
-              variant="subtitle1"
-              sx={{ color: BRAND.dark, fontWeight: 700 }}
+            <Tooltip
+              arrow
+              placement="top"
+              title="Counts only findings that went from failing to passing. Controls that stopped applying, or that a device stopped reporting, are excluded — they close too, but nobody fixed them."
             >
-              Average time to fix
-            </Typography>
+              <Typography
+                variant="subtitle1"
+                sx={{ color: BRAND.dark, fontWeight: 700, cursor: "help", display: "inline-block" }}
+              >
+                Time to remediate
+              </Typography>
+            </Tooltip>
+            {/* The old caption said "from open to resolved", which was
+                not what the number measured: it averaged every closure,
+                including controls that merely stopped applying. Now
+                that the query counts only findings that went green,
+                the caption can say so — and saying so is what makes
+                the number readable. */}
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
-              How long findings take from open to resolved, by severity
+              How long a failing control takes to turn passing, by severity
             </Typography>
           </Box>
         </Stack>
@@ -206,7 +238,7 @@ export default function MttrCard({ reloadKey } = {}) {
             p90
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", textAlign: "right", py: 1, borderBottom: `1px solid ${BRAND.border}` }}>
-            Sample
+            Remediated
           </Typography>
 
           {loading
@@ -258,7 +290,7 @@ export default function MttrCard({ reloadKey } = {}) {
                       </Typography>
                       {noisy ? (
                         <Tooltip
-                          title={`Only ${row.sampleSize} closed finding${
+                          title={`Only ${row.sampleSize} remediated finding${
                             row.sampleSize === 1 ? "" : "s"
                           } in this window — percentile is noisy.`}
                           arrow
@@ -312,6 +344,22 @@ export default function MttrCard({ reloadKey } = {}) {
               })}
         </Box>
       )}
+
+      {!error && !loading && churnExcluded > 0 ? (
+        <Tooltip
+          arrow
+          placement="top"
+          title="These controls went from failing to passing and back within a single evaluation cycle, which is too fast to be anyone's doing. Usually it means the evidence behind the check is arriving late or intermittently."
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: BRAND.gray, display: "block", mt: 1.25, cursor: "help" }}
+          >
+            {churnExcluded} short-lived {churnExcluded === 1 ? "closure" : "closures"} excluded —
+            flipped back to passing within one evaluation cycle.
+          </Typography>
+        </Tooltip>
+      ) : null}
     </Paper>
   );
 }
