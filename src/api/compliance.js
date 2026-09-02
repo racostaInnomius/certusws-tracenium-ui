@@ -20,8 +20,10 @@ const API_BASE = import.meta.env.VITE_API_BASE;
 
 
 // Tenant-wide KPI: scores, status breakdown, open finding counts.
-export async function getComplianceSummary() {
-  return httpGetJson(`${BASE}/summary`);
+// `assetGroupId` narrows every headline figure to one asset group — the
+// machines an operator actually loses sleep over. Omitted = whole fleet.
+export async function getComplianceSummary(params = {}) {
+  return httpGetJson(`${BASE}/summary${buildQuery(params)}`);
 }
 
 // Catalog (Control DB, read-only browse).
@@ -51,8 +53,10 @@ export async function getCategorySummary() {
 // `framework` narrows the list to controls that map to that standard, so
 // picking one on the page changes the first thing an operator reads
 // rather than only the sections that are folded away.
-export async function getTopFailingChecks({ limit, framework } = {}) {
-  return httpGetJson(`${BASE}/top-failing-checks${buildQuery({ limit, framework })}`);
+export async function getTopFailingChecks({ limit, framework, assetGroupId } = {}) {
+  return httpGetJson(
+    `${BASE}/top-failing-checks${buildQuery({ limit, framework, assetGroupId })}`
+  );
 }
 
 // Drill-in for a category: devices FAILING at least one check in the category,
@@ -62,8 +66,8 @@ export async function getCategoryDevices(category) {
 }
 
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
-export async function getFrameworkSummary() {
-  return httpGetJson(`${BASE}/framework-summary`);
+export async function getFrameworkSummary(params = {}) {
+  return httpGetJson(`${BASE}/framework-summary${buildQuery(params)}`);
 }
 
 // Device posture list — optionally filter/project by framework.

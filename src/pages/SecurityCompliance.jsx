@@ -112,6 +112,8 @@ import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCate
 import WhatToFixFirst from "../components/Compliance/WhatToFixFirst";
 import FirstVisitNote from "../components/Compliance/FirstVisitNote";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
+import { listAssetGroups } from "../api/assetGroups";
+import { listFrom } from "../api/shape";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
 import { scoreBandRole, scoreBandLabel } from "../theme/scoreBands";
@@ -329,6 +331,30 @@ export default function SecurityCompliance({ initialTab }) {
   // and search for it by hand.
   const [focusCheckId, setFocusCheckId] = React.useState(null);
 
+  // ── Ámbito por grupo de activos ────────────────────────────────────
+  // "Supongamos que genero un grupo con los equipos que deben cumplir
+  //  PCI DSS — hoy no tengo forma de ver sólo esos." Los grupos ya
+  //  existían y PMP, SDP y CDP ya filtraban por ellos; SCP era el que
+  //  faltaba. "" = toda la flota.
+  const [assetGroupId, setAssetGroupId] = React.useState("");
+  const [assetGroups, setAssetGroups] = React.useState([]);
+
+  React.useEffect(() => {
+    let alive = true;
+    listAssetGroups({ pageSize: 100 })
+      .then((res) => {
+        if (alive) setAssetGroups(listFrom(res, "items"));
+      })
+      // Un fallo aquí no debe romper la página: sin grupos el selector
+      // simplemente no aparece y todo sigue funcionando sobre la flota.
+      .catch(() => {
+        if (alive) setAssetGroups([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Deep-link filters (pre-populated from URL, user can clear via
   // chips). Client-side only — we already have the full device list
   // from the backend, so filtering in-memory is cheap and avoids
@@ -381,14 +407,19 @@ export default function SecurityCompliance({ initialTab }) {
     // page resilient (one failure never blanks the others) but the
     // failed section NAMES now travel with the data so the page can
     // say "hero KPIs failed to load" instead of lying with zeros.
+    const scope = assetGroupId ? { assetGroupId } : {};
     const requests = [
-      { key: "summary", label: "hero KPIs", run: () => getComplianceSummary() },
+      { key: "summary", label: "hero KPIs", run: () => getComplianceSummary(scope) },
       { key: "frameworks", label: "framework list", run: () => getFrameworks() },
-      { key: "frameworkSummary", label: "framework summary", run: () => getFrameworkSummary() },
+      { key: "frameworkSummary", label: "framework summary", run: () => getFrameworkSummary(scope) },
       {
         key: "devices",
         label: "device posture",
-        run: () => getDevicePosture(selectedFramework ? { framework: selectedFramework } : {}),
+        run: () =>
+          getDevicePosture({
+            ...scope,
+            ...(selectedFramework ? { framework: selectedFramework } : {}),
+          }),
       },
     ];
     const settled = await Promise.allSettled(requests.map((r) => r.run()));
@@ -417,9 +448,9 @@ export default function SecurityCompliance({ initialTab }) {
       deviceRowCap: Number(byKey.devices?.rowCap) || null,
       failedSections,
     };
-  }, [selectedFramework]);
+  }, [selectedFramework, assetGroupId]);
 
-  const cacheKey = `securityCompliance:${selectedFramework || "all"}`;
+  const cacheKey = `securityCompliance:${selectedFramework || "all"}:${assetGroupId || "fleet"}`;
   const { data, loading, refreshing, error, refetch } = useCachedFetch(cacheKey, loader);
 
   // Sprint 2 item 4 — one refresh to rule them all. The header's
@@ -728,6 +759,12 @@ export default function SecurityCompliance({ initialTab }) {
     return map;
   }, [frameworks]);
 
+  const assetGroupLabel = React.useMemo(() => {
+    if (!assetGroupId) return null;
+    const g = assetGroups.find((x) => String(x.id) === String(assetGroupId));
+    return g?.name || `Group ${assetGroupId}`;
+  }, [assetGroupId, assetGroups]);
+
   const selectedFrameworkLabel = selectedFramework
     ? frameworkLabels.get(selectedFramework) || selectedFramework
     : "All frameworks (weighted)";
@@ -804,6 +841,25 @@ export default function SecurityCompliance({ initialTab }) {
                 filtra: el operador lo elegía y, con las demás secciones
                 cerradas, no veía cambiar nada. La cabecera es donde se
                 buscan los filtros globales. */}
+            {/* Sólo cuando hay grupos: un selector con una única opción
+                ("All devices") es ruido en una cabecera ya cargada. */}
+            {assetGroups.length > 0 ? (
+              <Select
+                value={assetGroupId}
+                onChange={(e) => setAssetGroupId(e.target.value)}
+                size="small"
+                displayEmpty
+                inputProps={{ "aria-label": "Filter by asset group" }}
+                sx={{ minWidth: 190, bgcolor: BRAND.surface }}
+              >
+                <MenuItem value="">All devices</MenuItem>
+                {assetGroups.map((g) => (
+                  <MenuItem key={g.id} value={String(g.id)}>
+                    {g.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            ) : null}
             <Select
               value={selectedFramework}
               onChange={(e) => setSelectedFramework(e.target.value)}
@@ -1084,14 +1140,24 @@ export default function SecurityCompliance({ initialTab }) {
 
             {/* Qué estás mirando, y cómo salir de ahí. Sin esta línea el
                 titular filtrado es indistinguible del global. */}
-            {scoped ? (
+            {scoped || assetGroupLabel ? (
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.75, flexWrap: "wrap" }}>
-                <Chip
-                  size="small"
-                  label={`Measured against ${selectedFrameworkLabel}`}
-                  onDelete={() => setSelectedFramework("")}
-                  sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
-                />
+                {assetGroupLabel ? (
+                  <Chip
+                    size="small"
+                    label={`${assetGroupLabel} only`}
+                    onDelete={() => setAssetGroupId("")}
+                    sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                  />
+                ) : null}
+                {scoped ? (
+                  <Chip
+                    size="small"
+                    label={`Measured against ${selectedFrameworkLabel}`}
+                    onDelete={() => setSelectedFramework("")}
+                    sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                  />
+                ) : null}
               </Stack>
             ) : null}
 
@@ -1149,6 +1215,8 @@ export default function SecurityCompliance({ initialTab }) {
         reloadKey={refreshToken}
         framework={selectedFramework}
         frameworkLabel={selectedFrameworkLabel}
+        assetGroupId={assetGroupId}
+        assetGroupLabel={assetGroupLabel}
         onOpenCheck={(row) => {
           setFocusCheckId(row?.checkId ?? null);
           setTab("catalog");

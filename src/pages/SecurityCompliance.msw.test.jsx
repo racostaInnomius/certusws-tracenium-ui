@@ -99,7 +99,16 @@ const SETTINGS = {
   },
 };
 
+const ASSET_GROUPS = {
+  ok: true,
+  items: [
+    { id: 4, name: "PCI scope", kind: "static" },
+    { id: 9, name: "Domain controllers", kind: "dynamic" },
+  ],
+};
+
 function mountPage({ settings = SETTINGS } = {}) {
+  respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
   respond("get", `${BASE}/summary`, SUMMARY);
   respond("get", `${BASE}/frameworks`, FRAMEWORKS);
   respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
@@ -236,6 +245,60 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(screen.getByText(/11 of 94 controls mapped — narrow coverage/)).toBeInTheDocument();
     // The broadly-mapped one states its coverage without the warning.
     expect(screen.getByText("92 of 94 controls mapped")).toBeInTheDocument();
+  });
+
+  // ── Ámbito por grupo de activos ───────────────────────────────────
+  // "Supongamos que genero un grupo con los equipos que deben cumplir
+  //  PCI DSS — hoy no tengo forma de ver sólo esos."
+  it("scopes every headline read to the selected asset group", async () => {
+    // The headline, the framework table and the device list must ALL
+    // carry the scope, or the big number describes a different
+    // population than the table under it.
+    respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
+    const summaryCalls = respond("get", `${BASE}/summary`, SUMMARY);
+    const frameworkCalls = respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    const deviceCalls = respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/frameworks`, FRAMEWORKS);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+
+    const { fireEvent } = await import("@testing-library/react");
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    // The first load is fleet-wide: no scope on the wire.
+    expect(summaryCalls[0].search.assetGroupId).toBeUndefined();
+
+    // A bare <Select> (not a TextField), so the accessible combobox is
+    // the sibling of the hidden native input the aria-label lands on.
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by asset group" }));
+    fireEvent.click(await screen.findByRole("option", { name: "PCI scope" }));
+
+    await waitFor(() => {
+      expect(summaryCalls.some((c) => c.search.assetGroupId === "4")).toBe(true);
+      expect(frameworkCalls.some((c) => c.search.assetGroupId === "4")).toBe(true);
+      expect(deviceCalls.some((c) => c.search.assetGroupId === "4")).toBe(true);
+    });
+    // And the headline says which population it is describing.
+    expect(await screen.findByText("PCI scope only")).toBeInTheDocument();
+  });
+
+  it("offers no group selector when the tenant has no groups", async () => {
+    // A picker whose only option is "All devices" is noise in a header
+    // that already carries the framework filter, exports and refresh.
+    respond("get", "/api/v1/asset-groups", { ok: true, items: [] });
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, FRAMEWORKS);
+    respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
+    respond("get", `${BASE}/devices`, DEVICES);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Filter by asset group")).not.toBeInTheDocument();
   });
 
   it("says nothing about coverage when the backend does not report it", async () => {

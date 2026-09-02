@@ -55,7 +55,15 @@ function SeverityRail({ severity }) {
   );
 }
 
-export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, framework, frameworkLabel }) {
+export default function WhatToFixFirst({
+  reloadKey,
+  onOpenCheck,
+  onRemediate,
+  framework,
+  frameworkLabel,
+  assetGroupId,
+  assetGroupLabel,
+}) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
@@ -64,7 +72,11 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, fr
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
-    getTopFailingChecks({ limit: HOW_MANY, framework: framework || undefined })
+    getTopFailingChecks({
+      limit: HOW_MANY,
+      framework: framework || undefined,
+      assetGroupId: assetGroupId || undefined,
+    })
       .then((res) => {
         if (!alive) return;
         setItems(Array.isArray(res?.items) ? res.items : []);
@@ -82,7 +94,7 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, fr
     return () => {
       alive = false;
     };
-  }, [reloadKey, framework]);
+  }, [reloadKey, framework, assetGroupId]);
 
   const handleFix = React.useCallback(
     async (row) => {
@@ -104,9 +116,9 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, fr
           What to fix first
         </Typography>
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-          {framework
-            ? `Most-failed ${frameworkLabel || framework} controls across your fleet`
-            : "Most-failed controls across your fleet"}
+          {`Most-failed ${framework ? `${frameworkLabel || framework} ` : ""}controls ${
+            assetGroupLabel ? `in ${assetGroupLabel}` : "across your fleet"
+          }`}
         </Typography>
       </Stack>
 
@@ -120,8 +132,10 @@ export default function WhatToFixFirst({ reloadKey, onOpenCheck, onRemediate, fr
         </Typography>
       ) : items.length === 0 ? (
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-          {framework
-            ? `Nothing mapped to ${frameworkLabel || framework} is failing right now. Other standards may still have findings — clear the filter to see them.`
+          {framework || assetGroupLabel
+            ? `Nothing is failing within the current filters${
+                framework ? ` (${frameworkLabel || framework})` : ""
+              }${assetGroupLabel ? ` in ${assetGroupLabel}` : ""}. Clear them to see the rest of your fleet.`
             : "Nothing is failing right now. Every evaluated control passes on every reporting device."}
         </Typography>
       ) : (
