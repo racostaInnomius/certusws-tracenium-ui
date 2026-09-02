@@ -1,19 +1,30 @@
 // src/pages/RemoteControl.jsx
 //
-// Remote Control page — placeholders today, scaffolding for when the
-// `rcp` plugin lands. Structure:
+// Remote Control — four tabs over the /api/v1/remote-control/* contract.
 //
-//   Row 1  Hero KPIs (4)               — connectable / active / 7d / avg
-//   Row 2  ConnectablesTable (md:8)    + PluginUnavailableCard (md:4)
-//   Row 3  SessionHistoryTable         — full width, empty state
+// ── What this page used to be ────────────────────────────────────────
 //
-// All data flows through the stable `/api/v1/remote-control/*`
-// contract. Backend returns zeros + empty lists while the plugin
-// doesn't exist; page never crashes, user sees meaningful copy.
+// One scroll holding everything: four KPIs, a device table beside a card
+// that told operators the plugin was "not yet shipped", the session history
+// and the file-transfer log — all four datasets fetched on every visit
+// through a single Promise.allSettled under one cache key. Opening the page
+// to run one command downloaded the entire audit trail.
+//
+// ── What the tabs actually buy ───────────────────────────────────────
+//
+// Nothing, unless the loader is split with them. TabPanel unmounts the
+// inactive panel, so each tab now asks for its own data when it opens
+// (see useRemoteControlData.js, where the cache keys live). That is what
+// makes this a change in behaviour rather than a change in appearance.
+//
+// ── What stays outside the tabs ──────────────────────────────────────
+//
+// The approval queue. Someone is waiting to get into a machine; burying
+// that behind a tab would mean arriving late. It renders null when there is
+// nothing pending, so it costs no space the rest of the time.
 
 import * as React from "react";
 import {
-  Alert,
   Box,
   Button,
   Card,
@@ -24,51 +35,63 @@ import {
   DialogContent,
   DialogTitle,
   Drawer,
-  Grid,
-  Paper,
-  Skeleton,
-  Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography
 } from "@mui/material";
+import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import SwapVertOutlinedIcon from "@mui/icons-material/SwapVertOutlined";
+import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
+
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import BrandSnackbar from "../components/common/BrandSnackbar";
-import { useCachedFetch } from "../hooks/useCachedFetch";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import { invalidateCachePrefix } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
-import FlashOnOutlinedIcon from "@mui/icons-material/FlashOnOutlined";
-import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
-import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
-
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND } from "../theme/brand";
 import {
-  getRemoteControlSummary,
-  getConnectableDevices,
-  getRemoteSessions,
-  getAllFileTransfers,
   startRemoteSession,
   listPendingApprovals,
-  decideApproval,
-  getAccessPolicy,
-  setAccessPolicyCell
+  decideApproval
 } from "../api/remoteControl";
 
-import ConnectablesTable from "../components/RemoteControl/ConnectablesTable";
-import PluginUnavailableCard from "../components/RemoteControl/PluginUnavailableCard";
-import SessionHistoryTable from "../components/RemoteControl/SessionHistoryTable";
-import FileTransfersAuditTable from "../components/RemoteControl/FileTransfersAuditTable";
-// Lazy-loaded: these four own the xterm.js + WebRTC/DataChannel stack (~347KB
-// combined). They only render when an operator actually opens a shell/file/
-// screen session, so keep them out of the RemoteControl page's initial chunk
-// — otherwise all of xterm + WebRTC parses on page mount even for an operator
-// who never starts a session.
+import ConnectTab from "../components/RemoteControl/ConnectTab";
+import SessionsTab from "../components/RemoteControl/SessionsTab";
+import TransfersTab from "../components/RemoteControl/TransfersTab";
+import AccessTab from "../components/RemoteControl/AccessTab";
+import StartSessionWizard from "../components/RemoteControl/StartSessionWizard";
+
+// Lazy: these own the xterm.js + WebRTC/DataChannel stack (~347KB combined).
+// They only render when an operator actually opens a session, so they stay
+// out of the page's initial chunk.
 const ShellTerminal = React.lazy(() => import("../components/RemoteControl/ShellTerminal"));
-const TranscriptReplayDialog = React.lazy(() => import("../components/RemoteControl/TranscriptReplayDialog"));
+const TranscriptReplayDialog = React.lazy(() =>
+  import("../components/RemoteControl/TranscriptReplayDialog")
+);
 const FileBrowserPanel = React.lazy(() => import("../components/RemoteControl/FileBrowserPanel"));
 const ScreenShareViewer = React.lazy(() => import("../components/RemoteControl/ScreenShareViewer"));
-const RecordingReplayDialog = React.lazy(() => import("../components/RemoteControl/RecordingReplayDialog"));
+const RecordingReplayDialog = React.lazy(() =>
+  import("../components/RemoteControl/RecordingReplayDialog")
+);
 
-// Centered fallback while a session drawer's heavy body loads.
+const TAB_CONNECT = 0;
+const TAB_SESSIONS = 1;
+const TAB_TRANSFERS = 2;
+const TAB_ACCESS = 3;
+
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 58,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark }
+};
+
 function SessionLoading() {
   return (
     <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -77,125 +100,64 @@ function SessionLoading() {
   );
 }
 
-import PageHeader from "../components/common/PageHeader";
-
-
-// ---------- small atoms -----------------------------------------------------
-
-function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading }) {
+function TabPanel({ children, value, index }) {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        gap: 1.25
-      }}
+    <Box
+      role="tabpanel"
+      hidden={value !== index}
+      id={`remote-control-tabpanel-${index}`}
+      aria-labelledby={`remote-control-tab-${index}`}
     >
-      <Stack direction="row" spacing={1.5} alignItems="center">
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: 1.5,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: tint,
-            color: accent,
-            flexShrink: 0
-          }}
-        >
-          <Icon fontSize="small" />
-        </Box>
-        <Typography
-          variant="body2"
-          sx={{ color: BRAND.dark, fontWeight: 600, lineHeight: 1.2 }}
-        >
-          {title}
-        </Typography>
-      </Stack>
-
-      {loading ? (
-        <Skeleton variant="text" width={90} height={40} />
-      ) : (
-        <Typography
-          variant="h4"
-          sx={{ color: BRAND.dark, fontWeight: 700, lineHeight: 1.1 }}
-        >
-          {value}
-        </Typography>
-      )}
-
-      {subtitle != null && !loading && (
-        <Typography variant="caption" sx={{ color: BRAND.gray }}>
-          {subtitle}
-        </Typography>
-      )}
-    </Paper>
+      {/* Mounting only the active panel is what makes each tab fetch its own
+          data on open — see the header note. */}
+      {value === index ? children : null}
+    </Box>
   );
 }
 
-// ---------- page ------------------------------------------------------------
-
 /**
- * Pide el expediente antes de abrir una sesion privilegiada.
+ * Approval queue — ADR-0009 phase 2.
  *
- * ADR-0009 fase 1. El backend rechaza con 400 si falta cualquiera de los
- * dos, asi que validar aqui no es duplicar: es evitarle al operador un
- * viaje de ida y vuelta en mitad de una incidencia.
+ * Shown ONLY when something is pending. A permanently empty panel on the
+ * most-used screen turns invisible within a week, and then it fails to warn
+ * on the day there is something to see.
  *
- * El minimo de 10 caracteres del motivo no es celo: esta fase existe
- * para RECOGER el dato con el que se decidira que capacidades exigiran
- * vistobueno, y un expediente lleno de "x" calibraria esa politica sobre
- * ruido.
- */
-
-/**
- * Cola de aprobación — ADR-0009 fase 2.
- *
- * Se muestra SOLO cuando hay algo pendiente. Un panel permanentemente
- * vacío en la pantalla que más se usa se vuelve invisible en una semana,
- * y entonces no avisa el día que sí hay algo.
- *
- * ⚠️ Aprobar es conceder root a otra persona durante una ventana. Por eso
- * la fila muestra el expediente completo —quién, a qué equipo, por qué y
- * bajo qué ticket— en vez de un identificador: quien aprueba a ciegas no
- * está aprobando, está firmando.
+ * ⚠️ Approving is granting root to another person for a window of time.
+ * That's why the row shows the whole record — who, to which device, why and
+ * under which ticket — instead of an identifier: approving blind isn't
+ * approving, it's signing.
  */
 export function ApprovalQueue({ refreshNonce, notify }) {
   const [items, setItems] = React.useState([]);
   const [busy, setBusy] = React.useState("");
 
-  const cargar = React.useCallback(() => {
+  const load = React.useCallback(() => {
     listPendingApprovals()
       .then((r) => setItems(r?.items ?? []))
       .catch(() => setItems([]));
   }, []);
 
-  React.useEffect(() => { cargar(); }, [cargar, refreshNonce]);
+  React.useEffect(() => {
+    load();
+  }, [load, refreshNonce]);
 
-  const decidir = async (requestId, approve) => {
+  const decide = async (requestId, approve) => {
     setBusy(requestId);
     try {
       const r = await decideApproval(requestId, approve);
       if (r?.ok) {
-        notify("success", approve ? "Acceso aprobado" : "Acceso denegado");
+        notify("success", approve ? "Access approved" : "Access denied");
       } else {
-        // El backend responde 409 cuando el ESTADO no admite la
-        // decisión: ya resuelta, caducada, o es la propia solicitud del
-        // aprobador. Son situaciones distintas y el mensaje lo dice.
-        notify("error", r?.message || "No se pudo registrar la decisión");
+        // The backend answers 409 when the STATE doesn't allow the decision:
+        // already resolved, expired, or it's the approver's own request.
+        // Those are different situations and the message says which.
+        notify("error", r?.message || "Could not record the decision");
       }
     } catch (e) {
-      notify("error", e?.message || "No se pudo registrar la decisión");
+      notify("error", e?.message || "Could not record the decision");
     } finally {
       setBusy("");
-      cargar();
+      load();
     }
   };
 
@@ -205,39 +167,46 @@ export function ApprovalQueue({ refreshNonce, notify }) {
     <Card sx={{ mb: 2, border: `1px solid ${BRAND.alert.warningText}` }}>
       <CardContent>
         <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
-          {items.length} acceso(s) esperando visto bueno
+          {items.length} access {items.length === 1 ? "request is" : "requests are"} waiting
+          for approval
         </Typography>
         {items.map((it) => (
           <Box
             key={it.requestId}
             sx={{
-              display: "flex", gap: 2, alignItems: "center",
-              py: 1, borderTop: `1px solid ${BRAND.border}`, flexWrap: "wrap"
+              display: "flex",
+              gap: 2,
+              alignItems: "center",
+              py: 1,
+              borderTop: `1px solid ${BRAND.border}`,
+              flexWrap: "wrap"
             }}
           >
             <Box sx={{ flex: 1, minWidth: 260 }}>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                {it.operatorUserId} → {it.capability} en {it.deviceId}
+                {it.operatorUserId} → {it.capability} on {it.deviceId}
               </Typography>
               <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
                 {it.reason} · ticket {it.ticketRef}
-                {it.expiresAt ? ` · caduca ${new Date(it.expiresAt).toLocaleTimeString()}` : ""}
+                {it.expiresAt
+                  ? ` · expires ${new Date(it.expiresAt).toLocaleTimeString()}`
+                  : ""}
               </Typography>
             </Box>
             <Button
               size="small"
               disabled={busy === it.requestId}
-              onClick={() => decidir(it.requestId, false)}
+              onClick={() => decide(it.requestId, false)}
             >
-              Denegar
+              Deny
             </Button>
             <Button
               size="small"
               variant="contained"
               disabled={busy === it.requestId}
-              onClick={() => decidir(it.requestId, true)}
+              onClick={() => decide(it.requestId, true)}
             >
-              Aprobar
+              Approve
             </Button>
           </Box>
         ))}
@@ -247,100 +216,14 @@ export function ApprovalQueue({ refreshNonce, notify }) {
 }
 
 /**
- * La matriz de política — ADR-0009 fase 2.
+ * The access record — ADR-0009 phase 1 — for the table's per-row buttons.
  *
- * `(clase de equipo × capacidad) → requiere visto bueno`. Se muestra
- * COMPLETA, con todo apagado de fábrica, para que el administrador vea
- * qué combinaciones existen en vez de enfrentarse a una lista vacía.
- *
- * Incluye las capacidades de CDP porque comparten la misma matriz
- * (ADR-0011 dec. 5 y 10), aunque su botón todavía no exista.
+ * The wizard asks for the same two fields as its step 3. This dialog stays
+ * for the path that doesn't go through the wizard: `reason` and `ticketRef`
+ * are stored next to the session and are the data the phase-2 policy gets
+ * calibrated on, so no path may skip them.
  */
-export function AccessPolicyDialog({ open, onClose, notify }) {
-  const [rows, setRows] = React.useState([]);
-  const [busy, setBusy] = React.useState("");
-
-  React.useEffect(() => {
-    if (!open) return;
-    getAccessPolicy()
-      .then((r) => setRows(r?.items ?? []))
-      .catch(() => setRows([]));
-  }, [open]);
-
-  const alternar = async (row) => {
-    const clave = `${row.capability}:${row.deviceClass}`;
-    setBusy(clave);
-    try {
-      await setAccessPolicyCell({
-        capability: row.capability,
-        deviceClass: row.deviceClass,
-        requiresApproval: !row.requiresApproval,
-        jitMinutes: row.jitMinutes
-      });
-      setRows((prev) =>
-        prev.map((r) =>
-          r.capability === row.capability && r.deviceClass === row.deviceClass
-            ? { ...r, requiresApproval: !r.requiresApproval }
-            : r
-        )
-      );
-    } catch (e) {
-      notify("error", e?.message || "No se pudo guardar la política");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const capacidades = [...new Set(rows.map((r) => r.capability))];
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Política de acceso privilegiado</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" sx={{ mb: 2, color: BRAND.textMuted }}>
-          Qué capacidades exigen visto bueno de otra persona antes de ejercerse.
-          Entrar a un servidor y entrar a un portátil no son la misma operación.
-        </Typography>
-        {capacidades.map((cap) => (
-          <Box key={cap} sx={{ mb: 1.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>{cap}</Typography>
-            {rows
-              .filter((r) => r.capability === cap)
-              .map((r) => (
-                <Box
-                  key={r.deviceClass}
-                  sx={{ display: "flex", alignItems: "center", gap: 1, pl: 1 }}
-                >
-                  <Typography variant="caption" sx={{ width: 90, color: BRAND.textMuted }}>
-                    {r.deviceClass === "server" ? "Servidores" : "Endpoints"}
-                  </Typography>
-                  <Button
-                    size="small"
-                    variant={r.requiresApproval ? "contained" : "outlined"}
-                    disabled={busy === `${r.capability}:${r.deviceClass}`}
-                    onClick={() => alternar(r)}
-                  >
-                    {r.requiresApproval ? "Exige visto bueno" : "Sin visto bueno"}
-                  </Button>
-                </Box>
-              ))}
-          </Box>
-        ))}
-        {!rows.length && (
-          <Alert severity="info">
-            Sin política cargada. Si acabas de desplegar, la migración que siembra la
-            matriz puede no haberse aplicado todavía.
-          </Alert>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-function ExpedienteDialog({ pending, onCancel, onConfirm }) {
+function AccessRecordDialog({ pending, onCancel, onConfirm }) {
   const [reason, setReason] = React.useState("");
   const [ticketRef, setTicketRef] = React.useState("");
 
@@ -356,10 +239,13 @@ function ExpedienteDialog({ pending, onCancel, onConfirm }) {
 
   return (
     <Dialog open={Boolean(pending)} onClose={onCancel} maxWidth="sm" fullWidth>
-      <DialogTitle>Acceso a {pending?.device?.hostname || pending?.device?.deviceId}</DialogTitle>
+      <DialogTitle>
+        Access to {pending?.device?.hostname || pending?.device?.deviceId}
+      </DialogTitle>
       <DialogContent>
         <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
-          Queda registrado quien accede, a que equipo y por que. Se guarda junto a la sesion.
+          Who connects, to which device and why is recorded and stored alongside the
+          session.
         </Typography>
         <TextField
           autoFocus
@@ -367,13 +253,13 @@ function ExpedienteDialog({ pending, onCancel, onConfirm }) {
           multiline
           minRows={2}
           margin="dense"
-          label="Motivo"
-          placeholder="Que se va a hacer y por que hace falta este acceso"
+          label="Reason"
+          placeholder="What you are going to do and why this access is needed"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           error={reason.length > 0 && !reasonOk}
           helperText={
-            reason.length > 0 && !reasonOk ? "Describe el motivo (minimo 10 caracteres)" : " "
+            reason.length > 0 && !reasonOk ? "Describe the reason (at least 10 characters)" : " "
           }
         />
         <TextField
@@ -383,17 +269,17 @@ function ExpedienteDialog({ pending, onCancel, onConfirm }) {
           placeholder="TCK-4821, INC0012345, jira/OPS-77…"
           value={ticketRef}
           onChange={(e) => setTicketRef(e.target.value)}
-          helperText="El ticket bajo el que se realiza el acceso"
+          helperText="The ticket this access is performed under"
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onCancel}>Cancelar</Button>
+        <Button onClick={onCancel}>Cancel</Button>
         <Button
           variant="contained"
           disabled={!reasonOk || !ticketOk}
           onClick={() => onConfirm({ reason: reason.trim(), ticketRef: ticketRef.trim() })}
         >
-          Conectar
+          Connect
         </Button>
       </DialogActions>
     </Dialog>
@@ -401,59 +287,53 @@ function ExpedienteDialog({ pending, onCancel, onConfirm }) {
 }
 
 export default function RemoteControl() {
-  const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
+  const [snackbar, setSnackbar] = React.useState({
+    open: false,
+    message: "",
+    severity: "info"
+  });
+  const notify = React.useCallback(
+    (severity, message) => setSnackbar({ open: true, severity, message }),
+    []
+  );
 
-  const notify = (severity, message) =>
-    setSnackbar({ open: true, severity, message });
+  const [activeTab, setActiveTab] = React.useState(TAB_CONNECT);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  // Bundled loader so the cache stores one snapshot per visit instead
-  // of three independent ones — when the page rehydrates, all three
-  // panels fill from the same snapshot atomically.
-  const loader = React.useCallback(async () => {
-    const [sumRes, devRes, sesRes, ftRes] = await Promise.allSettled([
-      getRemoteControlSummary(),
-      getConnectableDevices(),
-      getRemoteSessions({ limit: 50 }),
-      getAllFileTransfers({ limit: 200 })
-    ]);
-    return {
-      summary: sumRes.status === "fulfilled" ? (sumRes.value?.summary ?? null) : null,
-      devices: devRes.status === "fulfilled" && Array.isArray(devRes.value?.items)
-        ? devRes.value.items : [],
-      sessions: sesRes.status === "fulfilled" && Array.isArray(sesRes.value?.items)
-        ? sesRes.value.items : [],
-      sessionTotal: sesRes.status === "fulfilled" ? Number(sesRes.value?.total ?? 0) : 0,
-      fileTransfers: ftRes.status === "fulfilled" && Array.isArray(ftRes.value?.items)
-        ? ftRes.value.items : [],
-      fileTransferTotal: ftRes.status === "fulfilled" ? Number(ftRes.value?.total ?? 0) : 0,
-    };
+  /**
+   * Refresh everything the page can show.
+   *
+   * Two moves, and both are needed. `invalidateCachePrefix` drops the cached
+   * entries of the tabs that are NOT mounted, so the next time one is opened
+   * it reloads instead of serving a snapshot from before the session. The
+   * nonce is what reaches the tab that IS mounted, which invalidation alone
+   * can't re-render.
+   */
+  const refreshAll = React.useCallback(() => {
+    invalidateCachePrefix("remoteControl:");
+    setRefreshNonce((v) => v + 1);
   }, []);
 
-  const { data, loading, refreshing, refetch, lastUpdatedAt } = useCachedFetch(
-    "remoteControl:bundle",
-    loader,
-  );
-  const summary = data?.summary ?? null;
-  const devices = data?.devices ?? [];
-  const sessions = data?.sessions ?? [];
-  const sessionTotal = data?.sessionTotal ?? 0;
-  const fileTransfers = data?.fileTransfers ?? [];
-  const fileTransferTotal = data?.fileTransferTotal ?? 0;
-  const refreshedAt = lastUpdatedAt ? new Date(lastUpdatedAt) : null;
-  const load = refetch;
+  const manualRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    refreshAll();
+    window.setTimeout(() => setRefreshing(false), 900);
+  }, [refreshAll]);
 
-  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refetch, "rcAutoRefresh");
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "rcAutoRefresh");
 
-  // Deep-link flash: Asset Management's "Actions" menu links here with
-  // `?highlightAgentId=<agentId>` so the operator lands on the exact
-  // device row in ConnectablesTable instead of hunting for it. Same
-  // one-shot-mount-effect shape as Jobs.jsx's highlightJobId deep link.
+  // Deep link: Asset Management's Actions menu links here with
+  // `?highlightAgentId=<agentId>` so the operator lands on the exact device
+  // row instead of hunting for it. Forces the Connect tab — the link means
+  // "this device", and the row only exists there.
   const [highlightDeviceId, setHighlightDeviceId] = React.useState("");
   React.useEffect(() => {
     const id = getSearchParam("highlightAgentId", "");
     if (!id) return undefined;
     updateSearchParams({ highlightAgentId: null });
     setHighlightDeviceId(id);
+    setActiveTab(TAB_CONNECT);
     const scrollTimer = window.setTimeout(() => {
       document.getElementById("remote-control-connectables")?.scrollIntoView({
         behavior: "smooth",
@@ -468,251 +348,195 @@ export default function RemoteControl() {
     // Mount-only — a one-shot "just arrived" flash.
   }, []);
 
-  // RCP M1.S2 — shell session envelope (ShellTerminal drawer).
-  const [activeSession, setActiveSession] = React.useState(null);
-
-  // RCP M2.S1 — file session envelope (FileBrowserPanel drawer).
+  // Session envelopes, one per capability. Each drawer owns its own WebRTC
+  // lifecycle, so they stay separate pieces of state rather than one
+  // discriminated union that every consumer would have to narrow.
+  const [shellSession, setShellSession] = React.useState(null);
   const [fileSession, setFileSession] = React.useState(null);
-
-  // RCP M3.S1 — screen session envelope (ScreenShareViewer drawer).
   const [screenSession, setScreenSession] = React.useState(null);
 
-  // RCP M1.S3 — replay dialog state. Holds the SessionHistory row
-  // selected via the "Replay" action so the dialog can stamp its
-  // header with operator/device metadata while it fetches the
-  // transcript itself.
   const [replaySession, setReplaySession] = React.useState(null);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
+  // { device, type } while waiting for reason + ticket on the table path.
+  const [recordFor, setRecordFor] = React.useState(null);
 
-  // ADR-0009 fase 1 — expediente pendiente. `null` = no hay dialogo
-  // abierto; { device, type } = esperando motivo y ticket.
-  const [expedienteFor, setExpedienteFor] = React.useState(null);
-  const [policyOpen, setPolicyOpen] = React.useState(false);
+  const closeSession = React.useCallback(
+    (setter) => () => {
+      setter(null);
+      refreshAll();
+    },
+    [refreshAll]
+  );
 
-  /**
-   * Click handler for Connect buttons in the ConnectablesTable.
-   * Calls POST /sessions; on success opens the appropriate drawer:
-   *   - type "shell"   → ShellTerminal drawer      (M1.S2)
-   *   - type "file"    → FileBrowserPanel drawer   (M2.S1)
-   *   - type "screen"  → ScreenShareViewer drawer  (M3.S1)
-   *
-   * Backend error codes map to friendly toasts:
-   *   - 501 / RCP_PLUGIN_NOT_AVAILABLE    — screen cap (M3+)
-   *   - 409 / RCP_DEVICE_OFFLINE          — device offline mid-click
-   *   - 409 / RCP_CAPABILITY_NOT_ADVERTISED — agent missing capability
-   *   - 429 / RCP_TOO_MANY_SESSIONS       — concurrency cap hit
-   *   - 403 / FORBIDDEN                   — caller lacks ADMIN/OWNER here
-   */
-  /**
-   * ADR-0009 fase 1 — el expediente se pide ANTES de conectar.
-   *
-   * No es un paso decorativo: `reason` y `ticketRef` quedan escritos
-   * junto a la sesión, y son los datos con los que se calibrará qué
-   * capacidades exigirán vistobueno en la fase 2. Pedirlos después de
-   * abrir la sesión los convertiría en opcionales de hecho.
-   */
-  const handleConnect = (device, type = "shell") => {
-    setExpedienteFor({ device, type });
-  };
+  const doConnect = React.useCallback(
+    async (device, type, record) => {
+      try {
+        const res = await startRemoteSession({
+          deviceId: device.deviceId,
+          type,
+          reason: record.reason,
+          ticketRef: record.ticketRef
+        });
 
-  const doConnect = async (device, type, expediente) => {
-    try {
-      const res = await startRemoteSession({
-        deviceId: device.deviceId,
-        type,
-        reason: expediente.reason,
-        ticketRef: expediente.ticketRef
-      });
-      // ADR-0009 fase 2 — el gate responde 202 con ok:false. NO es un
-      // fallo: la solicitud quedó en cola esperando vistobueno. Tratarlo
-      // como error diría "Failed to start session" a alguien cuya
-      // petición se registró correctamente, y le haría reintentar en
-      // bucle generando una solicitud pendiente por intento.
-      if (res?.status === "pending_approval") {
-        notify(
-          "info",
-          `Acceso en cola: ${res.message || "requiere visto bueno"}. ` +
-            `Solicitud ${String(res.requestId || "").slice(0, 8)}…`
-        );
-        return;
-      }
-      if (!res?.ok) {
-        notify("error", res?.message || "Failed to start session");
-        return;
-      }
-      const sessionEnvelope = {
-        sessionId: res.sessionId,
-        signalingUrl: res.signalingUrl,
-        turnConfig: res.turnConfig,
-        device
-      };
-      if (type === "file") {
-        setFileSession(sessionEnvelope);
-      } else if (type === "screen") {
-        setScreenSession(sessionEnvelope);
-      } else {
-        setActiveSession(sessionEnvelope);
-      }
-      load(); // pull history + active count
-    } catch (err) {
-      const msg = String(err?.message || "");
-      if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
-        notify(
-          "info",
-          "This capability is not yet available on the selected agent."
-        );
-      } else if (msg.includes("FORBIDDEN") || msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
-        // M4 moved RCP onto the shared requireRole("ADMIN","OWNER") gate, so
-        // the backend now answers a plain FORBIDDEN. The old code is still
-        // matched because a browser may be talking to a backend that hasn't
-        // been rolled forward yet.
-        notify(
-          "warning",
-          "You need the Admin or Owner role on this tenant to start a remote session."
-        );
-      } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
-        notify("error", "Device is not currently connected. Try again later.");
-      } else if (msg.includes("RCP_CAPABILITY_NOT_ADVERTISED")) {
-        notify(
-          "warning",
-          `This device hasn't advertised rcp.${type} — check the agent's policy configuration.`
-        );
-      } else if (msg.includes("RCP_TOO_MANY_SESSIONS")) {
-        notify(
-          "warning",
-          "Too many concurrent sessions. Close one before starting another."
-        );
-      } else {
-        notify("error", `Failed to start session: ${msg || "unknown error"}`);
-      }
-    }
-  };
+        // ADR-0009 phase 2 — the gate answers 202 with ok:false. That is NOT
+        // a failure: the request was queued for approval. Treating it as an
+        // error would say "Failed to start session" to someone whose request
+        // was correctly recorded, and make them retry in a loop, generating
+        // one pending request per attempt.
+        if (res?.status === "pending_approval") {
+          notify(
+            "info",
+            `Access queued: ${res.message || "approval required"}. ` +
+              `Request ${String(res.requestId || "").slice(0, 8)}…`
+          );
+          return;
+        }
+        if (!res?.ok) {
+          notify("error", res?.message || "Failed to start session");
+          return;
+        }
 
-  // KPI values — zero-safe whether summary is null or has zeros.
-  const connectable = Number(summary?.connectableDevices ?? 0);
-  const active = Number(summary?.activeSessions ?? 0);
-  const last7d = Number(summary?.sessionsLast7d ?? 0);
-  const avgDurationSec = summary?.avgDurationSec ?? null;
-  const avgDurationLabel =
-    avgDurationSec == null
-      ? "—"
-      : avgDurationSec < 60
-      ? `${avgDurationSec}s`
-      : `${Math.round(avgDurationSec / 60)}m`;
+        const envelope = {
+          sessionId: res.sessionId,
+          signalingUrl: res.signalingUrl,
+          turnConfig: res.turnConfig,
+          device
+        };
+        if (type === "file") setFileSession(envelope);
+        else if (type === "screen") setScreenSession(envelope);
+        else setShellSession(envelope);
+
+        refreshAll();
+      } catch (err) {
+        const msg = String(err?.message || "");
+        if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
+          notify("info", "This capability is not yet available on the selected agent.");
+        } else if (msg.includes("FORBIDDEN") || msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
+          // M4 moved RCP onto the shared requireRole("ADMIN","OWNER") gate, so
+          // the backend now answers a plain FORBIDDEN. The old code is still
+          // matched because a browser may be talking to a backend that hasn't
+          // been rolled forward yet.
+          notify(
+            "warning",
+            "You need the Admin or Owner role on this tenant to start a remote session."
+          );
+        } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
+          notify("error", "Device is not currently connected. Try again later.");
+        } else if (msg.includes("RCP_CAPABILITY_NOT_ADVERTISED")) {
+          notify(
+            "warning",
+            `This device hasn't advertised rcp.${type} — check the agent's policy configuration.`
+          );
+        } else if (msg.includes("RCP_TOO_MANY_SESSIONS")) {
+          notify("warning", "Too many concurrent sessions. Close one before starting another.");
+        } else {
+          notify("error", `Failed to start session: ${msg || "unknown error"}`);
+        }
+      }
+    },
+    [notify, refreshAll]
+  );
 
   return (
     <Box sx={{ pb: 4 }}>
-      {/* Header */}
       <PageHeader
         title="Remote Control"
-        subtitle={
-          <>
-            Interactive sessions to managed endpoints. Gated by the{" "}
-            <strong>rcp</strong> plugin — unavailable until deployed.
-            {refreshedAt
-              ? ` · Last refresh ${refreshedAt.toLocaleTimeString()}`
-              : ""}
-          </>
-        }
+        subtitle="Interactive sessions to managed endpoints, with every access recorded."
         icon={<DesktopWindowsOutlinedIcon />}
         actions={
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-            <Button size="small" variant="outlined" onClick={() => setPolicyOpen(true)}>
-              Política de acceso
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddOutlinedIcon fontSize="small" />}
+              onClick={() => setWizardOpen(true)}
+            >
+              Start a session
             </Button>
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
-              onRefresh={load}
-              loading={loading || refreshing}
+              onRefresh={manualRefresh}
+              loading={refreshing}
             />
           </Box>
         }
       />
 
-      {/* ADR-0009 fase 2 — la cola va ARRIBA del todo y solo aparece si
-          hay algo pendiente: alguien está esperando para entrar a un
-          equipo, y enterrarlo bajo los KPIs sería llegar tarde. */}
-      <ApprovalQueue refreshNonce={refreshSeconds} notify={notify} />
+      {/* Above the tabs on purpose — see the header note. */}
+      <ApprovalQueue refreshNonce={refreshNonce} notify={notify} />
 
-      {/* Row 1 — Hero KPIs */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Kpi
-            title="Connectable devices"
-            value={connectable}
-            subtitle={connectable ? "with rcp enabled" : "none yet"}
-            icon={DesktopWindowsOutlinedIcon}
-            accent={BRAND.teal}
-            tint={BRAND.tealSoft}
-            loading={loading}
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_e, v) => setActiveTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 58,
+            "& .MuiTabs-indicator": {
+              height: 3,
+              borderRadius: 999,
+              backgroundColor: BRAND.teal
+            }
+          }}
+        >
+          <Tab
+            icon={<PlayCircleOutlineOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Connect"
+            id="remote-control-tab-0"
+            aria-controls="remote-control-tabpanel-0"
+            sx={TAB_SX}
           />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Kpi
-            title="Active sessions"
-            value={active}
-            subtitle={active ? "in progress" : "none right now"}
-            icon={FlashOnOutlinedIcon}
-            accent={active > 0 ? ROLE.positive : BRAND.gray}
-            tint={active > 0 ? ROLE.positiveSoft : BRAND.surfaceMuted}
-            loading={loading}
+          <Tab
+            icon={<HistoryOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Sessions"
+            id="remote-control-tab-1"
+            aria-controls="remote-control-tabpanel-1"
+            sx={TAB_SX}
           />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Kpi
-            title="Sessions last 7d"
-            value={last7d}
-            subtitle={last7d ? "completed" : "no history yet"}
-            icon={HistoryOutlinedIcon}
-            accent={BRAND.teal}
-            tint={BRAND.tealSoft}
-            loading={loading}
+          <Tab
+            icon={<SwapVertOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="File transfers"
+            id="remote-control-tab-2"
+            aria-controls="remote-control-tabpanel-2"
+            sx={TAB_SX}
           />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          <Kpi
-            title="Avg session duration"
-            value={avgDurationLabel}
-            subtitle={avgDurationSec != null ? "across last 7d" : "—"}
-            icon={TimerOutlinedIcon}
-            accent={BRAND.teal}
-            tint={BRAND.tealSoft}
-            loading={loading}
+          <Tab
+            icon={<VerifiedUserOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Access"
+            id="remote-control-tab-3"
+            aria-controls="remote-control-tabpanel-3"
+            sx={TAB_SX}
           />
-        </Grid>
-      </Grid>
+        </Tabs>
+      </SectionPaper>
 
-      {/* Row 2 — Device selector + plugin info */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, md: 8 }}>
-          <ConnectablesTable
-            devices={devices}
-            loading={loading}
-            onConnect={(device, type) => handleConnect(device, type)}
-            highlightDeviceId={highlightDeviceId}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <PluginUnavailableCard />
-        </Grid>
-      </Grid>
-
-      {/* Row 3 — Session history */}
-      <SessionHistoryTable
-        sessions={sessions}
-        total={sessionTotal}
-        loading={loading}
-        onReplay={(s) => setReplaySession(s)}
-      />
-
-      {/* Row 4 — M2.S2 File transfer audit (cross-session, tenant-wide) */}
-      <Box sx={{ mt: 2 }}>
-        <FileTransfersAuditTable
-          transfers={fileTransfers}
-          total={fileTransferTotal}
-          loading={loading}
+      <TabPanel value={activeTab} index={TAB_CONNECT}>
+        <ConnectTab
+          refreshNonce={refreshNonce}
+          highlightDeviceId={highlightDeviceId}
+          onConnect={(device, type) => setRecordFor({ device, type })}
+          onShowActiveSessions={() => setActiveTab(TAB_SESSIONS)}
         />
-      </Box>
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={TAB_SESSIONS}>
+        <SessionsTab refreshNonce={refreshNonce} onReplay={(s) => setReplaySession(s)} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={TAB_TRANSFERS}>
+        <TransfersTab refreshNonce={refreshNonce} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={TAB_ACCESS}>
+        <AccessTab notify={notify} />
+      </TabPanel>
 
       <BrandSnackbar
         open={snackbar.open}
@@ -721,17 +545,11 @@ export default function RemoteControl() {
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
       />
 
-      {/* RCP M1.S2 — interactive shell drawer. Opens when a Connect
-          button succeeds; ShellTerminal owns the WebRTC + xterm
-          lifecycle. Closing the drawer triggers a clean session
-          close + refetch so the session history table updates. */}
+      {/* Shell drawer — ShellTerminal owns the WebRTC + xterm lifecycle. */}
       <Drawer
         anchor="right"
-        open={Boolean(activeSession)}
-        onClose={() => {
-          setActiveSession(null);
-          load();
-        }}
+        open={Boolean(shellSession)}
+        onClose={closeSession(setShellSession)}
         PaperProps={{
           sx: {
             width: { xs: "100%", md: 780, lg: 920 },
@@ -741,60 +559,24 @@ export default function RemoteControl() {
           }
         }}
       >
-        {activeSession ? (
+        {shellSession ? (
           <Box sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column" }}>
             <React.Suspense fallback={<SessionLoading />}>
               <ShellTerminal
-                session={activeSession}
-                device={activeSession.device}
-                onClose={() => {
-                  setActiveSession(null);
-                  load();
-                }}
+                session={shellSession}
+                device={shellSession.device}
+                onClose={closeSession(setShellSession)}
               />
             </React.Suspense>
           </Box>
         ) : null}
       </Drawer>
 
-      {/* RCP M1.S3 — transcript replay dialog. Mounted only when a replay is
-          selected so its lazy chunk doesn't load on page mount. */}
-      {/* Dos reproductores, elegidos por el tipo de sesión. Una de shell
-          replica la salida del terminal; una de pantalla reconstruye
-          fotogramas sobre un canvas (ADR-0012). Comparten el botón de la
-          tabla pero no tienen nada más en común, y fusionarlos habría dado un
-          componente con dos mitades excluyentes. */}
-      {replaySession && replaySession.type === "screen" ? (
-        <React.Suspense fallback={null}>
-          <RecordingReplayDialog
-            open
-            session={replaySession}
-            onClose={() => setReplaySession(null)}
-          />
-        </React.Suspense>
-      ) : null}
-
-      {replaySession && replaySession.type !== "screen" ? (
-        <React.Suspense fallback={null}>
-          <TranscriptReplayDialog
-            open={Boolean(replaySession)}
-            session={replaySession}
-            onClose={() => setReplaySession(null)}
-          />
-        </React.Suspense>
-      ) : null}
-
-      {/* RCP M2.S1 — file manager drawer. Opens when a Files button
-          succeeds; FileBrowserPanel owns the WebRTC + DataChannel
-          lifecycle. Closing the drawer triggers a refetch so the
-          session history table picks up the ended session. */}
+      {/* File manager drawer. */}
       <Drawer
         anchor="right"
         open={Boolean(fileSession)}
-        onClose={() => {
-          setFileSession(null);
-          load();
-        }}
+        onClose={closeSession(setFileSession)}
         PaperProps={{
           sx: {
             width: { xs: "100%", md: 880, lg: 1040 },
@@ -810,27 +592,18 @@ export default function RemoteControl() {
               <FileBrowserPanel
                 session={fileSession}
                 device={fileSession.device}
-                onClose={() => {
-                  setFileSession(null);
-                  load();
-                }}
+                onClose={closeSession(setFileSession)}
               />
             </React.Suspense>
           </Box>
         ) : null}
       </Drawer>
 
-      {/* RCP M3.S1 — screen share drawer. Opens when a Screen button
-          succeeds; ScreenShareViewer owns the WebRTC + DataChannel
-          lifecycle. The drawer is full-width to maximise the canvas
-          area; the viewer also supports browser fullscreen mode. */}
+      {/* Screen share drawer — wide, and the viewer also supports fullscreen. */}
       <Drawer
         anchor="right"
         open={Boolean(screenSession)}
-        onClose={() => {
-          setScreenSession(null);
-          load();
-        }}
+        onClose={closeSession(setScreenSession)}
         PaperProps={{
           sx: {
             width: { xs: "100%", md: "75vw", lg: "65vw" },
@@ -846,27 +619,53 @@ export default function RemoteControl() {
               <ScreenShareViewer
                 session={screenSession}
                 device={screenSession.device}
-                onClose={() => {
-                  setScreenSession(null);
-                  load();
-                }}
+                onClose={closeSession(setScreenSession)}
               />
             </React.Suspense>
           </Box>
         ) : null}
       </Drawer>
-      <AccessPolicyDialog
-        open={policyOpen}
-        onClose={() => setPolicyOpen(false)}
-        notify={notify}
+
+      {/* Two players, chosen by session type. A shell session replays terminal
+          output; a screen session rebuilds frames onto a canvas (ADR-0012).
+          They share the table's button and nothing else — merging them would
+          give one component with two mutually exclusive halves. */}
+      {replaySession && replaySession.type === "screen" ? (
+        <React.Suspense fallback={null}>
+          <RecordingReplayDialog
+            open
+            session={replaySession}
+            onClose={() => setReplaySession(null)}
+          />
+        </React.Suspense>
+      ) : null}
+
+      {replaySession && replaySession.type !== "screen" ? (
+        <React.Suspense fallback={null}>
+          <TranscriptReplayDialog
+            open
+            session={replaySession}
+            onClose={() => setReplaySession(null)}
+          />
+        </React.Suspense>
+      ) : null}
+
+      <StartSessionWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onConfirm={({ device, type, record }) => {
+          setWizardOpen(false);
+          doConnect(device, type, record);
+        }}
       />
-      <ExpedienteDialog
-        pending={expedienteFor}
-        onCancel={() => setExpedienteFor(null)}
-        onConfirm={(expediente) => {
-          const pend = expedienteFor;
-          setExpedienteFor(null);
-          if (pend) doConnect(pend.device, pend.type, expediente);
+
+      <AccessRecordDialog
+        pending={recordFor}
+        onCancel={() => setRecordFor(null)}
+        onConfirm={(record) => {
+          const pending = recordFor;
+          setRecordFor(null);
+          if (pending) doConnect(pending.device, pending.type, record);
         }}
       />
     </Box>

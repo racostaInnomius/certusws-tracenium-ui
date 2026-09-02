@@ -1,18 +1,17 @@
 // src/pages/RemoteControl.approvals.test.jsx
 //
-// ADR-0009 fase 2 — la cola de aprobación y la matriz de política.
+// ADR-0009 phase 2 — the approval queue and the policy matrix.
 //
-// ⚠️ Por qué existe este fichero: el smoke de páginas monta
-// RemoteControl y comprueba que no revienta, pero la cola devuelve
-// `null` cuando no hay pendientes y el diálogo nace cerrado — o sea que
-// el smoke no renderiza NADA de esto. Sin estos tests, dos componentes
-// que gobiernan la concesión de root estarían cubiertos solo por el
-// build.
+// ⚠️ Why this file exists: the page smoke test mounts RemoteControl and
+// checks it doesn't blow up, but the queue returns `null` when nothing is
+// pending and the matrix now lives in a tab that isn't the default one — so
+// the smoke test renders NONE of this. Without these tests, two components
+// that govern granting root would be covered by the build alone.
 //
-// No se pudo probar contra un backend real (la UI necesita sesión OIDC
-// y aquí no hay stack levantado), así que se prueba lo que sí puede
-// probarse: que renderizan lo correcto y que las acciones llaman a la
-// API con los argumentos correctos.
+// It couldn't be tested against a real backend (the UI needs an OIDC session
+// and there's no stack up here), so it tests what can be tested: that they
+// render the right thing and that the actions call the API with the right
+// arguments.
 
 import React from "react";
 import { render, screen, waitFor, fireEvent, cleanup } from "@testing-library/react";
@@ -28,8 +27,8 @@ vi.mock("../api/remoteControl", () => ({
   decideApproval: (...a) => decideApproval(...a),
   getAccessPolicy: (...a) => getAccessPolicy(...a),
   setAccessPolicyCell: (...a) => setAccessPolicyCell(...a),
-  // El módulo entero se mockea, así que hay que devolver lo que la
-  // página importa aunque estos tests no lo usen.
+  // The whole module is mocked, so everything the page imports has to be
+  // returned even if these tests don't use it.
   getRemoteControlSummary: vi.fn(async () => ({})),
   getConnectableDevices: vi.fn(async () => ({ items: [] })),
   getRemoteSessions: vi.fn(async () => ({ items: [] })),
@@ -37,25 +36,25 @@ vi.mock("../api/remoteControl", () => ({
   startRemoteSession: vi.fn(),
   getSessionTranscript: vi.fn(),
   getSessionFileTransfers: vi.fn(),
-  listAccessRequests: vi.fn()
+  listAccessRequests: vi.fn(async () => ({ items: [] }))
 }));
 
-import { ApprovalQueue, AccessPolicyDialog } from "./RemoteControl";
+import { ApprovalQueue } from "./RemoteControl";
+import { PolicyMatrix } from "../components/RemoteControl/AccessTab";
 
-const pendiente = {
+const pending = {
   requestId: "req-abc-123",
   deviceId: "SRV-DC01",
-  operatorUserId: "operador@cliente.com",
+  operatorUserId: "operator@customer.com",
   capability: "rcp.shell",
-  reason: "El usuario no puede iniciar sesion tras el update",
+  reason: "User cannot sign in after the update",
   ticketRef: "TCK-4821",
   createdAt: "2026-09-01T10:00:00Z",
   expiresAt: "2026-09-01T11:00:00Z"
 };
 
-// Sin esto el DOM de un test se acumula sobre el siguiente y
-// `findByRole` encuentra dos botones "Aprobar" — el proyecto no
-// configura cleanup automático.
+// Without this one test's DOM stacks on top of the next and `findByRole`
+// finds two "Approve" buttons — the project doesn't configure auto-cleanup.
 afterEach(() => cleanup());
 
 beforeEach(() => {
@@ -67,55 +66,54 @@ beforeEach(() => {
 });
 
 describe("ApprovalQueue", () => {
-  it("no pinta nada cuando no hay pendientes", async () => {
+  it("renders nothing when there is nothing pending", async () => {
     const { container } = render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
     await waitFor(() => expect(listPendingApprovals).toHaveBeenCalled());
-    // Un panel permanentemente vacío en la pantalla que más se usa se
-    // vuelve invisible en una semana, y entonces no avisa el día que sí
-    // hay algo.
+    // A permanently empty panel on the most-used screen turns invisible
+    // within a week, and then it fails to warn on the day there is something.
     expect(container.firstChild).toBeNull();
   });
 
-  it("⚠️ muestra el expediente COMPLETO, no solo un identificador", async () => {
-    // Aprobar es conceder root a otra persona durante una ventana. Quien
-    // aprueba sin ver quién, a qué equipo, por qué y bajo qué ticket no
-    // está aprobando: está firmando.
-    listPendingApprovals.mockResolvedValue({ items: [pendiente] });
+  it("⚠️ shows the WHOLE record, not just an identifier", async () => {
+    // Approving is granting root to another person for a window of time.
+    // Whoever approves without seeing who, to which device, why and under
+    // which ticket isn't approving: they're signing.
+    listPendingApprovals.mockResolvedValue({ items: [pending] });
     render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
 
-    await screen.findByText(/operador@cliente\.com/);
+    await screen.findByText(/operator@customer\.com/);
     expect(screen.getByText(/SRV-DC01/)).toBeTruthy();
     expect(screen.getByText(/rcp\.shell/)).toBeTruthy();
-    expect(screen.getByText(/no puede iniciar sesion/)).toBeTruthy();
+    expect(screen.getByText(/cannot sign in/)).toBeTruthy();
     expect(screen.getByText(/TCK-4821/)).toBeTruthy();
   });
 
-  it("aprobar llama a la API con approve=true", async () => {
-    listPendingApprovals.mockResolvedValue({ items: [pendiente] });
+  it("approving calls the API with approve=true", async () => {
+    listPendingApprovals.mockResolvedValue({ items: [pending] });
     const notify = vi.fn();
     render(<ApprovalQueue refreshNonce={0} notify={notify} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Aprobar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Approve/ }));
 
     await waitFor(() => expect(decideApproval).toHaveBeenCalledWith("req-abc-123", true));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("success", expect.any(String)));
   });
 
-  it("denegar llama a la API con approve=false", async () => {
-    listPendingApprovals.mockResolvedValue({ items: [pendiente] });
+  it("denying calls the API with approve=false", async () => {
+    listPendingApprovals.mockResolvedValue({ items: [pending] });
     render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Denegar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Deny/ }));
 
     await waitFor(() => expect(decideApproval).toHaveBeenCalledWith("req-abc-123", false));
   });
 
-  it("⚠️ un 409 del backend se enseña, no se traga", async () => {
-    // El backend responde 409 cuando el ESTADO no admite la decisión:
-    // ya resuelta, caducada, o es la propia solicitud del aprobador.
-    // Tragarse ese mensaje dejaría al aprobador pulsando un botón que
-    // aparentemente no hace nada.
-    listPendingApprovals.mockResolvedValue({ items: [pendiente] });
+  it("⚠️ a 409 from the backend is shown, not swallowed", async () => {
+    // The backend answers 409 when the STATE doesn't allow the decision:
+    // already resolved, expired, or it's the approver's own request.
+    // Swallowing that message would leave the approver pressing a button
+    // that apparently does nothing.
+    listPendingApprovals.mockResolvedValue({ items: [pending] });
     decideApproval.mockResolvedValue({
       ok: false,
       message: "an operator cannot approve their own access request"
@@ -123,7 +121,7 @@ describe("ApprovalQueue", () => {
     const notify = vi.fn();
     render(<ApprovalQueue refreshNonce={0} notify={notify} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Aprobar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Approve/ }));
 
     await waitFor(() =>
       expect(notify).toHaveBeenCalledWith("error", expect.stringMatching(/own access request/))
@@ -131,34 +129,43 @@ describe("ApprovalQueue", () => {
   });
 });
 
-describe("AccessPolicyDialog", () => {
-  const matriz = [
+describe("PolicyMatrix", () => {
+  // It used to be a dialog behind a header button; it now lives in the
+  // Access tab. The old "doesn't query while closed" test is gone with the
+  // dialog — that guarantee is now structural, provided by TabPanel mounting
+  // only the active panel, and RemoteControl.tabs.test.jsx covers it.
+  const matrix = [
     { capability: "rcp.shell", deviceClass: "server", requiresApproval: false, jitMinutes: 60 },
     { capability: "rcp.shell", deviceClass: "endpoint", requiresApproval: false, jitMinutes: 60 },
-    { capability: "cdp.anchor.distrust", deviceClass: "server", requiresApproval: false, jitMinutes: 60 }
+    {
+      capability: "cdp.anchor.distrust",
+      deviceClass: "server",
+      requiresApproval: false,
+      jitMinutes: 60
+    }
   ];
 
-  it("pinta la matriz completa, incluidas las capacidades de CDP", async () => {
-    // Se muestran aunque su botón todavía no exista: comparten la misma
-    // matriz (ADR-0011 dec. 5 y 10), y esconderlas obligaría a rehacer
-    // esta pantalla el día que se conecten.
-    getAccessPolicy.mockResolvedValue({ items: matriz });
-    render(<AccessPolicyDialog open onClose={vi.fn()} notify={vi.fn()} />);
+  it("renders the full matrix, CDP capabilities included", async () => {
+    // They're shown even though their button doesn't exist yet: they share
+    // the same matrix (ADR-0011 dec. 5 and 10), and hiding them would mean
+    // rebuilding this screen the day they get wired up.
+    getAccessPolicy.mockResolvedValue({ items: matrix });
+    render(<PolicyMatrix notify={vi.fn()} />);
 
     await screen.findByText("rcp.shell");
     expect(screen.getByText("cdp.anchor.distrust")).toBeTruthy();
-    expect(screen.getAllByText(/Servidores|Endpoints/).length).toBeGreaterThan(1);
+    expect(screen.getAllByText(/Servers|Endpoints/).length).toBeGreaterThan(1);
   });
 
-  it("alternar una celda guarda SOLO esa celda", async () => {
-    // Una por petición y no la matriz entera: un guardado masivo desde
-    // una pantalla con datos viejos apagaría en silencio lo que otro
-    // administrador acabara de encender.
-    getAccessPolicy.mockResolvedValue({ items: matriz });
-    render(<AccessPolicyDialog open onClose={vi.fn()} notify={vi.fn()} />);
+  it("toggling one cell saves ONLY that cell", async () => {
+    // One per request rather than the whole matrix: a bulk save from a
+    // screen holding stale data would silently switch off whatever another
+    // administrator had just switched on.
+    getAccessPolicy.mockResolvedValue({ items: matrix });
+    render(<PolicyMatrix notify={vi.fn()} />);
 
-    const botones = await screen.findAllByRole("button", { name: /Sin visto bueno/ });
-    fireEvent.click(botones[0]);
+    const buttons = await screen.findAllByRole("button", { name: /No approval/ });
+    fireEvent.click(buttons[0]);
 
     await waitFor(() => expect(setAccessPolicyCell).toHaveBeenCalledTimes(1));
     expect(setAccessPolicyCell).toHaveBeenCalledWith(
@@ -170,16 +177,11 @@ describe("AccessPolicyDialog", () => {
     );
   });
 
-  it("explica el caso de la matriz vacía en vez de dejar el hueco", async () => {
-    // Sin política cargada la pantalla estaría en blanco y el
-    // administrador no sabría si es un fallo o es que no hay nada.
+  it("explains the empty matrix instead of leaving a hole", async () => {
+    // With no policy loaded the screen would be blank and the administrator
+    // wouldn't know whether it's a failure or there is simply nothing.
     getAccessPolicy.mockResolvedValue({ items: [] });
-    render(<AccessPolicyDialog open onClose={vi.fn()} notify={vi.fn()} />);
-    expect(await screen.findByText(/Sin política cargada/)).toBeTruthy();
-  });
-
-  it("no consulta nada mientras está cerrado", async () => {
-    render(<AccessPolicyDialog open={false} onClose={vi.fn()} notify={vi.fn()} />);
-    expect(getAccessPolicy).not.toHaveBeenCalled();
+    render(<PolicyMatrix notify={vi.fn()} />);
+    expect(await screen.findByText(/No policy loaded/)).toBeTruthy();
   });
 });

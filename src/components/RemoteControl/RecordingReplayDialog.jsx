@@ -267,6 +267,12 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
 
         <Box
           sx={{
+            // Deliberate one-off: this is the letterbox behind the recording
+            // canvas, and it has to be true black. BRAND.dark (#3B404D) would
+            // put a slate frame around captured screen content and make every
+            // recording look washed out — a palette token is the wrong tool
+            // for the inside of a video player.
+            // eslint-disable-next-line no-restricted-syntax
             bgcolor: "#000",
             borderRadius: 1,
             display: "flex",

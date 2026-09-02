@@ -95,7 +95,7 @@ export default function SessionHistoryTable({
             Session history
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
-            Every remote session + recorded transcripts appear here once the plugin is active.
+            Every session opened from this page is recorded here, with its transcript.
           </Typography>
         </Box>
         {total ? (
@@ -135,9 +135,12 @@ export default function SessionHistoryTable({
                         : "No remote sessions recorded for this tenant."}
                     </Typography>
                     <Typography variant="caption" sx={{ color: BRAND.gray, maxWidth: 420 }}>
-                      Once the Remote Control plugin (`rcp`) is deployed on at least one agent,
-                      every session opened from this page will appear here with full transcript
-                      for audit and compliance review.
+                      {/* This used to say the session history would fill up "once
+                          the rcp plugin is deployed on at least one agent" — the
+                          same stale premise the old PluginUnavailableCard carried,
+                          on a page where the plugin has been working for months. */}
+                      Sessions started from the Connect tab appear here with their full
+                      transcript, for audit and compliance review.
                     </Typography>
                   </Stack>
                 </TableCell>
