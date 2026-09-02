@@ -37,6 +37,7 @@ import {
   Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
+import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
@@ -1217,6 +1218,11 @@ export default function CryptoDiscovery() {
         <Tab label="Certificates" />
         <Tab label="Devices" />
         <Tab label="Trust anchors" />
+        {/* ADR-0009 phase 2 keeps ONE approval matrix for every privileged
+            capability, so cdp.cert.install and cdp.anchor.distrust used to be
+            rendered inside Remote Control alongside rcp.* — somebody else's
+            settings on your screen. Shared data, separate screens. */}
+        <Tab label="Access policy" />
       </Tabs>
 
       <TabPanel value={tab} index={0}>
@@ -1237,6 +1243,13 @@ export default function CryptoDiscovery() {
       </TabPanel>
       <TabPanel value={tab} index={4}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={5}>
+        <AccessPolicyMatrix
+          prefix="cdp."
+          title="Privileged access policy"
+          description="Which crypto discovery capabilities need a second person’s approval before they can be used. Installing a certificate and distrusting a trust anchor both change what a machine will accept."
+        />
       </TabPanel>
 
       <CertIssuanceDialog

@@ -40,7 +40,7 @@ vi.mock("../api/remoteControl", () => ({
 }));
 
 import { ApprovalQueue } from "./RemoteControl";
-import { PolicyMatrix } from "../components/RemoteControl/AccessTab";
+import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
 
 const pending = {
   requestId: "req-abc-123",
@@ -129,11 +129,16 @@ describe("ApprovalQueue", () => {
   });
 });
 
-describe("PolicyMatrix", () => {
+describe("AccessPolicyMatrix", () => {
   // It used to be a dialog behind a header button; it now lives in the
   // Access tab. The old "doesn't query while closed" test is gone with the
   // dialog — that guarantee is now structural, provided by TabPanel mounting
   // only the active panel, and RemoteControl.tabs.test.jsx covers it.
+  //
+  // ⚠️ It is also now SHARED and FILTERED. ADR-0009 phase 2 keeps one matrix
+  // for every privileged capability, so the endpoint returns rcp.* and cdp.*
+  // together — and rendering all of it put Crypto Discovery's settings inside
+  // Remote Control. Each host passes the prefix it owns.
   const matrix = [
     { capability: "rcp.shell", deviceClass: "server", requiresApproval: false, jitMinutes: 60 },
     { capability: "rcp.shell", deviceClass: "endpoint", requiresApproval: false, jitMinutes: 60 },
@@ -145,16 +150,32 @@ describe("PolicyMatrix", () => {
     }
   ];
 
-  it("renders the full matrix, CDP capabilities included", async () => {
-    // They're shown even though their button doesn't exist yet: they share
-    // the same matrix (ADR-0011 dec. 5 and 10), and hiding them would mean
-    // rebuilding this screen the day they get wired up.
+  it("⚠️ shows only the capabilities of the plugin that hosts it", async () => {
+    // The bug this closes: cdp.anchor.distrust and cdp.cert.install rendered
+    // under Remote Control, where they read as somebody else's settings.
     getAccessPolicy.mockResolvedValue({ items: matrix });
-    render(<PolicyMatrix notify={vi.fn()} />);
+    render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
 
     await screen.findByText("rcp.shell");
-    expect(screen.getByText("cdp.anchor.distrust")).toBeTruthy();
+    expect(screen.queryByText("cdp.anchor.distrust")).toBeNull();
     expect(screen.getAllByText(/Servers|Endpoints/).length).toBeGreaterThan(1);
+  });
+
+  it("and the CDP host gets the other half of the same response", async () => {
+    getAccessPolicy.mockResolvedValue({ items: matrix });
+    render(<AccessPolicyMatrix prefix="cdp." title="Policy" description="" notify={vi.fn()} />);
+
+    await screen.findByText("cdp.anchor.distrust");
+    expect(screen.queryByText("rcp.shell")).toBeNull();
+  });
+
+  it("tells a plugin with no rows apart from a matrix that failed to load", async () => {
+    // Different causes, different fixes. One message for both would send
+    // whoever reads it looking in the wrong place.
+    getAccessPolicy.mockResolvedValue({ items: matrix });
+    render(<AccessPolicyMatrix prefix="sdp." title="Policy" description="" notify={vi.fn()} />);
+
+    expect(await screen.findByText(/No capability of this plugin/)).toBeTruthy();
   });
 
   it("toggling one cell saves ONLY that cell", async () => {
@@ -162,7 +183,7 @@ describe("PolicyMatrix", () => {
     // screen holding stale data would silently switch off whatever another
     // administrator had just switched on.
     getAccessPolicy.mockResolvedValue({ items: matrix });
-    render(<PolicyMatrix notify={vi.fn()} />);
+    render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
 
     const buttons = await screen.findAllByRole("button", { name: /No approval/ });
     fireEvent.click(buttons[0]);
@@ -181,7 +202,7 @@ describe("PolicyMatrix", () => {
     // With no policy loaded the screen would be blank and the administrator
     // wouldn't know whether it's a failure or there is simply nothing.
     getAccessPolicy.mockResolvedValue({ items: [] });
-    render(<PolicyMatrix notify={vi.fn()} />);
+    render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
     expect(await screen.findByText(/No policy loaded/)).toBeTruthy();
   });
 });

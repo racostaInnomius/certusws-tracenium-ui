@@ -3,7 +3,9 @@
 // Everything about WHO is allowed in and WHY, in one place:
 //
 //   · the approval-policy matrix (device class × capability), which used to
-//     be a dialog behind a header button;
+//     be a dialog behind a header button. The matrix component is shared —
+//     Crypto Discovery renders the same one over its own capabilities — and
+//     this tab passes the "rcp." prefix so only Remote Control's rows show;
 //   · the access record — who connected, to what, under which ticket. The
 //     endpoint and its API client already existed (listAccessRequests) and
 //     nothing rendered them. ADR-0009 phase 1 exists to COLLECT the data
@@ -15,9 +17,7 @@
 
 import * as React from "react";
 import {
-  Alert,
   Box,
-  Button,
   Chip,
   CircularProgress,
   Paper,
@@ -31,7 +31,8 @@ import {
   Typography
 } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
-import { getAccessPolicy, setAccessPolicyCell, listAccessRequests } from "../../api/remoteControl";
+import { listAccessRequests } from "../../api/remoteControl";
+import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 
 const STATUS_META = {
   approved: { label: "Approved", fg: ROLE.positive, bg: ROLE.positiveSoft },
@@ -59,108 +60,6 @@ function StatusChip({ status }) {
         border: `1px solid ${meta.fg}33`
       }}
     />
-  );
-}
-
-// Exported for its own test: the tab renders two independent panels and
-// mounting the whole tab to exercise the matrix would drag the access log's
-// fetch in with it.
-export function PolicyMatrix({ notify }) {
-  const [rows, setRows] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [busy, setBusy] = React.useState("");
-
-  React.useEffect(() => {
-    let alive = true;
-    getAccessPolicy()
-      .then((r) => alive && setRows(r?.items ?? []))
-      .catch(() => alive && setRows([]))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const toggle = async (row) => {
-    const key = `${row.capability}:${row.deviceClass}`;
-    setBusy(key);
-    try {
-      await setAccessPolicyCell({
-        capability: row.capability,
-        deviceClass: row.deviceClass,
-        requiresApproval: !row.requiresApproval,
-        jitMinutes: row.jitMinutes
-      });
-      setRows((prev) =>
-        prev.map((r) =>
-          r.capability === row.capability && r.deviceClass === row.deviceClass
-            ? { ...r, requiresApproval: !r.requiresApproval }
-            : r
-        )
-      );
-    } catch (e) {
-      notify("error", e?.message || "Could not save the policy");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const capabilities = [...new Set(rows.map((r) => r.capability))];
-
-  return (
-    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
-      <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
-        Privileged access policy
-      </Typography>
-      <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 2 }}>
-        Which capabilities need a second person’s approval before they can be used.
-        Connecting to a server and connecting to a laptop are not the same operation.
-      </Typography>
-
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-          <CircularProgress size={22} sx={{ color: BRAND.teal }} />
-        </Box>
-      ) : null}
-
-      {!loading && rows.length === 0 ? (
-        <Alert severity="info">
-          No policy loaded. If you have just deployed, the migration that seeds the matrix
-          may not have run yet.
-        </Alert>
-      ) : null}
-
-      {capabilities.map((cap) => (
-        <Box key={cap} sx={{ mb: 1.5 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
-            {cap}
-          </Typography>
-          {rows
-            .filter((r) => r.capability === cap)
-            .map((r) => (
-              <Stack
-                key={r.deviceClass}
-                direction="row"
-                alignItems="center"
-                spacing={1}
-                sx={{ pl: 1, py: 0.5 }}
-              >
-                <Typography variant="caption" sx={{ width: 90, color: BRAND.textMuted }}>
-                  {r.deviceClass === "server" ? "Servers" : "Endpoints"}
-                </Typography>
-                <Button
-                  size="small"
-                  variant={r.requiresApproval ? "contained" : "outlined"}
-                  disabled={busy === `${r.capability}:${r.deviceClass}`}
-                  onClick={() => toggle(r)}
-                >
-                  {r.requiresApproval ? "Approval required" : "No approval"}
-                </Button>
-              </Stack>
-            ))}
-        </Box>
-      ))}
-    </Paper>
   );
 }
 
@@ -242,7 +141,16 @@ function AccessLog() {
 export default function AccessTab({ notify }) {
   return (
     <Stack spacing={2}>
-      <PolicyMatrix notify={notify} />
+      {/* Filtered to rcp.* — Crypto Discovery's capabilities share this matrix
+          in the DATA but they are not settings of this screen, and rendering
+          them here read as somebody else's configuration leaking in. They
+          have their own tab under Crypto Discovery. */}
+      <AccessPolicyMatrix
+        prefix="rcp."
+        title="Privileged access policy"
+        description="Which remote control capabilities need a second person’s approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation."
+        notify={notify}
+      />
       <AccessLog />
     </Stack>
   );
