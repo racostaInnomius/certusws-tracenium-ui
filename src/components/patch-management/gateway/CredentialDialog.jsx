@@ -6,9 +6,19 @@
 // Two things this dialog must never do:
 //   1. Put the password in any request body, log, or component state that
 //      outlives the submit. It goes straight into sealCredential().
-//   2. Submit before the admin has confirmed the certificate fingerprint. That
-//      confirmation is the only defence against a compromised control plane
-//      handing us its own public key — the SSH host-key model (ADR-0001 C).
+//   2. Submit before the admin has confirmed the certificate fingerprint.
+//
+// ⚠️ Esa confirmación NO es, por sí sola, defensa contra un control plane
+// comprometido, aunque este archivo lo dijera. Es el modelo de SSH, y el modelo
+// de SSH necesita que haya dónde comparar: en la práctica casi nadie va al
+// servidor del gateway a mirar la huella, así que la casilla se marca porque
+// hay que marcarla.
+//
+// Lo que la vuelve real es ADR-0013 (F): la huella se FIJA en la primera
+// provisión, y a partir de ahí es el sistema —no la memoria de una persona— el
+// que nota si cambia. Cuando cambia, este diálogo enseña las dos y exige una
+// confirmación aparte. La comprobación que manda vive en el servidor; esto
+// existe para que la persona tenga con qué decidir.
 
 import React from "react";
 import {
@@ -29,6 +39,12 @@ import {
 } from "@mui/material";
 import { getGatewayPublicKey, provisionGatewayCredential } from "../../../api/patchManagement";
 import { sealCredential, formatFingerprint } from "./sealCredential";
+import {
+  describeSealTarget,
+  canSubmitCredential,
+  describeProvisionError,
+  isAwaitingDevice,
+} from "./sealTargetNotice";
 import { TEXT } from "../../../theme/brand";
 
 export default function CredentialDialog({ open, gateway, onClose, onDone, notify }) {
@@ -39,7 +55,14 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmed, setConfirmed] = React.useState(false);
+  // Deliberadamente separada de `confirmed`: una dice «esta huella es la del
+  // equipo» y la otra «sé que cambió respecto a la anterior». Reutilizar la
+  // primera convertiría un clic ya rutinario en la aprobación de algo que
+  // nadie miró.
+  const [confirmedChange, setConfirmedChange] = React.useState(false);
+  const [awaitingDevice, setAwaitingDevice] = React.useState(false);
   const [error, setError] = React.useState("");
+  const [errorDetail, setErrorDetail] = React.useState(null);
 
   React.useEffect(() => {
     if (!open || !gateway) return;
@@ -48,9 +71,12 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
     setLoadError("");
     setCertInfo(null);
     setConfirmed(false);
+    setConfirmedChange(false);
+    setAwaitingDevice(false);
     setUsername("");
     setPassword("");
     setError("");
+    setErrorDetail(null);
     // These endpoints return the entity itself, with no `{ ok, data }`
     // envelope; http.js throws on any non-2xx, so a resolved value is the
     // success case. Checking `res.ok` treated every success as a failure.
@@ -61,6 +87,10 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
       })
       .catch((err) => {
         if (cancelled) return;
+        // «Todavía no ha aparecido» es un estado legítimo y frecuente —se
+        // designa el gateway con la máquina apagada— y no una avería.
+        // Pintarlo en rojo manda a alguien a buscar un problema que no existe.
+        setAwaitingDevice(isAwaitingDevice(err));
         setLoadError(
           err?.body?.message ||
             "Could not fetch the gateway certificate. The gateway must connect at least once before a credential can be sealed for it."
@@ -74,27 +104,46 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
 
   const submit = async () => {
     setError("");
+    setErrorDetail(null);
     setSubmitting(true);
     try {
       // Seal first. If this throws, nothing has left the browser.
       const envelope = await sealCredential({ username, password }, certInfo.certPem);
       // Drop the plaintext from component state the moment it is sealed.
       setPassword("");
-      await provisionGatewayCredential(gateway.id, envelope);
+      await provisionGatewayCredential(gateway.id, envelope, {
+        // Solo viaja cuando de verdad hubo un cambio que alguien aprobó. El
+        // servidor lo exige, así que mandarlo siempre desarmaría su propia
+        // comprobación desde el cliente.
+        confirmFingerprintChange: notice?.requiresChangeConfirmation ? confirmedChange : undefined,
+      });
       notify?.("success", "Credential sealed and sent. The gateway will verify it and report back — watch the health column.");
       onDone?.();
       onClose?.();
     } catch (e) {
-      // Two very different failures land here: the browser-side sealing, and
-      // the control plane refusing the envelope. The server's own message is
-      // the more specific one whenever there is one.
-      setError(e?.body?.message || e?.message || "Could not seal the credential.");
+      // Three failures distintos aterrizan aquí: el sellado en el navegador, un
+      // rechazo genérico del control plane, y —el que importa— que el
+      // certificado haya cambiado ENTRE abrir el diálogo y enviar. Ese último
+      // trae las dos huellas en el cuerpo justamente para poder enseñarlas.
+      const detail = describeProvisionError(e?.body);
+      setErrorDetail(detail);
+      setError(
+        detail ? "" : e?.body?.message || e?.message || "Could not seal the credential."
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const canSubmit = Boolean(certInfo && username && password && confirmed && !submitting);
+  const notice = describeSealTarget(certInfo);
+  const canSubmit = canSubmitCredential({
+    certInfo,
+    username,
+    password,
+    confirmedIdentity: confirmed,
+    confirmedChange,
+    submitting,
+  });
 
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -106,10 +155,42 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
           </Stack>
         )}
 
-        {!loading && loadError && <Alert severity="warning">{loadError}</Alert>}
+        {!loading && loadError && (
+          <Alert severity={awaitingDevice ? "info" : "warning"}>
+            {awaitingDevice && <AlertTitle>Waiting for the gateway host</AlertTitle>}
+            {loadError}
+          </Alert>
+        )}
 
         {!loading && certInfo && (
           <Stack spacing={2.5}>
+            {notice && (
+              <Alert severity={notice.tone}>
+                <AlertTitle>{notice.title}</AlertTitle>
+                {notice.body}
+                {notice.pinned && (
+                  <Box sx={{ mt: 1.5, fontFamily: "monospace", fontSize: TEXT.xs }}>
+                    <Box sx={{ color: "text.secondary" }}>Previously approved</Box>
+                    <Box sx={{ wordBreak: "break-all" }}>{formatFingerprint(notice.pinned)}</Box>
+                    <Box sx={{ color: "text.secondary", mt: 1 }}>Presented now</Box>
+                    <Box sx={{ wordBreak: "break-all" }}>{formatFingerprint(notice.current)}</Box>
+                  </Box>
+                )}
+                {notice.requiresChangeConfirmation && (
+                  <FormControlLabel
+                    sx={{ mt: 1 }}
+                    control={
+                      <Checkbox
+                        checked={confirmedChange}
+                        onChange={(e) => setConfirmedChange(e.target.checked)}
+                      />
+                    }
+                    label="I have verified this change with the host administrator"
+                  />
+                )}
+              </Alert>
+            )}
+
             <Alert severity="info">
               <AlertTitle>This password never reaches Tracenium's servers</AlertTitle>
               It is encrypted here, in your browser, with a key only this gateway can
@@ -171,6 +252,21 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
               A wrong password is reported back rather than retried — vSphere locks
               accounts after repeated failures.
             </Alert>
+
+            {errorDetail && (
+              <Alert severity={errorDetail.tone}>
+                <AlertTitle>{errorDetail.title}</AlertTitle>
+                {errorDetail.body}
+                {errorDetail.pinned && (
+                  <Box sx={{ mt: 1.5, fontFamily: "monospace", fontSize: TEXT.xs }}>
+                    <Box sx={{ color: "text.secondary" }}>Previously approved</Box>
+                    <Box sx={{ wordBreak: "break-all" }}>{formatFingerprint(errorDetail.pinned)}</Box>
+                    <Box sx={{ color: "text.secondary", mt: 1 }}>Presented now</Box>
+                    <Box sx={{ wordBreak: "break-all" }}>{formatFingerprint(errorDetail.current)}</Box>
+                  </Box>
+                )}
+              </Alert>
+            )}
 
             {error && <Alert severity="error">{error}</Alert>}
           </Stack>

@@ -264,18 +264,34 @@ export async function deleteGateway(id) {
 
 /**
  * The gateway's certificate, so we can seal a credential against it in this
- * browser. Returns { certPem, certFingerprintSha256, envelope, notAfter }.
- * The fingerprint is shown to the admin for out-of-band comparison against the
- * gateway host — that is what stops a compromised control plane from handing us
- * its own key.
+ * browser.
+ *
+ * Devuelve { certPem, certFingerprintSha256, source, pinnedFingerprintSha256,
+ * fingerprintChanged, envelope, notAfter }.
+ *
+ * ⚠️ Enseñar la huella para compararla «fuera de banda» NO es, por sí solo, lo
+ * que impide que un control plane comprometido entregue su propia clave —
+ * aunque este comentario lo dijera. Requiere que alguien vaya de verdad al
+ * equipo a mirarla. Lo que lo sostiene es `pinnedFingerprintSha256`: se fija en
+ * la primera provisión y el servidor se niega a sellar si cambia sin
+ * aprobación (ADR-0013 F).
  */
 export async function getGatewayPublicKey(id) {
   return httpGetJson(`${BASE}/gateways/${encodeURIComponent(id)}/public-key`);
 }
 
-/** Send the SEALED envelope. Never a password. */
-export async function provisionGatewayCredential(id, envelope) {
-  return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/credential`, { envelope });
+/**
+ * Send the SEALED envelope. Never a password.
+ *
+ * `confirmFingerprintChange` viaja solo cuando el admin aprobó explícitamente
+ * que el gateway presenta un certificado distinto del aprobado la vez anterior
+ * (ADR-0013 F). Mandarlo siempre desarmaría la comprobación del servidor desde
+ * el cliente, que es exactamente lo que esa comprobación existe para impedir.
+ */
+export async function provisionGatewayCredential(id, envelope, opts = {}) {
+  const body = { envelope };
+  if (opts.confirmFingerprintChange === true) body.confirmFingerprintChange = true;
+  return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/credential`, body);
 }
 
 export async function verifyGateway(id) {

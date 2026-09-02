@@ -43,6 +43,12 @@ export const REMEDIATION = {
   no_credential: "No credential has been sent to this gateway yet.",
   stale_envelope:
     "The credential was sealed against a certificate this gateway has since replaced. Send it again.",
+  // ADR-0013. Ni la credencial ni la contraseña tienen la culpa: en Windows la
+  // clave de enrolamiento se crea solo-firma, así que no puede abrir un sobre.
+  // Volver a escribir la contraseña no arregla nada, y decir «credencial
+  // inválida» mandaría a alguien a hacer justamente eso.
+  key_cannot_decrypt:
+    "The agent on this gateway cannot open a sealed credential: its enrollment key is signing-only. Update the agent on the gateway host — re-entering the password will not help.",
   not_a_gateway:
     "This device has not received its gateway configuration yet. It should arrive on the next policy sync.",
   unknown: "Unexpected vCenter error — see the stage detail and the gateway log.",
