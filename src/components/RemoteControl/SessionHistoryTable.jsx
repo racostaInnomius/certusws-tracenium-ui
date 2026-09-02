@@ -76,7 +76,10 @@ export default function SessionHistoryTable({
   loading,
   // Sprint 3 — invoked when the operator clicks "Replay" on a row.
   // Parent passes a handler that mounts the TranscriptReplayDialog.
-  onReplay
+  onReplay,
+  // Opens the per-session drawer. Optional so the table still renders for a
+  // caller that doesn't offer one.
+  onOpenDetail
 }) {
   const items = Array.isArray(sessions) ? sessions : [];
 
@@ -178,6 +181,21 @@ export default function SessionHistoryTable({
                       />
                     </TableCell>
                     <TableCell>
+                      {/* The row's own detail: the access record, the close
+                          reason and the files that moved, in one place. It is
+                          offered on EVERY session, including the ones with
+                          nothing to replay — "why did this access happen" is a
+                          question you can ask of any of them. */}
+                      {onOpenDetail ? (
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => onOpenDetail(s)}
+                          sx={{ textTransform: "none", color: BRAND.tealText, mr: 0.5 }}
+                        >
+                          Detail
+                        </Button>
+                      ) : null}
                       {/* Sprint 3 — Replay opens TranscriptReplayDialog.
                           We render the button on EVERY closed session,
                           letting the backend return 404 if no chunks

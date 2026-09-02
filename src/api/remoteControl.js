@@ -70,6 +70,13 @@ export async function listAccessRequests(params = {}) {
   return httpGetJson(`${BASE}/access-requests${buildQuery(params)}`);
 }
 
+// One session with its access record: who connected, to what, why, under
+// which ticket, and how it ended. 404 both for a session that doesn't exist
+// and for one belonging to another tenant.
+export async function getSessionDetail(sessionId) {
+  return httpGetJson(`${BASE}/sessions/${encodeURIComponent(sessionId)}`);
+}
+
 // M2.S1 — list file transfer audit records for a session.
 // Returns { ok, total, items: FileTransferRecord[] }.
 export async function getSessionFileTransfers(sessionId, params = {}) {

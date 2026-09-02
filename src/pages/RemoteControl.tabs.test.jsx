@@ -24,6 +24,8 @@ const getAllFileTransfers = vi.fn();
 const listAccessRequests = vi.fn();
 const getAccessPolicy = vi.fn();
 const getDeviceFacets = vi.fn();
+const getSessionDetail = vi.fn();
+const getSessionFileTransfers = vi.fn();
 
 vi.mock("../api/remoteControl", () => ({
   getRemoteControlSummary: (...a) => getRemoteControlSummary(...a),
@@ -38,7 +40,8 @@ vi.mock("../api/remoteControl", () => ({
   decideApproval: vi.fn(async () => ({ ok: true })),
   startRemoteSession: vi.fn(),
   getSessionTranscript: vi.fn(),
-  getSessionFileTransfers: vi.fn()
+  getSessionDetail: (...a) => getSessionDetail(...a),
+  getSessionFileTransfers: (...a) => getSessionFileTransfers(...a)
 }));
 
 import RemoteControl from "./RemoteControl";
@@ -214,6 +217,151 @@ describe("the history tabs page and filter server-side", () => {
       expect(getAllFileTransfers.mock.calls[0][0]).toMatchObject({ page: 1, pageSize: 25 })
     );
     expect(await screen.findByText(/of 300 transfers/)).toBeTruthy();
+  });
+});
+
+describe("the session detail drawer", () => {
+  const SESSION = {
+    sessionId: "sess-1",
+    deviceId: "dev-1",
+    hostname: "SRV-DC01",
+    operator: "alice@certusitm",
+    startedAt: "2026-09-01T10:00:00Z",
+    endedAt: "2026-09-01T10:10:00Z",
+    durationSec: 600,
+    type: "shell",
+    status: "completed",
+    hasTranscript: true,
+    hasRecording: false,
+    consentRequired: false,
+    consentOutcome: null
+  };
+
+  beforeEach(() => {
+    getRemoteSessions.mockResolvedValue({
+      items: [SESSION],
+      total: 1,
+      page: 1,
+      pageSize: 25
+    });
+  });
+
+  async function openDrawer() {
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /Sessions/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Detail" }));
+  }
+
+  it("⚠️ puts the access record in front of the technical fields", async () => {
+    // "Was this access legitimate?" used to mean holding a session id in your
+    // head and scanning three separate lists for it.
+    getSessionDetail.mockResolvedValue({
+      ok: true,
+      session: {
+        ...SESSION,
+        closeReason: null,
+        accessRecord: {
+          requestId: "req-1",
+          reason: "User cannot sign in after the update",
+          ticketRef: "TCK-4821",
+          status: "consumed",
+          approvalSource: "ungated",
+          approverUserId: null,
+          decidedAt: null,
+          createdAt: "2026-09-01T09:59:00Z"
+        }
+      }
+    });
+    getSessionFileTransfers.mockResolvedValue({ items: [], total: 0 });
+
+    await openDrawer();
+
+    expect(await screen.findByText(/cannot sign in after the update/)).toBeTruthy();
+    expect(screen.getByText("TCK-4821")).toBeTruthy();
+  });
+
+  it("explains a missing record instead of showing a blank", async () => {
+    // Sessions from before ADR-0009 phase 1 have none and were deliberately
+    // not backfilled. Rendering an empty box would read as a broken view.
+    getSessionDetail.mockResolvedValue({
+      ok: true,
+      session: { ...SESSION, closeReason: null, accessRecord: null }
+    });
+    getSessionFileTransfers.mockResolvedValue({ items: [], total: 0 });
+
+    await openDrawer();
+
+    expect(await screen.findByText(/No record for this session/)).toBeTruthy();
+  });
+
+  it("lists the files that moved during the session", async () => {
+    getSessionDetail.mockResolvedValue({
+      ok: true,
+      session: { ...SESSION, type: "file", closeReason: null, accessRecord: null }
+    });
+    getSessionFileTransfers.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          transferId: "x-1",
+          direction: "download",
+          remotePath: "C:\\temp\\agent.log",
+          filename: "agent.log",
+          sizeBytes: 2048,
+          status: "completed"
+        }
+      ],
+      total: 1
+    });
+
+    await openDrawer();
+
+    expect(await screen.findByText("agent.log")).toBeTruthy();
+    expect(screen.getByText("2.0 KB")).toBeTruthy();
+  });
+
+  it("⚠️ still shows the record when the transfers fail to load", async () => {
+    // Two independent requests. Promise.all would lose the access record to
+    // whichever of the two failed — and the record is the half that matters.
+    getSessionDetail.mockResolvedValue({
+      ok: true,
+      session: {
+        ...SESSION,
+        closeReason: null,
+        accessRecord: {
+          requestId: "req-1",
+          reason: "Investigating the failed update",
+          ticketRef: "TCK-9",
+          status: "consumed",
+          approvalSource: "ungated",
+          approverUserId: null,
+          decidedAt: null,
+          createdAt: null
+        }
+      }
+    });
+    getSessionFileTransfers.mockRejectedValue(new Error("boom"));
+
+    await openDrawer();
+
+    expect(await screen.findByText(/Investigating the failed update/)).toBeTruthy();
+  });
+
+  it("surfaces why a session died when the reason isn't about consent", async () => {
+    getSessionDetail.mockResolvedValue({
+      ok: true,
+      session: {
+        ...SESSION,
+        status: "failed",
+        closeReason: "handshake_timeout",
+        accessRecord: null
+      }
+    });
+    getSessionFileTransfers.mockResolvedValue({ items: [], total: 0 });
+
+    await openDrawer();
+
+    expect(await screen.findByText("handshake_timeout")).toBeTruthy();
   });
 });
 

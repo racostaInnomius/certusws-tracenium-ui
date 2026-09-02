@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import SessionHistoryTable from "./SessionHistoryTable";
+import SessionDetailDrawer from "./SessionDetailDrawer";
 import HistoryPager from "./HistoryPager";
 import { RCP_METHODS } from "./rcpMethods";
 import { useRemoteSessions } from "./useRemoteControlData";
@@ -52,6 +53,10 @@ const RANGES = [
 ];
 
 export default function SessionsTab({ onReplay, refreshNonce = 0 }) {
+  // The row whose drawer is open. Held here rather than in the page: the
+  // drawer only makes sense over this list, and lifting it would mean the
+  // page carrying state for a tab that may not even be mounted.
+  const [detailFor, setDetailFor] = React.useState(null);
   const [filters, setFilters] = React.useState({
     page: 1,
     pageSize: 25,
@@ -191,6 +196,19 @@ export default function SessionsTab({ onReplay, refreshNonce = 0 }) {
         total={total}
         loading={loading}
         onReplay={onReplay}
+        onOpenDetail={setDetailFor}
+      />
+
+      <SessionDetailDrawer
+        session={detailFor}
+        onClose={() => setDetailFor(null)}
+        onReplay={(s) => {
+          // Close the drawer first: the player is a modal dialog, and leaving
+          // the drawer under it puts two dismissible layers on screen with
+          // only the top one obviously dismissible.
+          setDetailFor(null);
+          onReplay?.(s);
+        }}
       />
 
       <HistoryPager
