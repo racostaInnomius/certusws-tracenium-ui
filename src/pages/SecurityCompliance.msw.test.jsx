@@ -39,6 +39,9 @@ import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 afterEach(() => {
   cleanup();
+  // The active tab is deep-linked as ?scpTab=, so it outlives cleanup()
+  // and the next test starts on whatever tab the last one clicked.
+  window.history.replaceState({}, "", "/");
   server.resetHandlers();
   // useCachedFetch keeps `securityCompliance:all` in module memory — without
   // this the failure test would render test 1's cached data.
@@ -299,6 +302,43 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
 
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
     expect(screen.queryByLabelText("Filter by asset group")).not.toBeInTheDocument();
+  });
+
+  // ── Cabecera: acciones arriba, filtros debajo ─────────────────────
+  // Los siete controles compartían fila con el título, no cabían, y el
+  // bloque entero envolvía bajo el subtítulo. Se separan por naturaleza:
+  // verbos (exportar/refrescar) en la línea del título, filtros (grupo,
+  // framework, ajustes) en su propio renglón.
+  it("keeps exports and refresh in the title row, filters in their own", async () => {
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    const titleRow = screen.getByRole("heading", { name: "Security Compliance" }).closest("div")
+      ?.parentElement?.parentElement;
+    expect(titleRow).toBeTruthy();
+    expect(within(titleRow).getByRole("button", { name: /Export CSV/ })).toBeInTheDocument();
+    expect(within(titleRow).getByRole("button", { name: /Export PDF/ })).toBeInTheDocument();
+
+    // The filters are NOT in that row — they sit below it.
+    expect(within(titleRow).queryByRole("combobox", { name: "Filter by framework" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Filter by framework" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compliance settings" })).toBeInTheDocument();
+  });
+
+  it("hides the filter row on tabs that nothing filters", async () => {
+    // Baselines and Catalog are not scoped by framework or group, and a
+    // row of inert filters is worse than no row.
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Filter by framework" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Catalog/ }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("combobox", { name: "Filter by framework" })).toBeNull()
+    );
+    expect(screen.queryByRole("button", { name: "Compliance settings" })).toBeNull();
   });
 
   it("says nothing about coverage when the backend does not report it", async () => {

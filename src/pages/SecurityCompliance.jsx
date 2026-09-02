@@ -837,71 +837,17 @@ export default function SecurityCompliance({ initialTab }) {
         icon={<GppGoodOutlinedIcon />}
         actions={
           effectiveTab !== "posture" ? undefined : (
+          /* ── Qué va en la fila del título ────────────────────────────
+             Sólo VERBOS: exportar y refrescar. Los filtros bajan a su
+             propia fila (ver más abajo).
+
+             Estaban todos juntos aquí, y con siete controles la fila no
+             cabía junto al título: envolvía y el bloque entero caía bajo
+             el subtítulo, de modo que la cabecera acababa siendo una
+             franja de mandos sin jerarquía. Separarlos por naturaleza —
+             acciones arriba, filtros debajo — le devuelve al título su
+             línea y agrupa los filtros como lo que son: un conjunto. */
           <Stack direction="row" spacing={1} alignItems="center">
-            {/* ── El selector de framework vive aquí ──────────────────
-                Estaba dentro del acordeón "Frameworks", que además está
-                plegado por defecto. Un filtro que gobierna el titular,
-                "What to fix first", la tabla de equipos y los exports no
-                puede vivir escondido dentro de una de las secciones que
-                filtra: el operador lo elegía y, con las demás secciones
-                cerradas, no veía cambiar nada. La cabecera es donde se
-                buscan los filtros globales. */}
-            {/* Sólo cuando hay grupos: un selector con una única opción
-                ("All devices") es ruido en una cabecera ya cargada. */}
-            {assetGroups.length > 0 ? (
-              <Select
-                value={assetGroupId}
-                onChange={(e) => setAssetGroupId(e.target.value)}
-                size="small"
-                displayEmpty
-                inputProps={{ "aria-label": "Filter by asset group" }}
-                sx={{ minWidth: 190, bgcolor: BRAND.surface }}
-              >
-                <MenuItem value="">All devices</MenuItem>
-                {assetGroups.map((g) => (
-                  <MenuItem key={g.id} value={String(g.id)}>
-                    {g.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            ) : null}
-            <Select
-              value={selectedFramework}
-              onChange={(e) => setSelectedFramework(e.target.value)}
-              size="small"
-              displayEmpty
-              inputProps={{ "aria-label": "Filter by framework" }}
-              sx={{ minWidth: 220, bgcolor: BRAND.surface }}
-            >
-              <MenuItem value="">All frameworks (weighted)</MenuItem>
-              {frameworks.map((f) => (
-                <MenuItem key={f.framework} value={f.framework}>
-                  {f.shortName || f.framework}
-                </MenuItem>
-              ))}
-            </Select>
-            {/* Fase B: the "Baselines" button (Fase A) and the catalog
-                icon-button both became tabs — the header now only hosts
-                posture-scoped actions (settings, exports, refresh). */}
-            {/* Sprint 5 — tenant compliance settings dialog opener.
-                Compact icon button rather than a full "Settings"
-                label because the header is already crowded with
-                framework picker + export + refresh. */}
-            {canManage ? (
-              <Tooltip title="Compliance settings" arrow placement="bottom">
-                <IconButton
-                  aria-label="Compliance settings"
-                  size="small"
-                  onClick={() => setSettingsOpen(true)}
-                  sx={{
-                    border: `1px solid ${BRAND.border}`,
-                    borderRadius: 1
-                  }}
-                >
-                  <SettingsOutlinedIcon sx={{ fontSize: ICON.lg }} />
-                </IconButton>
-              </Tooltip>
-            ) : null}
             {/* Sprint 4 — CSV export. Fetched as an authenticated blob
                 (see handleExportCsv) rather than a plain anchor href, so
                 the X-Tenant-Id header for MSP-drilled sessions actually
@@ -972,6 +918,80 @@ export default function SecurityCompliance({ initialTab }) {
           )
         }
       />
+
+      {/* ── Fila de filtros ──────────────────────────────────────────
+          Qué se está mirando, separado de qué se puede hacer con ello.
+
+          El selector de framework vivía dentro del acordeón "Frameworks",
+          que además está plegado: un filtro que gobierna el titular,
+          "What to fix first", la tabla de equipos y los exports no puede
+          esconderse dentro de una de las secciones que filtra. Subió a la
+          cabecera, y con él el de grupos — pero mezclados con los botones
+          de exportar dejaban una fila de siete controles que envolvía.
+          Aquí tienen su propio renglón y se leen como un grupo.
+
+          Sólo en Fleet status: Baselines y Catalog no se filtran por
+          framework ni por grupo, y una barra de filtros inertes es peor
+          que ninguna. */}
+      {effectiveTab === "posture" ? (
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ mb: 2 }}
+        >
+          {/* Sólo cuando hay grupos: un selector con una única opción
+              ("All devices") es ruido. */}
+          {assetGroups.length > 0 ? (
+            <Select
+              value={assetGroupId}
+              onChange={(e) => setAssetGroupId(e.target.value)}
+              size="small"
+              displayEmpty
+              inputProps={{ "aria-label": "Filter by asset group" }}
+              sx={{ minWidth: 190, bgcolor: BRAND.surface }}
+            >
+              <MenuItem value="">All devices</MenuItem>
+              {assetGroups.map((g) => (
+                <MenuItem key={g.id} value={String(g.id)}>
+                  {g.name}
+                </MenuItem>
+              ))}
+            </Select>
+          ) : null}
+          <Select
+            value={selectedFramework}
+            onChange={(e) => setSelectedFramework(e.target.value)}
+            size="small"
+            displayEmpty
+            inputProps={{ "aria-label": "Filter by framework" }}
+            sx={{ minWidth: 220, bgcolor: BRAND.surface }}
+          >
+            <MenuItem value="">All frameworks (weighted)</MenuItem>
+            {frameworks.map((f) => (
+              <MenuItem key={f.framework} value={f.framework}>
+                {f.shortName || f.framework}
+              </MenuItem>
+            ))}
+          </Select>
+          {/* Los umbrales y los frameworks que sigues son ajustes de lo
+              que estás mirando, no una acción: van con los filtros. */}
+          {canManage ? (
+            <Tooltip title="Compliance settings" arrow placement="bottom">
+              <IconButton
+                aria-label="Compliance settings"
+                size="small"
+                onClick={() => setSettingsOpen(true)}
+                sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1 }}
+              >
+                <SettingsOutlinedIcon sx={{ fontSize: ICON.lg }} />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </Stack>
+      ) : null}
 
       {/* Fase B — the module's three faces: what we observe (Posture),
           what we require (Baselines, privileged), what we evaluate
