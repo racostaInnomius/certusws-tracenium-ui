@@ -23,10 +23,12 @@ const getRemoteSessions = vi.fn();
 const getAllFileTransfers = vi.fn();
 const listAccessRequests = vi.fn();
 const getAccessPolicy = vi.fn();
+const getDeviceFacets = vi.fn();
 
 vi.mock("../api/remoteControl", () => ({
   getRemoteControlSummary: (...a) => getRemoteControlSummary(...a),
   getConnectableDevices: (...a) => getConnectableDevices(...a),
+  getDeviceFacets: (...a) => getDeviceFacets(...a),
   getRemoteSessions: (...a) => getRemoteSessions(...a),
   getAllFileTransfers: (...a) => getAllFileTransfers(...a),
   listAccessRequests: (...a) => listAccessRequests(...a),
@@ -107,7 +109,10 @@ beforeEach(() => {
       deniedByUser7d: 3
     }
   });
-  getConnectableDevices.mockResolvedValue({ items: DEVICES });
+  // total > items so the pager has a second page to move to, and so the KPI
+  // fallback correctly reads the list as INCOMPLETE.
+  getConnectableDevices.mockResolvedValue({ items: DEVICES, total: 96, page: 1, pageSize: 25 });
+  getDeviceFacets.mockResolvedValue({ groups: [], platforms: [] });
   getRemoteSessions.mockResolvedValue({ items: [], total: 0 });
   getAllFileTransfers.mockResolvedValue({ items: [], total: 0 });
   listAccessRequests.mockResolvedValue({ items: [] });
@@ -189,13 +194,15 @@ describe("the KPI strip", () => {
     expect(screen.queryByText(/refused by the user/)).toBeNull();
   });
 
-  it("⚠️ falls back to counting locally when the backend is a version behind", async () => {
-    // The portal and the API deploy separately. Without the fallback the new
-    // bundle renders "0 / 0 · 0 devices" over a table full of devices — a
-    // fresh lie in place of the one being removed.
+  it("⚠️ falls back to counting locally against a backend a version behind", async () => {
+    // The portal and the API deploy separately. An older backend ignores the
+    // paging parameters and returns the WHOLE fleet with no `total` — which
+    // is a list the browser can legitimately count. Without this the new
+    // bundle would render "—" over a table full of devices.
     getRemoteControlSummary.mockResolvedValue({
       summary: { connectableDevices: 214, activeSessions: 0, sessionsLast7d: 0 }
     });
+    getConnectableDevices.mockResolvedValue({ items: DEVICES });
     render(<RemoteControl />);
 
     await screen.findByText("Ready now");
@@ -203,20 +210,46 @@ describe("the KPI strip", () => {
     expect(screen.getByText(/4 devices in the fleet/)).toBeTruthy();
     expect(screen.getByText(/\/ 3/)).toBeTruthy();
   });
+
+  it("⚠️ shows nothing rather than counting a PAGE and calling it the fleet", async () => {
+    // A new backend that pages but whose /summary failed. Counting the 4 rows
+    // on screen would report a fleet of 4 against one of 214 — the same class
+    // of lie the whole phase exists to remove, just smaller.
+    getRemoteControlSummary.mockResolvedValue({ summary: { activeSessions: 0 } });
+    render(<RemoteControl />);
+
+    await screen.findByText("Ready now");
+    expect(screen.getByText(/fleet totals unavailable/)).toBeTruthy();
+    // No invented total, and no count of the 4 rows on screen either.
+    expect(screen.queryByText(/devices in the fleet/)).toBeNull();
+    expect(screen.queryByText(/\/ 3/)).toBeNull();
+  });
 });
 
 describe("the device table", () => {
-  it("hides devices whose agent offers no remote control, and says how many", async () => {
+  it("⚠️ asks the SERVER to filter, instead of downloading the fleet", async () => {
+    // This is the phase-3 contract. The previous version pulled every device
+    // and ran Array.filter in the browser, which is what stops working at a
+    // thousand machines.
     render(<RemoteControl />);
 
-    await screen.findByText("SRV-DC01");
-    expect(screen.queryByText("OLD-BOX")).toBeNull();
-    // ⚠️ The arithmetic has to add up. Two filters ship on — "online only"
-    // and "without remote control" — so of the 4 fixtures, 2 show, 1 is
-    // offline and 1 has no plugin. A footer that only counted one of the two
-    // reasons said "2 shown · 1 hidden" out of 4, which is the "where is my
-    // device?" the counter exists to prevent.
-    expect(screen.getByText(/2 of 4 devices shown · 2 hidden by the filters above/)).toBeTruthy();
+    await waitFor(() => expect(getConnectableDevices).toHaveBeenCalled());
+
+    const params = getConnectableDevices.mock.calls[0][0];
+    expect(params).toMatchObject({
+      page: 1,
+      pageSize: 25,
+      rcpOnly: "true",
+      onlineOnly: "true"
+    });
+  });
+
+  it("counts the hidden devices from the fleet totals, not from the rows", async () => {
+    // With a paged list the rows on screen cannot answer "how many devices
+    // have no remote control" — 214 in the fleet minus 96 capable is 118,
+    // and none of that is visible in the 4 rows the page holds.
+    render(<RemoteControl />);
+    expect(await screen.findByText(/Show the 118 without remote control/)).toBeTruthy();
   });
 
   it("writes macOS the way Apple writes it", async () => {
@@ -227,13 +260,30 @@ describe("the device table", () => {
     expect(screen.queryByText("Macos")).toBeNull();
   });
 
-  it("one click brings the hidden ones back", async () => {
+  it("one click re-asks the server without the remote-control filter", async () => {
+    render(<RemoteControl />);
+    await screen.findByText(/Show the 118 without remote control/);
+
+    fireEvent.click(screen.getByText(/Show the 118 without remote control/));
+
+    await waitFor(() => {
+      const last = getConnectableDevices.mock.calls.at(-1)[0];
+      expect(last.rcpOnly).toBeUndefined();
+    });
+  });
+
+  it("⚠️ a filter change goes back to page 1", async () => {
+    // Staying on page 4 after narrowing to two results shows an empty table,
+    // which reads as "nothing matched" when something did.
     render(<RemoteControl />);
     await screen.findByText("SRV-DC01");
 
-    fireEvent.click(screen.getByText(/Show the 1 without remote control/));
+    fireEvent.click(screen.getByRole("button", { name: /Next page/ }));
+    await waitFor(() => expect(getConnectableDevices.mock.calls.at(-1)[0].page).toBe(2));
 
-    expect(await screen.findByText("OLD-BOX")).toBeTruthy();
+    fireEvent.click(screen.getByText(/Online only/));
+
+    await waitFor(() => expect(getConnectableDevices.mock.calls.at(-1)[0].page).toBe(1));
   });
 
   it("names the actions instead of showing three bare icons", async () => {

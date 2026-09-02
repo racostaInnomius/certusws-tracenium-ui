@@ -32,7 +32,11 @@ import { BRAND, ROLE } from "../../theme/brand";
 import ConnectablesTable from "./ConnectablesTable";
 import NoRemoteControlCard from "./NoRemoteControlCard";
 import { fleetNumbers } from "./rcpMethods";
-import { useConnectableDevices, useRemoteControlSummary } from "./useRemoteControlData";
+import {
+  useConnectableDevices,
+  useRemoteControlSummary,
+  useDeviceFacets
+} from "./useRemoteControlData";
 
 function Kpi({ title, value, subtitle, icon: Icon, accent, tint, loading, onClick }) {
   const clickable = typeof onClick === "function";
@@ -108,14 +112,78 @@ function durationLabel(seconds) {
   return seconds < 60 ? `${seconds}s avg` : `${Math.round(seconds / 60)} min avg`;
 }
 
+/**
+ * Filter state, owned here because this is where the fetch lives.
+ *
+ * `searchInput` and `search` are deliberately two fields. The input updates
+ * on every keystroke so typing stays responsive; `search` — the one in the
+ * cache key and the query string — lags 350 ms behind it. Without the split,
+ * "SRV-DC01" would be eight requests and eight cache entries, seven of them
+ * for prefixes nobody will ever ask for again.
+ */
+function useDeviceFilters() {
+  const [filters, setFilters] = React.useState({
+    page: 1,
+    pageSize: 25,
+    searchInput: "",
+    search: "",
+    onlineOnly: true,
+    rcpOnly: true,
+    groupId: null,
+    platform: null
+  });
+
+  React.useEffect(() => {
+    if (filters.searchInput === filters.search) return undefined;
+    const t = window.setTimeout(
+      () => setFilters((f) => ({ ...f, search: f.searchInput, page: 1 })),
+      350
+    );
+    return () => window.clearTimeout(t);
+  }, [filters.searchInput, filters.search]);
+
+  const update = React.useCallback((patch) => {
+    setFilters((f) => ({
+      ...f,
+      ...patch,
+      // Any change other than paging returns to page 1. Staying on page 4
+      // after narrowing a filter to two results shows an empty table and
+      // reads as "nothing matched".
+      page: patch.page != null ? patch.page : 1
+    }));
+  }, []);
+
+  return [filters, update];
+}
+
 export default function ConnectTab({
   onConnect,
   highlightDeviceId,
   onShowActiveSessions,
   refreshNonce = 0
 }) {
-  const { devices, loading: devicesLoading, refetch: refetchDevices } = useConnectableDevices();
+  const [filters, setFilters] = useDeviceFilters();
+
+  // A deep link names one device, and the filters that ship on would hide an
+  // offline one. Dropping them for that first render is what makes the link
+  // land on the row it promised.
+  const effectiveFilters = React.useMemo(
+    () =>
+      highlightDeviceId
+        ? { ...filters, search: highlightDeviceId, onlineOnly: false, rcpOnly: false }
+        : filters,
+    [filters, highlightDeviceId]
+  );
+
+  const {
+    devices,
+    total,
+    complete,
+    loading: devicesLoading,
+    refetch: refetchDevices
+  } = useConnectableDevices(effectiveFilters);
   const { summary, loading: summaryLoading, refetch: refetchSummary } = useRemoteControlSummary();
+  const { groups, platforms } = useDeviceFacets();
 
   // Reaches the panel that IS mounted. The ones that aren't are covered by
   // the page invalidating the cache prefix, which makes their next mount
@@ -130,7 +198,18 @@ export default function ConnectTab({
     refetchSummary();
   }, [refreshNonce, refetchDevices, refetchSummary]);
 
-  const fleet = React.useMemo(() => fleetNumbers(summary, devices), [summary, devices]);
+  const fleet = React.useMemo(
+    () => fleetNumbers(summary, devices, { complete }),
+    [summary, devices, complete]
+  );
+
+  // How many devices the "remote control" filter hides. It comes from the
+  // summary and not from counting rows: with a paged list the rows on screen
+  // cannot answer a question about the whole fleet.
+  const withoutRcp =
+    fleet.fleetTotal != null && fleet.rcpCapable != null
+      ? Math.max(0, fleet.fleetTotal - fleet.rcpCapable)
+      : null;
 
   const active = Number(summary?.activeSessions ?? 0);
   const last7d = Number(summary?.sessionsLast7d ?? 0);
@@ -154,15 +233,26 @@ export default function ConnectTab({
           <Kpi
             title="Ready now"
             value={
-              <>
-                {fleet.readyNow}
-                <Box component="span" sx={{ fontSize: "1rem", color: BRAND.gray, fontWeight: 500 }}>
-                  {" "}
-                  / {fleet.rcpCapable}
-                </Box>
-              </>
+              fleet.readyNow == null ? (
+                "—"
+              ) : (
+                <>
+                  {fleet.readyNow}
+                  <Box
+                    component="span"
+                    sx={{ fontSize: "1rem", color: BRAND.gray, fontWeight: 500 }}
+                  >
+                    {" "}
+                    / {fleet.rcpCapable}
+                  </Box>
+                </>
+              )
             }
-            subtitle={`online with remote control · ${fleet.fleetTotal} devices in the fleet`}
+            subtitle={
+              fleet.fleetTotal == null
+                ? "fleet totals unavailable"
+                : `online with remote control · ${fleet.fleetTotal} devices in the fleet`
+            }
             icon={DesktopWindowsOutlinedIcon}
             accent={BRAND.teal}
             tint={BRAND.tealSoft}
@@ -230,6 +320,12 @@ export default function ConnectTab({
           loading={devicesLoading}
           onConnect={onConnect}
           highlightDeviceId={highlightDeviceId}
+          filters={filters}
+          onFilters={setFilters}
+          total={total}
+          withoutRcp={withoutRcp}
+          groups={groups}
+          platforms={platforms}
         />
       )}
     </Box>

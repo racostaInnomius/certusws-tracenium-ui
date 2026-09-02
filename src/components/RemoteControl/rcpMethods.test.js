@@ -167,6 +167,25 @@ describe("fleetNumbers", () => {
   it("falls back when there is no summary at all", () => {
     expect(fleetNumbers(null, fleet).source).toBe("browser");
   });
+
+  it("⚠️ refuses to count a PAGE and call it the fleet", () => {
+    // A backend that pages but whose /summary failed. Counting the rows on
+    // screen would report a fleet of 2 against one of 214 — the same class of
+    // lie the server-side count was built to remove, just smaller. There is
+    // no honest number here, so there is no number.
+    const r = fleetNumbers(null, fleet, { complete: false });
+    expect(r.source).toBe("unknown");
+    expect(r.readyNow).toBeNull();
+    expect(r.fleetTotal).toBeNull();
+  });
+
+  it("the server's numbers win even over an incomplete list", () => {
+    const r = fleetNumbers({ readyNow: 38, rcpCapable: 96, fleetTotal: 214 }, fleet, {
+      complete: false
+    });
+    expect(r.source).toBe("server");
+    expect(r.fleetTotal).toBe(214);
+  });
 });
 
 describe("countsByMethod", () => {

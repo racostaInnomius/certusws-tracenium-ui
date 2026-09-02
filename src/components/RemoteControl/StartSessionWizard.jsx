@@ -40,17 +40,8 @@ import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
-import {
-  RCP_METHODS,
-  methodFor,
-  countsByMethod,
-  filterDevices,
-  matchesSearch,
-  hasAnyRcp,
-  blockedReason,
-  platformLabel
-} from "./rcpMethods";
-import { useConnectableDevices } from "./useRemoteControlData";
+import { RCP_METHODS, methodFor, blockedReason, platformLabel } from "./rcpMethods";
+import { useConnectableDevices, useMethodCounts } from "./useRemoteControlData";
 
 const METHOD_ICON = {
   shell: TerminalOutlinedIcon,
@@ -216,14 +207,56 @@ function DeviceRow({ device, selected, onSelect, reason }) {
 }
 
 export default function StartSessionWizard({ open, onClose, onConfirm }) {
-  const { devices, loading } = useConnectableDevices();
-
   const [step, setStep] = React.useState(0);
   const [type, setType] = React.useState("");
   const [device, setDevice] = React.useState(null);
+  const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [ticketRef, setTicketRef] = React.useState("");
+
+  // Same 350 ms split as the table: the box updates on every keystroke, the
+  // query lags behind it. See useDeviceFilters in ConnectTab.
+  React.useEffect(() => {
+    if (searchInput === search) return undefined;
+    const t = window.setTimeout(() => setSearch(searchInput), 350);
+    return () => window.clearTimeout(t);
+  }, [searchInput, search]);
+
+  // Step 2 asks the server for devices that can serve the CHOSEN method and
+  // are online — the filter is a query, not an Array.filter over the fleet.
+  //
+  // ⚠️ `pageSize: 50` and no pager. This is a picker, not a browser: if what
+  // you want isn't in the first fifty, the answer is to type, and the
+  // counter below the list says how many more there are so the box doesn't
+  // look like the whole answer.
+  const {
+    devices: eligible,
+    total: eligibleTotal,
+    loading
+  } = useConnectableDevices({
+    page: 1,
+    pageSize: 50,
+    search,
+    capability: type ? methodFor(type)?.capability : null,
+    onlineOnly: true
+  });
+
+  // The ones the operator IS looking for but that can't serve this: the same
+  // search WITHOUT the capability and online filters, so the difference
+  // between the two lists is exactly "found, but not available for this".
+  //
+  // A second query rather than splitting the first one locally: the first is
+  // capped at 50 rows, and a split would let 50 unusable devices crowd out
+  // usable ones that exist past the cap — the list would say "nothing
+  // matches" while something did.
+  const { devices: searchHits } = useConnectableDevices({
+    page: 1,
+    pageSize: 50,
+    search,
+    rcpOnly: true,
+    skip: !search || !type
+  });
 
   // Every opening starts from scratch. Without this the wizard would reopen
   // with the PREVIOUS access's reason and ticket already filled in, and the
@@ -234,31 +267,33 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
     setStep(0);
     setType("");
     setDevice(null);
+    setSearchInput("");
     setSearch("");
     setReason("");
     setTicketRef("");
   }, [open]);
 
-  const counts = React.useMemo(() => countsByMethod(devices), [devices]);
+  // How many devices each method can reach right now, for the step-1 cards.
+  // One small query, not the fleet: it asks the summary-shaped endpoint for a
+  // single row per method and reads the total off it.
+  const counts = useMethodCounts(open);
 
-  // The ones that can serve the chosen method right now.
-  const eligible = React.useMemo(
-    () => (type ? filterDevices(devices, { method: type, onlineOnly: true, search }) : []),
-    [devices, type, search]
-  );
-
-  // The ones the operator IS looking for but that can't serve this.
-  //
-  // A filter that only hides produces the worst possible question: "where is
-  // my device?". If what was searched for exists and doesn't fit, it's said
-  // here, with the reason. Only shown when there's a search: without one the
-  // list would be half the fleet greyed out, which is noise.
+  /**
+   * Found by the search, but unusable for the chosen method — greyed out
+   * with the reason instead of silently missing.
+   *
+   * A filter that only hides produces the worst possible question: "where is
+   * my device?". Only shown when something is typed: without a search this
+   * would be half the fleet in grey, which is noise.
+   */
   const blocked = React.useMemo(() => {
     if (!type || !search.trim()) return [];
-    return devices
-      .filter((d) => hasAnyRcp(d) && matchesSearch(d, search) && blockedReason(d, type))
-      .map((d) => ({ device: d, reason: blockedReason(d, type) }));
-  }, [devices, type, search]);
+    const shown = new Set(eligible.map((d) => d.deviceId));
+    return searchHits
+      .filter((d) => !shown.has(d.deviceId))
+      .map((d) => ({ device: d, reason: blockedReason(d, type) }))
+      .filter((entry) => Boolean(entry.reason));
+  }, [searchHits, eligible, type, search]);
 
   const reasonOk = reason.trim().length >= 10;
   const ticketOk = ticketRef.trim().length >= 3;
@@ -324,8 +359,8 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
               fullWidth
               size="small"
               placeholder="Search by host, group, site or identifier…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -350,6 +385,16 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
                 onSelect={pickDevice}
               />
             ))}
+
+            {/* This is a picker, not a browser: there is no pager, so when
+                the list is capped it has to say so. Without this line fifty
+                rows look like the whole answer and the search box looks
+                optional. */}
+            {eligibleTotal > eligible.length ? (
+              <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 1 }}>
+                Showing {eligible.length} of {eligibleTotal}. Keep typing to narrow it down.
+              </Typography>
+            ) : null}
 
             {!loading && eligible.length === 0 && blocked.length === 0 ? (
               <Alert severity="info" sx={{ mt: 1 }}>

@@ -24,31 +24,142 @@
 
 import { useCallback } from "react";
 import { useCachedFetch } from "../../hooks/useCachedFetch";
+import { RCP_METHODS, canStart } from "./rcpMethods";
 import {
   getRemoteControlSummary,
   getConnectableDevices,
+  getDeviceFacets,
   getRemoteSessions,
   getAllFileTransfers
 } from "../../api/remoteControl";
 
 /**
- * The devices a session can be opened against.
+ * One page of connectable devices, filtered server-side.
  *
- * ⚠️ `/devices` currently returns the whole fleet unpaginated and all the
- * filtering happens in the browser. That's acceptable at today's scale and
- * it's what lets phase 1 ship without touching the backend, but it is this
- * screen's known ceiling: phase 3 moves to server-side `page`/`pageSize`/
- * `search` and this hook changes shape. Callers already work off `devices`,
- * which is the shape that survives that change.
+ * ── The cache key carries the filters ────────────────────────────────
+ *
+ * Every distinct filter combination is its own cache entry, so paging back
+ * to a page you already visited is instant and changing a filter is a fresh
+ * request. Leaving the filters out of the key would serve page 1's rows
+ * under page 2's heading — the classic paginated-cache bug, and a silent one
+ * because the rows still look like devices.
+ *
+ * `complete` says whether what came back is the WHOLE filtered set rather
+ * than a slice. It exists for one caller — the KPI fallback — which must
+ * never count a page and call it the fleet. An older backend that ignores
+ * these parameters returns everything and no `total`, and that case reads as
+ * complete, which is exactly right.
  */
-export function useConnectableDevices() {
+export function useConnectableDevices(filters = {}) {
+  const {
+    page = 1,
+    pageSize = 25,
+    search = "",
+    capability = null,
+    rcpOnly = false,
+    onlineOnly = false,
+    groupId = null,
+    platform = null,
+    // Hooks can't be called conditionally, so a caller that only sometimes
+    // needs a list says so here instead. The loader short-circuits without
+    // touching the network — the alternative was a wasted page of devices
+    // every time the wizard opened.
+    skip = false
+  } = filters;
+
   const loader = useCallback(async () => {
-    const res = await getConnectableDevices();
-    return Array.isArray(res?.items) ? res.items : [];
+    if (skip) return { items: [], total: 0 };
+    const res = await getConnectableDevices({
+      page,
+      pageSize,
+      search: search || undefined,
+      capability: capability || undefined,
+      rcpOnly: rcpOnly ? "true" : undefined,
+      onlineOnly: onlineOnly ? "true" : undefined,
+      groupId: groupId ?? undefined,
+      platform: platform || undefined
+    });
+    const items = Array.isArray(res?.items) ? res.items : [];
+    return {
+      items,
+      // An old backend sends neither `total` nor `page`; falling back to the
+      // row count keeps the pager honest instead of showing "of NaN".
+      total: Number.isFinite(Number(res?.total)) ? Number(res.total) : items.length
+    };
+  }, [skip, page, pageSize, search, capability, rcpOnly, onlineOnly, groupId, platform]);
+
+  const key = [
+    "remoteControl:devices",
+    page,
+    pageSize,
+    search,
+    capability ?? "",
+    rcpOnly ? 1 : 0,
+    onlineOnly ? 1 : 0,
+    groupId ?? "",
+    platform ?? "",
+    skip ? "skip" : ""
+  ].join(":");
+
+  const state = useCachedFetch(key, loader);
+  const items = state.data?.items ?? [];
+  const total = state.data?.total ?? 0;
+  return { ...state, devices: items, total, complete: items.length >= total };
+}
+
+/**
+ * How many devices can serve each method right now — the counts under the
+ * wizard's three cards.
+ *
+ * Three requests of ONE row each: the answer wanted is the `total`, not the
+ * devices, so this asks for the smallest page the endpoint will give and
+ * reads the count off it. Fetching the fleet to call `.length` on it is what
+ * this whole phase exists to stop.
+ *
+ * ⚠️ An older backend ignores `pageSize` and sends everything with no
+ * `total`. Trusting `items.length` there would report the whole fleet as
+ * "ready" for every method, so that case falls back to counting the returned
+ * rows with the same predicate the buttons use.
+ */
+export function useMethodCounts(enabled = true) {
+  const loader = useCallback(async () => {
+    if (!enabled) return {};
+    const entries = await Promise.all(
+      RCP_METHODS.map(async (method) => {
+        const res = await getConnectableDevices({
+          page: 1,
+          pageSize: 1,
+          capability: method.capability,
+          onlineOnly: "true"
+        });
+        if (Number.isFinite(Number(res?.total))) return [method.type, Number(res.total)];
+        const items = Array.isArray(res?.items) ? res.items : [];
+        return [method.type, items.filter((d) => canStart(d, method.type)).length];
+      })
+    );
+    return Object.fromEntries(entries);
+  }, [enabled]);
+
+  const state = useCachedFetch(`remoteControl:methodCounts:${enabled ? 1 : 0}`, loader);
+  return state.data ?? {};
+}
+
+/** Group and platform options for the filter dropdowns. */
+export function useDeviceFacets() {
+  const loader = useCallback(async () => {
+    const res = await getDeviceFacets();
+    return {
+      groups: Array.isArray(res?.groups) ? res.groups : [],
+      platforms: Array.isArray(res?.platforms) ? res.platforms : []
+    };
   }, []);
 
-  const state = useCachedFetch("remoteControl:devices", loader);
-  return { ...state, devices: state.data ?? [] };
+  const state = useCachedFetch("remoteControl:facets", loader);
+  return {
+    ...state,
+    groups: state.data?.groups ?? [],
+    platforms: state.data?.platforms ?? []
+  };
 }
 
 /** Tenant-wide aggregates: active sessions, last 7 days, average duration. */

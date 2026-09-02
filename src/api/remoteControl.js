@@ -19,10 +19,28 @@ export async function getRemoteControlSummary() {
   return httpGetJson(`${BASE}/summary`);
 }
 
-// Devices (enrolled + active) with `rcpEnabled` flag. Drives the
-// "Start a session" table.
-export async function getConnectableDevices() {
-  return httpGetJson(`${BASE}/devices`);
+// One PAGE of connectable devices, filtered server-side.
+//
+// This used to take no arguments and return the whole fleet, which the
+// browser then filtered in JavaScript. Every filter here is applied in SQL
+// now, across both databases — see modules/remote-control/device-list.ts.
+//
+// Params: page, pageSize (capped at 100), search, capability, rcpOnly,
+// onlineOnly, groupId, platform.
+// Returns { ok, count, items, total, page, pageSize }.
+//
+// `search` covers hostname, platform, identifier AND group name — the last
+// one resolved on the control database and merged in, so "I remember the
+// group, not the host" works from the same box.
+export async function getConnectableDevices(params = {}) {
+  return httpGetJson(`${BASE}/devices${buildQuery(params)}`);
+}
+
+// The options the filter dropdowns offer: the tenant's asset groups and the
+// platforms actually present. Separate from /devices because a dropdown's
+// contents don't change as you page through a list.
+export async function getDeviceFacets() {
+  return httpGetJson(`${BASE}/devices/facets`);
 }
 
 // Session history. Empty until the plugin ships.

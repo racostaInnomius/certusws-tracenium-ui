@@ -168,7 +168,7 @@ export function summarizeFleet(devices) {
  * throw that real zero away and quietly fall back to counting a device list
  * that may not even be complete.
  */
-export function fleetNumbers(summary, devices) {
+export function fleetNumbers(summary, devices, { complete = true } = {}) {
   if (summary && summary.readyNow != null) {
     return {
       readyNow: Number(summary.readyNow ?? 0),
@@ -176,6 +176,13 @@ export function fleetNumbers(summary, devices) {
       fleetTotal: Number(summary.fleetTotal ?? 0),
       source: "server"
     };
+  }
+  // ⚠️ `complete` is the guard that keeps the fallback from lying. Counting a
+  // PAGE and calling it the fleet is the same bug the server-side count was
+  // built to fix, so with a partial list there is no honest number to give
+  // and the card shows nothing rather than something wrong.
+  if (!complete) {
+    return { readyNow: null, rcpCapable: null, fleetTotal: null, source: "unknown" };
   }
   return { ...summarizeFleet(devices), source: "browser" };
 }
