@@ -21,6 +21,7 @@ import MaintenanceWindowsPanel from "./MaintenanceWindowsPanel";
 import GatewayPanel from "./gateway/GatewayPanel";
 import ThirdPartyCatalogManager from "./ThirdPartyCatalogManager";
 import CveCatalogManager from "./CveCatalogManager";
+import RemediationMatrixPanel from "./RemediationMatrixPanel";
 
 /**
  * Ordered by how often an operator actually opens them: the two that change
@@ -46,6 +47,11 @@ export const CONFIG_SECTIONS = [
     key: "cve-catalog",
     label: "CVE catalog",
     blurb: "Vulnerability data, including the CISA KEV list.",
+  },
+  {
+    key: "remediation-matrix",
+    label: "Remediation matrix",
+    blurb: "What the agent can fix per platform, and whether it has been seen working.",
   },
 ];
 
@@ -127,6 +133,8 @@ export default function ConfigurePanel({
           <ThirdPartyCatalogManager canManage={canManage} notify={notify} />
         ) : active === "cve-catalog" ? (
           <CveCatalogManager canManage={canManage} notify={notify} />
+        ) : active === "remediation-matrix" ? (
+          <RemediationMatrixPanel canManage={canManage} devices={devices} notify={notify} />
         ) : (
           <Typography sx={{ color: BRAND.gray, fontSize: TEXT.sm }}>
             Pick a setting on the left.

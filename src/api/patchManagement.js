@@ -107,6 +107,23 @@ export async function cancelRemediation(id) {
   );
 }
 
+// ── Remediation matrix (PMP owns the "can the agent fix this?" answer) ──
+//
+// The matrix (capability → platform → handler) with the latest dry_run and
+// apply evidence per handler in this tenant, plus `validatedAnywhere`.
+// Returns { rows: [...], capabilitiesWithoutHandler: [...] }.
+export async function getRemediationMatrix() {
+  return httpGetJson(`${BASE}/remediation-matrix`);
+}
+
+// Launch one dry_run per remediable handler on one device per platform.
+// `devices`: { windows?: deviceId, linux?: deviceId, macos?: deviceId }.
+// Dry runs never call pmp.remediate — they read state and ack it. 202 with
+// { launched, failed, skipped }; the evidence lands in getRemediationMatrix.
+export async function validateRemediationMatrix(devices) {
+  return httpPostJson(`${BASE}/remediation-matrix/validate`, { devices });
+}
+
 // ── Third-party patching (catalog + outdated-software detection) ──
 
 // Fleet rollup: per catalog entry, how many devices run an outdated version.
