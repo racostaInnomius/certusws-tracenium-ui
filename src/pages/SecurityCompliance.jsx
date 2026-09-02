@@ -158,7 +158,7 @@ const PLATFORM_LABEL = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
 function CoverageNote({ coverage }) {
   if (!coverage || !coverage.total) return null;
-  const { mapped, total, platform, covered, standardTotal, standardSource } = coverage;
+  const { mapped, total, platform, covered, standardTotal, standardSource, latestKnownVersion } = coverage;
   const thin = mapped / total < FRAMEWORK_COVERAGE_THIN_BELOW;
 
   // ── Cobertura del ESTÁNDAR ────────────────────────────────────────
@@ -225,6 +225,20 @@ function CoverageNote({ coverage }) {
         </Tooltip>
       ) : null}
       {ourCoverage}
+      {/* Estamos midiendo contra una versión que ya no es la publicada.
+          Un framework caducado es peor que uno ausente: mide contra un
+          estándar que ya nadie audita, y sin esto no hay nada en
+          pantalla que lo desmienta. */}
+      {latestKnownVersion ? (
+        <Tooltip arrow placement="bottom-start" title={latestKnownVersion}>
+          <Typography
+            variant="caption"
+            sx={{ color: BRAND.alert.warningText, fontWeight: 700, cursor: "help" }}
+          >
+            A newer version of this standard exists
+          </Typography>
+        </Tooltip>
+      ) : null}
     </>
   );
 }
@@ -866,6 +880,8 @@ export default function SecurityCompliance({ initialTab }) {
           covered: f.coveredControls ?? null,
           standardTotal: f.totalControls ?? null,
           standardSource: f.totalControlsSource ?? null,
+          latestKnownVersion: f.latestKnownVersion ?? null,
+          versionWatchUrl: f.versionWatchUrl ?? null,
         });
       }
     }

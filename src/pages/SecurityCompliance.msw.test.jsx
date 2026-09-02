@@ -66,7 +66,7 @@ const FRAMEWORKS = {
   frameworks: [
     // Coverage mirrors prod: CIS is barely mapped (11 of 94), NIST is
     // mapped broadly (92 of 94).
-    { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11", mappedChecks: 11, catalogChecks: 94 },
+    { framework: "cis_windows_11_v3.0", family: "CIS", shortName: "CIS Win11", mappedChecks: 11, catalogChecks: 94, latestKnownVersion: "CIS Windows 11 v5.1.0 (512 recommendations)" },
     { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
     // SOC 2 maps every catalog check, so the coverage warning stays
     // silent — which is exactly why it needs a caveat of its own.
@@ -533,6 +533,20 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     await screen.findByText("CIS Win11");
     // Sólo SOC 2 lleva cifra verificada en el fixture; CIS y NIST no.
     expect(screen.queryAllByText(/controls in the standard/)).toHaveLength(1);
+  });
+
+  // ── Estamos midiendo contra una versión caducada ──────────────────
+  // Los documentos oficiales revelaron que medimos CIS Windows 11 v3.0
+  // cuando hay v5.1.0. Sin esto, nada en pantalla lo desmiente.
+  it("warns when a newer version of the standard exists", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+
+    expect(await screen.findByText("A newer version of this standard exists")).toBeInTheDocument();
+    // Sólo el que la tiene: SOC 2 y NIST están al día en el fixture.
+    expect(screen.queryAllByText("A newer version of this standard exists")).toHaveLength(1);
   });
 
   it("says nothing about coverage when the backend does not report it", async () => {
