@@ -158,8 +158,20 @@ const PLATFORM_LABEL = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
 function CoverageNote({ coverage }) {
   if (!coverage || !coverage.total) return null;
-  const { mapped, total, platform } = coverage;
+  const { mapped, total, platform, covered, standardTotal, standardSource } = coverage;
   const thin = mapped / total < FRAMEWORK_COVERAGE_THIN_BELOW;
+
+  // ── Cobertura del ESTÁNDAR ────────────────────────────────────────
+  // Cuando sabemos cuántos controles tiene el framework de verdad, ése
+  // es el número que manda. "82 of 94 checks mapped" habla de nuestro
+  // catálogo; un auditor necesita "13 of 106 CSF subcategories". En un
+  // producto cuyo núcleo es enseñar cumplimiento no se puede decir
+  // "cumples el 80%" cuando ese 80% es de un 10% del estándar.
+  //
+  // standardTotal null = cifra sin verificar. No se calcula nada: un
+  // denominario inventado vuelve ficción todo porcentaje que lo use.
+  const standardPct =
+    standardTotal && covered != null ? Math.round((covered / standardTotal) * 100) : null;
   // ⚠️ The denominator is per platform, and the first version of this got
   // it wrong: it measured CIS Windows 11 against all 94 catalog checks,
   // which implied 83 missing Windows controls when 64 of them are macOS
@@ -167,7 +179,8 @@ function CoverageNote({ coverage }) {
   // now scopes the denominator; this just has to name it, because "11 of
   // 30" invites the question "thirty what?".
   const scope = platform ? `${PLATFORM_LABEL[platform] || platform} controls` : "controls";
-  return (
+
+  const ourCoverage = (
     <Tooltip
       arrow
       placement="bottom-start"
@@ -186,6 +199,33 @@ function CoverageNote({ coverage }) {
         {mapped} of {total} {scope} mapped{thin ? " — narrow coverage" : ""}
       </Typography>
     </Tooltip>
+  );
+
+  return (
+    <>
+      {/* La cifra del estándar va PRIMERA cuando existe: es la que
+          responde "¿cuánto de este framework cubrís?". La nuestra queda
+          debajo como detalle de implementación. */}
+      {standardPct != null ? (
+        <Tooltip
+          arrow
+          placement="bottom-start"
+          title={
+            `Tracenium maps ${covered} of the ${standardTotal} controls in this standard (${standardPct}%). ` +
+            `A high score here is a score against those ${covered}, not against the whole framework.` +
+            (standardSource ? ` Source: ${standardSource}` : "")
+          }
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: BRAND.alert.warningText, fontWeight: 700, cursor: "help" }}
+          >
+            Covers {covered} of {standardTotal} controls in the standard ({standardPct}%)
+          </Typography>
+        </Tooltip>
+      ) : null}
+      {ourCoverage}
+    </>
   );
 }
 
@@ -823,6 +863,9 @@ export default function SecurityCompliance({ initialTab }) {
           mapped: f.mappedChecks ?? 0,
           total: f.catalogChecks,
           platform: f.scopePlatform ?? null,
+          covered: f.coveredControls ?? null,
+          standardTotal: f.totalControls ?? null,
+          standardSource: f.totalControlsSource ?? null,
         });
       }
     }

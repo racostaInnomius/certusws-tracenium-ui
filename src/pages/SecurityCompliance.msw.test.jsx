@@ -70,7 +70,17 @@ const FRAMEWORKS = {
     { framework: "nist_800_53_rev5", family: "NIST", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
     // SOC 2 maps every catalog check, so the coverage warning stays
     // silent — which is exactly why it needs a caveat of its own.
-    { framework: "soc2_tsc_2017", family: "AICPA", shortName: "SOC 2 TSC", mappedChecks: 94, catalogChecks: 94 },
+    {
+      framework: "soc2_tsc_2017",
+      family: "AICPA",
+      shortName: "SOC 2 TSC",
+      mappedChecks: 94,
+      catalogChecks: 94,
+      // Prod: los Common Criteria son 33 (CC1.1-CC9.2) y tocamos 8.
+      coveredControls: 8,
+      totalControls: 33,
+      totalControlsSource: "AICPA 2017 TSC, CC1.1-CC9.2 = 33 criteria",
+    },
   ],
   packActive: true,
   totalFrameworks: 12,
@@ -82,6 +92,7 @@ const FRAMEWORK_SUMMARY = {
   items: [
     { framework: "cis_windows_11_v3.0", devicesReporting: 12, compliant: 9, nonCompliant: 3, unknown: 0, avgScore: 80 },
     { framework: "nist_800_53_rev5", devicesReporting: 12, compliant: 10, nonCompliant: 2, unknown: 0, avgScore: 84 },
+    { framework: "soc2_tsc_2017", devicesReporting: 12, compliant: 8, nonCompliant: 4, unknown: 0, avgScore: 78 },
   ],
 };
 const DEVICES = {
@@ -493,6 +504,35 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     );
     // Looking is not choosing: the page is still on the weighted view.
     expect(screen.queryByText(/Measured against/)).toBeNull();
+  });
+
+  // ── Cobertura del ESTÁNDAR, no del catálogo ───────────────────────
+  // "Si el core de SCP es mostrar compliance, no podemos decir cumples
+  //  con el 80% de un 10% de NIST."
+  it("leads with how much of the standard we cover, when the count is verified", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    // La tabla de frameworks vive en un acordeón plegado por defecto.
+    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+
+    expect(await screen.findByText(/Covers 8 of 33 controls in the standard \(24%\)/)).toBeInTheDocument();
+    // Y la cifra de nuestro catálogo sigue ahí, debajo, como detalle.
+    expect(screen.getByText(/94 of 94 controls mapped/)).toBeInTheDocument();
+  });
+
+  it("computes no percentage for a framework whose control count is not verified", async () => {
+    // PCI DSS se cita como "más de 280", "más de 300" y "más de 400"
+    // según quién cuente. Un denominador inventado vuelve ficción todo
+    // porcentaje que lo use, así que sin cifra no se calcula nada.
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+
+    await screen.findByText("CIS Win11");
+    // Sólo SOC 2 lleva cifra verificada en el fixture; CIS y NIST no.
+    expect(screen.queryAllByText(/controls in the standard/)).toHaveLength(1);
   });
 
   it("says nothing about coverage when the backend does not report it", async () => {
