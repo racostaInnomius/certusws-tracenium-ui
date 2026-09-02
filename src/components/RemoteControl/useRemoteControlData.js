@@ -174,25 +174,56 @@ export function useRemoteControlSummary() {
 }
 
 /**
- * Session history.
+ * Session history — one page, filtered server-side.
  *
- * ⚠️ `limit: 50` is not a preference, it is the ceiling of what the endpoint
- * can give: it accepts `limit` (max 200) and `deviceId`, and nothing else —
- * no offset, no status, no date range. Past that the history stops existing
- * for the UI WITHOUT saying so, which is what phase 4 fixes. Until then the
- * table shows `total` next to the row count so the gap is visible rather
- * than hidden.
+ * It used to ask for `limit: 50` and stop there, because that was the whole
+ * of what the endpoint could do: no offset, no status, no date range. Past
+ * the newest 200 rows the history did not exist for this page and nothing
+ * said so.
  */
-export function useRemoteSessions(limit = 50) {
-  const loader = useCallback(async () => {
-    const res = await getRemoteSessions({ limit });
-    return {
-      items: Array.isArray(res?.items) ? res.items : [],
-      total: Number(res?.total ?? 0)
-    };
-  }, [limit]);
+export function useRemoteSessions(filters = {}) {
+  const {
+    page = 1,
+    pageSize = 25,
+    status = null,
+    type = null,
+    operator = "",
+    from = null,
+    to = null,
+    hasRecording = false
+  } = filters;
 
-  const state = useCachedFetch(`remoteControl:sessions:${limit}`, loader);
+  const loader = useCallback(async () => {
+    const res = await getRemoteSessions({
+      page,
+      pageSize,
+      status: status || undefined,
+      type: type || undefined,
+      operator: operator || undefined,
+      from: from || undefined,
+      to: to || undefined,
+      hasRecording: hasRecording ? "true" : undefined
+    });
+    const items = Array.isArray(res?.items) ? res.items : [];
+    return {
+      items,
+      total: Number.isFinite(Number(res?.total)) ? Number(res.total) : items.length
+    };
+  }, [page, pageSize, status, type, operator, from, to, hasRecording]);
+
+  const key = [
+    "remoteControl:sessions",
+    page,
+    pageSize,
+    status ?? "",
+    type ?? "",
+    operator,
+    from ?? "",
+    to ?? "",
+    hasRecording ? 1 : 0
+  ].join(":");
+
+  const state = useCachedFetch(key, loader);
   return {
     ...state,
     sessions: state.data?.items ?? [],
@@ -200,17 +231,20 @@ export function useRemoteSessions(limit = 50) {
   };
 }
 
-/** Tenant-wide file transfer audit log. */
-export function useFileTransfers(limit = 200) {
-  const loader = useCallback(async () => {
-    const res = await getAllFileTransfers({ limit });
-    return {
-      items: Array.isArray(res?.items) ? res.items : [],
-      total: Number(res?.total ?? 0)
-    };
-  }, [limit]);
+/** Tenant-wide file transfer audit log — one page. */
+export function useFileTransfers(filters = {}) {
+  const { page = 1, pageSize = 25 } = filters;
 
-  const state = useCachedFetch(`remoteControl:transfers:${limit}`, loader);
+  const loader = useCallback(async () => {
+    const res = await getAllFileTransfers({ page, pageSize });
+    const items = Array.isArray(res?.items) ? res.items : [];
+    return {
+      items,
+      total: Number.isFinite(Number(res?.total)) ? Number(res.total) : items.length
+    };
+  }, [page, pageSize]);
+
+  const state = useCachedFetch(`remoteControl:transfers:${page}:${pageSize}`, loader);
   return {
     ...state,
     transfers: state.data?.items ?? [],

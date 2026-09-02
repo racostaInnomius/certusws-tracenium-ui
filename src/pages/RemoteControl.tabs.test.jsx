@@ -162,6 +162,61 @@ describe("lazy loading per tab", () => {
   });
 });
 
+describe("the history tabs page and filter server-side", () => {
+  it("⚠️ asks for a PAGE of sessions, not the newest 50 and stop", async () => {
+    // The endpoint used to accept only `limit`, so past the newest 200 rows
+    // the audit trail did not exist for this page — and nothing said so. An
+    // audit trail that silently truncates is worse than a missing one,
+    // because it looks complete.
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /Sessions/ }));
+
+    await waitFor(() => expect(getRemoteSessions).toHaveBeenCalled());
+
+    expect(getRemoteSessions.mock.calls[0][0]).toMatchObject({ page: 1, pageSize: 25 });
+  });
+
+  it("a session filter reaches the query instead of the browser", async () => {
+    getRemoteSessions.mockResolvedValue({ items: [], total: 1240, page: 1, pageSize: 25 });
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /Sessions/ }));
+    await waitFor(() => expect(getRemoteSessions).toHaveBeenCalled());
+
+    fireEvent.mouseDown(screen.getByText("Any status"));
+    fireEvent.click(await screen.findByRole("option", { name: "Failed" }));
+
+    await waitFor(() =>
+      expect(getRemoteSessions.mock.calls.at(-1)[0]).toMatchObject({ status: "failed" })
+    );
+  });
+
+  it("⚠️ the pager reports the server's total, not the rows on screen", async () => {
+    // 25 rows out of 1240. Counting what arrived would say "1–25 of 25" and
+    // hide 1215 sessions behind a pager that looks finished.
+    getRemoteSessions.mockResolvedValue({
+      items: [],
+      total: 1240,
+      page: 1,
+      pageSize: 25
+    });
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /Sessions/ }));
+
+    expect(await screen.findByText(/of 1240 sessions/)).toBeTruthy();
+  });
+
+  it("transfers page too", async () => {
+    getAllFileTransfers.mockResolvedValue({ items: [], total: 300, page: 1, pageSize: 25 });
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /File transfers/ }));
+
+    await waitFor(() =>
+      expect(getAllFileTransfers.mock.calls[0][0]).toMatchObject({ page: 1, pageSize: 25 })
+    );
+    expect(await screen.findByText(/of 300 transfers/)).toBeTruthy();
+  });
+});
+
 describe("the KPI strip", () => {
   it("⚠️ reads the server's three numbers instead of the legacy field", async () => {
     // connectableDevices counts EVERY active enrolment with no capability
