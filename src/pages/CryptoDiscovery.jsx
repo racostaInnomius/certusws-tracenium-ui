@@ -67,7 +67,7 @@ import {
   AgilityBlockersPanel,
   CnsaPanel,
 } from "../components/CryptoDiscovery/PqcReadinessPanels";
-import { BRAND, DATAGRID_SX, ICON, TEXT } from "../theme/brand";
+import { BRAND, DATAGRID_SX, ICON, TEXT, TEXT_MUTED } from "../theme/brand";
 import {
   getCdpSummary,
   getCdpDashboard,
@@ -865,11 +865,29 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
     {
       field: "deviceCount",
       headerName: "Equipos",
-      width: 110,
-      renderCell: (params) =>
-        params.row.novelDeviceCount > 0
-          ? `${params.row.deviceCount} (${params.row.novelDeviceCount} nueva)`
-          : params.row.deviceCount,
+      description:
+        "Equipos que confían en esta CA hoy. Si hay una segunda línea, dice en cuántos de ESOS mismos equipos apareció después de que el equipo ya estuviera inventariado.",
+      width: 130,
+      // ⚠️ El recuento "nuevo" es un SUBCONJUNTO del total, no un
+      // añadido: sale de un FILTER sobre las mismas filas que cuentan el
+      // total, así que nunca puede superarlo (comprobado en los 3
+      // tenants: 0 anclas con nueva > total).
+      //
+      // Se pintaba "11 (1 nueva)", que se lee igual de bien como "11, de
+      // los cuales 1" que como "11 y además 1" — y con la segunda
+      // lectura el número deja de significar nada. Va en dos líneas y
+      // diciendo "de ellos" para que no quepa la duda.
+      renderCell: (params) => (
+        <Box sx={{ lineHeight: 1.25, py: 0.5 }}>
+          <Typography variant="body2">{params.row.deviceCount}</Typography>
+          {params.row.novelDeviceCount > 0 && (
+            <Typography variant="caption" sx={{ color: TEXT_MUTED, display: "block" }}>
+              {params.row.novelDeviceCount} de ellos reciente
+              {params.row.novelDeviceCount > 1 ? "s" : ""}
+            </Typography>
+          )}
+        </Box>
+      ),
     },
     { field: "signatureAlgorithm", headerName: "Firma", width: 170 },
     {
@@ -889,7 +907,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
     },
     {
       field: "distrusted",
-      headerName: "Por que importa",
+      headerName: "Por qué importa",
       flex: 3,
       minWidth: 300,
       renderCell: (params) =>
@@ -898,9 +916,14 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
             {params.row.distrusted}
           </Typography>
         ) : params.row.novelDeviceCount > 0 ? (
-          <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
-            Aparecio en {params.row.novelDeviceCount} de {params.row.deviceCount} equipos despues
-            de que ya estuvieran inventariados
+          // "de los N equipos que ya la tenían" cierra la lectura
+          // aditiva: el subconjunto queda explícito en la propia frase,
+          // no sólo en la columna de al lado.
+          <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
+            Ya estaba en {params.row.deviceCount - params.row.novelDeviceCount} equipo
+            {params.row.deviceCount - params.row.novelDeviceCount === 1 ? "" : "s"} desde su
+            inventariado; en {params.row.novelDeviceCount} de los {params.row.deviceCount} apareció
+            después
           </Typography>
         ) : null,
     },
@@ -916,7 +939,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
       {loadError && <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert>}
 
       <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2, flexWrap: "wrap" }}>
-        <Typography variant="body2" sx={{ color: BRAND.textMuted }}>
+        <Typography variant="body2" sx={{ color: TEXT_MUTED }}>
           {counts.total ?? 0} anclas · <strong>{counts.distrusted ?? 0}</strong> desconfiadas ·{" "}
           {counts.novel ?? 0} aparecidas en una minoria de equipos
         </Typography>

@@ -133,6 +133,71 @@ describe("pestaña Trust anchors", () => {
     );
   });
 
+  // ── La cuenta de equipos ──────────────────────────────────────────
+  //
+  // `novelDeviceCount` es un SUBCONJUNTO de `deviceCount`: sale de un
+  // FILTER sobre las mismas filas. Comprobado en los 3 tenants el
+  // 2026-09-01: cero anclas con nueva > total.
+  //
+  // Se pintaba "11 (1 nueva)", que se lee igual de bien como "11, de los
+  // cuales 1" que como "11 y además 1". Con la segunda lectura el número
+  // deja de significar nada, y un operador no puede saber si la CA está
+  // en 11 equipos o en 12.
+
+  it("⚠️ el recuento reciente se dice como subconjunto, no como suma", async () => {
+    // El caso real que lo destapó: SecureTrust CA en T1.
+    listCdpTrustAnchors.mockResolvedValue({
+      items: [ancla({ subjectCN: "SecureTrust CA", deviceCount: 11, novelDeviceCount: 1 })],
+      counts: { total: 1, distrusted: 0, novel: 1, vendorBundleOnly: 0 }
+    });
+
+    await abrirPestaña();
+
+    await waitFor(() => expect(screen.getByText(/SecureTrust CA/)).toBeTruthy(), { timeout: 4000 });
+
+    // El total sigue siendo scaneable por su cuenta.
+    expect(screen.getByText("11")).toBeTruthy();
+    // Y la parte reciente dice explícitamente que sale de ese total.
+    expect(screen.getByText(/1 de ellos reciente/)).toBeTruthy();
+    // La forma vieja, ambigua, no puede volver.
+    expect(screen.queryByText("11 (1 nueva)")).toBeNull();
+  });
+
+  it("la explicación larga dice las dos mitades y sus totales", async () => {
+    // 11 = 10 que ya la tenían + 1 que la cogió después. Que los dos
+    // sumandos aparezcan es lo que hace imposible la lectura aditiva.
+    listCdpTrustAnchors.mockResolvedValue({
+      items: [ancla({ deviceCount: 11, novelDeviceCount: 1 })],
+      counts: { total: 1, distrusted: 0, novel: 1, vendorBundleOnly: 0 }
+    });
+
+    await abrirPestaña();
+
+    await waitFor(
+      () => expect(screen.getByText(/Ya estaba en 10 equipos desde su inventariado/)).toBeTruthy(),
+      { timeout: 4000 }
+    );
+    expect(screen.getByText(/en 1 de los 11 apareció después/)).toBeTruthy();
+  });
+
+  it("sin recientes no inventa una segunda línea", async () => {
+    // `distrusted` para que la fila pase el filtro "solo hallazgos", que
+    // viene activado: un ancla con 0 recientes y sin motivo NO es un
+    // hallazgo y se esconde — comportamiento correcto que hay que
+    // rodear para poder mirar la celda.
+    listCdpTrustAnchors.mockResolvedValue({
+      items: [
+        ancla({ deviceCount: 18, novelDeviceCount: 0, distrusted: "retirada del programa de raíces" })
+      ],
+      counts: { total: 1, distrusted: 1, novel: 0, vendorBundleOnly: 0 }
+    });
+
+    await abrirPestaña();
+
+    await waitFor(() => expect(screen.getByText("18")).toBeTruthy(), { timeout: 4000 });
+    expect(screen.queryByText(/de ellos reciente/)).toBeNull();
+  });
+
   it("un fallo de carga se dice, no se calla", async () => {
     listCdpTrustAnchors.mockRejectedValue(new Error("backend caído"));
 
