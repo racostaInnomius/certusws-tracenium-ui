@@ -122,6 +122,38 @@ function shortRootLabel(root) {
   return parts.length ? parts[parts.length - 1] : trimmed || "/";
 }
 
+/**
+ * Etiquetas para TODAS las raíces, desambiguando las que colisionan.
+ *
+ * El último componente basta casi siempre, y falla justo donde más molesta:
+ * dos raíces de logs en árboles distintos dan dos chips llamados "logs" y el
+ * operador no sabe cuál abrir. Pasó en campo con
+ * ProgramData\Tracenium\logs y ProgramData\Tracenium\PrivSvc\logs.
+ *
+ * Cuando el nombre corto se repite se antepone el padre —"PrivSvc\logs"—, y
+ * solo en las que repiten: alargar todas por una colisión haría ilegible la
+ * fila entera.
+ */
+export function rootLabels(roots) {
+  const list = Array.isArray(roots) ? roots : [];
+  const counts = new Map();
+  for (const r of list) {
+    const k = shortRootLabel(r).toLowerCase();
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const out = new Map();
+  for (const r of list) {
+    const short = shortRootLabel(r);
+    if ((counts.get(short.toLowerCase()) || 0) < 2) {
+      out.set(r, short);
+      continue;
+    }
+    const parts = String(r).replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean);
+    out.set(r, parts.length >= 2 ? `${parts[parts.length - 2]}\\${short}` : short);
+  }
+  return out;
+}
+
 /** True when `path` sits inside one of the session's roots. Used to stop the
  *  Up button before it walks into a refusal. Case-insensitive because a
  *  Windows agent reports C:\Users while the user may have typed c:\users. */
@@ -268,6 +300,8 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   // back yet (or the agent is too old to answer), `[]` = old agent, treat
   // the filesystem as unconfined the way we always did.
   const [roots, setRoots] = React.useState(null);
+  // Se calcula una vez por cambio de raíces, no una vez por chip.
+  const rootLabelMap = React.useMemo(() => rootLabels(roots), [roots]);
   const rootsRef = React.useRef(null);
   const rootsTimerRef = React.useRef(null);
   // Inline "that location is off limits" notice. Distinct from `errorMsg`,
@@ -1025,7 +1059,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
                   <Tooltip key={r} title={r}>
                     <Chip
                       size="small"
-                      label={shortRootLabel(r)}
+                      label={rootLabelMap.get(r) || shortRootLabel(r)}
                       onClick={() => handleNavigate(r)}
                       variant={isInsideRoots(currentPath, [r]) ? "filled" : "outlined"}
                       sx={{

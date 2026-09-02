@@ -270,7 +270,24 @@ function StatusChip({ state }) {
  */
 export default function ScreenShareViewer({ session, device, onClose }) {
   const [state, setState]         = React.useState(STATE.CONNECTING);
+  // ⚠️ Espejos en refs de `state` y `errorMsg`.
+  //
+  // Los manejadores del WebSocket se registran UNA vez y capturan el valor de
+  // ese momento (CONNECTING, ""). Este fichero ya documenta el mismo problema
+  // para dc.onmessage, pero ws.onclose se quedó leyendo la variable directa:
+  // su guarda `state !== VIEWING && state !== ENDED` era por tanto SIEMPRE
+  // cierta, y el mensaje genérico pisaba cualquier motivo específico que
+  // hubiera llegado por el canal de datos.
+  //
+  // En campo eso se veía así: la persona pulsaba "detener" en su banda, el
+  // agente explicaba por qué, y el operador leía "Connection error: Signaling
+  // WebSocket closed unexpectedly" — un fallo de red donde hubo una decisión.
+  const stateRef                  = React.useRef(STATE.CONNECTING);
+  const errorMsgRef               = React.useRef("");
   const [errorMsg, setErrorMsg]   = React.useState("");
+
+  React.useEffect(() => { stateRef.current = state; }, [state]);
+  React.useEffect(() => { errorMsgRef.current = errorMsg; }, [errorMsg]);
   const [screenInfo, setScreenInfo] = React.useState(null); // { width, height, fps }
   const [liveSize, setLiveSize]   = React.useState(null);   // full desktop { width, height }
   const [liveFps, setLiveFps]     = React.useState(0);
@@ -698,10 +715,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           }
         };
         ws.onclose = () => {
-          if (!destroyed && state !== STATE.VIEWING && state !== STATE.ENDED) {
-            setErrorMsg("Signaling WebSocket closed unexpectedly.");
-            setState(STATE.ERROR);
-          }
+          if (destroyed) return;
+          const now = stateRef.current;
+          if (now === STATE.VIEWING || now === STATE.ENDED) return;
+          // Si ya hay un motivo concreto —lo mandó el agente por el canal de
+          // datos antes de cerrar— NO se pisa. El genérico solo vale cuando
+          // nadie explicó nada.
+          if (errorMsgRef.current) return;
+          setErrorMsg("Signaling WebSocket closed unexpectedly.");
+          setState(STATE.ERROR);
         };
 
         // 6. Generate SDP offer and send to backend.
