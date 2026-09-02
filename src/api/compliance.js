@@ -66,6 +66,13 @@ export async function getCategoryDevices(category) {
 }
 
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
+// Per-control posture for one framework: which controls you meet, which
+// you fail, which nobody could evaluate. The answer to the auditor's
+// question, which everything else on the page inverts.
+export async function getFrameworkControls({ framework, assetGroupId } = {}) {
+  return httpGetJson(`${BASE}/framework-controls${buildQuery({ framework, assetGroupId })}`);
+}
+
 export async function getFrameworkSummary(params = {}) {
   return httpGetJson(`${BASE}/framework-summary${buildQuery(params)}`);
 }

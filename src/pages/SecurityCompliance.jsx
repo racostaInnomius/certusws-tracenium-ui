@@ -33,6 +33,7 @@ import {
   CircularProgress,
   Drawer,
   IconButton,
+  Collapse,
   MenuItem,
   Select,
   Snackbar,
@@ -108,8 +109,10 @@ import MttrCard from "../components/Compliance/MttrCard";
 import ComplianceSettingsPanel from "../components/Compliance/ComplianceSettingsPanel";
 import { CatalogBrowser } from "../components/Compliance/ComplianceCatalogDialog";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ComplianceCategoryBreakdown from "../components/Compliance/ComplianceCategoryBreakdown";
 import WhatToFixFirst from "../components/Compliance/WhatToFixFirst";
+import FrameworkControlsPanel from "../components/Compliance/FrameworkControlsPanel";
 import FirstVisitNote from "../components/Compliance/FirstVisitNote";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { listAssetGroups } from "../api/assetGroups";
@@ -373,6 +376,11 @@ export default function SecurityCompliance({ initialTab }) {
   // efecto volvería a imponer el default en cada recarga de datos, y
   // volver a "All frameworks" a mano sería imposible.
   const [frameworkTouched, setFrameworkTouched] = React.useState(false);
+
+  // Qué framework tiene desplegada su lista de controles. Uno a la vez:
+  // dos paneles abiertos convierten la tabla en un muro y ninguno de los
+  // dos se lee. Se carga bajo demanda — ver FrameworkControlsPanel.
+  const [expandedFramework, setExpandedFramework] = React.useState(null);
 
   // Which control the Catalog tab should land on. Clicking a row in
   // "What to fix first" used to switch tabs and drop the operator at the
@@ -1429,6 +1437,7 @@ export default function SecurityCompliance({ initialTab }) {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell sx={{ width: 34, pr: 0 }} />
                 <TableCell sx={{ fontWeight: 700 }}>Framework</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Devices reporting</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700 }}>Compliant</TableCell>
@@ -1454,16 +1463,19 @@ export default function SecurityCompliance({ initialTab }) {
             <TableBody>
               {frameworkSummary.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ color: BRAND.gray, py: 3 }}>
+                  <TableCell colSpan={7} align="center" sx={{ color: BRAND.gray, py: 3 }}>
                     No devices have reported compliance yet.
                   </TableCell>
                 </TableRow>
               ) : (
                 frameworkSummary.map((f) => (
+                  <React.Fragment key={f.framework}>
                   <TableRow
-                    key={f.framework}
                     hover
-                    sx={{ cursor: "pointer" }}
+                    sx={{
+                      cursor: "pointer",
+                      "& > *": { borderBottom: expandedFramework === f.framework ? "none" : undefined },
+                    }}
                     onClick={() => {
                       setFrameworkTouched(true);
                       setSelectedFramework(f.framework);
@@ -1477,6 +1489,32 @@ export default function SecurityCompliance({ initialTab }) {
                       setSelectedFramework(f.framework);
                     })}
                   >
+                    {/* Desplegar NO es filtrar: la fila filtra la página,
+                        el chevron abre los controles. Sin stopPropagation
+                        una cosa dispararía la otra y el operador no
+                        podría mirar un framework sin adoptarlo. */}
+                    <TableCell sx={{ width: 34, pr: 0 }}>
+                      <Tooltip
+                        title={expandedFramework === f.framework ? "Hide controls" : "Show which controls you meet"}
+                        arrow
+                        placement="right"
+                      >
+                        <IconButton
+                          aria-label={`Show controls for ${frameworkLabels.get(f.framework) || f.framework}`}
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedFramework((prev) => (prev === f.framework ? null : f.framework));
+                          }}
+                        >
+                          {expandedFramework === f.framework ? (
+                            <ExpandLessIcon fontSize="small" />
+                          ) : (
+                            <ExpandMoreIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                     <TableCell>
                       <Stack>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
@@ -1516,6 +1554,22 @@ export default function SecurityCompliance({ initialTab }) {
                       ) : null}
                     </TableCell>
                   </TableRow>
+
+                  {/* La respuesta a "¿qué controles SÍ cumplo?". Sólo se
+                      monta cuando está abierto: monta = fetch, y estos
+                      datos casi nadie los mira en la primera pantalla. */}
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ py: 0, borderBottom: expandedFramework === f.framework ? undefined : "none" }}>
+                      <Collapse in={expandedFramework === f.framework} timeout="auto" unmountOnExit>
+                        <FrameworkControlsPanel
+                          framework={f.framework}
+                          assetGroupId={assetGroupId}
+                          reloadKey={refreshToken}
+                        />
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                  </React.Fragment>
                 ))
               )}
             </TableBody>

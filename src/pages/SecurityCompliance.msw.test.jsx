@@ -457,6 +457,44 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(screen.getByText("92 of 94 controls mapped")).toBeInTheDocument();
   });
 
+  // ── Ver los controles de un framework sin adoptarlo ───────────────
+  // La fila filtra la página entera; el chevron abre sus controles. Sin
+  // stopPropagation una cosa dispara la otra y no se puede echar un
+  // vistazo a un estándar sin cambiar todo lo que hay en pantalla.
+  it("expands a framework's controls without filtering the page by it", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const controlCalls = respond("get", `${BASE}/framework-controls`, {
+      ok: true,
+      framework: "cis_windows_11_v3.0",
+      controls: [
+        {
+          controlId: "18.3.2",
+          controlTitle: "Legacy cryptographic protocols",
+          controlLevel: "L1",
+          checks: [{ checkId: "windows.crypto.legacy_tls_disabled", title: "TLS", severity: "high" }],
+          devicesPassing: 50,
+          devicesFailing: 0,
+          devicesNotAssessed: 0,
+          status: "pass",
+        },
+      ],
+    });
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    // The frameworks section is folded by default when no framework is
+    // active, so open it before reaching for a row inside it.
+    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Show controls for CIS Win11" }));
+
+    expect(await screen.findByText(/1 of 1 controls met/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(controlCalls.some((c) => c.search.framework === "cis_windows_11_v3.0")).toBe(true)
+    );
+    // Looking is not choosing: the page is still on the weighted view.
+    expect(screen.queryByText(/Measured against/)).toBeNull();
+  });
+
   it("says nothing about coverage when the backend does not report it", async () => {
     // An older backend omits the counts; a missing number must not turn
     // into a scary one.
