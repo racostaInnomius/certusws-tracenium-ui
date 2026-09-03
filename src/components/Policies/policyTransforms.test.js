@@ -96,6 +96,53 @@ describe("readFormFromPolicy", () => {
   });
 });
 
+describe("formToPolicy — absent toggles are not 'off'", () => {
+  // 2026-09-03: Agent Settings built its form before the plugin catalog
+  // had loaded (cold cache), so the form had no plugin toggles at all.
+  // Flipping one unrelated switch and saving wrote `plugins: [amp]` and
+  // `modules: {}` for a 54-device tenant. These pin the fix.
+  const stored = {
+    plugins: { enabled: ["amp", "scp", "pmp", "sdp", "cdp", "rcp"] },
+    modules: { patch: true, compliance: true, remoteControl: true },
+    features: { remoteShell: true, deviceInfoWidget: true },
+  };
+
+  it("with no catalog, the stored plugin list and modules survive a save", () => {
+    const form = readFormFromPolicy(stored, []);
+    form.features.deviceInfoWidget = false; // the one edit the operator made
+    const policy = formToPolicy(form, []);
+    expect(policy.plugins.enabled).toEqual(["amp", "scp", "pmp", "sdp", "cdp", "rcp"]);
+    expect(policy.modules).toEqual({ patch: true, compliance: true, remoteControl: true });
+    expect(policy.features.deviceInfoWidget).toBe(false);
+    // remoteShell is gated on modules.remoteControl — which must still be there.
+    expect(policy.features.remoteShell).toBe(true);
+  });
+
+  it("a catalog that arrives after the form was built does not turn unknown toggles off", () => {
+    const form = readFormFromPolicy(stored, []); // toggles: {}
+    const policy = formToPolicy(form, catalog);  // amp/scp/pmp/rcp known; sdp/cdp not
+    expect(policy.plugins.enabled).toEqual(expect.arrayContaining(["amp", "scp", "pmp", "rcp", "sdp", "cdp"]));
+    expect(policy.plugins.enabled).toHaveLength(6);
+    expect(policy.modules).toEqual({ compliance: true, patch: true, remoteControl: true });
+  });
+
+  it("an explicit toggle off still removes the plugin and its module", () => {
+    const form = readFormFromPolicy(stored, catalog);
+    form.plugins.scp = false;
+    const policy = formToPolicy(form, catalog);
+    expect(policy.plugins.enabled).not.toContain("scp");
+    expect(policy.modules.compliance).toBeUndefined();
+    // Plugins the catalog doesn't know are still carried over.
+    expect(policy.plugins.enabled).toEqual(expect.arrayContaining(["sdp", "cdp"]));
+  });
+
+  it("legacy forms without the raw list behave as before", () => {
+    const policy = formToPolicy({ plugins: { amp: true, scp: true }, features: {} }, catalog);
+    expect(policy.plugins.enabled).toEqual(["amp", "scp"]);
+    expect(policy.modules).toEqual({ compliance: true });
+  });
+});
+
 describe("formToPolicy", () => {
   it("derives modules from plugins and gates intervals by module", () => {
     const form = readFormFromPolicy({ plugins: { enabled: ["scp"] } }, catalog);

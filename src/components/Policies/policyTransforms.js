@@ -420,6 +420,19 @@ export function readFormFromPolicy(policy, catalog = []) {
         p.required ? true : enabled.includes(p.key),
       ])
     ),
+    // What the policy ACTUALLY had, independent of the catalog. The
+    // toggles above only exist for plugins the catalog knows about; if
+    // the catalog hadn't loaded yet when the form was built (cold cache,
+    // first visit of a session) they are simply absent — and a save
+    // that only looked at the toggles wrote `plugins: [amp]`. On
+    // 2026-09-03 that turned off scp/pmp/sdp/cdp/rcp for a 54-device
+    // tenant while the operator was flipping one unrelated switch.
+    // formToPolicy falls back to these when a toggle has no answer.
+    pluginsEnabledRaw: enabled.slice(),
+    modulesRaw:
+      policy?.modules && typeof policy.modules === "object" && !Array.isArray(policy.modules)
+        ? { ...policy.modules }
+        : {},
     // Plugin-specific settings live under their own sub-key so adding
     // another plugin's options later (e.g. `patch: {...}`) stays
     // additive without restructuring the form shape.
@@ -524,16 +537,42 @@ export function readFormFromPolicy(policy, catalog = []) {
 }
 
 export function formToPolicy(form, catalog = []) {
-  const pluginsEnabled = catalog
-    .filter((p) => p.required || form.plugins[p.key])
-    .map((p) => p.key);
+  // A toggle answers for its plugin only when it exists and is a boolean.
+  // Anything the catalog can't account for — no catalog yet, or a plugin
+  // the server knows and this build doesn't — keeps whatever the policy
+  // already said. "Absent from the form" must never read as "off": that
+  // is exactly how a one-switch edit erased five plugins (see
+  // readFormFromPolicy). An explicit `false` still removes the plugin.
+  const raw = Array.isArray(form?.pluginsEnabledRaw) ? form.pluginsEnabledRaw : [];
+  const toggles = form?.plugins && typeof form.plugins === "object" ? form.plugins : {};
+  const pluginsEnabled = [];
+  catalog.forEach((p) => {
+    const explicit = toggles[p.key];
+    const on =
+      p.required === true ||
+      (typeof explicit === "boolean" ? explicit : raw.includes(p.key));
+    if (on && !pluginsEnabled.includes(p.key)) pluginsEnabled.push(p.key);
+  });
+  const known = new Set(catalog.map((p) => p.key));
+  raw.forEach((k) => {
+    if (!known.has(k) && !pluginsEnabled.includes(k)) pluginsEnabled.push(k);
+  });
 
   // Derive modules from plugins that imply one (e.g. scp → compliance).
+  // Modules the catalog can't derive (because it doesn't know the plugin
+  // that implies them) are carried over from the policy for the same
+  // reason as above.
   const modules = {};
   catalog.forEach((p) => {
     if (p.impliesModule && pluginsEnabled.includes(p.key)) {
       modules[p.impliesModule] = true;
     }
+  });
+  const derivable = new Set(catalog.map((p) => p.impliesModule).filter(Boolean));
+  const rawModules =
+    form?.modulesRaw && typeof form.modulesRaw === "object" ? form.modulesRaw : {};
+  Object.entries(rawModules).forEach(([m, v]) => {
+    if (v === true && !derivable.has(m) && modules[m] !== true) modules[m] = true;
   });
 
   const policy = {

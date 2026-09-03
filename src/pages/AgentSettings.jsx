@@ -481,7 +481,14 @@ export default function AgentSettings({ embedded = false }) {
     } finally {
       setTenantLoading(false);
     }
-  }, [canManage, tenantId, showSnack]);
+    // `pluginCatalog` is a dependency ON PURPOSE. The form's plugin toggles
+    // are derived from the catalog, and on a cold cache the catalog
+    // arrives after the first load — without this, the form kept the
+    // toggle-less shape it was built with, and a save from it wrote
+    // `plugins: [amp]` (2026-09-03, tenant 111: five plugins gone while
+    // the operator was flipping Device info widget). Re-reading when the
+    // catalog lands costs one extra load on first visit; nothing else.
+  }, [canManage, tenantId, showSnack, pluginCatalog]);
 
   // ── Load device override + effective + status ──────────────────────────
   const loadDevice = React.useCallback(async (deviceId) => {
@@ -526,7 +533,9 @@ export default function AgentSettings({ embedded = false }) {
     } finally {
       setDeviceLoading(false);
     }
-  }, [canManage, showSnack]);
+    // Same reason as loadTenant: the device form is derived from the
+    // catalog too, and must be re-read when the catalog lands.
+  }, [canManage, showSnack, pluginCatalog]);
 
   React.useEffect(() => {
     loadTenant();
@@ -569,6 +578,13 @@ export default function AgentSettings({ embedded = false }) {
     }
     if (tenantJsonError) {
       showSnack("Fix JSON errors before saving", "error");
+      return;
+    }
+    // Belt and braces with formToPolicy's raw-list fallback: with no
+    // catalog the page cannot show what it is about to write for the
+    // plugin block, so it does not write it.
+    if (!Array.isArray(pluginCatalog) || pluginCatalog.length === 0) {
+      showSnack("The plugin catalog has not loaded yet — reload before saving.", "error");
       return;
     }
     try {
