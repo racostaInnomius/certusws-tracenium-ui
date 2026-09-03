@@ -669,30 +669,35 @@ export default function Sidebar({
     tenantMemberIsActive === true &&
     (tenantMemberRole === "OWNER" || tenantMemberRole === "ADMIN");
 
-  // Items render top-to-bottom in the sidebar. The list is split into
-  // two functional groups separated by a divider:
+  // Items render top-to-bottom. Cuatro bloques separados por líneas, de lo
+  // que se mira cada día a lo que se toca de vez en cuando:
   //
-  //   1. Operational pages — what an operator monitors day-to-day
-  //      (fleet state, posture, jobs, alerts).
-  //   2. Administration pages — surfaces a privileged user touches
-  //      occasionally (enrolling new devices, managing certificates,
-  //      tenant settings). Pushing them below the divider keeps the
-  //      ops-focused list short and signals that they're configuration
-  //      surfaces, not daily-driver pages.
+  //   1. Overview — el sitio al que se entra.
+  //   2. PLUGINS, en el orden del ciclo de vida de un equipo: se
+  //      inventaría (AMP), se le instala software (SDP), se mide su
+  //      postura (SCP), se entra a arreglarlo (RCP), se parchea (PMP), se
+  //      audita su criptografía (CDP), y aparte el móvil (MDM/MAM). No es
+  //      alfabético a propósito: el orden cuenta una historia.
+  //   3. TRANSVERSALES — alfabético, porque no hay historia que contar:
+  //      Alerts, Jobs, Reports valen para todos los plugins por igual y
+  //      cualquier otro criterio sería inventado.
+  //   4. ADMINISTRATION — alfabético también, por la misma razón.
   //
   // Items use a tagged-union shape: regular nav items have
   // `{label, key, icon, highlighted?}`; the separator is
-  // `{type: "divider"}`. The render loop in <SidebarContent /> picks
-  // the right component per type. We place the divider only when the
-  // admin group has at least one entry (i.e. when the user is
-  // privileged) so non-privileged users don't see a trailing line
-  // with nothing under it.
+  // `{type: "divider"}` (el `label` es opcional: sin él se pinta sólo la
+  // línea). El render loop en <SidebarContent /> elige por tipo.
   const items = [
     ...(showWelcomeEntry
       ? [{ label: "Welcome", key: "welcome", icon: <RocketLaunchOutlinedIcon />, highlighted: true }]
       : []),
     { label: "Overview", key: "overview", icon: <DashboardOutlinedIcon /> },
+
+    // ── Plugins ────────────────────────────────────────────
+    { type: "divider", key: "divider-plugins" },
     { label: "Asset Management", key: "assets", icon: <ComputerOutlinedIcon /> },
+    // Software Delivery (SDP) — Phase 1.
+    { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
     // Security Compliance hosts the whole loop as tabs since Fase B:
     // Posture (evidence) | Baselines (desired state, privileged) |
     // Catalog (what we evaluate). "Security Baselines" briefly had its
@@ -700,78 +705,80 @@ export default function Sidebar({
     // as a tab the same day — the `security-baselines` key survives in
     // pageRegistry as an alias that opens the tab.
     { label: "Security Compliance", key: "ad", icon: <GppGoodOutlinedIcon /> },
-    // Crypto Discovery (CDP) — cert inventory ON the devices. Sits next
-    // to Security Compliance because both are posture-monitoring
-    // surfaces (distinct from PKI in Administration, which is the
-    // agent's own mTLS identity certs).
-    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon />, badge: "Beta" },
+    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon /> },
     { label: "Patch Management", key: "patch", icon: <SystemUpdateAltOutlinedIcon /> },
-    // Software Delivery (SDP) — Phase 1. Sits next to Patch Management
-    // because they're conceptually adjacent ("the fleet runs these
-    // bits") and admins often jump between them.
-    { label: "Software Delivery", key: "software-delivery", icon: <CloudDownloadOutlinedIcon /> },
-    { label: "Remote Control", key: "remote-control", icon: <DesktopWindowsOutlinedIcon />, badge: "Beta" },
-
-    // Device Management (MDM/MAM) sits with the operational surfaces,
-    // not under Administration: it's a product area in its own right
-    // (first-party MDM lands here), not a configuration knob.
+    // Crypto Discovery (CDP) — cert inventory ON the devices. Distinto de
+    // PKI (Administration), que son los certs de identidad mTLS del propio
+    // agente.
+    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon />, badge: "Beta" },
+    // Device Management (MDM/MAM) es un área de producto por derecho
+    // propio (aquí aterriza el MDM propio), no un ajuste de configuración.
     //
     // ADR-0011 Phase 3: unconditional now — its backend routes
     // (mobile-commands issue, policies domain PATCH for
     // "device-management"/"mdm-*") gate on the "device_management"
     // capability instead of requireRole(OWNER,ADMIN), so hiding this
     // behind isPrivileged would block a custom role explicitly granted
-    // it. Same pattern as Jobs/Audit/PKI/Device Enrollment above.
+    // it. Same pattern as Jobs/Audit/PKI/Device Enrollment below.
     { label: "MDM / MAM", key: "device-management", icon: <PhonelinkSetupOutlinedIcon />, badge: "Beta" },
-    // Jobs — like Alerts/Reports/Remote Control below, always visible
-    // (ADR-0011): the read endpoints (modules/orchestrator/jobs/jobs.routes.ts)
-    // have no role gate at all, any active member can already view
-    // this page. Dispatch/retry/cancel stay admin+capability gated
-    // server-side; a member without the "jobs" capability sees the
-    // page but gets the permission-denied popup on those actions, not
-    // a missing nav entry. Was previously wrapped in isPrivileged
-    // (OWNER/ADMIN only), which also hid it from any custom role
-    // granted "jobs" since isPrivileged only recognizes the 2 built-ins.
-    { label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> },
-    // Audit/PKI/Device Enrollment — ADR-0011 Phase 3: their backend
-    // routes now gate on requireCapability("audit_log"/"pki"/
-    // "enrollment") instead of requireRole(OWNER,ADMIN), so like Jobs
-    // above, hiding them behind isPrivileged would block a custom role
-    // explicitly granted one of these even though the server would let
-    // them in. Unconditional now; a member without the capability sees
-    // the page's own "you don't have permission" message (or the
-    // permission-denied popup on the underlying API calls) instead of a
-    // missing nav entry.
-    { label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> },
-    { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
-    { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
+
+    // ── Transversales ──────────────────────────────────────
+    { type: "divider", key: "divider-cross" },
     { label: "Alerts", key: "alerts", icon: <NotificationsOutlinedIcon /> },
+    // Jobs — always visible (ADR-0011): the read endpoints
+    // (modules/orchestrator/jobs/jobs.routes.ts) have no role gate at all,
+    // any active member can already view this page. Dispatch/retry/cancel
+    // stay admin+capability gated server-side; a member without the "jobs"
+    // capability sees the page but gets the permission-denied popup on
+    // those actions, not a missing nav entry. Was previously wrapped in
+    // isPrivileged (OWNER/ADMIN only), which also hid it from any custom
+    // role granted "jobs" since isPrivileged only recognizes the 2
+    // built-ins.
+    { label: "Jobs", key: "jobs", icon: <AssignmentOutlinedIcon /> },
     // ADR-0008 F1a — always visible for any active member; the catalog
     // itself is gated server-side per report type (GET /reports/types),
     // not by hiding this entry.
     { label: "Reports", key: "reports", icon: <SummarizeOutlinedIcon /> },
 
     // ── Administration group ───────────────────────────────
-    // Still OWNER/ADMIN-only: Billing/Settings' backend routes are NOT
-    // capability-wired yet (still plain requireRole) — see ADR-0011
-    // Phase 3's remaining scope. Plugin Control used to live here — it
-    // was retired once entitlements made manual per-plugin toggling
-    // obsolete; what's included/active now lives in Billing instead.
+    //
+    // ⚠️ EL GRUPO NO ES "SÓLO ADMINS", aunque el nombre lo sugiera. Estar
+    // bajo esta línea es una afirmación sobre la FRECUENCIA de uso —
+    // configuración, no trabajo diario— no sobre el permiso.
+    //
+    // Audit / PKI / Device Enrollment se muestran SIEMPRE, y no es un
+    // descuido: sus rutas de backend gatean con
+    // requireCapability("audit_log"/"pki"/"enrollment") desde ADR-0011
+    // Phase 3, no con requireRole(OWNER,ADMIN). Meterlas dentro de
+    // `isPrivileged` las escondería a un rol personalizado que TIENE la
+    // capacidad concedida y al que el servidor sí dejaría entrar —
+    // exactamente la regresión que esa fase vino a arreglar. Quien no
+    // tenga la capacidad ve el mensaje de la propia página, no un menú
+    // incompleto.
+    //
+    // Billing y Settings sí siguen siendo OWNER/ADMIN porque su backend
+    // NO está cableado a capacidades todavía (sigue en requireRole) — es
+    // el resto del alcance de ADR-0011 Phase 3. El día que se cablee,
+    // salen del condicional como salieron éstas.
+    //
+    // Plugin Control vivía aquí; se retiró cuando los derechos hicieron
+    // obsoleto el toggle manual por plugin — lo incluido y activo se ve
+    // ahora en Billing.
+    { type: "divider", key: "divider-admin", label: "Administration" },
+    { label: "Audit", key: "audit", icon: <FactCheckOutlinedIcon /> },
+    // Billing — sólo OWNER, en espejo del requireRole("OWNER") del
+    // backend. Un ADMIN que la viera recibiría 403 al abrirla.
+    ...(isPrivileged && tenantMemberRole === "OWNER"
+      ? [{ label: "Billing", key: "billing", icon: <CreditCardOutlinedIcon /> }]
+      : []),
+    { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
+    { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
+    // Agent Settings NO es una entrada aparte: es la segunda división
+    // dentro de Settings (?settingsTab=agent). Las dos son configuración
+    // del tenant, y separarlas obligaba al operador a saber que la cadencia
+    // de plugins vivía en otro sitio que el resto de su configuración.
     ...(isPrivileged
-      ? [
-          { type: "divider", key: "divider-admin", label: "Administration" },
-          // Agent Settings is NOT a separate entry: it's the second
-          // division inside Settings (?settingsTab=agent). Both are
-          // tenant-scoped configuration, and splitting them meant
-          // operators had to know that plugin cadence lived somewhere
-          // other than the rest of the tenant's setup.
-          // Billing — sólo OWNER, en espejo del requireRole("OWNER") del
-          // backend. Un ADMIN que la viera recibiría 403 al abrirla.
-          ...(tenantMemberRole === "OWNER"
-            ? [{ label: "Billing", key: "billing", icon: <CreditCardOutlinedIcon /> }]
-            : []),
-          { label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> },
-        ]
+      ? [{ label: "Settings", key: "configurations", icon: <SettingsOutlinedIcon /> }]
       : []),
   ];
 
