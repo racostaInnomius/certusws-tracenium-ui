@@ -18,7 +18,8 @@
 // What we render:
 //   - xterm.js terminal (same theme as the live ShellTerminal so
 //     replay looks identical to operating);
-//   - playback controls: play/pause, 1x/2x/4x speed, seek to start;
+//   - playback controls: play/pause, 1x/2x/4x/8x speed (4x by default —
+//     see DEFAULT_SPEED), seek to start;
 //   - progress bar showing position in the timeline;
 //   - session metadata strip (operator, device, duration, close
 //     reason).
@@ -60,6 +61,21 @@ import { httpGetJson } from "../../api/http";
 
 const SPEEDS = [1, 2, 4, 8];
 
+/**
+ * Where the player starts.
+ *
+ * 4x, not 1x. A shell transcript replays in real time by default, and real
+ * time for a support session is minutes of somebody typing, thinking and
+ * reading output — watched back, it is mostly waiting. The transcript is
+ * already coarse anyway: the agent coalesces output into ~5-second flush
+ * windows, so sub-second fidelity does not survive capture and 1x is
+ * reproducing a precision the data does not have.
+ *
+ * 1x stays one click away for the moment it matters — establishing that two
+ * commands really were seconds apart.
+ */
+const DEFAULT_SPEED = 4;
+
 // Reparto de la escritura progresiva. MAX_SMOOTH_MS evita que un hueco largo
 // entre chunks convierta una linea en un goteo eterno; MIN_SLICE_MS mantiene
 // los trozos por encima del ruido del temporizador del navegador.
@@ -84,7 +100,7 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
   const [playing, setPlaying] = React.useState(false);
   const [cursor, setCursor] = React.useState(0);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
-  const [speed, setSpeed] = React.useState(1);
+  const [speed, setSpeed] = React.useState(DEFAULT_SPEED);
 
   // ── Fetch transcript on open ─────────────────────────────────────
   React.useEffect(() => {
