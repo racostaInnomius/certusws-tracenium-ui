@@ -7,7 +7,7 @@
 // The parent passes `transfers` fetched from GET /file-transfers
 // (getAllFileTransfers); this component never fetches independently.
 //
-// Columns: Started · Filename · Direction · Remote path · Size · Status · Session
+// Columns: Started · Device · Filename · Direction · Remote path · Size · Status · Session
 
 import * as React from "react";
 import {
@@ -149,6 +149,12 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Started</TableCell>
+              {/* The question this table exists to answer is "which file went
+                  where" — and it used to answer only the first half. A
+                  transfer hangs off its session, so the device is a join
+                  away; without it the log reads as filenames with no
+                  subject. */}
+              <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Device</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Filename</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Direction</TableCell>
               <TableCell sx={{ fontWeight: 700, fontSize: TEXT.sm }}>Remote path</TableCell>
@@ -170,7 +176,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           <TableBody>
             {visible.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} sx={{ py: 5, border: "none" }}>
+                <TableCell colSpan={8} sx={{ py: 5, border: "none" }}>
                   <Stack
                     alignItems="center"
                     spacing={1}
@@ -216,6 +222,26 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
                             minute: "2-digit"
                           })
                         : "—"}
+                    </TableCell>
+
+                    {/* Device — hostname when the inventory knows it, the id
+                        otherwise. Never blank: "which machine" is the point. */}
+                    <TableCell sx={{ fontSize: TEXT.sm, maxWidth: 170 }}>
+                      <Tooltip title={t.deviceId || ""} placement="top">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: "block",
+                            color: BRAND.dark,
+                            fontWeight: 600,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                          }}
+                        >
+                          {t.hostname || t.deviceId || "—"}
+                        </Typography>
+                      </Tooltip>
                     </TableCell>
 
                     {/* Filename */}

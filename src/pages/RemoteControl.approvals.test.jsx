@@ -150,11 +150,43 @@ describe("AccessPolicyMatrix", () => {
     }
   ];
 
+  /** The panel ships collapsed — open it before asserting on its rows. */
+  async function expand() {
+    fireEvent.click(await screen.findByRole("button", { name: /Expand access policy/ }));
+  }
+
+  it("⚠️ ships collapsed, so a visit cannot toggle a gate by accident", async () => {
+    // The tab is opened to READ the access record. Leaving a row of one-click
+    // toggles under the cursor — each of which changes who can reach a
+    // machine without a second person agreeing, saved on the first click and
+    // with no confirmation — made every read a chance to write.
+    getAccessPolicy.mockResolvedValue({ items: matrix });
+    render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
+
+    await screen.findByRole("button", { name: /Expand access policy/ });
+    expect(screen.queryByRole("button", { name: /No approval/ })).toBeNull();
+  });
+
+  it("still says how many gates are on while collapsed", async () => {
+    // Collapsing is about preventing accidental edits, not about hiding the
+    // state — an administrator has to be able to see it without opening.
+    getAccessPolicy.mockResolvedValue({
+      items: [
+        { capability: "rcp.shell", deviceClass: "server", requiresApproval: true, jitMinutes: 60 },
+        { capability: "rcp.shell", deviceClass: "endpoint", requiresApproval: false, jitMinutes: 60 }
+      ]
+    });
+    render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
+
+    expect(await screen.findByText("1 of 2 require approval")).toBeTruthy();
+  });
+
   it("⚠️ shows only the capabilities of the plugin that hosts it", async () => {
     // The bug this closes: cdp.anchor.distrust and cdp.cert.install rendered
     // under Remote Control, where they read as somebody else's settings.
     getAccessPolicy.mockResolvedValue({ items: matrix });
     render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
+    await expand();
 
     await screen.findByText("rcp.shell");
     expect(screen.queryByText("cdp.anchor.distrust")).toBeNull();
@@ -164,6 +196,7 @@ describe("AccessPolicyMatrix", () => {
   it("and the CDP host gets the other half of the same response", async () => {
     getAccessPolicy.mockResolvedValue({ items: matrix });
     render(<AccessPolicyMatrix prefix="cdp." title="Policy" description="" notify={vi.fn()} />);
+    await expand();
 
     await screen.findByText("cdp.anchor.distrust");
     expect(screen.queryByText("rcp.shell")).toBeNull();
@@ -174,6 +207,7 @@ describe("AccessPolicyMatrix", () => {
     // whoever reads it looking in the wrong place.
     getAccessPolicy.mockResolvedValue({ items: matrix });
     render(<AccessPolicyMatrix prefix="sdp." title="Policy" description="" notify={vi.fn()} />);
+    await expand();
 
     expect(await screen.findByText(/No capability of this plugin/)).toBeTruthy();
   });
@@ -184,6 +218,7 @@ describe("AccessPolicyMatrix", () => {
     // administrator had just switched on.
     getAccessPolicy.mockResolvedValue({ items: matrix });
     render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
+    await expand();
 
     const buttons = await screen.findAllByRole("button", { name: /No approval/ });
     fireEvent.click(buttons[0]);
@@ -203,6 +238,7 @@ describe("AccessPolicyMatrix", () => {
     // wouldn't know whether it's a failure or there is simply nothing.
     getAccessPolicy.mockResolvedValue({ items: [] });
     render(<AccessPolicyMatrix prefix="rcp." title="Policy" description="" notify={vi.fn()} />);
+    await expand();
     expect(await screen.findByText(/No policy loaded/)).toBeTruthy();
   });
 });

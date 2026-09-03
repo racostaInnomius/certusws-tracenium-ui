@@ -208,6 +208,67 @@ describe("the history tabs page and filter server-side", () => {
     expect(await screen.findByText(/of 1240 sessions/)).toBeTruthy();
   });
 
+  it("⚠️ the transfer log names the machine, not just the file", async () => {
+    // "agent.log was downloaded" is not an audit record; "agent.log was
+    // downloaded from SRV-DC01" is. A transfer hangs off its session, so the
+    // device was a join away and the table simply never asked for it.
+    getAllFileTransfers.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          transferId: "x-1",
+          sessionId: "sess-1",
+          direction: "download",
+          remotePath: "C:\\temp\\agent.log",
+          filename: "agent.log",
+          sizeBytes: 2048,
+          transferredBytes: 2048,
+          status: "completed",
+          startedAt: "2026-09-01T10:00:00Z",
+          endedAt: "2026-09-01T10:00:05Z",
+          deviceId: "dev-1",
+          hostname: "SRV-DC01"
+        }
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 25
+    });
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /File transfers/ }));
+
+    expect(await screen.findByText("SRV-DC01")).toBeTruthy();
+  });
+
+  it("falls back to the identifier for a device with no inventory", async () => {
+    getAllFileTransfers.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          transferId: "x-1",
+          sessionId: "sess-1",
+          direction: "upload",
+          remotePath: "/tmp/fix.sh",
+          filename: "fix.sh",
+          sizeBytes: 100,
+          transferredBytes: 100,
+          status: "completed",
+          startedAt: "2026-09-01T10:00:00Z",
+          endedAt: null,
+          deviceId: "dev-never-reported",
+          hostname: null
+        }
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 25
+    });
+    render(<RemoteControl />);
+    fireEvent.click(screen.getByRole("tab", { name: /File transfers/ }));
+
+    expect(await screen.findByText("dev-never-reported")).toBeTruthy();
+  });
+
   it("transfers page too", async () => {
     getAllFileTransfers.mockResolvedValue({ items: [], total: 300, page: 1, pageSize: 25 });
     render(<RemoteControl />);

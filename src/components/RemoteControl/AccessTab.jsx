@@ -28,6 +28,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Tooltip,
   Typography
 } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -120,8 +121,13 @@ function AccessLog() {
                   </TableCell>
                   <TableCell>{it.operatorUserId || "—"}</TableCell>
                   <TableCell>{it.capability || "—"}</TableCell>
+                  {/* Hostname, with the id behind the tooltip. This log is
+                      read by a person auditing who went where; a column of
+                      UUIDs answers "which row" and not "which machine". */}
                   <TableCell sx={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {it.deviceId || "—"}
+                    <Tooltip title={it.deviceId || ""} placement="top">
+                      <span>{it.hostname || it.deviceId || "—"}</span>
+                    </Tooltip>
                   </TableCell>
                   <TableCell sx={{ maxWidth: 280 }}>{it.reason || "—"}</TableCell>
                   <TableCell>{it.ticketRef || "—"}</TableCell>
