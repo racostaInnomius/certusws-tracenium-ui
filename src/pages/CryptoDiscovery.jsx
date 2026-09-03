@@ -61,6 +61,7 @@ import {
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
+import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import {
   PqcHorizonPanel,
   PqcFamilyPanel,
@@ -1218,6 +1219,12 @@ export default function CryptoDiscovery() {
         <Tab label="Certificates" />
         <Tab label="Devices" />
         <Tab label="Trust anchors" />
+        {/*
+          ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
+          una huérfana es un ítem del inventario, y el punto de la
+          decisión es que se mire, no que esté.
+        */}
+        <Tab label="Claves huérfanas" />
         {/* ADR-0009 phase 2 keeps ONE approval matrix for every privileged
             capability, so cdp.cert.install and cdp.anchor.distrust used to be
             rendered inside Remote Control alongside rcp.* — somebody else's
@@ -1243,6 +1250,9 @@ export default function CryptoDiscovery() {
       </TabPanel>
       <TabPanel value={tab} index={4}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={5}>
+        <OrphanKeysPanel refreshNonce={refreshNonce} />
       </TabPanel>
       <TabPanel value={tab} index={5}>
         <AccessPolicyMatrix

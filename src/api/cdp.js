@@ -126,3 +126,32 @@ export async function installCdpCert({
     ignoreWindow
   });
 }
+
+/**
+ * ADR-0011 decisión 9.d — claves huérfanas.
+ *
+ * Una clave privada creada para un CSR a la que nunca llegó su
+ * certificado: utilidad cero y responsabilidad no-cero. La decisión
+ * exige que sean un ítem del inventario y no un barrido que nadie mira,
+ * porque en este producto ya hubo un `purge_after` que se escribía y no
+ * barría nadie.
+ */
+export async function listOrphanKeys() {
+  return httpGetJson(`${BASE}/keys/orphans`);
+}
+
+/** Pide a un equipo que reporte su almacén. Lectura: sin expediente. */
+export async function refreshEndpointKeys(deviceId) {
+  return httpPostJson(`${BASE}/keys/refresh`, { deviceId });
+}
+
+/**
+ * Destruye una clave huérfana en el equipo.
+ *
+ * ⚠️ Lleva expediente: es irreversible y no hay «deshacer». Si el
+ * certificado llegó entre la lista y esta llamada, se pierde uno ya
+ * emitido.
+ */
+export async function destroyEndpointKey({ deviceId, keyId, reason, ticketRef }) {
+  return httpPostJson(`${BASE}/keys/destroy`, { deviceId, keyId, reason, ticketRef });
+}
