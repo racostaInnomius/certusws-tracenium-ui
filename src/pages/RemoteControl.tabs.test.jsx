@@ -550,6 +550,61 @@ describe("the device table", () => {
     await waitFor(() => expect(getConnectableDevices.mock.calls.at(-1)[0].page).toBe(1));
   });
 
+  it("⚠️ drops the 'Can do' column that repeated the action buttons", async () => {
+    // It listed the same three capability names the buttons spell out one
+    // column over. A disabled button already IS the statement, and its
+    // tooltip carries the reason.
+    render(<RemoteControl />);
+    await screen.findByText("SRV-DC01");
+
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers).not.toContain("Can do");
+    expect(headers).toContain("Last seen");
+  });
+
+  it("shows status as the shared LED, not a row of pills", async () => {
+    render(<RemoteControl />);
+    await screen.findByText("SRV-DC01");
+
+    // OnlineDot labels itself; the old chip rendered the literal text.
+    expect(screen.getAllByLabelText("Online").length).toBeGreaterThan(0);
+  });
+
+  it("⚠️ an offline row says WHEN the device was last really here", async () => {
+    // The dot raises the question and could not answer it. The value comes
+    // from device_enrollments.last_seen_at — the heartbeat is overwritten by
+    // background sweeps and would report "seconds ago" for a machine silent
+    // for days.
+    getConnectableDevices.mockResolvedValue({
+      items: [
+        {
+          ...DEVICES[2],
+          lastSeenAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+        }
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 25
+    });
+    render(<RemoteControl />);
+
+    expect(await screen.findByText("3h ago")).toBeTruthy();
+  });
+
+  it("says so plainly for a device that was never seen", async () => {
+    getConnectableDevices.mockResolvedValue({
+      items: [{ ...DEVICES[0], lastSeenAt: null }],
+      total: 1,
+      page: 1,
+      pageSize: 25
+    });
+    render(<RemoteControl />);
+    await screen.findByText("SRV-DC01");
+
+    // The dash, not a fabricated timestamp.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
   it("names the actions instead of showing three bare icons", async () => {
     render(<RemoteControl />);
     await screen.findByText("SRV-DC01");

@@ -12,8 +12,16 @@
 //
 // ── What the columns say ─────────────────────────────────────────────
 //
-//   · no "Plugin" column: it repeated what "Can do" and the buttons already
-//     say — three ways of telling the same thing in one row;
+//   · no "Plugin" column and no "Can do" column. Both said what the action
+//     buttons say one column over — and "Can do" said it with the SAME three
+//     names. A row does not need to list its capabilities next to the
+//     buttons for those capabilities: a disabled button is already the
+//     statement, and its tooltip carries the reason;
+//   · "Last seen" took that space, because it is the question an offline dot
+//     raises and nothing on the row could answer;
+//   · status is the shared OnlineDot — the same green LED Asset Management
+//     uses. A row of pills reading "Online / Online / Offline" is louder
+//     than the information in it;
 //   · under the hostname goes what lets you RECOGNISE a machine — group,
 //     site, agent version — and the deviceId moves to the tooltip with
 //     copy-to-clipboard;
@@ -40,31 +48,10 @@ import {
   Typography
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
-import {
-  RCP_METHODS,
-  blockedReason,
-  canStart,
-  deviceSupports,
-  platformLabel
-} from "./rcpMethods";
-
-function StatusChip({ online }) {
-  return (
-    <Chip
-      size="small"
-      label={online ? "Online" : "Offline"}
-      sx={{
-        height: 20,
-        fontWeight: 700,
-        fontSize: TEXT.xs,
-        bgcolor: online ? ROLE.positiveSoft : BRAND.surfaceMuted,
-        color: online ? ROLE.positive : BRAND.gray,
-        border: `1px solid ${online ? ROLE.positive : BRAND.gray}33`
-      }}
-    />
-  );
-}
+import { BRAND, TEXT } from "../../theme/brand";
+import OnlineDot from "../common/OnlineDot";
+import { formatRelative } from "../../utils/format";
+import { RCP_METHODS, blockedReason, canStart, platformLabel } from "./rcpMethods";
 
 /** Filter chip. Lit = the filter is applied. */
 function FilterChip({ label, on, onClick }) {
@@ -81,37 +68,6 @@ function FilterChip({ label, on, onClick }) {
         color: on ? BRAND.tealText : BRAND.textMuted
       }}
     />
-  );
-}
-
-/** What this device can serve, as readable labels. */
-function CanDoCell({ device }) {
-  const usable = RCP_METHODS.filter((m) => deviceSupports(device, m.type));
-  if (usable.length === 0) {
-    return (
-      <Typography variant="caption" sx={{ color: BRAND.gray }}>
-        —
-      </Typography>
-    );
-  }
-  return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
-      {usable.map((m) => (
-        <Chip
-          key={m.type}
-          size="small"
-          label={m.action}
-          sx={{
-            height: 20,
-            fontWeight: 700,
-            fontSize: TEXT.xs,
-            bgcolor: BRAND.tealSoft,
-            color: BRAND.tealText,
-            border: `1px solid ${BRAND.teal}33`
-          }}
-        />
-      ))}
-    </Stack>
   );
 }
 
@@ -306,7 +262,12 @@ export default function ConnectablesTable({
               <TableCell sx={{ fontWeight: 700 }}>Device</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Platform</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Can do</TableCell>
+              {/* Replaces "Can do", which listed the same three capabilities
+                  the action buttons already spell out one column over. What
+                  the row was missing is WHEN this machine was last really
+                  here — the question an offline dot raises and could not
+                  answer. */}
+              <TableCell sx={{ fontWeight: 700 }}>Last seen</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700 }}>
                 Actions
               </TableCell>
@@ -335,10 +296,19 @@ export default function ConnectablesTable({
                   </TableCell>
                   <TableCell>{platformLabel(d.platform)}</TableCell>
                   <TableCell>
-                    <StatusChip online={d.online} />
+                    <OnlineDot
+                      online={d.online}
+                      title={
+                        d.online
+                          ? "Online"
+                          : d.lastSeenAt
+                            ? `Offline — last seen ${formatRelative(d.lastSeenAt)}`
+                            : "Offline — never seen"
+                      }
+                    />
                   </TableCell>
-                  <TableCell>
-                    <CanDoCell device={d} />
+                  <TableCell sx={{ color: BRAND.gray, whiteSpace: "nowrap" }}>
+                    {d.lastSeenAt ? formatRelative(d.lastSeenAt) : "—"}
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={0.5} justifyContent="flex-end">
