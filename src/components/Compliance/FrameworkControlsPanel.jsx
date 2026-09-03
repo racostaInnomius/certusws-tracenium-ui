@@ -56,6 +56,16 @@ const STATUS_META = {
     bg: BRAND.darkSoft,
     help: "No device reported the evidence this control needs, so it is neither met nor failed. The reason is shown under the control — usually the agent is not sending that value.",
   },
+  // ⚠️ Distinto de "Not assessed", y la diferencia importa: aquél es un
+  // control que SÍ medimos y no pudimos juzgar (falta el DATO); éste ni
+  // siquiera lo miramos (falta el TRABAJO). Mezclarlos volvería a dejar
+  // al cliente sin saber cuánto del estándar cubrimos de verdad.
+  no_evidence: {
+    label: "Not covered",
+    fg: BRAND.gray,
+    bg: "transparent",
+    help: "Tracenium does not collect evidence for this control yet. It is part of the standard and counts against coverage — it is not a finding about your devices.",
+  },
 };
 
 function StatusChip({ status }) {
@@ -110,12 +120,21 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
   }, [framework, assetGroupId, reloadKey]);
 
   const summary = React.useMemo(() => {
-    const c = { pass: 0, fail: 0, not_assessed: 0 };
+    const c = { pass: 0, fail: 0, not_assessed: 0, no_evidence: 0, automatable_gap: 0 };
     for (const row of state.controls) {
       if (c[row.status] !== undefined) c[row.status] += 1;
+      // De lo no cubierto, cuánto PODRÍA cubrirse. Un control manual no
+      // lo cierra ningún agente; el resto es evidencia que aún no
+      // recogemos, y ésa es la cifra sobre la que se puede trabajar.
+      if (row.status === "no_evidence" && row.automated !== false) c.automatable_gap += 1;
     }
     return c;
   }, [state.controls]);
+
+  const covered = state.controls.length - summary.no_evidence;
+  const coveragePct = state.controls.length
+    ? Math.round((covered / state.controls.length) * 100)
+    : 0;
 
   if (state.loading) {
     return (
@@ -145,8 +164,24 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
     <Box sx={{ py: 1.5 }}>
       {/* El titular del panel es la frase que el auditor quiere oír, y
           va antes de la tabla para que no haya que contarla a ojo. */}
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700, mb: 1 }}>
-        {summary.pass} of {state.controls.length} controls met
+      {/* Dos frases, y en este orden a propósito.
+          La primera es la que un cliente necesita antes de firmar:
+          cuánto del estándar somos capaces de mirar siquiera. La segunda
+          es el veredicto sobre esa parte. Enseñar sólo la segunda es lo
+          que hacía que un 80% se leyera como "80% de CIS" cuando era el
+          80% de un 2%. */}
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700 }}>
+        Tracenium covers {covered} of {state.controls.length} controls in this standard ({coveragePct}%)
+      </Typography>
+      {summary.no_evidence > 0 ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1 }}>
+          {summary.automatable_gap} of the {summary.no_evidence} uncovered controls are machine-checkable —
+          evidence we do not collect yet. The rest need human review and no agent can close them.
+        </Typography>
+      ) : null}
+
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700, mb: 1, mt: 1 }}>
+        Of those {covered}: {summary.pass} met
         <Box component="span" sx={{ fontWeight: 400, color: BRAND.gray }}>
           {summary.fail > 0 ? ` · ${summary.fail} not met` : ""}
           {summary.not_assessed > 0 ? ` · ${summary.not_assessed} not assessed` : ""}
@@ -165,7 +200,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
         </TableHead>
         <TableBody>
           {state.controls.map((row) => (
-            <TableRow key={row.controlId} hover>
+            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" ? { opacity: 0.55 } : undefined}>
               <TableCell>
                 <Stack spacing={0.25}>
                   <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
@@ -191,9 +226,17 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
                   {/* Qué evidencia sostiene el veredicto. Sin esto el
                       operador no puede discutir un "Not met" ni el
                       auditor comprobarlo. */}
-                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
-                    {row.checks.map((c) => c.checkId).join(" · ")}
-                  </Typography>
+                  {row.checks.length ? (
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
+                      {row.checks.map((c) => c.checkId).join(" · ")}
+                    </Typography>
+                  ) : (
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>
+                      {row.automated === false
+                        ? "manual review — no agent can check this"
+                        : "no check collects this yet"}
+                    </Typography>
+                  )}
                   {/* Por qué no se pudo evaluar. Sin esto "Not assessed"
                       se lee como un veredicto que Tracenium eligió, y es
                       lo contrario: evidencia que nunca llegó. El motivo

@@ -498,7 +498,10 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Show controls for CIS Win11" }));
 
-    expect(await screen.findByText(/1 of 1 controls met/)).toBeInTheDocument();
+    // El panel encabeza ahora con la cobertura contra el estándar, no
+    // con el veredicto: sin ella, un "1 de 1 cumplido" se lee como si
+    // cubriéramos el benchmark entero.
+    expect(await screen.findByText(/covers 1 of 1 controls in this standard/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(controlCalls.some((c) => c.search.framework === "cis_windows_11_v3.0")).toBe(true)
     );

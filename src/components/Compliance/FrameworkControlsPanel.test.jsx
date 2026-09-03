@@ -64,14 +64,63 @@ const CONTROLS = [
 const ok = (controls) => ({ ok: true, framework: "cis_windows_11_v3.0", controls });
 
 describe("FrameworkControlsPanel", () => {
-  it("leads with how many controls are met", async () => {
+  it("leads with how much of the standard we cover, then the verdict", async () => {
+    // "Tracenium sólo te dice que cubres el 20% de un 10% del CIS." Las
+    // dos frases van en este orden a propósito: la cobertura primero,
+    // porque sin ella el veredicto se lee como si fuera sobre el total.
     getFrameworkControls.mockResolvedValue(ok(CONTROLS));
     render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
 
-    // The sentence the auditor came for, before the table.
-    expect(await screen.findByText(/1 of 3 controls met/)).toBeInTheDocument();
+    expect(await screen.findByText(/covers 3 of 3 controls in this standard \(100%\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Of those 3: 1 met/)).toBeInTheDocument();
     expect(screen.getByText(/1 not met/)).toBeInTheDocument();
     expect(screen.getByText(/1 not assessed/)).toBeInTheDocument();
+  });
+
+  it("cuenta los controles del estándar que no cubrimos", async () => {
+    const conHueco = [
+      ...CONTROLS,
+      { controlId: "1.1.1", controlTitle: "Enforce password history", controlLevel: null,
+        checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0,
+        automated: true, status: "no_evidence" },
+      { controlId: "1.1.9", controlTitle: "Review approved software", controlLevel: null,
+        checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0,
+        automated: false, status: "no_evidence" },
+    ];
+    getFrameworkControls.mockResolvedValue(ok(conHueco));
+    render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
+
+    expect(await screen.findByText(/covers 3 of 5 controls in this standard \(60%\)/i)).toBeInTheDocument();
+    // De los 2 sin cubrir, sólo 1 es alcanzable por un agente.
+    expect(screen.getByText(/1 of the 2 uncovered controls are machine-checkable/)).toBeInTheDocument();
+  });
+
+  it("distingue 'no cubierto' de 'no evaluado'", async () => {
+    // not_assessed: lo medimos y no pudimos juzgarlo — falta el DATO.
+    // no_evidence:  ni lo miramos — falta el TRABAJO.
+    const conHueco = [...CONTROLS,
+      { controlId: "1.1.1", controlTitle: "Enforce password history", controlLevel: null,
+        checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0,
+        automated: true, status: "no_evidence" }];
+    getFrameworkControls.mockResolvedValue(ok(conHueco));
+    render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
+
+    const sinCubrir = (await screen.findByText("1.1.1")).closest("tr");
+    expect(within(sinCubrir).getByText("Not covered")).toBeInTheDocument();
+    expect(within(sinCubrir).getByText(/no check collects this yet/)).toBeInTheDocument();
+
+    const sinEvaluar = screen.getByText("19.1.3.3").closest("tr");
+    expect(within(sinEvaluar).getByText("Not assessed")).toBeInTheDocument();
+  });
+
+  it("dice cuándo un control no lo puede cerrar ningún agente", async () => {
+    const manual = [{ controlId: "1.1.9", controlTitle: "Review approved software",
+      controlLevel: null, checks: [], devicesPassing: 0, devicesFailing: 0,
+      devicesNotAssessed: 0, automated: false, status: "no_evidence" }];
+    getFrameworkControls.mockResolvedValue(ok(manual));
+    render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
+
+    expect(await screen.findByText(/manual review — no agent can check this/)).toBeInTheDocument();
   });
 
   it("renders each control with its verdict and device counts", async () => {
