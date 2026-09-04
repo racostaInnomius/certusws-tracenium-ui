@@ -19,6 +19,7 @@
 //         { op: "listing",  path, entries: [{name, isDir, size, modifiedAt}] }
 //         { op: "chunk",    transferId, seq, data, done? }  // base64
 //         { op: "ready",    transferId }  // agent ready to receive upload
+//         { op: "uploadComplete", transferId, bytes, sha256 } // it is on disk
 //         { op: "error",    code, message, transferId? }
 //
 //   The agent also fires RemoteFileTransferAudit gRPC events at
@@ -665,6 +666,34 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         startUploadChunks(tid, upload.file);
         break;
       }
+      // ⚠️ The agent, not the browser, decides an upload is finished.
+      //
+      // This panel used to flip the row to "Completed" as soon as it had
+      // handed its last chunk to the DataChannel. That says the bytes left
+      // the browser — not that they arrived, not that the file was whole,
+      // and not that the rename onto the destination succeeded. Combined
+      // with a send path that dropped chunks in silence, it meant a
+      // truncated file could be reported as a completed transfer.
+      case "uploadComplete": {
+        const tid = msg.transferId;
+        delete pendingChunksRef.current[tid];
+        setTransfers((prev) =>
+          prev.map((t) =>
+            t.id === tid
+              ? {
+                  ...t,
+                  status: "completed",
+                  transferred: Number(msg.bytes) || t.transferred,
+                  // Kept for the operator to compare against their own copy.
+                  // The audit trail's job is to answer "which file exactly",
+                  // and a size alone does not.
+                  sha256: typeof msg.sha256 === "string" ? msg.sha256 : null
+                }
+              : t
+          )
+        );
+        break;
+      }
       // The agent tells us which subtrees this session may reach. Sent in
       // reply to { op: "roots" } at channel open.
       case "roots": {
@@ -735,7 +764,13 @@ export default function FileBrowserPanel({ session, device, onClose }) {
     const dc = dcRef.current;
     if (dc && dc.readyState === "open") {
       dc.send(JSON.stringify(obj));
+      return true;
     }
+    // ⚠️ Returns false rather than pretending. This used to drop the message
+    // and say nothing, and the upload loop kept going — so a transfer whose
+    // channel had closed carried on "sending" chunks into nowhere and then
+    // reported success.
+    return false;
   }
 
   function sendList(path) {
@@ -798,54 +833,97 @@ export default function FileBrowserPanel({ session, device, onClose }) {
     }
   }
 
+  /**
+   * Stream a file to the agent, chunk by chunk.
+   *
+   * ── What this used to get wrong ────────────────────────────────────
+   *
+   * It chained FileReader callbacks and pushed every chunk into `dcSend` as
+   * fast as it could read them, then declared the transfer "Completed" the
+   * moment the last one had been handed over. Three separate problems, all
+   * invisible:
+   *
+   *   · No backpressure. `dc.send()` queues into the SCTP buffer; a large
+   *     file fills it faster than the network drains it. The channel either
+   *     stalls or is torn down for overrunning its buffer.
+   *   · Silent drops. `dcSend` discarded anything sent while the channel was
+   *     not open and returned nothing, so the loop never knew.
+   *   · Optimistic completion. "I sent the last chunk" is not "the file is on
+   *     the disk" — and with the two problems above, frequently was not.
+   *
+   * Now: await the buffer when it fills, stop on the first failed send, and
+   * let the AGENT say when it is done (`uploadComplete`).
+   */
   async function startUploadChunks(transferId, file) {
-    const CHUNK_SIZE = 64 * 1024; // 64 KB
-    let offset = 0;
-    let seq = 0;
-    const reader = new FileReader();
+    const CHUNK_SIZE = 64 * 1024;
+    // Pause at 4 MB queued and resume at 1 MB. Chosen relative to the chunk
+    // size, not to the file: it bounds how much of the file can be in flight
+    // regardless of how big the file is, which is the whole point.
+    const HIGH_WATER = 4 * 1024 * 1024;
+    const LOW_WATER = 1 * 1024 * 1024;
 
-    const sendChunk = () => {
-      const slice = file.slice(offset, offset + CHUNK_SIZE);
-      reader.readAsArrayBuffer(slice);
-    };
+    const dc = dcRef.current;
 
-    reader.onload = (ev) => {
-      const bytes = new Uint8Array(ev.target.result);
-      // base64-encode for JSON transport over DataChannel.
-      let binary = "";
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const b64 = btoa(binary);
-      offset += bytes.byteLength;
-      const done = offset >= file.size;
+    /** Resolve once the SCTP buffer has drained below the low-water mark. */
+    function waitForDrain() {
+      return new Promise((resolve) => {
+        dc.bufferedAmountLowThreshold = LOW_WATER;
+        const onLow = () => {
+          dc.removeEventListener("bufferedamountlow", onLow);
+          resolve();
+        };
+        dc.addEventListener("bufferedamountlow", onLow);
+      });
+    }
 
-      dcSend({ op: "chunk", transferId, seq, data: b64 });
-      seq++;
-
-      const transferred = offset;
+    function failTransfer(message) {
       setTransfers((prev) =>
         prev.map((t) =>
-          t.id === transferId ? { ...t, transferred } : t
+          t.id === transferId ? { ...t, status: "failed", error: message } : t
         )
       );
+      delete pendingChunksRef.current[transferId];
+    }
 
-      if (done) {
-        dcSend({ op: "uploadDone", transferId });
+    try {
+      let offset = 0;
+      let seq = 0;
+      while (offset < file.size) {
+        if (!pendingChunksRef.current[transferId]) return; // cancelled
+        if (!dc || dc.readyState !== "open") {
+          failTransfer("The connection closed before the file finished sending.");
+          return;
+        }
+        if (dc.bufferedAmount > HIGH_WATER) await waitForDrain();
+
+        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        const bytes = new Uint8Array(await slice.arrayBuffer());
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i += 1) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        if (!dcSend({ op: "chunk", transferId, seq, data: btoa(binary) })) {
+          failTransfer("The connection closed before the file finished sending.");
+          return;
+        }
+        seq += 1;
+        offset += bytes.byteLength;
+
+        const transferred = offset;
         setTransfers((prev) =>
-          prev.map((t) =>
-            t.id === transferId
-              ? { ...t, status: "completed", transferred: file.size }
-              : t
-          )
+          prev.map((t) => (t.id === transferId ? { ...t, transferred } : t))
         );
-        delete pendingChunksRef.current[transferId];
-      } else {
-        sendChunk();
       }
-    };
 
-    sendChunk();
+      // Hand over and WAIT. The transfer stays "active" until the agent
+      // confirms the file was written and renamed into place; if it never
+      // does, the operator sees an unfinished transfer, which is the truth.
+      if (!dcSend({ op: "uploadDone", transferId })) {
+        failTransfer("The connection closed before the file finished sending.");
+      }
+    } catch (err) {
+      failTransfer(err?.message || "The file could not be read.");
+    }
   }
 
   // ── M2.S2 — Cancel in-flight transfer ────────────────────────────────
