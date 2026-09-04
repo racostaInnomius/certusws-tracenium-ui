@@ -50,6 +50,7 @@ import "@xterm/xterm/css/xterm.css";
 import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
+import useSessionHeartbeat from "./useSessionHeartbeat";
 
 // State machine — drives the status strip + error rendering.
 const STATE = Object.freeze({
@@ -72,6 +73,11 @@ export default function ShellTerminal({ session, device, onClose }) {
   const termRef = React.useRef(null);
   const fitRef = React.useRef(null);
   const wsRef = React.useRef(null);
+
+  // The backend sees a shell's transcript, so this session already has a
+  // server-side pulse — but only while output is flowing. A long `make` with
+  // nobody typing still needs the operator to say they are here.
+  useSessionHeartbeat(wsRef);
   const pcRef = React.useRef(null);
   const dcRef = React.useRef(null);
   // Cleanup handle for the ICE restart listener — set inside negotiate()

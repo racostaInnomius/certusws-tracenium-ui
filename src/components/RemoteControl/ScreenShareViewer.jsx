@@ -94,6 +94,7 @@ import PanToolOutlinedIcon from "@mui/icons-material/PanToolOutlined";
 import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
+import useSessionHeartbeat from "./useSessionHeartbeat";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -308,6 +309,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const dcRef       = React.useRef(null);   // RTCDataChannel
   const pcRef       = React.useRef(null);   // RTCPeerConnection
   const wsRef       = React.useRef(null);   // WebSocket (signaling)
+
+  // Frames go P2P; the backend sees nothing. Watching an install run for
+  // forty minutes is work, and without this it looks like an abandoned tab.
+  useSessionHeartbeat(wsRef);
   const fpsTimestamps = React.useRef([]);   // rolling frame-arrival timestamps
   const containerRef  = React.useRef(null);
   // M3.S2 — chunked frame reassembly buffer.
@@ -517,8 +522,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
     function onKeyDown(e) {
       // Esc is the universal escape hatch: it leaves control mode
       // immediately instead of being forwarded to the remote.
+      //
+      // ⚠️ stopPropagation, not just preventDefault. This listener is on the
+      // window in the CAPTURE phase, so it runs first — but preventDefault
+      // does not stop the event, and MUI's Drawer was still seeing it and
+      // closing. Releasing control tore down the whole viewer instead: the
+      // one key documented as "step back" ended the session.
       if (e.code === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
         setControlEnabled(false);
         dcSend({ op: "releaseAll" });
         return;

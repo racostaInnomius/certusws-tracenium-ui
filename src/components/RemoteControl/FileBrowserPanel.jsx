@@ -77,6 +77,7 @@ import CloudUploadOutlinedIcon from "@mui/icons-material/CloudUploadOutlined";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
+import useSessionHeartbeat from "./useSessionHeartbeat";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -329,6 +330,10 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const dcRef = React.useRef(null);     // RTCDataChannel
   const pcRef = React.useRef(null);     // RTCPeerConnection
   const wsRef = React.useRef(null);     // WebSocket (signaling)
+
+  // File transfers run entirely P2P: the backend sees no byte of them and
+  // would otherwise cut a large copy at 30 minutes as "idle".
+  useSessionHeartbeat(wsRef);
   const pendingChunksRef = React.useRef({}); // transferId -> { chunks, totalSeq, blob }
 
   // ── Signaling + WebRTC setup ─────────────────────────────────────────

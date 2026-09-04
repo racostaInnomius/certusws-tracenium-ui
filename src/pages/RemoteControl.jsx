@@ -546,8 +546,15 @@ export default function RemoteControl() {
       />
 
       {/* Shell drawer — ShellTerminal owns the WebRTC + xterm lifecycle. */}
+      {/* disableEscapeKeyDown on all three: a live remote session is not a
+          dialog you dismiss by accident. Esc is a key the SESSION needs — it
+          steps out of control mode in the screen viewer, and inside a shell it
+          belongs to whatever is running (leaving vim's insert mode should not
+          end the connection). Closing is the button in the panel's own header.
+          Without this, MUI closed the drawer and the session died with it. */}
       <Drawer
         anchor="right"
+        disableEscapeKeyDown
         open={Boolean(shellSession)}
         onClose={closeSession(setShellSession)}
         PaperProps={{
@@ -575,6 +582,7 @@ export default function RemoteControl() {
       {/* File manager drawer. */}
       <Drawer
         anchor="right"
+        disableEscapeKeyDown
         open={Boolean(fileSession)}
         onClose={closeSession(setFileSession)}
         PaperProps={{
@@ -602,6 +610,7 @@ export default function RemoteControl() {
       {/* Screen share drawer — wide, and the viewer also supports fullscreen. */}
       <Drawer
         anchor="right"
+        disableEscapeKeyDown
         open={Boolean(screenSession)}
         onClose={closeSession(setScreenSession)}
         PaperProps={{
