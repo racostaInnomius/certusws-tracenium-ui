@@ -57,6 +57,15 @@ describe("useCdpFilter", () => {
     expect(readCdpFilter().flag).toBeUndefined();
   });
 
+  it("la agrupación `view` viaja en la URL y replace la deja caer (por certificado)", () => {
+    const { result } = renderHook(() => useCdpFilter());
+    act(() => result.current[1]({ view: "devices", flag: "weak_sig" }));
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("devices");
+    expect(readCdpFilter().view).toBe("devices");
+    act(() => result.current[2]({ issuer: "Corp" }));
+    expect(readCdpFilter().view).toBeUndefined();
+  });
+
   it("dos instancias del hook ven el mismo cambio", () => {
     // La página y la pestaña son componentes distintos con el mismo
     // hook; si no se sincronizaran, volveríamos a tener dos estados.

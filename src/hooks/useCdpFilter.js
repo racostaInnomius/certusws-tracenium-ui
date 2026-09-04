@@ -43,7 +43,10 @@ export const CDP_URL_KEYS = {
   storeName: "store",
   agentId: "device",
   notAfterFrom: "from",
-  notAfterTo: "to"
+  notAfterTo: "to",
+  // Fase 1, pieza D: agrupación de la lista de inventario. Ausente =
+  // por certificado; `devices` = por equipo.
+  view: "view"
 };
 
 const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots"]);

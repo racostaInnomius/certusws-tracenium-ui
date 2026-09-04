@@ -37,6 +37,8 @@ import {
   Tab,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -104,16 +106,22 @@ import {
  * Expiry horizon vs Timeline, Post-quantum vs Roadmap/Explore). Ahora
  * cada pregunta tiene UN sitio: Post-quantum se funde en Roadmap, Stores
  * en Explore, y el horizonte de vencimiento es la línea de tiempo.
+ *
+ * Fase 1, pieza D (2026-09-04): Certificates y Devices eran dos pestañas
+ * con dos consultas y dos filtros —la de equipos solo entendía un
+ * buscador, así que «equipos con weak_sig» no existía—. Ahora son UNA
+ * lista, «Inventory», con el mismo filtro, las mismas facetas y un
+ * conmutador de agrupación: por certificado o por equipo (`view` en la
+ * URL). Los contadores por equipo son sobre lo que cumple el filtro.
  */
 const TAB = {
   dashboard: 0,
   roadmap: 1,
   explore: 2,
-  certificates: 3,
-  devices: 4,
-  anchors: 5,
-  orphans: 6,
-  policy: 7
+  inventory: 3,
+  anchors: 4,
+  orphans: 5,
+  policy: 6
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -394,7 +402,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
           <HygienePanel flags={d.flags} onSelect={(flag) => onDrillDown?.({ flag })} />
         </Grid>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-          <TopDevicesPanel devices={d.topDevices} onSelect={() => onOpenDevices?.()} />
+          <TopDevicesPanel devices={d.topDevices} onSelect={(row) => onOpenDevices?.(row)} />
         </Grid>
       </Grid>
     </Stack>
@@ -462,7 +470,7 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
 
 // ── Certificates tab (fleet, deduped by fingerprint) ─────────────────
 
-function CdpCertificatesTab({ refreshNonce }) {
+function CdpInventoryTab({ refreshNonce }) {
   const [loadError, setLoadError] = React.useState(null);
   const [rows, setRows] = React.useState([]);
   const [rowCount, setRowCount] = React.useState(0);
@@ -477,6 +485,9 @@ function CdpCertificatesTab({ refreshNonce }) {
   // Con una sola fuente de verdad, cada control de abajo lee y escribe
   // la misma cosa, y un enlace copiado conserva la vista.
   const [filter, patchFilter] = useCdpFilter();
+  // Agrupación: por certificado (defecto) o por equipo. Vive en la URL
+  // como el resto, así que un enlace a «equipos con este emisor» existe.
+  const view = filter.view === "devices" ? "devices" : "certs";
   const search = filter.search ?? "";
   const status = filter.status ?? "";
   const includeRoots = filter.includeRoots === true;
@@ -533,26 +544,23 @@ function CdpCertificatesTab({ refreshNonce }) {
   // revocation all live there.
   const [drawerCert, setDrawerCert] = React.useState(null);
 
+  // El drawer de equipo (vista por equipo) y el de certificado (vista
+  // por certificado) son estados distintos: cambiar de vista no debe
+  // dejar abierto el cajón de la otra.
+  const [drawerDevice, setDrawerDevice] = React.useState(null);
+
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
-    listCdpCertificates({
-      page: paginationModel.page + 1,
-      pageSize: paginationModel.pageSize,
-      search: search || undefined,
-      status: status || undefined,
-      flag: flag || undefined,
-      issuer: issuer || undefined,
-      includeRoots: includeRoots || undefined,
-      hasPrivateKey: hasPrivateKey || undefined,
-      hasFlags: hasFlags || undefined,
-      eku: eku || undefined,
-      ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== "")),
-    })
+    const paging = { page: paginationModel.page + 1, pageSize: paginationModel.pageSize };
+    // MISMOS parámetros en las dos vistas: la agrupación es lo único que
+    // cambia. Es la propiedad de la fusión.
+    const load = view === "devices" ? listCdpDevices : listCdpCertificates;
+    load({ ...paging, ...listParams() })
       .then((resp) => {
         if (!alive) return;
         setRows(
-          (resp?.items ?? []).map((item) => ({ id: item.fingerprint256, ...item }))
+          (resp?.items ?? []).map((item) => ({ id: view === "devices" ? item.agentId : item.fingerprint256, ...item }))
         );
         setRowCount(Number(resp?.total ?? 0));
       })
@@ -571,9 +579,10 @@ function CdpCertificatesTab({ refreshNonce }) {
     return () => {
       alive = false;
     };
-  }, [paginationModel, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, refreshNonce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, refreshNonce]);
 
-  const columns = [
+  const certColumns = [
     {
       field: "subjectCN",
       headerName: "Subject",
@@ -625,12 +634,61 @@ function CdpCertificatesTab({ refreshNonce }) {
     },
   ];
 
+  // Vista por equipo: los contadores son sobre los certificados que
+  // cumplen el filtro actual, no sobre todo el equipo. Con
+  // `flag=weak_sig`, «Matching» es cuántos con firma débil tiene.
+  const countChip = (value, soft, color) =>
+    value > 0 ? <Chip size="small" label={value} sx={{ bgcolor: soft, color, fontWeight: 700 }} /> : "0";
+  const deviceColumns = [
+    {
+      field: "host",
+      headerName: "Device",
+      flex: 1.2,
+      minWidth: 180,
+      valueGetter: (value, row) => value || row.agentId,
+    },
+    { field: "platform", headerName: "Platform", width: 110 },
+    { field: "certCount", headerName: "Matching", width: 100 },
+    { field: "withPrivateKey", headerName: "With key", width: 100 },
+    {
+      field: "expiring",
+      headerName: "Expiring",
+      width: 100,
+      renderCell: (params) => countChip(params.value, BRAND.alert.warningSoft, BRAND.alert.warningText),
+    },
+    {
+      field: "expired",
+      headerName: "Expired",
+      width: 100,
+      renderCell: (params) => countChip(params.value, BRAND.alert.errorSoft, BRAND.alert.error),
+    },
+    { field: "withFlags", headerName: "Flagged", width: 90 },
+    {
+      field: "lastSeen",
+      headerName: "Last scan",
+      width: 120,
+      valueFormatter: (value) => formatDate(value),
+    },
+  ];
+
   return (
     <Box>
       <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={view}
+          aria-label="Group by"
+          onChange={(_e, v) => {
+            if (v && v !== view) setAndReset({ view: v === "devices" ? "devices" : "" });
+          }}
+        >
+          <ToggleButton value="certs" aria-label="By certificate">By certificate</ToggleButton>
+          <ToggleButton value="devices" aria-label="By device">By device</ToggleButton>
+        </ToggleButtonGroup>
         <TextField
           size="small"
-          label="Search subject / issuer / fingerprint"
+          label={view === "devices" ? "Search device / subject / issuer" : "Search subject / issuer / fingerprint"}
           value={search}
           onChange={(e) => setAndReset({ search: e.target.value })}
           sx={{ minWidth: 280 }}
@@ -740,9 +798,11 @@ function CdpCertificatesTab({ refreshNonce }) {
           ) : null
         )}
         <Box sx={{ flex: 1 }} />
-        <Button size="small" variant="outlined" onClick={exportCsv} disabled={exporting}>
-          {exporting ? "Exporting…" : `Export CSV${rowCount ? ` (${rowCount.toLocaleString()})` : ""}`}
-        </Button>
+        {view === "certs" ? (
+          <Button size="small" variant="outlined" onClick={exportCsv} disabled={exporting}>
+            {exporting ? "Exporting…" : `Export CSV${rowCount ? ` (${rowCount.toLocaleString()})` : ""}`}
+          </Button>
+        ) : null}
       </Stack>
       {exportError ? <Alert severity="error" sx={{ mb: 1.5 }}>Export failed: {exportError}</Alert> : null}
 
@@ -767,7 +827,7 @@ function CdpCertificatesTab({ refreshNonce }) {
           <DataGrid
             autoHeight
             rows={rows}
-            columns={columns}
+            columns={view === "devices" ? deviceColumns : certColumns}
             loading={loading}
             rowCount={rowCount}
             paginationMode="server"
@@ -776,7 +836,11 @@ function CdpCertificatesTab({ refreshNonce }) {
             pageSizeOptions={[10, 25, 50]}
             disableRowSelectionOnClick
             disableColumnMenu
-            onRowClick={(params) => setDrawerCert(params.row.fingerprint256)}
+            onRowClick={(params) =>
+              view === "devices"
+                ? setDrawerDevice({ agentId: params.row.agentId, host: params.row.host })
+                : setDrawerCert(params.row.fingerprint256)
+            }
             sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
           />
         </Box>
@@ -802,13 +866,41 @@ function CdpCertificatesTab({ refreshNonce }) {
           />
         ) : null}
       </Drawer>
+
+      <Drawer
+        anchor="right"
+        open={Boolean(drawerDevice)}
+        onClose={() => setDrawerDevice(null)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 440 } } }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
+          <IconButton aria-label="Close device details" onClick={() => setDrawerDevice(null)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {drawerDevice ? (
+          // keyed by agentId so internal state resets when switching devices
+          <CdpDeviceDrawerContent
+            key={drawerDevice.agentId}
+            agentId={drawerDevice.agentId}
+            host={drawerDevice.host}
+            onShowCertificates={() => {
+              // La misma lista, filtrada a este equipo y agrupada por
+              // certificado: de «qué equipos» a «qué certificados» sin
+              // perder el resto del filtro.
+              setDrawerDevice(null);
+              setAndReset({ agentId: drawerDevice.agentId, view: "" });
+            }}
+          />
+        ) : null}
+      </Drawer>
     </Box>
   );
 }
 
 // ── Devices tab + drawer ─────────────────────────────────────────────
 
-function CdpDeviceDrawerContent({ agentId, host }) {
+function CdpDeviceDrawerContent({ agentId, host, onShowCertificates }) {
   const [loadError, setLoadError] = React.useState(null);
   const [items, setItems] = React.useState(null);
   const [includeRoots, setIncludeRoots] = React.useState(false);
@@ -840,6 +932,11 @@ function CdpDeviceDrawerContent({ agentId, host }) {
       <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
         Certificates discovered on this device
       </Typography>
+      {onShowCertificates ? (
+        <Button size="small" variant="outlined" onClick={onShowCertificates} sx={{ mb: 1.5 }}>
+          Show in certificate view
+        </Button>
+      ) : null}
       <FormControlLabel
         control={
           <Switch
@@ -1179,162 +1276,6 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
   );
 }
 
-function CdpDevicesTab({ refreshNonce }) {
-  const [loadError, setLoadError] = React.useState(null);
-  const [rows, setRows] = React.useState([]);
-  const [rowCount, setRowCount] = React.useState(0);
-  const [loading, setLoading] = React.useState(false);
-  const [paginationModel, setPaginationModel] = React.useState({ page: 0, pageSize: 25 });
-  const [search, setSearch] = React.useState("");
-  const [drawerDevice, setDrawerDevice] = React.useState(null);
-
-  React.useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    listCdpDevices({
-      page: paginationModel.page + 1,
-      pageSize: paginationModel.pageSize,
-      search: search || undefined,
-    })
-      .then((resp) => {
-        if (!alive) return;
-        setRows((resp?.items ?? []).map((item) => ({ id: item.agentId, ...item })));
-        setRowCount(Number(resp?.total ?? 0));
-      })
-      .catch((err) => {
-        if (alive) {
-          // Vaciar la tabla sin más decía "cero certificados", que es una
-          // afirmación sobre la flota. La verdad era "no pude leerlos".
-          setRows([]);
-          setRowCount(0);
-          setLoadError(err?.message || String(err));
-        }
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [paginationModel, search, refreshNonce]);
-
-  const columns = [
-    {
-      field: "host",
-      headerName: "Device",
-      flex: 1.2,
-      minWidth: 180,
-      valueGetter: (value, row) => value || row.agentId,
-    },
-    { field: "platform", headerName: "Platform", width: 110 },
-    { field: "certCount", headerName: "Certs", width: 90 },
-    {
-      field: "withPrivateKey",
-      headerName: "With key",
-      width: 100,
-    },
-    {
-      field: "expiring",
-      headerName: "Expiring",
-      width: 100,
-      renderCell: (params) =>
-        params.value > 0 ? (
-          <Chip
-            size="small"
-            label={params.value}
-            sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 700 }}
-          />
-        ) : (
-          "0"
-        ),
-    },
-    {
-      field: "expired",
-      headerName: "Expired",
-      width: 100,
-      renderCell: (params) =>
-        params.value > 0 ? (
-          <Chip
-            size="small"
-            label={params.value}
-            sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700 }}
-          />
-        ) : (
-          "0"
-        ),
-    },
-    { field: "withFlags", headerName: "Flags", width: 90 },
-    {
-      field: "lastSeen",
-      headerName: "Last scan",
-      width: 120,
-      valueFormatter: (value) => formatDate(value),
-    },
-  ];
-
-  return (
-    <Box>
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <TextField
-          size="small"
-          label="Search device"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPaginationModel((m) => ({ ...m, page: 0 }));
-          }}
-          sx={{ minWidth: 240 }}
-        />
-      </Stack>
-
-      {loadError ? (
-        <Alert severity="error" sx={{ mb: 1.5 }}>
-          <AlertTitle>Couldn&apos;t load</AlertTitle>
-          {loadError} — the table is empty because the query failed, not because
-          there is nothing to show.
-        </Alert>
-      ) : null}
-
-      <DataGrid
-        autoHeight
-        rows={rows}
-        columns={columns}
-        loading={loading}
-        rowCount={rowCount}
-        paginationMode="server"
-        paginationModel={paginationModel}
-        onPaginationModelChange={setPaginationModel}
-        pageSizeOptions={[10, 25, 50]}
-        disableRowSelectionOnClick
-        disableColumnMenu
-        onRowClick={(params) => setDrawerDevice({ agentId: params.row.agentId, host: params.row.host })}
-        sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
-      />
-
-      <Drawer
-        anchor="right"
-        open={Boolean(drawerDevice)}
-        onClose={() => setDrawerDevice(null)}
-        PaperProps={{ sx: { width: { xs: "100%", sm: 440 } } }}
-      >
-        <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
-          <IconButton aria-label="Close device details" onClick={() => setDrawerDevice(null)} size="small">
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        </Box>
-        {drawerDevice ? (
-          // keyed by agentId so internal state resets when switching devices
-          <CdpDeviceDrawerContent
-            key={drawerDevice.agentId}
-            agentId={drawerDevice.agentId}
-            host={drawerDevice.host}
-          />
-        ) : null}
-      </Drawer>
-    </Box>
-  );
-}
-
 // ── Page ─────────────────────────────────────────────────────────────
 
 export default function CryptoDiscovery() {
@@ -1380,8 +1321,11 @@ export default function CryptoDiscovery() {
   // `replace` porque son una vista entera, no un refinamiento.
   const drillDown = React.useCallback(
     (delta, opts) => {
-      if (opts?.replace) replaceFilter({ ...delta, tab: TAB.certificates });
-      else patchFilter({ ...delta, tab: TAB.certificates });
+      // `view` no se conserva: un drill-down desde un panel habla de
+      // certificados. Quien quiera la vista por equipo la pide (KPI de
+      // equipos, panel «Devices needing attention»).
+      if (opts?.replace) replaceFilter({ ...delta, tab: TAB.inventory });
+      else patchFilter({ ...delta, tab: TAB.inventory, view: delta.view ?? "" });
     },
     [patchFilter, replaceFilter]
   );
@@ -1422,8 +1366,7 @@ export default function CryptoDiscovery() {
         <Tab label="Dashboard" />
         <Tab label="Roadmap" />
         <Tab label="Explore" />
-        <Tab label="Certificates" />
-        <Tab label="Devices" />
+        <Tab label="Inventory" />
         <Tab label="Trust anchors" />
         {/*
           ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
@@ -1442,7 +1385,9 @@ export default function CryptoDiscovery() {
         <CdpDashboard
           refreshNonce={refreshNonce}
           onDrillDown={drillDown}
-          onOpenDevices={() => setTab(TAB.devices)}
+          onOpenDevices={(row) =>
+            replaceFilter({ tab: TAB.inventory, view: "devices", ...(row?.host || row?.agentId ? { search: row.host || row.agentId } : {}) })
+          }
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>
@@ -1451,11 +1396,8 @@ export default function CryptoDiscovery() {
       <TabPanel value={tab} index={TAB.explore}>
         <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
       </TabPanel>
-      <TabPanel value={tab} index={TAB.certificates}>
-        <CdpCertificatesTab refreshNonce={refreshNonce} />
-      </TabPanel>
-      <TabPanel value={tab} index={TAB.devices}>
-        <CdpDevicesTab refreshNonce={refreshNonce} />
+      <TabPanel value={tab} index={TAB.inventory}>
+        <CdpInventoryTab refreshNonce={refreshNonce} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.anchors}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
