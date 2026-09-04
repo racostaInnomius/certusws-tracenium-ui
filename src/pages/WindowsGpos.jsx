@@ -27,16 +27,34 @@ import CompositionBars from "../components/common/CompositionBars";
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 
-function Kpi({ label, value, tone }) {
+function Kpi({ label, value, tone, onClick, active }) {
+  const clicable = typeof onClick === "function";
   return (
     <Paper
       elevation={0}
+      role={clicable ? "button" : undefined}
+      tabIndex={clicable ? 0 : undefined}
+      aria-pressed={clicable ? Boolean(active) : undefined}
+      onClick={onClick}
+      onKeyDown={
+        clicable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       sx={{
         p: 2,
         height: "100%",
         borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
+        cursor: clicable ? "pointer" : "default",
+        border: `1px solid ${active ? BRAND.teal : BRAND.border}`,
+        boxShadow: active ? `0 0 0 3px ${BRAND.tealSoft}` : BRAND.shadow,
+        transition: "border-color 160ms ease, box-shadow 160ms ease",
+        ...(clicable ? { "&:hover": { borderColor: BRAND.teal } } : {}),
       }}
     >
       <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>{label}</Typography>
@@ -79,7 +97,27 @@ export default function WindowsGpos({ refreshNonce }) {
   }, [refreshNonce, refetch]);
 
   const summary = data?.summary;
-  const devices = React.useMemo(() => (Array.isArray(data?.devices) ? data.devices : []), [data]);
+  // Mientras carga NO se pinta 0: un cero es una afirmacion, y hacerla antes
+  // de tener los datos es la mentira tranquilizadora de siempre.
+  const cargando = loading && !summary;
+
+  const todos = React.useMemo(() => (Array.isArray(data?.devices) ? data.devices : []), [data]);
+
+  const sinNinguna = Number(summary?.withoutAnyGpos ?? 0);
+
+  // Ver solo los equipos sin ninguna directiva. Se apaga volviendo a pulsar.
+  const [soloSinGpo, setSoloSinGpo] = React.useState(false);
+
+  const devices = React.useMemo(
+    () =>
+      soloSinGpo
+        ? todos.filter(
+            (d) =>
+              (d.computerGpos?.length ?? 0) === 0 && (d.userGpos?.length ?? 0) === 0
+          )
+        : todos,
+    [todos, soloSinGpo]
+  );
 
   const gpoRows = React.useMemo(
     () =>
@@ -115,26 +153,58 @@ export default function WindowsGpos({ refreshNonce }) {
   return (
     <Box>
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Kpi label="Devices reporting" value={loading && !summary ? "…" : summary?.devicesReporting ?? 0} />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Kpi label="Devices reporting" value={cargando ? "…" : summary?.devicesReporting ?? 0} />
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Kpi label="With computer GPOs" value={loading && !summary ? "…" : summary?.withComputerGpos ?? 0} />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Kpi label="With computer GPOs" value={cargando ? "…" : summary?.withComputerGpos ?? 0} />
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Kpi label="Distinct GPOs" value={loading && !summary ? "…" : summary?.distinctGpos ?? 0} />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          {/* ⚠️ La ausencia es un dato. Un equipo Windows que reporta el
+              inventario y no trae NI UNA directiva es o un equipo fuera del
+              dominio o un gpresult que fallo — y sin este numero se pierde
+              entre las cincuenta filas de la tabla. Misma regla que el "sin
+              dato" del disco. */}
+          <Kpi
+            label="Without any GPO"
+            value={cargando ? "…" : sinNinguna}
+            tone={sinNinguna > 0 ? BRAND.alert.high : undefined}
+            onClick={sinNinguna > 0 ? () => setSoloSinGpo((v) => !v) : undefined}
+            active={soloSinGpo}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Kpi label="Distinct GPOs" value={cargando ? "…" : summary?.distinctGpos ?? 0} />
         </Grid>
       </Grid>
 
-      {/* ⚠️ El cero de usuario NO se calla ni se disfraza de "sin datos". Es
-          una limitación conocida con una causa concreta, y decirla evita que
-          alguien concluya que la flota no tiene directivas de usuario. */}
-      {summary && summary.withUserGpos === 0 ? (
+      {/* ⚠️ El aviso solo aparece cuando HAY directivas de equipo.
+          Antes salia siempre que withUserGpos era 0, es decir tambien en
+          tenants sin un solo equipo de dominio: ahi no es que falten las de
+          usuario, es que no hay GPO de ninguna clase, y regañar por una
+          limitacion que no aplica es ruido. */}
+      {summary && summary.withComputerGpos > 0 && summary.withUserGpos === 0 ? (
         <Alert severity="info" sx={{ mb: 2, borderRadius: 3 }}>
-          <strong>User GPOs are not collected yet.</strong> `gpresult /Scope User` runs from the
-          privileged service, which has no interactive user profile, so Windows returns no user
-          RSOP data. Collecting them needs the tray app — it runs inside the signed-in user's
-          session — to report them back the same way it already requests software installs.
+          <strong>User GPOs are not collected yet.</strong> <code>gpresult /Scope User</code> runs
+          from the privileged service, which has no interactive user profile, so Windows returns no
+          user RSOP data. Collecting them needs the tray app — it runs inside the signed-in
+          user&apos;s session — to report them back the same way it already requests software
+          installs.
+        </Alert>
+      ) : null}
+
+      {/* El caso contrario: hay equipos, y ninguno tiene directivas. Decirlo
+          es mejor que tres ceros y una grafica vacia, que no distinguen "no
+          aplica" de "algo se rompio". */}
+      {summary && summary.devicesReporting > 0 && summary.withComputerGpos === 0 ? (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+          <strong>
+            {summary.devicesReporting} device{summary.devicesReporting === 1 ? "" : "s"} reported,
+            none has any Group Policy applied.
+          </strong>{" "}
+          They are either not joined to a domain, or <code>gpresult</code> failed on them. Today the
+          two cannot be told apart from here — the agent collects the domain-membership flag but
+          does not send it with this inventory.
         </Alert>
       ) : null}
 
@@ -157,9 +227,32 @@ export default function WindowsGpos({ refreshNonce }) {
             elevation={0}
             sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}
           >
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Applied policies by device
-            </Typography>
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              sx={{ mb: 1.5, flexWrap: "wrap" }}
+            >
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Applied policies by device
+              </Typography>
+              {/* Una tabla filtrada que no lo dice miente sobre el tamano de
+                  la flota. Misma regla que en Hardware Inventory. */}
+              {soloSinGpo ? (
+                <Chip
+                  size="small"
+                  label={`Without any GPO · ${devices.length}`}
+                  onDelete={() => setSoloSinGpo(false)}
+                  sx={{
+                    height: 24,
+                    fontWeight: 800,
+                    fontSize: TEXT.xs,
+                    bgcolor: BRAND.tealSoft,
+                    color: BRAND.tealText,
+                  }}
+                />
+              ) : null}
+            </Stack>
             <Box sx={{ height: 460, width: "100%" }}>
               <DataGrid
                 rows={devices}
