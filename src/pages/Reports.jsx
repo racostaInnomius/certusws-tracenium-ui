@@ -22,6 +22,7 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
+import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
 import {
   getReportTypes, getReportRuns, runReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
@@ -364,6 +365,16 @@ export default function Reports() {
             />
           </Box>
         )}
+      </Paper>
+
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+          GRC connector
+        </Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+          Let Vanta, Drata or any GRC platform pull the evidence-pack JSON, or push each scheduled run to it.
+        </Typography>
+        <GrcConnectorPanel onNotify={({ message, severity }) => setSnackbar({ open: true, message, severity })} />
       </Paper>
 
       <Paper sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>

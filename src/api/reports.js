@@ -31,6 +31,53 @@ export async function runReportScheduleNow(id) {
   return httpPostJson(`${BASE}/schedules/${encodeURIComponent(id)}/run`, {});
 }
 
+// ── ADR-0014 E4: GRC connector (API keys, push targets, deliveries) ──
+
+export async function listApiKeys() {
+  return httpGetJson(`${BASE}/api-keys`, { cache: false });
+}
+
+// → { key, secret }; `secret` is shown once and never retrievable again.
+export async function createApiKey({ label, scopes }) {
+  return httpPostJson(`${BASE}/api-keys`, { label, ...(scopes ? { scopes } : {}) });
+}
+
+export async function revokeApiKey(id) {
+  return httpDeleteJson(`${BASE}/api-keys/${encodeURIComponent(id)}`);
+}
+
+export async function listGrcTargets() {
+  return httpGetJson(`${BASE}/grc/targets`, { cache: false });
+}
+
+// { kind: "webhook"|"vanta", label, config: {...}, secret }
+export async function createGrcTarget(input) {
+  return httpPostJson(`${BASE}/grc/targets`, input);
+}
+
+export async function updateGrcTarget(id, patch) {
+  return httpPatchJson(`${BASE}/grc/targets/${encodeURIComponent(id)}`, patch);
+}
+
+export async function deleteGrcTarget(id) {
+  return httpDeleteJson(`${BASE}/grc/targets/${encodeURIComponent(id)}`);
+}
+
+export async function testGrcTarget(id) {
+  return httpPostJson(`${BASE}/grc/targets/${encodeURIComponent(id)}/test`, {});
+}
+
+export async function deliverRunToGrcTarget(id, runId) {
+  return httpPostJson(`${BASE}/grc/targets/${encodeURIComponent(id)}/deliver`, { runId });
+}
+
+export async function listGrcDeliveries({ targetId, runId, limit } = {}) {
+  const qs = [targetId && `targetId=${encodeURIComponent(targetId)}`, runId && `runId=${encodeURIComponent(runId)}`, limit && `limit=${encodeURIComponent(limit)}`]
+    .filter(Boolean)
+    .join("&");
+  return httpGetJson(`${BASE}/grc/deliveries${qs ? `?${qs}` : ""}`, { cache: false });
+}
+
 // Archived copy of a past run (the exact bytes whose SHA-256 the ledger
 // records). Same blob path as runReport: the tenant header must travel.
 export async function downloadReportRun(run) {

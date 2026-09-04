@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import { useAuthContext } from "../../auth/AuthContext";
 import { listTenantMembers } from "../../api/tenants";
-import { createReportSchedule } from "../../api/reports";
+import { createReportSchedule, listGrcTargets } from "../../api/reports";
 import { getFrameworks } from "../../api/compliance";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
@@ -34,6 +34,9 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
   const [frameworks, setFrameworks] = React.useState([]);
   const [groups, setGroups] = React.useState([]);
   const [members, setMembers] = React.useState([]);
+  // GRC push targets (ADR-0014 E4). Only for types with a JSON contract.
+  const [targets, setTargets] = React.useState([]);
+  const [checkedTargetIds, setCheckedTargetIds] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [checkedIds, setCheckedIds] = React.useState([]);
   const [externalText, setExternalText] = React.useState("");
@@ -46,20 +49,24 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
     setPeriodMonths(1);
     setValues({});
     setCheckedIds([]);
+    setCheckedTargetIds([]);
     setExternalText("");
     setError("");
     setLoading(true);
     const needsFrameworks = paramDefs.some((p) => p.kind === "framework");
     const needsGroups = paramDefs.some((p) => p.kind === "asset_group");
+    const hasJson = (reportType.formats || []).includes("json");
     Promise.all([
       listTenantMembers(tenantId).then((r) => (r?.items || []).filter((m) => m.isActive && m.email)).catch(() => []),
       needsFrameworks ? getFrameworks().then((r) => (Array.isArray(r?.frameworks) ? r.frameworks : [])).catch(() => []) : Promise.resolve([]),
       needsGroups ? listAssetGroups().then((r) => listFrom(r, { context: "scheduleReportGroups" })).catch(() => []) : Promise.resolve([]),
+      hasJson ? listGrcTargets().then((r) => (r?.targets || []).filter((t) => t.enabled)).catch(() => []) : Promise.resolve([]),
     ])
-      .then(([ms, fws, gs]) => {
+      .then(([ms, fws, gs, ts]) => {
         setMembers(ms);
         setFrameworks(fws);
         setGroups(gs);
+        setTargets(ts);
         const fwParam = paramDefs.find((p) => p.kind === "framework");
         if (fwParam && fws.length) {
           const soc2 = fws.find((f) => /^soc2/i.test(f.framework));
@@ -100,6 +107,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
         periodMonths: hasPeriod ? periodMonths : 1,
         recipientMemberIds: checkedIds,
         recipientExternal: externalCheck.unique,
+        ...(checkedTargetIds.length ? { targetIds: checkedTargetIds } : {}),
       });
       onCreated?.(res?.schedule);
       onClose();
@@ -194,6 +202,20 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
             onChange={(e) => setExternalText(e.target.value)}
             helperText="Comma or newline separated — for people outside this tenant."
           />
+
+          {targets.length > 0 ? (
+            <Box>
+              <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700 }}>PUSH TO GRC TARGETS</Typography>
+              {targets.map((t) => (
+                <FormControlLabel
+                  key={t.id}
+                  sx={{ display: "flex", ml: 0 }}
+                  control={<Checkbox size="small" checked={checkedTargetIds.includes(t.id)} onChange={() => setCheckedTargetIds((prev) => (prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id]))} inputProps={{ "aria-label": `Push to ${t.label}` }} />}
+                  label={<Typography variant="body2">{t.label} <Typography component="span" variant="caption" sx={{ color: BRAND.gray }}>({t.kind})</Typography></Typography>}
+                />
+              ))}
+            </Box>
+          ) : null}
 
           {error ? <Typography variant="body2" sx={{ color: "error.main" }}>{error}</Typography> : null}
         </Stack>
