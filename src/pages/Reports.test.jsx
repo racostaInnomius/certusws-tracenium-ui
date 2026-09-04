@@ -9,7 +9,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { server, respond } from "../test/msw/server";
+import { http, HttpResponse } from "msw";
+import { server, respond, API_BASE } from "../test/msw/server";
 
 vi.mock("../utils/browserState", async (importOriginal) => {
   const actual = await importOriginal();
@@ -172,5 +173,68 @@ describe("Reports page (types with params)", () => {
     await waitFor(() => expect(runCalls).toHaveLength(1));
     expect(runCalls[0].search).toEqual({ format: "pdf", framework: "soc2_tsc_2017", from: "2026-06", to: "2026-08" });
     expect(saveBlob).toHaveBeenCalled();
+  });
+});
+
+// ── ADR-0014 E3: schedules panel + archived runs ──────────────────────
+
+const SCHEDULES = {
+  ok: true,
+  schedules: [
+    {
+      id: 5,
+      reportKey: "scp.evidence-pack",
+      format: "pdf",
+      params: { framework: "soc2_tsc_2017" },
+      periodMonths: 1,
+      recipientMemberIds: [11],
+      recipientExternal: ["auditor@example.com"],
+      enabled: true,
+      nextRunAt: "2026-10-01T06:00:00.000Z",
+      lastRunAt: null,
+      lastRunStatus: null,
+    },
+  ],
+};
+
+describe("Reports — schedules (E3)", () => {
+  it("renders the schedules panel from the server and offers Schedule on every catalog row", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, SCHEDULES);
+    render(<Reports />);
+    await screen.findAllByText("Evidence Pack");
+    expect(await screen.findByText("Previous month", { exact: false })).toBeTruthy();
+    expect(screen.queryByTestId("schedules-empty")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^schedule$/i })).toHaveLength(TYPES.types.length);
+  });
+
+  it("a backend without schedules still renders the catalog", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { error: "NOT_FOUND" }, { status: 404 });
+    render(<Reports />);
+    await screen.findByText("Evidence Pack");
+    expect(await screen.findByTestId("schedules-empty")).toBeTruthy();
+  });
+
+  it("an archived run gets a download button that goes through the blob path", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, {
+      ok: true,
+      runs: [{ id: 9, occurredAt: "2026-09-01T06:00:00.000Z", key: "scp.evidence-pack", format: "pdf", trigger: "schedule", outcome: "sent", actor: "schedule:5", sha256: "abc", filename: "pack.pdf", downloadable: true }],
+    });
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    server.use(
+      http.get(`${API_BASE}${BASE}/runs/9/download`, () =>
+        new HttpResponse("%PDF", { headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="pack.pdf"' } })
+      )
+    );
+    saveBlob.mockClear();
+    render(<Reports />);
+    const btn = await screen.findByRole("button", { name: /download archived copy/i });
+    await userEvent.setup().click(btn);
+    await waitFor(() => expect(saveBlob).toHaveBeenCalled());
+    expect(saveBlob.mock.calls[0][1]).toBe("pack.pdf");
   });
 });

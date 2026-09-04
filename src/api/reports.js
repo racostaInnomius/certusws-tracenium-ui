@@ -3,10 +3,40 @@
 // Client for ADR-0008 Fase F1a's /api/v1/reports/* — the registry
 // wrapping the 5 existing report generators behind one gated catalog.
 
-import { httpGetJson, httpGetBlob, httpPostJson } from "./http";
+import { httpGetJson, httpGetBlob, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
 import { saveBlob } from "../utils/browserState";
 
 const BASE = "/api/v1/reports";
+
+// ── ADR-0014 E3: schedules + archived runs ──────────────────────────
+
+export async function listReportSchedules() {
+  return httpGetJson(`${BASE}/schedules`, { cache: false });
+}
+
+// { reportKey, format, params, periodMonths, recipientMemberIds, recipientExternal }
+export async function createReportSchedule(input) {
+  return httpPostJson(`${BASE}/schedules`, input);
+}
+
+export async function updateReportSchedule(id, patch) {
+  return httpPatchJson(`${BASE}/schedules/${encodeURIComponent(id)}`, patch);
+}
+
+export async function deleteReportSchedule(id) {
+  return httpDeleteJson(`${BASE}/schedules/${encodeURIComponent(id)}`);
+}
+
+export async function runReportScheduleNow(id) {
+  return httpPostJson(`${BASE}/schedules/${encodeURIComponent(id)}/run`, {});
+}
+
+// Archived copy of a past run (the exact bytes whose SHA-256 the ledger
+// records). Same blob path as runReport: the tenant header must travel.
+export async function downloadReportRun(run) {
+  const { blob, filename } = await httpGetBlob(`${BASE}/runs/${encodeURIComponent(run.id)}/download`);
+  saveBlob(blob, filename || run.filename || `${run.key}.${run.format}`);
+}
 
 export async function getReportTypes() {
   return httpGetJson(`${BASE}/types`);
