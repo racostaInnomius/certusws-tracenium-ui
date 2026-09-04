@@ -72,6 +72,7 @@ export default function AuditTimeseriesChart({
 
   const [windowDays, setWindowDays] = useState(parentWindow);
   const [override, setOverride] = useState(null);
+  const [overrideFailed, setOverrideFailed] = useState(false);
   const [toggling, setToggling] = useState(false);
 
   // Reset to parent whenever the parent's window changes (e.g. after
@@ -80,22 +81,34 @@ export default function AuditTimeseriesChart({
   useEffect(() => {
     setWindowDays(parentWindow);
     setOverride(null);
+    setOverrideFailed(false);
   }, [parentWindow]);
 
   // Fetch override when the toggle moves off the parent's window.
   useEffect(() => {
     if (windowDays === parentWindow) {
       setOverride(null);
+      setOverrideFailed(false);
       return;
     }
     let cancelled = false;
     setToggling(true);
     getAuditTimeseries(windowDays, lane)
       .then((v) => {
-        if (!cancelled) setOverride(v);
+        if (!cancelled) {
+          setOverride(v);
+          setOverrideFailed(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setOverride(null);
+        // ⚠️ Se marca el fallo en vez de sólo limpiar el override. Sin la
+        // marca, la tarjeta cae en silencio a los datos del padre: el
+        // selector diría "30 días" mientras se enseñan los 7 del padre, y
+        // quien mire se llevará una cifra que no es la que pidió.
+        if (!cancelled) {
+          setOverride(null);
+          setOverrideFailed(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setToggling(false);
@@ -108,6 +121,24 @@ export default function AuditTimeseriesChart({
   const value = override ?? parentValue;
   const buckets = Array.isArray(value?.buckets) ? value.buckets : [];
   const byCategory = variant === "category";
+
+  // ⚠️ "NO HAY EVENTOS" Y "NO PUDE LEERLOS" NO SON LO MISMO.
+  //
+  // Esta tarjeta pintaba las dos igual, y eso escondió un error de sintaxis en
+  // el SQL del backend durante SEIS DÍAS: el endpoint devolvía 500 con la base
+  // llena de eventos —hasta 456 en un día— y la gráfica afirmaba tranquilamente
+  // que no había pasado nada. Nadie mira dos veces un "sin eventos" en una
+  // consola tranquila; un "no se pudo cargar" se reporta el primer día.
+  //
+  // El fallo llega de dos formas según la página: Overview pasa el sobre de
+  // `Promise.allSettled` tal cual (`status: "rejected"`), y Audit pasa `null`
+  // cuando su fetch falló. Las dos se distinguen de "cargó y vino vacío", que
+  // es un objeto con `buckets`.
+  const effectiveLoading = loading || toggling;
+  const failed =
+    !effectiveLoading &&
+    (overrideFailed ||
+      (!override && (result?.status === "rejected" || !parentValue)));
 
   // Las series salen de los datos, no de una lista local. Se recorren
   // TODOS los buckets y no sólo el primero: una categoría que sólo
@@ -140,8 +171,6 @@ export default function AuditTimeseriesChart({
     error: b.error ?? 0,
     ...(b.categories || {})
   }));
-
-  const effectiveLoading = loading || toggling;
 
   // Whole card is clickable → /audit. Per-bar navigation (click Apr 22 →
   // audit filtered by that day) is a Phase 2 refinement; for now the
@@ -186,17 +215,29 @@ export default function AuditTimeseriesChart({
 
       {effectiveLoading ? (
         <Skeleton variant="rounded" height={220} />
-      ) : !hasData ? (
+      ) : failed || !hasData ? (
         <Box
           sx={{
             height: 220,
             display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
             alignItems: "center",
             justifyContent: "center",
-            color: BRAND.gray
+            textAlign: "center",
+            px: 2,
+            color: failed ? ROLE.caution : BRAND.gray
           }}
         >
-          <Typography variant="caption">No events in window</Typography>
+          <Typography variant="caption" sx={{ fontWeight: failed ? 700 : 400 }}>
+            {failed ? "Couldn't load activity" : "No events in window"}
+          </Typography>
+          {failed && (
+            <Typography variant="caption" sx={{ color: BRAND.gray }}>
+              The audit timeseries request failed — this is not the same as
+              having no activity.
+            </Typography>
+          )}
         </Box>
       ) : (
         <Box sx={{ height: 220 }}>
