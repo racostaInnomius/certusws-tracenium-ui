@@ -38,6 +38,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
+import useCdpFilter from "../hooks/useCdpFilter";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
@@ -212,6 +213,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
     {
       title: "End-entity certificates",
       value: s.totalCerts ?? "…",
+      filter: {},
       icon: <BadgeOutlinedIcon />,
       hint: `The certificates that expire and take a service down with them. CA certificates (${
         (s.caCerts ?? 0).toLocaleString()
@@ -220,12 +222,14 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
     {
       title: "With private key",
       value: s.withPrivateKey ?? "…",
+      filter: { hasPrivateKey: true },
       icon: <KeyOutlinedIcon />,
       hint: "Certificates the device holds a private key for — the ones the operator has to renew.",
     },
     {
       title: "Expiring ≤30d",
       value: s.expiring30d ?? "…",
+      filter: { status: "expiring" },
       icon: <ScheduleOutlinedIcon />,
       accent: BRAND.alert.warningText,
       tint: BRAND.alert.warningSoft,
@@ -236,6 +240,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
     {
       title: "Expired, with private key",
       value: s.expiredWithKey ?? "…",
+      filter: { status: "expired", hasPrivateKey: true },
       icon: <EventBusyOutlinedIcon />,
       accent: BRAND.alert.error,
       tint: BRAND.alert.errorSoft,
@@ -246,6 +251,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
     {
       title: "Hygiene flags",
       value: s.withFlags ?? "…",
+      filter: { hasFlags: true },
       icon: <ReportProblemOutlinedIcon />,
       accent: BRAND.alert.high,
       tint: BRAND.alert.highSoft,
@@ -255,6 +261,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
       title: "Devices reporting",
       value: s.devicesReporting ?? "…",
       icon: <ComputerOutlinedIcon />,
+      devices: true,
     },
   ];
 
@@ -272,6 +279,16 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
               accent={card.accent}
               tint={card.tint}
               titleHint={card.hint ?? null}
+              // Análisis de madurez 2026-09: los seis KPI eran inertes
+              // aunque SummaryCard soporta onClick desde siempre. Un
+              // número que no lleva a su lista es un adorno.
+              onClick={
+                card.devices
+                  ? () => onOpenDevices?.()
+                  : card.filter
+                    ? () => onDrillDown?.(card.filter, { replace: true })
+                    : undefined
+              }
               stretch
             />
           </Grid>
@@ -378,36 +395,37 @@ function CdpPqcTab({ refreshNonce }) {
 
 // ── Certificates tab (fleet, deduped by fingerprint) ─────────────────
 
-function CdpCertificatesTab({ refreshNonce, externalFilter }) {
+function CdpCertificatesTab({ refreshNonce }) {
   const [loadError, setLoadError] = React.useState(null);
   const [rows, setRows] = React.useState([]);
   const [rowCount, setRowCount] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
   const [paginationModel, setPaginationModel] = React.useState({ page: 0, pageSize: 25 });
-  const [search, setSearch] = React.useState("");
-  const [status, setStatus] = React.useState("");
-  const [includeRoots, setIncludeRoots] = React.useState(false);
-  // Set by dashboard drill-down. The backend has supported these two
-  // filters since Phase A; the grid had no control for them, so they
-  // are surfaced as removable chips rather than yet more dropdowns.
-  const [flag, setFlag] = React.useState("");
-  const [issuer, setIssuer] = React.useState("");
+  // ── El filtro vive en la URL, no aquí ──────────────────────────────
+  //
+  // Antes había dos estados para el mismo filtro: el de la página (el
+  // drill-down) y el de esta pestaña. El drill-down PISABA la búsqueda
+  // escrita y se reaplicaba al volver aunque se hubieran borrado los
+  // chips; `flag` e `issuer` solo se podían fijar desde el Dashboard.
+  // Con una sola fuente de verdad, cada control de abajo lee y escribe
+  // la misma cosa, y un enlace copiado conserva la vista.
+  const [filter, patchFilter] = useCdpFilter();
+  const search = filter.search ?? "";
+  const status = filter.status ?? "";
+  const includeRoots = filter.includeRoots === true;
+  const flag = filter.flag ?? "";
+  const issuer = filter.issuer ?? "";
+  const hasPrivateKey = filter.hasPrivateKey === true;
+  const hasFlags = filter.hasFlags === true;
+  const eku = filter.eku ?? "";
+  const setAndReset = (delta) => {
+    patchFilter(delta);
+    setPaginationModel((m) => ({ ...m, page: 0 }));
+  };
   // The fleet list answers "which certificates"; the drawer answers
   // "and what do I do about this one" — attribution, chain and
   // revocation all live there.
   const [drawerCert, setDrawerCert] = React.useState(null);
-
-  // Apply a drill-down coming from the Dashboard tab. Keyed on the
-  // filter object identity — the page mints a new one per click, so
-  // clicking the same issuer twice still re-applies.
-  React.useEffect(() => {
-    if (!externalFilter) return;
-    setSearch(externalFilter.search ?? "");
-    setStatus(externalFilter.status ?? "");
-    setFlag(externalFilter.flag ?? "");
-    setIssuer(externalFilter.issuer ?? "");
-    setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  }, [externalFilter]);
 
   React.useEffect(() => {
     let alive = true;
@@ -420,6 +438,9 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
       flag: flag || undefined,
       issuer: issuer || undefined,
       includeRoots: includeRoots || undefined,
+      hasPrivateKey: hasPrivateKey || undefined,
+      hasFlags: hasFlags || undefined,
+      eku: eku || undefined,
     })
       .then((resp) => {
         if (!alive) return;
@@ -443,7 +464,7 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
     return () => {
       alive = false;
     };
-  }, [paginationModel, search, status, flag, issuer, includeRoots, refreshNonce]);
+  }, [paginationModel, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, refreshNonce]);
 
   const columns = [
     {
@@ -504,10 +525,7 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
           size="small"
           label="Search subject / issuer / fingerprint"
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPaginationModel((m) => ({ ...m, page: 0 }));
-          }}
+          onChange={(e) => setAndReset({ search: e.target.value })}
           sx={{ minWidth: 280 }}
         />
         <TextField
@@ -515,10 +533,7 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
           select
           label="Status"
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPaginationModel((m) => ({ ...m, page: 0 }));
-          }}
+          onChange={(e) => setAndReset({ status: e.target.value })}
           sx={{ minWidth: 140 }}
         >
           <MenuItem value="">All</MenuItem>
@@ -531,38 +546,72 @@ function CdpCertificatesTab({ refreshNonce, externalFilter }) {
             <Switch
               size="small"
               checked={includeRoots}
-              onChange={(e) => {
-                setIncludeRoots(e.target.checked);
-                setPaginationModel((m) => ({ ...m, page: 0 }));
-              }}
+              onChange={(e) => setAndReset({ includeRoots: e.target.checked })}
             />
           }
           label={<Typography sx={{ fontSize: TEXT.md }}>Show system roots</Typography>}
         />
-
-        {/* Drill-down filters arriving from the Dashboard tab. */}
-        {flag && (
-          <Chip
-            size="small"
-            label={`Flag: ${FLAG_LABELS[flag] ?? flag}`}
-            onDelete={() => {
-              setFlag("");
-              setPaginationModel((m) => ({ ...m, page: 0 }));
-            }}
-            sx={{ bgcolor: BRAND.alert.highSoft, color: BRAND.alert.high, fontWeight: 700 }}
-          />
-        )}
-        {issuer && (
-          <Chip
-            size="small"
-            label={`Issuer: ${issuer}`}
-            onDelete={() => {
-              setIssuer("");
-              setPaginationModel((m) => ({ ...m, page: 0 }));
-            }}
-            sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
-          />
-        )}
+        {/*
+          Los filtros que antes solo se podían fijar desde el Dashboard
+          tienen control propio. Se sigue pudiendo llegar por drill-down,
+          pero también cambiarlos aquí sin volver atrás.
+        */}
+        <TextField
+          size="small"
+          select
+          label="Flag"
+          value={flag}
+          onChange={(e) => setAndReset({ flag: e.target.value })}
+          sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="">Any</MenuItem>
+          {Object.entries(FLAG_LABELS).map(([k, v]) => (
+            <MenuItem key={k} value={k}>{v}</MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          size="small"
+          select
+          label="Purpose (EKU)"
+          value={eku}
+          onChange={(e) => setAndReset({ eku: e.target.value })}
+          sx={{ minWidth: 170 }}
+        >
+          <MenuItem value="">Any</MenuItem>
+          <MenuItem value="serverAuth">TLS server</MenuItem>
+          <MenuItem value="clientAuth">TLS client</MenuItem>
+          <MenuItem value="codeSigning">Code signing</MenuItem>
+          <MenuItem value="emailProtection">S/MIME</MenuItem>
+          <MenuItem value="smartCardLogon">Smart card logon</MenuItem>
+          <MenuItem value="remoteDesktopAuth">Remote Desktop</MenuItem>
+        </TextField>
+        <TextField
+          size="small"
+          label="Issuer"
+          value={issuer}
+          onChange={(e) => setAndReset({ issuer: e.target.value })}
+          sx={{ minWidth: 180 }}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={hasPrivateKey}
+              onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })}
+            />
+          }
+          label={<Typography sx={{ fontSize: TEXT.md }}>With private key</Typography>}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              size="small"
+              checked={hasFlags}
+              onChange={(e) => setAndReset({ hasFlags: e.target.checked })}
+            />
+          }
+          label={<Typography sx={{ fontSize: TEXT.md }}>Flagged only</Typography>}
+        />
       </Stack>
 
       {loadError ? (
@@ -1145,11 +1194,11 @@ function CdpDevicesTab({ refreshNonce }) {
 // ── Page ─────────────────────────────────────────────────────────────
 
 export default function CryptoDiscovery() {
-  const [tab, setTab] = React.useState(0);
+  // Pestaña y filtro viven en la URL (ver hooks/useCdpFilter.js).
+  const [filter, patchFilter, replaceFilter] = useCdpFilter();
+  const tab = filter.tab ?? 0;
+  const setTab = React.useCallback((v) => patchFilter({ tab: v }), [patchFilter]);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
-  // Dashboard → Certificates drill-down. A fresh object per click so
-  // the child re-applies even when the same filter is picked twice.
-  const [certFilter, setCertFilter] = React.useState(null);
 
   // ADR-0011 fase 3 — emisión e instalación.
   const [issuanceOpen, setIssuanceOpen] = React.useState(false);
@@ -1182,11 +1231,16 @@ export default function CryptoDiscovery() {
     };
   }, [issuanceOpen]);
 
-  const drillDown = React.useCallback((filter) => {
-    setCertFilter({ ...filter });
-    // Certificates moved to index 2 when the Post-quantum tab landed.
-    setTab(2);
-  }, []);
+  // Dashboard → Certificates. FUNDE por defecto: un clic en «weak_sig»
+  // no borra la búsqueda que el usuario tenía escrita. Los KPI piden
+  // `replace` porque son una vista entera, no un refinamiento.
+  const drillDown = React.useCallback(
+    (delta, opts) => {
+      if (opts?.replace) replaceFilter({ ...delta, tab: 2 });
+      else patchFilter({ ...delta, tab: 2 });
+    },
+    [patchFilter, replaceFilter]
+  );
 
   return (
     <Box>
@@ -1250,7 +1304,7 @@ export default function CryptoDiscovery() {
         <CdpPqcTab refreshNonce={refreshNonce} />
       </TabPanel>
       <TabPanel value={tab} index={2}>
-        <CdpCertificatesTab refreshNonce={refreshNonce} externalFilter={certFilter} />
+        <CdpCertificatesTab refreshNonce={refreshNonce} />
       </TabPanel>
       <TabPanel value={tab} index={3}>
         <CdpDevicesTab refreshNonce={refreshNonce} />

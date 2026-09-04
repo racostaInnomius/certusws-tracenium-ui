@@ -37,7 +37,8 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { listOrphanKeys, destroyEndpointKey } from "../../api/cdp";
+import { listOrphanKeys, destroyEndpointKey, refreshEndpointKeys } from "../../api/cdp";
+import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import { BRAND, DATAGRID_SX } from "../../theme/brand";
 
 /**
@@ -120,7 +121,88 @@ function DestroyKeyDialog({ item, onClose, onDone }) {
   );
 }
 
+/**
+ * Pedir a los equipos que listen su almacén.
+ *
+ * Análisis de madurez 2026-09: `refreshEndpointKeys` existía en el
+ * cliente API sin llamador, mientras el panel decía «si nunca se les ha
+ * pedido su almacén, la lista sale vacía» y no ofrecía la forma de
+ * pedirlo. Un aviso que señala una acción imposible es peor que ninguno.
+ */
+function AskDevicesDialog({ open, onClose, onDone }) {
+  const [picked, setPicked] = React.useState(() => new Set());
+  const [busy, setBusy] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  React.useEffect(() => {
+    if (open) {
+      setPicked(new Set());
+      setResult(null);
+    }
+  }, [open]);
+
+  const enviar = async () => {
+    setBusy(true);
+    setResult(null);
+    let ok = 0;
+    const fallos = [];
+    // Un job por equipo: el endpoint es por dispositivo a propósito, y
+    // un fallo en uno no puede impedir el resto.
+    for (const deviceId of picked) {
+      try {
+        const r = await refreshEndpointKeys(deviceId);
+        if (r?.ok) ok += 1;
+        else fallos.push(deviceId);
+      } catch {
+        fallos.push(deviceId);
+      }
+    }
+    setBusy(false);
+    setResult({ ok, fallos });
+    if (ok > 0) onDone?.();
+  };
+
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Consultar el almacén de claves de los equipos</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          Se envía un job de lectura a cada equipo elegido. La lista de huérfanas se
+          actualiza cuando responden — normalmente en el siguiente ciclo de facts.
+        </Typography>
+        <KnownDevicesPicker
+          open={open}
+          selectedIds={picked}
+          onToggleDevice={(id) =>
+            setPicked((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
+          selectedLabel="equipo(s)"
+          emptyLabel="Ningún equipo coincide."
+        />
+        {result && (
+          <Alert severity={result.fallos.length ? "warning" : "success"} sx={{ mt: 2 }}>
+            Enviado a {result.ok} equipo(s).
+            {result.fallos.length ? ` No se pudo enviar a ${result.fallos.length}.` : ""}
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>Cerrar</Button>
+        <Button variant="contained" disabled={busy || picked.size === 0} onClick={enviar}>
+          {busy ? "Enviando…" : `Consultar ${picked.size || ""}`.trim()}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function OrphanKeysPanel({ refreshNonce }) {
+  const [askOpen, setAskOpen] = React.useState(false);
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -192,9 +274,14 @@ export default function OrphanKeysPanel({ refreshNonce }) {
         <Typography variant="body2">
           <strong>{rows.length}</strong> clave(s) sin certificado
         </Typography>
-        <Button size="small" startIcon={<RefreshIcon />} onClick={() => setNonce((n) => n + 1)}>
-          Recargar
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" onClick={() => setAskOpen(true)}>
+            Consultar equipos
+          </Button>
+          <Button size="small" startIcon={<RefreshIcon />} onClick={() => setNonce((n) => n + 1)}>
+            Recargar
+          </Button>
+        </Stack>
       </Stack>
 
       {/*
@@ -220,6 +307,12 @@ export default function OrphanKeysPanel({ refreshNonce }) {
         pageSizeOptions={[10, 25, 50]}
         initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
         sx={{ ...DATAGRID_SX, border: `1px solid ${BRAND.border}` }}
+      />
+
+      <AskDevicesDialog
+        open={askOpen}
+        onClose={() => setAskOpen(false)}
+        onDone={() => setNonce((n) => n + 1)}
       />
 
       <DestroyKeyDialog
