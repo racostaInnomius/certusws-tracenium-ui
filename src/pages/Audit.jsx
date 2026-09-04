@@ -30,14 +30,14 @@ import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
-import AuditTimeseriesChart from "../components/Overview/AuditTimeseriesChart";
+import AuditBreakdown from "../components/Audit/AuditBreakdown";
 
 import {
   getAuditFacets,
   getAuditSummary,
   listAuditEvents
 } from "../api/audit";
-import { getAuditTimeseries } from "../api/overview";
+import { getAuditBreakdown } from "../api/overview";
 import { listKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
@@ -188,6 +188,16 @@ function toIsoOrUndefined(value) {
   return parsed.toISOString();
 }
 
+/**
+ * Ventana del resumen de arriba.
+ *
+ * 30 días y no 7, y es una consecuencia directa del volumen: con ~20 acciones
+ * humanas al mes, una ventana de 7 días deja la mitad de los tipos de evento
+ * fuera y la página no dice nada. La tabla de abajo mantiene sus propios
+ * filtros de fecha para cuando se quiera acotar.
+ */
+const BREAKDOWN_WINDOW_DAYS = 30;
+
 export default function Audit() {
   const initialParamsRef = React.useRef({
     deviceId: getSearchParam("auditDeviceId", ""),
@@ -251,8 +261,9 @@ export default function Audit() {
   // Separate state for the timeseries chart so its own 1d/7d/30d
   // toggle (inside AuditTimeseriesChart) can refetch independently
   // without dragging the full audit load through a reload.
-  const [auditTimeseries, setAuditTimeseries] = React.useState(null);
-  const [loadingTimeseries, setLoadingTimeseries] = React.useState(true);
+  const [breakdown, setBreakdown] = React.useState(null);
+  const [loadingBreakdown, setLoadingBreakdown] = React.useState(true);
+  const [breakdownFailed, setBreakdownFailed] = React.useState(false);
 
   // Filters collapse state. Default closed — the page is scannable
   // without filters most of the time, and hiding the block gives more
@@ -329,11 +340,17 @@ export default function Audit() {
   React.useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
-    setLoadingTimeseries(true);
-    getAuditTimeseries(7, lane)
-      .then((v) => { if (!cancelled) setAuditTimeseries(v); })
-      .catch(() => { if (!cancelled) setAuditTimeseries(null); })
-      .finally(() => { if (!cancelled) setLoadingTimeseries(false); });
+    setLoadingBreakdown(true);
+    setBreakdownFailed(false);
+    getAuditBreakdown(BREAKDOWN_WINDOW_DAYS, lane)
+      .then((v) => { if (!cancelled) setBreakdown(v); })
+      .catch(() => {
+        // ⚠️ El fallo se MARCA, no se traduce a `null`. Un 500 pintado como
+        // "no hay nada" es lo que dejó la gráfica anterior seis días en
+        // blanco sin que nadie lo reportara.
+        if (!cancelled) { setBreakdown(null); setBreakdownFailed(true); }
+      })
+      .finally(() => { if (!cancelled) setLoadingBreakdown(false); });
     return () => { cancelled = true; };
   }, [canAccess, lane]);
 
@@ -869,7 +886,7 @@ export default function Audit() {
                   title="Rejected or failed"
                   titleHint={
                     failures > 0
-                      ? `Rechazados: ${rejected} · Errores: ${errors}. Un enrolamiento rechazado vive en el carril administrativo aunque su tipo de evento sea de sesión.`
+                      ? `Rechazados: ${rejected} · Errores: ${errors}. Esta tarjeta cuenta sólo el carril activo; la franja de arriba los muestra todos, venga de quien venga.`
                       : "Ningún evento rechazado ni errado con estos filtros."
                   }
                   value={failures}
@@ -905,24 +922,34 @@ export default function Audit() {
         </Grid>
       </Box>
 
-      {/* Timeseries chart — full width below the KPI strip.
-          AuditTimeseriesChart expects the allSettled-style envelope
-          (same shape it gets on the Overview page); we adapt here so
-          the chart component stays untouched. */}
+      {/* Qué pasó y qué no salió bien — sustituye a la serie temporal.
+          
+          Medido en producción el 2026-09-04: el carril administrativo del
+          tenant más activo tenía 59 eventos en 30 días —dos al día— y cinco
+          de los últimos catorce estaban a cero. Una gráfica por día a ese
+          volumen no está medio vacía: es el instrumento equivocado. A veinte
+          acciones humanas al mes la pregunta es QUÉ cambió y QUÉ se rechazó,
+          y eso se responde con conteos por tipo.
+
+          Overview conserva la serie temporal: allí se miran TODOS los
+          carriles —33.000 eventos en 30 días— y ahí sí hay una forma en el
+          tiempo que mirar. */}
       <Box sx={{ mb: 2 }}>
-        {/* Por categoría, no por outcome: con un 98,4% de `ok` la pila por
-            resultado es una línea plana que ningún dato real puede mover.
-            Overview conserva el eje de outcome — ahí la tarjeta es una
-            entre muchas y la pregunta es "¿algo se está rechazando?". */}
-        <AuditTimeseriesChart
-          result={
-            auditTimeseries
-              ? { status: "fulfilled", value: auditTimeseries }
-              : null
-          }
-          loading={loadingTimeseries}
-          variant="category"
+        <AuditBreakdown
+          data={breakdown}
+          loading={loadingBreakdown}
+          failed={breakdownFailed}
+          windowDays={BREAKDOWN_WINDOW_DAYS}
           lane={lane}
+          onSelectEventType={(type, outcomeValue) => {
+            // El ranking es un índice de la tabla de abajo, no un adorno:
+            // pulsar una fila la filtra. Repulsar lo mismo la limpia, para
+            // que el gesto sea reversible sin buscar el aspa.
+            const same = eventType === type && (!outcomeValue || outcome === outcomeValue);
+            setEventType(same ? "" : type);
+            if (outcomeValue) setOutcome(same ? "" : outcomeValue);
+            setFiltersOpen(true);
+          }}
         />
       </Box>
 
@@ -1293,7 +1320,6 @@ export default function Audit() {
                     setSelectedEvent(null);
                     setSelectedEventId("");
                   }}
-                  aria-label="Close detail"
                   sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
                 >
                   <CloseOutlinedIcon fontSize="small" />

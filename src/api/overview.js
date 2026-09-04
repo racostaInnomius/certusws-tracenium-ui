@@ -249,3 +249,15 @@ export async function fetchOverviewBundle() {
 
   return { results };
 }
+
+/**
+ * Resumen de la página de Audit: qué pasó y qué no salió bien.
+ *
+ * Sustituye a `getAuditTimeseries` en esa página — a dos acciones
+ * administrativas al día, una serie por día no dice nada. Overview sigue
+ * usando la serie, que ahí mira todos los carriles y sí tiene forma.
+ */
+export async function getAuditBreakdown(windowDays = 30, lane) {
+  const laneQs = lane ? `&lane=${encodeURIComponent(lane)}` : "";
+  return httpGetJson(`/api/v1/security/audit/breakdown?window=${windowDays}d${laneQs}`);
+}
