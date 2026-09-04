@@ -90,6 +90,21 @@ export async function exportCdpCertificatesCsv(params = {}) {
   saveBlob(blob, filename || "cdp-certificates.csv");
 }
 
+// ── Fase 4: activos que no vienen de un agente (CBOM importado) ─────
+
+/** Importa un CycloneDX ya parseado. `sourceName` identifica al productor. */
+export async function importCdpCbom(sourceName, bom) {
+  return httpPostJson(`${BASE}/cbom/import`, { sourceName, bom });
+}
+
+export async function getCryptoAssetsSummary() {
+  return httpGetJson(`${BASE}/assets/summary`);
+}
+
+export async function listCryptoAssets(params = {}) {
+  return httpGetJson(`${BASE}/assets${buildQuery(params)}`);
+}
+
 export async function listCdpCertificates(params = {}) {
   return httpGetJson(`${BASE}/certificates${buildQuery(params)}`);
 }

@@ -77,6 +77,7 @@ import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
 import CdpCertFacets from "../components/CryptoDiscovery/CdpCertFacets";
+import CbomAssetsPanel from "../components/CryptoDiscovery/CbomAssetsPanel";
 import { BRAND, DATAGRID_SX, ICON, TEXT, TEXT_MUTED } from "../theme/brand";
 import {
   getCdpSummary,
@@ -453,6 +454,8 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
         onSelect={select}
         explain={explain}
       />
+      {/* Fase 4: lo que vive donde no hay agente, importado como CBOM. */}
+      <CbomAssetsPanel refreshNonce={refreshNonce} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
     </Stack>
   );
 }
