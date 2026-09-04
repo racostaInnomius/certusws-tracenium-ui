@@ -29,7 +29,7 @@ import { emailReport } from "../../api/reports";
 import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
 import { BRAND } from "../../theme/brand";
 
-export default function EmailReportDialog({ open, onClose, reportType, onResult }) {
+export default function EmailReportDialog({ open, onClose, reportType, onResult, params }) {
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
 
@@ -79,7 +79,8 @@ export default function EmailReportDialog({ open, onClose, reportType, onResult 
       const result = await emailReport(reportType.key, {
         format,
         memberIds: checkedIds,
-        externalEmails: externalCheck.unique
+        externalEmails: externalCheck.unique,
+        params
       });
       onResult?.(result);
       onClose();

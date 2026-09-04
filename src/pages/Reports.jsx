@@ -12,6 +12,7 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
+import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import { getReportTypes, getReportRuns, runReport } from "../api/reports";
 import { BRAND, TEXT } from "../theme/brand";
 
@@ -23,6 +24,10 @@ export default function Reports() {
   const [runningKey, setRunningKey] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const [emailTarget, setEmailTarget] = React.useState(null);
+  // Types that declare `params` ask for them first (ReportParamsDialog);
+  // `paramsTarget` remembers what to do once the operator confirms.
+  const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "run" | "email" }
+  const [emailParams, setEmailParams] = React.useState(null);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);
@@ -41,10 +46,10 @@ export default function Reports() {
     loadData();
   }, [loadData]);
 
-  const handleRun = async (key, format) => {
+  const handleRun = async (key, format, params) => {
     setRunningKey(`${key}:${format}`);
     try {
-      await runReport(key, format);
+      await runReport(key, format, params);
       // Refresh the history table so the run just kicked off shows up
       // without a manual reload.
       loadData();
@@ -89,7 +94,11 @@ export default function Reports() {
               size="small"
               startIcon={<DownloadOutlinedIcon />}
               disabled={runningKey === `${params.row.key}:${format}`}
-              onClick={() => handleRun(params.row.key, format)}
+              onClick={() =>
+                params.row.params?.length
+                  ? setParamsTarget({ row: params.row, format, intent: "run" })
+                  : handleRun(params.row.key, format)
+              }
               sx={{ textTransform: "none" }}
             >
               {format.toUpperCase()}
@@ -98,7 +107,11 @@ export default function Reports() {
           <Button
             size="small"
             startIcon={<MailOutlineIcon />}
-            onClick={() => setEmailTarget(params.row)}
+            onClick={() =>
+              params.row.params?.length
+                ? setParamsTarget({ row: params.row, format: params.row.formats?.[0], intent: "email" })
+                : setEmailTarget(params.row)
+            }
             sx={{ textTransform: "none" }}
           >
             Email
@@ -162,10 +175,28 @@ export default function Reports() {
         </Box>
       </Paper>
 
+      <ReportParamsDialog
+        open={Boolean(paramsTarget)}
+        reportType={paramsTarget?.row || null}
+        format={paramsTarget?.format}
+        onClose={() => setParamsTarget(null)}
+        onSubmit={(values) => {
+          const t = paramsTarget;
+          setParamsTarget(null);
+          if (!t) return;
+          if (t.intent === "email") {
+            setEmailParams(values);
+            setEmailTarget(t.row);
+          } else {
+            handleRun(t.row.key, t.format, values);
+          }
+        }}
+      />
       <EmailReportDialog
         open={Boolean(emailTarget)}
         reportType={emailTarget}
-        onClose={() => setEmailTarget(null)}
+        params={emailParams}
+        onClose={() => { setEmailTarget(null); setEmailParams(null); }}
         onResult={handleEmailResult}
       />
 

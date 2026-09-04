@@ -7,7 +7,7 @@
 // link.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, respond } from "../test/msw/server";
 
@@ -55,6 +55,18 @@ const TYPES = {
       group: "Audit",
       formats: ["csv"],
     },
+    {
+      key: "scp.evidence-pack",
+      label: "Evidence Pack",
+      description: "Audit-ready evidence for one framework over a period.",
+      group: "SCP",
+      formats: ["pdf", "json"],
+      params: [
+        { name: "framework", label: "Framework", kind: "framework", required: true },
+        { name: "from", label: "From month", kind: "month", required: true },
+        { name: "to", label: "To month", kind: "month", required: true },
+      ],
+    },
   ],
 };
 
@@ -101,7 +113,8 @@ describe("Reports page", () => {
 
     render(<Reports />);
 
-    const jsonButton = await screen.findByRole("button", { name: /json/i });
+    const row = (await screen.findByText("Crypto Bill of Materials (CBOM)")).closest("[role='row']");
+    const jsonButton = within(row).getByRole("button", { name: /json/i });
     await userEvent.click(jsonButton);
 
     await waitFor(() => expect(runCalls).toHaveLength(1));
@@ -132,5 +145,32 @@ describe("Reports page", () => {
     render(<Reports />);
 
     expect(await screen.findByText(/could not load reports|tenant_not_resolved/i)).toBeInTheDocument();
+  });
+});
+
+describe("Reports page (types with params)", () => {
+  it("a type that declares params asks for them and sends them as query on run", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", "/api/v1/security/compliance/frameworks", { ok: true, frameworks: [{ framework: "soc2_tsc_2017", shortName: "SOC 2 (TSC 2017)" }] });
+    const runCalls = respond("get", `${BASE}/scp.evidence-pack/run`, { ok: true });
+    render(<Reports />);
+
+    const row = (await screen.findByText("Evidence Pack")).closest("[role='row']");
+    await userEvent.click(within(row).getByRole("button", { name: "PDF" }));
+
+    // Diálogo de parámetros, no descarga inmediata.
+    expect(runCalls).toHaveLength(0);
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByLabelText("Framework")).toHaveTextContent("SOC 2 (TSC 2017)"));
+    const from = within(dialog).getByLabelText("From month");
+    const to = within(dialog).getByLabelText("To month");
+    await userEvent.clear(from); await userEvent.type(from, "2026-06");
+    await userEvent.clear(to); await userEvent.type(to, "2026-08");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(runCalls).toHaveLength(1));
+    expect(runCalls[0].search).toEqual({ format: "pdf", framework: "soc2_tsc_2017", from: "2026-06", to: "2026-08" });
+    expect(saveBlob).toHaveBeenCalled();
   });
 });

@@ -23,18 +23,24 @@ export async function getReportRuns({ limit } = {}) {
 // export would silently reflect the wrong tenant (the exact incident
 // ADR-0008 documents for the compliance PDF export). Same pattern as
 // src/api/compliance.js's downloadFindingsCsv/Pdf.
-export async function runReport(key, format) {
+export function buildParamsQuery(params) {
+  const entries = Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  return entries.map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("");
+}
+
+export async function runReport(key, format, params) {
   const { blob, filename } = await httpGetBlob(
-    `${BASE}/${encodeURIComponent(key)}/run?format=${encodeURIComponent(format)}`
+    `${BASE}/${encodeURIComponent(key)}/run?format=${encodeURIComponent(format)}${buildParamsQuery(params)}`
   );
   saveBlob(blob, filename || `${key}.${format}`);
 }
 
 // { sent: string[], failed: {email, sent, reason}[] }
-export async function emailReport(key, { format, memberIds, externalEmails }) {
+export async function emailReport(key, { format, memberIds, externalEmails, params }) {
   return httpPostJson(`${BASE}/${encodeURIComponent(key)}/email`, {
     format,
     memberIds,
-    externalEmails
+    externalEmails,
+    ...(params && Object.keys(params).length ? { params } : {})
   });
 }
