@@ -147,7 +147,14 @@ function formatDate(value) {
 
 function TabPanel({ value, index, children }) {
   if (value !== index) return null;
-  return <Box sx={{ pt: 2 }}>{children}</Box>;
+  // role=tabpanel: lo que un lector de pantalla espera bajo un Tabs, y lo
+  // que permite al test de la página contar cuántos paneles hay visibles
+  // —que es como se caza un índice duplicado.
+  return (
+    <Box role="tabpanel" sx={{ pt: 2 }}>
+      {children}
+    </Box>
+  );
 }
 
 // ── Dashboard tab ────────────────────────────────────────────────────
@@ -1254,7 +1261,14 @@ export default function CryptoDiscovery() {
       <TabPanel value={tab} index={5}>
         <OrphanKeysPanel refreshNonce={refreshNonce} />
       </TabPanel>
-      <TabPanel value={tab} index={5}>
+      {/*
+        ⚠️ Índice 6, no 5. Al añadir «Claves huérfanas» se dejó este panel
+        en el 5 que ocupaba antes, y dos paneles con el mismo índice hacen
+        dos cosas malas a la vez: la pestaña de huérfanas pintaba ADEMÁS
+        la matriz de aprobación, y «Access policy» quedaba en blanco. El
+        test de la página fija que cada Tab tenga exactamente un panel.
+      */}
+      <TabPanel value={tab} index={6}>
         <AccessPolicyMatrix
           prefix="cdp."
           title="Privileged access policy"
