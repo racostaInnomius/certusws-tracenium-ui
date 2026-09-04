@@ -26,6 +26,35 @@ export async function getCdpPqcReadiness() {
   return httpGetJson(`${BASE}/pqc`);
 }
 
+// ── Fase 1 del análisis de madurez: exploración ──────────────────────
+//
+// Las agregaciones que eran triviales en SQL y no existían en la API.
+// Todas de solo lectura y todas aceptan el mismo filtro de exploración
+// (source, scope, storeName, agentId, keyAlgorithm, keySizeBits, family,
+// hasPrivateKey, eku, includeRoots).
+
+/** El embudo de la portada: total → tuyos → accionables → bloqueados. */
+export async function getCdpExposure() {
+  return httpGetJson(`${BASE}/exposure`);
+}
+
+/**
+ * `by` es una lista de dimensiones (key_algorithm, key_size_bits,
+ * ownership, source, store_scope, store_name, key_family, issuer_cn,
+ * platform); `stack` una dimensión más para apilar.
+ */
+export async function getCdpFacets({ by, stack, ...filter } = {}) {
+  return httpGetJson(`${BASE}/facets${buildQuery({ by: Array.isArray(by) ? by.join(",") : by, stack, ...filter })}`);
+}
+
+export async function getCdpStores(filter = {}) {
+  return httpGetJson(`${BASE}/stores${buildQuery(filter)}`);
+}
+
+export async function getCdpTimeline(filter = {}) {
+  return httpGetJson(`${BASE}/timeline${buildQuery(filter)}`);
+}
+
 export async function listCdpCertificates(params = {}) {
   return httpGetJson(`${BASE}/certificates${buildQuery(params)}`);
 }

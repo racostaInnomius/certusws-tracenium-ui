@@ -32,7 +32,18 @@ export const CDP_URL_KEYS = {
   hasPrivateKey: "pk",
   hasFlags: "flagged",
   eku: "eku",
-  includeRoots: "roots"
+  includeRoots: "roots",
+  // Fase 1: los filtros de navegación. Son los que hacen que un segmento
+  // de la distribución, una fila de almacenes o un año de la línea de
+  // tiempo lleven a SU lista.
+  keyAlgorithm: "algo",
+  keySizeBits: "bits",
+  family: "family",
+  source: "source",
+  storeName: "store",
+  agentId: "device",
+  notAfterFrom: "from",
+  notAfterTo: "to"
 };
 
 const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots"]);

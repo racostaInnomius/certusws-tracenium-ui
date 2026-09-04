@@ -39,6 +39,16 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
 import useCdpFilter from "../hooks/useCdpFilter";
+import {
+  ExposureFunnel,
+  ExplainToggle,
+  KeyDistributionPanel,
+  OwnershipScopeToggle,
+  StoresPanel,
+  TimelinePanel,
+  useExplainMode
+} from "../components/CryptoDiscovery/CdpExplorePanels";
+
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
@@ -80,7 +90,28 @@ import {
   listCdpDeviceCertificates,
   listCdpTrustAnchors,
   distrustAnchor,
+  getCdpExposure,
+  getCdpFacets,
+  getCdpStores,
+  getCdpTimeline
 } from "../api/cdp";
+
+/**
+ * Índices de pestaña, con nombre. Fase 1 insertó «Explore» y «Stores»
+ * tras Post-quantum y desplazó el resto; un número suelto (`tab: 2`) es
+ * exactamente lo que dejó «Access policy» en blanco la última vez.
+ */
+const TAB = {
+  dashboard: 0,
+  pqc: 1,
+  explore: 2,
+  stores: 3,
+  certificates: 4,
+  devices: 5,
+  anchors: 6,
+  orphans: 7,
+  policy: 8
+};
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -169,6 +200,19 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
   // que el que cae lo diga — sin esto los paneles se pintaban vacíos, que
   // se lee como "no hay nada que mostrar" en vez de "no pude cargarlo".
   const [panelsError, setPanelsError] = React.useState(null);
+  // Fase 1: el embudo de propiedad va PRIMERO. Es la cifra que separa lo
+  // que el cliente posee de lo que le llega con el sistema.
+  const [exposure, setExposure] = React.useState(null);
+  const [explain, toggleExplain] = useExplainMode();
+  React.useEffect(() => {
+    let alive = true;
+    getCdpExposure()
+      .then((r) => alive && setExposure(r?.exposure ?? null))
+      .catch(() => alive && setExposure(null));
+    return () => {
+      alive = false;
+    };
+  }, [refreshNonce]);
 
   React.useEffect(() => {
     let alive = true;
@@ -269,6 +313,14 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
 
   return (
     <Stack spacing={2}>
+      <Stack direction="row" justifyContent="flex-end">
+        <ExplainToggle on={explain} onToggle={toggleExplain} />
+      </Stack>
+      <ExposureFunnel
+        exposure={exposure}
+        explain={explain}
+        onSelect={(f) => onDrillDown?.(f, { replace: true })}
+      />
       <Grid container spacing={2}>
         {cards.map((card) => (
           <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
@@ -393,6 +445,95 @@ function CdpPqcTab({ refreshNonce }) {
   );
 }
 
+// ── Explore tab (fase 1): distribución por clave + línea de tiempo ───
+
+function CdpExploreTab({ refreshNonce, onDrillDown }) {
+  const [scope, setScope] = React.useState("all");
+  const [explain, toggleExplain] = useExplainMode();
+  const [facets, setFacets] = React.useState(null);
+  const [timeline, setTimeline] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    setError(null);
+    const filter = scope === "own" ? { hasPrivateKey: true } : {};
+    Promise.all([
+      getCdpFacets({ by: ["key_algorithm", "key_size_bits"], stack: "ownership", ...filter }),
+      getCdpTimeline(filter)
+    ])
+      .then(([f, t]) => {
+        if (!alive) return;
+        setFacets(f ?? null);
+        setTimeline(t ?? null);
+      })
+      .catch((err) => alive && setError(err?.message || String(err)));
+    return () => {
+      alive = false;
+    };
+  }, [refreshNonce, scope]);
+
+  // El filtro que se navega FUNDE el ámbito elegido: «solo lo mío» + un
+  // segmento = esa lista con clave privada.
+  const select = (f) => onDrillDown?.(scope === "own" ? { hasPrivateKey: true, ...f } : f, { replace: true });
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+        <OwnershipScopeToggle value={scope} onChange={setScope} />
+        <ExplainToggle on={explain} onToggle={toggleExplain} />
+      </Stack>
+      {error ? (
+        <Alert severity="error">
+          <AlertTitle>Couldn&apos;t load</AlertTitle>
+          {error}
+        </Alert>
+      ) : null}
+      <KeyDistributionPanel facets={facets} onSelect={select} explain={explain} />
+      <TimelinePanel timeline={timeline} onSelect={select} explain={explain} ownOnly={scope === "own"} />
+    </Stack>
+  );
+}
+
+// ── Stores tab (fase 1): fuente → almacén → equipo ───────────────────
+
+function CdpStoresTab({ refreshNonce, onDrillDown }) {
+  const [explain, toggleExplain] = useExplainMode();
+  const [data, setData] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    setError(null);
+    getCdpStores()
+      .then((r) => alive && setData(r ?? null))
+      .catch((err) => alive && setError(err?.message || String(err)));
+    return () => {
+      alive = false;
+    };
+  }, [refreshNonce]);
+
+  return (
+    <Stack spacing={2}>
+      <Stack direction="row" justifyContent="flex-end">
+        <ExplainToggle on={explain} onToggle={toggleExplain} />
+      </Stack>
+      {error ? (
+        <Alert severity="error">
+          <AlertTitle>Couldn&apos;t load</AlertTitle>
+          {error}
+        </Alert>
+      ) : null}
+      <StoresPanel
+        stores={data?.stores}
+        javaOnlyVendorBundles={data?.javaOnlyVendorBundles === true}
+        onSelect={(f) => onDrillDown?.(f, { replace: true })}
+        explain={explain}
+      />
+    </Stack>
+  );
+}
+
 // ── Certificates tab (fleet, deduped by fingerprint) ─────────────────
 
 function CdpCertificatesTab({ refreshNonce }) {
@@ -418,6 +559,20 @@ function CdpCertificatesTab({ refreshNonce }) {
   const hasPrivateKey = filter.hasPrivateKey === true;
   const hasFlags = filter.hasFlags === true;
   const eku = filter.eku ?? "";
+  // Filtros de navegación (fase 1): llegan desde Explore / Stores. No
+  // tienen control propio aquí —se eligen en su panel— pero sí chip
+  // borrable, para que nunca haya un filtro invisible actuando.
+  const nav = {
+    keyAlgorithm: filter.keyAlgorithm,
+    keySizeBits: filter.keySizeBits ? Number(filter.keySizeBits) : undefined,
+    family: filter.family,
+    source: filter.source,
+    storeName: filter.storeName,
+    agentId: filter.agentId,
+    notAfterFrom: filter.notAfterFrom,
+    notAfterTo: filter.notAfterTo
+  };
+  const navKey = JSON.stringify(nav);
   const setAndReset = (delta) => {
     patchFilter(delta);
     setPaginationModel((m) => ({ ...m, page: 0 }));
@@ -441,6 +596,7 @@ function CdpCertificatesTab({ refreshNonce }) {
       hasPrivateKey: hasPrivateKey || undefined,
       hasFlags: hasFlags || undefined,
       eku: eku || undefined,
+      ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== "")),
     })
       .then((resp) => {
         if (!alive) return;
@@ -464,7 +620,7 @@ function CdpCertificatesTab({ refreshNonce }) {
     return () => {
       alive = false;
     };
-  }, [paginationModel, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, refreshNonce]);
+  }, [paginationModel, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, refreshNonce]);
 
   const columns = [
     {
@@ -612,6 +768,26 @@ function CdpCertificatesTab({ refreshNonce }) {
           }
           label={<Typography sx={{ fontSize: TEXT.md }}>Flagged only</Typography>}
         />
+        {[
+          ["keyAlgorithm", "Algorithm"],
+          ["keySizeBits", "Key size"],
+          ["family", "Family"],
+          ["source", "Source"],
+          ["storeName", "Store"],
+          ["agentId", "Device"],
+          ["notAfterFrom", "Expires from"],
+          ["notAfterTo", "Expires before"]
+        ].map(([k, label]) =>
+          nav[k] != null && nav[k] !== "" ? (
+            <Chip
+              key={k}
+              size="small"
+              label={`${label}: ${nav[k]}`}
+              onDelete={() => setAndReset({ [k]: "" })}
+              sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, maxWidth: 360 }}
+            />
+          ) : null
+        )}
       </Stack>
 
       {loadError ? (
@@ -1236,8 +1412,8 @@ export default function CryptoDiscovery() {
   // `replace` porque son una vista entera, no un refinamiento.
   const drillDown = React.useCallback(
     (delta, opts) => {
-      if (opts?.replace) replaceFilter({ ...delta, tab: 2 });
-      else patchFilter({ ...delta, tab: 2 });
+      if (opts?.replace) replaceFilter({ ...delta, tab: TAB.certificates });
+      else patchFilter({ ...delta, tab: TAB.certificates });
     },
     [patchFilter, replaceFilter]
   );
@@ -1277,6 +1453,8 @@ export default function CryptoDiscovery() {
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Dashboard" />
         <Tab label="Post-quantum" />
+        <Tab label="Explore" />
+        <Tab label="Stores" />
         <Tab label="Certificates" />
         <Tab label="Devices" />
         <Tab label="Trust anchors" />
@@ -1293,26 +1471,32 @@ export default function CryptoDiscovery() {
         <Tab label="Access policy" />
       </Tabs>
 
-      <TabPanel value={tab} index={0}>
+      <TabPanel value={tab} index={TAB.dashboard}>
         <CdpDashboard
           refreshNonce={refreshNonce}
           onDrillDown={drillDown}
-          onOpenDevices={() => setTab(3)}
+          onOpenDevices={() => setTab(TAB.devices)}
         />
       </TabPanel>
-      <TabPanel value={tab} index={1}>
+      <TabPanel value={tab} index={TAB.pqc}>
         <CdpPqcTab refreshNonce={refreshNonce} />
       </TabPanel>
-      <TabPanel value={tab} index={2}>
+      <TabPanel value={tab} index={TAB.explore}>
+        <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
+      </TabPanel>
+      <TabPanel value={tab} index={TAB.stores}>
+        <CdpStoresTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
+      </TabPanel>
+      <TabPanel value={tab} index={TAB.certificates}>
         <CdpCertificatesTab refreshNonce={refreshNonce} />
       </TabPanel>
-      <TabPanel value={tab} index={3}>
+      <TabPanel value={tab} index={TAB.devices}>
         <CdpDevicesTab refreshNonce={refreshNonce} />
       </TabPanel>
-      <TabPanel value={tab} index={4}>
+      <TabPanel value={tab} index={TAB.anchors}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />
       </TabPanel>
-      <TabPanel value={tab} index={5}>
+      <TabPanel value={tab} index={TAB.orphans}>
         <OrphanKeysPanel refreshNonce={refreshNonce} />
       </TabPanel>
       {/*
@@ -1322,7 +1506,7 @@ export default function CryptoDiscovery() {
         la matriz de aprobación, y «Access policy» quedaba en blanco. El
         test de la página fija que cada Tab tenga exactamente un panel.
       */}
-      <TabPanel value={tab} index={6}>
+      <TabPanel value={tab} index={TAB.policy}>
         <AccessPolicyMatrix
           prefix="cdp."
           title="Privileged access policy"

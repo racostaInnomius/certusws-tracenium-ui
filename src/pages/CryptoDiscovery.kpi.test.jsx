@@ -29,6 +29,10 @@ vi.mock("../api/cdp", async (importOriginal) => {
     ...real,
     getCdpSummary: vi.fn(async () => ({ totalCerts: 143, withPrivateKey: 143, expiring30d: 0, expiredWithKey: 7, withFlags: 12, devicesReporting: 53 })),
     getCdpDashboard: vi.fn(async () => ({})),
+    getCdpExposure: vi.fn(async () => ({ exposure: null })),
+    getCdpFacets: vi.fn(async () => ({ rows: [] })),
+    getCdpStores: vi.fn(async () => ({ stores: [] })),
+    getCdpTimeline: vi.fn(async () => ({ buckets: [], references: [] })),
     getCdpPqcReadiness: vi.fn(async () => ({})),
     listCdpCertificates: (...a) => listCdpCertificates(...a),
     listCdpDevices: vi.fn(async () => ({ items: [], total: 0 })),
@@ -66,7 +70,7 @@ describe("KPI clicables", () => {
     // La URL es la fuente de verdad: pestaña 2 y pk=1.
     await waitFor(() => {
       const p = new URLSearchParams(window.location.search);
-      expect(p.get("cdpTab")).toBe("2");
+      expect(p.get("cdpTab")).toBe("4");
       expect(p.get("pk")).toBe("1");
       expect(p.get("page")).toBe("cdp");
     });
