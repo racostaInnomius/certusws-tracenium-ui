@@ -18,8 +18,8 @@ import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnec
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 
-const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault" };
-const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "" };
+const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault", k8s: "Kubernetes" };
+const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "", apiServer: "", namespaces: "", readSecrets: true };
 
 export function ConnectorForm({ onCreated, disabled }) {
   const [kind, setKind] = React.useState("keyvault");
@@ -37,7 +37,9 @@ export function ConnectorForm({ onCreated, disabled }) {
         ? { projectId: f.projectId.trim() }
         : kind === "vault"
           ? { vaultUrl: f.hcUrl.trim(), namespace: f.namespace.trim() || undefined, mounts: f.mounts, authMethod: f.authMethod, roleId: f.authMethod === "approle" ? f.roleId.trim() : undefined, caPem: f.caPem.trim() || undefined }
-          : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
+          : kind === "k8s"
+            ? { apiServer: f.apiServer.trim(), namespaces: f.namespaces, readSecrets: f.readSecrets, caPem: f.caPem.trim() || undefined }
+            : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
   const ready =
     label.trim().length >= 2 &&
     secret &&
@@ -47,7 +49,9 @@ export function ConnectorForm({ onCreated, disabled }) {
         ? config.projectId && secret.trim().startsWith("{")
         : kind === "vault"
           ? /^https:\/\//i.test(config.vaultUrl) && config.mounts.trim() && (config.authMethod === "token" || config.roleId)
-          : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
+          : kind === "k8s"
+            ? /^https:\/\//i.test(config.apiServer)
+            : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
 
   const submit = async () => {
     setBusy(true);
@@ -74,9 +78,21 @@ export function ConnectorForm({ onCreated, disabled }) {
           <MenuItem value="acm">AWS Certificate Manager</MenuItem>
           <MenuItem value="gcp">Google Cloud</MenuItem>
           <MenuItem value="vault">HashiCorp Vault</MenuItem>
+          <MenuItem value="k8s">Kubernetes</MenuItem>
         </TextField>
-        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
-        {kind === "vault" ? (
+        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : kind === "k8s" ? "Prod cluster" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
+        {kind === "k8s" ? (
+          <>
+            <TextField size="small" label="API server" value={f.apiServer} onChange={set("apiServer")} placeholder="https://k8s.corp.example:6443" sx={{ minWidth: 280 }} disabled={disabled} />
+            <TextField size="small" label="Namespaces (empty = all)" value={f.namespaces} onChange={set("namespaces")} placeholder="prod, staging" sx={{ minWidth: 200 }} disabled={disabled} />
+            <TextField size="small" select label="TLS secrets" value={f.readSecrets ? "yes" : "no"} onChange={(e) => setF((x) => ({ ...x, readSecrets: e.target.value === "yes" }))} sx={{ minWidth: 200 }} disabled={disabled}>
+              <MenuItem value="yes">Read (fingerprint, in use by)</MenuItem>
+              <MenuItem value="no">cert-manager only</MenuItem>
+            </TextField>
+            <TextField size="small" label="Service account token" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ minWidth: 260 }} disabled={disabled} autoComplete="off" />
+            <TextField size="small" label="Cluster CA (PEM, optional)" multiline minRows={1} maxRows={4} value={f.caPem} onChange={set("caPem")} placeholder="-----BEGIN CERTIFICATE-----" sx={{ minWidth: 300, "& textarea": { fontFamily: "ui-monospace, Menlo, monospace", fontSize: TEXT.xs } }} disabled={disabled} />
+          </>
+        ) : kind === "vault" ? (
           <>
             <TextField size="small" label="Vault address" value={f.hcUrl} onChange={set("hcUrl")} placeholder="https://vault.corp.example:8200" sx={{ minWidth: 280 }} disabled={disabled} />
             <TextField size="small" label="Namespace (Enterprise)" value={f.namespace} onChange={set("namespace")} sx={{ minWidth: 160 }} disabled={disabled} />
@@ -114,7 +130,15 @@ export function ConnectorForm({ onCreated, disabled }) {
           {busy ? "Saving…" : `Add ${KIND_LABEL[kind]}`}
         </Button>
       </Stack>
-      {kind === "vault" ? (
+      {kind === "k8s" ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+          Reads <code>kubernetes.io/tls</code> secrets (only that type), cert-manager <code>Certificate</code> objects
+          and which Ingress uses each certificate. RBAC: get/list on secrets, list on certificates.cert-manager.io,
+          list on ingresses. <strong>Note:</strong> the API returns the private key together with the public
+          certificate; Tracenium keeps <code>tls.crt</code> and discards the rest in the same step, never storing or
+          logging it. Choose <em>cert-manager only</em> if even that is not acceptable — you lose fingerprints.
+        </Typography>
+      ) : kind === "vault" ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
           Reads each PKI mount: issued certificates, issuers and roles (what the mount <em>will</em> issue, by key type).
           Policy: <code>list</code> on <code>&lt;pki&gt;/certs</code>, <code>&lt;pki&gt;/issuers</code>,{" "}
@@ -253,7 +277,9 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
                       ? c.config?.projectId
                       : c.kind === "vault"
                         ? `${c.config?.vaultUrl} · ${(c.config?.mounts ?? []).join(", ")}`
-                        : c.config?.vaultUrl}
+                        : c.kind === "k8s"
+                          ? `${c.config?.apiServer}${(c.config?.namespaces ?? []).length ? ` · ${c.config.namespaces.join(", ")}` : ""}${c.config?.readSecrets === false ? " · cert-manager only" : ""}`
+                          : c.config?.vaultUrl}
                 </Typography>
                 <StatusChip c={c} />
                 {!c.enabled ? <Chip size="small" label="disabled" variant="outlined" /> : null}

@@ -131,3 +131,22 @@ describe("ConnectorForm — HashiCorp Vault", () => {
     );
   });
 });
+
+describe("ConnectorForm — Kubernetes", () => {
+  it("con kind k8s pide API server, namespaces, modo de secrets y token", async () => {
+    listCdpConnectors.mockResolvedValue({ ok: true, secretsConfigured: true, connectors: [] });
+    createCdpConnector.mockResolvedValue({ ok: true, connector: { connectorId: 5, kind: "k8s", label: "Prod cluster", config: { apiServer: "https://k8s.corp.example:6443", namespaces: [], readSecrets: true }, enabled: true, hasSecret: true } });
+    render(<CdpConnectorsPanel refreshNonce={0} />);
+    await screen.findByRole("button", { name: /add azure key vault/i });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /^kubernetes$/i }));
+    fireEvent.change(screen.getByLabelText(/^label/i), { target: { value: "Prod cluster" } });
+    fireEvent.change(screen.getByLabelText(/api server/i), { target: { value: "https://k8s.corp.example:6443" } });
+    fireEvent.change(screen.getByLabelText(/service account token/i), { target: { value: "eyJ" } });
+    expect(screen.getByText(/discards the rest in the same step/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add kubernetes/i }));
+    await waitFor(() =>
+      expect(createCdpConnector).toHaveBeenCalledWith({ kind: "k8s", label: "Prod cluster", config: { apiServer: "https://k8s.corp.example:6443", namespaces: "", readSecrets: true, caPem: undefined }, clientSecret: "eyJ" })
+    );
+  });
+});
