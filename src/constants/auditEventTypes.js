@@ -60,6 +60,9 @@ const EVENT_TYPE_CATALOG = {
   policy_ack_failed:               { label: "Policy ack failed",               category: "Policies" },
 
   // ── PKI / certificates ───────────────────────────────────────────
+  // ⚠️ `cert_issued` faltaba: el backend lo emite y la pantalla enseñaba el
+  // token crudo. La lista del test que debía cazarlo también lo omitía.
+  cert_issued:            { label: "Certificate issued",           category: "PKI" },
   cert_revoked:           { label: "Certificate revoked",          category: "PKI" },
   cert_renew_requested:   { label: "Cert renew requested",         category: "PKI" },
   cert_renew_issued:      { label: "Cert renew issued",            category: "PKI" },
@@ -116,8 +119,20 @@ const EVENT_TYPE_CATALOG = {
   REPORT_RUN:             { label: "Report generated",             category: "Billing" },
   REPORT_EMAILED:         { label: "Report emailed",               category: "Billing" },
 
-  // ── Software y gateway de IA ─────────────────────────────────────
-  sdp_self_service_install: { label: "Self-service install",       category: "Other" },
+  // ── Cobro fallido ────────────────────────────────────────────────
+  // ⚠️ Faltaba, así que la pantalla enseñaba el tipo crudo `PAYMENT_FAILED`
+  // en el sitio donde debería leerse qué pasó. Es emitible desde ADR-0010.
+  PAYMENT_FAILED:         { label: "Payment declined",             category: "Billing" },
+
+  // ── Entrega de software ──────────────────────────────────────────
+  // Estaba en "Other" desde que existe: no fallaba nada, simplemente se
+  // presentaba como sin clasificar junto a lo que nadie ha categorizado.
+  sdp_self_service_install: { label: "Self-service install",       category: "Software" },
+
+  // ── Plataforma ───────────────────────────────────────────────────
+  // Se queda en "Other" a conciencia: es una llamada que dispara el
+  // producto solo, y una categoría con un único miembro informa menos
+  // que el cajón de sastre.
   AI_GATEWAY_CALL:          { label: "AI gateway call",            category: "Other" },
 };
 
@@ -138,6 +153,7 @@ const CATEGORY_META = {
   Devices:  { color: BRAND.tealText,        tint: BRAND.darkSoft  },
   Security: { color: BRAND.alert.errorText, tint: BRAND.alert.errorSoft },
   Billing:  { color: BRAND.alert.warningText, tint: BRAND.darkSoft },
+  Software: { color: BRAND.tealText,        tint: BRAND.tealSoft  },
   Other:    { color: BRAND.dark,            tint: BRAND.darkSoft  },
 };
 
@@ -151,6 +167,7 @@ export const CATEGORY_ORDER = [
   "Security",
   "Devices",
   "PKI",
+  "Software",
   "Billing",
   "gRPC",
   "Facts",

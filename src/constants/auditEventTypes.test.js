@@ -38,6 +38,13 @@ import {
 // esos van a OTRA tabla y no salen nunca en la página de Audit. Meterlos
 // aquí sería llenar el desplegable de filtros con opciones que no
 // devuelven nada.
+// ⚠️ ESTA LISTA SE MANTIENE A MANO Y SE QUEDA VIEJA. Es lo que pasó con
+// `PAYMENT_FAILED` y `cert_issued`: el backend los emite, nadie los añadió
+// aquí, y el test de cobertura pasó en verde mientras la pantalla enseñaba
+// el token crudo. Para refrescarla, comparar contra:
+//   grep -rhoE 'eventType: "[A-Za-z_.]+"' --include="*.ts" modules/
+// en certusws-tracenium (⚠️ no ve los tipos que se arman por plantilla,
+// como los POLICY_*_CHANGED de classifyChange).
 const TIPOS_DEL_BACKEND = [
   "AI_GATEWAY_CALL",
   "DEVICE_CERTIFICATES_REVOKED",
@@ -49,6 +56,7 @@ const TIPOS_DEL_BACKEND = [
   "DEVICE_PURGE_STARTED",
   "DEVICE_RESTORED",
   "ENTITLEMENTS_REDUCED",
+  "PAYMENT_FAILED",
   "MOBILE_COMMAND_ACKED",
   "MOBILE_COMMAND_ISSUED",
   "POLICY_DEVICE_CONFIG_CHANGED",
@@ -82,6 +90,7 @@ const TIPOS_DEL_BACKEND = [
   "TENANT_ROLE_PERMISSIONS_CHANGED",
   "TRIAL_EXTENDED",
   "cert_expired",
+  "cert_issued",
   "cert_renew_activated",
   "cert_renew_issued",
   "cert_renew_requested",
@@ -157,4 +166,8 @@ describe("catálogo de eventos de auditoría", () => {
 // Los dos que viven en "Other" a conciencia: no son de ninguna familia y
 // crear una categoría por cada uno llenaría el desplegable de grupos de
 // un solo elemento.
-const ESPERADOS_EN_OTHER = new Set(["sdp_self_service_install", "AI_GATEWAY_CALL"]);
+// Sólo AI_GATEWAY_CALL: es una llamada que dispara el producto solo, y una
+// categoría con un único miembro informa menos que el cajón de sastre.
+// `sdp_self_service_install` salió de aquí el 2026-09-04 — tiene familia
+// ("Software") y estar en Other era presentarlo como sin clasificar.
+const ESPERADOS_EN_OTHER = new Set(["AI_GATEWAY_CALL"]);
