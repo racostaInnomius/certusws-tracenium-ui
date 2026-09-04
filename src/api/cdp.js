@@ -5,7 +5,8 @@
 // (/api/v1/security/certificates), which covers the agent's own
 // mTLS/PKI identity certs.
 
-import { httpGetJson, httpPostJson, httpPutJson } from "./http";
+import { httpGetJson, httpGetBlob, httpPostJson, httpPutJson } from "./http";
+import { saveBlob } from "../utils/browserState";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/cdp";
@@ -76,6 +77,17 @@ export async function getCdpReadinessHistory(days = 180) {
 
 export async function postCdpReadinessSnapshot() {
   return httpPostJson(`${BASE}/readiness/snapshot`, {});
+}
+
+/**
+ * Export CSV de la lista con el MISMO filtro que se está viendo. Va por
+ * `httpGetBlob` y no por un `<a href>`: la cabecera X-Tenant-Id no
+ * sobrevive a un enlace plano, y sin ella el backend no sabe de qué
+ * tenant exportar.
+ */
+export async function exportCdpCertificatesCsv(params = {}) {
+  const { blob, filename } = await httpGetBlob(`${BASE}/certificates/export.csv${buildQuery(params)}`);
+  saveBlob(blob, filename || "cdp-certificates.csv");
 }
 
 export async function listCdpCertificates(params = {}) {

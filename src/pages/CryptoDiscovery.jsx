@@ -74,6 +74,7 @@ import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDe
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
+import CdpCertFacets from "../components/CryptoDiscovery/CdpCertFacets";
 import {
   PqcHorizonPanel,
   PqcFamilyPanel,
@@ -94,7 +95,8 @@ import {
   getCdpExposure,
   getCdpFacets,
   getCdpStores,
-  getCdpTimeline
+  getCdpTimeline,
+  exportCdpCertificatesCsv
 } from "../api/cdp";
 
 /**
@@ -579,6 +581,31 @@ function CdpCertificatesTab({ refreshNonce }) {
     patchFilter(delta);
     setPaginationModel((m) => ({ ...m, page: 0 }));
   };
+  // Export CSV con el MISMO filtro que se ve (fase 1, pieza D).
+  const [exporting, setExporting] = React.useState(false);
+  const [exportError, setExportError] = React.useState(null);
+  const listParams = () => ({
+    search: search || undefined,
+    status: status || undefined,
+    flag: flag || undefined,
+    issuer: issuer || undefined,
+    includeRoots: includeRoots || undefined,
+    hasPrivateKey: hasPrivateKey || undefined,
+    hasFlags: hasFlags || undefined,
+    eku: eku || undefined,
+    ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== ""))
+  });
+  const exportCsv = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      await exportCdpCertificatesCsv(listParams());
+    } catch (e) {
+      setExportError(e?.message || String(e));
+    } finally {
+      setExporting(false);
+    }
+  };
   // The fleet list answers "which certificates"; the drawer answers
   // "and what do I do about this one" — attribution, chain and
   // revocation all live there.
@@ -790,7 +817,12 @@ function CdpCertificatesTab({ refreshNonce }) {
             />
           ) : null
         )}
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" variant="outlined" onClick={exportCsv} disabled={exporting}>
+          {exporting ? "Exporting…" : `Export CSV${rowCount ? ` (${rowCount.toLocaleString()})` : ""}`}
+        </Button>
       </Stack>
+      {exportError ? <Alert severity="error" sx={{ mb: 1.5 }}>Export failed: {exportError}</Alert> : null}
 
       {loadError ? (
         <Alert severity="error" sx={{ mb: 1.5 }}>
@@ -800,21 +832,33 @@ function CdpCertificatesTab({ refreshNonce }) {
         </Alert>
       ) : null}
 
-      <DataGrid
-        autoHeight
-        rows={rows}
-        columns={columns}
-        loading={loading}
-        rowCount={rowCount}
-        paginationMode="server"
-        paginationModel={paginationModel}
-        onPaginationModelChange={setPaginationModel}
-        pageSizeOptions={[10, 25, 50]}
-        disableRowSelectionOnClick
-        disableColumnMenu
-        onRowClick={(params) => setDrawerCert(params.row.fingerprint256)}
-        sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
-      />
+      {/*
+        Facetas a la izquierda (fase 1, pieza D): valores con conteo bajo
+        el filtro actual, un clic los añade. Es lo que convierte la lista
+        en un explorador.
+      */}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
+        <Box sx={{ width: { xs: "100%", md: 220 }, flexShrink: 0 }}>
+          <CdpCertFacets filter={filter} refreshNonce={refreshNonce} onSelect={(delta) => setAndReset(delta)} />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <DataGrid
+            autoHeight
+            rows={rows}
+            columns={columns}
+            loading={loading}
+            rowCount={rowCount}
+            paginationMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 25, 50]}
+            disableRowSelectionOnClick
+            disableColumnMenu
+            onRowClick={(params) => setDrawerCert(params.row.fingerprint256)}
+            sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
+          />
+        </Box>
+      </Stack>
 
       <Drawer
         anchor="right"
