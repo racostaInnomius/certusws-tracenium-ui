@@ -18,12 +18,13 @@ import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnec
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 
-const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud" };
+const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault" };
+const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "" };
 
 export function ConnectorForm({ onCreated, disabled }) {
   const [kind, setKind] = React.useState("keyvault");
   const [label, setLabel] = React.useState("");
-  const [f, setF] = React.useState({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "" });
+  const [f, setF] = React.useState(EMPTY_FORM);
   const [secret, setSecret] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -34,7 +35,9 @@ export function ConnectorForm({ onCreated, disabled }) {
       ? { region: f.region.trim(), accessKeyId: f.accessKeyId.trim() }
       : kind === "gcp"
         ? { projectId: f.projectId.trim() }
-        : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
+        : kind === "vault"
+          ? { vaultUrl: f.hcUrl.trim(), namespace: f.namespace.trim() || undefined, mounts: f.mounts, authMethod: f.authMethod, roleId: f.authMethod === "approle" ? f.roleId.trim() : undefined, caPem: f.caPem.trim() || undefined }
+          : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
   const ready =
     label.trim().length >= 2 &&
     secret &&
@@ -42,7 +45,9 @@ export function ConnectorForm({ onCreated, disabled }) {
       ? config.region && config.accessKeyId
       : kind === "gcp"
         ? config.projectId && secret.trim().startsWith("{")
-        : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
+        : kind === "vault"
+          ? /^https:\/\//i.test(config.vaultUrl) && config.mounts.trim() && (config.authMethod === "token" || config.roleId)
+          : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
 
   const submit = async () => {
     setBusy(true);
@@ -51,7 +56,7 @@ export function ConnectorForm({ onCreated, disabled }) {
       const r = await createCdpConnector({ kind, label: label.trim(), config, clientSecret: secret });
       if (!r?.ok) throw new Error(r?.message || r?.error || "Could not create the connector");
       setLabel("");
-      setF({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "" });
+      setF(EMPTY_FORM);
       setSecret("");
       onCreated?.(r.connector);
     } catch (e) {
@@ -68,9 +73,25 @@ export function ConnectorForm({ onCreated, disabled }) {
           <MenuItem value="keyvault">Azure Key Vault</MenuItem>
           <MenuItem value="acm">AWS Certificate Manager</MenuItem>
           <MenuItem value="gcp">Google Cloud</MenuItem>
+          <MenuItem value="vault">HashiCorp Vault</MenuItem>
         </TextField>
-        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
-        {kind === "gcp" ? (
+        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
+        {kind === "vault" ? (
+          <>
+            <TextField size="small" label="Vault address" value={f.hcUrl} onChange={set("hcUrl")} placeholder="https://vault.corp.example:8200" sx={{ minWidth: 280 }} disabled={disabled} />
+            <TextField size="small" label="Namespace (Enterprise)" value={f.namespace} onChange={set("namespace")} sx={{ minWidth: 160 }} disabled={disabled} />
+            <TextField size="small" label="PKI mounts" value={f.mounts} onChange={set("mounts")} placeholder="pki, pki_int" sx={{ minWidth: 160 }} disabled={disabled} />
+            <TextField size="small" select label="Auth" value={f.authMethod} onChange={set("authMethod")} sx={{ minWidth: 130 }} disabled={disabled}>
+              <MenuItem value="approle">AppRole</MenuItem>
+              <MenuItem value="token">Token</MenuItem>
+            </TextField>
+            {f.authMethod === "approle" ? (
+              <TextField size="small" label="Role ID" value={f.roleId} onChange={set("roleId")} sx={{ minWidth: 300 }} disabled={disabled} />
+            ) : null}
+            <TextField size="small" label={f.authMethod === "approle" ? "Secret ID" : "Vault token"} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} sx={{ minWidth: 260 }} disabled={disabled} autoComplete="off" />
+            <TextField size="small" label="CA certificate (PEM, optional)" multiline minRows={1} maxRows={4} value={f.caPem} onChange={set("caPem")} placeholder="-----BEGIN CERTIFICATE-----" sx={{ minWidth: 300, "& textarea": { fontFamily: "ui-monospace, Menlo, monospace", fontSize: TEXT.xs } }} disabled={disabled} />
+          </>
+        ) : kind === "gcp" ? (
           <>
             <TextField size="small" label="Project ID" value={f.projectId} onChange={set("projectId")} placeholder="acme-prod" sx={{ minWidth: 200 }} disabled={disabled} />
             <TextField size="small" label="Service account JSON key" multiline minRows={1} maxRows={4} value={secret} onChange={(e) => setSecret(e.target.value)} placeholder='{"type":"service_account", …}' sx={{ minWidth: 340, "& textarea": { fontFamily: "ui-monospace, Menlo, monospace", fontSize: TEXT.xs } }} disabled={disabled} inputProps={{ "aria-label": "Service account JSON key", autoComplete: "off" }} />
@@ -93,7 +114,15 @@ export function ConnectorForm({ onCreated, disabled }) {
           {busy ? "Saving…" : `Add ${KIND_LABEL[kind]}`}
         </Button>
       </Stack>
-      {kind === "gcp" ? (
+      {kind === "vault" ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+          Reads each PKI mount: issued certificates, issuers and roles (what the mount <em>will</em> issue, by key type).
+          Policy: <code>list</code> on <code>&lt;pki&gt;/certs</code>, <code>&lt;pki&gt;/issuers</code>,{" "}
+          <code>&lt;pki&gt;/roles</code> and <code>read</code> on <code>&lt;pki&gt;/cert/*</code>,{" "}
+          <code>&lt;pki&gt;/issuer/*</code>, <code>&lt;pki&gt;/roles/*</code>. Never <code>issue</code>, <code>sign</code> or
+          KV. If Vault serves a private certificate, paste its CA here; verification is never disabled.
+        </Typography>
+      ) : kind === "gcp" ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
           Create a service account with only <code>certificatemanager.certs.list</code> and{" "}
           <code>compute.sslCertificates.list</code> (roles <em>Certificate Manager Viewer</em> + <em>Compute Viewer</em>) and
@@ -218,7 +247,13 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
                 <Typography sx={{ fontWeight: 700, fontSize: TEXT.md }}>{c.label}</Typography>
                 <Chip size="small" variant="outlined" label={KIND_LABEL[c.kind] ?? c.kind} />
                 <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                  {c.kind === "acm" ? `${c.config?.region} · ${c.config?.accessKeyId}` : c.kind === "gcp" ? c.config?.projectId : c.config?.vaultUrl}
+                  {c.kind === "acm"
+                    ? `${c.config?.region} · ${c.config?.accessKeyId}`
+                    : c.kind === "gcp"
+                      ? c.config?.projectId
+                      : c.kind === "vault"
+                        ? `${c.config?.vaultUrl} · ${(c.config?.mounts ?? []).join(", ")}`
+                        : c.config?.vaultUrl}
                 </Typography>
                 <StatusChip c={c} />
                 {!c.enabled ? <Chip size="small" label="disabled" variant="outlined" /> : null}

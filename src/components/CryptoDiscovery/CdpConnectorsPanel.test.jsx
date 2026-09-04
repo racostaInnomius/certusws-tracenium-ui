@@ -105,3 +105,29 @@ describe("ConnectorForm — GCP", () => {
     await waitFor(() => expect(createCdpConnector).toHaveBeenCalledWith({ kind: "gcp", label: "GCP", config: { projectId: "acme-prod" }, clientSecret: '{"type":"service_account"}' }));
   });
 });
+
+describe("ConnectorForm — HashiCorp Vault", () => {
+  it("con kind vault pide dirección, mounts, AppRole (role id + secret id) y CA opcional", async () => {
+    listCdpConnectors.mockResolvedValue({ ok: true, secretsConfigured: true, connectors: [] });
+    createCdpConnector.mockResolvedValue({ ok: true, connector: { connectorId: 4, kind: "vault", label: "Corp PKI", config: { vaultUrl: "https://vault.corp.example:8200", mounts: ["pki"] }, enabled: true, hasSecret: true } });
+    render(<CdpConnectorsPanel refreshNonce={0} />);
+    await screen.findByRole("button", { name: /add azure key vault/i });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /hashicorp vault/i }));
+    fireEvent.change(screen.getByLabelText(/^label/i), { target: { value: "Corp PKI" } });
+    fireEvent.change(screen.getByLabelText(/vault address/i), { target: { value: "https://vault.corp.example:8200" } });
+    fireEvent.change(screen.getByLabelText(/pki mounts/i), { target: { value: "pki, pki_int" } });
+    fireEvent.change(screen.getByLabelText(/role id/i), { target: { value: "r-1" } });
+    fireEvent.change(screen.getByLabelText(/secret id/i), { target: { value: "sid" } });
+    expect(screen.getByText(/verification is never disabled/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add hashicorp vault/i }));
+    await waitFor(() =>
+      expect(createCdpConnector).toHaveBeenCalledWith({
+        kind: "vault",
+        label: "Corp PKI",
+        config: { vaultUrl: "https://vault.corp.example:8200", namespace: undefined, mounts: "pki, pki_int", authMethod: "approle", roleId: "r-1", caPem: undefined },
+        clientSecret: "sid"
+      })
+    );
+  });
+});
