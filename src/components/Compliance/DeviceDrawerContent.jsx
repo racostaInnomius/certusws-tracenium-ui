@@ -46,7 +46,6 @@ import BulkFindingToolbar from "./BulkFindingToolbar";
 import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
-import { GpoInventorySection } from "./GpoInventory";
 
 export default function DeviceDrawerContent({
   agentId,
@@ -424,7 +423,12 @@ export default function DeviceDrawerContent({
           />
 
           {/* ADR-0012 — Active Directory GPOs applied to the device/user -- */}
-          <GpoInventorySection findings={findings} />
+          {/* ⚠️ Las GPO aplicadas se mudaron a Asset Management > Windows GPOs.
+              Son inventario: estaban aqui porque el dato viaja como evidencia
+              del hallazgo windows.domain.gpo_inventory_available, que describe
+              como se construyo y no lo que es. El hallazgo se queda —dice si
+              se PUDO leer el inventario, que si es cumplimiento— pero la lista
+              se lee donde vive el resto del inventario. */}
 
           {/* Sprint 4 — diff vs last scan -------------------------------- */}
           <DeviceDiffSection agentId={agentId} />

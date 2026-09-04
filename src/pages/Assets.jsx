@@ -9,11 +9,13 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
+import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import AssetsDashboard from "./AssetsDashboard";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
+import WindowsGpos from "./WindowsGpos";
 import AssetGroups from "./AssetGroups";
 
 // Note: the "Agent Downloads" tab moved to its own top-level page
@@ -181,6 +183,18 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             {...a11yProps(3)}
             sx={TAB_SX}
           />
+
+          {/* Va DESPUES de Hardware Inventory y no en Security Compliance: las
+              GPO aplicadas son inventario. Estaban alla porque el dato viajaba
+              como evidencia de un hallazgo, que describe como se construyo y
+              no lo que es. */}
+          <Tab
+            icon={<PolicyOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Windows GPOs"
+            {...a11yProps(4)}
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
@@ -204,6 +218,10 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
 
       <TabPanel value={activeTab} index={3}>
         <HardwareInventory initialSearch={pendingHardwareSearch} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={4}>
+        <WindowsGpos refreshNonce={refreshNonce} />
       </TabPanel>
     </Box>
   );

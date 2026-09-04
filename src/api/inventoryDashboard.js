@@ -52,3 +52,9 @@ export async function getSoftwareInventoryHostApps(agentId, params = {}) {
 export async function getBrowserInventory() {
   return httpGetJson("/api/v1/browser-inventory");
 }
+// GPOs de Windows aplicadas a cada equipo. Es inventario, no cumplimiento:
+// se mostraba dentro del cajón de Security Compliance porque el dato viajaba
+// como evidencia de un hallazgo, que describe cómo se construyó y no lo que es.
+export async function getWindowsGpoInventory() {
+  return httpGetJson(`${BASE}/windows-gpos`);
+}
