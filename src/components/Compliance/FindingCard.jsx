@@ -29,6 +29,7 @@ import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import FindingExplanation from "./FindingExplanation";
+import EvidenceView from "./EvidenceView";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import {
   SeverityChip,
@@ -511,23 +512,11 @@ export default function FindingCard({
               <Typography variant="caption" sx={{ color: BRAND.tealText, fontWeight: 700, textTransform: "uppercase" }}>
                 Evidence
               </Typography>
-              <Box
-                component="pre"
-                sx={{
-                  mt: 0.5,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: BRAND.surfaceMuted,
-                  fontSize: TEXT.xs,
-                  fontFamily: "monospace",
-                  maxHeight: 200,
-                  overflow: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  margin: 0
-                }}
-              >
-                {JSON.stringify(finding.evidence, null, 2)}
+              {/* One row per probe (registry key, path, sub-check of a
+                  composite) instead of the evaluator's JSON. Unknown
+                  shapes still fall back to the raw block inside. */}
+              <Box sx={{ maxHeight: 260, overflow: "auto" }}>
+                <EvidenceView evidence={finding.evidence} status={finding.status} />
               </Box>
             </Box>
           ) : null}
