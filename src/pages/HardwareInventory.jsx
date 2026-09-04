@@ -37,10 +37,10 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
-import CompositionBars from "../components/common/CompositionBars";
 import FleetAttentionBand from "../components/AssetManagement/FleetAttentionBand";
 import FleetCompositionDonut from "../components/AssetManagement/FleetCompositionDonut";
 import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
+import RankingDonut from "../components/AssetManagement/RankingDonut";
 import { formatBytesToGb, formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
@@ -463,33 +463,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
     [rankings?.topManufacturers]
   );
 
-  const topPlatformsRows = React.useMemo(
-    () =>
-      normalizeRankingRows(
-        (rankings?.topPlatforms || []).map((item) => ({
-          ...item,
-          color: BRAND.dark,
-        })),
-        BRAND.dark
-      ),
-    [rankings?.topPlatforms]
-  );
-
   const diskUnknownCount = Number(summary?.fleet?.attention?.diskUnknown || 0);
-
-  /**
-   * Cuando hay una sola plataforma, el ranking se colapsa a esta línea.
-   *
-   * `null` significa "hay más de una, dibuja la tarjeta". La decisión de qué
-   * es informativo vive junto al dato y no en el maquetado: dos filas o más
-   * tienen forma; una sola es una etiqueta.
-   */
-  const platformSummaryLine = React.useMemo(() => {
-    const rows = topPlatformsRows;
-    if (rows.length !== 1) return null;
-    const only = rows[0];
-    return `${only.label} · ${only.value} device${only.value === 1 ? "" : "s"}`;
-  }, [topPlatformsRows]);
 
   const openRankingDialog = React.useCallback((config) => {
     setRankingDialog(config);
@@ -640,17 +614,33 @@ export default function HardwareInventory({ initialSearch = "" }) {
         onSelect={selectFleetFilter}
       />
 
-      {/* ⚠️ El orden de esta fila es una decisión, no un accidente: columnas →
-          dona → columnas. Los dos histogramas juntos se leían como una sola
-          gráfica con un hueco en medio; la dona los separa, y es la única de
-          las tres que reparte un todo, así que es la única con forma circular. */}
+      {/* ⚠️ El orden ALTERNA la forma: dona → columnas → dona → columnas.
+          Dos graficas del mismo tipo juntas se leen como una sola con un hueco
+          en medio, que fue el problema de la version anterior con los dos
+          histogramas pegados.
+
+          La tarjeta de Platforms se fue: el dashboard ya resume la plataforma
+          —y ahora agrupada por ella— asi que repetirla aqui gastaba un cuarto
+          de fila para decir lo mismo peor. Con fabricantes subiendo a esta
+          fila, la tercera desaparece y la tabla queda pegada a las graficas. */}
       <Box sx={{ mb: 2 }}>
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
+            <Box sx={{ width: "100%" }}>
+              <FleetCompositionDonut
+                composition={summary?.fleet?.composition}
+                total={summary?.fleet?.total}
+                activeFilter={fleetFilter}
+                onSelect={selectFleetFilter}
+              />
+            </Box>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
               <DistributionHistogram
                 title="Disk usage"
-                subtitle="How close the rest of the fleet is to the threshold"
+                subtitle="How close the fleet is to the threshold"
                 buckets={summary?.fleet?.distribution?.disk}
                 activeFilter={fleetFilter}
                 onSelect={selectFleetFilter}
@@ -665,46 +655,16 @@ export default function HardwareInventory({ initialSearch = "" }) {
             </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
-              <FleetCompositionDonut
-                composition={summary?.fleet?.composition}
-                total={summary?.fleet?.total}
-                activeFilter={fleetFilter}
-                onSelect={selectFleetFilter}
-              />
-            </Box>
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <DistributionHistogram
-                title="Installed memory"
-                subtitle="Where the fleet sits, and how much of it is at the floor"
-                buckets={summary?.fleet?.distribution?.memory}
-                activeFilter={fleetFilter}
-                onSelect={selectFleetFilter}
-                emptyLabel="No memory data"
-              />
-            </Box>
-          </Grid>
-        </Grid>
-      </Box>
-
-      {/* Tercera fila: el ranking ocupa 8 y la plataforma 4, así la fila cierra
-          en 12 y no queda el hueco que dejaba la tarjeta de Platforms sola
-          justo encima de la tabla. */}
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 8 }} sx={{ display: "flex" }}>
-            <Box sx={{ width: "100%" }}>
-              <CompositionBars
+              {/* Cuatro marcas y un "Others". El ranking COMPLETO sigue en
+                  "View all": lo que se agrupa es el dibujo, no el dato. */}
+              <RankingDonut
                 title="Top manufacturers"
+                subtitle="Who built the fleet"
                 items={topManufacturersRows}
-                totalLabel="hosts"
                 emptyLabel="No manufacturer data"
-                minHeight={210}
-                maxItems={5}
+                totalLabel={`${topManufacturersRows.length} brands reporting`}
                 headerExtra={renderViewAllButton({
                   title: "Top manufacturers",
                   subtitle: rankingSubtitle(topManufacturersRows, rankings?.topManufacturersTotal, "manufacturers"),
@@ -717,53 +677,16 @@ export default function HardwareInventory({ initialSearch = "" }) {
             </Box>
           </Grid>
 
-          <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+          <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
-              {/* ⚠️ Una sola plataforma no es un ranking, es una etiqueta: en el
-                  tenant 111 esa tarjeta gastaba un cuarto de la fila para decir
-                  "windows 53". El dato NO se oculta —eso sería peor— pero se
-                  colapsa a una línea y el hueco lo llena el ranking de al lado. */}
-              {platformSummaryLine ? (
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    height: "100%",
-                    minHeight: 210,
-                    borderRadius: 3,
-                    border: `1px solid ${BRAND.border}`,
-                    boxShadow: BRAND.shadow,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Platform</Typography>
-                  <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark, mt: 0.5 }}>
-                    {platformSummaryLine}
-                  </Typography>
-                  <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 1 }}>
-                    Every device in this tenant runs the same platform.
-                  </Typography>
-                </Paper>
-              ) : (
-                <CompositionBars
-                  title="Platforms"
-                  items={topPlatformsRows}
-                  totalLabel="devices"
-                  emptyLabel="No platform data"
-                  minHeight={210}
-                  maxItems={5}
-                  headerExtra={renderViewAllButton({
-                    title: "Platforms",
-                    subtitle: rankingSubtitle(topPlatformsRows, rankings?.topPlatformsTotal, "platforms"),
-                    items: topPlatformsRows,
-                    totalLabel: "devices",
-                    labelHeader: "Platform",
-                    valueHeader: "Devices",
-                  })}
-                />
-              )}
+              <DistributionHistogram
+                title="Installed memory"
+                subtitle="Where the fleet sits, and what is at the floor"
+                buckets={summary?.fleet?.distribution?.memory}
+                activeFilter={fleetFilter}
+                onSelect={selectFleetFilter}
+                emptyLabel="No memory data"
+              />
             </Box>
           </Grid>
         </Grid>

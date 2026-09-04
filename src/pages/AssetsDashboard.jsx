@@ -67,7 +67,8 @@ import {
 import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
-import { normalizePlatform, platformColor } from "../utils/platform";
+import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
+import { groupOsVersionsByPlatform } from "../utils/osVersionGrouping";
 import { formatBytesToGb } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { listFrom } from "../api/shape";
@@ -87,10 +88,8 @@ import {
   readUrlFilters,
   compareVersions,
   bucketOfVersion,
-  toSafeNumber,
   getOsVersionDisplayTitle,
   getOsLifecycle,
-  getOsVersionDisplaySubtitle,
   formatDetailValue,
   formatDetailPercent,
   coalesceValue,
@@ -1294,48 +1293,32 @@ function osLifecycleBadge(row) {
 const osVersionItems = React.useMemo(() => {
   const rows = Array.isArray(summary?.osVersions) ? summary.osVersions : [];
 
-  return rows.map((r, rowIndex) => {
-    const platform = String(r?.os_platform ?? "").toLowerCase();
-    const color = platformColor(platform).dot;
-    const parentValue = toSafeNumber(r?.host_count ?? r?.count);
-    const children = Array.isArray(r?.children)
-      ? r.children
-          .map((child, childIndex) => ({
-            id: `${getOsVersionDisplayTitle(r)}-${child?.technical_version || child?.version_label || childIndex}`,
-            label:
-              child?.display_title ||
-              (child?.version_label ? `Version ${child.version_label}` : null) ||
-              child?.technical_version ||
-              child?.os_version ||
-              "Unknown version",
-            sub:
-              child?.display_subtitle ||
-              (child?.build_number ? `Build ${child.build_number}` : null) ||
-              child?.technical_version ||
-              "",
-            value: toSafeNumber(child?.host_count ?? child?.count),
-            percentage:
-              child?.percentage != null
-                ? Number(child.percentage)
-                : parentValue > 0
-                ? (toSafeNumber(child?.host_count ?? child?.count) / parentValue) * 100
-                : 0,
-            color,
-            badge: osLifecycleBadge(child),
-            raw: child,
-          }))
-          .filter((child) => Number(child.value || 0) > 0)
-      : [];
+  // ⚠️ Primero por PLATAFORMA. El backend agrupa por nombre comercial, asi que
+  // en el tenant 1 macOS salia en tres filas de primer nivel — "macOS Tahoe"
+  // (agrupada) y luego Monterey y Sequoia sueltas por tener un equipo cada una.
+  // La tarjeta contestaba "que versiones hay" cuando la pregunta que se hace
+  // primero es "de que esta hecho el parque". Ver osVersionGrouping.js.
+  const grupos = groupOsVersionsByPlatform(rows, {
+    platformLabel,
+    displayTitle: getOsVersionDisplayTitle,
+  });
 
+  return grupos.map((g) => {
+    const color = platformColor(g.platform).dot;
     return {
-      id: `${getOsVersionDisplayTitle(r)}-${r?.technical_version || r?.version_label || rowIndex}`,
-      label: getOsVersionDisplayTitle(r),
-      sub: getOsVersionDisplaySubtitle(r),
-      value: parentValue,
+      ...g,
       color,
-      badge: osLifecycleBadge(r),
-      children,
-      raw: r,
+      // La insignia de ciclo de vida solo tiene sentido cuando el grupo ES una
+      // version concreta; con varias, cada hija lleva la suya.
+      badge: g.raw ? osLifecycleBadge(g.raw) : undefined,
+      children: Array.isArray(g.children)
+        ? g.children.map((c) => ({
+            ...c,
+            color,
+            badge: osLifecycleBadge(c.raw),
+            percentage: g.value > 0 ? (c.value / g.value) * 100 : 0,
+          }))
+        : undefined,
     };
   });
 }, [summary]);
@@ -1524,12 +1507,15 @@ const osVersionItems = React.useMemo(() => {
               // technical_version instead, which is exactly what the
               // backend's `distro` column (and therefore the free-text
               // search) actually contains.
+              // ⚠️ Cada fila trae su PROPIO searchTerm. Antes esto deducia si
+              // la fila era hija mirando si traia `children`, con doce lineas
+              // de comentario explicando la heuristica. Con la plataforma como
+              // primer nivel esa deduccion deja de funcionar —un padre "macOS"
+              // no se busca igual que una version— y en vez de hacerla mas
+              // lista se elimina: quien construye la fila sabe que hay que
+              // buscar, y lo dice.
               onItemClick={(item) => {
-                const isChildVersion = !Array.isArray(item.children);
-                const searchTerm = isChildVersion
-                  ? item.raw?.technical_version || item.label
-                  : item.label;
-                onNavigateToHardwareInventory(searchTerm);
+                onNavigateToHardwareInventory(item.searchTerm || item.label);
               }}
               actionLabel="Open Hardware Inventory"
             />
