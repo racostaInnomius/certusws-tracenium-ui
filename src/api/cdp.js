@@ -5,7 +5,7 @@
 // (/api/v1/security/certificates), which covers the agent's own
 // mTLS/PKI identity certs.
 
-import { httpGetJson, httpPostJson } from "./http";
+import { httpGetJson, httpPostJson, httpPutJson } from "./http";
 import { buildQuery } from "./query";
 
 const BASE = "/api/v1/cdp";
@@ -53,6 +53,29 @@ export async function getCdpStores(filter = {}) {
 
 export async function getCdpTimeline(filter = {}) {
   return httpGetJson(`${BASE}/timeline${buildQuery(filter)}`);
+}
+
+// ── Fase 3: hoja de ruta PQC ─────────────────────────────────────────
+
+/** Sistemas derivados con prioridad, ola sugerida, plan y recomendaciones. */
+export async function getCdpRoadmap() {
+  return httpGetJson(`${BASE}/roadmap`);
+}
+
+export async function getCdpRoadmapSystem(key) {
+  return httpGetJson(`${BASE}/roadmap/systems/${encodeURIComponent(key)}`);
+}
+
+export async function putCdpRoadmapPlan(key, plan) {
+  return httpPutJson(`${BASE}/roadmap/systems/${encodeURIComponent(key)}/plan`, plan);
+}
+
+export async function getCdpReadinessHistory(days = 180) {
+  return httpGetJson(`${BASE}/readiness/history${buildQuery({ days })}`);
+}
+
+export async function postCdpReadinessSnapshot() {
+  return httpPostJson(`${BASE}/readiness/snapshot`, {});
 }
 
 export async function listCdpCertificates(params = {}) {

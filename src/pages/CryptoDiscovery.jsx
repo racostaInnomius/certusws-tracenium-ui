@@ -73,6 +73,7 @@ import {
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
+import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
 import {
   PqcHorizonPanel,
   PqcFamilyPanel,
@@ -104,13 +105,14 @@ import {
 const TAB = {
   dashboard: 0,
   pqc: 1,
-  explore: 2,
-  stores: 3,
-  certificates: 4,
-  devices: 5,
-  anchors: 6,
-  orphans: 7,
-  policy: 8
+  roadmap: 2,
+  explore: 3,
+  stores: 4,
+  certificates: 5,
+  devices: 6,
+  anchors: 7,
+  orphans: 8,
+  policy: 9
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -1453,6 +1455,7 @@ export default function CryptoDiscovery() {
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Dashboard" />
         <Tab label="Post-quantum" />
+        <Tab label="Roadmap" />
         <Tab label="Explore" />
         <Tab label="Stores" />
         <Tab label="Certificates" />
@@ -1480,6 +1483,9 @@ export default function CryptoDiscovery() {
       </TabPanel>
       <TabPanel value={tab} index={TAB.pqc}>
         <CdpPqcTab refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={TAB.roadmap}>
+        <CdpRoadmapPanel refreshNonce={refreshNonce} onDrillDown={(f) => drillDown(f, { replace: true })} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.explore}>
         <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />

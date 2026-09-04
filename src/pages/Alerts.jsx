@@ -95,6 +95,7 @@ const SOURCE_LABEL = {
   cdp_cert_expiry:    "Endpoint cert expiry",
   cdp_weak_crypto:    "Certificate hygiene",
   cdp_trust_anchor:   "Trust anchor",
+  cdp_pqc_roadmap:    "Post-quantum roadmap",
   disk_capacity:      "Disk capacity"
 };
 
