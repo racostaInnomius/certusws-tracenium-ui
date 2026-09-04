@@ -23,6 +23,29 @@ export const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable 
 export const CDP_INTERVAL_MIN = 900;            // 15m
 export const CDP_INTERVAL_MAX = 86400;          // 24h
 export const CDP_KEYSTORE_PATHS_MAX = 50;
+
+// Fase 2 — objetivos del rol Probe (`host:port`, uno por línea). Mismo
+// criterio que el backend y que el agente: sin loopback, puerto real.
+export const CDP_PROBE_TARGETS_MAX = 200;
+const PROBE_TARGET_RE = /^(\[[0-9a-f:]+\]|[a-z0-9.\-]+):(\d{1,5})$/i;
+const PROBE_LOOPBACK_RE = /^(\[::1\]|127\.\d+\.\d+\.\d+|localhost|0\.0\.0\.0):/i;
+
+export function splitTargetLines(text) {
+  return String(text ?? "")
+    .split(/\r?\n|,/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+/** Los tokens que NO son un `host:port` válido, para pintar el error. */
+export function invalidProbeTargets(text) {
+  return splitTargetLines(text).filter((t) => {
+    const m = PROBE_TARGET_RE.exec(t);
+    if (!m) return true;
+    const port = Number(m[2]);
+    return port < 1 || port > 65535 || PROBE_LOOPBACK_RE.test(t) || t.length > 260;
+  });
+}
 export const CDP_TLS_PORTS_MAX = 64;
 
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
@@ -532,6 +555,7 @@ export function readFormFromPolicy(policy, catalog = []) {
       scanTlsListeners: policy?.cdp?.scanTlsListeners === true,
       certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
+      probeTargets: (policy?.cdp?.probeTargets ?? []).join("\n"),
     },
   };
 }
@@ -728,6 +752,13 @@ export function formToPolicy(form, catalog = []) {
       const ports = parsePortList(form?.cdp?.tlsListenerPorts);
       if (ports.length > 0) cdp.tlsListenerPorts = ports;
     }
+
+    // Rol Probe: solo lo válido, deduplicado y acotado. Lo inválido no se
+    // cuela en silencio — la sección lo marca en rojo antes de guardar.
+    const targets = Array.from(
+      new Set(splitTargetLines(form?.cdp?.probeTargets).filter((t) => invalidProbeTargets(t).length === 0).map((t) => t.toLowerCase()))
+    ).slice(0, CDP_PROBE_TARGETS_MAX);
+    if (targets.length > 0) cdp.probeTargets = targets;
 
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }

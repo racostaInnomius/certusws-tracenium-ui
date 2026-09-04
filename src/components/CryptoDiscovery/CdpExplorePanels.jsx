@@ -204,14 +204,39 @@ export function ExposureFunnel({ exposure, onSelect, explain }) {
           <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
             Confidentiality today (key exchange)
           </Typography>
-          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-            {fmt(e.listeners)} TLS services on {fmt(e.listenerDevices)} devices ·{" "}
-            <Box component="span" sx={{ color: BRAND.gray }}>post-quantum key exchange not measured yet</Box>
-          </Typography>
-          <Explain on={explain}>
-            This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
-            classical. It lives in the TLS handshake, not in the certificate — and this product does not probe it yet.
-          </Explain>
+          {e.kemMeasured ? (
+            <>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                {fmt(e.kem?.endpoints)} TLS endpoints
+                {e.kem?.probes ? ` (${fmt(e.kem.probes)} remote)` : ""} ·{" "}
+                <Box component="span" sx={{ color: e.kem?.hybrid ? BRAND.alert.success : BRAND.alert.errorText, fontWeight: 700 }}>
+                  {fmt(e.kem?.hybrid)} negotiate post-quantum key exchange
+                </Box>
+                {" · "}
+                <Box component="span" sx={{ color: BRAND.alert.high }}>{fmt(e.kem?.classicalOnly)} classical only</Box>
+                {e.kem?.unknown ? (
+                  <Box component="span" sx={{ color: BRAND.gray }}> · {fmt(e.kem.unknown)} could not be determined</Box>
+                ) : null}
+              </Typography>
+              <Explain on={explain}>
+                This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
+                classical. It lives in the TLS handshake, not in the certificate. «Could not be determined» is not
+                «no» — the probing agent could not ask, or the server did not answer twice.
+              </Explain>
+            </>
+          ) : (
+            <>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                {fmt(e.listeners)} TLS services on {fmt(e.listenerDevices)} devices ·{" "}
+                <Box component="span" sx={{ color: BRAND.gray }}>post-quantum key exchange not measured yet</Box>
+              </Typography>
+              <Explain on={explain}>
+                This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
+                classical. It lives in the TLS handshake, not in the certificate. Agents report it once they run a
+                version that probes it; remote services can be added under the policy&apos;s probe targets.
+              </Explain>
+            </>
+          )}
         </Box>
         <Box sx={{ flex: 1, minWidth: 260 }}>
           <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
@@ -342,7 +367,8 @@ const SOURCE_LABELS = {
   "java-store": "Java keystore",
   listener: "TLS listener",
   file: "Certificate file on disk",
-  nss: "Firefox / Thunderbird (NSS)"
+  nss: "Firefox / Thunderbird (NSS)",
+  probe: "Remote TLS service (probed)"
 };
 
 export function StoresPanel({ stores, javaOnlyVendorBundles, onSelect, onOpenPolicy, explain }) {

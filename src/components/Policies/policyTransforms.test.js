@@ -325,6 +325,7 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
       // undefined, which a checkbox would render as an uncontrolled input.
       scanTlsListeners: false,
       tlsListenerPorts: "",
+      probeTargets: "",
       certFilePaths: "",
     });
   });

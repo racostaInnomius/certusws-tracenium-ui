@@ -73,6 +73,20 @@ describe("ExposureFunnel", () => {
     expect(screen.getByText(/only the ones you hold a private key for/i)).toBeInTheDocument();
   });
 
+  it("⭐ fase 2: con KEM medido enseña híbridos, clásicos y los que no se supo, por separado", () => {
+    render(
+      <ExposureFunnel
+        exposure={{ ...EXPOSURE, kemMeasured: true, kem: { endpoints: 61, probes: 4, hybrid: 0, classicalOnly: 57, unknown: 4, measured: 57 } }}
+        onSelect={() => {}}
+        explain={false}
+      />
+    );
+    expect(screen.getByText(/0 negotiate post-quantum key exchange/)).toBeInTheDocument();
+    expect(screen.getByText(/57 classical only/)).toBeInTheDocument();
+    expect(screen.getByText(/4 could not be determined/)).toBeInTheDocument();
+    expect(screen.queryByText(/not measured yet/i)).not.toBeInTheDocument();
+  });
+
   it("bloqueados sin evaluar dice «not evaluated», no cero", () => {
     render(<ExposureFunnel exposure={{ ...EXPOSURE, devicesBlocked: null }} onSelect={() => {}} explain={false} />);
     expect(screen.getByText(/not evaluated/i)).toBeInTheDocument();

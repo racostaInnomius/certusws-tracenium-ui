@@ -34,6 +34,7 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import { invalidProbeTargets, splitTargetLines, CDP_PROBE_TARGETS_MAX } from "./policyTransforms";
 import {
   CDP_INTERVAL_MIN,
   CDP_INTERVAL_MAX,
@@ -68,6 +69,9 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
       intervalNum > CDP_INTERVAL_MAX);
 
   const scanListeners = cdp.scanTlsListeners === true;
+  const badTargets = invalidProbeTargets(cdp.probeTargets ?? "");
+  const targetCount = splitTargetLines(cdp.probeTargets ?? "").length;
+  const targetsOverCap = targetCount > CDP_PROBE_TARGETS_MAX;
   const badPorts = invalidPortTokens(cdp.tlsListenerPorts ?? "");
   const portCount = parsePortList(cdp.tlsListenerPorts ?? "").length;
   const portsOverCap = portCount > CDP_TLS_PORTS_MAX;
@@ -225,6 +229,44 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
             sx={{ mt: 1.5, width: { xs: "100%", md: 360 } }}
           />
         </Collapse>
+
+        <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark, mt: 2.5 }}>
+          Probe remote TLS services (no agent needed)
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Devices running this policy connect to each <code>host:port</code> below, record the
+          certificate it serves and what the handshake <strong>negotiates</strong> — protocol,
+          cipher suite and whether the server accepts a <strong>post-quantum key exchange</strong>
+          (X25519MLKEM768). That is the half of post-quantum readiness with real urgency, and it
+          lives in the handshake, not in the certificate. Load balancers, appliances, managed
+          databases, hypervisors: anything with TLS and no agent.
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Nothing is discovered — only what you list is probed. The socket closes the moment the
+          handshake completes; no application bytes are ever sent. Loopback targets are rejected:
+          the local probe above already covers them, with process attribution.
+        </Typography>
+        <TextField
+          size="small"
+          fullWidth
+          label="Targets (optional)"
+          value={cdp.probeTargets ?? ""}
+          onChange={(e) => setField("probeTargets", e.target.value)}
+          disabled={readOnly}
+          error={badTargets.length > 0 || targetsOverCap}
+          helperText={
+            badTargets.length > 0
+              ? `Not a valid host:port — ${badTargets.slice(0, 3).join(", ")}${badTargets.length > 3 ? "…" : ""}`
+              : targetsOverCap
+                ? `At most ${CDP_PROBE_TARGETS_MAX} targets.`
+                : `One host:port per line. ${targetCount} target(s).`
+          }
+          multiline
+          minRows={2}
+          maxRows={8}
+          placeholder={"lb.corp.example:443\nvcenter.corp.example:443\n10.0.0.12:636"}
+          sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.sm } }}
+        />
       </Box>
     </Box>
   );
