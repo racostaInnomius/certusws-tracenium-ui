@@ -43,6 +43,7 @@ import { getMyCapabilities } from "../api/roles";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
+import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 import { formatDate } from "../utils/format";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
@@ -635,16 +636,6 @@ export default function SoftwareInventory() {
     [rankings]
   );
 
-  const topSourcesItems = React.useMemo(
-    () => getRankingItems(rankings, "topSources"),
-    [rankings]
-  );
-
-  const appsPerDeviceItems = React.useMemo(
-    () => getRankingItems(rankings, "appsPerDevice"),
-    [rankings]
-  );
-
   const topInstalledAppsTotal = React.useMemo(
     () => getRankingTotal(rankings, "topInstalledApps", "topInstalledAppsTotal"),
     [rankings]
@@ -652,16 +643,6 @@ export default function SoftwareInventory() {
 
   const topPublishersTotal = React.useMemo(
     () => getRankingTotal(rankings, "topPublishers", "topPublishersTotal"),
-    [rankings]
-  );
-
-  const topSourcesTotal = React.useMemo(
-    () => getRankingTotal(rankings, "topSources", "topSourcesTotal"),
-    [rankings]
-  );
-
-  const appsPerDeviceTotal = React.useMemo(
-    () => getRankingTotal(rankings, "appsPerDevice", "appsPerDeviceTotal"),
     [rankings]
   );
 
@@ -675,14 +656,29 @@ export default function SoftwareInventory() {
     [topPublishersItems]
   );
 
-  const topSourcesRows = React.useMemo(
-    () => normalizeRankingRows(topSourcesItems, SOFTWARE_ACCENTS.sources),
-    [topSourcesItems]
+  const versionFragmentationRows = React.useMemo(
+    () =>
+      normalizeRankingRows(
+        getRankingItems(rankings, "versionFragmentation").map((f) => ({
+          ...f,
+          // La linea de apoyo lleva el alcance: "10 versiones" en 2 equipos y
+          // en 50 son problemas de tamano muy distinto.
+          sub: `${Number(f.deviceCount || 0)} device${Number(f.deviceCount || 0) === 1 ? "" : "s"}`,
+        })),
+        SOFTWARE_ACCENTS.installed
+      ),
+    [rankings]
   );
 
-  const appsPerDeviceRows = React.useMemo(
-    () => normalizeRankingRows(appsPerDeviceItems, SOFTWARE_ACCENTS.appsPerDevice),
-    [appsPerDeviceItems]
+  const appsPerDeviceBuckets = React.useMemo(
+    () =>
+      (Array.isArray(rankings?.appsPerDeviceBuckets) ? rankings.appsPerDeviceBuckets : []).map((b) => ({
+        key: b.label,
+        label: b.label,
+        count: Number(b.count || 0),
+        alarming: false,
+      })),
+    [rankings]
   );
 
   const openRankingDialog = React.useCallback((config) => {
@@ -996,24 +992,33 @@ export default function SoftwareInventory() {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
+              {/* ⚠️ Reemplaza a "Top sources", que en el tenant 111 tenia DOS
+                  filas — la misma regla que retiro Platforms de Hardware:
+                  un ranking de dos no es un ranking.
+
+                  Esta es la lectura que ninguna grafica daba: "Chrome esta en
+                  24 equipos" no dice nada sobre si esos 24 estan
+                  sincronizados. Medido en el 111: Chrome con 10 versiones
+                  distintas, Edge con 9, y el propio Tracenium Agent con 7 en
+                  53 equipos. */}
               <CompositionBars
-                title="Top sources"
-                items={topSourcesRows}
-                totalLabel="apps"
-                emptyLabel="No source data"
+                title="Version fragmentation"
+                items={versionFragmentationRows}
+                totalLabel="versions"
+                emptyLabel="Every app runs a single version"
                 minHeight={260}
-                headerExtraPlacement="below"
-                reserveHeaderExtraSpace
                 maxItems={5}
-                totalValue={topSourcesTotal}
                 headerExtra={renderViewAllButton({
-                  title: "Top sources",
-                  subtitle: rankingSubtitle(topSourcesRows, rankings?.topSourcesDistinct, "sources"),
-                  items: topSourcesRows,
-                  totalValue: topSourcesTotal,
-                  totalLabel: "apps",
-                  labelHeader: "Source",
-                  valueHeader: "Apps",
+                  title: "Version fragmentation",
+                  subtitle: rankingSubtitle(
+                    versionFragmentationRows,
+                    rankings?.versionFragmentationTotal,
+                    "apps with 3+ versions"
+                  ),
+                  items: versionFragmentationRows,
+                  totalLabel: "versions",
+                  labelHeader: "Application",
+                  valueHeader: "Versions",
                 })}
               />
             </Box>
@@ -1021,25 +1026,15 @@ export default function SoftwareInventory() {
 
           <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: "flex" }}>
             <Box sx={{ width: "100%" }}>
-              <CompositionBars
+              {/* ⚠️ Antes era un ranking de los 25 equipos mas cargados. Eso
+                  contesta "quien tiene mas" y esconde la pregunta util: donde
+                  se acumula la flota y que tan larga es la cola. Un ranking
+                  ordena; una distribucion tiene forma. */}
+              <DistributionHistogram
                 title="Apps per device"
-                items={appsPerDeviceRows}
-                totalLabel="apps"
-                emptyLabel="No device app data"
-                minHeight={260}
-                headerExtraPlacement="below"
-                reserveHeaderExtraSpace
-                maxItems={5}
-                totalValue={appsPerDeviceTotal}
-                headerExtra={renderViewAllButton({
-                  title: "Apps per device",
-                  subtitle: rankingSubtitle(appsPerDeviceRows, rankings?.appsPerDeviceDistinct, "devices"),
-                  items: appsPerDeviceRows,
-                  totalValue: appsPerDeviceTotal,
-                  totalLabel: "apps",
-                  labelHeader: "Device",
-                  valueHeader: "Apps",
-                })}
+                subtitle="Where the fleet sits, and how long the tail is"
+                buckets={appsPerDeviceBuckets}
+                emptyLabel="No software inventory yet"
               />
             </Box>
           </Grid>
