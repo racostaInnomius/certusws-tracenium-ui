@@ -43,6 +43,24 @@ import { getSessionDetail, getSessionFileTransfers } from "../../api/remoteContr
 import { RCP_METHODS } from "./rcpMethods";
 import { describeCloseReason } from "./closeReasons";
 
+/**
+ * Nombres de los eventos, en el idioma del operador.
+ *
+ * Un evento sin traducción se enseña tal cual en vez de esconderse: el que
+ * nadie ha etiquetado todavía es justo el que alguien va a citar al
+ * preguntar qué pasó.
+ */
+const EVENT_LABEL = {
+  requested: "Session requested",
+  gated: "Held for approval",
+  approved: "Approval spent",
+  break_glass: "⚠️ Break-glass override",
+  connected: "Connected",
+  closed: "Closed",
+  file_upload: "File written to the device",
+  file_download: "File taken from the device"
+};
+
 const STATUS_META = {
   active: { label: "Active", fg: ROLE.positive, bg: ROLE.positiveSoft },
   completed: { label: "Completed", fg: BRAND.tealText, bg: BRAND.tealSoft },
@@ -161,6 +179,9 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
   const shown = detail || session;
   const method = RCP_METHODS.find((m) => m.type === shown?.type);
   const record = detail?.accessRecord ?? null;
+  // Array vacío y no undefined: el render distingue "sin historia" de
+  // "todavía cargando", y son cosas distintas.
+  const timeline = Array.isArray(detail?.timeline) ? detail.timeline : [];
 
   // Same rule the history table applies: only offer playback where something
   // was actually recorded. A shell session has a transcript; a screen session
@@ -251,6 +272,14 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
                 {shown.deviceId}
               </Typography>
             </Field>
+            {/* Desde dónde entró. Un guion cuando no se sabe, y se sabe solo
+                de las sesiones posteriores al 2026-09-09: "no registrado" y
+                "entró desde aquí" no pueden verse igual. */}
+            <Field label="From">
+              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                {detail?.operatorIp || "—"}
+              </Typography>
+            </Field>
           </Stack>
 
           {/* Only when it says something. A NULL close_reason on a session
@@ -294,6 +323,67 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
               </Button>
             </Box>
           ) : null}
+
+          <Divider />
+
+          {/* ── What happened, in order ─────────────────────────────── */}
+          {/*
+            La tabla `remote_sessions` se sobrescribe a sí misma, así que
+            esta línea de tiempo es lo único que conserva el orden real de
+            los hechos: cuándo se pidió frente a cuándo conectó, un
+            break-glass, un fichero que salió del equipo.
+
+            Vacía en las sesiones anteriores a la tabla, y entonces lo DICE.
+            Una línea de tiempo en blanco se lee como "no pasó nada", que es
+            lo contrario de "no lo estábamos anotando".
+          */}
+          <Box>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 700, color: BRAND.dark, mb: 1 }}
+            >
+              What happened
+            </Typography>
+            {timeline.length === 0 ? (
+              <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                No event history — this session predates the audit log.
+              </Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                {timeline.map((ev, i) => (
+                  <Stack
+                    key={`${ev.occurredAt}-${i}`}
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ alignItems: "baseline" }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ color: BRAND.gray, minWidth: 130, flexShrink: 0 }}
+                    >
+                      {new Date(ev.occurredAt).toLocaleTimeString()}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: ev.event === "break_glass" ? 700 : 500,
+                        color:
+                          ev.event === "break_glass" ? ROLE.critical : BRAND.dark
+                      }}
+                    >
+                      {EVENT_LABEL[ev.event] || ev.event}
+                    </Typography>
+                    {ev.actor ? (
+                      <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                        {ev.actor}
+                        {ev.actorIp ? ` · ${ev.actorIp}` : ""}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+          </Box>
 
           <Divider />
 
