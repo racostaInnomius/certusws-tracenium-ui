@@ -18,12 +18,12 @@ import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnec
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 
-const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager" };
+const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud" };
 
 export function ConnectorForm({ onCreated, disabled }) {
   const [kind, setKind] = React.useState("keyvault");
   const [label, setLabel] = React.useState("");
-  const [f, setF] = React.useState({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "" });
+  const [f, setF] = React.useState({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "" });
   const [secret, setSecret] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState(null);
@@ -32,11 +32,17 @@ export function ConnectorForm({ onCreated, disabled }) {
   const config =
     kind === "acm"
       ? { region: f.region.trim(), accessKeyId: f.accessKeyId.trim() }
-      : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
+      : kind === "gcp"
+        ? { projectId: f.projectId.trim() }
+        : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
   const ready =
     label.trim().length >= 2 &&
     secret &&
-    (kind === "acm" ? config.region && config.accessKeyId : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
+    (kind === "acm"
+      ? config.region && config.accessKeyId
+      : kind === "gcp"
+        ? config.projectId && secret.trim().startsWith("{")
+        : /^https:\/\//i.test(config.vaultUrl) && config.tenantId && config.clientId);
 
   const submit = async () => {
     setBusy(true);
@@ -45,7 +51,7 @@ export function ConnectorForm({ onCreated, disabled }) {
       const r = await createCdpConnector({ kind, label: label.trim(), config, clientSecret: secret });
       if (!r?.ok) throw new Error(r?.message || r?.error || "Could not create the connector");
       setLabel("");
-      setF({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "" });
+      setF({ vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "" });
       setSecret("");
       onCreated?.(r.connector);
     } catch (e) {
@@ -61,9 +67,15 @@ export function ConnectorForm({ onCreated, disabled }) {
         <TextField size="small" select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} sx={{ minWidth: 220 }} disabled={disabled}>
           <MenuItem value="keyvault">Azure Key Vault</MenuItem>
           <MenuItem value="acm">AWS Certificate Manager</MenuItem>
+          <MenuItem value="gcp">Google Cloud</MenuItem>
         </TextField>
-        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
-        {kind === "acm" ? (
+        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
+        {kind === "gcp" ? (
+          <>
+            <TextField size="small" label="Project ID" value={f.projectId} onChange={set("projectId")} placeholder="acme-prod" sx={{ minWidth: 200 }} disabled={disabled} />
+            <TextField size="small" label="Service account JSON key" multiline minRows={1} maxRows={4} value={secret} onChange={(e) => setSecret(e.target.value)} placeholder='{"type":"service_account", …}' sx={{ minWidth: 340, "& textarea": { fontFamily: "ui-monospace, Menlo, monospace", fontSize: TEXT.xs } }} disabled={disabled} inputProps={{ "aria-label": "Service account JSON key", autoComplete: "off" }} />
+          </>
+        ) : kind === "acm" ? (
           <>
             <TextField size="small" label="Region" value={f.region} onChange={set("region")} placeholder="us-east-1" sx={{ minWidth: 140 }} disabled={disabled} />
             <TextField size="small" label="Access key ID" value={f.accessKeyId} onChange={set("accessKeyId")} placeholder="AKIA…" sx={{ minWidth: 240 }} disabled={disabled} />
@@ -81,7 +93,15 @@ export function ConnectorForm({ onCreated, disabled }) {
           {busy ? "Saving…" : `Add ${KIND_LABEL[kind]}`}
         </Button>
       </Stack>
-      {kind === "acm" ? (
+      {kind === "gcp" ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+          Create a service account with only <code>certificatemanager.certs.list</code> and{" "}
+          <code>compute.sslCertificates.list</code> (roles <em>Certificate Manager Viewer</em> + <em>Compute Viewer</em>) and
+          paste its JSON key. Both Certificate Manager and the classic Compute SSL certificates are read; an API that
+          is not enabled in the project simply counts as empty. Public certificates only: no private key ever leaves
+          Google.
+        </Typography>
+      ) : kind === "acm" ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
           Create an IAM user (or role credentials) with a policy allowing only{" "}
           <code>acm:ListCertificates</code>, <code>acm:DescribeCertificate</code>, <code>acm:GetCertificate</code> and{" "}
@@ -198,7 +218,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
                 <Typography sx={{ fontWeight: 700, fontSize: TEXT.md }}>{c.label}</Typography>
                 <Chip size="small" variant="outlined" label={KIND_LABEL[c.kind] ?? c.kind} />
                 <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                  {c.kind === "acm" ? `${c.config?.region} · ${c.config?.accessKeyId}` : c.config?.vaultUrl}
+                  {c.kind === "acm" ? `${c.config?.region} · ${c.config?.accessKeyId}` : c.kind === "gcp" ? c.config?.projectId : c.config?.vaultUrl}
                 </Typography>
                 <StatusChip c={c} />
                 {!c.enabled ? <Chip size="small" label="disabled" variant="outlined" /> : null}

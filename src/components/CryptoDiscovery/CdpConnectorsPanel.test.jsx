@@ -88,3 +88,20 @@ describe("ConnectorForm — ACM", () => {
     await waitFor(() => expect(createCdpConnector).toHaveBeenCalledWith({ kind: "acm", label: "AWS", config: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" }, clientSecret: "wJalr" }));
   });
 });
+
+describe("ConnectorForm — GCP", () => {
+  it("con kind gcp pide project id + clave JSON y la manda como secreto", async () => {
+    listCdpConnectors.mockResolvedValue({ ok: true, secretsConfigured: true, connectors: [] });
+    createCdpConnector.mockResolvedValue({ ok: true, connector: { connectorId: 3, kind: "gcp", label: "GCP", config: { projectId: "acme-prod" }, enabled: true, hasSecret: true } });
+    render(<CdpConnectorsPanel refreshNonce={0} />);
+    await screen.findByRole("button", { name: /add azure key vault/i });
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /google cloud/i }));
+    fireEvent.change(screen.getByLabelText(/^label/i), { target: { value: "GCP" } });
+    fireEvent.change(screen.getByLabelText(/project id/i), { target: { value: "acme-prod" } });
+    fireEvent.change(screen.getByLabelText(/service account json key/i), { target: { value: '{"type":"service_account"}' } });
+    expect(screen.getByText(/compute\.sslCertificates\.list/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add google cloud/i }));
+    await waitFor(() => expect(createCdpConnector).toHaveBeenCalledWith({ kind: "gcp", label: "GCP", config: { projectId: "acme-prod" }, clientSecret: '{"type":"service_account"}' }));
+  });
+});
