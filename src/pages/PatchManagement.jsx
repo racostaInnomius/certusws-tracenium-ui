@@ -946,20 +946,10 @@ export default function PatchManagement({ onNavigate }) {
         icon={<SystemUpdateAltOutlinedIcon />}
         actions={
           <>
-            {pmpEnabled ? (
-              <Chip
-                label="PMP active"
-                size="small"
-                icon={<CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
-                sx={{
-                  bgcolor: ROLE.positiveSoft,
-                  color: ROLE.positive,
-                  fontWeight: 700,
-                  border: `1px solid ${ROLE.positive}55`,
-                  "& .MuiChip-icon": { color: ROLE.positive }
-                }}
-              />
-            ) : (
+            {/* Solo se avisa cuando el plugin está APAGADO: un chip "active" en
+                la única página que lo tenía no decía nada que el resto de la
+                página no dijera ya. */}
+            {!pmpEnabled && (
               <Chip
                 label="PMP plugin disabled"
                 size="small"
