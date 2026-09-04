@@ -95,6 +95,7 @@ import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
+import { describeCloseReason } from "./closeReasons";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -286,6 +287,11 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   const stateRef                  = React.useRef(STATE.CONNECTING);
   const errorMsgRef               = React.useRef("");
   const [errorMsg, setErrorMsg]   = React.useState("");
+  // Why the session ended, as the backend reported it. Was thrown away: the
+  // `close` frame carries a reason and this viewer rendered a flat "Session
+  // ended.", so `consent_denied` — somebody said no — was indistinguishable
+  // from a clean hang-up.
+  const [endReason, setEndReason] = React.useState(null);
 
   React.useEffect(() => { stateRef.current = state; }, [state]);
   React.useEffect(() => { errorMsgRef.current = errorMsg; }, [errorMsg]);
@@ -718,7 +724,19 @@ export default function ScreenShareViewer({ session, device, onClose }) {
                 await pc.addIceCandidate(cand);
               }
             } else if (msg.type === "close") {
-              if (!destroyed) setState(STATE.ENDED);
+              if (!destroyed) {
+                setEndReason(msg.reason ?? null);
+                setState(STATE.ENDED);
+              }
+            } else if (msg.type === "error") {
+              // Never handled before. The backend sends this for a session
+              // refused before it ever opened — consent declined above all —
+              // and it fell through to the generic ended state.
+              if (!destroyed) {
+                const { title, detail } = describeCloseReason(msg.code);
+                setErrorMsg(detail ? `${title} ${detail}` : title || msg.message || "Session error");
+                setState(STATE.ERROR);
+              }
             }
           } catch (err) {
             // Antes el try/catch envolvía promesas sin await, así que no
@@ -1127,8 +1145,16 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           >
             {state === STATE.ERROR
               ? `Connection error: ${errorMsg}`
-              : "Session ended."}
+              : describeCloseReason(endReason).title}
           </Typography>
+          {state !== STATE.ERROR && describeCloseReason(endReason).detail ? (
+            <Typography
+              variant="body2"
+              sx={{ color: BRAND.gray, maxWidth: 420, textAlign: "center" }}
+            >
+              {describeCloseReason(endReason).detail}
+            </Typography>
+          ) : null}
           <Button variant="outlined" size="small" onClick={onClose}>
             Close
           </Button>

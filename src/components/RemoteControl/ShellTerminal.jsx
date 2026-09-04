@@ -51,6 +51,7 @@ import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
+import { describeCloseReason } from "./closeReasons";
 
 // State machine — drives the status strip + error rendering.
 const STATE = Object.freeze({
@@ -381,7 +382,13 @@ export default function ShellTerminal({ session, device, onClose }) {
           await applyOrQueueIce(cand);
         } else if (parsed.type === "close") {
           setState(STATE.ENDED);
-          setStatusMsg(`Session closed (${parsed.reason || "remote"}).`);
+          // Was `Session closed (${reason})` — the raw token, verbatim. It is
+          // the only one of the three viewers that showed the reason at all,
+          // and it showed it in the backend's vocabulary: an operator reading
+          // "consent_denied" has to already know what the product calls
+          // things to understand somebody said no.
+          const { title, detail } = describeCloseReason(parsed.reason);
+          setStatusMsg(detail ? `${title} ${detail}` : title);
         } else if (parsed.type === "error") {
           setState(STATE.ERROR);
           setStatusMsg(

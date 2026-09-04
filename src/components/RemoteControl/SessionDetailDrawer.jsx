@@ -41,6 +41,7 @@ import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutline
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getSessionDetail, getSessionFileTransfers } from "../../api/remoteControl";
 import { RCP_METHODS } from "./rcpMethods";
+import { describeCloseReason } from "./closeReasons";
 
 const STATUS_META = {
   active: { label: "Active", fg: ROLE.positive, bg: ROLE.positiveSoft },
@@ -255,7 +256,20 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
           {/* Only when it says something. A NULL close_reason on a session
               that ended normally is not information. */}
           {detail?.closeReason ? (
-            <Field label="Closed because">{detail.closeReason}</Field>
+            <Field label="Closed because">
+              {/* The friendly line, with the raw token kept beside it. This
+                  view is read when something went wrong and gets quoted into
+                  bug reports, so dropping the token to look tidy would throw
+                  away the only searchable part. */}
+              {describeCloseReason(detail.closeReason).title}
+              <Typography
+                component="span"
+                variant="caption"
+                sx={{ color: BRAND.gray, ml: 1 }}
+              >
+                {detail.closeReason}
+              </Typography>
+            </Field>
           ) : null}
 
           {shown.consentRequired ? (

@@ -78,6 +78,7 @@ import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { getApiWsUrl } from "../../api/http";
 import { attachIceRestart } from "./iceRestart";
 import useSessionHeartbeat from "./useSessionHeartbeat";
+import { describeCloseReason } from "./closeReasons";
 
 // ── State machine ──────────────────────────────────────────────────────────
 
@@ -296,6 +297,9 @@ function TransferRow({ transfer, onCancel }) {
 export default function FileBrowserPanel({ session, device, onClose }) {
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [errorMsg, setErrorMsg] = React.useState("");
+  // Why the session ended, as the backend reported it. The `close` frame has
+  // always carried a reason; this panel discarded it and said "Session ended."
+  const [endReason, setEndReason] = React.useState(null);
   const [currentPath, setCurrentPath] = React.useState("/");
   // Roots the agent will let this session reach. `null` = we haven't heard
   // back yet (or the agent is too old to answer), `[]` = old agent, treat
@@ -531,7 +535,17 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               }
             } else if (msg.type === "close") {
               if (!destroyed) {
+                setEndReason(msg.reason ?? null);
                 setState(STATE.ENDED);
+              }
+            } else if (msg.type === "error") {
+              // Never handled before, so a session refused before it opened —
+              // consent declined, most importantly — arrived as a plain
+              // "Session ended."
+              if (!destroyed) {
+                const { title, detail } = describeCloseReason(msg.code);
+                setErrorMsg(detail ? `${title} ${detail}` : title || msg.message || "Session error");
+                setState(STATE.ERROR);
               }
             }
           } catch (err) {
@@ -989,8 +1003,16 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           >
             {state === STATE.ERROR
               ? `Connection error: ${errorMsg}`
-              : "Session ended."}
+              : describeCloseReason(endReason).title}
           </Typography>
+          {state !== STATE.ERROR && describeCloseReason(endReason).detail ? (
+            <Typography
+              variant="body2"
+              sx={{ color: BRAND.gray, maxWidth: 420, textAlign: "center" }}
+            >
+              {describeCloseReason(endReason).detail}
+            </Typography>
+          ) : null}
           <Button variant="outlined" size="small" onClick={onClose}>
             Close
           </Button>

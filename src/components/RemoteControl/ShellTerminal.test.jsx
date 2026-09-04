@@ -327,10 +327,27 @@ describe("ShellTerminal — ENDED transitions", () => {
     expect(await screen.findByText(/Shell exited \(code 0\)/i)).toBeInTheDocument();
   });
 
-  it("WS 'close' control frame → 'Session closed' status", async () => {
+  it("WS 'close' control frame → the reason in words, not the raw token", async () => {
+    // Was `Session closed (agent_dispose)`. The token is the backend's
+    // vocabulary; an operator should not have to learn it to read a status
+    // line. See closeReasons.js.
     const { ws } = await connect();
     await ws.fireMessage({ type: "close", reason: "agent_dispose" });
-    expect(await screen.findByText(/Session closed \(agent_dispose\)/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/The device ended the session/i)
+    ).toBeInTheDocument();
+  });
+
+  it("⚠️ says plainly when the person at the device declined", async () => {
+    // The single most important ending in the module, and the one the other
+    // two viewers used to render as a flat "Session ended." Somebody refusing
+    // and a network failing must never look the same: the operator's next
+    // move is apologise-and-call versus check-the-firewall.
+    const { ws } = await connect();
+    await ws.fireMessage({ type: "close", reason: "consent_denied" });
+    expect(
+      await screen.findByText(/The person at the device declined/i)
+    ).toBeInTheDocument();
   });
 });
 
