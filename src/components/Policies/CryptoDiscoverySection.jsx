@@ -268,6 +268,34 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.sm } }}
         />
       </Box>
+
+      <Box sx={{ mt: 3, pt: 2, borderTop: `1px dashed ${BRAND.border}` }}>
+        <FormControlLabel
+          disabled={readOnly}
+          control={
+            <Switch
+              size="small"
+              checked={cdp.adcsEnabled === true}
+              onChange={(e) => setField("adcsEnabled", e.target.checked)}
+              inputProps={{ "aria-label": "Read Active Directory Certificate Services issuance" }}
+            />
+          }
+          label={
+            <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark }}>
+              Read Active Directory Certificate Services (AD CS) issuance
+            </Typography>
+          }
+        />
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mt: 0.5 }}>
+          Only acts on a device that holds the <strong>Certification Authority</strong> role; on any
+          other device the agent asks, learns it is not a CA, and runs nothing. On a CA it reads the
+          issuance database incrementally (<code>certutil -view</code>, read-only) and reports what the
+          CA issued — including certificates that never landed on a device with an agent — and the
+          <strong> template</strong> each one came from. Findings appear under{" "}
+          <em>Explore → Imported inventories</em> as source <code>adcs:&lt;CA name&gt;</code>, never mixed
+          into the CA server&rsquo;s own certificate list.
+        </Typography>
+      </Box>
     </Box>
   );
 }

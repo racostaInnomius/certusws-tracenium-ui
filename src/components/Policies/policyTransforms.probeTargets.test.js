@@ -26,3 +26,23 @@ describe("probeTargets en la policy", () => {
     expect(CDP_PROBE_TARGETS_MAX).toBe(200);
   });
 });
+
+// Conector AD CS (fase 4b): opt-in; solo se escribe cuando está ON.
+import { readFormFromPolicy, formToPolicy } from "./policyTransforms";
+
+describe("cdp.adcs en la policy", () => {
+  const catalog = [{ key: "amp" }, { key: "cdp" }];
+  const withCdp = (adcs) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp: { adcs } });
+  it("hidrata `enabled` solo si es exactamente true", () => {
+    expect(readFormFromPolicy(withCdp({ enabled: true }), catalog).cdp.adcsEnabled).toBe(true);
+    expect(readFormFromPolicy(withCdp({ enabled: "true" }), catalog).cdp.adcsEnabled).toBe(false);
+    expect(readFormFromPolicy({ cdp: {} }, catalog).cdp.adcsEnabled).toBe(false);
+  });
+
+  it("serializa `{enabled:true}` cuando está ON y omite la clave cuando está OFF", () => {
+    const on = formToPolicy(readFormFromPolicy(withCdp({ enabled: true }), catalog), catalog);
+    expect(on.cdp?.adcs).toEqual({ enabled: true });
+    const off = formToPolicy(readFormFromPolicy(withCdp({ enabled: false }), catalog), catalog);
+    expect(off.cdp?.adcs).toBeUndefined();
+  });
+});

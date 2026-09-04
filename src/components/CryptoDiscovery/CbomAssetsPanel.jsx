@@ -120,10 +120,12 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
 
   return (
     <SectionPaper>
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Imported inventories (CBOM)</Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Imported inventories</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1.5 }}>
-        Crypto assets from places without an agent — code scanners, container images, other inventories — as
-        CycloneDX 1.6. Shown by source, never mixed with what agents saw.
+        Crypto assets from places without an agent: CycloneDX 1.6 files from code scanners, container
+        images or other inventories, and what an <strong>AD CS</strong> Certification Authority reports it
+        issued (source <code>adcs:&lt;CA&gt;</code>, enabled per policy). Shown by source, never mixed
+        with what agents saw on devices.
       </Typography>
       <CbomImportForm onImported={() => setNonce((n) => n + 1)} />
       {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}

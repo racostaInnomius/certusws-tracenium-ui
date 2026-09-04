@@ -556,6 +556,8 @@ export function readFormFromPolicy(policy, catalog = []) {
       certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
       probeTargets: (policy?.cdp?.probeTargets ?? []).join("\n"),
+      // Conector AD CS (fase 4b): opt-in, solo actúa en un CA server.
+      adcsEnabled: policy?.cdp?.adcs?.enabled === true,
     },
   };
 }
@@ -759,6 +761,9 @@ export function formToPolicy(form, catalog = []) {
       new Set(splitTargetLines(form?.cdp?.probeTargets).filter((t) => invalidProbeTargets(t).length === 0).map((t) => t.toLowerCase()))
     ).slice(0, CDP_PROBE_TARGETS_MAX);
     if (targets.length > 0) cdp.probeTargets = targets;
+
+    // Conector AD CS: solo cuando está ON (omit-when-empty, como el resto).
+    if (form?.cdp?.adcsEnabled === true) cdp.adcs = { enabled: true };
 
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }
