@@ -371,7 +371,12 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
               sx={{ mb: 1.5 }}
             />
 
-            {loading && devices.length === 0 ? (
+            {/* `eligible`, not `devices`: the hook's `devices` is renamed on
+                destructuring above and no such binding exists in this scope.
+                Spelling it `devices` here threw a ReferenceError on every
+                render of this step — the whole Remote Control page went to the
+                route ErrorBoundary and the wizard never opened. */}
+            {loading && eligible.length === 0 ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress size={24} sx={{ color: BRAND.teal }} />
               </Box>
