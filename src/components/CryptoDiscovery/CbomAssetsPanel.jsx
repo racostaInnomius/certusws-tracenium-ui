@@ -14,6 +14,7 @@ import { Alert, Box, Button, Chip, Stack, TextField, Typography } from "@mui/mat
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT } from "../../theme/brand";
 import { getCryptoAssetsSummary, importCdpCbom, listCryptoAssets } from "../../api/cdp";
+import CdpConnectorsPanel from "./CdpConnectorsPanel";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const TYPE_LABEL = {
@@ -123,11 +124,13 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Imported inventories</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1.5 }}>
         Crypto assets from places without an agent: CycloneDX 1.6 files from code scanners, container
-        images or other inventories, and what an <strong>AD CS</strong> Certification Authority reports it
-        issued (source <code>adcs:&lt;CA&gt;</code>, enabled per policy). Shown by source, never mixed
-        with what agents saw on devices.
+        images or other inventories; what an <strong>AD CS</strong> Certification Authority reports it
+        issued (source <code>adcs:&lt;CA&gt;</code>, enabled per policy); and cloud connectors such as{" "}
+        <strong>Azure Key Vault</strong> (source <code>keyvault:&lt;vault&gt;</code>). Shown by source, never
+        mixed with what agents saw on devices.
       </Typography>
       <CbomImportForm onImported={() => setNonce((n) => n + 1)} />
+      <CdpConnectorsPanel refreshNonce={refreshNonce} onChanged={() => setNonce((n) => n + 1)} />
       {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
 
       {summary && total === 0 ? (

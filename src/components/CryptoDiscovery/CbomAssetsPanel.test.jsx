@@ -12,7 +12,12 @@ const importCdpCbom = vi.fn();
 vi.mock("../../api/cdp", () => ({
   getCryptoAssetsSummary: (...a) => getCryptoAssetsSummary(...a),
   listCryptoAssets: (...a) => listCryptoAssets(...a),
-  importCdpCbom: (...a) => importCdpCbom(...a)
+  importCdpCbom: (...a) => importCdpCbom(...a),
+  listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
+  createCdpConnector: vi.fn(),
+  updateCdpConnector: vi.fn(),
+  deleteCdpConnector: vi.fn(),
+  runCdpConnector: vi.fn()
 }));
 
 import CbomAssetsPanel, { CbomImportForm } from "./CbomAssetsPanel";

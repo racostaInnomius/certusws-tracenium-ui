@@ -5,7 +5,7 @@
 // (/api/v1/security/certificates), which covers the agent's own
 // mTLS/PKI identity certs.
 
-import { httpGetJson, httpGetBlob, httpPostJson, httpPutJson } from "./http";
+import { httpGetJson, httpGetBlob, httpPostJson, httpPutJson, httpDeleteJson } from "./http";
 import { saveBlob } from "../utils/browserState";
 import { buildQuery } from "./query";
 
@@ -233,4 +233,25 @@ export async function refreshEndpointKeys(deviceId) {
  */
 export async function destroyEndpointKey({ deviceId, keyId, reason, ticketRef }) {
   return httpPostJson(`${BASE}/keys/destroy`, { deviceId, keyId, reason, ticketRef });
+}
+
+// ── Conectores sin agente (fase 4c): Azure Key Vault ────────────────
+export async function listCdpConnectors() {
+  return httpGetJson(`${BASE}/connectors`);
+}
+
+export async function createCdpConnector({ kind = "keyvault", label, config, clientSecret }) {
+  return httpPostJson(`${BASE}/connectors`, { kind, label, config, clientSecret });
+}
+
+export async function updateCdpConnector(id, patch) {
+  return httpPutJson(`${BASE}/connectors/${encodeURIComponent(id)}`, patch);
+}
+
+export async function deleteCdpConnector(id) {
+  return httpDeleteJson(`${BASE}/connectors/${encodeURIComponent(id)}`);
+}
+
+export async function runCdpConnector(id, { dryRun = false } = {}) {
+  return httpPostJson(`${BASE}/connectors/${encodeURIComponent(id)}/run${dryRun ? "?dryRun=1" : ""}`, {}, { timeoutMs: 120000 });
 }
