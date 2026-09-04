@@ -1,5 +1,10 @@
 // src/components/CryptoDiscovery/PqcReadinessPanels.jsx
 //
+// Consolidación 2026-09-04: el horizonte 2030/2035 y las familias de
+// algoritmo se retiraron de aquí — el embudo del Dashboard y la
+// distribución por clave de Explore responden lo mismo con más contexto.
+// Quedan las tres referencias con valor propio, montadas en Roadmap.
+//
 // The post-quantum readiness surface (ADR-0004 e-F1 / e-F2), fed by a
 // single GET /api/v1/cdp/pqc.
 //
@@ -51,168 +56,6 @@ function formatDate(value) {
 }
 
 // ── 1. The anchor metric ─────────────────────────────────────────────
-
-function HorizonBlock({ year, data, emphasis }) {
-  const total = data?.total ?? 0;
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        minWidth: 0,
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${emphasis ? BRAND.alert.error : BRAND.border}`,
-        bgcolor: emphasis ? BRAND.alert.errorSoft : BRAND.surfaceMuted,
-      }}
-    >
-      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.gray, letterSpacing: 0.6 }}>
-        STILL VALID AFTER {year}
-      </Typography>
-      <Typography
-        sx={{
-          fontSize: TEXT["4xl"],
-          fontWeight: 800,
-          lineHeight: 1.1,
-          color: emphasis ? BRAND.alert.error : BRAND.dark,
-        }}
-      >
-        {total.toLocaleString()}
-      </Typography>
-      <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
-          <strong>{(data?.ca ?? 0).toLocaleString()}</strong> certificate authorities
-        </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
-          <strong>{(data?.withPrivateKey ?? 0).toLocaleString()}</strong> with private key
-        </Typography>
-      </Stack>
-    </Box>
-  );
-}
-
-export function PqcHorizonPanel({ pqc }) {
-  const outliving = pqc?.quantumBrokenOutliving;
-  const deprecation = pqc?.deprecationYear ?? 2030;
-  const disallowed = pqc?.disallowedYear ?? 2035;
-
-  return (
-    <SectionPaper sx={{ p: 2 }}>
-      <PanelTitle hint="NIST IR 8547 (draft) proposes deprecating RSA and ECDSA after 2030 and disallowing them after 2035. A certificate that outlives those dates is a planning problem today, not in 2030.">
-        Quantum-broken certificates outliving the deadlines
-      </PanelTitle>
-
-      {!outliving ? (
-        <Empty>No certificate data yet.</Empty>
-      ) : (
-        <>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <HorizonBlock year={deprecation} data={outliving.beyondDeprecation} />
-            <HorizonBlock year={disallowed} data={outliving.beyondDisallowed} emphasis />
-          </Stack>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1.5 }}>
-            Replacing a certificate authority means distributing a new root to every device
-            years in advance. Renewing a leaf you hold the key for does not.
-            {outliving.noExpiry > 0 && (
-              <> {outliving.noExpiry} certificate(s) carry no expiry date at all.</>
-            )}
-          </Typography>
-        </>
-      )}
-    </SectionPaper>
-  );
-}
-
-// ── 2. Algorithm families ────────────────────────────────────────────
-
-const FAMILY_META = {
-  quantum_broken: {
-    label: "Quantum-broken",
-    hint: "RSA, ECDSA, EdDSA and friends — everything Shor's algorithm breaks. This is a statement about migration deadlines, not about the certificate being unsafe today.",
-  },
-  pq_safe: { label: "Post-quantum safe", hint: "ML-DSA, SLH-DSA, ML-KEM and the stateful hash-based signatures." },
-  hybrid: { label: "Hybrid", hint: "A post-quantum algorithm bound together with a classical one." },
-  unknown: {
-    label: "Unclassified",
-    hint: "An algorithm the control plane does not recognise yet. Deliberately not folded into either bucket: guessing would either hide a deadline or invent one.",
-  },
-};
-
-export function PqcFamilyPanel({ pqc }) {
-  const reported = Array.isArray(pqc?.byFamily) ? pqc.byFamily : [];
-  const total = reported.reduce((sum, r) => sum + (r.total ?? 0), 0);
-
-  // Every family is rendered, including the ones with nothing in them.
-  // The backend only returns families it actually found, and omitting
-  // the empty ones would hide the single most important line a
-  // readiness panel can show: "post-quantum safe: 0". A zero here is the
-  // finding, not the absence of one.
-  const order = ["quantum_broken", "hybrid", "pq_safe", "unknown"];
-  const byName = new Map(reported.map((r) => [r.family, r]));
-  const rows = order.map(
-    (family) =>
-      byName.get(family) ?? { family, total: 0, nonRoot: 0, withPrivateKey: 0 }
-  );
-
-  return (
-    <SectionPaper sx={{ p: 2, height: "100%" }}>
-      <PanelTitle hint="Every certificate in the inventory, by algorithm family. Classification happens on the control plane, so it can be updated without touching a single endpoint.">
-        Algorithm families
-      </PanelTitle>
-
-      {total === 0 ? (
-        <Empty>No certificates inventoried yet.</Empty>
-      ) : (
-        <Stack spacing={1.25}>
-          {rows.map((row) => {
-            const meta = FAMILY_META[row.family] ?? { label: row.family, hint: null };
-            const pct = Math.round(((row.total ?? 0) / total) * 100);
-            return (
-              <Box key={row.family}>
-                <Stack direction="row" justifyContent="space-between" alignItems="baseline">
-                  <Tooltip title={meta.hint ?? ""} arrow>
-                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: meta.hint ? "help" : "default" }}>
-                      {meta.label}
-                    </Typography>
-                  </Tooltip>
-                  <Typography
-                    sx={{ fontSize: TEXT.md, fontWeight: 700, color: row.total === 0 ? BRAND.gray : BRAND.dark }}
-                  >
-                    {row.total.toLocaleString()}
-                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
-                      {pct}%
-                    </Typography>
-                  </Typography>
-                </Stack>
-                <LinearProgress
-                  variant="determinate"
-                  value={pct}
-                  sx={{
-                    mt: 0.5,
-                    height: 6,
-                    borderRadius: 3,
-                    bgcolor: BRAND.surfaceMuted,
-                    "& .MuiLinearProgress-bar": {
-                      borderRadius: 3,
-                      bgcolor: row.family === "pq_safe" ? BRAND.alert.success : BRAND.tealText,
-                    },
-                  }}
-                />
-                {row.total > 0 && (
-                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                    {row.nonRoot.toLocaleString()} outside trust stores ·{" "}
-                    {row.withPrivateKey.toLocaleString()} with private key
-                  </Typography>
-                )}
-              </Box>
-            );
-          })}
-        </Stack>
-      )}
-    </SectionPaper>
-  );
-}
-
-// ── 3. Trust anchors at risk ─────────────────────────────────────────
 
 export function TrustAnchorsPanel({ pqc }) {
   const rows = Array.isArray(pqc?.trustAnchorsAtRisk) ? pqc.trustAnchorsAtRisk : [];

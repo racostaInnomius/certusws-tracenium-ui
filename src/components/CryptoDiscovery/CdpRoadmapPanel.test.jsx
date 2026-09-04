@@ -17,7 +17,8 @@ vi.mock("../../api/cdp", () => ({
   getCdpRoadmapSystem: vi.fn(async () => ({ ok: true, members: [] })),
   putCdpRoadmapPlan: (...a) => putCdpRoadmapPlan(...a),
   getCdpReadinessHistory: (...a) => getCdpReadinessHistory(...a),
-  postCdpReadinessSnapshot: vi.fn(async () => ({ ok: true }))
+  postCdpReadinessSnapshot: vi.fn(async () => ({ ok: true })),
+  getCdpPqcReadiness: vi.fn(async () => ({ ok: true, pqc: null }))
 }));
 
 import CdpRoadmapPanel, { WaveChip, PlanDialog, ReadinessTrend } from "./CdpRoadmapPanel";

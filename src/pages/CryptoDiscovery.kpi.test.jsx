@@ -72,7 +72,7 @@ describe("KPI clicables", () => {
     // La URL es la fuente de verdad: pestaña 2 y pk=1.
     await waitFor(() => {
       const p = new URLSearchParams(window.location.search);
-      expect(p.get("cdpTab")).toBe("5");
+      expect(p.get("cdpTab")).toBe("3");
       expect(p.get("pk")).toBe("1");
       expect(p.get("page")).toBe("cdp");
     });

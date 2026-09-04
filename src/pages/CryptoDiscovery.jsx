@@ -1,12 +1,16 @@
 // src/pages/CryptoDiscovery.jsx
 //
-// CDP (Crypto Discovery Plugin) — Phase A surface. Three tabs:
+// CDP (Crypto Discovery Plugin). Eight tabs, one question each:
 //
-//   Dashboard    : KPI row from /api/v1/cdp/summary.
-//   Certificates : fleet view deduped by fingerprint (server-side
-//                  pagination), system roots hidden behind a toggle.
-//   Devices      : per-device counters → right Drawer with that
-//                  device's certificate list.
+//   Dashboard    : ownership funnel, KPIs, expiry timeline against the
+//                  PQC deadlines, action list, issuers, hygiene, devices.
+//   Roadmap      : systems to migrate, priority, waves, trend, references
+//                  (agility blockers, CNSA 2.0, trust anchors to replace).
+//   Explore      : distribution by key algorithm/size and where
+//                  certificates live (source → store → device).
+//   Certificates : the fleet list, deduped by fingerprint, with facets
+//                  and CSV export. Devices, Trust anchors, Orphan keys
+//                  and Access policy complete the set.
 //
 // This page reads the CDP inventory (certs discovered ON devices).
 // The PKI page covers the agent's own mTLS identity certs — different
@@ -63,11 +67,9 @@ import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
 import {
-  ExpiryHorizonPanel,
   ActionRequiredPanel,
   HygienePanel,
   IssuersPanel,
-  DistributionPanel,
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
@@ -75,18 +77,10 @@ import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
 import CdpCertFacets from "../components/CryptoDiscovery/CdpCertFacets";
-import {
-  PqcHorizonPanel,
-  PqcFamilyPanel,
-  TrustAnchorsPanel,
-  AgilityBlockersPanel,
-  CnsaPanel,
-} from "../components/CryptoDiscovery/PqcReadinessPanels";
 import { BRAND, DATAGRID_SX, ICON, TEXT, TEXT_MUTED } from "../theme/brand";
 import {
   getCdpSummary,
   getCdpDashboard,
-  getCdpPqcReadiness,
   listCdpCertificates,
   listCdpDevices,
   listCdpDeviceCertificates,
@@ -100,21 +94,25 @@ import {
 } from "../api/cdp";
 
 /**
- * Índices de pestaña, con nombre. Fase 1 insertó «Explore» y «Stores»
- * tras Post-quantum y desplazó el resto; un número suelto (`tab: 2`) es
- * exactamente lo que dejó «Access policy» en blanco la última vez.
+ * Índices de pestaña, con nombre — un número suelto (`tab: 2`) es lo que
+ * dejó «Access policy» en blanco una vez.
+ *
+ * Consolidación 2026-09-04: las fases 1–3 del análisis montaron lo nuevo
+ * al lado de lo viejo y la página llegó a 10 pestañas con paneles que
+ * respondían la misma pregunta dos veces (Where they live vs Stores,
+ * Expiry horizon vs Timeline, Post-quantum vs Roadmap/Explore). Ahora
+ * cada pregunta tiene UN sitio: Post-quantum se funde en Roadmap, Stores
+ * en Explore, y el horizonte de vencimiento es la línea de tiempo.
  */
 const TAB = {
   dashboard: 0,
-  pqc: 1,
-  roadmap: 2,
-  explore: 3,
-  stores: 4,
-  certificates: 5,
-  devices: 6,
-  anchors: 7,
-  orphans: 8,
-  policy: 9
+  roadmap: 1,
+  explore: 2,
+  certificates: 3,
+  devices: 4,
+  anchors: 5,
+  orphans: 6,
+  policy: 7
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -207,12 +205,19 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
   // Fase 1: el embudo de propiedad va PRIMERO. Es la cifra que separa lo
   // que el cliente posee de lo que le llega con el sistema.
   const [exposure, setExposure] = React.useState(null);
+  // La línea de tiempo SUSTITUYE al «Expiry horizon» antiguo: misma
+  // pregunta (cuándo caduca lo que hay), pero apilada por propiedad y
+  // contra los plazos PQC. Dos gráficos para una pregunta era deuda.
+  const [timeline, setTimeline] = React.useState(null);
   const [explain, toggleExplain] = useExplainMode();
   React.useEffect(() => {
     let alive = true;
     getCdpExposure()
       .then((r) => alive && setExposure(r?.exposure ?? null))
       .catch(() => alive && setExposure(null));
+    getCdpTimeline({})
+      .then((r) => alive && setTimeline(r ?? null))
+      .catch(() => alive && setTimeline(null));
     return () => {
       alive = false;
     };
@@ -362,10 +367,10 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
         </Alert>
       ) : null}
 
-      {/* Row 1 — when does the fleet break, and what do I do today. */}
+      {/* Row 1 — when does the fleet break (against the deadlines), and what do I do today. */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 7 }}>
-          <ExpiryHorizonPanel data={d.expiryHorizon} noExpiryDate={d.noExpiryDate ?? 0} />
+          <TimelinePanel timeline={timeline} explain={explain} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
         </Grid>
         <Grid size={{ xs: 12, lg: 5 }}>
           <ActionRequiredPanel
@@ -375,7 +380,8 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
         </Grid>
       </Grid>
 
-      {/* Row 2 — posture: who signs, what's unhealthy, where they live. */}
+      {/* Row 2 — posture: who signs, what's unhealthy, which devices. Where
+          certificates live is a question for Explore, not a third copy here. */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
           <IssuersPanel
@@ -387,64 +393,9 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
           <HygienePanel flags={d.flags} onSelect={(flag) => onDrillDown?.({ flag })} />
         </Grid>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-          <DistributionPanel distribution={d.distribution} />
-        </Grid>
-      </Grid>
-
-      {/* Row 3 — worst devices, straight into the Devices tab. */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
           <TopDevicesPanel devices={d.topDevices} onSelect={() => onOpenDevices?.()} />
         </Grid>
       </Grid>
-    </Stack>
-  );
-}
-
-// ── PQC readiness tab ────────────────────────────────────────────────
-
-function CdpPqcTab({ refreshNonce }) {
-  const [pqc, setPqc] = React.useState(null);
-  const [error, setError] = React.useState(null);
-
-  React.useEffect(() => {
-    let alive = true;
-    getCdpPqcReadiness()
-      .then((resp) => {
-        if (alive) {
-          setPqc(resp?.pqc ?? null);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        if (alive) setError(err?.message || String(err));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [refreshNonce]);
-
-  if (error) {
-    return (
-      <Typography color="error" sx={{ py: 2 }}>
-        Failed to load post-quantum readiness: {error}
-      </Typography>
-    );
-  }
-
-  return (
-    <Stack spacing={2}>
-      <PqcHorizonPanel pqc={pqc} />
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <PqcFamilyPanel pqc={pqc} />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <TrustAnchorsPanel pqc={pqc} />
-        </Grid>
-      </Grid>
-      <AgilityBlockersPanel pqc={pqc} />
-      <CnsaPanel pqc={pqc} />
     </Stack>
   );
 }
@@ -455,7 +406,9 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
   const [scope, setScope] = React.useState("all");
   const [explain, toggleExplain] = useExplainMode();
   const [facets, setFacets] = React.useState(null);
-  const [timeline, setTimeline] = React.useState(null);
+  // Stores vive aquí: «dónde viven» es una dimensión de la exploración,
+  // no una pestaña aparte ni un tercer panel en el Dashboard.
+  const [stores, setStores] = React.useState(null);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -464,12 +417,12 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
     const filter = scope === "own" ? { hasPrivateKey: true } : {};
     Promise.all([
       getCdpFacets({ by: ["key_algorithm", "key_size_bits"], stack: "ownership", ...filter }),
-      getCdpTimeline(filter)
+      getCdpStores(filter)
     ])
-      .then(([f, t]) => {
+      .then(([f, st]) => {
         if (!alive) return;
         setFacets(f ?? null);
-        setTimeline(t ?? null);
+        setStores(st ?? null);
       })
       .catch((err) => alive && setError(err?.message || String(err)));
     return () => {
@@ -494,44 +447,10 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
         </Alert>
       ) : null}
       <KeyDistributionPanel facets={facets} onSelect={select} explain={explain} />
-      <TimelinePanel timeline={timeline} onSelect={select} explain={explain} ownOnly={scope === "own"} />
-    </Stack>
-  );
-}
-
-// ── Stores tab (fase 1): fuente → almacén → equipo ───────────────────
-
-function CdpStoresTab({ refreshNonce, onDrillDown }) {
-  const [explain, toggleExplain] = useExplainMode();
-  const [data, setData] = React.useState(null);
-  const [error, setError] = React.useState(null);
-
-  React.useEffect(() => {
-    let alive = true;
-    setError(null);
-    getCdpStores()
-      .then((r) => alive && setData(r ?? null))
-      .catch((err) => alive && setError(err?.message || String(err)));
-    return () => {
-      alive = false;
-    };
-  }, [refreshNonce]);
-
-  return (
-    <Stack spacing={2}>
-      <Stack direction="row" justifyContent="flex-end">
-        <ExplainToggle on={explain} onToggle={toggleExplain} />
-      </Stack>
-      {error ? (
-        <Alert severity="error">
-          <AlertTitle>Couldn&apos;t load</AlertTitle>
-          {error}
-        </Alert>
-      ) : null}
       <StoresPanel
-        stores={data?.stores}
-        javaOnlyVendorBundles={data?.javaOnlyVendorBundles === true}
-        onSelect={(f) => onDrillDown?.(f, { replace: true })}
+        stores={stores?.stores}
+        javaOnlyVendorBundles={stores?.javaOnlyVendorBundles === true}
+        onSelect={select}
         explain={explain}
       />
     </Stack>
@@ -1498,10 +1417,8 @@ export default function CryptoDiscovery() {
 
       <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
         <Tab label="Dashboard" />
-        <Tab label="Post-quantum" />
         <Tab label="Roadmap" />
         <Tab label="Explore" />
-        <Tab label="Stores" />
         <Tab label="Certificates" />
         <Tab label="Devices" />
         <Tab label="Trust anchors" />
@@ -1525,17 +1442,11 @@ export default function CryptoDiscovery() {
           onOpenDevices={() => setTab(TAB.devices)}
         />
       </TabPanel>
-      <TabPanel value={tab} index={TAB.pqc}>
-        <CdpPqcTab refreshNonce={refreshNonce} />
-      </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>
         <CdpRoadmapPanel refreshNonce={refreshNonce} onDrillDown={(f) => drillDown(f, { replace: true })} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.explore}>
         <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
-      </TabPanel>
-      <TabPanel value={tab} index={TAB.stores}>
-        <CdpStoresTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.certificates}>
         <CdpCertificatesTab refreshNonce={refreshNonce} />

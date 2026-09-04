@@ -1,5 +1,10 @@
 // src/components/CryptoDiscovery/CdpDashboardPanels.jsx
 //
+// Consolidación 2026-09-04: «Expiry horizon» y «Where they live» se
+// retiraron de aquí. La primera pregunta la responde la línea de tiempo
+// (CdpExplorePanels.TimelinePanel) y la segunda el panel de almacenes en
+// Explore. Dos paneles para una pregunta era deuda, no cobertura.
+//
 // The analytical half of the Crypto Discovery dashboard — everything
 // below the KPI row. Fed by a single GET /api/v1/cdp/dashboard.
 //
@@ -17,24 +22,12 @@
 import * as React from "react";
 import { Box, Chip, Stack, Tooltip, Typography, LinearProgress } from "@mui/material";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RTooltip,
-  Cell,
-} from "recharts";
 
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 // ── shared bits ──────────────────────────────────────────────────────
 
-const AXIS_TICK = { fontSize: TEXT.sm, fill: BRAND.dark };
-const GRID_STROKE = "rgba(190,190,190,0.35)";
 
 function PanelTitle({ children, hint }) {
   const title = (
@@ -78,80 +71,6 @@ function daysUntil(value) {
 //
 // The panel that answers "when does my fleet break?". Ordered urgency
 // buckets, so a bar chart on an ordinal axis is the right form.
-
-const SEVERITY_FILL = {
-  critical: BRAND.alert.error,
-  serious: BRAND.alert.high,
-  warning: BRAND.alert.warningText,
-  neutral: BRAND.teal,
-};
-
-function HorizonTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
-  return (
-    <Box
-      sx={{
-        bgcolor: BRAND.surface,
-        border: `1px solid ${BRAND.border}`,
-        borderRadius: 1,
-        px: 1.5,
-        py: 1,
-        boxShadow: BRAND.shadow,
-      }}
-    >
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md }}>{row.label}</Typography>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
-        {row.count} certificate{row.count === 1 ? "" : "s"}
-      </Typography>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.tealText }}>
-        {row.withPrivateKey} with private key
-      </Typography>
-    </Box>
-  );
-}
-
-export function ExpiryHorizonPanel({ data, noExpiryDate }) {
-  const buckets = Array.isArray(data) ? data : [];
-  const total = buckets.reduce((sum, b) => sum + (b.count ?? 0), 0);
-
-  return (
-    <SectionPaper sx={{ p: 2, height: "100%" }}>
-      <PanelTitle hint="Certificates grouped by how soon they expire. System roots excluded — this is a worklist, and OS trust bundles are not work.">
-        Expiry horizon
-      </PanelTitle>
-
-      {total === 0 ? (
-        <EmptyPanel>No certificates with an expiry date yet.</EmptyPanel>
-      ) : (
-        <>
-          <Box sx={{ height: 240, width: "100%", minWidth: 0 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={buckets} margin={{ top: 8, right: 8, left: -20, bottom: 4 }}>
-                <CartesianGrid vertical={false} stroke={GRID_STROKE} />
-                <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} />
-                <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} allowDecimals={false} />
-                <RTooltip content={<HorizonTooltip />} cursor={{ fill: BRAND.surfaceMuted }} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={56}>
-                  {buckets.map((b) => (
-                    <Cell key={b.key} fill={SEVERITY_FILL[b.severity] ?? BRAND.teal} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Box>
-          {noExpiryDate > 0 && (
-            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1 }}>
-              + {noExpiryDate} with no expiry date recorded
-            </Typography>
-          )}
-        </>
-      )}
-    </SectionPaper>
-  );
-}
-
-// ── 2. Action required (worklist) ────────────────────────────────────
 
 export function ActionRequiredPanel({ items, onSelect }) {
   const rows = Array.isArray(items) ? items : [];
@@ -427,74 +346,6 @@ export function IssuersPanel({ issuers, onSelect }) {
 //
 // Text-labeled rows rather than a pie: with OS stores vs Java keystores
 // the categories are few and the labels are the identity channel.
-
-const SOURCE_LABELS = {
-  store: "OS certificate store",
-  "java-store": "Java keystore",
-  // Captured from a live local handshake — what the service actually
-  // serves, which can differ from anything in a store.
-  listener: "TLS listener",
-};
-
-const SCOPE_LABELS = {
-  machine: "machine",
-  user: "user",
-  "system-roots": "system roots",
-};
-
-export function DistributionPanel({ distribution }) {
-  const rows = Array.isArray(distribution) ? distribution : [];
-  const total = rows.reduce((sum, r) => sum + (r.count ?? 0), 0);
-
-  return (
-    <SectionPaper sx={{ p: 2, height: "100%" }}>
-      <PanelTitle hint="Java keystores (JKS/PKCS12) are invisible to the OS certificate stores — they are collected separately by the agent.">
-        Where they live
-      </PanelTitle>
-
-      {total === 0 ? (
-        <EmptyPanel>No certificates inventoried yet.</EmptyPanel>
-      ) : (
-        <Stack spacing={1.25}>
-          {rows.map((row) => {
-            const pct = Math.round(((row.count ?? 0) / total) * 100);
-            return (
-              <Box key={`${row.source}:${row.scope}`}>
-                <Stack direction="row" justifyContent="space-between" alignItems="baseline">
-                  <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>
-                    {SOURCE_LABELS[row.source] ?? row.source}
-                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
-                      ({SCOPE_LABELS[row.scope] ?? row.scope})
-                    </Typography>
-                  </Typography>
-                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700 }}>
-                    {row.count}
-                    <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 0.5 }}>
-                      {pct}%
-                    </Typography>
-                  </Typography>
-                </Stack>
-                <LinearProgress
-                  variant="determinate"
-                  value={pct}
-                  sx={{
-                    mt: 0.5,
-                    height: 6,
-                    borderRadius: 3,
-                    bgcolor: BRAND.surfaceMuted,
-                    "& .MuiLinearProgress-bar": { borderRadius: 3, bgcolor: BRAND.tealText },
-                  }}
-                />
-              </Box>
-            );
-          })}
-        </Stack>
-      )}
-    </SectionPaper>
-  );
-}
-
-// ── 6. Devices needing attention ─────────────────────────────────────
 
 export function TopDevicesPanel({ devices, onSelect }) {
   const rows = Array.isArray(devices) ? devices : [];

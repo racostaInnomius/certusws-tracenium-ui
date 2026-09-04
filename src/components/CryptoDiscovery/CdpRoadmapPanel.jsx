@@ -49,7 +49,12 @@ import {
 } from "recharts";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT } from "../../theme/brand";
-import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessHistory, postCdpReadinessSnapshot } from "../../api/cdp";
+import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessHistory, postCdpReadinessSnapshot, getCdpPqcReadiness } from "../../api/cdp";
+// Lo que quedaba con valor propio en el antiguo tab «Post-quantum» vive
+// aquí, como referencias de la hoja de ruta. Lo que duplicaba al embudo
+// (horizonte 2030/2035) y a Explore (familias) se retiró — consolidación
+// 2026-09-04.
+import { TrustAnchorsPanel, AgilityBlockersPanel, CnsaPanel } from "./PqcReadinessPanels";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -331,6 +336,7 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown }) 
 export default function CdpRoadmapPanel({ refreshNonce, onDrillDown }) {
   const [data, setData] = React.useState(null);
   const [snapshots, setSnapshots] = React.useState([]);
+  const [pqc, setPqc] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [nonce, setNonce] = React.useState(0);
   const [selected, setSelected] = React.useState(null);
@@ -348,6 +354,11 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown }) {
         setSnapshots(h?.snapshots ?? []);
       })
       .catch((e) => alive && setError(e?.message || String(e)));
+    // Las referencias (agilidad, CNSA, anclas) vienen de /pqc; fallo
+    // blando: sin ellas la hoja de ruta sigue siendo legible.
+    getCdpPqcReadiness()
+      .then((r) => alive && setPqc(r?.pqc ?? null))
+      .catch(() => alive && setPqc(null));
     return () => {
       alive = false;
     };
@@ -478,6 +489,18 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown }) {
           </Box>
         </Box>
       </SectionPaper>
+
+      {/* Referencias de la hoja de ruta: qué no puede migrar todavía, qué
+          exige CNSA 2.0, y qué anclas habría que reemplazar. */}
+      {pqc ? (
+        <>
+          <AgilityBlockersPanel pqc={pqc} />
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
+            <Box sx={{ flex: 1, minWidth: 0 }}><CnsaPanel pqc={pqc} /></Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}><TrustAnchorsPanel pqc={pqc} /></Box>
+          </Stack>
+        </>
+      ) : null}
 
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setSelected(null)}>
         <SystemDrawer
