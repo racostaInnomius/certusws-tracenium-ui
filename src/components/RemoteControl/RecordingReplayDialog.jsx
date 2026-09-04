@@ -28,6 +28,7 @@
 
 import * as React from "react";
 import {
+  Chip,
   Alert,
   Box,
   Button,
@@ -46,7 +47,7 @@ import PauseIcon from "@mui/icons-material/Pause";
 import ReplayIcon from "@mui/icons-material/Replay";
 
 import { httpGetNdjson } from "../../api/http";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
   seekPlan,
   totalDuration,
@@ -67,6 +68,19 @@ const SPEEDS = [1, 2, 4];
 export default function RecordingReplayDialog({ open, session, onClose }) {
   const canvasRef = React.useRef(null);
   const framesRef = React.useRef([]);
+  /**
+   * Los eventos de entrada del operador, grabados junto al vídeo.
+   *
+   * Responden la pregunta que el vídeo solo no contesta: ¿esta persona
+   * estaba MIRANDO o estaba CONDUCIENDO? Dos sesiones de diez minutos —una
+   * de diagnóstico y otra en la que alguien tecleó en un servidor— se ven
+   * casi iguales en imagen.
+   *
+   * ⚠️ Las teclas que producen texto llegan REDACTADAS del endpoint. No se
+   * ocultan aquí: nunca se escribieron. Grabarlas convertiría el expediente
+   * de una sesión de soporte en un fichero con la contraseña del cliente.
+   */
+  const inputsRef = React.useRef([]);
   const drawnRef = React.useRef(-1);      // índice del último pintado
   const drawingRef = React.useRef(false); // hay un dibujado en curso
 
@@ -76,6 +90,19 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
   const [capped, setCapped] = React.useState(false);
   const [duration, setDuration] = React.useState(0);
   const [position, setPosition] = React.useState(0);
+
+  /**
+   * ¿El operador estaba conduciendo en este instante de la reproducción?
+   *
+   * Ventana de 1,5 s hacia atrás: teclear son ráfagas con huecos, y una
+   * ventana más corta haría parpadear la señal entre pulsaciones — que se
+   * leería como "dejó de controlar" cuando solo estaba pensando.
+   */
+  const driving = React.useMemo(() => {
+    const list = inputsRef.current;
+    if (!list.length) return false;
+    return list.some((e) => e.t <= position && position - e.t <= 1500);
+  }, [position]);
   const [playing, setPlaying] = React.useState(false);
   const [speed, setSpeed] = React.useState(1);
 
@@ -90,6 +117,7 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
     setError(null);
     setNotice("");
     setCapped(false);
+    inputsRef.current = [];
     setDuration(0);
     setPosition(0);
     setPlaying(false);
@@ -103,6 +131,7 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
         if (cancelled) return;
         if (obj.kind === "header") header = obj;
         else if (obj.kind === "end") end = obj;
+        else if (obj.kind === "input") inputsRef.current.push(obj);
         else if (obj.kind === "frame") {
           if (framesRef.current.length >= MAX_FRAMES) {
             setCapped(true);
@@ -236,6 +265,25 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
         <Typography sx={{ flex: 1, fontWeight: 700, fontSize: TEXT.md }}>
           Screen recording · {session?.deviceId || ""}
         </Typography>
+        {/* Mirar o conducir. Sin esto, una sesión en la que alguien tecleó en
+            un servidor y otra en la que solo se diagnosticó se ven igual. */}
+        {inputsRef.current.length > 0 ? (
+          <Chip
+            size="small"
+            label={
+              driving
+                ? "Operator is driving"
+                : `${inputsRef.current.length} input events`
+            }
+            sx={{
+              fontWeight: 700,
+              fontSize: TEXT.xs,
+              height: 20,
+              bgcolor: driving ? ROLE.cautionSoft : BRAND.surfaceMuted,
+              color: driving ? ROLE.caution : BRAND.gray
+            }}
+          />
+        ) : null}
         <IconButton size="small" onClick={onClose} aria-label="Close">
           <CloseIcon fontSize="small" />
         </IconButton>
