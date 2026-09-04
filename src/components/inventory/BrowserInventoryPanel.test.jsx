@@ -1,7 +1,7 @@
 // src/components/inventory/BrowserInventoryPanel.test.jsx
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../../api/inventoryDashboard", () => ({ getBrowserInventory: vi.fn() }));
 import { getBrowserInventory } from "../../api/inventoryDashboard";
@@ -57,5 +57,60 @@ describe("BrowserInventoryPanel", () => {
     const notify = vi.fn();
     render(<BrowserInventoryPanel notify={notify} />);
     await waitFor(() => expect(notify).toHaveBeenCalledWith("error", "boom"));
+  });
+});
+
+describe("BrowserInventoryPanel — el maximo es por plataforma", () => {
+  // El caso real del tenant 1: Chrome publica .76 en macOS y .82 en Windows
+  // para la MISMA release. El dueno de una Mac al dia reporto que la pantalla
+  // decia que estaba atrasado.
+  const familiaChrome = {
+    family: "Chrome",
+    deviceCount: 4,
+    latestVersion: "152.0.7977.82",
+    behindCount: 1,
+    platforms: [
+      { platform: "windows", latestVersion: "152.0.7977.82", deviceCount: 2, behindCount: 1 },
+      { platform: "macos", latestVersion: "152.0.7977.76", deviceCount: 2, behindCount: 0 },
+    ],
+    versions: [
+      { version: "152.0.7977.82", platform: "windows", deviceCount: 1, outdated: false },
+      { version: "152.0.7977.76", platform: "macos", deviceCount: 2, outdated: false },
+      { version: "151.0.7922.138", platform: "windows", deviceCount: 1, outdated: true },
+    ],
+    behindDevices: [
+      {
+        agentId: "w2",
+        hostname: "ETE-2",
+        platform: "windows",
+        version: "151.0.7922.138",
+        latestForPlatform: "152.0.7977.82",
+      },
+    ],
+  };
+
+  function render1() {
+    getBrowserInventory.mockResolvedValue({ families: [familiaChrome], totalDevicesWithBrowser: 4 });
+    return render(<BrowserInventoryPanel />);
+  }
+
+  it("muestra un maximo POR PLATAFORMA, no uno solo", async () => {
+    render1();
+    expect(await screen.findByText("152.0.7977.82")).toBeTruthy();
+    expect(screen.getByText("152.0.7977.76")).toBeTruthy();
+    expect(screen.getByText("windows")).toBeTruthy();
+    expect(screen.getByText("macos")).toBeTruthy();
+  });
+
+  it("⚠️ dice QUE equipos estan atrasados, no solo cuantos", async () => {
+    render1();
+    const chip = await screen.findByText("1 behind");
+    fireEvent.click(chip);
+    expect(await screen.findByText("ETE-2")).toBeTruthy();
+  });
+
+  it("explica que la comparacion es dentro de la misma plataforma", async () => {
+    render1();
+    expect(await screen.findByText(/on the same platform/i)).toBeTruthy();
   });
 });
