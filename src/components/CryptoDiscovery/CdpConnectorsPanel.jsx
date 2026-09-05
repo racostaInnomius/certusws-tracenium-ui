@@ -18,11 +18,15 @@ import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnec
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 
-const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault", k8s: "Kubernetes" };
-const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "", apiServer: "", namespaces: "", readSecrets: true };
+const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault", k8s: "Kubernetes", ct: "Public CT logs (crt.sh)" };
+const SECRETLESS_KINDS = new Set(["ct"]);
+const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "", apiServer: "", namespaces: "", readSecrets: true, domains: "", includeSubdomains: true, includeExpired: false };
 
-export function ConnectorForm({ onCreated, disabled }) {
+export function ConnectorForm({ onCreated, secretsConfigured = true }) {
   const [kind, setKind] = React.useState("keyvault");
+  // Sin clave de sellado en el servidor solo se pueden crear los tipos
+  // sin credencial (CT). El selector de tipo queda siempre activo.
+  const disabled = !secretsConfigured && !SECRETLESS_KINDS.has(kind);
   const [label, setLabel] = React.useState("");
   const [f, setF] = React.useState(EMPTY_FORM);
   const [secret, setSecret] = React.useState("");
@@ -39,11 +43,15 @@ export function ConnectorForm({ onCreated, disabled }) {
           ? { vaultUrl: f.hcUrl.trim(), namespace: f.namespace.trim() || undefined, mounts: f.mounts, authMethod: f.authMethod, roleId: f.authMethod === "approle" ? f.roleId.trim() : undefined, caPem: f.caPem.trim() || undefined }
           : kind === "k8s"
             ? { apiServer: f.apiServer.trim(), namespaces: f.namespaces, readSecrets: f.readSecrets, caPem: f.caPem.trim() || undefined }
-            : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
+            : kind === "ct"
+              ? { domains: f.domains, includeSubdomains: f.includeSubdomains, includeExpired: f.includeExpired }
+              : { vaultUrl: f.vaultUrl.trim(), tenantId: f.tenantId.trim(), clientId: f.clientId.trim() };
   const ready =
     label.trim().length >= 2 &&
-    secret &&
-    (kind === "acm"
+    (SECRETLESS_KINDS.has(kind) || secret) &&
+    (kind === "ct"
+      ? f.domains.trim().length > 3
+      : kind === "acm"
       ? config.region && config.accessKeyId
       : kind === "gcp"
         ? config.projectId && secret.trim().startsWith("{")
@@ -57,7 +65,7 @@ export function ConnectorForm({ onCreated, disabled }) {
     setBusy(true);
     setError(null);
     try {
-      const r = await createCdpConnector({ kind, label: label.trim(), config, clientSecret: secret });
+      const r = await createCdpConnector({ kind, label: label.trim(), config, clientSecret: SECRETLESS_KINDS.has(kind) ? "" : secret });
       if (!r?.ok) throw new Error(r?.message || r?.error || "Could not create the connector");
       setLabel("");
       setF(EMPTY_FORM);
@@ -73,15 +81,28 @@ export function ConnectorForm({ onCreated, disabled }) {
   return (
     <Box>
       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-        <TextField size="small" select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} sx={{ minWidth: 220 }} disabled={disabled}>
+        <TextField size="small" select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="keyvault">Azure Key Vault</MenuItem>
           <MenuItem value="acm">AWS Certificate Manager</MenuItem>
           <MenuItem value="gcp">Google Cloud</MenuItem>
           <MenuItem value="vault">HashiCorp Vault</MenuItem>
           <MenuItem value="k8s">Kubernetes</MenuItem>
+          <MenuItem value="ct">Public CT logs (crt.sh)</MenuItem>
         </TextField>
-        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : kind === "k8s" ? "Prod cluster" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
-        {kind === "k8s" ? (
+        <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : kind === "k8s" ? "Prod cluster" : kind === "ct" ? "Our domains" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
+        {kind === "ct" ? (
+          <>
+            <TextField size="small" label="Domains" value={f.domains} onChange={set("domains")} placeholder="example.com, corp.example.net" sx={{ minWidth: 320 }} disabled={disabled} />
+            <TextField size="small" select label="Subdomains" value={f.includeSubdomains ? "yes" : "no"} onChange={(e) => setF((x) => ({ ...x, includeSubdomains: e.target.value === "yes" }))} sx={{ minWidth: 150 }} disabled={disabled}>
+              <MenuItem value="yes">Include</MenuItem>
+              <MenuItem value="no">Exact only</MenuItem>
+            </TextField>
+            <TextField size="small" select label="Expired" value={f.includeExpired ? "yes" : "no"} onChange={(e) => setF((x) => ({ ...x, includeExpired: e.target.value === "yes" }))} sx={{ minWidth: 150 }} disabled={disabled}>
+              <MenuItem value="no">Skip</MenuItem>
+              <MenuItem value="yes">Include</MenuItem>
+            </TextField>
+          </>
+        ) : kind === "k8s" ? (
           <>
             <TextField size="small" label="API server" value={f.apiServer} onChange={set("apiServer")} placeholder="https://k8s.corp.example:6443" sx={{ minWidth: 280 }} disabled={disabled} />
             <TextField size="small" label="Namespaces (empty = all)" value={f.namespaces} onChange={set("namespaces")} placeholder="prod, staging" sx={{ minWidth: 200 }} disabled={disabled} />
@@ -130,7 +151,14 @@ export function ConnectorForm({ onCreated, disabled }) {
           {busy ? "Saving…" : `Add ${KIND_LABEL[kind]}`}
         </Button>
       </Stack>
-      {kind === "k8s" ? (
+      {kind === "ct" ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+          No credentials: Certificate Transparency logs are public. Lists every certificate a public CA (Let&apos;s
+          Encrypt, ZeroSSL, DigiCert, Sectigo, Google…) logged for these domains, via crt.sh. A certificate here that
+          no device has is either a service without an agent or someone requesting certificates for your domains on
+          their own. crt.sh is a community service: large domain lists are read slowly and capped.
+        </Typography>
+      ) : kind === "k8s" ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
           Reads <code>kubernetes.io/tls</code> secrets (only that type), cert-manager <code>Certificate</code> objects
           and which Ingress uses each certificate. RBAC: get/list on secrets, list on certificates.cert-manager.io,
@@ -258,10 +286,10 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
       {state && !secretsConfigured ? (
         <Alert severity="warning" sx={{ mb: 1 }}>
           The server has no <code>CDP_CONNECTOR_SECRETS_KEY</code>, so connector credentials cannot be stored. Set it
-          on the control plane before adding a connector.
+          on the control plane before adding a connector with credentials. Public CT logs need none and work now.
         </Alert>
       ) : null}
-      <ConnectorForm disabled={!secretsConfigured} onCreated={() => { reload(); }} />
+      <ConnectorForm secretsConfigured={secretsConfigured} onCreated={() => { reload(); }} />
 
       {connectors.length > 0 ? (
         <Stack spacing={1} sx={{ mt: 1.5 }}>
@@ -279,7 +307,9 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
                         ? `${c.config?.vaultUrl} · ${(c.config?.mounts ?? []).join(", ")}`
                         : c.kind === "k8s"
                           ? `${c.config?.apiServer}${(c.config?.namespaces ?? []).length ? ` · ${c.config.namespaces.join(", ")}` : ""}${c.config?.readSecrets === false ? " · cert-manager only" : ""}`
-                          : c.config?.vaultUrl}
+                          : c.kind === "ct"
+                            ? (c.config?.domains ?? []).join(", ")
+                            : c.config?.vaultUrl}
                 </Typography>
                 <StatusChip c={c} />
                 {!c.enabled ? <Chip size="small" label="disabled" variant="outlined" /> : null}
