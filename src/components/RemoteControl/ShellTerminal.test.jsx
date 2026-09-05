@@ -351,12 +351,102 @@ describe("ShellTerminal — ENDED transitions", () => {
   });
 });
 
-describe("ShellTerminal — ERROR transitions", () => {
-  it("WS error → error status + red indicator", async () => {
-    renderTerminal();
+describe("⚠️ perder la señalización no es perder la shell", () => {
+  // Este bloque sustituye a "WS error → error status", que fijaba lo
+  // contrario y estaba bien mientras el socket ERA la sesión. Ya no lo es:
+  // por él viaja el handshake, y lo que lleva la shell es el DataChannel,
+  // que va directo al equipo. Cuando se cae solo el socket —se reinicia la
+  // réplica del API, parpadea la red, un balanceador corta una conexión
+  // ociosa— el panel daba por terminada una sesión con la terminal viva.
+
+  it("un error de socket ya NO termina la sesión por sí solo", async () => {
+    // En un navegador real un error va SIEMPRE seguido de un close, y es el
+    // close quien decide mirando si la shell sigue abierta.
+    const { dc } = await connect();
     await sockets[0].fireError();
-    expect(await screen.findByText(/Signaling WebSocket error/i)).toBeInTheDocument();
+
+    expect(dc.readyState).toBe("open");
+    expect(screen.queryByText(/Signaling WebSocket error/i)).not.toBeInTheDocument();
   });
+
+  it("⚠️ con la shell viva, el socket se reintenta en vez de rendirse", async () => {
+    vi.useFakeTimers();
+    try {
+      const { dc } = await connect();
+      expect(dc.readyState).toBe("open");
+      const antes = sockets.length;
+
+      await sockets[0].fireClose();
+      expect(screen.getByText(/Reconnecting to the session/i)).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100);
+      });
+      expect(sockets.length).toBe(antes + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⚠️ al reengancharse NO se manda otra oferta", async () => {
+    // Una oferta nueva le llega al agente como un reinicio de ICE y le hace
+    // reconstruir el peer — y con él la PTY. El operador recuperaría el
+    // socket y perdería su shell: peor que el problema que se arregla.
+    vi.useFakeTimers();
+    try {
+      await connect();
+      await sockets[0].fireClose();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100);
+      });
+
+      const nuevo = sockets[sockets.length - 1];
+      await nuevo.fireOpen();
+      const ofertas = nuevo.sent
+        .map((m) => JSON.parse(m))
+        .filter((m) => m.type === "offer");
+      expect(ofertas).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sin shell viva, el cierre del socket sí termina la sesión", async () => {
+    // El caso de siempre: si el DataChannel también se fue, no queda sesión
+    // que salvar y decirlo es lo correcto.
+    const { dc } = await connect();
+    await dc.fireClose();
+    await sockets[0].fireClose();
+
+    expect(await screen.findByText(/closed/i)).toBeInTheDocument();
+  });
+
+  it("desmontar corta el reintento", async () => {
+    // Un temporizador que sobreviva al panel abriría un socket contra una
+    // sesión que ya nadie mira.
+    vi.useFakeTimers();
+    try {
+      const { unmount } = renderTerminal();
+      const ws = sockets[0];
+      const pc = peers[0];
+      await ws.fireOpen();
+      await ws.fireMessage({ type: "answer", sdp: "v=0-fake-answer" });
+      await pc.dc.fireOpen();
+
+      await ws.fireClose();
+      const antes = sockets.length;
+      unmount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30000);
+      });
+      expect(sockets.length).toBe(antes);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ShellTerminal — ERROR transitions", () => {
 
   it("backend 'error' control frame → surfaces code + message", async () => {
     renderTerminal();

@@ -86,6 +86,10 @@ export default function ShellTerminal({ session, device, onClose }) {
   // of a closure variable is the standard pattern when the producer
   // (negotiate) and consumer (cleanup return) live in different scopes.
   const iceRestartDetachRef = React.useRef(null);
+  // El temporizador de reconexión de la señalización, para poder cortarlo al
+  // desmontar: un reintento que sobreviva al panel abriría un socket contra
+  // una sesión que ya nadie mira.
+  const cleanupReconnectRef = React.useRef(null);
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [statusMsg, setStatusMsg] = React.useState("Establishing connection…");
 
@@ -146,7 +150,10 @@ export default function ShellTerminal({ session, device, onClose }) {
       // offer once we generate it. The WS lives on the API origin
       // (api.tracenium.com), NOT the SPA origin (portal.tracenium.com) —
       // getApiWsUrl resolves against VITE_API_BASE just like every REST call.
-      const ws = new WebSocket(getApiWsUrl(session.signalingUrl));
+      // ⚠️ El socket se abre a través de una variable, no de una constante:
+      // se vuelve a abrir si se cae (ver `reopenSignaling` más abajo), y los
+      // manejadores de mensajes se re-enganchan al socket nuevo.
+      let ws = new WebSocket(getApiWsUrl(session.signalingUrl));
       wsRef.current = ws;
 
       // Open the PeerConnection with the TURN config the backend
@@ -326,8 +333,64 @@ export default function ShellTerminal({ session, device, onClose }) {
         }
       };
 
+      // ── El socket, y cómo se vuelve a poner ─────────────────────────
+      //
+      // ⚠️ Perder la señalización NO es perder la sesión.
+      //
+      // Por este socket viaja el handshake; lo que lleva la shell es el
+      // DataChannel, que va directo al equipo. Cuando se cae solo él —se
+      // reinicia la réplica del API, parpadea la red, un balanceador corta
+      // una conexión ociosa— la terminal sigue funcionando, y hasta ahora
+      // el panel decía "Signaling channel closed unexpectedly" y daba la
+      // sesión por terminada delante de una shell viva.
+      //
+      // El backend abre un minuto de gracia (`OPERATOR_GRACE_MS`); esto
+      // reintenta dentro de esa ventana.
+      let reconnectAttempt = 0;
+      let reconnectTimer = null;
+      const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000];
+
+      const clearReconnect = () => {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      };
+      cleanupReconnectRef.current = clearReconnect;
+
+      const reopenSignaling = () => {
+        if (cancelled) return;
+        const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+        reconnectAttempt += 1;
+        reconnectTimer = setTimeout(() => {
+          if (cancelled) return;
+          try {
+            ws = new WebSocket(getApiWsUrl(session.signalingUrl));
+            wsRef.current = ws;
+            wireSocket({ resumed: true });
+          } catch {
+            // Ni siquiera se pudo construir: se reintenta igual, porque la
+            // causa (red caída) es exactamente la que se está esperando a
+            // que pase.
+            reopenSignaling();
+          }
+        }, delay);
+      };
+
+      const wireSocket = ({ resumed }) => {
       ws.onopen = async () => {
         if (cancelled) return;
+        reconnectAttempt = 0;
+        if (resumed) {
+          // ⚠️ NO se renegocia. Mandar otra oferta aquí llegaría al agente
+          // como un reinicio de ICE y le haría reconstruir el peer — y con
+          // él la PTY: el operador recuperaría el socket y perdería su
+          // shell, que es peor que lo que veníamos a arreglar. La sesión ya
+          // está montada; este socket solo vuelve a estar disponible para
+          // señalizar y para el latido.
+          setStatusMsg("");
+          return;
+        }
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
@@ -399,24 +462,45 @@ export default function ShellTerminal({ session, device, onClose }) {
 
       ws.onerror = () => {
         if (cancelled) return;
-        setState(STATE.ERROR);
-        setStatusMsg("Signaling WebSocket error.");
+        // Un error de socket viene SIEMPRE seguido de un close, y es ahí
+        // donde se decide. Marcar ERROR aquí mataría la sesión antes de
+        // mirar si la shell sigue viva.
+        console.warn("[rcp] signaling socket error");
       };
       ws.onclose = () => {
         if (cancelled) return;
-        // If we were RUNNING this is unexpected; if we were already
-        // ENDED it's the normal post-close.
+        // La pregunta no es en qué estado creía estar la UI —`state` es la
+        // del render en que se ató este manejador y puede estar rancia—,
+        // sino si la shell sigue abierta. El DataChannel es la sesión.
+        const shellAlive = dcRef.current?.readyState === "open";
+        if (shellAlive) {
+          setStatusMsg("Reconnecting to the session…");
+          reopenSignaling();
+          return;
+        }
         if (state === STATE.RUNNING) {
           setState(STATE.ENDED);
           setStatusMsg("Signaling channel closed unexpectedly.");
         }
       };
+      };
+
+      wireSocket({ resumed: false });
     }
 
     negotiate();
 
     return () => {
       cancelled = true;
+      // Antes que nada: cortar el reintento de señalización. Un temporizador
+      // que sobreviva al panel abriría un socket contra una sesión que ya
+      // nadie mira.
+      try {
+        cleanupReconnectRef.current?.();
+        cleanupReconnectRef.current = null;
+      } catch {
+        /* ignore */
+      }
       try {
         iceRestartDetachRef.current?.();
         iceRestartDetachRef.current = null;
