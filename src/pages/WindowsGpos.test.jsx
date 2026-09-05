@@ -191,3 +191,57 @@ describe("WindowsGpos — los equipos sin ninguna directiva", () => {
     expect(marcadas).toHaveLength(0);
   });
 });
+
+describe("WindowsGpos — una lectura que fallo", () => {
+  // El equipo real: MSIG-VEEAM-PC, con tres directivas aplicadas segun su
+  // propio gpresult, que llegaba como lista vacia porque el colector buscaba
+  // un encabezado en ingles. Desde el agente 1.1.61 llega null.
+  const sinLectura = {
+    ...conDominio,
+    summary: {
+      ...conDominio.summary,
+      withoutAnyGpos: 1,
+      domainJoinedWithoutGpos: 0,
+      notDomainJoinedWithoutGpos: 1,
+      withoutGpoData: 1,
+    },
+    devices: [
+      conDominio.devices[0],
+      { ...conDominio.devices[1], computerGpos: null, userGpos: null },
+      conDominio.devices[2],
+    ],
+  };
+
+  it("se declara en vez de contarse como equipo sin directivas", async () => {
+    getWindowsGpoInventory.mockResolvedValue(sinLectura);
+    render(<WindowsGpos />);
+    expect(await screen.findByText(/could not report/i)).toBeTruthy();
+  });
+
+  it("⚠️ la celda dice 'Not reported', nunca 'None'", async () => {
+    getWindowsGpoInventory.mockResolvedValue(sinLectura);
+    render(<WindowsGpos />);
+    expect(await screen.findAllByText("Not reported")).toBeTruthy();
+  });
+
+  it("⚠️ y ese equipo NO entra en el filtro de 'sin ninguna directiva'", async () => {
+    getWindowsGpoInventory.mockResolvedValue(sinLectura);
+    render(<WindowsGpos />);
+    fireEvent.click(await screen.findByText("Without any GPO"));
+
+    await screen.findByText(/Without any GPO · 1/);
+    expect(screen.queryByText("MSIG-VEEAM-PC")).toBeNull();
+    expect(screen.getByText("DESKTOP-ANH1JCN")).toBeTruthy();
+  });
+
+  it("cuando todas las lecturas salen bien, el aviso no aparece", async () => {
+    getWindowsGpoInventory.mockResolvedValue({
+      ...conDominio,
+      summary: { ...conDominio.summary, withoutGpoData: 0 },
+    });
+    render(<WindowsGpos />);
+    await screen.findByText("Without any GPO");
+    expect(screen.queryByText(/could not report/i)).toBeNull();
+  });
+});
+

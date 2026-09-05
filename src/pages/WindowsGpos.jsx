@@ -70,9 +70,15 @@ function Kpi({ label, value, tone, onClick, active, hint }) {
 }
 
 function GpoChips({ names }) {
+  // ⚠️ "Ninguna" y "no se pudo leer" son cosas distintas y se ven distintas.
+  // Que se vieran igual es lo que hizo pasar por equipo sin directivas a uno
+  // que tenia tres aplicadas: el colector no encontraba el encabezado en un
+  // Windows en espanol y devolvia la lista vacia.
+  if (names === null || names === undefined) {
+    return <Typography sx={{ fontSize: TEXT.md, color: "text.disabled" }}>Not reported</Typography>;
+  }
   const list = Array.isArray(names) ? names : [];
   if (list.length === 0) {
-    // "Ninguna" y "no se pudo leer" son cosas distintas y se ven distintas.
     return <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>None</Typography>;
   }
   return (
@@ -121,7 +127,11 @@ export default function WindowsGpos({ refreshNonce }) {
       soloSinGpo
         ? todos.filter(
             (d) =>
-              (d.computerGpos?.length ?? 0) === 0 && (d.userGpos?.length ?? 0) === 0
+              // ⚠️ Mismo criterio que el conteo del backend (gpo-domain.ts):
+              // un equipo cuya lectura fallo NO es un equipo sin directivas.
+              Array.isArray(d.computerGpos) &&
+              d.computerGpos.length === 0 &&
+              (d.userGpos?.length ?? 0) === 0
           )
         : todos,
     [todos, soloSinGpo]
@@ -238,6 +248,20 @@ export default function WindowsGpos({ refreshNonce }) {
           {desglose?.joined > 0
             ? `${desglose.joined} of them ${desglose.joined === 1 ? "is" : "are"} joined to a domain and should be receiving policies — that part is a fault worth chasing.`
             : "Check the Domain column below: on a workgroup device this is the expected state."}
+        </Alert>
+      ) : null}
+
+      {/* ⚠️ La lectura que fallo se declara. Es el aviso que no existia cuando
+          un equipo con tres directivas aplicadas llevaba meses contandose
+          entre los que no tenian ninguna. */}
+      {summary && summary.withoutGpoData > 0 ? (
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
+          <strong>
+            {summary.withoutGpoData} device{summary.withoutGpoData === 1 ? "" : "s"} could not report{" "}
+            {summary.withoutGpoData === 1 ? "its" : "their"} applied policies.
+          </strong>{" "}
+          They are counted apart from the devices below: a failed read is not the same as a device
+          with no Group Policy, and treating it as one hides exactly the devices worth looking at.
         </Alert>
       ) : null}
 
