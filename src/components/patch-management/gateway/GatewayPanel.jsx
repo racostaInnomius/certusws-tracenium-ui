@@ -49,6 +49,7 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -66,6 +67,7 @@ import {
 } from "../../../api/patchManagement";
 import GatewayDialog from "./GatewayDialog";
 import CredentialDialog from "./CredentialDialog";
+import SnapshotTestDialog from "./SnapshotTestDialog";
 import {
   toStageRows,
   healthPresentation,
@@ -138,6 +140,7 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
   const [editing, setEditing] = React.useState(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [credentialFor, setCredentialFor] = React.useState(null);
+  const [snapshotTestFor, setSnapshotTestFor] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
 
   const load = React.useCallback(async () => {
@@ -304,6 +307,24 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
                                 </IconButton>
                               </span>
                             </Tooltip>
+                            <Tooltip
+                              title={
+                                gw.health === "verified"
+                                  ? "Test a snapshot on one VM"
+                                  : "Test a snapshot (verify the gateway first)"
+                              }
+                            >
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Test a snapshot with ${gw.name}`}
+                                  onClick={() => setSnapshotTestFor(gw)}
+                                  disabled={gw.health !== "verified"}
+                                >
+                                  <PhotoCameraOutlinedIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                             <Tooltip title="Edit">
                               <IconButton
                                 size="small"
@@ -352,6 +373,12 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
         gateway={credentialFor}
         onClose={() => setCredentialFor(null)}
         onDone={load}
+        notify={notify}
+      />
+      <SnapshotTestDialog
+        open={Boolean(snapshotTestFor)}
+        gateway={snapshotTestFor}
+        onClose={() => setSnapshotTestFor(null)}
         notify={notify}
       />
     </Box>

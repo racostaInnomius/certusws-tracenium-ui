@@ -315,6 +315,26 @@ export async function verifyGateway(id) {
   return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/verify`, {});
 }
 
+// ── Snapshot round-trip test ────────────────────────────────────────
+// "Test connection" proves the credential. This proves the part that matters
+// on patch day: one real VM gets correlated, snapshotted and the snapshot is
+// removed again — without deploying anything to it.
+
+/** VMs this gateway could snapshot (never the host it runs on). */
+export async function listSnapshotCandidates(id) {
+  return httpGetJson(`${BASE}/gateways/${encodeURIComponent(id)}/snapshot-candidates`);
+}
+
+/** Start one round trip against `targetDeviceId`. 202 + {snapshotResultId, jobId}; 409 with a code when it cannot start. */
+export async function startSnapshotTest(id, targetDeviceId) {
+  return httpPostJson(`${BASE}/gateways/${encodeURIComponent(id)}/snapshot-test`, { targetDeviceId });
+}
+
+/** This gateway's tests, newest first. */
+export async function listSnapshotTests(id, limit = 20) {
+  return httpGetJson(`${BASE}/gateways/${encodeURIComponent(id)}/snapshot-tests${buildQuery({ limit })}`);
+}
+
 /** Per-device snapshot outcomes for one deployment. */
 export async function listDeploymentSnapshots(deploymentId) {
   return httpGetJson(`${BASE}/deployments/${encodeURIComponent(deploymentId)}/snapshots`);
