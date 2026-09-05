@@ -255,3 +255,8 @@ export async function deleteCdpConnector(id) {
 export async function runCdpConnector(id, { dryRun = false } = {}) {
   return httpPostJson(`${BASE}/connectors/${encodeURIComponent(id)}/run${dryRun ? "?dryRun=1" : ""}`, {}, { timeoutMs: 120000 });
 }
+
+// §5.2: servicios TLS internos vistos por los agentes (conexiones salientes).
+export async function listCdpProbeCandidates(params = {}) {
+  return httpGetJson(`${BASE}/probe-candidates${buildQuery(params)}`);
+}

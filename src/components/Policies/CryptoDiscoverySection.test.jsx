@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+// §5.2: la sección carga los servicios TLS descubiertos por los agentes.
+const listCdpProbeCandidates = vi.fn(async () => ({ ok: true, candidates: [] }));
+vi.mock("../../api/cdp", () => ({ listCdpProbeCandidates: (...a) => listCdpProbeCandidates(...a) }));
+
 import CryptoDiscoverySection from "./CryptoDiscoverySection";
 
 afterEach(cleanup);
@@ -150,5 +154,35 @@ describe("CryptoDiscoverySection", () => {
       expect(screen.getByLabelText(PROBE_LABEL)).toBeDisabled();
       expect(screen.getByLabelText(PORTS_LABEL)).toBeDisabled();
     });
+  });
+});
+
+describe("servicios TLS descubiertos (§5.2)", () => {
+  it("⭐ enseña los candidatos y «Add» los añade a los objetivos sin duplicar los que ya están", async () => {
+    listCdpProbeCandidates.mockResolvedValueOnce({
+      ok: true,
+      candidates: [
+        { target: "10.0.0.5:443", host: "10.0.0.5", port: 443, devices: 12, connections: 40, processes: ["chrome"], probed: false },
+        { target: "10.0.0.9:636", host: "10.0.0.9", port: 636, devices: 3, connections: 3, processes: [], probed: true }
+      ]
+    });
+    const onChange = vi.fn();
+    render(<CryptoDiscoverySection form={{ cdp: { probeTargets: "10.0.0.9:636" } }} onChange={onChange} />);
+    expect(await screen.findByText("10.0.0.5:443")).toBeInTheDocument();
+    // El que ya está en la lista no ofrece Add: se marca como sondeado.
+    expect(screen.getByText("probed")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add 10\.0\.0\.9:636/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /add 10\.0\.0\.5:443/i }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ cdp: expect.objectContaining({ probeTargets: "10.0.0.9:636\n10.0.0.5:443" }) }));
+    expect(listCdpProbeCandidates).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it("sin candidatos lo dice, y un fallo de carga enseña el motivo en vez de una sección vacía", async () => {
+    render(<CryptoDiscoverySection form={{ cdp: {} }} onChange={() => {}} />);
+    expect(await screen.findByText(/Nothing discovered yet/)).toBeInTheDocument();
+    cleanup();
+    listCdpProbeCandidates.mockRejectedValueOnce(new Error("HTTP 503"));
+    render(<CryptoDiscoverySection form={{ cdp: {} }} onChange={() => {}} />);
+    expect(await screen.findByText(/Couldn't load discovered services: HTTP 503/)).toBeInTheDocument();
   });
 });

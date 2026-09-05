@@ -27,6 +27,7 @@
 import * as React from "react";
 import {
   Box,
+  Button,
   Collapse,
   FormControlLabel,
   Switch,
@@ -35,6 +36,7 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { invalidProbeTargets, splitTargetLines, CDP_PROBE_TARGETS_MAX } from "./policyTransforms";
+import { listCdpProbeCandidates } from "../../api/cdp";
 import {
   CDP_INTERVAL_MIN,
   CDP_INTERVAL_MAX,
@@ -70,7 +72,30 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
 
   const scanListeners = cdp.scanTlsListeners === true;
   const badTargets = invalidProbeTargets(cdp.probeTargets ?? "");
-  const targetCount = splitTargetLines(cdp.probeTargets ?? "").length;
+  const targetLines = splitTargetLines(cdp.probeTargets ?? "");
+  const targetCount = targetLines.length;
+
+  // §5.2: candidatos descubiertos por los agentes (conexiones salientes a
+  // servicios TLS internos). Solo se PROPONEN; nada se sonda hasta que el
+  // operador lo añade a la lista. Se cargan al montar; un fallo deja la
+  // lista vacía con su motivo, no una sección en blanco.
+  const [candidates, setCandidates] = React.useState(null);
+  const [candidatesError, setCandidatesError] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    listCdpProbeCandidates({ limit: 100 })
+      .then((r) => alive && setCandidates(r?.candidates ?? []))
+      .catch((e) => alive && setCandidatesError(e?.message || String(e)));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const targetSet = new Set(targetLines.map((t) => t.toLowerCase()));
+  const addTarget = (target) => {
+    if (targetSet.has(target.toLowerCase())) return;
+    const cur = String(cdp.probeTargets ?? "").trim();
+    setField("probeTargets", cur ? `${cur}\n${target}` : target);
+  };
   const targetsOverCap = targetCount > CDP_PROBE_TARGETS_MAX;
   const badPorts = invalidPortTokens(cdp.tlsListenerPorts ?? "");
   const portCount = parsePortList(cdp.tlsListenerPorts ?? "").length;
@@ -242,9 +267,10 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           databases, hypervisors: anything with TLS and no agent.
         </Typography>
         <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
-          Nothing is discovered — only what you list is probed. The socket closes the moment the
-          handshake completes; no application bytes are ever sent. Loopback targets are rejected:
-          the local probe above already covers them, with process attribution.
+          Only what you list is probed. The socket closes the moment the handshake completes; no
+          application bytes are ever sent. Loopback targets are rejected: the local probe above
+          already covers them, with process attribution. Ports that start in clear text (SMTP, IMAP,
+          POP3, LDAP, PostgreSQL, MySQL) are negotiated with their own StartTLS preamble.
         </Typography>
         <TextField
           size="small"
@@ -267,6 +293,67 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           placeholder={"lb.corp.example:443\nvcenter.corp.example:443\n10.0.0.12:636"}
           sx={{ "& textarea": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.sm } }}
         />
+
+        {/*
+          §5.2 — lo que los agentes ya ven: servicios TLS internos con los
+          que sus equipos hablan. Se ofrecen para promover a objetivo con un
+          clic; nunca se sondean solos. Los que ya están en la lista salen
+          marcados, y los que ya se sondan también.
+        */}
+        <Typography variant="body2" sx={{ fontWeight: 700, color: BRAND.dark, mt: 2 }}>
+          Discovered internal TLS services
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
+          Endpoints on private addresses that devices running the local probe connect to (established
+          outbound connections, last 14 days). Add the ones you want probed; nothing here is probed on
+          its own.
+        </Typography>
+        {candidatesError ? (
+          <Typography variant="caption" sx={{ color: BRAND.alert.errorText, display: "block" }}>
+            Couldn&apos;t load discovered services: {candidatesError}
+          </Typography>
+        ) : candidates === null ? (
+          <Typography variant="caption" sx={{ color: BRAND.gray }}>Loading…</Typography>
+        ) : candidates.length === 0 ? (
+          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+            Nothing discovered yet. Devices report candidates once the local TLS probe is on and they
+            have talked to an internal TLS service.
+          </Typography>
+        ) : (
+          <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", fontSize: TEXT.sm }}>
+            <Box component="thead">
+              <Box component="tr" sx={{ textAlign: "left", color: BRAND.gray }}>
+                <Box component="th" sx={{ py: 0.5 }}>Service</Box>
+                <Box component="th">Devices</Box>
+                <Box component="th">Connections</Box>
+                <Box component="th">Seen from</Box>
+                <Box component="th" />
+              </Box>
+            </Box>
+            <Box component="tbody">
+              {candidates.map((c) => {
+                const listed = targetSet.has(c.target.toLowerCase());
+                return (
+                  <Box component="tr" key={c.target} sx={{ borderTop: `1px solid ${BRAND.border}` }}>
+                    <Box component="td" sx={{ py: 0.5, fontFamily: "ui-monospace, Menlo, monospace" }}>{c.target}</Box>
+                    <Box component="td">{c.devices}</Box>
+                    <Box component="td">{c.connections}</Box>
+                    <Box component="td" sx={{ color: BRAND.gray }}>{(c.processes ?? []).join(", ") || "—"}</Box>
+                    <Box component="td" sx={{ textAlign: "right" }}>
+                      {listed ? (
+                        <Typography variant="caption" sx={{ color: BRAND.tealText, fontWeight: 700 }}>{c.probed ? "probed" : "listed"}</Typography>
+                      ) : (
+                        <Button size="small" variant="outlined" disabled={readOnly || targetsOverCap} onClick={() => addTarget(c.target)} aria-label={`Add ${c.target} to probe targets`}>
+                          Add
+                        </Button>
+                      )}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
       </Box>
 
       <Box sx={{ mt: 3, pt: 2, borderTop: `1px dashed ${BRAND.border}` }}>
