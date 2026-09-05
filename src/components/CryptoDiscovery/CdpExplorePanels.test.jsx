@@ -194,3 +194,26 @@ describe("TimelinePanel", () => {
     expect(screen.getByText("Shipped with the OS / JVM")).toBeInTheDocument();
   });
 });
+
+describe("ExposureFunnel — fuera de los equipos (fase 4)", () => {
+  it("⭐ enseña lo que existe sin agente como bloque aparte y lleva a Explore", () => {
+    const onOpenOutside = vi.fn();
+    const exposure = { ...EXPOSURE, outside: { assets: 230, certificates: 200, sources: 3, quantumBroken: 180, beyondDisallowed: 90, inUse: 12, bySource: [] } };
+    render(<ExposureFunnel exposure={exposure} onSelect={() => {}} onOpenOutside={onOpenOutside} explain={false} />);
+    const block = screen.getByRole("button", { name: /outside your devices/i });
+    expect(block).toHaveTextContent(/200 certificate\(s\) in 3 source\(s\) without an agent/);
+    expect(block).toHaveTextContent(/12 in use by a service/);
+    expect(block).toHaveTextContent(/180 quantum-broken/);
+    fireEvent.click(block);
+    expect(onOpenOutside).toHaveBeenCalled();
+    // Y no se suma a «Yours»: la cifra de equipos sigue siendo la de equipos.
+    expect(screen.getByRole("button", { name: /^Yours: 153$/ })).toBeInTheDocument();
+  });
+
+  it("sin activos fuera (o tabla ausente) no pinta el bloque", () => {
+    render(<ExposureFunnel exposure={{ ...EXPOSURE, outside: null }} onSelect={() => {}} explain={false} />);
+    expect(screen.queryByText(/outside your devices/i)).not.toBeInTheDocument();
+    render(<ExposureFunnel exposure={{ ...EXPOSURE, outside: { assets: 0, certificates: 0, sources: 0 } }} onSelect={() => {}} explain={false} />);
+    expect(screen.queryByText(/outside your devices/i)).not.toBeInTheDocument();
+  });
+});

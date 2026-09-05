@@ -202,7 +202,7 @@ function TabPanel({ value, index, children }) {
 
 // ── Dashboard tab ────────────────────────────────────────────────────
 
-function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
+function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside }) {
   const [summary, setSummary] = React.useState(null);
   const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -338,6 +338,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices }) {
         exposure={exposure}
         explain={explain}
         onSelect={(f) => onDrillDown?.(f, { replace: true })}
+        onOpenOutside={onOpenOutside}
       />
       <Grid container spacing={2}>
         {cards.map((card) => (
@@ -1388,6 +1389,7 @@ export default function CryptoDiscovery() {
           onOpenDevices={(row) =>
             replaceFilter({ tab: TAB.inventory, view: "devices", ...(row?.host || row?.agentId ? { search: row.host || row.agentId } : {}) })
           }
+          onOpenOutside={() => setTab(TAB.explore)}
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>

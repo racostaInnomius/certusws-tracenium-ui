@@ -63,7 +63,8 @@ const KIND_LABEL = {
   target: "Remote service (probed)",
   issuer: "Issued by",
   subject: "By subject",
-  "self-per-device": "Self-signed per device"
+  "self-per-device": "Self-signed per device",
+  source: "Outside your devices (vault, cloud, cluster, CA)"
 };
 
 const FACTOR_LABEL = {

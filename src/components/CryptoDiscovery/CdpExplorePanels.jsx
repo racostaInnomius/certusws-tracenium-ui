@@ -158,10 +158,11 @@ function FunnelStep({ label, value, sub, onSelect, emphasis }) {
   );
 }
 
-export function ExposureFunnel({ exposure, onSelect, explain }) {
+export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
   const e = exposure;
   if (!e) return null;
   const pct = e.total ? Math.round((e.own / e.total) * 1000) / 10 : 0;
+  const o = e.outside;
   return (
     <SectionPaper>
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -198,6 +199,32 @@ export function ExposureFunnel({ exposure, onSelect, explain }) {
         {e.deprecationYear} and {e.disallowedYear} are the years NIST&apos;s draft IR 8547 proposes to deprecate and then disallow RSA and ECDSA
         signatures. A certificate that expires before then renews on its normal cycle; one that outlives them is the migration.
       </Explain>
+
+      {o && o.assets > 0 ? (
+        <Box
+          onClick={onOpenOutside}
+          role={onOpenOutside ? "button" : undefined}
+          tabIndex={onOpenOutside ? 0 : undefined}
+          sx={{ mt: 1.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BRAND.border}`, cursor: onOpenOutside ? "pointer" : "default", "&:hover": onOpenOutside ? { bgcolor: BRAND.rowHover } : undefined }}
+        >
+          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
+            Outside your devices
+          </Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+            <strong>{fmt(o.certificates)}</strong> certificate(s) in {fmt(o.sources)} source(s) without an agent
+            {o.inUse ? ` · ${fmt(o.inUse)} in use by a service` : ""}
+            {" · "}
+            <Box component="span" sx={{ color: BRAND.alert.high }}>{fmt(o.quantumBroken)} quantum-broken</Box>
+            {" · "}
+            {fmt(o.beyondDisallowed)} still valid in {e.disallowedYear}
+          </Typography>
+          <Explain on={explain}>
+            Key Vault, ACM, Google Cloud, HashiCorp Vault, Kubernetes, AD CS and imported inventories. These are yours
+            too, but they are migrated at the source — the vault&apos;s policy, the CA&apos;s template, the cluster&apos;s
+            issuer — and the roadmap lists each source as one system.
+          </Explain>
+        </Box>
+      ) : null}
 
       <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap", rowGap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 260 }}>
