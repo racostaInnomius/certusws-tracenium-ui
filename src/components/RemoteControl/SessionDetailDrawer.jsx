@@ -53,9 +53,19 @@ import { describeCloseReason } from "./closeReasons";
 const EVENT_LABEL = {
   requested: "Session requested",
   gated: "Held for approval",
-  approved: "Approval spent",
+  approved: "Approved",
+  denied: "Approval refused",
   break_glass: "⚠️ Break-glass override",
   connected: "Connected",
+  // El aviso del equipo (ADR-0012). Se dice en pasiva y sin culpar a nadie:
+  // la persona ejerció un derecho que el producto le dio a propósito, y
+  // "declined" en rojo junto a su nombre lo convertiría en una falta.
+  consent_denied: "The person at the device declined",
+  consent_timeout: "Nobody answered on the device",
+  // El flujo de vídeo, que no es la sesión: puede parar y seguir habiendo
+  // sesión, y de hecho un error de grabación no la termina.
+  screen_stopped: "Screen sharing stopped",
+  screen_error: "Screen sharing reported a problem",
   closed: "Closed",
   file_upload: "File written to the device",
   file_download: "File taken from the device"

@@ -102,6 +102,68 @@ describe("la línea de tiempo", () => {
     expect(getComputedStyle(row).fontWeight).toBe("700");
   });
 
+  it("⚠️ una negativa del usuario se lee en palabras, no como un código", async () => {
+    // `consent_denied` sin etiqueta se enseña crudo, y el operador lee un
+    // identificador donde debería leer que una persona dijo que no. Es la
+    // fila más importante que puede tener una sesión de pantalla.
+    getSessionDetail.mockResolvedValue(
+      detailWith({
+        timeline: [
+          { occurredAt: "2026-09-09T10:00:00Z", event: "requested", actor: "javier@example.com", actorIp: null, source: "operator", detail: null },
+          { occurredAt: "2026-09-09T10:00:20Z", event: "consent_denied", actor: null, actorIp: null, source: "agent", detail: { reason: "consent_denied" } },
+          { occurredAt: "2026-09-09T10:00:20Z", event: "closed", actor: null, actorIp: null, source: "system", detail: null }
+        ]
+      })
+    );
+    render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
+
+    expect(await screen.findByText(/The person at the device declined/i)).toBeInTheDocument();
+    expect(screen.queryByText("consent_denied")).not.toBeInTheDocument();
+  });
+
+  it("el aviso caducado se distingue del rechazo", async () => {
+    // Nadie contestó y alguien dijo que no son cosas distintas: la primera
+    // se reintenta llamando por teléfono, la segunda no se reintenta.
+    getSessionDetail.mockResolvedValue(
+      detailWith({
+        timeline: [
+          { occurredAt: "2026-09-09T10:00:20Z", event: "consent_timeout", actor: null, actorIp: null, source: "agent", detail: null }
+        ]
+      })
+    );
+    render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
+    expect(await screen.findByText(/Nobody answered on the device/i)).toBeInTheDocument();
+  });
+
+  it("aprobar y denegar tienen cada uno su fila", async () => {
+    getSessionDetail.mockResolvedValue(
+      detailWith({
+        timeline: [
+          { occurredAt: "2026-09-09T09:59:00Z", event: "gated", actor: "javier@example.com", actorIp: null, source: "system", detail: null },
+          { occurredAt: "2026-09-09T09:59:30Z", event: "denied", actor: "jefa@example.com", actorIp: null, source: "operator", detail: null }
+        ]
+      })
+    );
+    render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
+    expect(await screen.findByText("Approval refused")).toBeInTheDocument();
+  });
+
+  it("parar la pantalla no dice 'cerrada'", async () => {
+    // El flujo de vídeo y la sesión son dos cosas: confundirlas es lo que
+    // hacía el backend, y una etiqueta que dijera "Closed" aquí volvería a
+    // contarlo mal en la pantalla.
+    getSessionDetail.mockResolvedValue(
+      detailWith({
+        timeline: [
+          { occurredAt: "2026-09-09T10:04:00Z", event: "screen_stopped", actor: null, actorIp: null, source: "agent", detail: { width: 1920, height: 1080 } }
+        ]
+      })
+    );
+    render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
+    expect(await screen.findByText("Screen sharing stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Closed")).not.toBeInTheDocument();
+  });
+
   it("un evento sin etiqueta se enseña tal cual en vez de esconderse", async () => {
     // El que nadie ha traducido todavía es justo el que alguien va a citar
     // preguntando qué pasó.
