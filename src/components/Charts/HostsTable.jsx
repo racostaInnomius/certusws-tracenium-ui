@@ -29,6 +29,7 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { normalizePlatform, platformLabel, platformColor } from "../../utils/platform";
+import { describeLastBoot } from "../../utils/lastBoot";
 import OnlineDot from "../common/OnlineDot";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
@@ -376,6 +377,12 @@ export default function HostsTable({
                 sortModel={sortModel}
                 onSortChange={onSortChange}
               />
+              <SortableHeadCell
+                field="lastBootUtc"
+                label="Last boot"
+                sortModel={sortModel}
+                onSortChange={onSortChange}
+              />
               <TableCell sx={{ fontWeight: 700, width: 170, textAlign: "right" }}>
                 Action
               </TableCell>
@@ -392,6 +399,7 @@ export default function HostsTable({
               const agentVersion = firstValue(r.agentVersion, r.agent_version);
               const lastLogonUser = firstValue(r.lastLogonUser, r.last_logon_user);
               const localIp = firstValue(r.localIp, r.local_ip);
+              const lastBoot = describeLastBoot(firstValue(r.lastBootUtc, r.last_boot_utc));
               const job = getJobForDevice(decommissionJobs, agentId);
               const lifecycleLocked = isDeviceLockedForDecommission(r);
               const jobActive = isJobActive(job);
@@ -528,6 +536,28 @@ export default function HostsTable({
                   <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 130 }}>
                     {displayText(localIp)}
                   </TableCell>
+                  {/* ⚠️ Se muestra la antiguedad, no la fecha: la pregunta que
+                      trae a alguien aqui es cuanto lleva sin reiniciarse. Y el
+                      "sin dato" NO se tine de alarma — mientras dure el
+                      despliegue del agente sera la mayoria de la flota. */}
+                  <TableCell sx={{ minWidth: 120 }}>
+                    <Tooltip title={lastBoot.title}>
+                      <Box
+                        component="span"
+                        sx={{
+                          fontSize: TEXT.sm,
+                          color: lastBoot.stale
+                            ? BRAND.alert.high
+                            : lastBoot.known
+                              ? BRAND.dark
+                              : "text.disabled",
+                          fontWeight: lastBoot.stale ? 700 : 400,
+                        }}
+                      >
+                        {lastBoot.label}
+                      </Box>
+                    </Tooltip>
+                  </TableCell>
                   <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                     <RowActions
                       row={r}
@@ -544,7 +574,7 @@ export default function HostsTable({
 
             {rows.length === 0 && !loading ? (
               <TableRow>
-                <TableCell colSpan={8} sx={{ color: "text.secondary", py: 4 }}>
+                <TableCell colSpan={9} sx={{ color: "text.secondary", py: 4 }}>
                   No hosts found.
                 </TableCell>
               </TableRow>
