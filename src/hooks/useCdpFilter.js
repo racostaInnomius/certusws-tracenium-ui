@@ -40,6 +40,10 @@ export const CDP_URL_KEYS = {
   keySizeBits: "bits",
   family: "family",
   source: "source",
+  // Ámbito del almacén (machine / user / system-roots / network). La
+  // faceta «Scope» lo escribía desde el primer día, pero la clave no
+  // estaba aquí: el clic se perdía en silencio (revisión UI 2026-09-05).
+  scope: "scope",
   storeName: "store",
   agentId: "device",
   notAfterFrom: "from",

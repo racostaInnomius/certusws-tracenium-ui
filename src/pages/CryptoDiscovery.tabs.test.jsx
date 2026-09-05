@@ -77,10 +77,10 @@ describe("pestañas de Crypto Discovery", () => {
       </ConfirmProvider>
     );
 
-    const huerfanas = await screen.findByRole("tab", { name: /claves huérfanas/i }, { timeout: 4000 });
+    const huerfanas = await screen.findByRole("tab", { name: /orphan keys/i }, { timeout: 4000 });
     huerfanas.click();
     // El texto de honestidad del panel de huérfanas: prueba de que ESTÁ.
-    await screen.findByText(/sin que eso signifique que no hay ninguna/i);
+    await screen.findByText(/without that meaning there are none/i);
     // Y la matriz de aprobación NO: este era el síntoma —dos paneles
     // apilados bajo una sola pestaña.
     expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("pestañas de Crypto Discovery", () => {
     policy.click();
     // Este era el otro síntoma: la pestaña en blanco.
     await screen.findByText(/Privileged access policy/i);
-    expect(screen.queryByText(/sin que eso signifique/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/without that meaning/i)).not.toBeInTheDocument();
   });
 
   it("cada Tab de la barra tiene un panel, y ningún índice se repite", async () => {

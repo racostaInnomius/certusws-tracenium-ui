@@ -50,7 +50,7 @@ import {
   Tooltip as RTooltip
 } from "recharts";
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 // ── Modo explicar ────────────────────────────────────────────────────
 
@@ -242,7 +242,7 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
                 {" · "}
                 <Box component="span" sx={{ color: BRAND.alert.high }}>{fmt(e.kem?.classicalOnly)} classical only</Box>
                 {e.kem?.unknown ? (
-                  <Box component="span" sx={{ color: BRAND.gray }}> · {fmt(e.kem.unknown)} could not be determined</Box>
+                  <Box component="span" sx={{ color: TEXT_MUTED }}> · {fmt(e.kem.unknown)} could not be determined</Box>
                 ) : null}
               </Typography>
               <Explain on={explain}>
@@ -255,7 +255,7 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
             <>
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
                 {fmt(e.listeners)} TLS services on {fmt(e.listenerDevices)} devices ·{" "}
-                <Box component="span" sx={{ color: BRAND.gray }}>post-quantum key exchange not measured yet</Box>
+                <Box component="span" sx={{ color: TEXT_MUTED }}>post-quantum key exchange not measured yet</Box>
               </Typography>
               <Explain on={explain}>
                 This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
@@ -319,7 +319,7 @@ export function KeyDistributionPanel({ facets, onSelect, explain, stackBy = "own
         own.
       </Explain>
       {rows.length === 0 ? (
-        <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>No certificates match.</Typography>
+        <Typography sx={{ color: TEXT_MUTED, fontSize: TEXT.md, py: 3, textAlign: "center" }}>No certificates match.</Typography>
       ) : (
         <Stack spacing={0.75} sx={{ mt: 1.5 }}>
           {rows.map((r) => {
@@ -441,7 +441,7 @@ export function StoresPanel({ stores, javaOnlyVendorBundles, onSelect, onOpenPol
 
       <Stack spacing={0.5} sx={{ mt: 1.5 }}>
         {bySource.length === 0 ? (
-          <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>No stores reported.</Typography>
+          <Typography sx={{ color: TEXT_MUTED, fontSize: TEXT.md, py: 3, textAlign: "center" }}>No stores reported.</Typography>
         ) : null}
         {bySource.map((src) => {
           const open = openSource.has(src.source);
@@ -503,7 +503,7 @@ export function StoresPanel({ stores, javaOnlyVendorBundles, onSelect, onOpenPol
                               />
                             ))}
                             {st.devices > (st.deviceList ?? []).length ? (
-                              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, alignSelf: "center" }}>
+                              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, alignSelf: "center" }}>
                                 +{st.devices - (st.deviceList ?? []).length} more
                               </Typography>
                             ) : null}

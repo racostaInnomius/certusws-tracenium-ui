@@ -15,7 +15,7 @@
 import * as React from "react";
 import { Box, Chip, Skeleton, Stack, Typography } from "@mui/material";
 import { getCdpFacets } from "../../api/cdp";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 const FACETS = [
   { id: "source", label: "Source", by: ["source"], value: (r) => r.keys.source, select: (r) => ({ source: r.keys.source }),
@@ -73,19 +73,19 @@ export default function CdpCertFacets({ filter, onSelect, refreshNonce }) {
         const rows = data[f.id];
         return (
           <Box key={f.id}>
-            <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.gray, textTransform: "uppercase", letterSpacing: ".06em", mb: 0.5 }}>
+            <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em", mb: 0.5 }}>
               {f.label}
             </Typography>
             {loading && !rows ? <Skeleton height={60} /> : null}
-            {rows === null && !loading ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>Couldn&apos;t load</Typography> : null}
-            {rows && rows.length === 0 ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>—</Typography> : null}
+            {rows === null && !loading ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>Couldn&apos;t load</Typography> : null}
+            {rows && rows.length === 0 ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>—</Typography> : null}
             <Stack spacing={0.25}>
-              {(rows || []).map((r) => {
+              {(rows || []).map((r, i) => {
                 const v = f.value(r);
                 const label = f.labels?.[v] ?? v ?? "—";
                 return (
                   <Box
-                    key={String(v)}
+                    key={`${String(v)}-${i}`}
                     role="button"
                     tabIndex={0}
                     aria-label={`${f.label} ${label}: ${r.certs}`}
@@ -102,7 +102,7 @@ export default function CdpCertFacets({ filter, onSelect, refreshNonce }) {
           </Box>
         );
       })}
-      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
         Counts are certificates on devices under the current navigation filter; search, status, flag and issuer are
         not applied here.
       </Typography>

@@ -16,7 +16,7 @@
 import * as React from "react";
 import { Box, Chip, CircularProgress, Divider, Stack, Tooltip, Typography } from "@mui/material";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
-import { BRAND, ICON, TEXT } from "../../theme/brand";
+import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCdpCertificateDetail } from "../../api/cdp";
 
 const FAMILY_LABEL = {
@@ -29,7 +29,7 @@ const FAMILY_LABEL = {
 function Field({ label, children, mono }) {
   return (
     <Box sx={{ mb: 1.25 }}>
-      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, fontWeight: 700, letterSpacing: 0.4 }}>
         {label.toUpperCase()}
       </Typography>
       <Typography
@@ -67,7 +67,7 @@ function formatDate(value) {
 function OwnerChips({ owners }) {
   if (!Array.isArray(owners) || owners.length === 0) {
     return (
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, fontStyle: "italic" }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, fontStyle: "italic" }}>
         No matching application found. That is an honest answer, not a failure — a wrong
         owner sends someone to renew a certificate that is not theirs.
       </Typography>
@@ -138,12 +138,12 @@ function ChainSummary({ tls }) {
             }}
           />
         </Tooltip>
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
           {tls.chainDepth} certificate{tls.chainDepth === 1 ? "" : "s"} sent
         </Typography>
       </Stack>
       {tls.coversDeviceHostname === false && (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Does not cover this device&apos;s own hostname — normal for a proxy or virtual host,
           worth a look for a service that should present its own name.
         </Typography>
@@ -159,7 +159,7 @@ function RevocationChip({ revocation }) {
         <Chip
           size="small"
           label="revocation not checked"
-          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray, fontWeight: 600, fontSize: TEXT.xs }}
+          sx={{ bgcolor: BRAND.surfaceMuted, color: TEXT_MUTED, fontWeight: 600, fontSize: TEXT.xs }}
         />
       </Tooltip>
     );
@@ -230,7 +230,7 @@ export default function CertificateDetailDrawer({
       <Typography sx={{ fontWeight: 800, fontSize: TEXT.lg, color: BRAND.dark, wordBreak: "break-word" }}>
         {detail.subjectCN || `${detail.fingerprint256?.slice(0, 24)}…`}
       </Typography>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, mb: 1 }}>
         issued by {detail.issuerCN || "unknown issuer"}
       </Typography>
 
@@ -364,7 +364,7 @@ export default function CertificateDetailDrawer({
                 {device.host || device.agentId}
               </Typography>
             </Stack>
-            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
               {device.storeName} · {device.storeScope}
             </Typography>
 
@@ -390,14 +390,14 @@ export default function CertificateDetailDrawer({
 
             {device.tls?.process && (
               <Box sx={{ mt: 1 }}>
-                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 700, letterSpacing: 0.4 }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, fontWeight: 700, letterSpacing: 0.4 }}>
                   SERVED BY
                 </Typography>
                 <Typography sx={{ fontSize: TEXT.sm, wordBreak: "break-all" }}>
                   {device.tls.process.name} (pid {device.tls.process.pid})
                 </Typography>
                 {device.tls.process.path && (
-                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, wordBreak: "break-all" }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, wordBreak: "break-all" }}>
                     {device.tls.process.path}
                   </Typography>
                 )}

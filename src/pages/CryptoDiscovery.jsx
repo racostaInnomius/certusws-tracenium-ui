@@ -1,16 +1,17 @@
 // src/pages/CryptoDiscovery.jsx
 //
-// CDP (Crypto Discovery Plugin). Eight tabs, one question each:
+// CDP (Crypto Discovery Plugin). Seven tabs, one question each:
 //
-//   Dashboard    : ownership funnel, KPIs, expiry timeline against the
-//                  PQC deadlines, action list, issuers, hygiene, devices.
-//   Roadmap      : systems to migrate, priority, waves, trend, references
-//                  (agility blockers, CNSA 2.0, trust anchors to replace).
-//   Explore      : distribution by key algorithm/size and where
-//                  certificates live (source → store → device).
-//   Certificates : the fleet list, deduped by fingerprint, with facets
-//                  and CSV export. Devices, Trust anchors, Orphan keys
-//                  and Access policy complete the set.
+//   Dashboard     : ownership funnel, KPIs, expiry timeline against the
+//                   PQC deadlines, action list, issuers, hygiene, devices.
+//   Roadmap       : systems to migrate, priority, waves, trend, references
+//                   (agility blockers, CNSA 2.0, trust anchors to replace).
+//   Explore       : distribution by key algorithm/size, where certificates
+//                   live (source → store → device) and what lives outside
+//                   your devices (imports, connectors).
+//   Inventory     : the fleet list — by certificate (deduped by
+//                   fingerprint) or by device — with facets and CSV export.
+//   Trust anchors, Orphan keys and Access policy complete the set.
 //
 // This page reads the CDP inventory (certs discovered ON devices).
 // The PKI page covers the agent's own mTLS identity certs — different
@@ -130,7 +131,7 @@ const STATUS_META = {
   active: { label: "Active", color: BRAND.alert.success, soft: BRAND.alert.successSoft },
   expiring: { label: "Expiring", color: BRAND.alert.warningText, soft: BRAND.alert.warningSoft },
   expired: { label: "Expired", color: BRAND.alert.error, soft: BRAND.alert.errorSoft },
-  unknown: { label: "Unknown", color: BRAND.gray, soft: BRAND.surfaceMuted },
+  unknown: { label: "Unknown", color: TEXT_MUTED, soft: BRAND.surfaceMuted },
 };
 
 function CertStatusChip({ status }) {
@@ -188,13 +189,19 @@ function formatDate(value) {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
+// Tab ↔ panel: el mismo par id/aria para que un lector de pantalla sepa
+// qué panel abre cada pestaña. `TabPanel` y `tabA11y` se leen juntos.
+const tabId = (index) => `cdp-tab-${index}`;
+const panelId = (index) => `cdp-tabpanel-${index}`;
+const tabA11y = (index) => ({ id: tabId(index), "aria-controls": panelId(index) });
+
 function TabPanel({ value, index, children }) {
   if (value !== index) return null;
   // role=tabpanel: lo que un lector de pantalla espera bajo un Tabs, y lo
   // que permite al test de la página contar cuántos paneles hay visibles
   // —que es como se caza un índice duplicado.
   return (
-    <Box role="tabpanel" sx={{ pt: 2 }}>
+    <Box role="tabpanel" id={panelId(index)} aria-labelledby={tabId(index)} sx={{ pt: 2 }}>
       {children}
     </Box>
   );
@@ -218,15 +225,29 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
   // pregunta (cuándo caduca lo que hay), pero apilada por propiedad y
   // contra los plazos PQC. Dos gráficos para una pregunta era deuda.
   const [timeline, setTimeline] = React.useState(null);
+  // Qué bloque no cargó. Antes un fallo dejaba `null` y el embudo
+  // simplemente NO se pintaba: la primera cifra de la página desaparecía
+  // sin decir por qué (revisión UI 2026-09-05).
+  const [chartsError, setChartsError] = React.useState([]);
   const [explain, toggleExplain] = useExplainMode();
   React.useEffect(() => {
     let alive = true;
+    setChartsError([]);
+    const failed = (what, err) => alive && setChartsError((prev) => [...prev, `${what}: ${err?.message || String(err)}`]);
     getCdpExposure()
       .then((r) => alive && setExposure(r?.exposure ?? null))
-      .catch(() => alive && setExposure(null));
+      .catch((err) => {
+        if (!alive) return;
+        setExposure(null);
+        failed("exposure funnel", err);
+      });
     getCdpTimeline({})
       .then((r) => alive && setTimeline(r ?? null))
-      .catch(() => alive && setTimeline(null));
+      .catch((err) => {
+        if (!alive) return;
+        setTimeline(null);
+        failed("expiry timeline", err);
+      });
     return () => {
       alive = false;
     };
@@ -334,6 +355,12 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
       <Stack direction="row" justifyContent="flex-end">
         <ExplainToggle on={explain} onToggle={toggleExplain} />
       </Stack>
+      {chartsError.length > 0 ? (
+        <Alert severity="warning">
+          <AlertTitle>Part of the dashboard didn&apos;t load</AlertTitle>
+          {chartsError.join(" · ")} — the rest of the page is unaffected; use Refresh to retry.
+        </Alert>
+      ) : null}
       <ExposureFunnel
         exposure={exposure}
         explain={explain}
@@ -505,6 +532,7 @@ function CdpInventoryTab({ refreshNonce }) {
     keySizeBits: filter.keySizeBits ? Number(filter.keySizeBits) : undefined,
     family: filter.family,
     source: filter.source,
+    scope: filter.scope,
     storeName: filter.storeName,
     agentId: filter.agentId,
     notAfterFrom: filter.notAfterFrom,
@@ -783,6 +811,7 @@ function CdpInventoryTab({ refreshNonce }) {
           ["keySizeBits", "Key size"],
           ["family", "Family"],
           ["source", "Source"],
+          ["scope", "Scope"],
           ["storeName", "Store"],
           ["agentId", "Device"],
           ["notAfterFrom", "Expires from"],
@@ -1270,7 +1299,9 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
           columns={columns}
           loading={loading}
           disableRowSelectionOnClick
+          disableColumnMenu
           initialState={{ sorting: { sortModel: [{ field: "deviceCount", sort: "desc" }] } }}
+          sx={DATAGRID_SX}
         />
       </Box>
     </Box>
@@ -1352,7 +1383,7 @@ export default function CryptoDiscovery() {
               startIcon={<AddCircleOutlineIcon />}
               onClick={() => setIssuanceOpen(true)}
             >
-              Emitir certificado
+              Issue certificate
             </Button>
             <Tooltip title="Refresh" arrow>
               <IconButton aria-label="Refresh" onClick={() => setRefreshNonce((n) => n + 1)}>
@@ -1363,23 +1394,35 @@ export default function CryptoDiscovery() {
         }
       />
 
-      <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
-        <Tab label="Dashboard" />
-        <Tab label="Roadmap" />
-        <Tab label="Explore" />
-        <Tab label="Inventory" />
-        <Tab label="Trust anchors" />
+      {/*
+        Siete pestañas no caben en un portátil de 13": `scrollable` en vez
+        de dejar que MUI las apriete hasta cortar etiquetas.
+      */}
+      <Tabs
+        value={tab}
+        onChange={(_e, v) => setTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        aria-label="Crypto Discovery sections"
+        sx={{ borderBottom: `1px solid ${BRAND.border}` }}
+      >
+        <Tab label="Dashboard" {...tabA11y(TAB.dashboard)} />
+        <Tab label="Roadmap" {...tabA11y(TAB.roadmap)} />
+        <Tab label="Explore" {...tabA11y(TAB.explore)} />
+        <Tab label="Inventory" {...tabA11y(TAB.inventory)} />
+        <Tab label="Trust anchors" {...tabA11y(TAB.anchors)} />
         {/*
           ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
           una huérfana es un ítem del inventario, y el punto de la
           decisión es que se mire, no que esté.
         */}
-        <Tab label="Claves huérfanas" />
+        <Tab label="Orphan keys" {...tabA11y(TAB.orphans)} />
         {/* ADR-0009 phase 2 keeps ONE approval matrix for every privileged
             capability, so cdp.cert.install and cdp.anchor.distrust used to be
             rendered inside Remote Control alongside rcp.* — somebody else's
             settings on your screen. Shared data, separate screens. */}
-        <Tab label="Access policy" />
+        <Tab label="Access policy" {...tabA11y(TAB.policy)} />
       </Tabs>
 
       <TabPanel value={tab} index={TAB.dashboard}>
@@ -1393,7 +1436,14 @@ export default function CryptoDiscovery() {
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>
-        <CdpRoadmapPanel refreshNonce={refreshNonce} onDrillDown={(f) => drillDown(f, { replace: true })} />
+        <CdpRoadmapPanel
+          refreshNonce={refreshNonce}
+          onDrillDown={(f) => drillDown(f, { replace: true })}
+          // Un sistema-origen (vault, nube, CA, CT) no tiene filas en el
+          // inventario de equipos: sus miembros viven en «Outside your
+          // devices», en Explore.
+          onOpenOutside={() => setTab(TAB.explore)}
+        />
       </TabPanel>
       <TabPanel value={tab} index={TAB.explore}>
         <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
@@ -1408,7 +1458,7 @@ export default function CryptoDiscovery() {
         <OrphanKeysPanel refreshNonce={refreshNonce} />
       </TabPanel>
       {/*
-        ⚠️ Índice 6, no 5. Al añadir «Claves huérfanas» se dejó este panel
+        ⚠️ Índice 6, no 5. Al añadir «Orphan keys» se dejó este panel
         en el 5 que ocupaba antes, y dos paneles con el mismo índice hacen
         dos cosas malas a la vez: la pestaña de huérfanas pintaba ADEMÁS
         la matriz de aprobación, y «Access policy» quedaba en blanco. El

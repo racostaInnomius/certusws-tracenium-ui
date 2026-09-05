@@ -20,9 +20,9 @@
 // hue plus text labels, status colours reserved for genuine states.
 
 import * as React from "react";
-import { Box, Chip, LinearProgress, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 function PanelTitle({ children, hint }) {
   const title = (
@@ -43,7 +43,7 @@ function PanelTitle({ children, hint }) {
 
 function Empty({ children }) {
   return (
-    <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
+    <Typography sx={{ color: TEXT_MUTED, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
       {children}
     </Typography>
   );
@@ -90,7 +90,7 @@ export function TrustAnchorsPanel({ pqc }) {
                   label={[row.keyAlgorithm ?? "?", row.keySizeBits].filter(Boolean).join(" ")}
                   sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700, fontSize: TEXT.xs }}
                 />
-                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                   valid to {formatDate(row.notAfter)} · {row.deviceCount} device
                   {row.deviceCount === 1 ? "" : "s"}
                 </Typography>
@@ -130,13 +130,13 @@ export function AgilityBlockersPanel({ pqc }) {
         </Empty>
       ) : (
         <>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, mb: 1.5 }}>
             Thresholds: Java {agility.jvmMinMajor}+ (ML-KEM and ML-DSA arrived in that JDK),
             OpenSSL {agility.opensslMinVersion}+, Windows{" "}
             {agility.windowsMinBuild ? `build ${agility.windowsMinBuild}` : "24H2"}+ and macOS{" "}
             {agility.macosMinMajor ?? 26}+ for the operating system&apos;s own TLS stack.
           </Typography>
-          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1.5, fontStyle: "italic" }}>
             An <strong>os-tls</strong> blocker covers everything that uses the system stack —
             on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a
             software inventory. Clearing the threshold is not the same as having it on:
@@ -209,7 +209,7 @@ export function CnsaPanel({ pqc }) {
         CNSA 2.0
       </PanelTitle>
 
-      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1.5, fontStyle: "italic" }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1.5, fontStyle: "italic" }}>
         {cnsa.applicability}
       </Typography>
 
@@ -218,7 +218,7 @@ export function CnsaPanel({ pqc }) {
           <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
             {next.daysRemaining} days to {next.date}
           </Typography>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{next.label}</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{next.label}</Typography>
         </Box>
       ) : null}
 
@@ -231,7 +231,7 @@ export function CnsaPanel({ pqc }) {
               alignItems="baseline"
               sx={{ cursor: "help" }}
             >
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{label}</Typography>
+              <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{label}</Typography>
               <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
                 {value ?? 0}
               </Typography>
@@ -241,7 +241,7 @@ export function CnsaPanel({ pqc }) {
       </Stack>
 
       {c.weakDigest > 0 ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1.5 }}>
           {c.weakDigest} of {c.total} also sit below the SHA-384 digest floor. Counted separately
           because on an estate that has already migrated its algorithms, the digest can be the
           only thing left failing.

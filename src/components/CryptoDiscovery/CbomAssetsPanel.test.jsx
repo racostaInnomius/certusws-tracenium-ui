@@ -32,7 +32,7 @@ describe("CbomAssetsPanel", () => {
     getCryptoAssetsSummary.mockResolvedValue({ sources: [], byType: [], matchedFleetCertificates: 0, imports: [] });
     listCryptoAssets.mockResolvedValue({ items: [] });
     render(<CbomAssetsPanel refreshNonce={0} onSelect={() => {}} />);
-    expect(await screen.findByText(/Nothing imported yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Nothing outside your devices yet/i)).toBeInTheDocument();
   });
 
   it("⭐ enseña por origen, cruza con la flota y un certificado visto por un agente navega a él", async () => {

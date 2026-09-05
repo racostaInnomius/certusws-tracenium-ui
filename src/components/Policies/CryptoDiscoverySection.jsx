@@ -379,7 +379,7 @@ export default function CryptoDiscoverySection({ form, onChange, readOnly = fals
           issuance database incrementally (<code>certutil -view</code>, read-only) and reports what the
           CA issued — including certificates that never landed on a device with an agent — and the
           <strong> template</strong> each one came from. Findings appear under{" "}
-          <em>Explore → Imported inventories</em> as source <code>adcs:&lt;CA name&gt;</code>, never mixed
+          <em>Explore → Outside your devices</em> as source <code>adcs:&lt;CA name&gt;</code>, never mixed
           into the CA server&rsquo;s own certificate list.
         </Typography>
       </Box>

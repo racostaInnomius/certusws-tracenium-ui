@@ -32,6 +32,8 @@
 // Confundir cualquiera de las tres con un error es el fallo que ya se
 // cometió con el 202 de Remote Control, que se pintaba como «Failed to
 // start session» cuando el gate estaba haciendo justo su trabajo.
+//
+// Copy en inglés como el resto del portal (revisión UI 2026-09-05).
 
 import * as React from "react";
 import {
@@ -60,7 +62,7 @@ import { getJob } from "../../api/jobs";
 import { TEXT } from "../../theme/brand";
 
 /** El expediente de ADR-0009: sin motivo ni ticket no se sigue. */
-function expedienteValido(reason, ticketRef) {
+function hasCaseFile(reason, ticketRef) {
   return reason.trim().length >= 10 && ticketRef.trim().length >= 3;
 }
 
@@ -73,10 +75,10 @@ function expedienteValido(reason, ticketRef) {
  * sigue en cola, que es la verdad — el agente lo recogerá al conectar y
  * el CSR estará en el detalle del job.
  */
-async function esperarCsr(jobId, { intentos = 20, esperaMs = 3000, señal } = {}) {
-  for (let i = 0; i < intentos; i++) {
-    if (señal?.abortado) return { estado: "cancelado" };
-    await new Promise((r) => setTimeout(r, esperaMs));
+async function waitForCsr(jobId, { attempts = 20, waitMs = 3000, signal } = {}) {
+  for (let i = 0; i < attempts; i++) {
+    if (signal?.aborted) return { state: "cancelled" };
+    await new Promise((r) => setTimeout(r, waitMs));
     let job = null;
     try {
       job = (await getJob(jobId))?.job ?? null;
@@ -90,22 +92,22 @@ async function esperarCsr(jobId, { intentos = 20, esperaMs = 3000, señal } = {}
       const r = typeof job.result_json === "string"
         ? JSON.parse(job.result_json || "{}")
         : job.result_json || {};
-      return { estado: "completed", result: r };
+      return { state: "completed", result: r };
     }
     if (job.status === "failed" || job.status === "timeout") {
-      return { estado: "failed", error: job.last_error || "el equipo rechazó la petición" };
+      return { state: "failed", error: job.last_error || "the device rejected the request" };
     }
   }
-  return { estado: "esperando" };
+  return { state: "waiting" };
 }
 
-const PASOS = ["Pedir el CSR al equipo", "Firmar en tu CA", "Instalar el certificado"];
+const STEPS = ["Request the CSR from the device", "Sign it with your CA", "Install the certificate"];
 
-export default function CertIssuanceDialog({ open, onClose, devices = [], deviceId: deviceIdInicial }) {
-  const [paso, setPaso] = React.useState(0);
+export default function CertIssuanceDialog({ open, onClose, devices = [], deviceId: initialDeviceId }) {
+  const [step, setStep] = React.useState(0);
 
   // Paso 1
-  const [deviceId, setDeviceId] = React.useState(deviceIdInicial || "");
+  const [deviceId, setDeviceId] = React.useState(initialDeviceId || "");
   const [cn, setCn] = React.useState("");
   const [org, setOrg] = React.useState("");
   const [ou, setOu] = React.useState("");
@@ -126,22 +128,22 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
 
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState(null);
-  const señal = React.useRef({ abortado: false });
+  const signal = React.useRef({ aborted: false });
 
   React.useEffect(() => {
     if (open) {
-      señal.current = { abortado: false };
+      signal.current = { aborted: false };
       setMsg(null);
     }
     return () => {
       // Si el diálogo se cierra a mitad de la espera, se corta el sondeo.
-      señal.current.abortado = true;
+      signal.current.aborted = true;
     };
   }, [open]);
 
-  const copiar = (texto) => {
+  const copy = (text) => {
     try {
-      navigator.clipboard?.writeText(texto);
+      navigator.clipboard?.writeText(text);
     } catch {
       /* sin portapapeles el operador siempre puede seleccionar a mano */
     }
@@ -155,10 +157,10 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
     .filter(Boolean)
     .join(",");
 
-  const puedePedir =
-    deviceId && cn.trim().length > 0 && expedienteValido(reason, ticketRef) && !busy;
+  const canRequest =
+    deviceId && cn.trim().length > 0 && hasCaseFile(reason, ticketRef) && !busy;
 
-  const pedirCsr = async () => {
+  const requestCsr = async () => {
     setBusy(true);
     setMsg(null);
     try {
@@ -180,55 +182,55 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
         // que la latencia de decisión humana no deje huérfanas.
         setMsg({
           sev: "info",
-          titulo: "Pendiente de visto bueno",
+          title: "Waiting for approval",
           text:
-            `${r.message || "la política del tenant lo exige"}. ` +
-            "Todavía no se ha creado ninguna clave en el equipo: se creará cuando se apruebe."
+            `${r.message || "the tenant policy requires it"}. ` +
+            "No key has been created on the device yet: it is created once approved."
         });
         return;
       }
       if (!r?.ok) {
-        setMsg({ sev: "error", text: r?.message || "No se pudo pedir el CSR" });
+        setMsg({ sev: "error", text: r?.message || "Couldn't request the CSR" });
         return;
       }
 
       setKeyId(r.keyId || "");
       setMsg({
         sev: "info",
-        text: "Petición enviada. Esperando a que el equipo genere la clave y devuelva el CSR…"
+        text: "Request sent. Waiting for the device to generate the key and return the CSR…"
       });
 
-      const fin = await esperarCsr(r.jobId, { señal: señal.current });
-      if (fin.estado === "completed" && fin.result?.csrPem) {
-        setCsrPem(fin.result.csrPem);
-        setPaso(1);
+      const end = await waitForCsr(r.jobId, { signal: signal.current });
+      if (end.state === "completed" && end.result?.csrPem) {
+        setCsrPem(end.result.csrPem);
+        setStep(1);
         setMsg(null);
-      } else if (fin.estado === "failed") {
-        setMsg({ sev: "error", text: fin.error });
-      } else if (fin.estado === "esperando") {
+      } else if (end.state === "failed") {
+        setMsg({ sev: "error", text: end.error });
+      } else if (end.state === "waiting") {
         setMsg({
           sev: "warning",
-          titulo: "El equipo aún no responde",
+          title: "The device hasn't answered yet",
           text:
-            `El job sigue en cola (${r.jobId}). No se ha perdido nada: el agente lo recogerá ` +
-            `al conectar y el CSR quedará en el detalle del job. Guarda el keyId «${r.keyId}».`
+            `The job is still queued (${r.jobId}). Nothing is lost: the agent picks it up when it connects and ` +
+            `the CSR will be in the job detail. Keep the keyId “${r.keyId}”.`
         });
       }
     } catch (e) {
-      setMsg({ sev: "error", text: e?.message || "No se pudo pedir el CSR" });
+      setMsg({ sev: "error", text: e?.message || "Couldn't request the CSR" });
     } finally {
       setBusy(false);
     }
   };
 
-  const puedeInstalar =
+  const canInstall =
     deviceId &&
     keyId.trim() &&
     certPem.includes("BEGIN CERTIFICATE") &&
-    expedienteValido(reason, ticketRef) &&
+    hasCaseFile(reason, ticketRef) &&
     !busy;
 
-  const instalar = async () => {
+  const install = async () => {
     setBusy(true);
     setMsg(null);
     try {
@@ -246,32 +248,32 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
       if (r?.status === "pending_approval") {
         setMsg({
           sev: "info",
-          titulo: "Pendiente de visto bueno",
-          text: r.message || "la política del tenant lo exige"
+          title: "Waiting for approval",
+          text: r.message || "the tenant policy requires it"
         });
       } else if (r?.status === "held_for_window") {
         // No es un error: instalar recarga el servicio que usa el
         // certificado, así que espera a la ventana del tenant.
         setMsg({
           sev: "warning",
-          titulo: "Fuera de la ventana de mantenimiento",
-          text: `${r.message}. Próxima apertura: ${
+          title: "Outside the maintenance window",
+          text: `${r.message}. Next opening: ${
             r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : "—"
-          }. Puedes marcar «instalar ahora» si es una urgencia.`
+          }. You can tick “install now” if this is urgent.`
         });
       } else if (r?.ok) {
         setMsg({
           sev: "success",
-          titulo: "Enviado al equipo",
+          title: "Sent to the device",
           text:
-            "Al terminar, el agente vuelve a inventariar la criptografía del equipo y el " +
-            "certificado aparecerá en la pestaña de certificados. Si no aparece, no se instaló."
+            "When it finishes, the agent re-inventories the device's cryptography and the certificate shows up " +
+            "in Inventory. If it doesn't show up, it wasn't installed."
         });
       } else {
-        setMsg({ sev: "error", text: r?.message || "No se pudo instalar" });
+        setMsg({ sev: "error", text: r?.message || "Couldn't install" });
       }
     } catch (e) {
-      setMsg({ sev: "error", text: e?.message || "No se pudo instalar" });
+      setMsg({ sev: "error", text: e?.message || "Couldn't install" });
     } finally {
       setBusy(false);
     }
@@ -279,10 +281,10 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Emitir e instalar un certificado</DialogTitle>
+      <DialogTitle>Issue and install a certificate</DialogTitle>
       <DialogContent>
-        <Stepper activeStep={paso} sx={{ mb: 3, mt: 1 }}>
-          {PASOS.map((p) => (
+        <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }}>
+          {STEPS.map((p) => (
             <Step key={p}>
               <StepLabel>{p}</StepLabel>
             </Step>
@@ -294,16 +296,16 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
           espere que Tracenium firme perderá el tiempo hasta el paso 2.
         */}
         <Alert severity="info" sx={{ mb: 2 }}>
-          Tracenium <strong>no firma</strong>. El equipo genera la clave —que nunca sale de
-          él— y su CSR; tú lo llevas a tu CA y vuelves aquí con el certificado. Solo se
-          instala si <strong>ya encadena a una CA en la que ese equipo confía</strong>: el
-          agente lo comprueba contra su propio almacén y rechaza lo demás.
+          Tracenium <strong>does not sign</strong>. The device generates the key — which never leaves it — and its
+          CSR; you take that to your CA and come back here with the certificate. It is only installed if it{" "}
+          <strong>already chains to a CA that device trusts</strong>: the agent checks against its own store and
+          rejects anything else.
         </Alert>
 
-        {paso === 0 && (
+        {step === 0 && (
           <Stack spacing={0.5}>
             <TextField
-              select fullWidth margin="dense" label="Equipo"
+              select fullWidth margin="dense" label="Device"
               value={deviceId} onChange={(e) => setDeviceId(e.target.value)}
             >
               {devices.map((d) => (
@@ -315,12 +317,12 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
               <TextField
-                fullWidth margin="dense" label="CN (nombre común)" required
+                fullWidth margin="dense" label="CN (common name)" required
                 value={cn} onChange={(e) => setCn(e.target.value)}
                 placeholder="web01.corp.example"
               />
               <TextField
-                fullWidth margin="dense" label="O (organización)"
+                fullWidth margin="dense" label="O (organization)"
                 value={org} onChange={(e) => setOrg(e.target.value)}
               />
               <TextField
@@ -336,38 +338,39 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
               sujeto distinto del pedido sin que nadie se entere.
             */}
             <Typography variant="caption" sx={{ color: "text.secondary", mb: 1 }}>
-              Sujeto: <code>{subject || "—"}</code>
+              Subject: <code>{subject || "—"}</code>
             </Typography>
 
             <TextField
-              fullWidth margin="dense" label="Nombres DNS (SAN)"
+              fullWidth margin="dense" label="DNS names (SAN)"
               value={dnsNames} onChange={(e) => setDnsNames(e.target.value)}
               placeholder="web01.corp.example, web01"
-              helperText="Separados por comas o espacios. Los navegadores validan contra esto, no contra el CN."
+              helperText="Comma- or space-separated. Browsers validate against these, not against the CN."
             />
             <TextField
-              select fullWidth margin="dense" label="Uso"
+              select fullWidth margin="dense" label="Purpose"
               value={eku} onChange={(e) => setEku(e.target.value)}
             >
-              <MenuItem value="serverAuth">Servidor TLS (serverAuth)</MenuItem>
-              <MenuItem value="clientAuth">Cliente TLS (clientAuth)</MenuItem>
+              <MenuItem value="serverAuth">TLS server (serverAuth)</MenuItem>
+              <MenuItem value="clientAuth">TLS client (clientAuth)</MenuItem>
             </TextField>
 
             <Divider sx={{ my: 2 }} />
             <TextField
-              fullWidth multiline minRows={2} margin="dense" label="Motivo" required
+              fullWidth multiline minRows={2} margin="dense" label="Reason" required
               value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder="Para qué es este certificado"
-              helperText="Mínimo 10 caracteres. Queda registrado aunque no haga falta visto bueno."
+              placeholder="What this certificate is for"
+              helperText="At least 10 characters. Recorded even when no approval is needed."
             />
             <TextField
               fullWidth margin="dense" label="Ticket" required
               value={ticketRef} onChange={(e) => setTicketRef(e.target.value)}
+              helperText="At least 3 characters"
             />
           </Stack>
         )}
 
-        {paso === 1 && (
+        {step === 1 && (
           <Stack spacing={2}>
             {/*
               El keyId primero y destacado. Es lo único que ata el
@@ -375,26 +378,26 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
               espera puede durar días.
             */}
             <Alert severity="warning">
-              <AlertTitle>Guarda este identificador</AlertTitle>
+              <AlertTitle>Keep this identifier</AlertTitle>
               <Stack direction="row" spacing={1} alignItems="center">
                 <Chip label={keyId} sx={{ fontFamily: "monospace", fontWeight: 600 }} />
-                <Tooltip title="Copiar">
-                  <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copiar(keyId)}>
-                    Copiar
+                <Tooltip title="Copy">
+                  <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copy(keyId)}>
+                    Copy
                   </Button>
                 </Tooltip>
               </Stack>
               <Typography variant="body2" sx={{ mt: 1 }}>
-                La clave privada no sale del equipo. Sin este identificador el certificado
-                firmado no se puede asociar a ella y esa clave queda inservible.
+                The private key never leaves the device. Without this identifier the signed certificate cannot be
+                matched to it and that key becomes unusable.
               </Typography>
             </Alert>
 
             <Box>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="subtitle2">CSR para tu CA</Typography>
-                <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copiar(csrPem)}>
-                  Copiar CSR
+                <Typography variant="subtitle2">CSR for your CA</Typography>
+                <Button size="small" startIcon={<ContentCopyIcon />} onClick={() => copy(csrPem)}>
+                  Copy CSR
                 </Button>
               </Stack>
               <TextField
@@ -405,33 +408,33 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
           </Stack>
         )}
 
-        {paso === 2 && (
+        {step === 2 && (
           <Stack spacing={0.5}>
             <TextField
-              fullWidth margin="dense" label="Identificador de clave (keyId)" required
+              fullWidth margin="dense" label="Key identifier (keyId)" required
               value={keyId} onChange={(e) => setKeyId(e.target.value)}
               InputProps={{ sx: { fontFamily: "monospace" } }}
-              helperText="El que te dio el paso 1. Si vuelves días después, pégalo aquí."
+              helperText="The one step 1 gave you. Coming back days later? Paste it here."
             />
             <TextField
-              fullWidth multiline minRows={6} margin="dense" label="Certificado firmado (PEM)" required
+              fullWidth multiline minRows={6} margin="dense" label="Signed certificate (PEM)" required
               value={certPem} onChange={(e) => setCertPem(e.target.value)}
               InputProps={{ sx: { fontFamily: "monospace", fontSize: TEXT.sm } }}
               placeholder="-----BEGIN CERTIFICATE-----"
             />
             <TextField
-              fullWidth multiline minRows={4} margin="dense" label="Intermedias (PEM)"
+              fullWidth multiline minRows={4} margin="dense" label="Intermediates (PEM)"
               value={chainPem} onChange={(e) => setChainPem(e.target.value)}
               InputProps={{ sx: { fontFamily: "monospace", fontSize: TEXT.sm } }}
-              helperText="Sin ellas el agente rechaza la instalación, y un servicio arrancaría con clientes fallando."
+              helperText="Without them the agent rejects the install — a service would start with clients failing."
             />
             <TextField
-              fullWidth margin="dense" label="Destino"
+              fullWidth margin="dense" label="Destination"
               value={destination} onChange={(e) => setDestination(e.target.value)}
               placeholder="/etc/nginx/ssl/web01.pem"
               helperText={
-                "Linux: ruta del PEM del servicio, y es obligatoria. Windows: My o WebHosting. " +
-                "macOS: el llavero de la máquina. Nunca un almacén de anclas — el agente lo rechaza."
+                "Linux: path of the service's PEM, required. Windows: My or WebHosting. " +
+                "macOS: the machine keychain. Never a trust-anchor store — the agent rejects it."
               }
             />
             <Button
@@ -440,34 +443,34 @@ export default function CertIssuanceDialog({ open, onClose, devices = [], device
               sx={{ alignSelf: "flex-start", mt: 1 }}
               color={ignoreWindow ? "warning" : "inherit"}
             >
-              {ignoreWindow ? "✓ Instalar ahora, fuera de ventana" : "Instalar ahora, fuera de ventana"}
+              {ignoreWindow ? "✓ Install now, outside the maintenance window" : "Install now, outside the maintenance window"}
             </Button>
           </Stack>
         )}
 
         {msg && (
           <Alert severity={msg.sev} sx={{ mt: 2 }}>
-            {msg.titulo && <AlertTitle>{msg.titulo}</AlertTitle>}
+            {msg.title && <AlertTitle>{msg.title}</AlertTitle>}
             {msg.text}
           </Alert>
         )}
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={onClose} disabled={busy}>Cerrar</Button>
-        {paso === 0 && (
-          <Button variant="contained" disabled={!puedePedir} onClick={pedirCsr}>
-            {busy ? "Esperando al equipo…" : "Pedir CSR"}
+        <Button onClick={onClose} disabled={busy}>Close</Button>
+        {step === 0 && (
+          <Button variant="contained" disabled={!canRequest} onClick={requestCsr}>
+            {busy ? "Waiting for the device…" : "Request CSR"}
           </Button>
         )}
-        {paso === 1 && (
-          <Button variant="contained" onClick={() => setPaso(2)}>
-            Ya tengo el certificado firmado
+        {step === 1 && (
+          <Button variant="contained" onClick={() => setStep(2)}>
+            I have the signed certificate
           </Button>
         )}
-        {paso === 2 && (
-          <Button variant="contained" disabled={!puedeInstalar} onClick={instalar}>
-            {busy ? "Enviando…" : "Instalar"}
+        {step === 2 && (
+          <Button variant="contained" disabled={!canInstall} onClick={install}>
+            {busy ? "Sending…" : "Install"}
           </Button>
         )}
       </DialogActions>

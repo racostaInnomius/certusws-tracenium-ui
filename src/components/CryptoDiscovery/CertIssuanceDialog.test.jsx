@@ -45,42 +45,42 @@ function abrir() {
 
 /** Rellena el paso 1 hasta dejar «Pedir CSR» habilitado. */
 async function rellenarPaso1(user) {
-  await user.type(screen.getByLabelText(/CN \(nombre común\)/i), "web01.corp");
-  await user.type(screen.getByLabelText(/Motivo/i), "certificado del portal interno");
+  await user.type(screen.getByLabelText(/CN \(common name\)/i), "web01.corp");
+  await user.type(screen.getByLabelText(/Reason/i), "certificado del portal interno");
   await user.type(screen.getByLabelText(/^Ticket/i), "OPS-42");
 }
 
 describe("CertIssuanceDialog", () => {
   it("monta y dice desde el principio que Tracenium no firma", () => {
     abrir();
-    expect(screen.getByText(/Emitir e instalar un certificado/i)).toBeInTheDocument();
+    expect(screen.getByText(/Issue and install a certificate/i)).toBeInTheDocument();
     // El operador que espere que firmemos perdería el tiempo hasta el
     // paso 2; decirlo arriba es más barato que descubrirlo entonces.
-    expect(screen.getByText(/no firma/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not sign/i)).toBeInTheDocument();
   });
 
   it("el expediente es obligatorio: sin motivo ni ticket no se puede pedir", async () => {
     const user = userEvent.setup();
     abrir();
-    const boton = screen.getByRole("button", { name: /Pedir CSR/i });
+    const boton = screen.getByRole("button", { name: /Request CSR/i });
     expect(boton).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/CN \(nombre común\)/i), "web01.corp");
+    await user.type(screen.getByLabelText(/CN \(common name\)/i), "web01.corp");
     // Con CN pero sin expediente sigue bloqueado.
-    expect(screen.getByRole("button", { name: /Pedir CSR/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Request CSR/i })).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/Motivo/i), "certificado del portal interno");
+    await user.type(screen.getByLabelText(/Reason/i), "certificado del portal interno");
     await user.type(screen.getByLabelText(/^Ticket/i), "OPS-42");
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /Pedir CSR/i })).toBeEnabled()
+      expect(screen.getByRole("button", { name: /Request CSR/i })).toBeEnabled()
     );
   });
 
   it("compone el sujeto a partir de CN, O y OU", async () => {
     const user = userEvent.setup();
     abrir();
-    await user.type(screen.getByLabelText(/CN \(nombre común\)/i), "web01.corp");
-    await user.type(screen.getByLabelText(/O \(organización\)/i), "Acme");
+    await user.type(screen.getByLabelText(/CN \(common name\)/i), "web01.corp");
+    await user.type(screen.getByLabelText(/O \(organization\)/i), "Acme");
     expect(screen.getByText("CN=web01.corp,O=Acme")).toBeInTheDocument();
   });
 
@@ -94,14 +94,14 @@ describe("CertIssuanceDialog", () => {
     });
     abrir();
     await rellenarPaso1(user);
-    await user.click(screen.getByRole("button", { name: /Pedir CSR/i }));
+    await user.click(screen.getByRole("button", { name: /Request CSR/i }));
 
-    const aviso = await screen.findByText(/Pendiente de visto bueno/i);
+    const aviso = await screen.findByText(/Waiting for approval/i);
     expect(aviso).toBeInTheDocument();
     expect(aviso.closest(".MuiAlert-root")).toHaveClass("MuiAlert-standardInfo");
     // Y se dice que TODAVÍA no hay clave: la decisión 9.a genera tarde
     // justo para que la espera humana no deje huérfanas.
-    expect(screen.getByText(/se creará cuando se apruebe/i)).toBeInTheDocument();
+    expect(screen.getByText(/created once approved/i)).toBeInTheDocument();
   });
 
   it("⭐ muestra el keyId y el CSR cuando el equipo responde", async () => {
@@ -112,12 +112,12 @@ describe("CertIssuanceDialog", () => {
     });
     abrir();
     await rellenarPaso1(user);
-    await user.click(screen.getByRole("button", { name: /Pedir CSR/i }));
+    await user.click(screen.getByRole("button", { name: /Request CSR/i }));
 
     // El keyId es lo que hay que guardar; sin él el material del equipo
     // queda inservible.
     expect(await screen.findByText("kabc123", {}, { timeout: 8000 })).toBeInTheDocument();
-    expect(screen.getByText(/Guarda este identificador/i)).toBeInTheDocument();
+    expect(screen.getByText(/Keep this identifier/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue(/BEGIN CERTIFICATE REQUEST/)).toBeInTheDocument();
   }, 15000);
 
@@ -132,7 +132,7 @@ describe("CertIssuanceDialog", () => {
     });
     abrir();
     await rellenarPaso1(user);
-    await user.click(screen.getByRole("button", { name: /Pedir CSR/i }));
+    await user.click(screen.getByRole("button", { name: /Request CSR/i }));
     expect(await screen.findByText("k2", {}, { timeout: 8000 })).toBeInTheDocument();
   }, 15000);
 
@@ -142,7 +142,7 @@ describe("CertIssuanceDialog", () => {
     getJob.mockResolvedValue({ job: { status: "failed", last_error: "keyId invalido" } });
     abrir();
     await rellenarPaso1(user);
-    await user.click(screen.getByRole("button", { name: /Pedir CSR/i }));
+    await user.click(screen.getByRole("button", { name: /Request CSR/i }));
     expect(await screen.findByText(/keyId invalido/i, {}, { timeout: 8000 })).toBeInTheDocument();
   }, 15000);
 });
@@ -156,9 +156,9 @@ describe("CertIssuanceDialog — instalación", () => {
     });
     abrir();
     await rellenarPaso1(user);
-    await user.click(screen.getByRole("button", { name: /Pedir CSR/i }));
+    await user.click(screen.getByRole("button", { name: /Request CSR/i }));
     await screen.findByText("kabc", {}, { timeout: 8000 });
-    await user.click(screen.getByRole("button", { name: /Ya tengo el certificado firmado/i }));
+    await user.click(screen.getByRole("button", { name: /I have the signed certificate/i }));
   }
 
   it("⭐ held_for_window NO es un error: se pinta como aviso, con la próxima apertura", async () => {
@@ -173,20 +173,20 @@ describe("CertIssuanceDialog — instalación", () => {
     });
 
     await user.type(
-      screen.getByLabelText(/Certificado firmado/i),
+      screen.getByLabelText(/Signed certificate/i),
       "-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----"
     );
-    await user.click(screen.getByRole("button", { name: /^Instalar$/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     // El texto sale dos veces —título y cuerpo, porque el mensaje del
     // backend lo repite—, así que se ancla en el TÍTULO del Alert.
     const titulo = await screen.findByText(
-      /Fuera de la ventana de mantenimiento/i,
+      /Outside the maintenance window/i,
       { selector: ".MuiAlertTitle-root" }
     );
     // `warning`, no `error`: el gate hizo su trabajo, no falló nada.
     expect(titulo.closest(".MuiAlert-root")).toHaveClass("MuiAlert-standardWarning");
-    expect(screen.getByText(/Próxima apertura/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next opening/i)).toBeInTheDocument();
   }, 20000);
 
   it("el éxito dice que el inventario es quien lo confirma", async () => {
@@ -195,20 +195,20 @@ describe("CertIssuanceDialog — instalación", () => {
     installCdpCert.mockResolvedValue({ ok: true, status: "dispatched", jobId: "j2" });
 
     await user.type(
-      screen.getByLabelText(/Certificado firmado/i),
+      screen.getByLabelText(/Signed certificate/i),
       "-----BEGIN CERTIFICATE-----\nAA\n-----END CERTIFICATE-----"
     );
-    await user.click(screen.getByRole("button", { name: /^Instalar$/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
 
     // «El agente dijo que sí» no es «el certificado está ahí». El rescan
     // de verificación es lo que lo separa, y la UI lo dice en vez de
     // dejar creer que ya está.
-    expect(await screen.findByText(/Si no aparece, no se instaló/i)).toBeInTheDocument();
+    expect(await screen.findByText(/If it doesn't show up, it wasn't installed/i)).toBeInTheDocument();
   }, 20000);
 
   it("no deja instalar sin certificado, aunque el resto esté relleno", async () => {
     const user = userEvent.setup();
     await llegarAInstalar(user);
-    expect(screen.getByRole("button", { name: /^Instalar$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Install$/i })).toBeDisabled();
   }, 20000);
 });

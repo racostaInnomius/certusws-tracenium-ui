@@ -24,7 +24,7 @@ import { Box, Chip, Stack, Tooltip, Typography, LinearProgress } from "@mui/mate
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, ICON, TEXT } from "../../theme/brand";
+import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 // ── shared bits ──────────────────────────────────────────────────────
 
@@ -46,9 +46,31 @@ function PanelTitle({ children, hint }) {
   );
 }
 
+/**
+ * Una fila que navega es un control: ratón Y teclado, con nombre. Antes
+ * solo tenía onClick, así que un lector de pantalla no la anunciaba y el
+ * tabulador la saltaba (revisión UI 2026-09-05).
+ */
+function rowActionProps(onActivate, label) {
+  if (!onActivate) return {};
+  return {
+    role: "button",
+    tabIndex: 0,
+    "aria-label": label,
+    onClick: onActivate,
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate();
+      }
+    }
+  };
+}
+const ROW_FOCUS_SX = { "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, outlineOffset: -2, borderRadius: 0.5 } };
+
 function EmptyPanel({ children }) {
   return (
-    <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
+    <Typography sx={{ color: TEXT_MUTED, fontSize: TEXT.md, py: 3, textAlign: "center" }}>
       {children}
     </Typography>
   );
@@ -92,7 +114,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
             return (
               <Box
                 key={row.fingerprint256}
-                onClick={onSelect ? () => onSelect(row) : undefined}
+                {...rowActionProps(onSelect ? () => onSelect(row) : null, `Open ${row.subjectCN || row.fingerprint256}`)}
                 sx={{
                   py: 1,
                   px: 0.5,
@@ -101,6 +123,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
                   gap: 1,
                   cursor: onSelect ? "pointer" : "default",
                   "&:hover": onSelect ? { bgcolor: BRAND.rowHover } : undefined,
+                  ...ROW_FOCUS_SX,
                 }}
               >
                 <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -122,7 +145,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
                       {row.subjectCN || "(no common name)"}
                     </Typography>
                   </Stack>
-                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                     {row.issuerCN || "Unknown issuer"} · {row.deviceCount} device
                     {row.deviceCount === 1 ? "" : "s"}
                     {row.sampleHost ? ` · ${row.sampleHost}` : ""}
@@ -222,11 +245,12 @@ export function HygienePanel({ flags, onSelect }) {
           {entries.map((entry) => (
             <Box
               key={entry.key}
-              onClick={onSelect && entry.count > 0 ? () => onSelect(entry.key) : undefined}
+              {...rowActionProps(onSelect && entry.count > 0 ? () => onSelect(entry.key) : null, `${entry.label}: ${entry.count}`)}
               sx={{
                 cursor: onSelect && entry.count > 0 ? "pointer" : "default",
                 "&:hover":
                   onSelect && entry.count > 0 ? { "& .flag-label": { color: BRAND.tealText } } : undefined,
+                ...ROW_FOCUS_SX,
               }}
             >
               <Stack direction="row" justifyContent="space-between" alignItems="baseline">
@@ -291,10 +315,11 @@ export function IssuersPanel({ issuers, onSelect }) {
           {rows.map((row) => (
             <Box
               key={row.issuer}
-              onClick={onSelect ? () => onSelect(row.issuer) : undefined}
+              {...rowActionProps(onSelect ? () => onSelect(row.issuer) : null, `Issuer ${row.issuer}: ${row.count}`)}
               sx={{
                 cursor: onSelect ? "pointer" : "default",
                 "&:hover": onSelect ? { "& .issuer-label": { color: BRAND.tealText } } : undefined,
+                ...ROW_FOCUS_SX,
               }}
             >
               <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
@@ -363,7 +388,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
           {rows.map((row) => (
             <Box
               key={row.agentId}
-              onClick={onSelect ? () => onSelect(row) : undefined}
+              {...rowActionProps(onSelect ? () => onSelect(row) : null, `Open device ${row.host || row.agentId}`)}
               sx={{
                 py: 1,
                 px: 0.5,
@@ -373,6 +398,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                 gap: 1,
                 cursor: onSelect ? "pointer" : "default",
                 "&:hover": onSelect ? { bgcolor: BRAND.rowHover } : undefined,
+                ...ROW_FOCUS_SX,
               }}
             >
               <Box sx={{ minWidth: 0 }}>
@@ -387,7 +413,7 @@ export function TopDevicesPanel({ devices, onSelect }) {
                 >
                   {row.host || row.agentId}
                 </Typography>
-                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                   {row.total} certificate{row.total === 1 ? "" : "s"}
                 </Typography>
               </Box>

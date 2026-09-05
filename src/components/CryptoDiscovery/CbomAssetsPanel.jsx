@@ -12,7 +12,7 @@
 import * as React from "react";
 import { Alert, Box, Button, Chip, Stack, TextField, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCryptoAssetsSummary, importCdpCbom, listCryptoAssets } from "../../api/cdp";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
 
@@ -76,7 +76,7 @@ export function CbomImportForm({ onImported }) {
           {busy ? "Importing…" : "Import"}
         </Button>
       </Stack>
-      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
         Each import is a full picture for its source: assets missing from the next import of the same source are
         retired. Nothing here is verified — it is what the producer declared.
       </Typography>
@@ -121,22 +121,23 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
 
   return (
     <SectionPaper>
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Imported inventories</Typography>
+      {/* Mismo nombre que el bloque del embudo que lleva aquí («Outside your devices»). */}
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Outside your devices</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1.5 }}>
-        Crypto assets from places without an agent: CycloneDX 1.6 files from code scanners, container
-        images or other inventories; what an <strong>AD CS</strong> Certification Authority reports it
-        issued (source <code>adcs:&lt;CA&gt;</code>, enabled per policy); and cloud connectors such as{" "}
-        <strong>Azure Key Vault</strong> (source <code>keyvault:&lt;vault&gt;</code>). Shown by source, never
-        mixed with what agents saw on devices.
+        Crypto assets from places without an agent, shown by source and never mixed with what agents saw on devices:
+        CycloneDX 1.6 files imported from code scanners, container images or other inventories; what an{" "}
+        <strong>AD CS</strong> Certification Authority reports it issued (enabled per policy); SSH host keys the agents
+        read from disk; and the connectors below.
       </Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Import a CBOM</Typography>
       <CbomImportForm onImported={() => setNonce((n) => n + 1)} />
       <CdpConnectorsPanel refreshNonce={refreshNonce} onChanged={() => setNonce((n) => n + 1)} />
       {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
 
       {summary && total === 0 ? (
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          Nothing imported yet. Export this tenant&apos;s own CBOM from Reports and import it here to see the round trip, or
-          point a scanner at a repository.
+          Nothing outside your devices yet. Add a connector above, enable AD CS in the Crypto Discovery policy, or
+          export this tenant&apos;s own CBOM from Reports and import it here to see the round trip.
         </Alert>
       ) : null}
 
@@ -161,7 +162,7 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
           </Stack>
           <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", fontSize: TEXT.sm, mt: 1.5 }}>
             <Box component="thead">
-              <Box component="tr" sx={{ textAlign: "left", color: BRAND.gray, fontSize: TEXT.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
+              <Box component="tr" sx={{ textAlign: "left", color: TEXT_MUTED, fontSize: TEXT.xs, textTransform: "uppercase", letterSpacing: ".06em" }}>
                 <Box component="th" sx={{ py: 0.5 }}>Asset</Box><Box component="th">Type</Box><Box component="th">Algorithm</Box><Box component="th">Family</Box><Box component="th">Source</Box><Box component="th">On devices</Box>
               </Box>
             </Box>
@@ -170,17 +171,17 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
                 <Box component="tr" key={a.assetId} sx={{ borderTop: `1px solid ${BRAND.border}` }}>
                   <Box component="td" sx={{ py: 0.5, pr: 1 }}>
                     <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{a.name || a.subjectName || a.bomRef}</Typography>
-                    {a.subjectName && a.name !== a.subjectName ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{a.subjectName}</Typography> : null}
+                    {a.subjectName && a.name !== a.subjectName ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{a.subjectName}</Typography> : null}
                   </Box>
                   <Box component="td">{TYPE_LABEL[a.assetType] ?? a.assetType}</Box>
                   <Box component="td">{a.algorithmName ? `${a.algorithmName}${a.keySizeBits ? `-${a.keySizeBits}` : ""}` : a.protocolType ? `${a.protocolType} ${a.protocolVersion ?? ""}` : "—"}</Box>
                   <Box component="td">{a.family ? FAMILY_LABEL[a.family] ?? a.family : "—"}</Box>
-                  <Box component="td" sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{a.sourceName}</Box>
+                  <Box component="td" sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{a.sourceName}</Box>
                   <Box component="td">
                     {a.inFleet ? (
                       <Chip size="small" label="seen by an agent" onClick={() => onSelect?.({ search: a.fingerprint256 })} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
                     ) : a.assetType === "certificate" ? (
-                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>not on any device</Typography>
+                      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>not on any device</Typography>
                     ) : null}
                   </Box>
                 </Box>

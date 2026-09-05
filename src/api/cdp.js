@@ -123,10 +123,6 @@ export async function listCdpDeviceCertificates(agentId, params = {}) {
   );
 }
 
-export async function listCdpExpiring(params = {}) {
-  return httpGetJson(`${BASE}/expiring${buildQuery(params)}`);
-}
-
 // Anclas de confianza: las CAs en las que los equipos CREEN. Solo
 // lectura — la remediación es una capacidad aparte (ADR-0011 dec. 10).
 export async function listCdpTrustAnchors() {

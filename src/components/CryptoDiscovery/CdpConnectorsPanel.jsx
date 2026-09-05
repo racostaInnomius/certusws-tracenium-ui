@@ -1,7 +1,7 @@
 // src/components/CryptoDiscovery/CdpConnectorsPanel.jsx
 //
 // Fase 4c: conectores sin agente. El primero, Azure Key Vault. Vive
-// dentro de «Imported inventories» (Explore) y no en una pestaña propia:
+// dentro de «Outside your devices» (Explore) y no en una pestaña propia:
 // es otra fuente de activos que ningún agente ve, y la pregunta sigue
 // siendo «dónde viven».
 //
@@ -11,8 +11,8 @@
 // guardar el secreto en claro.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, MenuItem, Stack, TextField, Typography } from "@mui/material";
-import { BRAND, TEXT } from "../../theme/brand";
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnector, updateCdpConnector } from "../../api/cdp";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
@@ -152,14 +152,14 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
         </Button>
       </Stack>
       {kind === "ct" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           No credentials: Certificate Transparency logs are public. Lists every certificate a public CA (Let&apos;s
           Encrypt, ZeroSSL, DigiCert, Sectigo, Google…) logged for these domains, via crt.sh. A certificate here that
           no device has is either a service without an agent or someone requesting certificates for your domains on
           their own. crt.sh is a community service: large domain lists are read slowly and capped.
         </Typography>
       ) : kind === "k8s" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Reads <code>kubernetes.io/tls</code> secrets (only that type), cert-manager <code>Certificate</code> objects
           and which Ingress uses each certificate. RBAC: get/list on secrets, list on certificates.cert-manager.io,
           list on ingresses. <strong>Note:</strong> the API returns the private key together with the public
@@ -167,7 +167,7 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
           logging it. Choose <em>cert-manager only</em> if even that is not acceptable — you lose fingerprints.
         </Typography>
       ) : kind === "vault" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Reads each PKI mount: issued certificates, issuers and roles (what the mount <em>will</em> issue, by key type).
           Policy: <code>list</code> on <code>&lt;pki&gt;/certs</code>, <code>&lt;pki&gt;/issuers</code>,{" "}
           <code>&lt;pki&gt;/roles</code> and <code>read</code> on <code>&lt;pki&gt;/cert/*</code>,{" "}
@@ -175,7 +175,7 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
           KV. If Vault serves a private certificate, paste its CA here; verification is never disabled.
         </Typography>
       ) : kind === "gcp" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Create a service account with only <code>certificatemanager.certs.list</code> and{" "}
           <code>compute.sslCertificates.list</code> (roles <em>Certificate Manager Viewer</em> + <em>Compute Viewer</em>) and
           paste its JSON key. Both Certificate Manager and the classic Compute SSL certificates are read; an API that
@@ -183,14 +183,14 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
           Google.
         </Typography>
       ) : kind === "acm" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Create an IAM user (or role credentials) with a policy allowing only{" "}
           <code>acm:ListCertificates</code>, <code>acm:DescribeCertificate</code>, <code>acm:GetCertificate</code> and{" "}
           <code>sts:GetCallerIdentity</code>. Never grant <code>acm:ExportCertificate</code>: Tracenium reads the public
           certificate and who uses it, and never a private key. One connector per region.
         </Typography>
       ) : (
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Register an app in Entra ID and give it <strong>read-only</strong> access to the vault: RBAC roles{" "}
           <em>Key Vault Certificate User</em> and <em>Key Vault Crypto User</em> (or <em>Key Vault Reader</em>), or an
           access policy with certificates <code>get, list</code> and keys <code>get, list</code>. No secret permissions:
@@ -208,11 +208,39 @@ function StatusChip({ c }) {
   return <Chip size="small" label="failed" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700 }} />;
 }
 
+/**
+ * Quitar un conector retira sus activos del roadmap y del embudo. Un
+ * `window.confirm` nativo no encaja con el resto del portal ni deja
+ * decir QUÉ se pierde; este diálogo sí.
+ */
+function RemoveConnectorDialog({ connector, busy, onClose, onConfirm }) {
+  return (
+    <Dialog open={Boolean(connector)} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Remove “{connector?.label}”?</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2">
+          The {fmt(connector?.lastSummary?.certificates)} certificate(s) and {fmt(connector?.lastSummary?.keys)} key(s)
+          it brought are retired from Explore and the roadmap. Nothing is touched at the source
+          {connector?.kind && KIND_LABEL[connector.kind] ? ` (${KIND_LABEL[connector.kind]})` : ""}; adding the connector
+          again re-reads everything.
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="contained" color="error" disabled={busy} onClick={onConfirm}>
+          {busy ? "Removing…" : "Remove connector"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
   const [state, setState] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
   const [runResult, setRunResult] = React.useState(null);
+  const [toRemove, setToRemove] = React.useState(null);
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
@@ -257,7 +285,6 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
   };
 
   const remove = async (c) => {
-    if (!window.confirm(`Remove connector "${c.label}"? The assets it brought will be retired.`)) return;
     setBusyId(c.connectorId);
     try {
       await deleteCdpConnector(c.connectorId);
@@ -266,6 +293,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
       setError(e?.message || String(e));
     } finally {
       setBusyId(null);
+      setToRemove(null);
       reload();
     }
   };
@@ -275,12 +303,13 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
 
   return (
     <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Cloud connectors</Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Connectors</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
-        Read-only pulls from services without an agent, refreshed daily. Azure Key Vault reports its certificates and
-        keys (type, size, HSM, expiry); AWS Certificate Manager reports each certificate&rsquo;s key algorithm, status
-        and which load balancers or distributions use it. A certificate that also lives on a device is matched by
-        fingerprint.
+        Read-only pulls from places without an agent, refreshed daily: Azure Key Vault, AWS Certificate Manager,
+        Google Cloud, HashiCorp Vault PKI, Kubernetes (TLS secrets and cert-manager) and the public Certificate
+        Transparency logs for your domains. Each reports its certificates and keys, who uses them and, where the
+        source knows it, what it will issue next. A certificate that also lives on a device is matched by fingerprint.
+        Each connector is one system in the roadmap.
       </Typography>
       {error ? <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert> : null}
       {state && !secretsConfigured ? (
@@ -298,7 +327,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
               <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
                 <Typography sx={{ fontWeight: 700, fontSize: TEXT.md }}>{c.label}</Typography>
                 <Chip size="small" variant="outlined" label={KIND_LABEL[c.kind] ?? c.kind} />
-                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                   {c.kind === "acm"
                     ? `${c.config?.region} · ${c.config?.accessKeyId}`
                     : c.kind === "gcp"
@@ -319,9 +348,9 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
                   {busyId === c.connectorId ? "Running…" : "Run now"}
                 </Button>
                 <Button size="small" disabled={busyId != null} onClick={() => toggle(c)}>{c.enabled ? "Disable" : "Enable"}</Button>
-                <Button size="small" color="error" disabled={busyId != null} onClick={() => remove(c)}>Remove</Button>
+                <Button size="small" color="error" disabled={busyId != null} onClick={() => setToRemove(c)}>Remove</Button>
               </Stack>
-              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
                 Last run {when(c.lastRunAt)}
                 {c.lastSummary ? ` · ${fmt(c.lastSummary.certificates)} certificate(s), ${fmt(c.lastSummary.keys)} key(s)${c.lastSummary.complete === false ? " (listing incomplete: nothing retired)" : ""}` : ""}
                 {c.lastError ? ` · ${c.lastError}` : ""}
@@ -339,6 +368,12 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
           ))}
         </Stack>
       ) : null}
+      <RemoveConnectorDialog
+        connector={toRemove}
+        busy={busyId != null && busyId === toRemove?.connectorId}
+        onClose={() => setToRemove(null)}
+        onConfirm={() => toRemove && remove(toRemove)}
+      />
     </Box>
   );
 }

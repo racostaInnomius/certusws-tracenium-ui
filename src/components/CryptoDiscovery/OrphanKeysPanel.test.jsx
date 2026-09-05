@@ -43,7 +43,7 @@ describe("OrphanKeysPanel", () => {
     render(<OrphanKeysPanel refreshNonce={0} />);
     // La frase importa: es la diferencia entre un inventario y una falsa
     // tranquilidad como la de `purge_after`.
-    expect(await screen.findByText(/sin que eso signifique que no hay ninguna/i)).toBeInTheDocument();
+    expect(await screen.findByText(/without that meaning there are none/i)).toBeInTheDocument();
   });
 
   it("lista las huérfanas con su antigüedad y su solicitud", async () => {
@@ -62,7 +62,7 @@ describe("OrphanKeysPanel", () => {
     expect(await screen.findByText(/backend caído/i)).toBeInTheDocument();
     // Y NO se muestra el mensaje de "no hay registradas", que sugeriría
     // que la consulta funcionó.
-    expect(screen.queryByText(/sin que eso signifique/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/without that meaning/i)).not.toBeInTheDocument();
   });
 
   it("⭐ destruir exige expediente y avisa de que es irreversible", async () => {
@@ -73,18 +73,18 @@ describe("OrphanKeysPanel", () => {
 
     // Por su etiqueta accesible: un botón de solo icono sin nombre es
     // invisible para un lector de pantalla, y también para este test.
-    await user.click(screen.getByRole("button", { name: /Destruir la clave prueba-e2e-0901/i }));
+    await user.click(screen.getByRole("button", { name: /Destroy key prueba-e2e-0901/i }));
 
     expect(await screen.findByText(/irreversible/i)).toBeInTheDocument();
-    const boton = screen.getByRole("button", { name: /^Destruir$/i });
+    const boton = screen.getByRole("button", { name: /^Destroy$/i });
     expect(boton).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/Motivo/i), "clave de una prueba manual");
+    await user.type(screen.getByLabelText(/Reason/i), "clave de una prueba manual");
     await user.type(screen.getByLabelText(/^Ticket/i), "OPS-1");
-    await waitFor(() => expect(screen.getByRole("button", { name: /^Destruir$/i })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Destroy$/i })).toBeEnabled());
 
     destroyEndpointKey.mockResolvedValue({ ok: true, status: "dispatched", jobId: "j9" });
-    await user.click(screen.getByRole("button", { name: /^Destruir$/i }));
+    await user.click(screen.getByRole("button", { name: /^Destroy$/i }));
 
     await waitFor(() => expect(destroyEndpointKey).toHaveBeenCalledOnce());
     expect(destroyEndpointKey.mock.calls[0][0]).toMatchObject({

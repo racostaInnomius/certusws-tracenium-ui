@@ -18,6 +18,9 @@
 // significa «no hay huérfanas», significa «no hemos mirado». Confundir
 // las dos cosas convertiría este panel en la misma falsa tranquilidad
 // que motivó la decisión, así que se dice explícitamente.
+//
+// Copy en inglés como el resto del portal (revisión UI 2026-09-05: era
+// la única pestaña en español).
 
 import * as React from "react";
 import {
@@ -62,9 +65,9 @@ function DestroyKeyDialog({ item, onClose, onDone }) {
     }
   }, [item]);
 
-  const puede = reason.trim().length >= 10 && ticketRef.trim().length >= 3 && !busy;
+  const canSend = reason.trim().length >= 10 && ticketRef.trim().length >= 3 && !busy;
 
-  const enviar = async () => {
+  const send = async () => {
     setBusy(true);
     setMsg(null);
     try {
@@ -75,13 +78,13 @@ function DestroyKeyDialog({ item, onClose, onDone }) {
         ticketRef: ticketRef.trim()
       });
       if (r?.ok) {
-        setMsg({ sev: "success", text: "Enviado al equipo. La lista lo confirmará al refrescar." });
+        setMsg({ sev: "success", text: "Sent to the device. The list confirms it on the next reload." });
         onDone?.();
       } else {
-        setMsg({ sev: "error", text: r?.message || "No se pudo enviar" });
+        setMsg({ sev: "error", text: r?.message || "Couldn't send" });
       }
     } catch (e) {
-      setMsg({ sev: "error", text: e?.message || "No se pudo enviar" });
+      setMsg({ sev: "error", text: e?.message || "Couldn't send" });
     } finally {
       setBusy(false);
     }
@@ -89,32 +92,32 @@ function DestroyKeyDialog({ item, onClose, onDone }) {
 
   return (
     <Dialog open={Boolean(item)} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Destruir la clave «{item?.keyId}»</DialogTitle>
+      <DialogTitle>Destroy key “{item?.keyId}”</DialogTitle>
       <DialogContent>
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Es <strong>irreversible</strong> y no hay deshacer. Si el certificado ha llegado
-          al equipo desde la última vez que se listó, se perderá uno ya emitido y habrá que
-          volver a pedirlo a la CA.
+          This is <strong>irreversible</strong> — there is no undo. If the certificate reached the device since
+          the list was last read, an already-issued certificate is lost and has to be requested from the CA again.
         </Alert>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          Equipo <code>{item?.agentId}</code>
-          {item?.subject ? <> · sujeto <code>{item.subject}</code></> : null}
+          Device <code>{item?.agentId}</code>
+          {item?.subject ? <> · subject <code>{item.subject}</code></> : null}
         </Typography>
         <TextField
-          fullWidth multiline minRows={2} margin="dense" label="Motivo" required
+          fullWidth multiline minRows={2} margin="dense" label="Reason" required
           value={reason} onChange={(e) => setReason(e.target.value)}
-          helperText="Mínimo 10 caracteres. Queda registrado."
+          helperText="At least 10 characters. It is recorded."
         />
         <TextField
           fullWidth margin="dense" label="Ticket" required
           value={ticketRef} onChange={(e) => setTicketRef(e.target.value)}
+          helperText="At least 3 characters"
         />
         {msg && <Alert severity={msg.sev} sx={{ mt: 2 }}>{msg.text}</Alert>}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={busy}>Cerrar</Button>
-        <Button variant="contained" color="error" disabled={!puede} onClick={enviar}>
-          {busy ? "Enviando…" : "Destruir"}
+        <Button onClick={onClose} disabled={busy}>Close</Button>
+        <Button variant="contained" color="error" disabled={!canSend} onClick={send}>
+          {busy ? "Sending…" : "Destroy"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -141,34 +144,34 @@ function AskDevicesDialog({ open, onClose, onDone }) {
     }
   }, [open]);
 
-  const enviar = async () => {
+  const send = async () => {
     setBusy(true);
     setResult(null);
     let ok = 0;
-    const fallos = [];
+    const failed = [];
     // Un job por equipo: el endpoint es por dispositivo a propósito, y
     // un fallo en uno no puede impedir el resto.
     for (const deviceId of picked) {
       try {
         const r = await refreshEndpointKeys(deviceId);
         if (r?.ok) ok += 1;
-        else fallos.push(deviceId);
+        else failed.push(deviceId);
       } catch {
-        fallos.push(deviceId);
+        failed.push(deviceId);
       }
     }
     setBusy(false);
-    setResult({ ok, fallos });
+    setResult({ ok, failed });
     if (ok > 0) onDone?.();
   };
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Consultar el almacén de claves de los equipos</DialogTitle>
+      <DialogTitle>Ask devices to list their key store</DialogTitle>
       <DialogContent>
         <Typography variant="body2" sx={{ mb: 2 }}>
-          Se envía un job de lectura a cada equipo elegido. La lista de huérfanas se
-          actualiza cuando responden — normalmente en el siguiente ciclo de facts.
+          A read job is sent to each selected device. The orphan list updates when they answer — normally on the
+          next facts cycle.
         </Typography>
         <KnownDevicesPicker
           open={open}
@@ -181,20 +184,20 @@ function AskDevicesDialog({ open, onClose, onDone }) {
               return next;
             })
           }
-          selectedLabel="equipo(s)"
-          emptyLabel="Ningún equipo coincide."
+          selectedLabel="device(s)"
+          emptyLabel="No device matches."
         />
         {result && (
-          <Alert severity={result.fallos.length ? "warning" : "success"} sx={{ mt: 2 }}>
-            Enviado a {result.ok} equipo(s).
-            {result.fallos.length ? ` No se pudo enviar a ${result.fallos.length}.` : ""}
+          <Alert severity={result.failed.length ? "warning" : "success"} sx={{ mt: 2 }}>
+            Sent to {result.ok} device(s).
+            {result.failed.length ? ` Couldn't send to ${result.failed.length}.` : ""}
           </Alert>
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={busy}>Cerrar</Button>
-        <Button variant="contained" disabled={busy || picked.size === 0} onClick={enviar}>
-          {busy ? "Enviando…" : `Consultar ${picked.size || ""}`.trim()}
+        <Button onClick={onClose} disabled={busy}>Close</Button>
+        <Button variant="contained" disabled={busy || picked.size === 0} onClick={send}>
+          {busy ? "Sending…" : `Ask ${picked.size || ""}`.trim()}
         </Button>
       </DialogActions>
     </Dialog>
@@ -206,33 +209,33 @@ export default function OrphanKeysPanel({ refreshNonce }) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
-  const [aDestruir, setADestruir] = React.useState(null);
+  const [toDestroy, setToDestroy] = React.useState(null);
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
-    let vivo = true;
+    let alive = true;
     setLoading(true);
     setError(null);
     listOrphanKeys()
       .then((r) => {
-        if (!vivo) return;
+        if (!alive) return;
         setRows((r?.items || []).map((x) => ({ ...x, id: `${x.agentId}:${x.keyId}` })));
       })
-      .catch((e) => vivo && setError(e?.message || "No se pudo cargar"))
-      .finally(() => vivo && setLoading(false));
+      .catch((e) => alive && setError(e?.message || "Couldn't load"))
+      .finally(() => alive && setLoading(false));
     return () => {
-      vivo = false;
+      alive = false;
     };
   }, [refreshNonce, nonce]);
 
   const columns = [
-    { field: "keyId", headerName: "Clave", flex: 1, minWidth: 160 },
-    { field: "subject", headerName: "Sujeto", flex: 1.4, minWidth: 200,
+    { field: "keyId", headerName: "Key", flex: 1, minWidth: 160 },
+    { field: "subject", headerName: "Subject", flex: 1.4, minWidth: 200,
       renderCell: (p) => p.value || <span style={{ opacity: 0.5 }}>—</span> },
-    { field: "agentId", headerName: "Equipo", flex: 1.2, minWidth: 200 },
+    { field: "agentId", headerName: "Device", flex: 1.2, minWidth: 200 },
     {
       field: "ageDays",
-      headerName: "Antigüedad",
+      headerName: "Age",
       width: 130,
       renderCell: (p) =>
         p.value == null ? "—" : (
@@ -246,20 +249,20 @@ export default function OrphanKeysPanel({ refreshNonce }) {
           />
         )
     },
-    { field: "requestId", headerName: "Solicitud", flex: 1, minWidth: 140,
+    { field: "requestId", headerName: "Request", flex: 1, minWidth: 140,
       renderCell: (p) => p.value || <span style={{ opacity: 0.5 }}>—</span> },
     {
-      field: "acciones",
+      field: "actions",
       headerName: "",
       width: 60,
       sortable: false,
       renderCell: (p) => (
-        <Tooltip title="Destruir esta clave">
+        <Tooltip title="Destroy this key">
           <Button
             size="small"
             color="error"
-            aria-label={`Destruir la clave ${p.row.keyId}`}
-            onClick={() => setADestruir(p.row)}
+            aria-label={`Destroy key ${p.row.keyId}`}
+            onClick={() => setToDestroy(p.row)}
           >
             <DeleteOutlineIcon fontSize="small" />
           </Button>
@@ -272,14 +275,14 @@ export default function OrphanKeysPanel({ refreshNonce }) {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
         <Typography variant="body2">
-          <strong>{rows.length}</strong> clave(s) sin certificado
+          <strong>{rows.length}</strong> key(s) without a certificate
         </Typography>
         <Stack direction="row" spacing={1}>
           <Button size="small" variant="outlined" onClick={() => setAskOpen(true)}>
-            Consultar equipos
+            Ask devices
           </Button>
           <Button size="small" startIcon={<RefreshIcon />} onClick={() => setNonce((n) => n + 1)}>
-            Recargar
+            Reload
           </Button>
         </Stack>
       </Stack>
@@ -291,9 +294,8 @@ export default function OrphanKeysPanel({ refreshNonce }) {
       */}
       {!loading && rows.length === 0 && !error && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          No hay huérfanas <strong>registradas</strong>. Esto refleja lo último que reportó
-          cada equipo: si nunca se les ha pedido su almacén de claves, la lista sale vacía
-          sin que eso signifique que no hay ninguna.
+          No orphan keys <strong>recorded</strong>. This reflects the last thing each device reported: if their key
+          store has never been asked for, the list is empty without that meaning there are none.
         </Alert>
       )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -304,6 +306,7 @@ export default function OrphanKeysPanel({ refreshNonce }) {
         columns={columns}
         loading={loading}
         disableRowSelectionOnClick
+        disableColumnMenu
         pageSizeOptions={[10, 25, 50]}
         initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
         sx={{ ...DATAGRID_SX, border: `1px solid ${BRAND.border}` }}
@@ -316,10 +319,10 @@ export default function OrphanKeysPanel({ refreshNonce }) {
       />
 
       <DestroyKeyDialog
-        item={aDestruir}
-        onClose={() => setADestruir(null)}
+        item={toDestroy}
+        onClose={() => setToDestroy(null)}
         onDone={() => {
-          setADestruir(null);
+          setToDestroy(null);
           setNonce((n) => n + 1);
         }}
       />
