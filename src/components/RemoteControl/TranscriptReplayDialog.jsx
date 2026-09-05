@@ -58,6 +58,7 @@ import "@xterm/xterm/css/xterm.css";
 
 import { BRAND, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
 import { httpGetJson } from "../../api/http";
+import { describeCloseReason } from "./closeReasons";
 
 const SPEEDS = [1, 2, 4, 8];
 
@@ -493,7 +494,14 @@ export default function TranscriptReplayDialog({ open, session, onClose }) {
                 <strong>Status:</strong> {session?.status ?? "—"}
               </Typography>
               <Typography variant="caption">
-                <strong>Close:</strong> {session?.closeReason ?? "—"}
+                {/* El quinto consumidor de closeReasons, que se quedó
+                    crudo. Quien mira un replay lo hace porque algo pasó: leer
+                    "ice_failed" aquí obliga a saberse el vocabulario del
+                    backend justo cuando se está reconstruyendo un incidente. */}
+                <strong>Close:</strong>{" "}
+                {session?.closeReason
+                  ? describeCloseReason(session.closeReason).title
+                  : "—"}
               </Typography>
               <Typography variant="caption">
                 <strong>Events:</strong> {eventCount}

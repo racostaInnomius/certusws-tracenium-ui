@@ -225,8 +225,14 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
           <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 1 }}>
             Capability gates for the Remote Control Plugin. Each toggle controls
             whether agents advertise the matching <code>rcp.*</code> capability
-            in their next Hello. Sessions are admin_master-only and tracked
-            under <strong>Remote Control</strong> in the sidebar.
+            {/* Decía "admin_master-only". M4 lo cambió a ADMIN/OWNER por
+                tenant hace cinco semanas, así que el texto le decía a un OWNER
+                que no podía usar algo que sí puede — y a un administrador de
+                MSP que necesitaba a alguien de Tracenium para atender a su
+                propio cliente. */}
+            in their next Hello. Sessions require the ADMIN or OWNER role on
+            the device's tenant, and are tracked under{" "}
+            <strong>Remote Control</strong> in the sidebar.
           </Typography>
 
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>

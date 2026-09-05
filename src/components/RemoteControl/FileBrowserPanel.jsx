@@ -20,6 +20,7 @@
 //         { op: "chunk",    transferId, seq, data, done? }  // base64
 //         { op: "ready",    transferId }  // agent ready to receive upload
 //         { op: "uploadComplete", transferId, bytes, sha256 } // it is on disk
+//         { op: "roots",    roots: [...], maxUploadBytes }
 //         { op: "error",    code, message, transferId? }
 //
 //   The agent also fires RemoteFileTransferAudit gRPC events at
@@ -335,6 +336,9 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   const dcRef = React.useRef(null);     // RTCDataChannel
   const pcRef = React.useRef(null);     // RTCPeerConnection
   const wsRef = React.useRef(null);     // WebSocket (signaling)
+  // Tope de subida que anuncia el agente; null hasta que llegue (o si el
+  // agente es anterior al campo).
+  const maxUploadBytesRef = React.useRef(null);
 
   // File transfers run entirely P2P: the backend sees no byte of them and
   // would otherwise cut a large copy at 30 minutes as "idle".
@@ -703,6 +707,15 @@ export default function FileBrowserPanel({ session, device, onClose }) {
         }
         const list = Array.isArray(msg.roots) ? msg.roots.filter(Boolean) : [];
         rootsRef.current = list;
+        // El tope de subida del equipo, tal como lo dice su política. Llega
+        // con las raíces porque es la misma pregunta: qué se puede hacer
+        // aquí. Un agente anterior a este campo no lo manda y entonces no se
+        // impone ninguno en el navegador — el del agente sigue puesto, y
+        // rechazar aquí por un valor que no conocemos sería inventarlo.
+        maxUploadBytesRef.current =
+          Number.isFinite(Number(msg.maxUploadBytes)) && Number(msg.maxUploadBytes) > 0
+            ? Number(msg.maxUploadBytes)
+            : null;
         setRoots(list);
         if (list.length > 0) {
           setCurrentPath(list[0]);
@@ -865,14 +878,30 @@ export default function FileBrowserPanel({ session, device, onClose }) {
     const dc = dcRef.current;
 
     /** Resolve once the SCTP buffer has drained below the low-water mark. */
+    /**
+     * Espera a que el búfer SCTP baje del umbral.
+     *
+     * ⚠️ Resuelve también si el canal se CIERRA mientras espera. Sin eso, un
+     * canal que muere con el búfer lleno dejaba esta promesa sin resolver
+     * para siempre: el bucle de subida se quedaba colgado, la transferencia
+     * eterna en "activa", y el operador mirando una barra que no avanzaba ni
+     * fallaba. Un cuelgue silencioso es peor que un error.
+     *
+     * Al volver, el bucle vuelve a mirar `readyState` y falla como debe.
+     */
     function waitForDrain() {
       return new Promise((resolve) => {
         dc.bufferedAmountLowThreshold = LOW_WATER;
-        const onLow = () => {
+        const done = () => {
           dc.removeEventListener("bufferedamountlow", onLow);
+          dc.removeEventListener("close", done);
+          dc.removeEventListener("error", done);
           resolve();
         };
+        const onLow = () => done();
         dc.addEventListener("bufferedamountlow", onLow);
+        dc.addEventListener("close", done);
+        dc.addEventListener("error", done);
       });
     }
 
@@ -994,6 +1023,33 @@ export default function FileBrowserPanel({ session, device, onClose }) {
   function queueUpload(file) {
     const transferId = crypto.randomUUID();
     const destPath = currentPath.replace(/\/$/, "") + "/" + file.name;
+
+    // ⚠️ Antes de empezar, no después.
+    //
+    // El agente ya rechaza lo que se pasa del tope, pero lo hacía cuando la
+    // subida ya estaba en marcha: el operador veía una barra avanzar y, al
+    // final, un fallo. Con ficheros grandes eso son minutos de espera para un
+    // "no" que se sabía desde el primer byte.
+    //
+    // Se comprueba solo si el agente dijo su tope. Rechazar por un límite que
+    // no conocemos sería inventárnoslo, y el agente sigue teniendo el suyo.
+    const cap = maxUploadBytesRef.current;
+    if (cap && file.size > cap) {
+      setTransfers((prev) => [
+        {
+          id: transferId,
+          name: file.name,
+          path: destPath,
+          direction: "upload",
+          sizeBytes: file.size,
+          transferred: 0,
+          status: "failed",
+          errorMsg: `This device accepts uploads up to ${formatBytes(cap)}; this file is ${formatBytes(file.size)}.`
+        },
+        ...prev
+      ]);
+      return;
+    }
     pendingChunksRef.current[transferId] = { file, transferred: 0 };
     setTransfers((prev) => [
       {

@@ -231,20 +231,50 @@ export function useRemoteSessions(filters = {}) {
   };
 }
 
-/** Tenant-wide file transfer audit log — one page. */
+/**
+ * Tenant-wide file transfer audit log — one page.
+ *
+ * ⚠️ direction/status/filename van a la PETICIÓN. La tabla los aplicaba en
+ * cliente sobre la página cargada, así que "failed" solo encontraba fallos
+ * entre las 25 filas más recientes y una tabla vacía significaba "no hay en
+ * esta página", no "no hay". El endpoint los acepta desde M2.S2.
+ *
+ * "all" y "" son ausencia de filtro y no se mandan: el backend valida
+ * `status` contra una lista y descartaría "all" en silencio, pero mandarlo
+ * ensuciaría la clave de caché con un valor que no significa nada.
+ */
 export function useFileTransfers(filters = {}) {
-  const { page = 1, pageSize = 25 } = filters;
+  const {
+    page = 1,
+    pageSize = 25,
+    direction = "all",
+    status = "all",
+    filename = ""
+  } = filters;
+
+  const dir = direction && direction !== "all" ? direction : null;
+  const st = status && status !== "all" ? status : null;
+  const name = String(filename || "").trim() || null;
 
   const loader = useCallback(async () => {
-    const res = await getAllFileTransfers({ page, pageSize });
+    const res = await getAllFileTransfers({
+      page,
+      pageSize,
+      ...(dir ? { direction: dir } : {}),
+      ...(st ? { status: st } : {}),
+      ...(name ? { filename: name } : {})
+    });
     const items = Array.isArray(res?.items) ? res.items : [];
     return {
       items,
       total: Number.isFinite(Number(res?.total)) ? Number(res.total) : items.length
     };
-  }, [page, pageSize]);
+  }, [page, pageSize, dir, st, name]);
 
-  const state = useCachedFetch(`remoteControl:transfers:${page}:${pageSize}`, loader);
+  const state = useCachedFetch(
+    `remoteControl:transfers:${page}:${pageSize}:${dir ?? ""}:${st ?? ""}:${name ?? ""}`,
+    loader
+  );
   return {
     ...state,
     transfers: state.data?.items ?? [],

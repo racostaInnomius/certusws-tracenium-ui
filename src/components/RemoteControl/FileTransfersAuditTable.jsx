@@ -2,10 +2,19 @@
 //
 // RCP M2.S2 — tenant-wide cross-session file transfer audit table.
 //
-// Receives the transfer list from the parent (RemoteControl page)
-// and provides client-side direction / status / filename filtering.
-// The parent passes `transfers` fetched from GET /file-transfers
-// (getAllFileTransfers); this component never fetches independently.
+// ⚠️ Los filtros son del SERVIDOR, no de la página que se ve.
+//
+// Filtraban en cliente sobre `transfers`, que desde la paginación es UNA
+// página de 25 filas de un histórico de miles. "Status: failed" no
+// enseñaba los fallos del tenant: enseñaba los fallos que hubiera entre
+// las 25 más recientes, y la respuesta a "¿ha fallado alguna
+// transferencia?" era "no" con la tabla vacía y el filtro puesto — un
+// silencio indistinguible del bueno, en la pantalla de auditoría.
+//
+// El endpoint ya aceptaba direction/status/filename desde M2.S2; solo
+// nadie se los mandaba. Ahora el componente es CONTROLADO: el estado vive
+// en TransfersTab, que lo mete en la petición y vuelve a la página 1 al
+// cambiarlo. Aquí no se descarta ninguna fila.
 //
 // Columns: Started · Device · Filename · Direction · Remote path · Size · Status · Session
 
@@ -57,26 +66,37 @@ const STATUS_META = {
 
 /**
  * Props:
- *   transfers  — FileTransferRecord[]
- *   total      — number (backend total before any limit)
+ *   transfers  — FileTransferRecord[] (la página actual, ya filtrada por el backend)
+ *   total      — number (total del backend PARA ESTOS filtros)
  *   loading    — bool
+ *   filters    — { direction, status, filename } — "all" / "" para sin filtro
+ *   onFiltersChange — (next) => void, con el objeto completo
  */
-export default function FileTransfersAuditTable({ transfers, total, loading }) {
-  const [dirFilter, setDirFilter]         = React.useState("all");
-  const [statusFilter, setStatusFilter]   = React.useState("all");
-  const [filenameFilter, setFilenameFilter] = React.useState("");
+export default function FileTransfersAuditTable({
+  transfers,
+  total,
+  loading,
+  filters = {},
+  onFiltersChange
+}) {
+  const dirFilter = filters.direction ?? "all";
+  const statusFilter = filters.status ?? "all";
+  const filenameFilter = filters.filename ?? "";
 
-  const items = Array.isArray(transfers) ? transfers : [];
-
-  const visible = items.filter((t) => {
-    if (dirFilter !== "all" && t.direction !== dirFilter) return false;
-    if (statusFilter !== "all" && t.status !== statusFilter) return false;
-    if (filenameFilter.trim()) {
-      const q = filenameFilter.trim().toLowerCase();
-      if (!t.filename?.toLowerCase().includes(q)) return false;
+  const set = (patch) => {
+    if (typeof onFiltersChange === "function") {
+      onFiltersChange({
+        direction: dirFilter,
+        status: statusFilter,
+        filename: filenameFilter,
+        ...patch
+      });
     }
-    return true;
-  });
+  };
+
+  // Lo que llega ES lo visible: filtrar otra vez aquí volvería a recortar
+  // una página ya recortada.
+  const visible = Array.isArray(transfers) ? transfers : [];
 
   const isFiltered =
     dirFilter !== "all" || statusFilter !== "all" || filenameFilter.trim().length > 0;
@@ -96,11 +116,13 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
             Cross-session record of every file sent or received via rcp.file sessions.
           </Typography>
         </Box>
-        {(total > 0 || items.length > 0) ? (
+        {(total > 0 || visible.length > 0) ? (
+          // `total` ya viene contado con los filtros aplicados, así que dice
+          // cuántas coinciden en TODO el histórico y no cuántas caben aquí.
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
             {isFiltered
-              ? `${visible.length} of ${total ?? items.length}`
-              : `${total ?? items.length} total`}
+              ? `${total ?? visible.length} matching`
+              : `${total ?? visible.length} total`}
           </Typography>
         ) : null}
       </Stack>
@@ -110,7 +132,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
         <Select
           size="small"
           value={dirFilter}
-          onChange={(e) => setDirFilter(e.target.value)}
+          onChange={(e) => set({ direction: e.target.value })}
           sx={{ fontSize: TEXT.sm, height: 32, minWidth: 140 }}
         >
           <MenuItem value="all">All directions</MenuItem>
@@ -121,7 +143,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
         <Select
           size="small"
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => set({ status: e.target.value })}
           sx={{ fontSize: TEXT.sm, height: 32, minWidth: 150 }}
         >
           <MenuItem value="all">All statuses</MenuItem>
@@ -135,7 +157,7 @@ export default function FileTransfersAuditTable({ transfers, total, loading }) {
           size="small"
           placeholder="Filter filename…"
           value={filenameFilter}
-          onChange={(e) => setFilenameFilter(e.target.value)}
+          onChange={(e) => set({ filename: e.target.value })}
           sx={{
             "& .MuiInputBase-input": { fontSize: TEXT.sm, py: "5px" },
             minWidth: 180

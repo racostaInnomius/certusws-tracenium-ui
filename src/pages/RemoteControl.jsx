@@ -65,6 +65,7 @@ import SessionsTab from "../components/RemoteControl/SessionsTab";
 import TransfersTab from "../components/RemoteControl/TransfersTab";
 import AccessTab from "../components/RemoteControl/AccessTab";
 import StartSessionWizard from "../components/RemoteControl/StartSessionWizard";
+import { describeStartSessionError } from "../components/RemoteControl/startSessionError";
 
 // Lazy: these own the xterm.js + WebRTC/DataChannel stack (~347KB combined).
 // They only render when an operator actually opens a session, so they stay
@@ -408,30 +409,9 @@ export default function RemoteControl() {
 
         refreshAll();
       } catch (err) {
-        const msg = String(err?.message || "");
-        if (msg.includes("RCP_PLUGIN_NOT_AVAILABLE") || msg.includes("501")) {
-          notify("info", "This capability is not yet available on the selected agent.");
-        } else if (msg.includes("FORBIDDEN") || msg.includes("RCP_ADMIN_MASTER_REQUIRED")) {
-          // M4 moved RCP onto the shared requireRole("ADMIN","OWNER") gate, so
-          // the backend now answers a plain FORBIDDEN. The old code is still
-          // matched because a browser may be talking to a backend that hasn't
-          // been rolled forward yet.
-          notify(
-            "warning",
-            "You need the Admin or Owner role on this tenant to start a remote session."
-          );
-        } else if (msg.includes("RCP_DEVICE_OFFLINE")) {
-          notify("error", "Device is not currently connected. Try again later.");
-        } else if (msg.includes("RCP_CAPABILITY_NOT_ADVERTISED")) {
-          notify(
-            "warning",
-            `This device hasn't advertised rcp.${type} — check the agent's policy configuration.`
-          );
-        } else if (msg.includes("RCP_TOO_MANY_SESSIONS")) {
-          notify("warning", "Too many concurrent sessions. Close one before starting another.");
-        } else {
-          notify("error", `Failed to start session: ${msg || "unknown error"}`);
-        }
+        // La tabla de decisión vive en startSessionError.js, con sus tests.
+        const { severity, message } = describeStartSessionError(err, type);
+        notify(severity, message);
       }
     },
     [notify, refreshAll]
