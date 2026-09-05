@@ -27,20 +27,54 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+// ⚠️ Los dos equipos sin directivas de T111 son casos OPUESTOS, medido el
+// 04-sep: MSIG-VEEAM-PC esta unido a mountainside-investment.com y aun asi no
+// recibe ninguna (averia), y DESKTOP-ANH1JCN es workgroup (correcto).
 const conDominio = {
-  summary: { devicesReporting: 50, withComputerGpos: 48, withUserGpos: 0, withoutAnyGpos: 2, distinctGpos: 6 },
+  summary: {
+    devicesReporting: 50,
+    withComputerGpos: 48,
+    withUserGpos: 0,
+    withoutAnyGpos: 2,
+    domainJoinedWithoutGpos: 1,
+    notDomainJoinedWithoutGpos: 1,
+    domainUnknown: 0,
+    distinctGpos: 6,
+  },
   gpos: [{ name: "Default Domain Policy", devices: 48, computer: 48, user: 0 }],
   devices: [
-    { agentId: "a", hostname: "MSIG-FIN", osFullVersion: "Windows 11 Pro", computerGpos: ["Default Domain Policy"], userGpos: [], collectedAt: null },
-    { agentId: "b", hostname: "MSIG-VEEAM-PC", osFullVersion: "Windows 11 Pro for Workstations", computerGpos: [], userGpos: [], collectedAt: null },
-    { agentId: "c", hostname: "DESKTOP-ANH1JCN", osFullVersion: "Windows 11 Pro", computerGpos: [], userGpos: [], collectedAt: null },
+    { agentId: "a", hostname: "MSIG-FIN", osFullVersion: "Windows 11 Pro", computerGpos: ["Default Domain Policy"], userGpos: [], partOfDomain: true, domain: "mountainside-investment.com", collectedAt: null },
+    { agentId: "b", hostname: "MSIG-VEEAM-PC", osFullVersion: "Windows 11 Pro for Workstations", computerGpos: [], userGpos: [], partOfDomain: true, domain: "mountainside-investment.com", collectedAt: null },
+    { agentId: "c", hostname: "DESKTOP-ANH1JCN", osFullVersion: "Windows 11 Pro", computerGpos: [], userGpos: [], partOfDomain: false, domain: null, collectedAt: null },
   ],
 };
 
 const sinDominio = {
-  summary: { devicesReporting: 8, withComputerGpos: 0, withUserGpos: 0, withoutAnyGpos: 8, distinctGpos: 0 },
+  summary: {
+    devicesReporting: 8,
+    withComputerGpos: 0,
+    withUserGpos: 0,
+    withoutAnyGpos: 8,
+    domainJoinedWithoutGpos: 0,
+    notDomainJoinedWithoutGpos: 8,
+    domainUnknown: 0,
+    distinctGpos: 0,
+  },
   gpos: [],
-  devices: [{ agentId: "x", hostname: "WKG-1", osFullVersion: "Windows 11 Pro", computerGpos: [], userGpos: [], collectedAt: null }],
+  devices: [{ agentId: "x", hostname: "WKG-1", osFullVersion: "Windows 11 Pro", computerGpos: [], userGpos: [], partOfDomain: false, domain: null, collectedAt: null }],
+};
+
+// El estado del dia siguiente a la migracion 20260904: los hallazgos abiertos
+// todavia no traen partOfDomain.
+const sinDatoDeDominio = {
+  ...conDominio,
+  summary: {
+    ...conDominio.summary,
+    domainJoinedWithoutGpos: 0,
+    notDomainJoinedWithoutGpos: 0,
+    domainUnknown: 50,
+  },
+  devices: conDominio.devices.map((d) => ({ ...d, partOfDomain: null, domain: null })),
 };
 
 describe("WindowsGpos — el aviso de GPO de usuario", () => {
@@ -61,10 +95,58 @@ describe("WindowsGpos — el aviso de GPO de usuario", () => {
 
   it("⚠️ en su lugar explica por que no hay ninguna", async () => {
     // Tres ceros y una grafica vacia no distinguen "no aplica" de "algo se
-    // rompio".
+    // rompio". Con todos en workgroup, ese cero ES el estado correcto.
     getWindowsGpoInventory.mockResolvedValue(sinDominio);
     render(<WindowsGpos />);
-    expect(await screen.findByText(/not joined to a domain/i)).toBeTruthy();
+    expect(await screen.findByText(/expected state/i)).toBeTruthy();
+  });
+
+  it("⚠️ pero si esos equipos SI estan en dominio, lo llama averia", async () => {
+    getWindowsGpoInventory.mockResolvedValue({
+      ...sinDominio,
+      summary: { ...sinDominio.summary, domainJoinedWithoutGpos: 8, notDomainJoinedWithoutGpos: 0 },
+    });
+    render(<WindowsGpos />);
+    expect(await screen.findByText(/8 of them are joined to a domain/i)).toBeTruthy();
+    expect(screen.queryByText(/expected state/i)).toBeNull();
+  });
+});
+
+describe("WindowsGpos — pertenencia al dominio", () => {
+  it("separa el equipo averiado del que esta bien asi", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conDominio);
+    render(<WindowsGpos />);
+    expect(await screen.findByText("1 domain-joined · 1 workgroup")).toBeTruthy();
+  });
+
+  it("la tabla dice de que dominio, no solo que si", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conDominio);
+    render(<WindowsGpos />);
+    expect(await screen.findAllByText("mountainside-investment.com")).toBeTruthy();
+    expect(screen.getByText("Workgroup")).toBeTruthy();
+  });
+
+  it("⚠️ un equipo que aun no lo reporta NO se pinta como workgroup", async () => {
+    // Es la confusion que esta pantalla existe para no cometer: leer una
+    // ausencia como un `false` convierte un equipo averiado en uno correcto.
+    getWindowsGpoInventory.mockResolvedValue(sinDatoDeDominio);
+    render(<WindowsGpos />);
+    expect(await screen.findAllByText("Not reported")).toBeTruthy();
+    expect(screen.queryByText("Workgroup")).toBeNull();
+  });
+
+  it("⚠️ y mientras falten datos, la pantalla dice que el conteo es un piso", async () => {
+    getWindowsGpoInventory.mockResolvedValue(sinDatoDeDominio);
+    render(<WindowsGpos />);
+    expect(await screen.findByText(/not report domain membership yet/i)).toBeTruthy();
+    expect(screen.getByText(/a floor, not a total/i)).toBeTruthy();
+  });
+
+  it("cuando ya se sabe de todos, ese aviso desaparece", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conDominio);
+    render(<WindowsGpos />);
+    await screen.findByText("Without any GPO");
+    expect(screen.queryByText(/not report domain membership yet/i)).toBeNull();
   });
 });
 

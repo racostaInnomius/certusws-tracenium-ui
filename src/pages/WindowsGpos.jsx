@@ -26,8 +26,9 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import CompositionBars from "../components/common/CompositionBars";
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
+import { describeWithoutGpos } from "../utils/gpoDomainSummary";
 
-function Kpi({ label, value, tone, onClick, active }) {
+function Kpi({ label, value, tone, onClick, active, hint }) {
   const clicable = typeof onClick === "function";
   return (
     <Paper
@@ -61,6 +62,9 @@ function Kpi({ label, value, tone, onClick, active }) {
       <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: tone || BRAND.dark, mt: 0.5 }}>
         {value}
       </Typography>
+      {hint ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.25 }}>{hint}</Typography>
+      ) : null}
     </Paper>
   );
 }
@@ -104,6 +108,10 @@ export default function WindowsGpos({ refreshNonce }) {
   const todos = React.useMemo(() => (Array.isArray(data?.devices) ? data.devices : []), [data]);
 
   const sinNinguna = Number(summary?.withoutAnyGpos ?? 0);
+  // ⚠️ El total por si solo no dice que hacer: un equipo de workgroup sin
+  // directivas esta bien, uno de dominio sin directivas esta averiado. El
+  // desglose vive en gpoDomainSummary.js con sus tests.
+  const desglose = describeWithoutGpos(summary);
 
   // Ver solo los equipos sin ninguna directiva. Se apaga volviendo a pulsar.
   const [soloSinGpo, setSoloSinGpo] = React.useState(false);
@@ -134,6 +142,30 @@ export default function WindowsGpos({ refreshNonce }) {
     { field: "hostname", headerName: "Device", minWidth: 180, flex: 0.8 },
     { field: "osFullVersion", headerName: "OS", minWidth: 180, flex: 0.7 },
     {
+      field: "partOfDomain",
+      headerName: "Domain",
+      minWidth: 200,
+      flex: 0.8,
+      // ⚠️ Tres estados, no dos. `null` es "todavia no lo reporta", y pintarlo
+      // como "Workgroup" convertiria un equipo averiado en uno correcto.
+      renderCell: (p) => {
+        const enDominio = p.value;
+        if (enDominio === true) {
+          return (
+            <Typography sx={{ fontSize: TEXT.md }}>{p.row?.domain || "Joined"}</Typography>
+          );
+        }
+        if (enDominio === false) {
+          return (
+            <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Workgroup</Typography>
+          );
+        }
+        return (
+          <Typography sx={{ fontSize: TEXT.md, color: "text.disabled" }}>Not reported</Typography>
+        );
+      },
+    },
+    {
       field: "computerGpos",
       headerName: "Computer GPOs",
       minWidth: 320,
@@ -160,15 +192,16 @@ export default function WindowsGpos({ refreshNonce }) {
           <Kpi label="With computer GPOs" value={cargando ? "…" : summary?.withComputerGpos ?? 0} />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          {/* ⚠️ La ausencia es un dato. Un equipo Windows que reporta el
-              inventario y no trae NI UNA directiva es o un equipo fuera del
-              dominio o un gpresult que fallo — y sin este numero se pierde
-              entre las cincuenta filas de la tabla. Misma regla que el "sin
-              dato" del disco. */}
+          {/* ⚠️ La ausencia es un dato: sin este numero, un equipo sin
+              directivas se pierde entre las cincuenta filas de la tabla.
+              Pero el total no basta —mezcla workgroup con averia— asi que
+              debajo va el desglose, y el rojo se enciende SOLO cuando hay
+              equipos unidos al dominio sin recibir ni una. */}
           <Kpi
             label="Without any GPO"
             value={cargando ? "…" : sinNinguna}
-            tone={sinNinguna > 0 ? BRAND.alert.high : undefined}
+            hint={cargando ? undefined : desglose?.text}
+            tone={desglose?.actionable ? BRAND.alert.high : undefined}
             onClick={sinNinguna > 0 ? () => setSoloSinGpo((v) => !v) : undefined}
             active={soloSinGpo}
           />
@@ -202,9 +235,25 @@ export default function WindowsGpos({ refreshNonce }) {
             {summary.devicesReporting} device{summary.devicesReporting === 1 ? "" : "s"} reported,
             none has any Group Policy applied.
           </strong>{" "}
-          They are either not joined to a domain, or <code>gpresult</code> failed on them. Today the
-          two cannot be told apart from here — the agent collects the domain-membership flag but
-          does not send it with this inventory.
+          {desglose?.joined > 0
+            ? `${desglose.joined} of them ${desglose.joined === 1 ? "is" : "are"} joined to a domain and should be receiving policies — that part is a fault worth chasing.`
+            : "Check the Domain column below: on a workgroup device this is the expected state."}
+        </Alert>
+      ) : null}
+
+      {/* ⚠️ Mientras haya equipos que no reportan pertenencia al dominio, el
+          conteo de averiados es un PISO y no un total. Callarlo dejaria la
+          pantalla afirmando "solo hay uno" cuando lo que hay es "solo se sabe
+          de uno" — y esas dos frases llevan a decisiones distintas. */}
+      {summary && summary.domainUnknown > 0 && summary.devicesReporting > 0 ? (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 3 }}>
+          <strong>
+            {summary.domainUnknown} of {summary.devicesReporting} device
+            {summary.devicesReporting === 1 ? "" : "s"} {summary.domainUnknown === 1 ? "does" : "do"}{" "}
+            not report domain membership yet.
+          </strong>{" "}
+          The agent already collects it; each device starts sending it on its next compliance
+          evaluation cycle. Until then the domain-joined counts below are a floor, not a total.
         </Alert>
       ) : null}
 
