@@ -503,6 +503,7 @@ export default function RemoteControl() {
           highlightDeviceId={highlightDeviceId}
           onConnect={(device, type) => setRecordFor({ device, type })}
           onShowActiveSessions={() => setActiveTab(TAB_SESSIONS)}
+          onNotify={notify}
         />
       </TabPanel>
 

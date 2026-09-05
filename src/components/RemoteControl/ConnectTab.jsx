@@ -32,6 +32,8 @@ import { BRAND, ROLE } from "../../theme/brand";
 import ConnectablesTable from "./ConnectablesTable";
 import NoRemoteControlCard from "./NoRemoteControlCard";
 import { fleetNumbers } from "./rcpMethods";
+import { setDeviceClass } from "../../api/remoteControl";
+import { invalidateCachePrefix } from "../../hooks/useCachedFetch";
 import {
   useConnectableDevices,
   useRemoteControlSummary,
@@ -160,7 +162,9 @@ export default function ConnectTab({
   onConnect,
   highlightDeviceId,
   onShowActiveSessions,
-  refreshNonce = 0
+  refreshNonce = 0,
+  // La página es quien tiene el snackbar; aquí solo se sabe qué pasó.
+  onNotify = null
 }) {
   const [filters, setFilters] = useDeviceFilters();
 
@@ -197,6 +201,39 @@ export default function ConnectTab({
     refetchDevices();
     refetchSummary();
   }, [refreshNonce, refetchDevices, refetchSummary]);
+
+  // ── Corregir la clase de un equipo ────────────────────────────────
+  //
+  // ⚠️ Cambia el GOBIERNO, no una etiqueta: la clase decide si entrar exige
+  // el vistobueno de otra persona y si se le pregunta al usuario del equipo.
+  // Por eso se recarga la lista después en vez de pintar el valor nuevo a la
+  // ligera — lo que vale es lo que quedó escrito, no lo que se pidió.
+  const [classBusyDeviceId, setClassBusyDeviceId] = React.useState("");
+  const changeDeviceClass = React.useCallback(
+    async (device, next) => {
+      const id = String(device?.deviceId || "");
+      if (!id) return;
+      setClassBusyDeviceId(id);
+      try {
+        await setDeviceClass(id, next);
+        // La clase la leen también el asistente y la matriz de política, y
+        // esas viven detrás de otras claves de caché.
+        invalidateCachePrefix("remoteControl:");
+        await refetchDevices();
+        onNotify?.(
+          "success",
+          `${device.hostname || id} is now treated as ${next === "server" ? "a server" : "an endpoint"}.`
+        );
+      } catch (err) {
+        // Sin recargar: si falló, la fila tiene que seguir enseñando lo que
+        // el backend cree, no lo que se intentó.
+        onNotify?.("error", `Could not change the class: ${err?.message || "unknown error"}`);
+      } finally {
+        setClassBusyDeviceId("");
+      }
+    },
+    [refetchDevices, onNotify]
+  );
 
   const fleet = React.useMemo(
     () => fleetNumbers(summary, devices, { complete }),
@@ -326,6 +363,8 @@ export default function ConnectTab({
           withoutRcp={withoutRcp}
           groups={groups}
           platforms={platforms}
+          onChangeDeviceClass={changeDeviceClass}
+          classBusyDeviceId={classBusyDeviceId}
         />
       )}
     </Box>

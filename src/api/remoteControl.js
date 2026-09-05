@@ -92,6 +92,21 @@ export async function getAllFileTransfers(params = {}) {
   return httpGetJson(`${BASE}/file-transfers${buildQuery(params)}`);
 }
 
+/**
+ * Corrige a mano la clase de un equipo.
+ *
+ * ⚠️ Es un cambio de PRIVILEGIO, no una etiqueta. La clase decide si hace
+ * falta vistobueno para entrar (`access_policy`) y si se le pregunta al
+ * usuario del equipo antes de mirarle la pantalla. Marcar un servidor como
+ * `endpoint` le quita lo primero y le pone lo segundo — por eso el backend
+ * lo deja en `security_events` con el valor anterior y el nuevo.
+ */
+export async function setDeviceClass(deviceId, deviceClass) {
+  return httpPutJson(`${BASE}/devices/${encodeURIComponent(deviceId)}/class`, {
+    deviceClass
+  });
+}
+
 // ── ADR-0009 fase 2 — política de acceso y cola de aprobación ────────
 
 /** La matriz (clase de equipo × capacidad) → requiere visto bueno. */

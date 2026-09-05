@@ -52,6 +52,7 @@ import { BRAND, TEXT } from "../../theme/brand";
 import OnlineDot from "../common/OnlineDot";
 import { formatRelative } from "../../utils/format";
 import { RCP_METHODS, blockedReason, canStart, platformLabel } from "./rcpMethods";
+import DeviceClassCell from "./DeviceClassCell";
 
 /** Filter chip. Lit = the filter is applied. */
 function FilterChip({ label, on, onClick }) {
@@ -139,7 +140,12 @@ export default function ConnectablesTable({
   total = 0,
   withoutRcp = null,
   groups = [],
-  platforms = []
+  platforms = [],
+  // Corregir la clase es un cambio de GOBIERNO (ver DeviceClassCell). Sin
+  // este callback la columna se pinta en solo lectura, que es lo correcto
+  // donde no haya quien recargue la lista después.
+  onChangeDeviceClass = null,
+  classBusyDeviceId = ""
 }) {
   const list = Array.isArray(devices) ? devices : [];
   const page = filters.page || 1;
@@ -261,6 +267,11 @@ export default function ConnectablesTable({
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>Device</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Platform</TableCell>
+              {/* No es una etiqueta: de esta columna cuelga si entrar exige
+                  el vistobueno de otra persona y si se le pregunta al
+                  usuario del equipo. La API existía desde el 01-sep sin
+                  pantalla que la usara. */}
+              <TableCell sx={{ fontWeight: 700 }}>Class</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
               {/* Replaces "Can do", which listed the same three capabilities
                   the action buttons already spell out one column over. What
@@ -276,7 +287,7 @@ export default function ConnectablesTable({
           <TableBody>
             {list.length === 0 && !loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ color: BRAND.gray, py: 3 }}>
+                <TableCell colSpan={6} align="center" sx={{ color: BRAND.gray, py: 3 }}>
                   No device matches the current filters.
                 </TableCell>
               </TableRow>
@@ -295,6 +306,19 @@ export default function ConnectablesTable({
                     <DeviceCell device={d} />
                   </TableCell>
                   <TableCell>{platformLabel(d.platform)}</TableCell>
+                  <TableCell>
+                    <DeviceClassCell
+                      value={d.deviceClass}
+                      source={d.deviceClassSource}
+                      deviceLabel={d.hostname || d.deviceId}
+                      busy={String(classBusyDeviceId) === String(d.deviceId)}
+                      onChange={
+                        onChangeDeviceClass
+                          ? (next) => onChangeDeviceClass(d, next)
+                          : undefined
+                      }
+                    />
+                  </TableCell>
                   <TableCell>
                     <OnlineDot
                       online={d.online}
