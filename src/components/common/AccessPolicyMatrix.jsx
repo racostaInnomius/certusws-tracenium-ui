@@ -75,10 +75,24 @@ export default function AccessPolicyMatrix({ prefix, title, description, notify 
    */
   const [open, setOpen] = React.useState(false);
 
+  // ⚠️ Cuántas personas pueden aprobar en este tenant.
+  //
+  // La autoaprobación está prohibida —un vistobueno de uno mismo no es un
+  // vistobueno—, así que hacen falta DOS con rol ADMIN u OWNER. Con una
+  // sola, encender una celda no añade un control: convierte el break-glass
+  // en el único camino, que es justo lo que no debe volverse costumbre.
+  // ADR-0009 pide avisarlo al configurar la política y no descubrirlo la
+  // primera noche.
+  const [approvers, setApprovers] = React.useState(null);
+
   React.useEffect(() => {
     let alive = true;
     getAccessPolicy()
-      .then((r) => alive && setRows(Array.isArray(r?.items) ? r.items : []))
+      .then((r) => {
+        if (!alive) return;
+        setRows(Array.isArray(r?.items) ? r.items : []);
+        setApprovers(r?.approvers ?? null);
+      })
       .catch(() => alive && setRows([]))
       .finally(() => alive && setLoading(false));
     return () => {
@@ -194,6 +208,18 @@ export default function AccessPolicyMatrix({ prefix, title, description, notify 
       {!loading && rows.length > 0 && mine.length === 0 ? (
         <Alert severity="info">
           No capability of this plugin is in the access policy yet.
+        </Alert>
+      ) : null}
+
+      {/* ⚠️ El aviso va ANTES de la matriz, no después de encender una celda:
+          la decisión que hay que informar es la de encenderla. */}
+      {!loading && approvers && approvers.canApprove === false ? (
+        <Alert severity="warning" sx={{ mb: 1.5 }}>
+          {approvers.eligible === 0
+            ? "Nobody in this tenant can approve: no member has the Admin or Owner role. "
+            : "Only one person in this tenant can approve, and nobody may approve their own request. "}
+          Turning a rule on here would leave break-glass as the only way in. Add a second
+          Admin or Owner first.
         </Alert>
       ) : null}
 
