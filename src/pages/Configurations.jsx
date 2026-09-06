@@ -430,7 +430,7 @@ export default function Configurations({ onNavigate, initialTab }) {
             </Box>
           }
         >
-          <AgentSettings embedded />
+          <AgentSettings embedded onNavigate={onNavigate} />
         </React.Suspense>
       ) : (
         <>

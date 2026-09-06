@@ -33,8 +33,14 @@ function findWideOpenRoot(text) {
   return null;
 }
 
-export default function FeaturesSection({ form, onChange, readOnly = false, catalog = [] }) {
+// `parts` picks which half renders. Agent Settings shows the agent's own
+// switches under "Agent" and the RCP gates under "Remote Control", so the
+// two blocks must be mountable on their own; "all" keeps the original
+// single card for anyone still rendering the whole thing.
+export default function FeaturesSection({ form, onChange, readOnly = false, catalog = [], parts = "all" }) {
   const wideOpenRoot = findWideOpenRoot(form?.rcpFile?.roots);
+  const showAgent = parts === "all" || parts === "agent";
+  const showRcp = parts === "all" || parts === "rcp";
   return (
       <Box
         sx={{
@@ -45,13 +51,16 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
           bgcolor: BRAND.surfaceMuted,
         }}
       >
+        {showAgent ? (
         <Typography
           variant="overline"
           sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
         >
           Features
         </Typography>
+        ) : null}
 
+        {showAgent ? (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, mt: 0.5 }}>
           <FormControlLabel
             control={
@@ -187,6 +196,7 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             sx={{ alignItems: "flex-start", mx: 0, mt: 0.5 }}
           />
         </Box>
+        ) : null}
 
         {/* ── Remote Control (RCP) sub-section ────────────────────────
             Three capabilities behind their own gates so an operator can
@@ -197,12 +207,13 @@ export default function FeaturesSection({ form, onChange, readOnly = false, cata
             remoteControl ← rcp). Requires agent 1.1.19+; older agents
             ignore the policy flags silently. */}
         {(() => {
+          if (!showRcp) return null;
           const rcpActive = catalog.some(
             (p) => p.impliesModule === "remoteControl" && form.plugins[p.key]
           );
           if (!rcpActive) return null;
           return (
-            <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
+            <Box sx={showAgent ? { mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` } : {}}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
                 <Typography
                   variant="overline"

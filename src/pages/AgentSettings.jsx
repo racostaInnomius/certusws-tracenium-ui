@@ -1,46 +1,53 @@
+// src/pages/AgentSettings.jsx
+//
+// Agent Settings — how the agent and its plugins behave, one section per
+// plugin, for the tenant policy or for one device's override.
+//
+// Shape of the page (docs/AGENT_SETTINGS_ANALYSIS_2026-09.md, phase A):
+//   * PolicyScopeBar   — WHAT is being edited: tenant, or one device.
+//   * PluginNav        — WHERE: one entry per plugin + Agent, AI, Plugins
+//                        (read-only, follows the plan), Advanced, and the
+//                        two tools (Overrides, Policy rollout).
+//   * the content      — the chosen section's cards, or a tool view.
+//   * PolicyDiffDialog — every save shows the leaves that change first.
+//
+// Invariants this page keeps, in order of how expensive it was to learn them:
+//   1. Save sends the agent-config slice ONLY (PATCH by domain, If-Match).
+//      The raw editor's "Replace entire document" is the one whole-doc PUT.
+//   2. Never save from a form that was not loaded: a failed GET disables
+//      Save (tenant and device alike) — the optimistic lock is disarmed by
+//      the same null that caused it.
+//   3. Never save without the catalog: `plugins.enabled` is rebuilt from the
+//      toggles, and an empty catalog once wrote `[amp]` over five plugins.
+//   4. A device override is a WHOLE document (`device ?? tenant`). A new
+//      override starts from the policy the device runs today, and is
+//      written with the whole-doc PUT so security/MAM travel with it; an
+//      existing override is patched by domain like the tenant.
+//   5. Unsaved edits pause auto-refresh and guard the tab; the nav badges
+//      say which section they are in.
+
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { listGateways } from "../api/patchManagement";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Chip,
-  Collapse,
-  Divider,
-  MenuItem,
-  Paper,
-  Tab,
-  Tabs,
-  TextField,
-  Tooltip,
-  Typography,
-  useMediaQuery,
-  useTheme,
-} from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
-
-import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
-import BrandSnackbar from "../components/common/BrandSnackbar";
+import { Alert, AlertTitle, Box, Button, Chip, Typography } from "@mui/material";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
-import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
-import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
-import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { useConfirm } from "../components/common/ConfirmDialog";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import BrandSnackbar from "../components/common/BrandSnackbar";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import { BRAND, ICON, TEXT } from "../theme/brand";
+import { formatDate } from "../utils/format";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
+
 import {
   deleteDevicePolicy,
   getDevicePolicy,
@@ -48,671 +55,421 @@ import {
   getEffectivePolicy,
   getTenantPolicy,
   listTenantPolicyStatus,
+  patchDevicePolicyDomain,
   patchTenantPolicyDomain,
   pushDevicePolicy,
   pushTenantPolicy,
   saveDevicePolicy,
   saveTenantPolicy,
 } from "../api/policies";
-import { listKnownDevices } from "../api/jobs";
+import { listAllKnownDevices } from "../api/jobs";
 import { getPluginCoverageSummary } from "../api/overview";
-import PluginCoverageStrip from "../components/Overview/PluginCoverageStrip";
-import OnlineDot from "../components/common/OnlineDot";
+import { listGateways } from "../api/patchManagement";
 
-import { BRAND, DATAGRID_SX, ICON, TEXT } from "../theme/brand";
-import PageHeader from "../components/common/PageHeader";
-import SectionPaper from "../components/common/SectionPaper";
-import { usePluginCatalog } from "../hooks/usePluginCatalog";
-import { formatDate } from "../utils/format";
 import {
-  INVENTORY_INTERVAL_MIN,
-  INVENTORY_INTERVAL_MAX,
-  COMPLIANCE_INTERVAL_MIN,
-  COMPLIANCE_INTERVAL_MAX,
-  PATCH_INTERVAL_MIN,
-  PATCH_INTERVAL_MAX,
-  UPDATE_INTERVAL_MIN,
-  UPDATE_INTERVAL_MAX,
-  readFormFromPolicy,
+  extractPolicyEnvelope,
   formToPolicy,
   isEmptyPolicy,
-  extractPolicyEnvelope,
+  readFormFromPolicy,
 } from "../components/Policies/policyTransforms";
-import {
-  formatJson,
-  formatRelativeTime,
-  shortHash,
-  renderAckChip,
-  renderSourceChip,
-  SummaryCard,
-  DetailRow,
-  JsonBlock,
-} from "../components/Policies/policyDisplay";
-import CryptoDiscoverySection from "../components/Policies/CryptoDiscoverySection";
-import { AiIntelligenceSection, SoftwareDeliverySection } from "../components/Policies/AiSdpSections";
-import FeaturesSection from "../components/Policies/FeaturesSection";
-import IntervalScheduleCard from "../components/Policies/IntervalScheduleCard";
+import { DetailRow, formatJson, formatRelativeTime, renderAckChip } from "../components/Policies/policyDisplay";
 
-// The plugin catalog now lives in the BACKEND
-// (modules/policies/plugin-catalog.ts) and is fetched via the
-// usePluginCatalog hook. Pure helpers `readFormFromPolicy()` and
-// `formToPolicy()` take the catalog as a second argument so they
-// stay testable and don't import any module-level constants.
-//
-// The shape returned matches what the legacy constants/plugins.js
-// PLUGIN_CATALOG exported — same key/label/title/description/required/
-// impliesModule fields — so the rest of this file's logic is unchanged.
+import PluginNav from "../components/AgentSettings/PluginNav";
+import PolicyScopeBar from "../components/AgentSettings/PolicyScopeBar";
+import PolicySectionPanel from "../components/AgentSettings/PolicySectionPanel";
+import PluginsView from "../components/AgentSettings/PluginsView";
+import AdvancedJsonPanel from "../components/AgentSettings/AdvancedJsonPanel";
+import OverridesView from "../components/AgentSettings/OverridesView";
+import { overrideRows } from "../components/AgentSettings/overrides";
+import PolicyRolloutView from "../components/AgentSettings/PolicyRolloutView";
+import PolicyDiffDialog from "../components/AgentSettings/PolicyDiffDialog";
+import { diffPolicies } from "../components/AgentSettings/policyDiff";
+import { agentConfigSlice, composeFirstOverride, formProblems } from "../components/AgentSettings/formGuards";
+import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, TOOL_VIEWS } from "../components/AgentSettings/sections";
+import { summarizeRollout } from "../components/AgentSettings/rolloutModel";
+import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges";
 
-// Interval bounds — mirror the server-side validator
-// (modules/policies/policies.service.ts) AND the agent's
-// policy-runtime.ts. The agent silently reverts out-of-range values
-// to its hardcoded default, so we clamp here too to fail fast at
-// authoring time instead of letting the operator save a number that
-// the agent will quietly ignore.
-//
-// Sprint 1 of Policy v2 added inventory + update bounds — they were
-// previously hardcoded on the agent and not editable from the UI at
-// all.
+const SECTION_PARAM = "agentSection";
+const DEVICE_PARAM = "agentDevice";
+const TOOL_IDS = new Set(TOOL_VIEWS.map((t) => t.id));
 
-
-// ── PolicyForm — collection intervals + collapsible advanced JSON.
-//
-// Plugin enable/disable used to live here as a row of switches, then
-// moved to a dedicated Plugin Control page, which was itself later
-// retired once entitlements made manual per-plugin toggling obsolete —
-// what's included/active is now informational, in Billing. This
-// surface stays strictly about HOW enabled plugins behave, not WHICH
-// plugins are on. The form
-// still tracks `form.plugins` internally because the conditional
-// schedule panels (Compliance / Patch) check it to decide whether to
-// render — that state is populated read-only from the loaded policy by
-// `readFormFromPolicy()` and only mutates if the operator drops into
-// the advanced JSON editor (power-user mode).
-
-function PolicyForm({ form, onChange, jsonDraft, setJsonDraft, jsonError, setJsonError, readOnly = false, onSaveRawJson = null }) {
-  const [advancedOpen, setAdvancedOpen] = React.useState(false);
-
-  // Hook is cheap to re-call — useCachedFetch returns the in-memory
-  // cached catalog without a new network request. This avoids prop-
-  // drilling `catalog` through TenantTab/DeviceTab into PolicyForm.
-  const { catalog } = usePluginCatalog();
-
-  const handleJsonChange = (e) => {
-    const value = e.target.value;
-    setJsonDraft(value);
-    try {
-      const parsed = JSON.parse(value);
-      setJsonError(null);
-      onChange(readFormFromPolicy(parsed, catalog));
-    } catch (err) {
-      setJsonError(String(err?.message || err));
-    }
-  };
-
-  // Build a quick reference list of which plugins are enabled in the
-  // currently-loaded policy. We render it as a chip strip at the top of
-  // the form so the operator can see at a glance what configuration
-  // panels apply ("compliance shows because SCP is on") without having
-  // to bounce to Billing to check.
-  const enabledPluginsSummary = catalog.filter(
-    (p) => p.required || Boolean(form.plugins?.[p.key])
-  );
-
-  return (
-    <Box>
-      <Box
-        sx={{
-          mb: 2,
-          p: 1.5,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 2,
-          bgcolor: BRAND.surfaceMuted,
-        }}
-      >
-        <Typography
-          variant="overline"
-          sx={{ color: BRAND.dark, fontWeight: 800, letterSpacing: 1.2 }}
-        >
-          Currently enabled plugins
-        </Typography>
-        <Box sx={{ mt: 0.5, display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-          {enabledPluginsSummary.length === 0 ? (
-            <Typography variant="caption" sx={{ color: BRAND.gray }}>
-              No plugins enabled.
-            </Typography>
-          ) : (
-            enabledPluginsSummary.map((p) => (
-              <Chip
-                key={p.key}
-                label={`${p.label} · ${p.title}`}
-                size="small"
-                sx={{
-                  bgcolor: BRAND.tealSoft,
-                  color: BRAND.tealText,
-                  fontWeight: 700,
-                  border: `1px solid ${BRAND.teal}55`,
-                }}
-              />
-            ))
-          )}
-        </Box>
-        <Typography variant="caption" sx={{ color: BRAND.gray, mt: 0.75, display: "block" }}>
-          See what's included in your plan and what's currently active in <strong>Billing</strong>.
-          The settings below apply to plugins that are currently enabled.
-        </Typography>
-      </Box>
-
-      {/* Collection-interval cards — inventory (always, AMP is required),
-          compliance/patch (gated by their implying plugin), and the agent
-          update probe. Deduped into IntervalScheduleCard. */}
-      <IntervalScheduleCard
-        form={form}
-        onChange={onChange}
-        readOnly={readOnly}
-        formKey="inventory"
-        title="Inventory schedule (AMP)"
-        label="Asset collection interval (seconds)"
-        min={INVENTORY_INTERVAL_MIN}
-        max={INVENTORY_INTERVAL_MAX}
-        step={60}
-        bgcolor={BRAND.surfaceMuted}
-        helperText="Blank = use backend default (6h / 21600s). Range 60–86400."
-      />
-
-      {catalog.some((p) => p.impliesModule === "compliance" && form.plugins[p.key]) ? (
-        <IntervalScheduleCard
-          form={form}
-          onChange={onChange}
-          readOnly={readOnly}
-          formKey="compliance"
-          title="Compliance schedule"
-          label="Collection interval (seconds)"
-          min={COMPLIANCE_INTERVAL_MIN}
-          max={COMPLIANCE_INTERVAL_MAX}
-          step={60}
-          bgcolor={BRAND.tealSoft}
-          titleColor={BRAND.tealText}
-          helperText="Blank = use backend default (8h / 28800s). Range 300–86400."
-        />
-      ) : null}
-
-      {catalog.some((p) => p.impliesModule === "patch" && form.plugins[p.key]) ? (
-        <IntervalScheduleCard
-          form={form}
-          onChange={onChange}
-          readOnly={readOnly}
-          formKey="patch"
-          title="Patch schedule"
-          label="Patch scan interval (seconds)"
-          min={PATCH_INTERVAL_MIN}
-          max={PATCH_INTERVAL_MAX}
-          step={300}
-          bgcolor={BRAND.cyanSoft}
-          helperText="Blank = use backend default (24h / 86400s). Range 300–604800."
-        />
-      ) : null}
-
-      {/* Update schedule — install path gated separately by features.selfUpdate. */}
-      <IntervalScheduleCard
-        form={form}
-        onChange={onChange}
-        readOnly={readOnly}
-        formKey="update"
-        title="Agent update schedule"
-        label="Update probe interval (seconds)"
-        min={UPDATE_INTERVAL_MIN}
-        max={UPDATE_INTERVAL_MAX}
-        step={300}
-        bgcolor={BRAND.surfaceMuted}
-        helperText="Blank = use backend default (6h / 21600s). Set higher to slow down auto-update; disable entirely via Self-update toggle below."
-      />
-
-      <FeaturesSection form={form} onChange={onChange} readOnly={readOnly} catalog={catalog} />
-
-      <AiIntelligenceSection form={form} onChange={onChange} readOnly={readOnly} />
-
-      <SoftwareDeliverySection form={form} onChange={onChange} readOnly={readOnly} />
-
-      {/* MAM moved to Device Management; the security baseline moved to
-          Security Baselines. This page is strictly agent/plugin behavior.
-          The raw JSON editor below still shows those blocks (it edits the
-          WHOLE document) — but the form-level save can't touch them. */}
-
-      {/* CDP is opt-in and its only settings are meaningless with the
-          plugin off, so the section follows the plugin toggle rather
-          than sitting there inert. */}
-      {form.plugins?.cdp ? (
-        <CryptoDiscoverySection form={form} onChange={onChange} readOnly={readOnly} />
-      ) : null}
-
-      <Box sx={{ mt: 2 }}>
-        <Button
-          size="small"
-          onClick={() => setAdvancedOpen((v) => !v)}
-          startIcon={<CodeOutlinedIcon />}
-          endIcon={advancedOpen ? <ExpandLessOutlinedIcon /> : <ExpandMoreOutlinedIcon />}
-          sx={{ textTransform: "none", color: BRAND.dark, fontWeight: 600 }}
-        >
-          {advancedOpen ? "Hide JSON editor" : "Advanced: edit raw JSON"}
-        </Button>
-        <Collapse in={advancedOpen} unmountOnExit>
-          <TextField
-            multiline
-            minRows={10}
-            fullWidth
-            value={jsonDraft}
-            onChange={handleJsonChange}
-            disabled={readOnly}
-            error={Boolean(jsonError)}
-            helperText={
-              jsonError ||
-              (onSaveRawJson
-                ? "Edits the WHOLE policy document, including the Security Baselines and Device Management blocks. Use the button below to save it."
-                : "Preserves unknown keys. Saved value replaces the policy on the server.")
-            }
-            sx={{
-              mt: 1,
-              "& .MuiInputBase-root": {
-                fontFamily: "monospace",
-                fontSize: TEXT.sm,
-                bgcolor: BRAND.surface,
-              },
-            }}
-          />
-          {onSaveRawJson ? (
-            <Button
-              size="small"
-              variant="outlined"
-              color="warning"
-              onClick={onSaveRawJson}
-              disabled={readOnly || Boolean(jsonError)}
-              startIcon={<SaveOutlinedIcon />}
-              sx={{ mt: 1, textTransform: "none", fontWeight: 700 }}
-            >
-              Save raw JSON (replaces entire document)
-            </Button>
-          ) : null}
-        </Collapse>
-      </Box>
-    </Box>
-  );
+function normalizeDevices(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((d) => ({
+      deviceId: String(d?.deviceId || "").trim(),
+      hostname: String(d?.hostname || "").trim() || String(d?.deviceId || "").trim(),
+      connected: d?.connected === true,
+      agentVersion: d?.agentVersion ?? null,
+    }))
+    .filter((d) => d.deviceId);
 }
 
-// ── Main component ───────────────────────────────────────────────────────
-
 /**
- * `embedded` — rendered as a section inside the Settings page rather than
- * as a standalone route. Suppresses this page's own PageHeader (Settings
- * already supplies one; two stacked headers read as a bug) and drops the
- * outer padding, since the host tab panel provides it. The RefreshControl
- * still renders, just inline — it's a control, not chrome.
+ * `embedded` — rendered inside Settings: no PageHeader (the host has one),
+ * no outer padding. `onNavigate(pageKey)` opens another page of the app —
+ * the plugin pages the sections link to, and Billing from Plugins.
  */
-export default function AgentSettings({ embedded = false }) {
-  const theme = useTheme();
-  const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
+export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
+  const { catalog, entitled, loading: catalogLoading } = usePluginCatalog();
+  const catalogReady = !catalogLoading && Array.isArray(catalog) && catalog.length > 0;
 
-  // Plugin catalog is fetched from the backend (single source of truth).
-  // While it's loading the array is empty — form initializers gracefully
-  // produce empty `plugins.{}` maps, and an effect below re-runs
-  // readFormFromPolicy() once the catalog arrives. Save buttons disable
-  // while loading so we never PUT a partial enabled list.
-  const {
-    catalog: pluginCatalog,
-  } = usePluginCatalog();
-
-  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
-  // portfolio navigation the selected tenant lives in the MSP context and
-  // `auth` does not carry it, so this read silently resolved to nothing.
+  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId.
   const tenantId = useEffectiveTenantId();
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
 
-  const [tab, setTab] = React.useState("tenant");
+  // ── Navigation state (URL-backed) ─────────────────────────────────────
+  const [view, setViewState] = React.useState(() => {
+    const fromUrl = getSearchParam(SECTION_PARAM, "");
+    return isKnownView(fromUrl) ? fromUrl : DEFAULT_SECTION;
+  });
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState(() => getSearchParam(DEVICE_PARAM, ""));
+  const [scope, setScope] = React.useState(() => (getSearchParam(DEVICE_PARAM, "") ? "device" : "tenant"));
 
-  // Shared
-  const [devices, setDevices] = React.useState([]); // [{deviceId, hostname, connected, agentVersion}]
+  const setView = React.useCallback((id) => {
+    if (!isKnownView(id)) return;
+    setViewState(id);
+    updateSearchParams({ [SECTION_PARAM]: id === DEFAULT_SECTION ? "" : id });
+  }, []);
+
+  // ── Shared data ───────────────────────────────────────────────────────
+  const [devices, setDevices] = React.useState([]);
+  const [gateways, setGateways] = React.useState([]);
+  const [coverage, setCoverage] = React.useState(null);
+  const [loadedAt, setLoadedAt] = React.useState(() => Date.now());
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
+  const showSnack = React.useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
 
-  // Tenant state
+  // ── Tenant policy ─────────────────────────────────────────────────────
   const [tenantPolicy, setTenantPolicy] = React.useState(null);
   const [tenantForm, setTenantForm] = React.useState(() => readFormFromPolicy({}, []));
+  const [tenantBaseline, setTenantBaseline] = React.useState(() => readFormFromPolicy({}, []));
   const [tenantJsonDraft, setTenantJsonDraft] = React.useState("{}");
   const [tenantJsonError, setTenantJsonError] = React.useState(null);
   const [tenantStatus, setTenantStatus] = React.useState([]);
   const [tenantLoading, setTenantLoading] = React.useState(true);
-  const [tenantSaving, setTenantSaving] = React.useState(false);
-  // "No pude leer la política" NO es lo mismo que "todavía no hay
-  // política", aunque ambas dejaban `tenantPolicy` en null. Esa confusión
-  // no solo pintaba el formulario con defaults sin avisar: además
-  // desarmaba el candado optimista, porque `extractPolicyEnvelope(null)`
-  // devuelve version=null y eso significa "no mandes If-Match". Un 500
-  // pasajero en el GET más un click en Guardar reemplazaban la política
-  // real del tenant por los defaults del formulario, y de ahí a todos los
-  // agentes. El candado protege contra otro escritor, nunca protegió
-  // contra una lectura fallida.
   const [tenantLoadError, setTenantLoadError] = React.useState(null);
+  const [tenantSaving, setTenantSaving] = React.useState(false);
   const [tenantPushing, setTenantPushing] = React.useState(false);
-  // Plugin coverage real-state — distinto de policy ack: lee de
-  // agent_payload->agent->capabilities (último facts publish del agent),
-  // representando el runtime efectivo no la promesa contractual del ack.
-  // Operadores necesitan esto en la página Policies para distinguir
-  // "device confirmó la policy" vs "plugin realmente corriendo".
-  const [pluginCoverageResult, setPluginCoverageResult] = React.useState(null);
 
-  // Device state
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState("");
-  // Infrastructure Gateway registrations (ADR-0001). READ-ONLY here: this page
-  // edits the device policy, but the `gateway` block inside it is OWNED by the
-  // Patch Management registration. Someone finding that block here without
-  // explanation would reasonably hand-edit it — and their change would be
-  // silently replaced the next time the gateway is saved.
-  const [gateways, setGateways] = React.useState([]);
-  const [devicePolicy, setDevicePolicy] = React.useState(null); // raw override or null
+  // ── Device override ───────────────────────────────────────────────────
+  const [devicePolicy, setDevicePolicy] = React.useState(null);
   const [deviceForm, setDeviceForm] = React.useState(() => readFormFromPolicy({}, []));
+  const [deviceBaseline, setDeviceBaseline] = React.useState(() => readFormFromPolicy({}, []));
   const [deviceJsonDraft, setDeviceJsonDraft] = React.useState("{}");
   const [deviceJsonError, setDeviceJsonError] = React.useState(null);
   const [effective, setEffective] = React.useState(null);
   const [deviceStatus, setDeviceStatus] = React.useState(null);
   const [deviceLoading, setDeviceLoading] = React.useState(false);
+  const [deviceLoadError, setDeviceLoadError] = React.useState(null);
   const [deviceSaving, setDeviceSaving] = React.useState(false);
   const [devicePushing, setDevicePushing] = React.useState(false);
   const [deviceDeleting, setDeviceDeleting] = React.useState(false);
+  const [devicePolling, setDevicePolling] = React.useState(false);
 
-  const showSnack = React.useCallback((message, severity = "success") => {
-    setSnackbar({ open: true, message, severity });
-  }, []);
+  const [diffDialog, setDiffDialog] = React.useState({ open: false, entries: [] });
 
-  // ── Load tenant policy + status + device list ──────────────────────────
+  // ── Loading ───────────────────────────────────────────────────────────
   const loadTenant = React.useCallback(async () => {
     if (!canManage || !tenantId) return;
     try {
       setTenantLoading(true);
-      // Plugin coverage usa allSettled porque PluginCoverageStrip lee
-      // `result.status === "fulfilled"` y `result.value` — formato
-      // estándar de Promise.allSettled. Se carga en paralelo con el
-      // resto (no bloquea la página si está lento o falla).
-      const [policyRes, statusRes, devicesRes, coverageSettled] = await Promise.all([
-        // La política es la página. Su fallo tiene que llegar al operador
-        // y, sobre todo, tiene que impedir el guardado.
+      const [policyRes, statusRes, devicesRes, coverageRes] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setTenantLoadError(null); return r; },
           (err) => { setTenantLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
         listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
-        listKnownDevices().catch(() => ({ items: [] })),
-        Promise.allSettled([getPluginCoverageSummary()]).then((arr) => arr[0]),
+        listAllKnownDevices().catch(() => ({ items: [] })),
+        getPluginCoverageSummary().catch(() => null),
       ]);
-      setPluginCoverageResult(coverageSettled);
-
-      // Normalize the response envelope once and feed the form+JSON
-      // editor from the extracted policy content. Without this the form
-      // was reading `.plugins` off the DB row (which has no such key)
-      // and all plugin toggles rendered as off.
-      const tenantEnv = extractPolicyEnvelope(policyRes);
-      const policy = tenantEnv.raw ?? {};
+      const policy = extractPolicyEnvelope(policyRes).raw ?? {};
+      const form = readFormFromPolicy(policy, catalog);
       setTenantPolicy(policyRes ?? null);
-      setTenantForm(readFormFromPolicy(policy, pluginCatalog));
+      setTenantForm(form);
+      setTenantBaseline(form);
       setTenantJsonDraft(formatJson(policy));
       setTenantJsonError(null);
-
-      const statusItems = Array.isArray(statusRes?.items) ? statusRes.items : [];
-      setTenantStatus(statusItems);
-
-      const deviceItems = Array.isArray(devicesRes?.items) ? devicesRes.items : [];
-      const normalized = deviceItems
-        .map((d) => ({
-          deviceId: String(d?.deviceId || "").trim(),
-          hostname: String(d?.hostname || "").trim() || String(d?.deviceId || "").trim(),
-          connected: d?.connected === true,
-          agentVersion: d?.agentVersion ?? null,
-        }))
-        .filter((d) => d.deviceId);
-      setDevices(normalized);
-      setSelectedDeviceId((current) => {
-        if (current && normalized.some((d) => d.deviceId === current)) return current;
-        return normalized[0]?.deviceId || "";
-      });
+      setTenantStatus(Array.isArray(statusRes?.items) ? statusRes.items : []);
+      setDevices(normalizeDevices(devicesRes?.items));
+      setCoverage(coverageRes && typeof coverageRes === "object" ? coverageRes : null);
+      setLoadedAt(Date.now());
     } catch (e) {
       console.error(e);
       showSnack("Failed to load tenant policy", "error");
     } finally {
       setTenantLoading(false);
     }
-    // `pluginCatalog` is a dependency ON PURPOSE. The form's plugin toggles
-    // are derived from the catalog, and on a cold cache the catalog
-    // arrives after the first load — without this, the form kept the
-    // toggle-less shape it was built with, and a save from it wrote
-    // `plugins: [amp]` (2026-09-03, tenant 111: five plugins gone while
-    // the operator was flipping Device info widget). Re-reading when the
-    // catalog lands costs one extra load on first visit; nothing else.
-  }, [canManage, tenantId, showSnack, pluginCatalog]);
+    // `catalog` is a dependency ON PURPOSE: the form's toggles are derived
+    // from it and it can land after the first load (cold cache).
+  }, [canManage, tenantId, showSnack, catalog]);
 
-  // ── Load device override + effective + status ──────────────────────────
   const loadDevice = React.useCallback(async (deviceId) => {
     if (!canManage || !deviceId) {
       setDevicePolicy(null);
       setEffective(null);
       setDeviceStatus(null);
+      setDeviceLoadError(null);
       return;
     }
     try {
       setDeviceLoading(true);
+      let loadError = null;
       const [overrideRes, effectiveRes, statusRes] = await Promise.all([
-        getDevicePolicy(deviceId).catch(() => null),
-        getEffectivePolicy(deviceId).catch(() => null),
+        // 404 = no override, a normal state. Anything else is a failed read,
+        // and a failed read must not become a save (invariant 2).
+        getDevicePolicy(deviceId).catch((err) => {
+          if (err?.status === 404) return null;
+          loadError = err?.message || "Could not load the device override.";
+          return null;
+        }),
+        getEffectivePolicy(deviceId).catch((err) => {
+          loadError = loadError || err?.message || "Could not load the effective policy.";
+          return null;
+        }),
         getDevicePolicyStatus(deviceId).catch(() => null),
       ]);
-
-      // See extractPolicyEnvelope for why we normalize: backend returns
-      // `{ ok, policy: { policy_version, policy_hash, policy_json } }`
-      // and directly passing that to readFormFromPolicy left the form
-      // empty. The helper produces a `.raw` that is always the policy
-      // content (modules/plugins/compliance) or null if no override.
-      const overrideEnv = extractPolicyEnvelope(overrideRes);
-      const overridePolicy = overrideEnv.raw;
+      const overridePolicy = extractPolicyEnvelope(overrideRes).raw;
+      const eff = effectiveRes?.policy ?? effectiveRes ?? null;
+      const effectiveJson = eff?.policy_json ?? eff?.policyJson ?? eff?.policy ?? null;
+      // A new override starts from what the device runs today (invariant 4).
+      const seed = !isEmptyPolicy(overridePolicy) ? overridePolicy : effectiveJson && typeof effectiveJson === "object" ? effectiveJson : {};
+      const form = readFormFromPolicy(seed, catalog);
       setDevicePolicy(overrideRes ?? null);
-      setDeviceForm(readFormFromPolicy(overridePolicy || {}, pluginCatalog));
-      setDeviceJsonDraft(formatJson(overridePolicy || {}));
+      setDeviceForm(form);
+      setDeviceBaseline(form);
+      setDeviceJsonDraft(formatJson(seed));
       setDeviceJsonError(null);
-      // Effective policy is wrapped as `{ ok, policy: {source, policyJson, ...} }`.
-      // Unwrap to the inner object so downstream code can read
-      // `effective.source`, `effective.policyJson`, `effective.policyVersion`
-      // directly without worrying about the envelope.
-      setEffective(effectiveRes?.policy ?? effectiveRes ?? null);
-      // Same dance for status: `{ ok, status: {...} }`. Without this
-      // unwrap `deviceStatus.last_ack_status` was always undefined and
-      // the Sync panel chip stayed stuck on "Pending" regardless of
-      // what the DB actually had.
+      setEffective(eff);
       setDeviceStatus(statusRes?.status ?? statusRes ?? null);
+      setDeviceLoadError(loadError);
     } catch (e) {
       console.error(e);
-      showSnack("Failed to load device policy", "error");
+      setDeviceLoadError(e?.message || "Could not load the device override.");
     } finally {
       setDeviceLoading(false);
     }
-    // Same reason as loadTenant: the device form is derived from the
-    // catalog too, and must be re-read when the catalog lands.
-  }, [canManage, showSnack, pluginCatalog]);
+  }, [canManage, catalog]);
 
-  React.useEffect(() => {
-    loadTenant();
-  }, [loadTenant]);
-
+  React.useEffect(() => { loadTenant(); }, [loadTenant]);
+  React.useEffect(() => { loadDevice(selectedDeviceId); }, [selectedDeviceId, loadDevice]);
   React.useEffect(() => {
     listGateways()
       .then((res) => res?.ok && setGateways(res.data?.gateways ?? []))
-      .catch(() => {
-        // Not every tenant has a gateway; this banner is purely informational.
-      });
+      .catch(() => { /* informational only */ });
   }, []);
 
-  const gatewayForSelected = React.useMemo(
-    () => gateways.find((g) => g.deviceId === selectedDeviceId) || null,
-    [gateways, selectedDeviceId]
+  // ── Derived ───────────────────────────────────────────────────────────
+  const isDevice = scope === "device";
+  const form = isDevice ? deviceForm : tenantForm;
+  const setForm = isDevice ? setDeviceForm : setTenantForm;
+  const baseline = isDevice ? deviceBaseline : tenantBaseline;
+  const jsonDraft = isDevice ? deviceJsonDraft : tenantJsonDraft;
+  const jsonError = isDevice ? deviceJsonError : tenantJsonError;
+  const loadError = isDevice ? deviceLoadError : tenantLoadError;
+  const saving = isDevice ? deviceSaving : tenantSaving;
+
+  const diff = React.useMemo(
+    () => diffPolicies(agentConfigSlice(baseline, catalog, formToPolicy), agentConfigSlice(form, catalog, formToPolicy)),
+    [baseline, form, catalog]
   );
+  const dirty = diff.length > 0;
+  const dirtyRef = React.useRef(false);
+  dirtyRef.current = dirty;
+  useUnsavedChanges(dirty);
+  const changes = React.useMemo(() => changesBySection(diff), [diff]);
+  const problems = React.useMemo(() => formProblems(form), [form]);
+  const sections = React.useMemo(() => buildSections(catalog, form), [catalog, form]);
+  const activeSection = sections.find((s) => s.id === view) || null;
+  const deviceMap = React.useMemo(() => new Map(devices.map((d) => [d.deviceId, d])), [devices]);
+  const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) || { deviceId: selectedDeviceId, hostname: selectedDeviceId } : null;
+  const gatewayForSelected = React.useMemo(() => gateways.find((g) => g.deviceId === selectedDeviceId) || null, [gateways, selectedDeviceId]);
+  const rollout = React.useMemo(() => summarizeRollout(tenantStatus, { now: loadedAt }), [tenantStatus, loadedAt]);
+  const overrideCount = React.useMemo(() => overrideRows(tenantStatus).length, [tenantStatus]);
 
-  React.useEffect(() => {
-    loadDevice(selectedDeviceId);
-  }, [selectedDeviceId, loadDevice]);
+  const tenantEnv = extractPolicyEnvelope(tenantPolicy);
+  const deviceEnv = extractPolicyEnvelope(devicePolicy);
+  const hasOverride = !isEmptyPolicy(deviceEnv.raw);
+  const effectiveView = effective
+    ? { source: effective.source, version: effective.policy_version ?? effective.policyVersion, json: effective.policy_json ?? effective.policyJson ?? effective.policy ?? {} }
+    : null;
 
+  // Auto-refresh never overwrites an edit in progress (invariant 5).
   const refreshAll = React.useCallback(() => {
+    if (dirtyRef.current) return;
     loadTenant();
     if (selectedDeviceId) loadDevice(selectedDeviceId);
   }, [loadTenant, loadDevice, selectedDeviceId]);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "policiesAutoRefresh");
 
-  // ── Actions ────────────────────────────────────────────────────────────
-  const handleSaveTenant = async () => {
-    if (!canManage || !tenantId) return;
-    // El guard que importa. Si la política no se leyó, el formulario
-    // contiene defaults y `expectedVersion` sería null — o sea, un PATCH
-    // sin If-Match que pisa lo que haya en el servidor. Rechazar aquí, y
-    // no solo deshabilitar el botón, porque el botón se puede volver a
-    // habilitar por cualquier re-render y esto no admite un "casi".
-    if (tenantLoadError) {
-      showSnack("The current policy could not be read — reload before saving.", "error");
-      return;
+  const manualRefresh = async () => {
+    if (dirtyRef.current) {
+      const ok = await confirm({ title: "Discard unsaved changes?", body: "Reloading replaces the form with what the server has.", confirmText: "Discard and reload", danger: true });
+      if (!ok) return;
+      dirtyRef.current = false;
     }
-    if (tenantJsonError) {
-      showSnack("Fix JSON errors before saving", "error");
-      return;
-    }
-    // Belt and braces with formToPolicy's raw-list fallback: with no
-    // catalog the page cannot show what it is about to write for the
-    // plugin block, so it does not write it.
-    if (!Array.isArray(pluginCatalog) || pluginCatalog.length === 0) {
-      showSnack("The plugin catalog has not loaded yet — reload before saving.", "error");
-      return;
-    }
+    loadTenant();
+    if (selectedDeviceId) loadDevice(selectedDeviceId);
+  };
+
+  const discardIfDirty = async (what) => {
+    if (!dirtyRef.current) return true;
+    return confirm({ title: "Discard unsaved changes?", body: `${what} drops the edits you have not saved.`, confirmText: "Discard", danger: true });
+  };
+
+  // ── Navigation handlers ───────────────────────────────────────────────
+  const handleScopeChange = async (next) => {
+    if (next === scope) return;
+    if (!(await discardIfDirty("Switching scope"))) return;
+    if (scope === "device") { setDeviceForm(deviceBaseline); setDeviceJsonError(null); } else { setTenantForm(tenantBaseline); setTenantJsonError(null); }
+    setScope(next);
+    if (TOOL_IDS.has(view)) setView(DEFAULT_SECTION);
+    if (next === "tenant") updateSearchParams({ [DEVICE_PARAM]: "" });
+    else if (selectedDeviceId) updateSearchParams({ [DEVICE_PARAM]: selectedDeviceId });
+  };
+
+  const handlePickDevice = async (deviceId) => {
+    if (!deviceId || deviceId === selectedDeviceId) return;
+    if (!(await discardIfDirty("Changing device"))) return;
+    setSelectedDeviceId(deviceId);
+    updateSearchParams({ [DEVICE_PARAM]: deviceId });
+  };
+
+  const openDeviceFromTool = async (deviceId) => {
+    if (!(await discardIfDirty("Opening another device"))) return;
+    setScope("device");
+    setSelectedDeviceId(deviceId);
+    updateSearchParams({ [DEVICE_PARAM]: deviceId });
+    setView(DEFAULT_SECTION);
+  };
+
+  const handleJsonChange = (value) => {
+    const setDraft = isDevice ? setDeviceJsonDraft : setTenantJsonDraft;
+    const setError = isDevice ? setDeviceJsonError : setTenantJsonError;
+    setDraft(value);
     try {
-      setTenantSaving(true);
-      // Domain-scoped save: this page owns the agent-config slice ONLY.
-      // formToPolicy still rebuilds the whole document from the form
-      // (including security/mam populated read-only at load), so we strip
-      // the foreign domains before sending — the server preserves its
-      // stored copies of those keys verbatim. This is what stops Agent
-      // Settings from clobbering Security Baselines / Device Management,
-      // the way the old whole-document PUT used to.
-      const slice = formToPolicy(tenantForm, pluginCatalog);
-      delete slice.security;
-      delete slice.mam;
-      delete slice.managedApp;
-      // Opt-locking: send the version we loaded the policy at as
-      // If-Match. If another operator wrote in the meantime, backend
-      // returns 409 and we surface a non-blocking notice + reload so
-      // the user can re-apply on top of fresh state.
-      const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
-      await patchTenantPolicyDomain(tenantId, "agent-config", slice, { expectedVersion });
-      showSnack("Agent settings saved", "success");
-      await loadTenant();
-    } catch (e) {
-      if (e?.status === 409) {
-        console.warn("[agent-settings] tenant save rejected: stale policy", e?.body);
-        showSnack(
-          "Policy was modified by someone else. Reloaded — review your changes and save again.",
-          "warning"
-        );
-        await loadTenant();
-      } else {
-        console.error(e);
-        showSnack("Failed to save agent settings", "error");
-      }
-    } finally {
-      setTenantSaving(false);
+      const parsed = JSON.parse(value);
+      setError(null);
+      setForm(readFormFromPolicy(parsed, catalog));
+    } catch (err) {
+      setError(String(err?.message || err));
     }
   };
 
-  // Raw-JSON escape hatch: replaces the ENTIRE policy document (all
-  // three domains) via the whole-doc PUT. Kept for power users; the
-  // confirm dialog makes the blast radius explicit.
-  const handleSaveTenantRawJson = async () => {
-    if (!canManage || !tenantId) return;
-    if (tenantJsonError) {
-      showSnack("Fix JSON errors before saving", "error");
-      return;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(tenantJsonDraft);
-    } catch {
-      showSnack("Fix JSON errors before saving", "error");
-      return;
-    }
-    // El guard que importa. Si la política no se leyó, el formulario
-    // contiene defaults y `expectedVersion` sería null — o sea, un PATCH
-    // sin If-Match que pisa lo que haya en el servidor. Rechazar aquí, y
-    // no solo deshabilitar el botón, porque el botón se puede volver a
-    // habilitar por cualquier re-render y esto no admite un "casi".
-    if (tenantLoadError) {
-      showSnack("The current policy could not be read — reload before saving.", "error");
-      return;
-    }
+  // ── Save ──────────────────────────────────────────────────────────────
+  const saveBlockedReason = () => {
+    if (loadError) return "The current policy could not be read — reload before saving.";
+    if (jsonError) return "Fix JSON errors before saving.";
+    if (!catalogReady) return "The plugin catalog has not loaded yet — reload before saving.";
+    if (problems.length > 0) return problems[0].message;
+    if (isDevice && !selectedDeviceId) return "Choose a device first.";
+    return null;
+  };
 
+  const openSaveDialog = () => {
+    const reason = saveBlockedReason();
+    if (reason) { showSnack(reason, "error"); return; }
+    setDiffDialog({ open: true, entries: diff });
+  };
+
+  const confirmSave = async () => {
+    const reason = saveBlockedReason();
+    if (reason) { showSnack(reason, "error"); setDiffDialog({ open: false, entries: [] }); return; }
+    const setSaving = isDevice ? setDeviceSaving : setTenantSaving;
+    try {
+      setSaving(true);
+      const slice = agentConfigSlice(form, catalog, formToPolicy);
+      if (!isDevice) {
+        await patchTenantPolicyDomain(tenantId, "agent-config", slice, { expectedVersion: tenantEnv.version });
+        showSnack("Agent settings saved", "success");
+        setDiffDialog({ open: false, entries: [] });
+        await loadTenant();
+      } else if (hasOverride) {
+        await patchDevicePolicyDomain(selectedDeviceId, "agent-config", slice, { expectedVersion: deviceEnv.version });
+        showSnack("Device override updated", "success");
+        setDiffDialog({ open: false, entries: [] });
+        await loadDevice(selectedDeviceId);
+      } else {
+        // First override: the whole document — the effective policy verbatim
+        // with the agent-config keys replaced — so the device keeps its
+        // security/MAM/gateway blocks exactly as it runs them (invariant 4).
+        await saveDevicePolicy(selectedDeviceId, composeFirstOverride(effectiveView?.json, slice), {});
+        showSnack("Device override created", "success");
+        setDiffDialog({ open: false, entries: [] });
+        await Promise.all([loadDevice(selectedDeviceId), loadTenant()]);
+      }
+    } catch (e) {
+      setDiffDialog({ open: false, entries: [] });
+      if (e?.status === 409) {
+        console.warn("[agent-settings] save rejected: stale policy", e?.body);
+        showSnack("The policy was modified by someone else. Reloaded — review your changes and save again.", "warning");
+        if (isDevice) await loadDevice(selectedDeviceId); else await loadTenant();
+      } else {
+        console.error(e);
+        showSnack(e?.message ? `Failed to save: ${e.message}` : "Failed to save agent settings", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Raw-JSON escape hatch: replaces the ENTIRE tenant document.
+  const handleReplaceDocument = async () => {
+    if (isDevice) return;
+    if (tenantLoadError) { showSnack("The current policy could not be read — reload before saving.", "error"); return; }
+    let parsed;
+    try { parsed = JSON.parse(tenantJsonDraft); } catch { showSnack("Fix JSON errors before saving", "error"); return; }
     const ok = await confirm({
       title: "Replace the entire policy document?",
-      body:
-        "Saving raw JSON overwrites ALL policy domains — including the " +
-        "Security Baselines and Device Management (MAM) blocks, which are " +
-        "normally edited on their own pages.",
+      body: "This overwrites ALL policy domains — including the Security Baselines and Device Management blocks, which are normally edited on their own pages.",
       confirmText: "Replace document",
       danger: true,
     });
     if (!ok) return;
     try {
       setTenantSaving(true);
-      const expectedVersion = extractPolicyEnvelope(tenantPolicy).version;
-      await saveTenantPolicy(tenantId, parsed, { expectedVersion });
+      await saveTenantPolicy(tenantId, parsed, { expectedVersion: tenantEnv.version });
       showSnack("Policy document replaced", "success");
       await loadTenant();
     } catch (e) {
       if (e?.status === 409) {
-        showSnack(
-          "Policy was modified by someone else. Reloaded — review your changes and save again.",
-          "warning"
-        );
+        showSnack("The policy was modified by someone else. Reloaded — review your changes and save again.", "warning");
         await loadTenant();
       } else {
         console.error(e);
-        showSnack("Failed to save policy document", "error");
+        showSnack("Failed to replace the policy document", "error");
       }
     } finally {
       setTenantSaving(false);
     }
   };
 
+  // ── Push / delete ─────────────────────────────────────────────────────
   const handlePushTenant = async () => {
     if (!canManage || !tenantId) return;
     const ok = await confirm({
-      title: "Push tenant policy?",
+      title: "Push tenant policy to every device?",
       body:
-        "This will broadcast the current tenant policy to every device.\n\n" +
-        "Any pre-existing device-level overrides will be reset — devices with " +
-        "custom policies will receive the tenant policy instead.",
-      confirmText: "Push to all devices",
+        "Broadcasts the saved tenant policy to every device." +
+        (overrideCount > 0
+          ? `\n\n⚠️ ${overrideCount} device override${overrideCount === 1 ? "" : "s"} will be RESET — those devices will receive the tenant policy instead.`
+          : "\n\nNo device override exists, so nothing is reset."),
+      confirmText: overrideCount > 0 ? `Push and reset ${overrideCount} override${overrideCount === 1 ? "" : "s"}` : "Push to all devices",
       danger: true,
     });
     if (!ok) return;
     try {
       setTenantPushing(true);
       const res = await pushTenantPolicy(tenantId);
-      // Backend retorna: { targeted, connected, sent, failed, clearedOverrides }
-      // Mostramos los counters útiles para el operador. El número de
-      // devices entregados de inmediato (`sent`) puede ser menor que
-      // `targeted` cuando hay devices conectados a una instancia gRPC
-      // distinta de la REST que recibió el push — esos los cosecha la
-      // heartbeat reconciliation en sus próximos heartbeats.
-      const targeted = res?.targeted ?? 0;
-      const sent = res?.sent ?? 0;
+      const parts = [`${res?.targeted ?? 0} targeted`, `${res?.sent ?? 0} delivered immediately`];
       const cleared = res?.clearedOverrides ?? 0;
-      const parts = [`${targeted} targeted`, `${sent} delivered immediately`];
-      if (cleared > 0) {
-        parts.push(`${cleared} device override${cleared === 1 ? "" : "s"} reset`);
-      }
+      if (cleared > 0) parts.push(`${cleared} override${cleared === 1 ? "" : "s"} reset`);
       showSnack(`Tenant policy push: ${parts.join(" · ")}`, "success");
       await loadTenant();
+      if (selectedDeviceId) await loadDevice(selectedDeviceId);
     } catch (e) {
       console.error(e);
       showSnack("Failed to push tenant policy", "error");
@@ -721,133 +478,49 @@ export default function AgentSettings({ embedded = false }) {
     }
   };
 
-  const handleSaveDevice = async () => {
-    if (!canManage || !selectedDeviceId) return;
-    if (deviceJsonError) {
-      showSnack("Fix JSON errors before saving", "error");
-      return;
-    }
-    try {
-      setDeviceSaving(true);
-      const policy = formToPolicy(deviceForm, pluginCatalog);
-      // Same opt-locking rationale as tenant save above. `devicePolicy`
-      // can be null when there's no override yet — extractPolicyEnvelope
-      // returns version=null in that case, which becomes "no If-Match
-      // header sent" (legacy last-writer-wins for first writes).
-      const expectedVersion = extractPolicyEnvelope(devicePolicy).version;
-      await saveDevicePolicy(selectedDeviceId, policy, { expectedVersion });
-      showSnack("Device override saved", "success");
-      await loadDevice(selectedDeviceId);
-    } catch (e) {
-      if (e?.status === 409) {
-        console.warn("[policies] device save rejected: stale policy", e?.body);
-        showSnack(
-          "Device override was modified by someone else. Reloaded — review your changes and save again.",
-          "warning"
-        );
-        await loadDevice(selectedDeviceId);
-      } else {
-        console.error(e);
-        showSnack("Failed to save device override", "error");
-      }
-    } finally {
-      setDeviceSaving(false);
-    }
-  };
-
-  // Ref that always reflects the currently-selected device id. Used by
-  // the post-push poll to detect when the user has navigated to a
-  // different device mid-poll — in that case we simply stop updating
-  // state so the new device's panel isn't contaminated with stale data
-  // from the one we were polling.
   const selectedDeviceIdRef = React.useRef(selectedDeviceId);
-  React.useEffect(() => {
-    selectedDeviceIdRef.current = selectedDeviceId;
-  }, [selectedDeviceId]);
+  React.useEffect(() => { selectedDeviceIdRef.current = selectedDeviceId; }, [selectedDeviceId]);
 
-  const [devicePolling, setDevicePolling] = React.useState(false);
-
-  /**
-   * Poll the device's policy-status endpoint every 3s for up to 30s,
-   * stopping as soon as `last_ack_at` advances past the timestamp we
-   * captured before the push. This replaces the old "one-shot refresh"
-   * behavior that left the Sync panel showing a stale ACK whenever the
-   * agent took more than a second to process the policy.
-   *
-   * Fire-and-forget: callers don't await; the UI re-renders on each
-   * setDeviceStatus update. If the user switches to another device
-   * before the poll finishes we abandon silently.
-   */
-  const pollForDeviceAck = React.useCallback(
-    async (deviceId, priorAckAt) => {
-      const started = Date.now();
-      const MAX_MS = 30_000;
-      const POLL_MS = 3_000;
-      setDevicePolling(true);
-      try {
-        while (Date.now() - started < MAX_MS) {
-          await new Promise((r) => setTimeout(r, POLL_MS));
-          // User navigated away — don't touch state for a device that
-          // isn't on screen anymore.
-          if (selectedDeviceIdRef.current !== deviceId) return;
-
-          const res = await getDevicePolicyStatus(deviceId).catch(() => null);
-          // And check again — a slow request could have straddled a
-          // device switch.
-          if (selectedDeviceIdRef.current !== deviceId) return;
-
-          if (res) {
-            setDeviceStatus(res);
-            const nextAckAt = res?.last_ack_at ?? null;
-            if (nextAckAt && nextAckAt !== priorAckAt) {
-              if (res.last_ack_status === 0) {
-                showSnack("Agent acknowledged policy (ACK OK)", "success");
-              } else {
-                showSnack(
-                  `Agent rejected policy (ACK ${res.last_ack_status}${
-                    res.last_ack_message ? ": " + res.last_ack_message : ""
-                  })`,
-                  "warning"
-                );
-              }
-              return;
-            }
+  // Poll the device's status every 3 s for up to 30 s after a push, until
+  // `last_ack_at` advances. Abandoned silently if the operator moves on.
+  const pollForDeviceAck = React.useCallback(async (deviceId, priorAckAt) => {
+    const started = Date.now();
+    setDevicePolling(true);
+    try {
+      while (Date.now() - started < 30_000) {
+        await new Promise((r) => setTimeout(r, 3_000));
+        if (selectedDeviceIdRef.current !== deviceId) return;
+        const res = await getDevicePolicyStatus(deviceId).catch(() => null);
+        if (selectedDeviceIdRef.current !== deviceId) return;
+        const status = res?.status ?? res ?? null;
+        if (status) {
+          setDeviceStatus(status);
+          const nextAckAt = status.last_ack_at ?? null;
+          if (nextAckAt && nextAckAt !== priorAckAt) {
+            if (status.last_ack_status === 0) showSnack("Agent acknowledged the policy (ACK OK)", "success");
+            else showSnack(`Agent rejected the policy (ACK ${status.last_ack_status}${status.last_ack_message ? ": " + status.last_ack_message : ""})`, "warning");
+            return;
           }
         }
-        // Timed out. Don't swallow — surface so the operator knows the
-        // agent hasn't reported back. Common causes: device offline,
-        // gRPC bridge down on the agent, or the agent is mid-restart.
-        if (selectedDeviceIdRef.current === deviceId) {
-          showSnack(
-            "No ACK from agent in 30s — device may be offline or disconnected from gRPC",
-            "warning"
-          );
-        }
-      } finally {
-        setDevicePolling(false);
       }
-    },
-    [showSnack]
-  );
+      if (selectedDeviceIdRef.current === deviceId) showSnack("No ACK from the agent in 30 s — the device may be offline", "warning");
+    } finally {
+      setDevicePolling(false);
+    }
+  }, [showSnack]);
 
   const handlePushDevice = async () => {
     if (!canManage || !selectedDeviceId) return;
-    // Snapshot the current ACK timestamp before we push. The poll uses
-    // this as the "prior" baseline so it can tell a fresh ACK apart
-    // from the previous one still displayed on screen.
     const priorAckAt = deviceStatus?.last_ack_at ?? null;
     try {
       setDevicePushing(true);
       await pushDevicePolicy(selectedDeviceId);
-      showSnack("Policy dispatched to device", "success");
+      showSnack("Policy dispatched to the device", "success");
       await loadDevice(selectedDeviceId);
-      // Fire-and-forget. The push button releases immediately; the poll
-      // runs in the background and updates the Sync panel as it gets
-      // fresh status payloads.
       pollForDeviceAck(selectedDeviceId, priorAckAt);
     } catch (e) {
       console.error(e);
-      showSnack("Failed to push device policy", "error");
+      showSnack("Failed to push the device policy", "error");
     } finally {
       setDevicePushing(false);
     }
@@ -856,8 +529,8 @@ export default function AgentSettings({ embedded = false }) {
   const handleDeleteDevice = async () => {
     if (!canManage || !selectedDeviceId) return;
     const ok = await confirm({
-      title: "Remove device override?",
-      body: "The device will fall back to the tenant-level policy on its next sync.",
+      title: "Remove this device's override?",
+      body: "The device goes back to the tenant policy on its next sync.",
       confirmText: "Remove override",
       danger: true,
     });
@@ -866,184 +539,16 @@ export default function AgentSettings({ embedded = false }) {
       setDeviceDeleting(true);
       await deleteDevicePolicy(selectedDeviceId);
       showSnack("Device override removed", "success");
-      await loadDevice(selectedDeviceId);
+      await Promise.all([loadDevice(selectedDeviceId), loadTenant()]);
     } catch (e) {
       console.error(e);
-      showSnack("Failed to remove device override", "error");
+      showSnack("Failed to remove the override", "error");
     } finally {
       setDeviceDeleting(false);
     }
   };
 
-  const handleSwitchToDevice = (deviceId) => {
-    setSelectedDeviceId(deviceId);
-    setTab("device");
-  };
-
-  // ── Derived summary ────────────────────────────────────────────────────
-  const deviceMap = React.useMemo(
-    () => new Map(devices.map((d) => [d.deviceId, d])),
-    [devices]
-  );
-
-  const summary = React.useMemo(() => {
-    const total = tenantStatus.length;
-    const acked = tenantStatus.filter((s) => s.last_ack_status === 0).length;
-    const pending = tenantStatus.filter(
-      (s) => s.last_ack_status == null && s.last_sent_policy_version
-    ).length;
-    const errors = tenantStatus.filter(
-      (s) => s.last_ack_status != null && s.last_ack_status !== 0
-    ).length;
-    return { total, acked, pending, errors };
-  }, [tenantStatus]);
-
-  // Unified envelope extraction — the backend wraps DB rows as
-  // `{ ok, policy: { policy_version, policy_hash, policy_json, updated_at } }`
-  // and we want the UI to read version/hash/updatedAt regardless of
-  // which shape layer we landed in.
-  const tenantEnv = extractPolicyEnvelope(tenantPolicy);
-  const tenantVersion = tenantEnv.version ?? "—";
-  const tenantHash = tenantEnv.hash;
-  const tenantUpdatedAt = tenantEnv.updatedAt;
-
-  const deviceEnv = extractPolicyEnvelope(devicePolicy);
-  const deviceVersion = deviceEnv.version;
-  const deviceHash = deviceEnv.hash;
-  const deviceUpdatedAt = deviceEnv.updatedAt;
-
-  // Effective policy comes from /devices/:id/effective-policy which
-  // does its own shape dance; we pick policy_json → policyJson → policy
-  // (last one is a legacy API that nested the content one level).
-  const effectivePolicyJson =
-    effective?.policy_json ?? effective?.policyJson ?? effective?.policy ?? {};
-  const effectiveSource = effective?.source;
-  const effectiveVersion = effective?.policy_version ?? effective?.policyVersion;
-
-  // hasOverride is a pure "is there anything saved?" binary. Use the
-  // extracted content (what the user actually authored) — not the row
-  // wrapper, which always has policy_* columns even when empty.
-  const hasOverride = !isEmptyPolicy(deviceEnv.raw);
-
-  // ── Rollout table columns ──────────────────────────────────────────────
-  //
-  // Liveness columns (Online + Last seen) van junto al Device para que
-  // el operador interprete el ack a la derecha en su contexto correcto:
-  //   * online + ack reciente  → policy aplicada y viva (alta confianza)
-  //   * online + ack viejo     → policy estable, no requiere re-ack
-  //   * offline + ack reciente → aplicada antes de offline (media)
-  //   * offline + ack antiguo  → estado real desconocido (baja)
-  // Sin estas columnas, un ack OK podía interpretarse erróneamente como
-  // "device aplicó y sigue corriendo el plugin", aunque el device esté
-  // offline desde hace días o nunca recibió un policy_applied real.
-  const statusColumns = [
-    {
-      field: "device_id",
-      headerName: "Device",
-      minWidth: 200,
-      flex: 1,
-      valueGetter: (_v, row) => deviceMap.get(row.device_id)?.hostname || row.device_id,
-    },
-    {
-      field: "is_connected",
-      headerName: "Online",
-      minWidth: 75,
-      flex: 0.25,
-      sortable: true,
-      renderCell: (params) => {
-        const online = params.row?.is_connected === true;
-        const lastSeen = params.row?.last_heartbeat;
-        // Tooltip enriquecido con last seen para evitar dos hovers
-        // separados — el operador ve el dot y al pasar el mouse
-        // entiende exactamente qué tan reciente es esa señal.
-        const tooltip = online
-          ? lastSeen
-            ? `Online · last heartbeat ${formatRelativeTime(lastSeen)}`
-            : "Online — active session"
-          : lastSeen
-            ? `Offline · last seen ${formatRelativeTime(lastSeen)}`
-            : "Offline · never seen";
-        return <OnlineDot online={online} title={tooltip} />;
-      },
-    },
-    {
-      field: "last_heartbeat",
-      headerName: "Last seen",
-      minWidth: 110,
-      flex: 0.4,
-      // Render relative para scan-rapido, tooltip absoluto para
-      // precision cuando el operador necesita correlacionar con logs.
-      renderCell: (params) => {
-        const value = params.value;
-        if (!value) return <Typography variant="caption" sx={{ color: "text.secondary" }}>Never</Typography>;
-        return (
-          <Tooltip title={formatDate(value)} arrow>
-            <Typography variant="caption">{formatRelativeTime(value)}</Typography>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      field: "desired_policy_source",
-      headerName: "Source",
-      minWidth: 140,
-      flex: 0.5,
-      renderCell: (params) => renderSourceChip(params.value),
-    },
-    {
-      field: "desired_policy_version",
-      headerName: "Desired",
-      minWidth: 110,
-      flex: 0.4,
-      valueGetter: (_v, row) => row.desired_policy_version || "—",
-    },
-    {
-      field: "last_sent_policy_version",
-      headerName: "Sent",
-      minWidth: 110,
-      flex: 0.4,
-      valueGetter: (_v, row) => row.last_sent_policy_version || "—",
-    },
-    {
-      field: "last_ack_status",
-      headerName: "ACK",
-      minWidth: 130,
-      flex: 0.5,
-      renderCell: (params) => renderAckChip(params.row.last_ack_status, null),
-    },
-    {
-      field: "last_ack_at",
-      headerName: "ACK At",
-      minWidth: 140,
-      flex: 0.5,
-      renderCell: (params) => formatDate(params.value),
-    },
-    {
-      field: "last_ack_message",
-      headerName: "Message",
-      minWidth: 220,
-      flex: 1,
-      valueGetter: (_v, row) => row.last_ack_message || "—",
-    },
-  ];
-
-  const columnVisibilityModel = React.useMemo(() => {
-    if (isSmDown) {
-      // En móvil priorizamos: Device + Online + ACK status. Ocultamos
-      // detalles que requieren precisión (versions, timestamps,
-      // mensajes) — el operador puede tap en una row para ver el
-      // device override panel con el detalle completo.
-      return {
-        last_ack_at: false,
-        last_ack_message: false,
-        desired_policy_version: false,
-        last_heartbeat: false,
-        last_sent_policy_version: false,
-      };
-    }
-    return {};
-  }, [isSmDown]);
-
+  // ── Render ────────────────────────────────────────────────────────────
   if (!canManage) {
     return (
       <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
@@ -1054,186 +559,223 @@ export default function AgentSettings({ embedded = false }) {
     );
   }
 
+  const isTool = TOOL_IDS.has(view);
+  const editing = !isTool && view !== "plugins";
+  const saveDisabled = saving || !dirty || !catalogReady || Boolean(loadError) || Boolean(jsonError) || problems.length > 0 || (isDevice && !selectedDeviceId);
+
+  const scopeVersionText = isDevice
+    ? hasOverride
+      ? `override ${deviceEnv.version ?? "—"}`
+      : selectedDeviceId
+        ? "no override · follows the tenant policy"
+        : ""
+    : tenantEnv.version
+      ? `version ${tenantEnv.version}${tenantEnv.updatedAt ? ` · ${formatRelativeTime(tenantEnv.updatedAt)}` : ""}`
+      : "";
+  const scopeRolloutText = !isDevice && rollout.active > 0 ? `${rollout.inSync} of ${rollout.active} active devices in sync` : "";
+
+  const refreshControl = (
+    <RefreshControl refreshSeconds={refreshSeconds} onRefreshSecondsChange={setRefreshSeconds} onRefresh={manualRefresh} loading={tenantLoading} />
+  );
+
+  let content = null;
+  if (view === "plugins") {
+    content = (
+      <PluginsView
+        catalog={catalog}
+        form={form}
+        entitled={entitled}
+        coverage={coverage}
+        onOpenSection={(key) => setView(key)}
+        onNavigate={onNavigate}
+      />
+    );
+  } else if (view === "overrides") {
+    content = (
+      <OverridesView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onEdit={openDeviceFromTool} onPushAll={handlePushTenant} pushing={tenantPushing} />
+    );
+  } else if (view === "rollout") {
+    content = <PolicyRolloutView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onOpenDevice={openDeviceFromTool} now={loadedAt} />;
+  } else if (isDevice && !selectedDeviceId) {
+    content = (
+      <Alert severity="info">Choose a device in the bar above to inspect or edit its override.</Alert>
+    );
+  } else if (view === "advanced") {
+    content = (
+      <AdvancedJsonPanel
+        scope={scope}
+        jsonDraft={jsonDraft}
+        jsonError={jsonError}
+        onJsonChange={handleJsonChange}
+        onReplaceDocument={isDevice ? null : handleReplaceDocument}
+        replaceDisabled={tenantSaving || Boolean(tenantLoadError)}
+        effective={effectiveView}
+      />
+    );
+  } else {
+    content = (
+      <PolicySectionPanel section={activeSection} form={form} onChange={setForm} catalog={catalog} onNavigate={onNavigate} onOpenPlugins={() => setView("plugins")} />
+    );
+  }
+
   return (
-    <Box
-      sx={
-        embedded
-          ? { minWidth: 0 }
-          : { px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }
-      }
-    >
-      {/* Header */}
+    <Box sx={embedded ? { minWidth: 0 } : { px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       {embedded ? (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={refreshAll}
-            loading={tenantLoading}
-          />
-        </Box>
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>{refreshControl}</Box>
       ) : (
         <PageHeader
           title="Agent Settings"
-          subtitle="How the agent and its plugins behave — collection schedules, feature gates and runtime limits. What's included/active lives in Billing; security remediation lives in Security Baselines; mobile/MAM in Device Management."
+          subtitle="How the agent and its plugins behave, per plugin, for the tenant or for one device."
           icon={<TuneOutlinedIcon />}
-          actions={
-            <RefreshControl
-              refreshSeconds={refreshSeconds}
-              onRefreshSecondsChange={setRefreshSeconds}
-              onRefresh={refreshAll}
-              loading={tenantLoading}
-            />
-          }
+          actions={refreshControl}
         />
       )}
 
-      {/* Summary cards — intentionally complementary, not mutually
-          exclusive: a device can show up in both `Devices tracked` and
-          `ACK OK`. Tracked is total; the other three are a breakdown
-          of that total by last-ACK state. Hints below each value
-          spell this out so the numbers don't look double-counted. */}
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <SummaryCard
-              title="Devices tracked"
-              value={summary.total}
-              hint="total with policy rollout state"
-              icon={<AssignmentOutlinedIcon />}
-              accent={BRAND.dark}
-              tint={BRAND.darkSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <SummaryCard
-              title="ACK OK"
-              value={summary.acked}
-              hint={
-                summary.total > 0
-                  ? `${summary.acked} / ${summary.total} applied`
-                  : "no rollouts yet"
-              }
-              icon={<CheckCircleOutlineOutlinedIcon />}
-              accent={BRAND.tealText}
-              tint={BRAND.tealSoft}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <SummaryCard
-              title="Pending ACK"
-              value={summary.pending}
-              hint="sent, awaiting agent reply"
-              icon={<HourglassEmptyOutlinedIcon />}
-              accent={BRAND.alert.high}
-              tint="rgba(199,121,43,0.14)"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <SummaryCard
-              title="ACK errors"
-              value={summary.errors}
-              hint="agent rejected or failed to apply"
-              icon={<ErrorOutlineOutlinedIcon />}
-              accent={BRAND.alert.error}
-              tint={BRAND.alert.errorSoft}
-            />
-          </Grid>
+      <PolicyScopeBar
+        scope={scope}
+        onScopeChange={handleScopeChange}
+        device={isDevice ? selectedDevice : null}
+        onPickDevice={handlePickDevice}
+        versionText={scopeVersionText}
+        rolloutText={scopeRolloutText}
+        onOpenRollout={!isDevice ? () => setView("rollout") : null}
+        dirtyCount={diff.length}
+      />
+
+      <Grid container spacing={2} sx={{ mt: 1.5 }}>
+        <Grid size={{ xs: 12, md: 3 }}>
+          <SectionPaper variant="panel" sx={{ p: 1, minWidth: 0 }}>
+            <PluginNav sections={sections} tools={TOOL_VIEWS} active={view} onSelect={setView} changes={changes} />
+          </SectionPaper>
         </Grid>
-      </Box>
 
-      {/* Tabs */}
-      <SectionPaper
-        variant="panel"
-        sx={{ p: 0, overflow: "hidden", mb: 2 }}
-      >
-        <Tabs
-          value={tab}
-          onChange={(_e, next) => setTab(next)}
-          sx={{
-            borderBottom: `1px solid ${BRAND.border}`,
-            bgcolor: BRAND.darkSoft,
-            "& .MuiTab-root": {
-              textTransform: "none",
-              fontWeight: 700,
-              color: BRAND.dark,
-              minHeight: 48,
-              outline: "none",
-              "&:focus, &:focus-visible": {
-                outline: "none",
-                boxShadow: "none",
-              },
-              "&.Mui-focusVisible": {
-                backgroundColor: BRAND.cyanSoft,
-              },
-            },
-            "& .Mui-selected": { color: `${BRAND.teal} !important` },
-            "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
-          }}
-        >
-          <Tab value="tenant" label="Tenant Policy" icon={<TuneOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
-          <Tab value="device" label="Device Overrides" icon={<AccountTreeOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
-        </Tabs>
+        <Grid size={{ xs: 12, md: 9 }}>
+          <SectionPaper variant="panel" sx={{ minWidth: 0 }}>
+            {isDevice && gatewayForSelected && editing ? (
+              <Alert severity="info" icon={<HubOutlinedIcon />} sx={{ mb: 2 }}>
+                This device is the <strong>Infrastructure Gateway</strong> “{gatewayForSelected.name}”. Its <code>gateway</code> policy block is managed from{" "}
+                <strong>Patch Management → Virtual infrastructure</strong>; a change here is replaced the next time the gateway is saved.
+              </Alert>
+            ) : null}
 
-        <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
-          {tab === "tenant" ? (
-            <TenantTab
-              tenantForm={tenantForm}
-              setTenantForm={setTenantForm}
-              tenantJsonDraft={tenantJsonDraft}
-              setTenantJsonDraft={setTenantJsonDraft}
-              tenantJsonError={tenantJsonError}
-              setTenantJsonError={setTenantJsonError}
-              tenantVersion={tenantVersion}
-              tenantHash={tenantHash}
-              tenantUpdatedAt={tenantUpdatedAt}
-              tenantSaving={tenantSaving}
-              tenantLoadError={tenantLoadError}
-              onRetryLoad={loadTenant}
-              tenantPushing={tenantPushing}
-              onSave={handleSaveTenant}
-              onPush={handlePushTenant}
-              onSaveRawJson={handleSaveTenantRawJson}
-              tenantStatus={tenantStatus}
-              statusColumns={statusColumns}
-              columnVisibilityModel={columnVisibilityModel}
-              onRowClick={(row) => handleSwitchToDevice(row.device_id)}
-              loading={tenantLoading}
-              pluginCoverageResult={pluginCoverageResult}
-            />
-          ) : (
-            <DeviceTab
-              devices={devices}
-              gatewayForSelected={gatewayForSelected}
-              selectedDeviceId={selectedDeviceId}
-              setSelectedDeviceId={setSelectedDeviceId}
-              deviceMap={deviceMap}
-              hasOverride={hasOverride}
-              deviceForm={deviceForm}
-              setDeviceForm={setDeviceForm}
-              deviceJsonDraft={deviceJsonDraft}
-              setDeviceJsonDraft={setDeviceJsonDraft}
-              deviceJsonError={deviceJsonError}
-              setDeviceJsonError={setDeviceJsonError}
-              deviceVersion={deviceVersion}
-              deviceHash={deviceHash}
-              deviceUpdatedAt={deviceUpdatedAt}
-              effectivePolicyJson={effectivePolicyJson}
-              effectiveSource={effectiveSource}
-              effectiveVersion={effectiveVersion}
-              deviceStatus={deviceStatus}
-              deviceSaving={deviceSaving}
-              devicePushing={devicePushing}
-              devicePolling={devicePolling}
-              deviceDeleting={deviceDeleting}
-              loading={deviceLoading}
-              onSave={handleSaveDevice}
-              onPush={handlePushDevice}
-              onDelete={handleDeleteDevice}
-            />
-          )}
-        </Box>
-      </SectionPaper>
+            {content}
+
+            {editing && loadError ? (
+              <Alert
+                severity="error"
+                sx={{ mt: 2.5 }}
+                action={
+                  <Button color="inherit" size="small" onClick={() => (isDevice ? loadDevice(selectedDeviceId) : loadTenant())}>
+                    Retry
+                  </Button>
+                }
+              >
+                <AlertTitle>Couldn&apos;t read the current policy</AlertTitle>
+                {loadError} — the form shows default values, not the real configuration. Saving is disabled so it cannot be overwritten.
+              </Alert>
+            ) : null}
+
+            {editing && problems.length > 0 ? (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                {problems.map((p) => (
+                  <div key={`${p.section}-${p.message}`}>{p.message}</div>
+                ))}
+              </Alert>
+            ) : null}
+
+            {editing && (!isDevice || selectedDeviceId) ? (
+              <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+                <Button
+                  variant="contained"
+                  startIcon={<SaveOutlinedIcon />}
+                  onClick={openSaveDialog}
+                  disabled={saveDisabled}
+                  sx={{ bgcolor: BRAND.teal, color: BRAND.surface, fontWeight: 700, textTransform: "none", "&:hover": { bgcolor: BRAND.tealHover } }}
+                >
+                  {saving ? "Saving…" : isDevice ? (hasOverride ? "Review and update override…" : "Review and create override…") : "Review and save…"}
+                </Button>
+                {!isDevice ? (
+                  <Button
+                    variant="outlined"
+                    startIcon={<SendOutlinedIcon />}
+                    onClick={handlePushTenant}
+                    disabled={tenantPushing}
+                    sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
+                  >
+                    {tenantPushing ? "Pushing…" : overrideCount > 0 ? `Push to all (resets ${overrideCount})` : "Push to all"}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SendOutlinedIcon />}
+                      onClick={handlePushDevice}
+                      disabled={devicePushing || deviceLoading}
+                      sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
+                    >
+                      {devicePushing ? "Pushing…" : "Push to device"}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteOutlineOutlinedIcon />}
+                      onClick={handleDeleteDevice}
+                      disabled={deviceDeleting || !hasOverride || deviceLoading}
+                      sx={{ textTransform: "none", fontWeight: 700 }}
+                    >
+                      {deviceDeleting ? "Removing…" : "Remove override"}
+                    </Button>
+                  </>
+                )}
+                {!dirty && !saving ? (
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, ml: 0.5 }}>No unsaved changes</Typography>
+                ) : null}
+              </Box>
+            ) : null}
+
+            {isDevice && selectedDeviceId && editing ? (
+              <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${BRAND.border}` }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
+                  <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>Sync status</Typography>
+                  {devicePolling ? (
+                    <Chip
+                      label="Waiting for ACK…"
+                      size="small"
+                      icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                      sx={{ bgcolor: BRAND.cyanSoft, color: BRAND.tealText, fontWeight: 700, "& .MuiChip-icon": { color: BRAND.tealText } }}
+                    />
+                  ) : null}
+                  {deviceStatus ? renderAckChip(deviceStatus.last_ack_status, null) : null}
+                </Box>
+                {deviceStatus ? (
+                  <Box sx={{ display: "grid", gap: 0.5, gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}>
+                    <DetailRow label="Desired" value={deviceStatus.desired_policy_version || "—"} mono />
+                    <DetailRow label="Source" value={deviceStatus.desired_policy_source || "—"} />
+                    <DetailRow label="Last sent" value={deviceStatus.last_sent_policy_version || "—"} mono />
+                    <DetailRow label="Sent at" value={formatDate(deviceStatus.last_sent_at)} />
+                    <DetailRow label="ACK version" value={deviceStatus.last_ack_policy_version || "—"} mono />
+                    <DetailRow label="ACK at" value={formatDate(deviceStatus.last_ack_at)} />
+                    <DetailRow label="Message" value={deviceStatus.last_ack_message || "—"} />
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">No sync activity recorded yet for this device.</Typography>
+                )}
+              </Box>
+            ) : null}
+          </SectionPaper>
+        </Grid>
+      </Grid>
+
+      <PolicyDiffDialog
+        open={diffDialog.open}
+        entries={diffDialog.entries}
+        onClose={() => setDiffDialog({ open: false, entries: [] })}
+        onConfirm={confirmSave}
+        busy={saving}
+        title={isDevice ? (hasOverride ? "Review override changes" : "Review the new override") : "Review tenant policy changes"}
+        confirmText={isDevice ? (hasOverride ? "Update override" : "Create override") : "Save"}
+        scopeLabel={isDevice ? selectedDevice?.hostname || selectedDeviceId : "Tenant policy"}
+      />
 
       <BrandSnackbar
         open={snackbar.open}
@@ -1241,404 +783,6 @@ export default function AgentSettings({ embedded = false }) {
         message={snackbar.message}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       />
-    </Box>
-  );
-}
-
-// ── Tenant tab ──────────────────────────────────────────────────────────
-
-function TenantTab(props) {
-  const {
-    tenantForm, setTenantForm,
-    tenantJsonDraft, setTenantJsonDraft,
-    tenantJsonError, setTenantJsonError,
-    tenantVersion, tenantHash, tenantUpdatedAt,
-    tenantSaving, tenantPushing, onSave, onPush, onSaveRawJson,
-    tenantLoadError, onRetryLoad,
-    tenantStatus, statusColumns, columnVisibilityModel, onRowClick,
-    loading,
-    pluginCoverageResult,
-  } = props;
-
-  return (
-    <Grid container spacing={2}>
-      <Grid size={{ xs: 12, lg: 5 }}>
-        <SectionPaper
-          variant="panel"
-          sx={{ minWidth: 0 }}
-        >
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-              Tenant policy
-            </Typography>
-          </Box>
-
-          <Box sx={{ display: "grid", gap: 0.5, mb: 2 }}>
-            <DetailRow label="Version" value={tenantVersion} mono />
-            <DetailRow label="Hash" value={shortHash(tenantHash)} mono />
-            <DetailRow label="Updated" value={formatDate(tenantUpdatedAt)} />
-          </Box>
-
-          <Divider sx={{ borderColor: BRAND.border, mb: 2 }} />
-
-          <PolicyForm
-            form={tenantForm}
-            onChange={setTenantForm}
-            jsonDraft={tenantJsonDraft}
-            setJsonDraft={setTenantJsonDraft}
-            jsonError={tenantJsonError}
-            setJsonError={setTenantJsonError}
-            onSaveRawJson={onSaveRawJson}
-          />
-
-          {tenantLoadError ? (
-            // Sin esto el formulario se ve normal — con defaults — y nada
-            // indica que lo que hay en pantalla no es la política real.
-            <Alert
-              severity="error"
-              sx={{ mt: 2.5 }}
-              action={
-                <Button color="inherit" size="small" onClick={onRetryLoad}>
-                  Retry
-                </Button>
-              }
-            >
-              <AlertTitle>Couldn&apos;t read the current policy</AlertTitle>
-              {tenantLoadError} — the form below shows default values, not this
-              tenant&apos;s configuration. Saving is disabled so it can&apos;t be
-              overwritten.
-            </Alert>
-          ) : null}
-
-          <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
-            <Button
-              variant="contained"
-              startIcon={<SaveOutlinedIcon />}
-              onClick={onSave}
-              disabled={tenantSaving || Boolean(tenantJsonError) || Boolean(tenantLoadError)}
-              sx={{
-                bgcolor: BRAND.teal,
-                color: BRAND.surface,
-                fontWeight: 700,
-                textTransform: "none",
-                "&:hover": { bgcolor: BRAND.tealHover },
-              }}
-            >
-              {tenantSaving ? "Saving…" : "Save"}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<SendOutlinedIcon />}
-              onClick={onPush}
-              disabled={tenantPushing}
-              sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                borderColor: BRAND.teal,
-                color: BRAND.teal,
-                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              {tenantPushing ? "Pushing…" : "Push to all"}
-            </Button>
-          </Box>
-        </SectionPaper>
-      </Grid>
-
-      <Grid size={{ xs: 12, lg: 7 }}>
-        {/*
-          Plugin coverage real — qué plugins están EFECTIVAMENTE corriendo
-          en runtime según el último facts publish de cada agent. Distinto
-          de "ack OK" en la tabla de Rollout status abajo: el ack confirma
-          que el agent recibió y procesó la policy en su momento, pero un
-          ack viejo en un device offline o un runtime desincronizado
-          (bug de la saga PMP) no garantiza que el plugin esté activo
-          ahora. Esta strip lo refleja desde agent.capabilities.
-        */}
-        <Box sx={{ mb: 2 }}>
-          <PluginCoverageStrip result={pluginCoverageResult} loading={loading} />
-        </Box>
-
-        <SectionPaper
-          variant="panel"
-          sx={{ minWidth: 0, overflow: "hidden" }}
-        >
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5, flexWrap: "wrap", gap: 1 }}>
-            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-              Rollout status
-            </Typography>
-            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-              {tenantStatus.length} devices tracked · click a row to edit override
-            </Typography>
-          </Box>
-
-          <Box sx={{ width: "100%", overflowX: "auto" }}>
-            <DataGrid
-              autoHeight
-              disableRowSelectionOnClick
-              rows={tenantStatus}
-              columns={statusColumns}
-              loading={loading}
-              getRowId={(row) => row.device_id}
-              onRowClick={(params) => onRowClick?.(params.row)}
-              columnVisibilityModel={columnVisibilityModel}
-              pageSizeOptions={[10, 25, 50]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-              sx={DATAGRID_SX}
-            />
-          </Box>
-        </SectionPaper>
-      </Grid>
-    </Grid>
-  );
-}
-
-// ── Device tab ──────────────────────────────────────────────────────────
-
-function DeviceTab(props) {
-  const {
-    devices, selectedDeviceId, setSelectedDeviceId, deviceMap,
-    gatewayForSelected,
-    hasOverride,
-    deviceForm, setDeviceForm,
-    deviceJsonDraft, setDeviceJsonDraft,
-    deviceJsonError, setDeviceJsonError,
-    deviceVersion, deviceHash, deviceUpdatedAt,
-    effectivePolicyJson, effectiveSource, effectiveVersion,
-    deviceStatus,
-    deviceSaving, devicePushing, devicePolling, deviceDeleting, loading,
-    onSave, onPush, onDelete,
-  } = props;
-
-  const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) : null;
-
-  return (
-    <Box>
-      {/* Device selector */}
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          select
-          label="Device"
-          size="small"
-          value={selectedDeviceId}
-          onChange={(e) => setSelectedDeviceId(e.target.value)}
-          fullWidth
-          helperText={
-            selectedDevice
-              ? `${selectedDevice.connected ? "Connected" : "Offline"} · agent ${selectedDevice.agentVersion || "unknown"}`
-              : `${devices.length} devices known`
-          }
-        >
-          {devices.length === 0 ? (
-            <MenuItem value="">No devices available</MenuItem>
-          ) : (
-            devices.map((d) => (
-              <MenuItem key={d.deviceId} value={d.deviceId}>
-                {d.hostname}
-                {d.hostname !== d.deviceId ? ` · ${d.deviceId}` : ""}
-                {d.connected ? " · online" : " · offline"}
-              </MenuItem>
-            ))
-          )}
-        </TextField>
-      </Box>
-
-      {!selectedDeviceId ? (
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 3,
-            borderRadius: 2,
-            borderColor: BRAND.border,
-            borderStyle: "dashed",
-            bgcolor: BRAND.darkSoft,
-            textAlign: "center",
-            color: "text.secondary",
-          }}
-        >
-          <InfoOutlinedIcon sx={{ fontSize: ICON["2xl"], color: BRAND.gray, mb: 1 }} />
-          <Typography variant="body2">Select a device to inspect and edit its override.</Typography>
-        </Paper>
-      ) : (
-        <Grid container spacing={2}>
-          {gatewayForSelected && (
-            <Grid size={12}>
-              <Alert severity="info" icon={<HubOutlinedIcon />}>
-                This device is the <strong>Infrastructure Gateway</strong> “{gatewayForSelected.name}”.
-                Its <code>gateway</code> policy block is managed from{" "}
-                <strong>Patch Management → Virtual infrastructure</strong> — edit it there,
-                not here, or your change will be replaced the next time the gateway is saved.
-              </Alert>
-            </Grid>
-          )}
-          {/* Override editor */}
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <SectionPaper
-              variant="panel"
-              sx={{ minWidth: 0 }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-                  Device override
-                </Typography>
-                {hasOverride ? (
-                  <Chip
-                    label="Override active"
-                    size="small"
-                    sx={{
-                      bgcolor: BRAND.cyanSoft,
-                      color: BRAND.dark,
-                      fontWeight: 700,
-                      border: `1px solid ${BRAND.cyan}88`,
-                    }}
-                  />
-                ) : (
-                  <Chip
-                    label="No override"
-                    size="small"
-                    sx={{
-                      bgcolor: BRAND.darkSoft,
-                      color: BRAND.dark,
-                      fontWeight: 700,
-                      border: `1px solid ${BRAND.border}`,
-                    }}
-                  />
-                )}
-              </Box>
-
-              <Box sx={{ display: "grid", gap: 0.5, mb: 2 }}>
-                <DetailRow label="Version" value={deviceVersion || "—"} mono />
-                <DetailRow label="Hash" value={shortHash(deviceHash)} mono />
-                <DetailRow label="Updated" value={formatDate(deviceUpdatedAt)} />
-              </Box>
-
-              <Divider sx={{ borderColor: BRAND.border, mb: 2 }} />
-
-              <PolicyForm
-                form={deviceForm}
-                onChange={setDeviceForm}
-                jsonDraft={deviceJsonDraft}
-                setJsonDraft={setDeviceJsonDraft}
-                jsonError={deviceJsonError}
-                setJsonError={setDeviceJsonError}
-              />
-
-              <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap" }}>
-                <Button
-                  variant="contained"
-                  startIcon={<SaveOutlinedIcon />}
-                  onClick={onSave}
-                  disabled={deviceSaving || Boolean(deviceJsonError) || loading}
-                  sx={{
-                    bgcolor: BRAND.teal,
-                    color: BRAND.surface,
-                    fontWeight: 700,
-                    textTransform: "none",
-                    "&:hover": { bgcolor: BRAND.tealHover },
-                  }}
-                >
-                  {deviceSaving ? "Saving…" : hasOverride ? "Update override" : "Create override"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<SendOutlinedIcon />}
-                  onClick={onPush}
-                  disabled={devicePushing || loading}
-                  sx={{
-                    textTransform: "none",
-                    fontWeight: 700,
-                    borderColor: BRAND.teal,
-                    color: BRAND.teal,
-                    "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-                  }}
-                >
-                  {devicePushing ? "Pushing…" : "Push"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<DeleteOutlineOutlinedIcon />}
-                  onClick={onDelete}
-                  disabled={deviceDeleting || !hasOverride || loading}
-                  sx={{ textTransform: "none", fontWeight: 700 }}
-                >
-                  {deviceDeleting ? "Removing…" : "Remove override"}
-                </Button>
-              </Box>
-            </SectionPaper>
-          </Grid>
-
-          {/* Effective + status */}
-          <Grid size={{ xs: 12, lg: 6 }}>
-            <SectionPaper
-              variant="panel"
-              sx={{ minWidth: 0, mb: 2 }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-                  Effective policy
-                </Typography>
-                {renderSourceChip(effectiveSource)}
-              </Box>
-              <Box sx={{ display: "grid", gap: 0.5, mb: 1 }}>
-                <DetailRow label="Version" value={effectiveVersion || "—"} mono />
-              </Box>
-              <JsonBlock value={effectivePolicyJson} maxHeight={220} />
-            </SectionPaper>
-
-            <SectionPaper
-              variant="panel"
-              sx={{ minWidth: 0 }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 1, mb: 1 }}>
-                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-                  Sync status
-                </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  {/* Lightweight live indicator while the post-push poll
-                      runs. Fades in for up to 30 s; once ACK arrives or
-                      the window elapses, the chip shows the real result. */}
-                  {devicePolling && (
-                    <Chip
-                      label="Waiting for ACK…"
-                      size="small"
-                      icon={<HourglassEmptyOutlinedIcon sx={{ fontSize: ICON.sm }} />}
-                      sx={{
-                        bgcolor: BRAND.cyanSoft,
-                        color: BRAND.tealText,
-                        fontWeight: 700,
-                        border: `1px solid ${BRAND.teal}55`,
-                        animation: "pulse 1.5s ease-in-out infinite",
-                        "@keyframes pulse": {
-                          "0%, 100%": { opacity: 1 },
-                          "50%": { opacity: 0.5 },
-                        },
-                        "& .MuiChip-icon": { color: BRAND.tealText },
-                      }}
-                    />
-                  )}
-                  {deviceStatus ? renderAckChip(deviceStatus.last_ack_status, null) : null}
-                </Box>
-              </Box>
-              {deviceStatus ? (
-                <Box sx={{ display: "grid", gap: 0.5 }}>
-                  <DetailRow label="Desired" value={deviceStatus.desired_policy_version || "—"} mono />
-                  <DetailRow label="Source" value={deviceStatus.desired_policy_source || "—"} />
-                  <DetailRow label="Last sent" value={deviceStatus.last_sent_policy_version || "—"} mono />
-                  <DetailRow label="Sent at" value={formatDate(deviceStatus.last_sent_at)} />
-                  <DetailRow label="ACK version" value={deviceStatus.last_ack_policy_version || "—"} mono />
-                  <DetailRow label="ACK at" value={formatDate(deviceStatus.last_ack_at)} />
-                  <DetailRow label="Message" value={deviceStatus.last_ack_message || "—"} />
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No sync activity recorded yet for this device.
-                </Typography>
-              )}
-            </SectionPaper>
-          </Grid>
-        </Grid>
-      )}
     </Box>
   );
 }
