@@ -49,11 +49,15 @@ import { formatDate } from "../utils/format";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 import {
+  applyOverrideBatch,
   deleteDevicePolicy,
   getDevicePolicy,
+  getPolicyHistoryEntry,
   getDevicePolicyStatus,
   getEffectivePolicy,
   getTenantPolicy,
+  listOverrideBatches,
+  listPolicyHistory,
   listTenantOverrides,
   listTenantPolicyStatus,
   patchDevicePolicyDomain,
@@ -61,10 +65,14 @@ import {
   pushDevicePolicy,
   pushTenantPolicy,
   resetTenantOverrides,
+  restorePolicyVersion,
+  revokeOverrideBatch,
   saveDevicePolicy,
   saveTenantPolicy,
 } from "../api/policies";
 import { listAllKnownDevices } from "../api/jobs";
+import { listAssetGroups } from "../api/assetGroups";
+import { listFrom } from "../api/shape";
 import { getPluginCoverageSummary } from "../api/overview";
 import { listGateways } from "../api/patchManagement";
 
@@ -84,6 +92,8 @@ import AdvancedJsonPanel from "../components/AgentSettings/AdvancedJsonPanel";
 import OverridesView from "../components/AgentSettings/OverridesView";
 import PolicyRolloutView from "../components/AgentSettings/PolicyRolloutView";
 import PolicyDiffDialog from "../components/AgentSettings/PolicyDiffDialog";
+import ApplyOverrideDialog from "../components/AgentSettings/ApplyOverrideDialog";
+import HistoryPanel from "../components/AgentSettings/HistoryPanel";
 import { diffPolicies } from "../components/AgentSettings/policyDiff";
 import { agentConfigSlice, deviceDomainSlice, domainSlice, domainsTouched, formProblems, overriddenDomains } from "../components/AgentSettings/formGuards";
 import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, TOOL_VIEWS } from "../components/AgentSettings/sections";
@@ -142,6 +152,14 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const [coverage, setCoverage] = React.useState(null);
   const [overrides, setOverrides] = React.useState([]);
   const [resettingOverrides, setResettingOverrides] = React.useState(false);
+  const [batches, setBatches] = React.useState([]);
+  const [groups, setGroups] = React.useState([]);
+  const [history, setHistory] = React.useState([]);
+  const [applyOpen, setApplyOpen] = React.useState(false);
+  const [applying, setApplying] = React.useState(false);
+  const [revokingId, setRevokingId] = React.useState(null);
+  const [restoring, setRestoring] = React.useState(false);
+  const [historyReview, setHistoryReview] = React.useState(null); // { entry, entries }
   const [loadedAt, setLoadedAt] = React.useState(() => Date.now());
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const showSnack = React.useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
@@ -180,7 +198,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     if (!canManage || !tenantId) return;
     try {
       setTenantLoading(true);
-      const [policyRes, statusRes, devicesRes, coverageRes, overridesRes] = await Promise.all([
+      const [policyRes, statusRes, devicesRes, coverageRes, overridesRes, batchesRes, historyRes, groupsRes] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setTenantLoadError(null); return r; },
           (err) => { setTenantLoadError(err?.message || "Could not load the tenant policy."); return null; }
@@ -189,6 +207,9 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         listAllKnownDevices().catch(() => ({ items: [] })),
         getPluginCoverageSummary().catch(() => null),
         listTenantOverrides(tenantId).catch(() => ({ items: [] })),
+        listOverrideBatches(tenantId).catch(() => ({ items: [] })),
+        listPolicyHistory(tenantId).catch(() => ({ items: [] })),
+        listAssetGroups().catch(() => ({ items: [] })),
       ]);
       const policy = extractPolicyEnvelope(policyRes).raw ?? {};
       const form = readFormFromPolicy(policy, catalog);
@@ -201,6 +222,9 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       setDevices(normalizeDevices(devicesRes?.items));
       setCoverage(coverageRes && typeof coverageRes === "object" ? coverageRes : null);
       setOverrides(Array.isArray(overridesRes?.items) ? overridesRes.items : []);
+      setBatches(Array.isArray(batchesRes?.items) ? batchesRes.items : []);
+      setHistory(Array.isArray(historyRes?.items) ? historyRes.items : []);
+      setGroups(listFrom(groupsRes, { context: "agentSettingsGroups" }));
       setLoadedAt(Date.now());
     } catch (e) {
       console.error(e);
@@ -563,6 +587,88 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     }
   };
 
+  // ── Phase C: apply by group, revoke a batch, restore a version ────────
+  const handleApplyBatch = async (payload) => {
+    if (!canManage || !tenantId) return;
+    try {
+      setApplying(true);
+      const res = await applyOverrideBatch(tenantId, payload);
+      const skipped = Array.isArray(res?.skipped) ? res.skipped.length : 0;
+      showSnack(
+        `${payload.sectionLabel} applied to ${res?.applied ?? 0} of ${res?.targeted ?? 0} device${(res?.targeted ?? 0) === 1 ? "" : "s"} (${payload.targetLabel}) · ${res?.sent ?? 0} delivered immediately${skipped ? ` · ${skipped} skipped` : ""}`,
+        "success"
+      );
+      setApplyOpen(false);
+      await loadTenant();
+      if (selectedDeviceId) await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack(e?.message ? `Failed to apply: ${e.message}` : "Failed to apply the override", "error");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleRevokeBatch = async (batch) => {
+    if (!canManage || !tenantId || !batch?.id) return;
+    const live = Number(batch.live_device_count ?? 0);
+    const ok = await confirm({
+      title: "Revoke this batch?",
+      body: `${live} device${live === 1 ? "" : "s"} still carr${live === 1 ? "ies" : "y"} this override${batch.group_name ? ` (via group ${batch.group_name})` : ""}. ${live === 1 ? "It goes" : "They go"} back to the tenant policy for ${sectionLabel(batch.domain)}. Devices whose section was edited by hand afterwards are left alone.`,
+      confirmText: "Revoke batch",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      setRevokingId(batch.id);
+      const res = await revokeOverrideBatch(tenantId, batch.id);
+      showSnack(`Batch revoked · ${res?.reverted ?? 0} device${(res?.reverted ?? 0) === 1 ? "" : "s"} back on the tenant policy`, "success");
+      await loadTenant();
+      if (selectedDeviceId) await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to revoke the batch", "error");
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handleReviewHistory = async (entry) => {
+    if (!tenantId || !entry?.id) return;
+    try {
+      const res = await getPolicyHistoryEntry(tenantId, entry.id);
+      const json = res?.entry?.policy_json ?? {};
+      setHistoryReview({ entry: res?.entry ?? entry, entries: diffPolicies(tenantEnv.raw ?? {}, json) });
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to load that version", "error");
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!historyReview?.entry?.id || !tenantId) return;
+    if (tenantLoadError) { showSnack("The current policy could not be read — reload before restoring.", "error"); return; }
+    try {
+      setRestoring(true);
+      const res = await restorePolicyVersion(tenantId, historyReview.entry.id, { expectedVersion: tenantEnv.version });
+      showSnack(`Restored version ${res?.restoredFrom ?? historyReview.entry.policy_version}`, "success");
+      setHistoryReview(null);
+      await loadTenant();
+      if (selectedDeviceId) await loadDevice(selectedDeviceId);
+    } catch (e) {
+      setHistoryReview(null);
+      if (e?.status === 409) {
+        showSnack("The policy was modified by someone else. Reloaded — review and restore again.", "warning");
+        await loadTenant();
+      } else {
+        console.error(e);
+        showSnack("Failed to restore the version", "error");
+      }
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const selectedDeviceIdRef = React.useRef(selectedDeviceId);
   React.useEffect(() => { selectedDeviceIdRef.current = selectedDeviceId; }, [selectedDeviceId]);
 
@@ -677,7 +783,18 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     );
   } else if (view === "overrides") {
     content = (
-      <OverridesView rows={overrides} deviceMap={deviceMap} loading={tenantLoading} onEdit={openDeviceFromTool} onResetAll={handleResetOverrides} resetting={resettingOverrides} />
+      <OverridesView
+        rows={overrides}
+        batches={batches}
+        deviceMap={deviceMap}
+        loading={tenantLoading}
+        onEdit={openDeviceFromTool}
+        onResetAll={handleResetOverrides}
+        resetting={resettingOverrides}
+        onApply={() => setApplyOpen(true)}
+        onRevokeBatch={handleRevokeBatch}
+        revokingId={revokingId}
+      />
     );
   } else if (view === "rollout") {
     content = <PolicyRolloutView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onOpenDevice={openDeviceFromTool} now={loadedAt} />;
@@ -687,15 +804,18 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     );
   } else if (view === "advanced") {
     content = (
-      <AdvancedJsonPanel
-        scope={scope}
-        jsonDraft={jsonDraft}
-        jsonError={jsonError}
-        onJsonChange={handleJsonChange}
-        onReplaceDocument={handleReplaceDocument}
-        replaceDisabled={saving || Boolean(loadError)}
-        effective={effectiveView}
-      />
+      <>
+        <AdvancedJsonPanel
+          scope={scope}
+          jsonDraft={jsonDraft}
+          jsonError={jsonError}
+          onJsonChange={handleJsonChange}
+          onReplaceDocument={handleReplaceDocument}
+          replaceDisabled={saving || Boolean(loadError)}
+          effective={effectiveView}
+        />
+        {!isDevice ? <HistoryPanel items={history} currentVersion={tenantEnv.version} onReview={handleReviewHistory} busy={restoring} /> : null}
+      </>
     );
   } else {
     content = (
@@ -871,6 +991,29 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         confirmText={isDevice ? (hasOverride ? "Update override" : "Create override") : "Save"}
         scopeLabel={isDevice ? selectedDevice?.hostname || selectedDeviceId : "Tenant policy"}
         sectionsLabel={domainsToSave.length ? `Writes: ${domainsToSave.map(sectionLabel).join(", ")}${isDevice ? " — only what differs from the tenant is stored in the override." : "."}` : ""}
+      />
+
+      <ApplyOverrideDialog
+        open={applyOpen}
+        onClose={() => setApplyOpen(false)}
+        onApply={handleApplyBatch}
+        sections={sections}
+        tenantForm={tenantBaseline}
+        catalog={catalog}
+        groups={groups}
+        busy={applying}
+      />
+
+      <PolicyDiffDialog
+        open={Boolean(historyReview)}
+        entries={historyReview?.entries ?? []}
+        onClose={() => setHistoryReview(null)}
+        onConfirm={confirmRestore}
+        busy={restoring}
+        title={`Restore version ${historyReview?.entry?.policy_version ?? ""}?`}
+        confirmText="Restore"
+        scopeLabel="Tenant policy"
+        sectionsLabel="Whole document: every domain, including Security Baselines and Device Management, becomes what it was in that version."
       />
 
       <BrandSnackbar

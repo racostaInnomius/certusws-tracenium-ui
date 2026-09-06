@@ -927,14 +927,14 @@ export function getApiCacheSnapshot(url, options = {}) {
   };
 }
 
-export async function httpPostJson(url, body, { timeoutMs } = {}) {
+export async function httpPostJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
 
   try {
     const res = await fetch(`${API_BASE}${url}`, {
       method: "POST",
       credentials: "include",
-      headers: withTenantHeader({ "Content-Type": "application/json" }),
+      headers: withTenantHeader({ "Content-Type": "application/json", ...(headers || {}) }),
       body: JSON.stringify(body),
       signal: timeout.signal,
     });

@@ -99,9 +99,27 @@ const OVERRIDES = {
       last_ack_status: 0,
       last_ack_at: iso(0.2),
       overridden_paths: ["cdp"],
+      provenance: { cdp: { batchId: "b-1", groupId: 26 } },
     },
   ],
 };
+
+// Phase C fixtures: one batch applied via a group, two saved versions, two groups.
+const BATCHES = {
+  ok: true,
+  items: [
+    { id: "b-1", tenant_id: "t-1", domain: "cdp", patch_json: DEV2_PATCH, group_id: 26, group_name: "SQL Servers", sync_membership: true, device_count: 1, live_device_count: 1, applied_by: "admin@t", applied_at: iso(1), last_sync_at: iso(0.1), revoked_at: null },
+  ],
+};
+const OLD_VERSION = "1788000000000";
+const HISTORY = {
+  ok: true,
+  items: [
+    { id: 2, policy_version: TENANT_VERSION, policy_hash: "deadbeefdeadbeef", saved_at: iso(0.5), actor_subject: "a@t", reason: "domain:agent" },
+    { id: 1, policy_version: OLD_VERSION, policy_hash: "0ld0ld0ld", saved_at: iso(2), actor_subject: null, reason: "seed" },
+  ],
+};
+const GROUPS = { ok: true, items: [{ id: 26, name: "SQL Servers", kind: "dynamic", memberCount: 3 }, { id: 29, name: "Test Group - DP", kind: "static", memberCount: 4 }] };
 
 function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 200 } = {}) {
   respond("get", "/api/v1/policies/plugins/catalog", { ok: true, catalog, entitled: ["amp", "scp", "pmp", "sdp"] });
@@ -111,6 +129,9 @@ function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 20
   respond("get", "/api/v1/dashboard/plugin-coverage", COVERAGE);
   respond("get", "/api/v1/patch-management/gateways", { ok: true, data: { gateways: [] } });
   respond("get", "/api/v1/policies/tenants/t-1/policy/overrides", OVERRIDES);
+  respond("get", "/api/v1/policies/tenants/t-1/policy/overrides/batches", BATCHES);
+  respond("get", "/api/v1/policies/tenants/t-1/policy/history", HISTORY);
+  respond("get", "/api/v1/asset-groups", GROUPS);
 }
 
 function renderPage(props = {}) {
@@ -307,13 +328,83 @@ describe("tools", () => {
     expect(await screen.findByText("SRV-OVERRIDE")).toBeInTheDocument();
     expect(screen.queryByText("LAPTOP-ONE")).toBeNull();
     expect(screen.getByText(/1 device runs a policy of its own/)).toBeInTheDocument();
-    expect(screen.getByText("cdp")).toBeInTheDocument();
+    expect(screen.getByText("cdp ↗")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Reset all to tenant policy/ }));
     const confirmDialog = await screen.findByRole("dialog");
     fireEvent.click(within(confirmDialog).getByRole("button", { name: /Reset 1 override/ }));
     await waitFor(() => expect(resets).toHaveLength(1));
     expect(await screen.findByText(/1 override reset · 1 delivered immediately/)).toBeInTheDocument();
+  });
+
+  it("overrides: lists the batches by provenance and revokes one", async () => {
+    mockBase();
+    const revokes = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/batches/b-1/revoke", { ok: true, reverted: 1, sent: 1 });
+    renderPage();
+    await settled();
+    fireEvent.click(screen.getByText("Overrides"));
+    const card = await screen.findByTestId("override-batch");
+    expect(within(card).getByText(/1 device via group SQL Servers/)).toBeInTheDocument();
+    expect(within(card).getByText(/Crypto Discovery · applied/)).toBeInTheDocument();
+    expect(within(card).getByText("in sync with group")).toBeInTheDocument();
+    // The device row marks the path as coming from a batch.
+    expect(await screen.findByText("cdp ↗")).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Revoke" }));
+    const confirmDialog = await screen.findByRole("dialog");
+    expect(within(confirmDialog).getByText(/via group SQL Servers/)).toBeInTheDocument();
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: "Revoke batch" }));
+    await waitFor(() => expect(revokes).toHaveLength(1));
+    expect(await screen.findByText(/Batch revoked · 1 device back on the tenant policy/)).toBeInTheDocument();
+  });
+
+  it("apply to a group: one section, only what differs, stamped with the group and kept in sync", async () => {
+    mockBase();
+    const applies = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/apply", { ok: true, batchId: "b-2", domain: "scp", targeted: 3, applied: 3, sent: 2, skipped: [] });
+    renderPage();
+    await settled();
+    fireEvent.click(screen.getByText("Overrides"));
+    fireEvent.click(await screen.findByRole("button", { name: /Apply to devices/ }));
+    const dialog = await screen.findByRole("dialog");
+    const apply = within(dialog).getByRole("button", { name: "Apply" });
+    expect(apply).toBeDisabled(); // no target, nothing differs
+
+    fireEvent.change(within(dialog).getByLabelText("Section"), { target: { value: "scp" } });
+    fireEvent.change(within(dialog).getByLabelText("Group"), { target: { value: "26" } });
+    fireEvent.click(within(dialog).getByLabelText(/Keep in sync/));
+    expect(apply).toBeDisabled(); // still nothing differs from the tenant
+    fireEvent.change(within(dialog).getByLabelText("Evaluation interval (seconds)"), { target: { value: "3600" } });
+    expect(await within(dialog).findByText("compliance.intervalSeconds")).toBeInTheDocument();
+    expect(apply).toBeEnabled();
+
+    fireEvent.click(apply);
+    await waitFor(() => expect(applies).toHaveLength(1));
+    expect(applies[0].body).toEqual({ groupId: 26, deviceIds: null, domain: "scp", patch: { compliance: { intervalSeconds: 3600 } }, syncMembership: true });
+    expect(await screen.findByText(/Security Compliance applied to 3 of 3 devices \(SQL Servers\) · 2 delivered immediately/)).toBeInTheDocument();
+  });
+
+  it("history: review the diff of a saved version, then restore it with If-Match on the current one", async () => {
+    mockBase();
+    respond("get", "/api/v1/policies/tenants/t-1/policy/history/1", {
+      ok: true,
+      entry: { ...HISTORY.items[1], policy_json: { ...TENANT_POLICY.policy.policy_json, update: { intervalSeconds: 3600 } } },
+    });
+    const restores = respond("post", "/api/v1/policies/tenants/t-1/policy/history/1/restore", { ok: true, policyVersion: "1788476599999", restoredFrom: OLD_VERSION });
+    renderPage();
+    await settled();
+    fireEvent.click(screen.getByText("Advanced"));
+    const table = await screen.findByRole("table", { name: "Policy version history" });
+    expect(within(table).getByText("current")).toBeInTheDocument();
+    const oldRow = within(table).getByText(OLD_VERSION).closest("tr");
+    fireEvent.click(within(oldRow).getByRole("button", { name: /Review and restore/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(`Restore version ${OLD_VERSION}?`)).toBeInTheDocument();
+    expect(within(dialog).getByText("update.intervalSeconds")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Restore" }));
+    await waitFor(() => expect(restores).toHaveLength(1));
+    expect(restores[0].headers["if-match"]).toBe(TENANT_VERSION);
+    expect(await screen.findByText(`Restored version ${OLD_VERSION}`)).toBeInTheDocument();
   });
 });
 

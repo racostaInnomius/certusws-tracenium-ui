@@ -61,6 +61,53 @@ export async function resetTenantOverrides(tenantId) {
   return httpPostJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides/reset`, {});
 }
 
+// ── Phase C: apply by group with provenance, and policy history ──────
+
+// Apply one domain's patch to a group (groupId) or a device list
+// (deviceIds). Creates or updates each device's override, stamped with the
+// batch; `syncMembership` keeps the batch following the group's members.
+export async function applyOverrideBatch(tenantId, { groupId = null, deviceIds = null, domain, patch, syncMembership = false }) {
+  return httpPostJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides/apply`, {
+    groupId,
+    deviceIds,
+    domain,
+    patch,
+    syncMembership,
+  });
+}
+
+export async function listOverrideBatches(tenantId, { includeRevoked = false } = {}) {
+  return httpGetJson(
+    `${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides/batches${includeRevoked ? "?includeRevoked=true" : ""}`
+  );
+}
+
+// Removes the batch's patch from every device still carrying it (a device
+// whose section was edited by hand afterwards is left alone).
+export async function revokeOverrideBatch(tenantId, batchId) {
+  return httpPostJson(
+    `${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides/batches/${encodeURIComponent(batchId)}/revoke`,
+    {}
+  );
+}
+
+export async function listPolicyHistory(tenantId) {
+  return httpGetJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/history`);
+}
+
+export async function getPolicyHistoryEntry(tenantId, historyId) {
+  return httpGetJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/history/${encodeURIComponent(historyId)}`);
+}
+
+// A whole-document PUT of the saved version, locked on the current one.
+export async function restorePolicyVersion(tenantId, historyId, opts) {
+  return httpPostJson(
+    `${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/history/${encodeURIComponent(historyId)}/restore`,
+    {},
+    buildPutHeaders(opts)
+  );
+}
+
 export async function listTenantPolicyStatus(tenantId) {
   return httpGetJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy-status`);
 }
