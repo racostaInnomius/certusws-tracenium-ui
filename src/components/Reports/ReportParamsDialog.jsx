@@ -39,7 +39,11 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
     // audit ask is "last month", and the operator widens from there.
     const defaults = {};
     for (const p of params) {
-      if (p.kind === "month") defaults[p.name] = p.name === "to" ? previousMonth() : previousMonth();
+      // Los dos extremos al último mes cerrado: la pregunta habitual de una
+      // auditoría es "el mes pasado", y desde ahí se ensancha. (Aquí había un
+      // ternario cuyas dos ramas eran idénticas, que se leía como si `from` y
+      // `to` fueran a diferir.)
+      if (p.kind === "month") defaults[p.name] = previousMonth();
     }
     setValues(defaults);
     const needsFrameworks = params.some((p) => p.kind === "framework");

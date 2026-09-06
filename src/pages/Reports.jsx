@@ -19,6 +19,7 @@ import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
+import { useConfirm } from "../components/common/ConfirmDialog";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
@@ -33,6 +34,7 @@ import {
 import { BRAND, TEXT } from "../theme/brand";
 
 export default function Reports() {
+  const confirm = useConfirm();
   const [rows, setRows] = React.useState([]);
   const [runs, setRuns] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
@@ -59,8 +61,16 @@ export default function Reports() {
     }
   }, []);
 
-  const loadData = React.useCallback(async () => {
-    setLoading(true);
+  /**
+   * `silent` para las recargas que siguen a una acción del usuario.
+   *
+   * Sin él, cada "Run now", cada borrado y cada envío ponía las TRES tablas
+   * en estado de carga: la página entera parpadeaba para refrescar una fila.
+   * El spinner tiene sentido al entrar, cuando de verdad no hay nada que
+   * mirar; después estorba y hace perder el sitio.
+   */
+  const loadData = React.useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [typesRes, runsRes] = await Promise.all([getReportTypes(), getReportRuns({ limit: 20 })]);
       setRows((typesRes.types || []).map((t) => ({ id: t.key, ...t })));
@@ -69,7 +79,7 @@ export default function Reports() {
     } catch (err) {
       setSnackbar({ open: true, message: err?.message || "Could not load reports.", severity: "error" });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [loadSchedules]);
 
@@ -84,8 +94,8 @@ export default function Reports() {
     try {
       await runReport(key, format, params);
       // Refresh the history table so the run just kicked off shows up
-      // without a manual reload.
-      loadData();
+      // without a manual reload. En silencio: es una recarga, no una entrada.
+      loadData({ silent: true });
     } catch (err) {
       setSnackbar({ open: true, message: err?.message || "Report failed.", severity: "error" });
     } finally {
@@ -126,7 +136,20 @@ export default function Reports() {
   };
 
   const handleToggleSchedule = (s) => withSchedule(s.id, () => updateReportSchedule(s.id, { enabled: !s.enabled }));
-  const handleDeleteSchedule = (s) => withSchedule(s.id, () => deleteReportSchedule(s.id), "Schedule deleted.");
+  const handleDeleteSchedule = async (s) => {
+    // Borrar una programación se lleva por delante sus destinatarios y sus
+    // destinos GRC, y no hay deshacer. Un clic era suficiente.
+    const ok = await confirm({
+      title: "Delete this schedule?",
+      body:
+        `“${typeByKey[s.reportKey]?.label || s.reportKey}” stops being generated and sent.\n\n` +
+        "Its recipients and GRC destinations go with it. Reports already generated stay in the history.",
+      confirmText: "Delete schedule",
+      danger: true,
+    });
+    if (!ok) return;
+    return withSchedule(s.id, () => deleteReportSchedule(s.id), "Schedule deleted.");
+  };
   const handleRunSchedule = (s) =>
     withSchedule(s.id, async () => {
       const res = await runReportScheduleNow(s.id);
@@ -282,18 +305,45 @@ export default function Reports() {
 
   const runColumns = [
     { field: "occurredAt", headerName: "When", minWidth: 170, valueFormatter: (v) => formatWhen(v) },
-    { field: "key", headerName: "Report", minWidth: 200, flex: 1 },
+    {
+      field: "key",
+      headerName: "Report",
+      minWidth: 200,
+      flex: 1,
+      // `scp.evidence-pack` es un identificador nuestro. El catálogo de
+      // arriba ya trae la etiqueta legible; se cae a la key sólo si el tipo
+      // desapareció del registro, y entonces la key es la respuesta honesta.
+      valueGetter: (_v, row) => typeByKey[row.key]?.label || row.key,
+    },
     { field: "format", headerName: "Format", minWidth: 80, valueFormatter: (v) => String(v || "").toUpperCase() },
     { field: "trigger", headerName: "Via", minWidth: 100, valueFormatter: (v) => triggerLabel(v) },
     { field: "actor", headerName: "By", minWidth: 200, flex: 1 },
     {
       field: "outcome",
       headerName: "Outcome",
-      minWidth: 150,
+      minWidth: 260,
+      // El motivo del fallo y el hash estaban SÓLO en un tooltip. Un hash que
+      // hay que descubrir pasando el ratón no sirve para verificar nada, y un
+      // error que no se ve se lee como "no pasó nada". Van debajo del chip.
       renderCell: (params) => (
-        <Tooltip title={params.row.error || (params.row.sha256 ? `SHA-256 ${params.row.sha256}` : "")}>
-          <Chip size="small" label={runStatusLabel(params.row.outcome)} color={runStatusColor(params.row.outcome)} variant="outlined" />
-        </Tooltip>
+        <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", py: 0.5, minWidth: 0 }}>
+          <Chip
+            size="small"
+            label={runStatusLabel(params.row.outcome)}
+            color={runStatusColor(params.row.outcome)}
+            variant="outlined"
+            sx={{ alignSelf: "flex-start" }}
+          />
+          {params.row.error ? (
+            <Typography variant="caption" sx={{ color: BRAND.alert?.errorText || "error.main", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={params.row.error}>
+              {params.row.error}
+            </Typography>
+          ) : params.row.sha256 ? (
+            <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: TEXT.xs, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`SHA-256 ${params.row.sha256}`}>
+              {params.row.sha256.slice(0, 16)}…
+            </Typography>
+          ) : null}
+        </Box>
       ),
     },
     {
@@ -327,6 +377,7 @@ export default function Reports() {
         </Typography>
         <Box sx={{ width: "100%" }}>
           <DataGrid
+            aria-label="Report catalog"
             rows={rows}
             columns={typeColumns}
             loading={loading}
@@ -354,6 +405,7 @@ export default function Reports() {
         ) : (
           <Box sx={{ width: "100%" }}>
             <DataGrid
+              aria-label="Schedules"
               rows={schedules}
               columns={scheduleColumns}
               autoHeight
@@ -383,6 +435,7 @@ export default function Reports() {
         </Typography>
         <Box sx={{ width: "100%" }}>
           <DataGrid
+            aria-label="Recent runs"
             rows={runs.map((r, i) => ({ id: r.id ?? `evt-${i}`, ...r }))}
             columns={runColumns}
             loading={loading}

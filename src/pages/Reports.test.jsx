@@ -30,6 +30,7 @@ vi.mock("../auth/AuthContext", () => ({
   AuthProvider: ({ children }) => children,
 }));
 
+import { ConfirmProvider } from "../components/common/ConfirmDialog";
 import Reports from "./Reports";
 
 afterEach(() => {
@@ -89,9 +90,13 @@ describe("Reports page", () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
 
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    expect(await screen.findByText("Crypto Bill of Materials (CBOM)")).toBeInTheDocument();
+    // ⚠️ `getAllByText`: desde que el historial enseña la ETIQUETA del tipo en
+    // vez de la key cruda, el mismo texto sale en el catálogo y en el
+    // historial. Acotar por `role="grid"` no vale — MUI virtualiza las filas
+    // fuera de ese nodo.
+    expect((await screen.findAllByText("Crypto Bill of Materials (CBOM)")).length).toBeGreaterThan(0);
     expect(screen.getByText("Audit Events")).toBeInTheDocument();
     // A type NOT present in the server response must never appear —
     // proves there's no client-side catalog to drift from the backend.
@@ -102,7 +107,7 @@ describe("Reports page", () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
 
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     expect(await screen.findByText("op@tracenium.test")).toBeInTheDocument();
   });
@@ -112,9 +117,15 @@ describe("Reports page", () => {
     respond("get", `${BASE}/runs`, RUNS);
     const runCalls = respond("get", `${BASE}/cdp.cbom/run`, { ok: true });
 
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    const row = (await screen.findByText("Crypto Bill of Materials (CBOM)")).closest("[role='row']");
+    // La fila del CATÁLOGO es la que trae botones de formato; la del
+    // historial no. Es el discriminador estable ahora que las dos tablas
+    // muestran la misma etiqueta.
+    const celdas = await screen.findAllByText("Crypto Bill of Materials (CBOM)");
+    const row = celdas
+      .map((c) => c.closest("[role='row']"))
+      .find((r) => r && within(r).queryByRole("button", { name: /json/i }));
     const jsonButton = within(row).getByRole("button", { name: /json/i });
     await userEvent.click(jsonButton);
 
@@ -131,7 +142,7 @@ describe("Reports page", () => {
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", "/api/v1/tenants/7/members", { items: [] });
 
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     const emailButtons = await screen.findAllByRole("button", { name: /email/i });
     await userEvent.click(emailButtons[0]);
@@ -143,7 +154,7 @@ describe("Reports page", () => {
     respond("get", `${BASE}/types`, { error: "TENANT_NOT_RESOLVED" }, { status: 403 });
     respond("get", `${BASE}/runs`, { error: "TENANT_NOT_RESOLVED" }, { status: 403 });
 
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     expect(await screen.findByText(/could not load reports|tenant_not_resolved/i)).toBeInTheDocument();
   });
@@ -155,7 +166,7 @@ describe("Reports page (types with params)", () => {
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", "/api/v1/security/compliance/frameworks", { ok: true, frameworks: [{ framework: "soc2_tsc_2017", shortName: "SOC 2 (TSC 2017)" }] });
     const runCalls = respond("get", `${BASE}/scp.evidence-pack/run`, { ok: true });
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     const row = (await screen.findByText("Evidence Pack")).closest("[role='row']");
     await userEvent.click(within(row).getByRole("button", { name: "PDF" }));
@@ -202,7 +213,7 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, SCHEDULES);
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await screen.findAllByText("Evidence Pack");
     expect(await screen.findByText("Previous month", { exact: false })).toBeTruthy();
     expect(screen.queryByTestId("schedules-empty")).toBeNull();
@@ -213,7 +224,7 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, { error: "NOT_FOUND" }, { status: 404 });
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await screen.findByText("Evidence Pack");
     expect(await screen.findByTestId("schedules-empty")).toBeTruthy();
   });
@@ -231,10 +242,97 @@ describe("Reports — schedules (E3)", () => {
       )
     );
     saveBlob.mockClear();
-    render(<Reports />);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
     const btn = await screen.findByRole("button", { name: /download archived copy/i });
     await userEvent.setup().click(btn);
     await waitFor(() => expect(saveBlob).toHaveBeenCalled());
     expect(saveBlob.mock.calls[0][1]).toBe("pack.pdf");
+  });
+});
+
+// ── Lo que el historial tiene que decir (plan R0, punto 4) ──────────
+describe("Reports — el historial", () => {
+  const RUN_CON_HASH = {
+    ok: true,
+    runs: [{
+      id: 9, occurredAt: "2026-09-01T06:00:00.000Z", key: "scp.evidence-pack", format: "pdf",
+      trigger: "schedule", outcome: "sent", actor: "schedule:5",
+      sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    }],
+  };
+
+  it("enseña la ETIQUETA del tipo, no la key cruda", async () => {
+    // `scp.evidence-pack` es un identificador nuestro; el catálogo de arriba
+    // ya trae "Evidence Pack" y la tabla lo tenía a mano.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUN_CON_HASH);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findByText("schedule:5");
+
+    // La key cruda no aparece en ninguna parte; la etiqueta sí.
+    expect(screen.queryByText("scp.evidence-pack")).toBeNull();
+    expect(screen.getAllByText("Evidence Pack").length).toBeGreaterThan(0);
+  });
+
+  it("el hash se LEE, no hay que descubrirlo con el ratón", async () => {
+    // Un SHA-256 que sólo existe en un tooltip no sirve para verificar nada.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUN_CON_HASH);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findByText("schedule:5");
+    expect(screen.getByText(/^0123456789abcdef/)).toBeInTheDocument();
+  });
+
+  it("el motivo del fallo se ve sin pasar por encima", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, {
+      ok: true,
+      runs: [{ id: 10, occurredAt: "2026-09-01T06:00:00.000Z", key: "audit.events", format: "csv", trigger: "manual", outcome: "failed", actor: "op@x.test", error: "mailer_not_configured" }],
+    });
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    expect(await screen.findByText("mailer_not_configured")).toBeInTheDocument();
+  });
+});
+
+describe("Reports — borrar una programación pide confirmación", () => {
+  it("cancelar no borra nada", async () => {
+    // Se lleva por delante destinatarios y destinos GRC, y no hay deshacer.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, SCHEDULES);
+    const deletes = respond("delete", `${BASE}/schedules/5`, { ok: true });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await screen.findByText("Previous month", { exact: false });
+
+    await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    expect(deletes).toHaveLength(0);
+  });
+
+  it("confirmar sí borra", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, SCHEDULES);
+    const deletes = respond("delete", `${BASE}/schedules/5`, { ok: true });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await screen.findByText("Previous month", { exact: false });
+
+    await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /delete schedule/i, hidden: false }).catch(() => screen.getByText("Delete schedule")));
+
+    await waitFor(() => expect(deletes).toHaveLength(1));
   });
 });

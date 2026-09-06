@@ -23,15 +23,18 @@ import {
   TextField,
   Typography
 } from "@mui/material";
-import { useAuthContext } from "../../auth/AuthContext";
+import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { listTenantMembers } from "../../api/tenants";
 import { emailReport } from "../../api/reports";
-import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
+import { parseRecipients, validateRecipients, MAX_RECIPIENTS } from "../Alerts/notifyHelpers";
 import { BRAND } from "../../theme/brand";
 
 export default function EmailReportDialog({ open, onClose, reportType, onResult, params }) {
-  const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ El tenant EFECTIVO, no el del token. En una sesión de MSP con un
+  // cliente abierto, `auth.tenantId` es el del operador: la lista de
+  // miembros salía vacía y no se podía ni enviar ni programar para el
+  // cliente que se está mirando.
+  const tenantId = useEffectiveTenantId();
 
   const [members, setMembers] = React.useState([]);
   const [loadingMembers, setLoadingMembers] = React.useState(false);
@@ -69,7 +72,8 @@ export default function EmailReportDialog({ open, onClose, reportType, onResult,
       setError(
         externalCheck.invalid.length
           ? `Not a valid email: ${externalCheck.invalid[0]}`
-          : `Too many external recipients (max ${externalCheck.unique.length}).`
+          // El tope, no cuántos hay: "max 23" con 23 escritos no dice nada.
+          : `Too many external recipients (max ${MAX_RECIPIENTS}).`
       );
       return;
     }

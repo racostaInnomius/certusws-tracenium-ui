@@ -346,7 +346,17 @@ function normalizeGetOptions(url, options = {}) {
 
   return {
     timeoutMs: options.timeoutMs,
-    cache: options.cache || profile.cache || "default",
+    // ⚠️ `cache: false` SIGNIFICA "no cachear", y hasta hoy no significaba
+    // nada: `false || profile.cache || "default"` lo saltaba por falsy, así
+    // que las seis llamadas de src/api/reports.js que lo pasaban se servían
+    // de la caché de 60 s igual que cualquier otra. El síntoma que lo
+    // destapó: tras "Run now" el historial devolvía la entrada anterior y el
+    // run recién lanzado no aparecía.
+    //
+    // Se acepta explícitamente en vez de cambiar las seis a "no-store"
+    // porque `false` es lo que sus autores escribieron queriendo decir eso, y
+    // la siguiente persona lo volverá a escribir.
+    cache: options.cache === false ? "no-store" : options.cache || profile.cache || "default",
     staleMs: Number(options.staleMs ?? profile.staleMs ?? DEFAULT_STALE_MS),
     storageMaxAgeMs: Number(
       options.storageMaxAgeMs ??

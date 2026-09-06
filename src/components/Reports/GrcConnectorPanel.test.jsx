@@ -9,6 +9,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, respond } from "../../test/msw/server";
 
+import { ConfirmProvider } from "../common/ConfirmDialog";
 import GrcConnectorPanel from "./GrcConnectorPanel";
 
 afterEach(() => {
@@ -23,7 +24,7 @@ describe("GrcConnectorPanel", () => {
     respond("get", `${BASE}/api-keys`, { ok: true, keys: [], scopes: ["reports:read"] });
     respond("get", `${BASE}/grc/targets`, { ok: true, targets: [], secretsConfigured: true });
     const posted = respond("post", `${BASE}/api-keys`, { ok: true, key: { id: 1, label: "Vanta reader" }, secret: "trk_SECRET_VALUE" }, { status: 201 });
-    render(<GrcConnectorPanel />);
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
     await screen.findByTestId("api-keys-empty");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /new key/i }));
@@ -38,7 +39,7 @@ describe("GrcConnectorPanel", () => {
     let targets = [];
     respond("get", `${BASE}/grc/targets`, { ok: true, targets, secretsConfigured: true });
     const posted = respond("post", `${BASE}/grc/targets`, { ok: true, target: { id: 3 } }, { status: 201 });
-    render(<GrcConnectorPanel />);
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
     await screen.findByTestId("grc-targets-empty");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /new target/i }));
@@ -57,7 +58,7 @@ describe("GrcConnectorPanel", () => {
   it("without GRC_SECRETS_KEY on the server the target button is disabled", async () => {
     respond("get", `${BASE}/api-keys`, { ok: true, keys: [{ id: 9, label: "old", keyPrefix: "trk_abcdefgh", revokedAt: "2026-08-01T00:00:00Z" }], scopes: ["reports:read"] });
     respond("get", `${BASE}/grc/targets`, { ok: true, targets: [], secretsConfigured: false });
-    render(<GrcConnectorPanel />);
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
     await screen.findByText("Revoked");
     expect(screen.getByRole("button", { name: /new target/i }).disabled).toBe(true);
   });

@@ -87,3 +87,38 @@ describe("runReport (authenticated blob path)", () => {
     }
   });
 });
+
+// ── El historial no puede llegar cacheado (plan R0, punto 4) ────────
+//
+// `getReportRuns` era la única lectura del módulo sin directiva de caché, y
+// el efecto se veía: tras "Run now" la página recargaba el historial y recibía
+// la entrada de hasta 60 s antes, así que el run recién lanzado no aparecía.
+//
+// ⚠️ Y `cache: false` NO desactivaba nada: `normalizeGetOptions` hacía
+// `options.cache || profile.cache || "default"`, y `false` es falsy. Las seis
+// llamadas del módulo que lo pasaban se servían de la caché igual que
+// cualquier otra. Por eso el test mira el efecto —dos peticiones de verdad—
+// y no la presencia de la opción.
+describe("getReportRuns no se sirve de la caché", () => {
+  it("dos lecturas seguidas son dos peticiones", async () => {
+    const calls = respond("get", `${BASE}/runs`, { ok: true, runs: [] });
+
+    await getReportRuns({ limit: 20 });
+    await getReportRuns({ limit: 20 });
+
+    expect(calls).toHaveLength(2);
+  });
+
+  it("la segunda lectura ve lo que el servidor devuelve ahora", async () => {
+    // Es la forma de usuario del caso anterior: lanzar un reporte y verlo
+    // aparecer en el historial sin recargar la página.
+    respond("get", `${BASE}/runs`, { ok: true, runs: [] });
+    const primera = await getReportRuns({ limit: 20 });
+    expect(primera.runs).toHaveLength(0);
+
+    respond("get", `${BASE}/runs`, { ok: true, runs: [{ id: 1, key: "cdp.cbom", format: "json", outcome: "ok" }] });
+    const segunda = await getReportRuns({ limit: 20 });
+
+    expect(segunda.runs).toHaveLength(1);
+  });
+});

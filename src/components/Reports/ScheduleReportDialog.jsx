@@ -12,7 +12,7 @@ import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControl, FormControlLabel, InputLabel, MenuItem, Select, Stack, TextField, Typography,
 } from "@mui/material";
-import { useAuthContext } from "../../auth/AuthContext";
+import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { listTenantMembers } from "../../api/tenants";
 import { createReportSchedule, listGrcTargets } from "../../api/reports";
 import { getFrameworks } from "../../api/compliance";
@@ -23,8 +23,11 @@ import { BRAND, TEXT } from "../../theme/brand";
 import { PERIOD_OPTIONS, scheduleParamDefs, typeHasPeriod } from "./reportSchedules";
 
 export default function ScheduleReportDialog({ open, onClose, reportType, onCreated }) {
-  const { auth } = useAuthContext();
-  const tenantId = auth?.tenantId;
+  // ⚠️ El tenant EFECTIVO, no el del token. En una sesión de MSP con un
+  // cliente abierto, `auth.tenantId` es el del operador: la lista de
+  // miembros salía vacía y no se podía ni enviar ni programar para el
+  // cliente que se está mirando.
+  const tenantId = useEffectiveTenantId();
   const paramDefs = React.useMemo(() => scheduleParamDefs(reportType), [reportType]);
   const hasPeriod = typeHasPeriod(reportType);
 

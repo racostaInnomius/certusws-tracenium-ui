@@ -91,7 +91,11 @@ export async function getReportTypes() {
 
 export async function getReportRuns({ limit } = {}) {
   const qs = limit ? `?limit=${encodeURIComponent(limit)}` : "";
-  return httpGetJson(`${BASE}/runs${qs}`);
+  // ⚠️ `cache: false` como el resto del módulo. Era la única llamada sin él,
+  // y el efecto se veía: tras "Run now" la página recargaba el historial y
+  // recibía la entrada cacheada de hasta 60 s antes, así que el run recién
+  // lanzado no aparecía y el usuario volvía a pulsar.
+  return httpGetJson(`${BASE}/runs${qs}`, { cache: false });
 }
 
 // Every format — including json (CBOM) — goes through httpGetBlob +

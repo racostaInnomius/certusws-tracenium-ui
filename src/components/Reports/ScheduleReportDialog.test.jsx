@@ -14,11 +14,20 @@ vi.mock("../../auth/AuthContext", () => ({
   AuthProvider: ({ children }) => children,
 }));
 
+// El contexto MSP, controlable por caso. Por defecto NO hay cliente abierto
+// —la sesión normal— para que el resto del fichero siga hablando del tenant 7
+// del token; un caso lo enciende para probar el drill-in.
+let clienteAbierto = null;
+vi.mock("../../msp/MspContext", () => ({
+  useMspOptional: () => (clienteAbierto ? { activeTenant: clienteAbierto } : null),
+}));
+
 import ScheduleReportDialog from "./ScheduleReportDialog";
 
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  clienteAbierto = null;
 });
 
 const PACK = {
@@ -95,5 +104,27 @@ describe("ScheduleReportDialog", () => {
     await screen.findByText(/no active members/i);
     expect(screen.queryByLabelText("Period")).toBeNull();
     expect(screen.queryByLabelText("Framework")).toBeNull();
+  });
+});
+
+// ── El tenant EFECTIVO, no el del token (plan R0, punto 4) ──────────
+//
+// En una sesión de MSP con un cliente abierto, `auth.tenantId` es el del
+// operador, no el del cliente que se está mirando. El diálogo pedía los
+// miembros de ese tenant: la lista salía vacía y no se podía programar ni
+// enviar nada para el cliente. Es la trampa del tenant efectivo, ya
+// documentada, y aquí volvía a estar.
+
+
+describe("ScheduleReportDialog — sesión de MSP con cliente abierto", () => {
+  it("pide los miembros del cliente ABIERTO, no los del operador", async () => {
+    clienteAbierto = { id: 42, name: "Cliente" };
+    const calls = respond("get", "/api/v1/tenants/:tenantId/members", { ok: true, items: [] });
+
+    render(<ScheduleReportDialog open reportType={PACK} onClose={() => {}} />);
+
+    await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    // 42 es el cliente en el que el operador ha entrado; 7 es su propio tenant.
+    expect(calls[0].params.tenantId).toBe("42");
   });
 });

@@ -24,6 +24,7 @@ import {
   listGrcTargets, createGrcTarget, updateGrcTarget, deleteGrcTarget, testGrcTarget,
 } from "../../api/reports";
 import { BRAND, TEXT } from "../../theme/brand";
+import { useConfirm } from "../common/ConfirmDialog";
 import { formatWhen } from "./reportSchedules";
 import { targetKindLabel, TARGET_KINDS, describeTarget, deliveryColor } from "./grcConnector";
 
@@ -49,6 +50,7 @@ function CopyButton({ value, label }) {
 }
 
 export default function GrcConnectorPanel({ onNotify }) {
+  const confirm = useConfirm();
   const [keys, setKeys] = React.useState([]);
   const [targets, setTargets] = React.useState([]);
   const [secretsConfigured, setSecretsConfigured] = React.useState(true);
@@ -93,6 +95,19 @@ export default function GrcConnectorPanel({ onNotify }) {
   };
 
   const handleRevoke = async (k) => {
+    // ⚠️ La clave no se recupera: sólo se enseña una vez al crearla. Quien la
+    // revoque sin querer tiene que emitir otra y repartirla de nuevo, así que
+    // el diálogo lo dice en vez de dejarlo implícito.
+    const ok = await confirm({
+      title: `Revoke “${k.label || `key ${k.id}`}”?`,
+      body:
+        "Anything using this key stops working immediately.\n\n" +
+        "The key cannot be recovered — it was shown once when it was created. " +
+        "You would have to issue a new one and distribute it again.",
+      confirmText: "Revoke key",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(`key:${k.id}`);
     try {
       await revokeApiKey(k.id);
@@ -150,6 +165,15 @@ export default function GrcConnectorPanel({ onNotify }) {
   };
 
   const handleDelete = async (t) => {
+    const ok = await confirm({
+      title: `Delete destination “${t.label || `target ${t.id}`}”?`,
+      body:
+        "Scheduled reports stop being delivered to it. Its secret is destroyed " +
+        "with it and cannot be recovered.\n\nPast deliveries stay in the log.",
+      confirmText: "Delete destination",
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(`target:${t.id}`);
     try {
       await deleteGrcTarget(t.id);
