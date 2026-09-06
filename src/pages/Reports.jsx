@@ -38,6 +38,12 @@ export default function Reports() {
   const [rows, setRows] = React.useState([]);
   const [runs, setRuns] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
+  // ¿Puede esta sesión administrar programaciones? Lo dice el SERVIDOR, no un
+  // rol leído aquí: en una sesión MSP el rol efectivo sobre el cliente activo
+  // no es el de `auth.role`, y duplicar esa resolución en el portal es cómo se
+  // termina enseñando un botón que siempre da 403 (o escondiéndoselo a quien
+  // sí puede). El 403 del listado es la respuesta a la pregunta.
+  const [canSchedule, setCanSchedule] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   // `${key}:${format}` while that specific button's download is in flight.
   const [runningKey, setRunningKey] = React.useState(null);
@@ -56,8 +62,12 @@ export default function Reports() {
     try {
       const res = await listReportSchedules();
       setSchedules(res?.schedules || []);
-    } catch {
+      setCanSchedule(true);
+    } catch (err) {
       setSchedules([]);
+      // 403 ≠ "no hay ninguna". Puede haber programaciones y esta sesión no
+      // tener por qué verlas; decir "No schedules yet" sería mentir.
+      if (err?.status === 403) setCanSchedule(false);
     }
   }, []);
 
@@ -206,14 +216,16 @@ export default function Reports() {
           >
             Email
           </Button>
-          <Button
-            size="small"
-            startIcon={<EventRepeatOutlinedIcon />}
-            onClick={() => setScheduleTarget(params.row)}
-            sx={{ textTransform: "none" }}
-          >
-            Schedule
-          </Button>
+          {canSchedule ? (
+            <Button
+              size="small"
+              startIcon={<EventRepeatOutlinedIcon />}
+              onClick={() => setScheduleTarget(params.row)}
+              sx={{ textTransform: "none" }}
+            >
+              Schedule
+            </Button>
+          ) : null}
         </Box>
       ),
     },
@@ -400,7 +412,9 @@ export default function Reports() {
         </Typography>
         {schedules.length === 0 ? (
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="schedules-empty">
-            No schedules yet. Use "Schedule" on a catalog row to get a report every month.
+            {canSchedule
+              ? 'No schedules yet. Use "Schedule" on a catalog row to get a report every month.'
+              : "Schedules are managed by this tenant's administrators. There may be some running; this account cannot see them."}
           </Typography>
         ) : (
           <Box sx={{ width: "100%" }}>

@@ -229,6 +229,40 @@ describe("Reports — schedules (E3)", () => {
     expect(await screen.findByTestId("schedules-empty")).toBeTruthy();
   });
 
+  // ⭐ 403 ≠ "no hay ninguna". El listado sólo lo ven ADMIN/OWNER; decirle a un
+  // USER "No schedules yet. Use Schedule on a catalog row" es mentirle dos
+  // veces: puede haber programaciones, y ese botón le va a dar 403.
+  it("a un miembro sin permiso le dice la verdad y le quita el botón", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { error: "FORBIDDEN" }, { status: 403 });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findAllByText("Evidence Pack");
+    const vacio = await screen.findByTestId("schedules-empty");
+    expect(vacio.textContent).toMatch(/administrators/i);
+    expect(vacio.textContent).not.toMatch(/No schedules yet/i);
+    await waitFor(() =>
+      expect(screen.queryAllByRole("button", { name: /^schedule$/i })).toHaveLength(0)
+    );
+  });
+
+  // El contraste: un backend que simplemente no tiene el endpoint (404) NO es
+  // una negativa de permiso, y ahí el mensaje de "aún no hay ninguna" sí vale.
+  it("un 404 no se confunde con una negativa de permiso", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { error: "NOT_FOUND" }, { status: 404 });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findAllByText("Evidence Pack");
+    const vacio = await screen.findByTestId("schedules-empty");
+    expect(vacio.textContent).toMatch(/No schedules yet/i);
+    expect(screen.getAllByRole("button", { name: /^schedule$/i }).length).toBeGreaterThan(0);
+  });
+
   it("an archived run gets a download button that goes through the blob path", async () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, {
