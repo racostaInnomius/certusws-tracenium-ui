@@ -23,6 +23,11 @@ describe("parsePolicyVersion", () => {
     expect(p.extra).toEqual(["e0a1b2c3d4", "zz9"]);
     expect(parsePolicyVersion("1788273862888-e0a1b2c3d").entitlements).toBe("0a1b2c3d");
   });
+  it("reads the override suffix of phase B and keeps it in the label", () => {
+    const p = parsePolicyVersion("1788476532943-oa68724db-rf2129992");
+    expect(p).toMatchObject({ base: "1788476532943", override: "a68724db", probes: "f2129992", extra: [] });
+    expect(versionLabel("1788476532943-oa68724db-rf2129992", "1788476532943")).toBe("…-oa68724db-rf2129992");
+  });
   it("tolerates empty input", () => {
     expect(parsePolicyVersion(null).raw).toBe("");
     expect(parsePolicyVersion("").base).toBe("");
@@ -77,6 +82,11 @@ describe("classifyRolloutRow", () => {
   it("a connected device is never excluded, whatever its timestamps say", () => {
     const row = { desired_policy_version: "v2", is_connected: true };
     expect(classifyRolloutRow(row, { now: NOW })).toBe("pending");
+  });
+
+  it("trusts last_seen_at from enrollments over a stale session heartbeat", () => {
+    const row = { ...base, is_connected: false, last_ack_policy_version: "v1", last_heartbeat: iso(90 * DAY), last_seen_at: iso(1 * DAY) };
+    expect(classifyRolloutRow(row, { now: NOW })).toBe("offline");
   });
 
   it("uses the freshest of heartbeat, ack and sent timestamps", () => {

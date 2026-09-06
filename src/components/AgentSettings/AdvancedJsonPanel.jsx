@@ -7,9 +7,9 @@
 //   * "Replace entire document" is the whole-document PUT — it also
 //     rewrites the Security Baselines and Device Management blocks, which
 //     is why it has its own button and its own confirm.
-// For a device it also shows the effective policy the device runs, since
-// an override is a whole document and the operator needs to see what it
-// replaces.
+// For a device the editable document is the override PATCH (phase B: the
+// paths the device changes, nothing else) and the effective policy the
+// device runs is shown read-only underneath.
 
 import * as React from "react";
 import { Alert, Box, Button, TextField, Typography } from "@mui/material";
@@ -32,8 +32,9 @@ export default function AdvancedJsonPanel({
         Advanced
       </Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
-        The {scope === "device" ? "override" : "tenant policy"} as stored. Edits here update the form: Save still writes the agent
-        settings only. Unknown keys are preserved.
+        {scope === "device"
+          ? "The override patch as stored: only the paths this device changes. Everything else is inherited from the tenant policy. Replacing it writes exactly this document."
+          : "The tenant policy as stored. Edits here update the form: Save still writes the agent settings only. Unknown keys are preserved."}
       </Typography>
 
       <TextField
@@ -55,11 +56,13 @@ export default function AdvancedJsonPanel({
           sx={{ mt: 1.5 }}
           action={
             <Button color="inherit" size="small" onClick={onReplaceDocument} disabled={readOnly || replaceDisabled || Boolean(jsonError)}>
-              Replace entire document
+              {scope === "device" ? "Replace override patch" : "Replace entire document"}
             </Button>
           }
         >
-          Replacing the document also overwrites the Security Baselines and Device Management blocks, which are normally edited on their own pages.
+          {scope === "device"
+            ? "Replaces the whole patch. An empty patch ({}) removes the override. plugins and modules are ignored: activation follows the plan."
+            : "Replacing the document also overwrites the Security Baselines and Device Management blocks, which are normally edited on their own pages."}
         </Alert>
       ) : null}
 

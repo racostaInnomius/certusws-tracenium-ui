@@ -8,9 +8,14 @@ const BASE = "/api/v1/policies";
 // if someone else wrote in between. Calling without it preserves the
 // legacy "last writer wins" behavior, so this is a strict superset.
 function buildPutHeaders(opts) {
+  const headers = {};
   const v = opts?.expectedVersion;
-  if (v === undefined || v === null || v === "") return undefined;
-  return { headers: { "If-Match": String(v) } };
+  if (v !== undefined && v !== null && v !== "") headers["If-Match"] = String(v);
+  // `If-None-Match: *` — create only if no row exists yet. The lock of a
+  // device's FIRST override, which has no version to send as If-Match and
+  // still must not overwrite one created between load and save.
+  if (opts?.expectAbsent) headers["If-None-Match"] = "*";
+  return Object.keys(headers).length ? { headers } : undefined;
 }
 
 export async function getTenantPolicy(tenantId) {
@@ -41,6 +46,19 @@ export async function patchTenantPolicyDomain(tenantId, domain, slice, opts) {
 
 export async function pushTenantPolicy(tenantId) {
   return httpPostJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/push`, {});
+}
+
+// Devices running a policy patch of their own, with the paths each one
+// fixes (`overridden_paths`). Source: the override table, not the rollout
+// status (which follows one heartbeat behind).
+export async function listTenantOverrides(tenantId) {
+  return httpGetJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides`);
+}
+
+// Removes EVERY override of the tenant and reconciles each device. What the
+// tenant push used to do silently; explicit and audited per device now.
+export async function resetTenantOverrides(tenantId) {
+  return httpPostJson(`${BASE}/tenants/${encodeURIComponent(tenantId)}/policy/overrides/reset`, {});
 }
 
 export async function listTenantPolicyStatus(tenantId) {

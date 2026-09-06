@@ -81,6 +81,28 @@ const DEVICES = {
 
 const COVERAGE = { ok: true, total: 4, byPlugin: [{ plugin: "amp", count: 4 }, { plugin: "scp", count: 3 }] };
 
+// Phase B: overrides are PATCHES. dev-2 changes only its CDP interval.
+const DEV2_PATCH = { cdp: { intervalSeconds: 900 } };
+const OVERRIDES = {
+  ok: true,
+  count: 1,
+  items: [
+    {
+      device_id: "dev-2",
+      policy_version: "1788500000000",
+      policy_hash: "sha256:cafe",
+      policy_json: DEV2_PATCH,
+      updated_at: iso(0.5),
+      csr_common_name: "SRV-OVERRIDE",
+      last_seen_at: iso(0),
+      is_connected: true,
+      last_ack_status: 0,
+      last_ack_at: iso(0.2),
+      overridden_paths: ["cdp"],
+    },
+  ],
+};
+
 function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 200 } = {}) {
   respond("get", "/api/v1/policies/plugins/catalog", { ok: true, catalog, entitled: ["amp", "scp", "pmp", "sdp"] });
   respond("get", "/api/v1/policies/tenants/t-1/policy", policyStatus === 200 ? policy : { ok: false, message: "backend down" }, { status: policyStatus });
@@ -88,6 +110,7 @@ function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 20
   respond("get", "/api/v1/orchestrator/known-devices", DEVICES);
   respond("get", "/api/v1/dashboard/plugin-coverage", COVERAGE);
   respond("get", "/api/v1/patch-management/gateways", { ok: true, data: { gateways: [] } });
+  respond("get", "/api/v1/policies/tenants/t-1/policy/overrides", OVERRIDES);
 }
 
 function renderPage(props = {}) {
@@ -161,9 +184,9 @@ describe("navigation", () => {
 });
 
 describe("saving the tenant policy", () => {
-  it("shows the diff first, then PATCHes the agent-config slice with If-Match and the plugin list intact", async () => {
+  it("shows the diff first, then PATCHes ONLY the touched domain with If-Match and no plugin block", async () => {
     mockBase();
-    const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent-config", { ok: true });
+    const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true, policyVersion: "1788476540000" });
     renderPage();
     await settled();
 
@@ -180,6 +203,7 @@ describe("saving the tenant policy", () => {
     expect(within(dialog).getByText("update.intervalSeconds")).toBeInTheDocument();
     expect(within(dialog).getByText("21600")).toBeInTheDocument();
     expect(within(dialog).getByText("7200")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Writes: Agent\./)).toBeInTheDocument();
     // no other leaf changed: the plugin block is not in the diff
     expect(within(dialog).queryByText(/plugins\.enabled/)).toBeNull();
 
@@ -187,16 +211,14 @@ describe("saving the tenant policy", () => {
     await waitFor(() => expect(patches).toHaveLength(1));
     const call = patches[0];
     expect(call.headers["if-match"]).toBe(TENANT_VERSION);
-    expect(call.body.update.intervalSeconds).toBe(7200);
-    expect(call.body.plugins.enabled).toEqual(expect.arrayContaining(["amp", "scp", "pmp", "rcp"]));
-    expect(call.body.security).toBeUndefined();
-    expect(call.body.mam).toBeUndefined();
+    // The agent domain: update + the agent's own feature flags, nothing else.
+    expect(call.body).toEqual({ update: { intervalSeconds: 7200 }, features: { selfUpdate: true } });
     expect(await screen.findByText("Agent settings saved")).toBeInTheDocument();
   });
 
   it("refuses to save while the plugin catalog is empty", async () => {
     mockBase({ catalog: [] });
-    const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent-config", { ok: true });
+    const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true });
     renderPage();
     await settled();
     fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
@@ -226,7 +248,7 @@ describe("saving the tenant policy", () => {
 
   it("surfaces a 409 as a warning and reloads", async () => {
     mockBase();
-    respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent-config", { ok: false, code: "STALE_POLICY" }, { status: 409 });
+    respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: false, code: "STALE_POLICY" }, { status: 409 });
     renderPage();
     await settled();
     fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
@@ -234,6 +256,28 @@ describe("saving the tenant policy", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/modified by someone else/)).toBeInTheDocument();
+  });
+});
+
+describe("saving two sections", () => {
+  it("writes one PATCH per domain, chaining If-Match on the version each one returns", async () => {
+    mockBase();
+    const agentPatches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true, policyVersion: "1788476540001" });
+    const scpPatches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/scp", { ok: true, policyVersion: "1788476540002" });
+    renderPage();
+    await settled();
+    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.click(screen.getByText("Security Compliance"));
+    fireEvent.change(await screen.findByLabelText("Evaluation interval (seconds)"), { target: { value: "3600" } });
+    expect(await screen.findByText("2 unsaved changes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Review and save/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Writes: Agent, Security Compliance\./)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(scpPatches).toHaveLength(1));
+    expect(agentPatches[0].headers["if-match"]).toBe(TENANT_VERSION);
+    expect(scpPatches[0].headers["if-match"]).toBe("1788476540001");
+    expect(scpPatches[0].body).toEqual({ compliance: { intervalSeconds: 3600 } });
   });
 });
 
@@ -254,71 +298,103 @@ describe("tools", () => {
     expect(await screen.findByText("GHOST-FOUR")).toBeInTheDocument();
   });
 
-  it("overrides: lists only devices whose desired policy is their own", async () => {
+  it("overrides: lists the devices with a patch, the paths each one changes, and resets them all explicitly", async () => {
     mockBase();
+    const resets = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/reset", { ok: true, reset: 1, sent: 1, batchId: "b-1" });
     renderPage();
     await settled();
     fireEvent.click(screen.getByText("Overrides"));
     expect(await screen.findByText("SRV-OVERRIDE")).toBeInTheDocument();
     expect(screen.queryByText("LAPTOP-ONE")).toBeNull();
     expect(screen.getByText(/1 device runs a policy of its own/)).toBeInTheDocument();
+    expect(screen.getByText("cdp")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Reset all to tenant policy/ }));
+    const confirmDialog = await screen.findByRole("dialog");
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /Reset 1 override/ }));
+    await waitFor(() => expect(resets).toHaveLength(1));
+    expect(await screen.findByText(/1 override reset · 1 delivered immediately/)).toBeInTheDocument();
   });
 });
 
 describe("device scope", () => {
   const OVERRIDE = {
     ok: true,
+    policy: { policy_version: "1788500000000", policy_hash: "cafe", policy_json: DEV2_PATCH },
+  };
+  // What the device runs: the tenant policy with the patch applied.
+  const EFFECTIVE = {
+    ok: true,
     policy: {
-      policy_version: "1788500000000",
-      policy_hash: "cafe",
-      policy_json: { plugins: { enabled: ["amp", "scp"] }, update: { intervalSeconds: 3600 }, security: { mode: "audit" } },
+      source: "device",
+      policy_version: `${TENANT_VERSION}-oa68724db`,
+      overriddenPaths: ["cdp"],
+      policy_json: { ...TENANT_POLICY.policy.policy_json, cdp: DEV2_PATCH.cdp },
     },
   };
-  const EFFECTIVE = { ok: true, policy: { source: "device", policy_version: "1788500000000", policy_json: OVERRIDE.policy.policy_json } };
   const DEV_STATUS = { ok: true, status: STATUS.items[1] };
 
-  it("opens a device from ?agentDevice= and patches its override by domain with If-Match", async () => {
+  it("opens a device from ?agentDevice=, shows the override marks, and patches ONLY what differs from the tenant", async () => {
     window.history.replaceState({}, "", "/?agentDevice=dev-2");
     mockBase();
     respond("get", "/api/v1/policies/devices/dev-2/policy", OVERRIDE);
     respond("get", "/api/v1/policies/devices/dev-2/effective-policy", EFFECTIVE);
     respond("get", "/api/v1/policies/devices/dev-2/policy-status", DEV_STATUS);
-    const patches = respond("patch", "/api/v1/policies/devices/dev-2/policy/domains/agent-config", { ok: true });
+    const patches = respond("patch", "/api/v1/policies/devices/dev-2/policy/domains/agent", { ok: true, policyVersion: "1788500000001" });
     renderPage();
     expect(await screen.findByText(/SRV-OVERRIDE/)).toBeInTheDocument();
-    expect(await screen.findByText("override 1788500000000")).toBeInTheDocument();
+    expect(await screen.findByText("override 1788500000000 · 1 path")).toBeInTheDocument();
+    // The nav marks the section the patch touches.
+    const nav = screen.getByRole("navigation", { name: "Agent settings sections" });
+    expect(within(nav).getByText("override")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
     fireEvent.click(await screen.findByRole("button", { name: /Review and update override/ }));
     const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/only what differs from the tenant/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Update override" }));
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0].headers["if-match"]).toBe("1788500000000");
-    expect(patches[0].body.update.intervalSeconds).toBe(7200);
-    expect(patches[0].body.plugins.enabled).toEqual(expect.arrayContaining(["amp", "scp"]));
+    // selfUpdate equals the tenant's → not in the patch. Only the deviation travels.
+    expect(patches[0].body).toEqual({ update: { intervalSeconds: 7200 } });
   });
 
-  it("creates a first override from the effective policy with the whole document, so security travels with it", async () => {
+  it("creates a first override with If-None-Match: * and only the deviation — never a whole document", async () => {
     window.history.replaceState({}, "", "/?agentDevice=dev-1");
     mockBase();
     server.use(http.get(`${import.meta.env.VITE_API_BASE}/api/v1/policies/devices/dev-1/policy`, () => HttpResponse.json({ ok: false, code: "NOT_FOUND" }, { status: 404 })));
-    respond("get", "/api/v1/policies/devices/dev-1/effective-policy", { ok: true, policy: { source: "tenant", policy_version: CURRENT, policy_json: TENANT_POLICY.policy.policy_json } });
+    respond("get", "/api/v1/policies/devices/dev-1/effective-policy", { ok: true, policy: { source: "tenant", policy_version: CURRENT, overriddenPaths: [], policy_json: TENANT_POLICY.policy.policy_json } });
     respond("get", "/api/v1/policies/devices/dev-1/policy-status", { ok: true, status: STATUS.items[0] });
-    const puts = respond("put", "/api/v1/policies/devices/dev-1/policy", { ok: true });
+    const patches = respond("patch", "/api/v1/policies/devices/dev-1/policy/domains/agent", { ok: true, policyVersion: "1788500000009" });
     renderPage();
     expect(await screen.findByText("no override · follows the tenant policy")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
     fireEvent.click(await screen.findByRole("button", { name: /Review and create override/ }));
     const dialog = await screen.findByRole("dialog");
-    // only the edited leaf differs from what the device runs today
     expect(within(dialog).getByText("update.intervalSeconds")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create override" }));
-    await waitFor(() => expect(puts).toHaveLength(1));
-    expect(puts[0].headers["if-match"]).toBeUndefined();
-    expect(puts[0].body.plugins.enabled).toEqual(expect.arrayContaining(["amp", "scp", "pmp", "rcp"]));
-    expect(puts[0].body.security).toEqual({ mode: "audit" });
-    expect(puts[0].body.update.intervalSeconds).toBe(7200);
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0].headers["if-match"]).toBeUndefined();
+    expect(patches[0].headers["if-none-match"]).toBe("*");
+    expect(patches[0].body).toEqual({ update: { intervalSeconds: 7200 } });
+  });
+
+  it("resets one section to the tenant with an empty slice for that domain", async () => {
+    window.history.replaceState({}, "", "/?agentDevice=dev-2&agentSection=cdp");
+    mockBase();
+    respond("get", "/api/v1/policies/devices/dev-2/policy", OVERRIDE);
+    respond("get", "/api/v1/policies/devices/dev-2/effective-policy", EFFECTIVE);
+    respond("get", "/api/v1/policies/devices/dev-2/policy-status", DEV_STATUS);
+    const patches = respond("patch", "/api/v1/policies/devices/dev-2/policy/domains/cdp", { ok: true, deleted: true });
+    renderPage();
+    const reset = await screen.findByRole("button", { name: "Reset section to tenant" });
+    fireEvent.click(reset);
+    const confirmDialog = await screen.findByRole("dialog");
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: "Reset section" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0].headers["if-match"]).toBe("1788500000000");
+    expect(patches[0].body).toEqual({});
   });
 
   it("refuses to save when the override could not be read", async () => {

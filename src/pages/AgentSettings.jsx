@@ -19,12 +19,12 @@
 //      the same null that caused it.
 //   3. Never save without the catalog: `plugins.enabled` is rebuilt from the
 //      toggles, and an empty catalog once wrote `[amp]` over five plugins.
-//   4. A device override is a WHOLE document (`device ?? tenant`). A new
-//      override starts from the policy the device runs today, and is
-//      written with the whole-doc PUT so security/MAM travel with it; an
-//      existing override is patched by domain like the tenant.
+//   4. A device override is a PATCH on the tenant policy (phase B): the
+//      device form shows the EFFECTIVE policy, and a save writes, per
+//      domain, only the paths that differ from the tenant. A first override
+//      is created with If-None-Match: *; later saves carry If-Match.
 //   5. Unsaved edits pause auto-refresh and guard the tab; the nav badges
-//      say which section they are in.
+//      say which section they are in. Each section saves its own domain.
 
 import * as React from "react";
 import Grid from "@mui/material/Grid";
@@ -54,11 +54,13 @@ import {
   getDevicePolicyStatus,
   getEffectivePolicy,
   getTenantPolicy,
+  listTenantOverrides,
   listTenantPolicyStatus,
   patchDevicePolicyDomain,
   patchTenantPolicyDomain,
   pushDevicePolicy,
   pushTenantPolicy,
+  resetTenantOverrides,
   saveDevicePolicy,
   saveTenantPolicy,
 } from "../api/policies";
@@ -80,11 +82,10 @@ import PolicySectionPanel from "../components/AgentSettings/PolicySectionPanel";
 import PluginsView from "../components/AgentSettings/PluginsView";
 import AdvancedJsonPanel from "../components/AgentSettings/AdvancedJsonPanel";
 import OverridesView from "../components/AgentSettings/OverridesView";
-import { overrideRows } from "../components/AgentSettings/overrides";
 import PolicyRolloutView from "../components/AgentSettings/PolicyRolloutView";
 import PolicyDiffDialog from "../components/AgentSettings/PolicyDiffDialog";
 import { diffPolicies } from "../components/AgentSettings/policyDiff";
-import { agentConfigSlice, composeFirstOverride, formProblems } from "../components/AgentSettings/formGuards";
+import { agentConfigSlice, deviceDomainSlice, domainSlice, domainsTouched, formProblems, overriddenDomains } from "../components/AgentSettings/formGuards";
 import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, TOOL_VIEWS } from "../components/AgentSettings/sections";
 import { summarizeRollout } from "../components/AgentSettings/rolloutModel";
 import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges";
@@ -139,6 +140,8 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const [devices, setDevices] = React.useState([]);
   const [gateways, setGateways] = React.useState([]);
   const [coverage, setCoverage] = React.useState(null);
+  const [overrides, setOverrides] = React.useState([]);
+  const [resettingOverrides, setResettingOverrides] = React.useState(false);
   const [loadedAt, setLoadedAt] = React.useState(() => Date.now());
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const showSnack = React.useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
@@ -177,7 +180,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     if (!canManage || !tenantId) return;
     try {
       setTenantLoading(true);
-      const [policyRes, statusRes, devicesRes, coverageRes] = await Promise.all([
+      const [policyRes, statusRes, devicesRes, coverageRes, overridesRes] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setTenantLoadError(null); return r; },
           (err) => { setTenantLoadError(err?.message || "Could not load the tenant policy."); return null; }
@@ -185,6 +188,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         listTenantPolicyStatus(tenantId).catch(() => ({ items: [] })),
         listAllKnownDevices().catch(() => ({ items: [] })),
         getPluginCoverageSummary().catch(() => null),
+        listTenantOverrides(tenantId).catch(() => ({ items: [] })),
       ]);
       const policy = extractPolicyEnvelope(policyRes).raw ?? {};
       const form = readFormFromPolicy(policy, catalog);
@@ -196,6 +200,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       setTenantStatus(Array.isArray(statusRes?.items) ? statusRes.items : []);
       setDevices(normalizeDevices(devicesRes?.items));
       setCoverage(coverageRes && typeof coverageRes === "object" ? coverageRes : null);
+      setOverrides(Array.isArray(overridesRes?.items) ? overridesRes.items : []);
       setLoadedAt(Date.now());
     } catch (e) {
       console.error(e);
@@ -235,13 +240,14 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       const overridePolicy = extractPolicyEnvelope(overrideRes).raw;
       const eff = effectiveRes?.policy ?? effectiveRes ?? null;
       const effectiveJson = eff?.policy_json ?? eff?.policyJson ?? eff?.policy ?? null;
-      // A new override starts from what the device runs today (invariant 4).
-      const seed = !isEmptyPolicy(overridePolicy) ? overridePolicy : effectiveJson && typeof effectiveJson === "object" ? effectiveJson : {};
+      // The form shows what the device RUNS (tenant ⊕ patch); the raw editor
+      // shows the patch itself (invariant 4).
+      const seed = effectiveJson && typeof effectiveJson === "object" ? effectiveJson : {};
       const form = readFormFromPolicy(seed, catalog);
       setDevicePolicy(overrideRes ?? null);
       setDeviceForm(form);
       setDeviceBaseline(form);
-      setDeviceJsonDraft(formatJson(seed));
+      setDeviceJsonDraft(formatJson(overridePolicy ?? {}));
       setDeviceJsonError(null);
       setEffective(eff);
       setDeviceStatus(statusRes?.status ?? statusRes ?? null);
@@ -288,7 +294,10 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const selectedDevice = selectedDeviceId ? deviceMap.get(selectedDeviceId) || { deviceId: selectedDeviceId, hostname: selectedDeviceId } : null;
   const gatewayForSelected = React.useMemo(() => gateways.find((g) => g.deviceId === selectedDeviceId) || null, [gateways, selectedDeviceId]);
   const rollout = React.useMemo(() => summarizeRollout(tenantStatus, { now: loadedAt }), [tenantStatus, loadedAt]);
-  const overrideCount = React.useMemo(() => overrideRows(tenantStatus).length, [tenantStatus]);
+  const overrideCount = overrides.length;
+  // The tenant's agent-config slice as loaded: what a device slice is
+  // compared against, so an override carries only real deviations.
+  const tenantSliceAtLoad = React.useMemo(() => agentConfigSlice(tenantBaseline, catalog, formToPolicy), [tenantBaseline, catalog]);
 
   const tenantEnv = extractPolicyEnvelope(tenantPolicy);
   const deviceEnv = extractPolicyEnvelope(devicePolicy);
@@ -296,6 +305,13 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const effectiveView = effective
     ? { source: effective.source, version: effective.policy_version ?? effective.policyVersion, json: effective.policy_json ?? effective.policyJson ?? effective.policy ?? {} }
     : null;
+  const overriddenPaths = React.useMemo(
+    () => (Array.isArray(effective?.overriddenPaths) ? effective.overriddenPaths : Array.isArray(effective?.overridden_paths) ? effective.overridden_paths : []),
+    [effective]
+  );
+  const overriddenSections = React.useMemo(() => overriddenDomains(overriddenPaths), [overriddenPaths]);
+  const domainsToSave = React.useMemo(() => domainsTouched(diff), [diff]);
+  const sectionLabel = React.useCallback((id) => sections.find((x) => x.id === id)?.label || id, [sections]);
 
   // Auto-refresh never overwrites an edit in progress (invariant 5).
   const refreshAll = React.useCallback(() => {
@@ -353,7 +369,9 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     try {
       const parsed = JSON.parse(value);
       setError(null);
-      setForm(readFormFromPolicy(parsed, catalog));
+      // The device draft is the PATCH, not the effective document: it is
+      // written with "Replace override patch", never through the form.
+      if (!isDevice) setForm(readFormFromPolicy(parsed, catalog));
     } catch (err) {
       setError(String(err?.message || err));
     }
@@ -375,32 +393,34 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     setDiffDialog({ open: true, entries: diff });
   };
 
+  // One PATCH per touched domain, each carrying the version the previous
+  // one returned — so a save of two sections is two locked writes, not one
+  // whole-document rewrite. For a device the slice is only what differs
+  // from the tenant; an empty slice returns that section to the tenant.
   const confirmSave = async () => {
     const reason = saveBlockedReason();
     if (reason) { showSnack(reason, "error"); setDiffDialog({ open: false, entries: [] }); return; }
+    if (domainsToSave.length === 0) { showSnack("Nothing to save", "info"); setDiffDialog({ open: false, entries: [] }); return; }
     const setSaving = isDevice ? setDeviceSaving : setTenantSaving;
     try {
       setSaving(true);
-      const slice = agentConfigSlice(form, catalog, formToPolicy);
-      if (!isDevice) {
-        await patchTenantPolicyDomain(tenantId, "agent-config", slice, { expectedVersion: tenantEnv.version });
-        showSnack("Agent settings saved", "success");
-        setDiffDialog({ open: false, entries: [] });
-        await loadTenant();
-      } else if (hasOverride) {
-        await patchDevicePolicyDomain(selectedDeviceId, "agent-config", slice, { expectedVersion: deviceEnv.version });
-        showSnack("Device override updated", "success");
-        setDiffDialog({ open: false, entries: [] });
-        await loadDevice(selectedDeviceId);
-      } else {
-        // First override: the whole document — the effective policy verbatim
-        // with the agent-config keys replaced — so the device keeps its
-        // security/MAM/gateway blocks exactly as it runs them (invariant 4).
-        await saveDevicePolicy(selectedDeviceId, composeFirstOverride(effectiveView?.json, slice), {});
-        showSnack("Device override created", "success");
-        setDiffDialog({ open: false, entries: [] });
-        await Promise.all([loadDevice(selectedDeviceId), loadTenant()]);
+      const fullSlice = agentConfigSlice(form, catalog, formToPolicy);
+      let version = isDevice ? deviceEnv.version : tenantEnv.version;
+      let createFirst = isDevice && !hasOverride;
+      for (const domain of domainsToSave) {
+        if (isDevice) {
+          const slice = deviceDomainSlice(domain, fullSlice, tenantSliceAtLoad);
+          if (createFirst && Object.keys(slice).length === 0) continue; // nothing to override yet
+          const res = await patchDevicePolicyDomain(selectedDeviceId, domain, slice, createFirst ? { expectAbsent: true } : { expectedVersion: version });
+          if (res?.deleted) { createFirst = true; version = null; } else { createFirst = false; version = res?.policyVersion ?? version; }
+        } else {
+          const res = await patchTenantPolicyDomain(tenantId, domain, domainSlice(domain, fullSlice), { expectedVersion: version });
+          version = res?.policyVersion ?? version;
+        }
       }
+      showSnack(isDevice ? (hasOverride ? "Device override updated" : "Device override created") : "Agent settings saved", "success");
+      setDiffDialog({ open: false, entries: [] });
+      if (isDevice) await Promise.all([loadDevice(selectedDeviceId), loadTenant()]); else await loadTenant();
     } catch (e) {
       setDiffDialog({ open: false, entries: [] });
       if (e?.status === 409) {
@@ -416,34 +436,99 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     }
   };
 
-  // Raw-JSON escape hatch: replaces the ENTIRE tenant document.
+  // Raw-JSON escape hatch: replaces the ENTIRE tenant document, or the
+  // device's whole override patch.
   const handleReplaceDocument = async () => {
-    if (isDevice) return;
-    if (tenantLoadError) { showSnack("The current policy could not be read — reload before saving.", "error"); return; }
+    if (loadError) { showSnack("The current policy could not be read — reload before saving.", "error"); return; }
     let parsed;
-    try { parsed = JSON.parse(tenantJsonDraft); } catch { showSnack("Fix JSON errors before saving", "error"); return; }
+    try { parsed = JSON.parse(jsonDraft); } catch { showSnack("Fix JSON errors before saving", "error"); return; }
+    const ok = await confirm(
+      isDevice
+        ? {
+            title: "Replace this device's override patch?",
+            body: "The patch is written exactly as shown. An empty patch removes the override and the device follows the tenant policy again.",
+            confirmText: "Replace patch",
+            danger: true,
+          }
+        : {
+            title: "Replace the entire policy document?",
+            body: "This overwrites ALL policy domains — including the Security Baselines and Device Management blocks, which are normally edited on their own pages.",
+            confirmText: "Replace document",
+            danger: true,
+          }
+    );
+    if (!ok) return;
+    const setSaving = isDevice ? setDeviceSaving : setTenantSaving;
+    try {
+      setSaving(true);
+      if (isDevice) {
+        await saveDevicePolicy(selectedDeviceId, parsed, hasOverride ? { expectedVersion: deviceEnv.version } : { expectAbsent: true });
+        showSnack("Override patch replaced", "success");
+        await Promise.all([loadDevice(selectedDeviceId), loadTenant()]);
+      } else {
+        await saveTenantPolicy(tenantId, parsed, { expectedVersion: tenantEnv.version });
+        showSnack("Policy document replaced", "success");
+        await loadTenant();
+      }
+    } catch (e) {
+      if (e?.status === 409) {
+        showSnack("The policy was modified by someone else. Reloaded — review your changes and save again.", "warning");
+        if (isDevice) await loadDevice(selectedDeviceId); else await loadTenant();
+      } else {
+        console.error(e);
+        showSnack(e?.message ? `Failed to replace: ${e.message}` : "Failed to replace the document", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Returns one section of the device to the tenant policy: an empty slice
+  // for that domain removes its paths from the patch (and the patch itself
+  // when nothing is left).
+  const handleResetSection = async () => {
+    if (!isDevice || !selectedDeviceId || !overriddenSections.has(view)) return;
     const ok = await confirm({
-      title: "Replace the entire policy document?",
-      body: "This overwrites ALL policy domains — including the Security Baselines and Device Management blocks, which are normally edited on their own pages.",
-      confirmText: "Replace document",
+      title: `Reset ${sectionLabel(view)} to the tenant policy?`,
+      body: "The device stops overriding this section and follows the tenant policy for it, now and for future tenant changes.",
+      confirmText: "Reset section",
       danger: true,
     });
     if (!ok) return;
     try {
-      setTenantSaving(true);
-      await saveTenantPolicy(tenantId, parsed, { expectedVersion: tenantEnv.version });
-      showSnack("Policy document replaced", "success");
-      await loadTenant();
+      setDeviceSaving(true);
+      await patchDevicePolicyDomain(selectedDeviceId, view, {}, { expectedVersion: deviceEnv.version });
+      showSnack(`${sectionLabel(view)} follows the tenant policy again`, "success");
+      await Promise.all([loadDevice(selectedDeviceId), loadTenant()]);
     } catch (e) {
-      if (e?.status === 409) {
-        showSnack("The policy was modified by someone else. Reloaded — review your changes and save again.", "warning");
-        await loadTenant();
-      } else {
-        console.error(e);
-        showSnack("Failed to replace the policy document", "error");
-      }
+      console.error(e);
+      showSnack(e?.status === 409 ? "The override was modified by someone else. Reloaded." : "Failed to reset the section", "error");
+      await loadDevice(selectedDeviceId);
     } finally {
-      setTenantSaving(false);
+      setDeviceSaving(false);
+    }
+  };
+
+  const handleResetOverrides = async () => {
+    if (!canManage || !tenantId || overrideCount === 0) return;
+    const ok = await confirm({
+      title: `Reset ${overrideCount} override${overrideCount === 1 ? "" : "s"} to the tenant policy?`,
+      body: "Every device override is removed and each device receives the tenant policy. This is audited per device and cannot be undone.",
+      confirmText: `Reset ${overrideCount} override${overrideCount === 1 ? "" : "s"}`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      setResettingOverrides(true);
+      const res = await resetTenantOverrides(tenantId);
+      showSnack(`${res?.reset ?? 0} override${(res?.reset ?? 0) === 1 ? "" : "s"} reset · ${res?.sent ?? 0} delivered immediately`, "success");
+      await loadTenant();
+      if (selectedDeviceId) await loadDevice(selectedDeviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to reset overrides", "error");
+    } finally {
+      setResettingOverrides(false);
     }
   };
 
@@ -455,18 +540,18 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       body:
         "Broadcasts the saved tenant policy to every device." +
         (overrideCount > 0
-          ? `\n\n⚠️ ${overrideCount} device override${overrideCount === 1 ? "" : "s"} will be RESET — those devices will receive the tenant policy instead.`
-          : "\n\nNo device override exists, so nothing is reset."),
-      confirmText: overrideCount > 0 ? `Push and reset ${overrideCount} override${overrideCount === 1 ? "" : "s"}` : "Push to all devices",
-      danger: true,
+          ? `\n\n${overrideCount} device${overrideCount === 1 ? " has" : "s have"} an override: ${overrideCount === 1 ? "it receives" : "they receive"} the tenant policy with ${overrideCount === 1 ? "its" : "their"} override applied. Nothing is reset.`
+          : ""),
+      confirmText: "Push to all devices",
+      danger: false,
     });
     if (!ok) return;
     try {
       setTenantPushing(true);
       const res = await pushTenantPolicy(tenantId);
       const parts = [`${res?.targeted ?? 0} targeted`, `${res?.sent ?? 0} delivered immediately`];
-      const cleared = res?.clearedOverrides ?? 0;
-      if (cleared > 0) parts.push(`${cleared} override${cleared === 1 ? "" : "s"} reset`);
+      const kept = res?.withOverrides ?? 0;
+      if (kept > 0) parts.push(`${kept} with override${kept === 1 ? "" : "s"} applied`);
       showSnack(`Tenant policy push: ${parts.join(" · ")}`, "success");
       await loadTenant();
       if (selectedDeviceId) await loadDevice(selectedDeviceId);
@@ -565,7 +650,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
 
   const scopeVersionText = isDevice
     ? hasOverride
-      ? `override ${deviceEnv.version ?? "—"}`
+      ? `override ${deviceEnv.version ?? "—"} · ${overriddenPaths.length} path${overriddenPaths.length === 1 ? "" : "s"}`
       : selectedDeviceId
         ? "no override · follows the tenant policy"
         : ""
@@ -592,7 +677,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     );
   } else if (view === "overrides") {
     content = (
-      <OverridesView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onEdit={openDeviceFromTool} onPushAll={handlePushTenant} pushing={tenantPushing} />
+      <OverridesView rows={overrides} deviceMap={deviceMap} loading={tenantLoading} onEdit={openDeviceFromTool} onResetAll={handleResetOverrides} resetting={resettingOverrides} />
     );
   } else if (view === "rollout") {
     content = <PolicyRolloutView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onOpenDevice={openDeviceFromTool} now={loadedAt} />;
@@ -607,8 +692,8 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         jsonDraft={jsonDraft}
         jsonError={jsonError}
         onJsonChange={handleJsonChange}
-        onReplaceDocument={isDevice ? null : handleReplaceDocument}
-        replaceDisabled={tenantSaving || Boolean(tenantLoadError)}
+        onReplaceDocument={handleReplaceDocument}
+        replaceDisabled={saving || Boolean(loadError)}
         effective={effectiveView}
       />
     );
@@ -645,7 +730,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       <Grid container spacing={2} sx={{ mt: 1.5 }}>
         <Grid size={{ xs: 12, md: 3 }}>
           <SectionPaper variant="panel" sx={{ p: 1, minWidth: 0 }}>
-            <PluginNav sections={sections} tools={TOOL_VIEWS} active={view} onSelect={setView} changes={changes} />
+            <PluginNav sections={sections} tools={TOOL_VIEWS} active={view} onSelect={setView} changes={changes} overridden={isDevice ? overriddenSections : null} />
           </SectionPaper>
         </Grid>
 
@@ -702,7 +787,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
                     disabled={tenantPushing}
                     sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
                   >
-                    {tenantPushing ? "Pushing…" : overrideCount > 0 ? `Push to all (resets ${overrideCount})` : "Push to all"}
+                    {tenantPushing ? "Pushing…" : "Push to all"}
                   </Button>
                 ) : (
                   <>
@@ -715,6 +800,16 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
                     >
                       {devicePushing ? "Pushing…" : "Push to device"}
                     </Button>
+                    {overriddenSections.has(view) ? (
+                      <Button
+                        variant="outlined"
+                        onClick={handleResetSection}
+                        disabled={deviceSaving || deviceLoading}
+                        sx={{ textTransform: "none", fontWeight: 700 }}
+                      >
+                        Reset section to tenant
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outlined"
                       color="error"
@@ -775,6 +870,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         title={isDevice ? (hasOverride ? "Review override changes" : "Review the new override") : "Review tenant policy changes"}
         confirmText={isDevice ? (hasOverride ? "Update override" : "Create override") : "Save"}
         scopeLabel={isDevice ? selectedDevice?.hostname || selectedDeviceId : "Tenant policy"}
+        sectionsLabel={domainsToSave.length ? `Writes: ${domainsToSave.map(sectionLabel).join(", ")}${isDevice ? " — only what differs from the tenant is stored in the override." : "."}` : ""}
       />
 
       <BrandSnackbar

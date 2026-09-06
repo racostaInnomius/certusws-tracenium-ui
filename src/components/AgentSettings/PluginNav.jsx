@@ -14,7 +14,7 @@ import * as React from "react";
 import { Box, Chip, List, ListItemButton, ListItemText, ListSubheader, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 
-function Entry({ item, active, disabled, badge, onSelect }) {
+function Entry({ item, active, disabled, badge, overridden = false, onSelect }) {
   const button = (
     <ListItemButton
       selected={active}
@@ -36,6 +36,11 @@ function Entry({ item, active, disabled, badge, onSelect }) {
           sx: { fontSize: TEXT.base, fontWeight: active ? 700 : 500, color: active ? BRAND.tealText : BRAND.dark },
         }}
       />
+      {overridden ? (
+        <Tooltip title="This device overrides settings in this section" arrow>
+          <Chip size="small" label="override" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.cyanSoft, color: BRAND.dark, mr: badge ? 0.5 : 0 }} />
+        </Tooltip>
+      ) : null}
       {badge ? (
         <Chip
           size="small"
@@ -54,7 +59,7 @@ function Entry({ item, active, disabled, badge, onSelect }) {
   );
 }
 
-export default function PluginNav({ sections, tools, active, onSelect, changes = {}, planLabel = null }) {
+export default function PluginNav({ sections, tools, active, onSelect, changes = {}, overridden = null, planLabel = null }) {
   return (
     <Box component="nav" aria-label="Agent settings sections" sx={{ minWidth: 0 }}>
       <List dense disablePadding>
@@ -62,7 +67,15 @@ export default function PluginNav({ sections, tools, active, onSelect, changes =
           {planLabel ? `Plan · ${planLabel}` : "Configuration"}
         </ListSubheader>
         {sections.map((s) => (
-          <Entry key={s.id} item={s} active={active === s.id} disabled={s.enabled === false} badge={changes[s.id] || 0} onSelect={onSelect} />
+          <Entry
+            key={s.id}
+            item={s}
+            active={active === s.id}
+            disabled={s.enabled === false}
+            badge={changes[s.id] || 0}
+            overridden={Boolean(overridden?.has?.(s.id))}
+            onSelect={onSelect}
+          />
         ))}
         <ListSubheader disableSticky sx={{ mt: 1, lineHeight: "28px", px: 1.25, fontSize: TEXT.xs, letterSpacing: 1, fontWeight: 800, color: BRAND.gray, bgcolor: "transparent" }}>
           Tools

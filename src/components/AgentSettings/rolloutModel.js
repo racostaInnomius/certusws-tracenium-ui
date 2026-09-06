@@ -13,10 +13,11 @@
 //      rollout number. Rows that are disconnected AND unseen for longer
 //      than STALE_DAYS are EXCLUDED from the denominator and shown apart.
 //
-//   2. The effective version is `<base>[-e…][-r…][-gw…]`: the base changes
-//      when someone edits the policy; the `-r` suffix changes when the
-//      registry-probe catalog changes (four times between 03 and 05-sep);
-//      `-gw` marks the gateway role. Grouping the fleet by the full string
+//   2. The effective version is `<base>[-o…][-e…][-r…][-gw…]`: the base changes
+//      when someone edits the tenant policy; `-o` marks a device override
+//      patch (phase B); the `-r` suffix changes when the registry-probe
+//      catalog changes (four times between 03 and 05-sep); `-gw` marks the
+//      gateway role. Grouping the fleet by the full string
 //      makes a catalog change look like a botched rollout. The version is
 //      parsed so the view can say WHICH part moved.
 
@@ -34,13 +35,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 export function parsePolicyVersion(value) {
   const raw = value === null || value === undefined ? "" : String(value).trim();
-  if (!raw) return { raw: "", base: "", probes: null, gateway: null, entitlements: null, extra: [] };
+  if (!raw) return { raw: "", base: "", override: null, probes: null, gateway: null, entitlements: null, extra: [] };
   const [base, ...suffixes] = raw.split("-");
-  const out = { raw, base, probes: null, gateway: null, entitlements: null, extra: [] };
+  const out = { raw, base, override: null, probes: null, gateway: null, entitlements: null, extra: [] };
   for (const s of suffixes) {
     if (/^r[0-9a-f]{8}$/i.test(s)) out.probes = s.slice(1);
     else if (/^gw([0-9a-f]{8}|0)$/i.test(s)) out.gateway = s.slice(2);
     else if (/^e[0-9a-f]{8}$/i.test(s)) out.entitlements = s.slice(1);
+    else if (/^o[0-9a-f]{8}$/i.test(s)) out.override = s.slice(1);
     else out.extra.push(s);
   }
   return out;
@@ -55,6 +57,7 @@ export function versionLabel(value, currentBase) {
   const p = parsePolicyVersion(value);
   if (!p.raw) return "(none)";
   const suffix =
+    (p.override ? `-o${p.override}` : "") +
     (p.entitlements ? `-e${p.entitlements}` : "") +
     (p.probes ? `-r${p.probes}` : "") +
     (p.gateway ? `-gw${p.gateway}` : "") +
@@ -64,7 +67,9 @@ export function versionLabel(value, currentBase) {
 }
 
 function lastSeenMs(row) {
-  const candidates = [row?.last_heartbeat, row?.last_ack_at, row?.last_sent_at];
+  // `last_seen_at` (device_enrollments) is the real last contact; the
+  // session heartbeat gets overwritten by sweeps. Both are considered.
+  const candidates = [row?.last_seen_at, row?.last_heartbeat, row?.last_ack_at, row?.last_sent_at];
   let best = null;
   for (const c of candidates) {
     if (!c) continue;

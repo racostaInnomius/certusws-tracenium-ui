@@ -13,7 +13,7 @@ import { formatDiffValue } from "./policyDiff";
 const KIND_COLOR = { added: ROLE.positive, removed: ROLE.critical, changed: ROLE.caution };
 const KIND_SIGN = { added: "+", removed: "−", changed: "~" };
 
-export default function PolicyDiffDialog({ open, onClose, entries, onConfirm, title = "Review changes", confirmText = "Save", busy = false, scopeLabel = "" }) {
+export default function PolicyDiffDialog({ open, onClose, entries, onConfirm, title = "Review changes", confirmText = "Save", busy = false, scopeLabel = "", sectionsLabel = "" }) {
   const list = Array.isArray(entries) ? entries : [];
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="md">
@@ -22,6 +22,9 @@ export default function PolicyDiffDialog({ open, onClose, entries, onConfirm, ti
         {scopeLabel ? <Typography component="span" sx={{ ml: 1, fontSize: TEXT.sm, color: BRAND.gray, fontWeight: 500 }}>{scopeLabel}</Typography> : null}
       </DialogTitle>
       <DialogContent dividers>
+        {sectionsLabel && list.length > 0 ? (
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>{sectionsLabel}</Typography>
+        ) : null}
         {list.length === 0 ? (
           <Typography sx={{ fontSize: TEXT.base, color: BRAND.gray }}>Nothing changes: the document you would save is identical to the one loaded.</Typography>
         ) : (

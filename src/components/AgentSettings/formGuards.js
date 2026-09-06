@@ -1,10 +1,12 @@
 // src/components/AgentSettings/formGuards.js
 //
-// What must be true of the form before Save is allowed. Pure, so the page
-// and the tests agree on it. Interval cards already paint their own error
-// text; this is the list that turns the Save button off — the agent
-// silently reverts an out-of-range value to its default, so letting one
-// through would save a number nobody runs.
+// What must be true of the form before Save is allowed, and how a save is
+// cut into per-domain slices. Pure, so the page and the tests agree.
+//
+// Phase B: each section saves ONLY its policy domain (backend
+// POLICY_DOMAINS, mirrored in DOMAIN_PATHS below). A device override is a
+// PATCH on the tenant policy: the device slice carries only the paths that
+// differ from the tenant, so an override says exactly what it changes.
 
 import {
   CDP_INTERVAL_MAX,
@@ -18,6 +20,7 @@ import {
   UPDATE_INTERVAL_MAX,
   UPDATE_INTERVAL_MIN,
 } from "../Policies/policyTransforms";
+import { sectionForPath } from "./sections";
 
 const INTERVALS = [
   { key: "inventory", label: "Inventory interval", min: INVENTORY_INTERVAL_MIN, max: INVENTORY_INTERVAL_MAX, section: "amp" },
@@ -29,6 +32,10 @@ const INTERVALS = [
 
 function isBlank(v) {
   return v === null || v === undefined || v === "";
+}
+
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 /** [{ section, message }] — empty when the form can be saved. */
@@ -46,55 +53,114 @@ export function formProblems(form) {
 }
 
 /**
- * The agent-config slice this page owns, as the server will store it.
+ * The agent-config part of a form, as the server would store it.
  * `formToPolicy` rebuilds the whole document (security / MAM included,
- * read-only at load), so the foreign domains are stripped — the same
- * strip the save path does, so "what the diff shows" and "what is sent"
- * are the same object.
+ * read-only at load), so the foreign domains are stripped, and so are
+ * `plugins`/`modules`: activation follows the plan and no editor sends it.
  */
 export function agentConfigSlice(form, catalog, formToPolicy) {
   const slice = formToPolicy(form, catalog);
   delete slice.security;
   delete slice.mam;
   delete slice.managedApp;
+  delete slice.plugins;
+  delete slice.modules;
   return slice;
 }
 
-// Mirror of POLICY_DOMAINS["agent-config"] in the backend
-// (modules/policies/policies.service.ts). The server enforces it on PATCH;
-// the UI needs it for the one write that is not a PATCH — see below.
-export const AGENT_CONFIG_KEYS = [
-  "plugins",
-  "modules",
-  "inventory",
-  "compliance",
-  "patch",
-  "update",
-  "agent",
-  "features",
-  "rcp",
-  "cdp",
-  "ai",
-  "sdp",
-];
+// Mirror of POLICY_DOMAINS in the backend (modules/policies/policies.service.ts)
+// for the domains this page saves. A path is a top-level key, or one level
+// deeper for the `features` block that agent and rcp share. If this drifts
+// from the backend, saves come back as 400 DOMAIN_KEY_VIOLATION naming the
+// path — loud, not silent.
+export const DOMAIN_PATHS = {
+  agent: ["update", "agent", "features.selfUpdate", "features.deviceInfoWidget", "features.locationTracking"],
+  amp: ["inventory"],
+  scp: ["compliance"],
+  pmp: ["patch"],
+  sdp: ["sdp"],
+  cdp: ["cdp"],
+  rcp: [
+    "rcp",
+    "remoteControl",
+    "features.remoteShell",
+    "features.remoteFile",
+    "features.remoteScreen",
+    "features.remoteRequireConsent",
+    "features.remoteRecordScreen",
+  ],
+  ai: ["ai"],
+};
+
+export const AGENT_DOMAINS = Object.keys(DOMAIN_PATHS);
+
+function getPath(doc, path) {
+  const [key, sub] = path.split(".");
+  const v = doc?.[key];
+  if (sub === undefined) return v;
+  return isPlainObject(v) ? v[sub] : undefined;
+}
+
+function setPath(out, path, value) {
+  const [key, sub] = path.split(".");
+  if (sub === undefined) {
+    out[key] = value;
+    return;
+  }
+  out[key] = { ...(isPlainObject(out[key]) ? out[key] : {}), [sub]: value };
+}
+
+function sameValue(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
 
 /**
- * The document a FIRST device override is created with.
- *
- * An override is a whole document (`device ?? tenant`): a device with one
- * stops reading the tenant policy entirely. So the first write must carry
- * everything the device runs today — security baselines, MAM, the gateway
- * block, MDM platforms — verbatim, and replace only the agent-config keys
- * with what the form says. Same replace-slice semantics as the server's
- * domain merge, applied client-side because there is no row to merge into.
- *
- * Not `formToPolicy(form)`: the form round-trip only knows the keys it
- * edits, and drops or reshapes the rest.
+ * The complete replace-slice of one domain, cut from the agent-config
+ * slice of a form. A path absent from the document is absent from the
+ * slice (omit-empty: the server removes it).
  */
-export function composeFirstOverride(effectiveJson, slice) {
-  const base = effectiveJson && typeof effectiveJson === "object" && !Array.isArray(effectiveJson) ? effectiveJson : {};
-  const out = { ...base };
-  for (const key of AGENT_CONFIG_KEYS) delete out[key];
-  for (const [key, value] of Object.entries(slice || {})) out[key] = value;
+export function domainSlice(domain, fullSlice) {
+  const out = {};
+  for (const path of DOMAIN_PATHS[domain] || []) {
+    const v = getPath(fullSlice, path);
+    if (v !== undefined) setPath(out, path, v);
+  }
+  return out;
+}
+
+/**
+ * The device's slice for one domain: ONLY the paths whose value differs
+ * from the tenant's. Everything else is inherited, so the override stored
+ * for the device says exactly what it changes — and a value edited back to
+ * the tenant's drops out of the override instead of pinning it.
+ */
+export function deviceDomainSlice(domain, deviceSlice, tenantSlice) {
+  const out = {};
+  for (const path of DOMAIN_PATHS[domain] || []) {
+    const v = getPath(deviceSlice, path);
+    if (v === undefined) continue;
+    if (sameValue(v, getPath(tenantSlice, path))) continue;
+    setPath(out, path, v);
+  }
+  return out;
+}
+
+/** Domains a diff (see policyDiff.js) touches, in DOMAIN_PATHS order. */
+export function domainsTouched(diffEntries) {
+  const hit = new Set();
+  for (const e of Array.isArray(diffEntries) ? diffEntries : []) {
+    const id = sectionForPath(e.path);
+    if (DOMAIN_PATHS[id]) hit.add(id);
+  }
+  return AGENT_DOMAINS.filter((d) => hit.has(d));
+}
+
+/** Sections (= domains) an override's paths belong to. */
+export function overriddenDomains(paths) {
+  const out = new Set();
+  for (const p of Array.isArray(paths) ? paths : []) {
+    const id = sectionForPath(p);
+    if (DOMAIN_PATHS[id]) out.add(id);
+  }
   return out;
 }
