@@ -43,13 +43,18 @@ describe("PqcReadinessPanels — drill-down", () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ fingerprint256: "a".repeat(64) }));
   });
 
-  it("un equipo bloqueado lleva a su lista, y las dos causas van en la misma fila", () => {
+  it("⭐ los bloqueos se agrupan por causa con su recuento; una causa se despliega a sus equipos, que llevan a Inventory", () => {
     const onSelectDevice = vi.fn();
     render(<AgilityBlockersPanel pqc={PQC} onSelectDevice={onSelectDevice} />);
-    fireEvent.click(screen.getByRole("button", { name: /Open device SRV-JAVA-01/i }));
+    // Un equipo con dos causas cuenta una vez en el título y una vez por causa.
+    expect(screen.getByText(/Devices that cannot migrate yet \(1\)/)).toBeInTheDocument();
+    const jvm = screen.getByRole("button", { name: /Java below 24: 1 device/i });
+    expect(screen.getByRole("button", { name: /OpenSSL below 3.5: 1 device/i })).toBeInTheDocument();
+    // Cerrado no enseña equipos: la lista larga era el problema.
+    expect(screen.queryByText("SRV-JAVA-01")).not.toBeInTheDocument();
+    fireEvent.click(jvm);
+    fireEvent.click(screen.getByText("SRV-JAVA-01"));
     expect(onSelectDevice).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1", host: "SRV-JAVA-01" }));
-    expect(screen.getByText("jvm 8.0.392")).toBeInTheDocument();
-    expect(screen.getByText("openssl 1.1.1")).toBeInTheDocument();
   });
 
   it("CNSA: lo cuántico-vulnerable navega por familia; lo post-cuántico sin filtro exacto NO navega", () => {

@@ -42,6 +42,8 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import useCdpFilter from "../hooks/useCdpFilter";
@@ -86,6 +88,7 @@ import {
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
 import CdpSettingsTab from "../components/CryptoDiscovery/CdpSettingsTab";
+import { TrustAnchorsPanel } from "../components/CryptoDiscovery/PqcReadinessPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
@@ -105,6 +108,7 @@ import {
   getCdpFacets,
   getCdpStores,
   getCdpTimeline,
+  getCdpPqcReadiness,
   exportCdpCertificatesCsv
 } from "../api/cdp";
 
@@ -258,6 +262,12 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
   // simplemente NO se pintaba: la primera cifra de la página desaparecía
   // sin decir por qué (revisión UI 2026-09-05).
   const [chartsError, setChartsError] = React.useState([]);
+  // Antes del `return` temprano de error: los hooks van siempre en el
+  // mismo orden.
+  // `useTheme()` devuelve el tema por defecto sin ThemeProvider (los
+  // tests montan la página sin él); el selector `(theme) => …` no.
+  const theme = useTheme();
+  const wideEnoughForIcons = useMediaQuery(theme.breakpoints.up("xl"));
   React.useEffect(() => {
     let alive = true;
     setChartsError([]);
@@ -324,11 +334,13 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
   const s = summary ?? {};
   const cards = [
     {
-      title: "End-entity certificates",
+      // Títulos cortos: SummaryCard no parte la línea y «End-entity
+      // certificates» se cortaba en pantallas de 13" (repaso 2026-09-06).
+      title: "End-entity certs",
       value: s.totalCerts ?? "…",
       filter: {},
       icon: <BadgeOutlinedIcon />,
-      hint: `The certificates that expire and take a service down with them. CA certificates (${
+      hint: `Distinct end-entity certificates — the ones that expire and take a service down with them. CA certificates (${
         (s.caCerts ?? 0).toLocaleString()
       }) are counted separately — you review those under Trust anchors, you don't renew them.`,
     },
@@ -351,7 +363,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
     // son 7 sobre 549. Un certificado caducado sin clave privada rara vez
     // es una incidencia; con clave es una identidad viva que ya no vale.
     {
-      title: "Expired, with private key",
+      title: "Expired, with key",
       value: s.expiredWithKey ?? "…",
       filter: { status: "expired", hasPrivateKey: true },
       icon: <EventBusyOutlinedIcon />,
@@ -374,6 +386,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
       title: "Devices reporting",
       value: s.devicesReporting ?? "…",
       icon: <ComputerOutlinedIcon />,
+      hint: "Devices with at least one end-entity certificate — the same set the Inventory's device view lists.",
       devices: true,
     },
   ];
@@ -391,20 +404,17 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           {chartsError.join(" · ")} — the rest of the page is unaffected; use Refresh to retry.
         </Alert>
       ) : null}
-      <ExposureFunnel
-        exposure={exposure}
-        explain={false}
-        onSelect={(f) => onDrillDown?.(f, { replace: true })}
-        onOpenOutside={() => onOpenTab?.(TAB.explore)}
-        onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
-      />
+      {/* Los KPI primero: son la lectura de un vistazo; el embudo es la explicación. */}
       <Grid container spacing={2}>
         {cards.map((card) => (
           <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
             <SummaryCard
               title={card.title}
               value={card.value}
-              icon={card.icon}
+              // Seis tarjetas en una fila de 1.200–1.536 px dejan ~110 px
+              // para el título con icono: se cortaba. Sin icono hasta xl
+              // el título entero cabe; el icono vuelve donde sobra sitio.
+              icon={wideEnoughForIcons ? card.icon : null}
               accent={card.accent}
               tint={card.tint}
               titleHint={card.hint ?? null}
@@ -423,6 +433,14 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           </Grid>
         ))}
       </Grid>
+
+      <ExposureFunnel
+        exposure={exposure}
+        explain={false}
+        onSelect={(f) => onDrillDown?.(f, { replace: true })}
+        onOpenOutside={() => onOpenTab?.(TAB.explore)}
+        onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
+      />
 
       {panelsError ? (
         // Después de los KPIs, no antes: los KPIs vienen de otra petición y
@@ -977,7 +995,7 @@ function CdpInventoryTab({ refreshNonce }) {
       */}
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="flex-start">
         <Box sx={{ width: { xs: "100%", md: 220 }, flexShrink: 0 }}>
-          <CdpCertFacets filter={filter} refreshNonce={refreshNonce} onSelect={(delta) => setAndReset(delta)} />
+          <CdpCertFacets filter={filter} view={view} refreshNonce={refreshNonce} onSelect={(delta) => setAndReset(delta)} />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <DataGrid
@@ -1288,6 +1306,19 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
   const [distrustFor, setDistrustFor] = React.useState(null);
   // Una fila es un certificado: clic = su ficha (cadena, equipos, flags).
   const [drawerCert, setDrawerCert] = React.useState(null);
+  // «Anclas a reemplazar» (quantum-broken y válidas más allá de 2035)
+  // vivía en Roadmap; una lista de anclas es de ESTA pestaña (repaso UI
+  // 2026-09-06). Fallo blando: sin ella la rejilla sigue.
+  const [pqc, setPqc] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    getCdpPqcReadiness()
+      .then((r) => alive && setPqc(r?.pqc ?? null))
+      .catch(() => alive && setPqc(null));
+    return () => {
+      alive = false;
+    };
+  }, [refreshNonce]);
 
   React.useEffect(() => {
     let alive = true;
@@ -1434,6 +1465,12 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
           trust: the OS ships them and decides their state separately.
         </Alert>
       )}
+
+      {pqc && Array.isArray(pqc.trustAnchorsAtRisk) && pqc.trustAnchorsAtRisk.length > 0 ? (
+        <Box sx={{ mb: 2 }}>
+          <TrustAnchorsPanel pqc={pqc} onSelect={(row) => setDrawerCert(row.fingerprint256)} />
+        </Box>
+      ) : null}
 
       <Box sx={{ height: 560 }}>
         <DataGrid

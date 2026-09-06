@@ -88,13 +88,13 @@ describe("KPI clicables", () => {
     );
   });
 
-  it("«Expired, with private key» combina estado y clave", async () => {
+  it("«Expired, with key» combina estado y clave", async () => {
     render(
       <ConfirmProvider>
         <CryptoDiscovery />
       </ConfirmProvider>
     );
-    (await screen.findByText("Expired, with private key", {}, { timeout: 4000 })).click();
+    (await screen.findByText("Expired, with key", {}, { timeout: 4000 })).click();
     await waitFor(() =>
       expect(listCdpCertificates).toHaveBeenCalledWith(
         expect.objectContaining({ status: "expired", hasPrivateKey: true })

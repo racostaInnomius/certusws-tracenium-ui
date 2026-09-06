@@ -190,7 +190,8 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, onOpenRoadma
       <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
         <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>Your exposure</Typography>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.75 }}>
-          {fmt(e.devices)} devices · {fmt(e.uniqueTotal)} distinct certificates
+          {/* Los pasos cuentan certificados distintos, como la lista; las ocurrencias van aquí. */}
+          {fmt(e.devices)} devices{e.instances != null && e.instances !== e.total ? ` · ${fmt(e.instances)} occurrences on devices` : ""}
         </Typography>
       </Stack>
       <Explain on={explain}>

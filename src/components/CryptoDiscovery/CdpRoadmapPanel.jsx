@@ -54,7 +54,9 @@ import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessH
 // aquí, como referencias de la hoja de ruta. Lo que duplicaba al embudo
 // (horizonte 2030/2035) y a Explore (familias) se retiró — consolidación
 // 2026-09-04.
-import { TrustAnchorsPanel, AgilityBlockersPanel, CnsaPanel } from "./PqcReadinessPanels";
+// «Trust anchors to replace» vive en la pestaña Trust anchors desde el
+// repaso UI 2026-09-06: una lista de anclas es cosa de esa pestaña.
+import { AgilityBlockersPanel, CnsaPanel } from "./PqcReadinessPanels";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -622,7 +624,7 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
 
       {pqcError ? (
         <Alert severity="warning">
-          The references below (agility blockers, CNSA 2.0, trust anchors) didn&apos;t load: {pqcError}. The systems
+          The references below (devices that can&apos;t migrate, CNSA 2.0) didn&apos;t load: {pqcError}. The systems
           list above is unaffected.
         </Alert>
       ) : null}
@@ -636,15 +638,7 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
             // Un equipo bloqueado → sus certificados en Inventory (vista por equipo).
             onSelectDevice={onDrillDown ? (d) => onDrillDown({ view: "devices", search: d.host || d.agentId }) : undefined}
           />
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <CnsaPanel pqc={pqc} onSelect={onDrillDown ? (f) => onDrillDown({ ...f, hasPrivateKey: true }) : undefined} />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              {/* Un ancla vive en un almacén de raíces: la lista la esconde salvo que se pidan. */}
-              <TrustAnchorsPanel pqc={pqc} onSelect={onOpenCertificate ? (row) => onOpenCertificate(row.fingerprint256) : undefined} />
-            </Box>
-          </Stack>
+          <CnsaPanel pqc={pqc} onSelect={onDrillDown ? (f) => onDrillDown({ ...f, hasPrivateKey: true }) : undefined} />
         </>
       ) : null}
 

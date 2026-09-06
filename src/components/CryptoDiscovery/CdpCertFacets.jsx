@@ -7,10 +7,13 @@
 // explorador: «¿cuántos de estos son RSA-2048? ¿y cuántos vienen de un
 // keystore Java?» se responde mirando, no consultando.
 //
-// Los conteos salen de /facets con el mismo filtro de navegación que la
-// lista, así que lo que se ve y lo que se cuenta es lo mismo. Búsqueda,
-// estado, flag y emisor no se pasan porque /facets no los conoce: se dice
-// en el pie para que el número no se lea como el total de la tabla.
+// Repaso UI 2026-09-06: los conteos NO cuadraban con el total de la tabla
+// porque /facets aplicaba otro recorte (sin lente entidad-final, sin
+// búsqueda/estado/bandera/emisor) y contaba ocurrencias en vez de
+// certificados. Ahora viajan TODOS los parámetros de la lista con
+// `lens=list`, el backend los traduce con el mismo constructor que la
+// lista, y se enseña `uniqueCerts` (vista por certificado) o `devices`
+// (vista por equipo). Sumar los valores de una faceta da el total del pill.
 
 import * as React from "react";
 import { Box, Chip, Skeleton, Stack, Typography } from "@mui/material";
@@ -28,23 +31,24 @@ const FACETS = [
     labels: { machine: "Machine", user: "User", "system-roots": "System roots", network: "Network (probed)" } }
 ];
 
-/** Solo lo que /facets entiende. */
+/** El filtro de la lista, entero, tal como lo manda la propia lista. */
 export function facetFilterOf(filter) {
   const f = filter || {};
-  const out = {};
-  for (const k of ["source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "hasPrivateKey", "eku"]) {
+  const out = { lens: "list" };
+  for (const k of ["search", "status", "flag", "issuer", "eku", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
     if (f[k] != null && f[k] !== "" && f[k] !== false) out[k] = f[k];
   }
-  // La lista esconde las raíces del SO salvo que se pidan; las facetas
-  // hacen lo mismo para que los conteos cuadren con lo que se ve.
-  out.includeRoots = f.includeRoots === true;
+  for (const k of ["hasPrivateKey", "hasFlags", "includeRoots"]) {
+    if (f[k] === true) out[k] = true;
+  }
   return out;
 }
 
-export default function CdpCertFacets({ filter, onSelect, refreshNonce }) {
+export default function CdpCertFacets({ filter, onSelect, refreshNonce, view = "certs" }) {
   const [data, setData] = React.useState({});
   const [loading, setLoading] = React.useState(false);
   const key = JSON.stringify(facetFilterOf(filter));
+  const count = (r) => (view === "devices" ? r.devices : r.uniqueCerts ?? r.certs);
 
   React.useEffect(() => {
     let alive = true;
@@ -80,31 +84,33 @@ export default function CdpCertFacets({ filter, onSelect, refreshNonce }) {
             {rows === null && !loading ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>Couldn&apos;t load</Typography> : null}
             {rows && rows.length === 0 ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>—</Typography> : null}
             <Stack spacing={0.25}>
-              {(rows || []).map((r, i) => {
-                const v = f.value(r);
-                const label = f.labels?.[v] ?? v ?? "—";
-                return (
-                  <Box
-                    key={`${String(v)}-${i}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`${f.label} ${label}: ${r.certs}`}
-                    onClick={() => onSelect(f.select(r))}
-                    onKeyDown={(e) => e.key === "Enter" && onSelect(f.select(r))}
-                    sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 0.75, py: 0.25, borderRadius: 0.5, cursor: "pointer", "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}` } }}
-                  >
-                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</Typography>
-                    <Chip size="small" label={Number(r.certs).toLocaleString()} sx={{ height: 18, fontSize: TEXT.xs, ml: 1, fontVariantNumeric: "tabular-nums" }} />
-                  </Box>
-                );
-              })}
+              {(rows || [])
+                .map((r) => ({ r, n: Number(count(r) ?? 0) }))
+                .sort((a, b) => b.n - a.n)
+                .map(({ r, n }, i) => {
+                  const v = f.value(r);
+                  const label = f.labels?.[v] ?? v ?? "—";
+                  return (
+                    <Box
+                      key={`${String(v)}-${i}`}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${f.label} ${label}: ${n}`}
+                      onClick={() => onSelect(f.select(r))}
+                      onKeyDown={(e) => e.key === "Enter" && onSelect(f.select(r))}
+                      sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", px: 0.75, py: 0.25, borderRadius: 0.5, cursor: "pointer", "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}` } }}
+                    >
+                      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</Typography>
+                      <Chip size="small" label={n.toLocaleString()} sx={{ height: 18, fontSize: TEXT.xs, ml: 1, fontVariantNumeric: "tabular-nums" }} />
+                    </Box>
+                  );
+                })}
             </Stack>
           </Box>
         );
       })}
       <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
-        Counts are certificates on devices under the current navigation filter; search, status, flag and issuer are
-        not applied here.
+        {view === "devices" ? "Devices" : "Certificates"} under the current filters, the same way the table counts them.
       </Typography>
     </Stack>
   );

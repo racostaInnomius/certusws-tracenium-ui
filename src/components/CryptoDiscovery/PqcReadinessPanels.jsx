@@ -20,7 +20,7 @@
 // hue plus text labels, status colours reserved for genuine states.
 
 import * as React from "react";
-import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, LinearProgress, Stack, Tooltip, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
@@ -134,71 +134,121 @@ export function TrustAnchorsPanel({ pqc, onSelect }) {
 
 // ── 4. Agility blockers ──────────────────────────────────────────────
 
+// Etiqueta legible de cada bloqueo. El umbral viene de la API.
+const RUNTIME_LABEL = {
+  jvm: (a) => `Java below ${a?.jvmMinMajor ?? 24}`,
+  openssl: (a) => `OpenSSL below ${a?.opensslMinVersion ?? "3.5"}`,
+  "os-tls": (a) => `OS TLS stack below the threshold (Windows build ${a?.windowsMinBuild ?? 26100} / macOS ${a?.macosMinMajor ?? 26})`
+};
+const RUNTIME_HINT = {
+  jvm: "ML-KEM and ML-DSA arrived in that JDK; older JVMs cannot negotiate post-quantum TLS.",
+  openssl: "OpenSSL gained X25519MLKEM768 in 3.5; anything linked against an older one stays classical.",
+  "os-tls": "Everything that uses the system stack — on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a software inventory. Clearing the threshold is not the same as having it on: Windows ships the ML-KEM groups disabled until policy enables them."
+};
+
+/**
+ * Repaso UI 2026-09-06: la lista de equipos (uno por fila, chips por
+ * causa) no cabía en una pantalla y no decía lo que importa: CUÁNTOS y
+ * POR QUÉ. Ahora se agrupa por causa —una barra por bloqueo con su
+ * recuento de equipos— y cada causa se despliega a sus equipos, que
+ * llevan a Inventory. La cifra total sigue siendo la del embudo.
+ */
 export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
   const agility = pqc?.agility;
   const blockers = Array.isArray(agility?.blockers) ? agility.blockers : [];
+  const [open, setOpen] = React.useState(() => new Set());
 
-  // One row per device, listing what blocks it.
-  const byDevice = new Map();
-  for (const b of blockers) {
-    const key = b.agentId;
-    if (!byDevice.has(key)) byDevice.set(key, { agentId: b.agentId, host: b.host || b.agentId, items: [] });
-    byDevice.get(key).items.push(b);
-  }
+  // Una fila por causa (runtime), con sus equipos deduplicados.
+  const groups = React.useMemo(() => {
+    const m = new Map();
+    for (const b of blockers) {
+      const key = b.runtime || "other";
+      if (!m.has(key)) m.set(key, { runtime: key, devices: new Map(), versions: new Set() });
+      const g = m.get(key);
+      if (!g.devices.has(b.agentId)) g.devices.set(b.agentId, { agentId: b.agentId, host: b.host || b.agentId, versions: [] });
+      g.devices.get(b.agentId).versions.push(b.version);
+      if (b.version) g.versions.add(String(b.version));
+    }
+    return [...m.values()].sort((a, b) => b.devices.size - a.devices.size);
+  }, [blockers]);
+  const totalDevices = new Set(blockers.map((b) => b.agentId)).size;
+  const max = Math.max(1, ...groups.map((g) => g.devices.size));
+  const toggle = (key) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   return (
     <SectionPaper sx={{ p: 2 }}>
       <PanelTitle hint="Devices running a runtime with no post-quantum support. These are not a scheduling problem — they cannot migrate at all until the runtime is upgraded.">
-        Devices that cannot migrate yet
+        Devices that cannot migrate yet{totalDevices ? ` (${totalDevices})` : ""}
       </PanelTitle>
 
-      {byDevice.size === 0 ? (
+      {groups.length === 0 ? (
         <Empty>
           Nothing we know how to judge is blocking migration. That is not the same as
           &ldquo;ready&rdquo;.
         </Empty>
       ) : (
-        <>
-          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, mb: 1.5 }}>
-            Thresholds: Java {agility.jvmMinMajor}+ (ML-KEM and ML-DSA arrived in that JDK),
-            OpenSSL {agility.opensslMinVersion}+, Windows{" "}
-            {agility.windowsMinBuild ? `build ${agility.windowsMinBuild}` : "24H2"}+ and macOS{" "}
-            {agility.macosMinMajor ?? 26}+ for the operating system&apos;s own TLS stack.
-          </Typography>
-          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1.5, fontStyle: "italic" }}>
-            An <strong>os-tls</strong> blocker covers everything that uses the system stack —
-            on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a
-            software inventory. Clearing the threshold is not the same as having it on:
-            Windows ships the ML-KEM groups disabled until policy enables them.
-          </Typography>
-          <Stack divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
-            {[...byDevice.values()].map((device) => (
-              <Box
-                key={device.agentId || device.host}
-                sx={{ py: 1, px: 0.5, ...ROW_ACTION_SX(Boolean(onSelectDevice)) }}
-                {...rowActionProps(onSelectDevice ? () => onSelectDevice(device) : null, `Open device ${device.host}`)}
-              >
-                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>{device.host}</Typography>
-                <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5 }}>
-                  {device.items.map((item, i) => (
-                    <Tooltip key={`${item.runtime}-${item.version}-${i}`} title={item.reason} arrow>
-                      <Chip
-                        size="small"
-                        label={`${item.runtime} ${item.version}`}
-                        sx={{
-                          bgcolor: BRAND.alert.highSoft,
-                          color: BRAND.alert.high,
-                          fontWeight: 700,
-                          fontSize: TEXT.xs,
-                        }}
-                      />
+        <Stack spacing={1.25}>
+          {groups.map((g) => {
+            const label = (RUNTIME_LABEL[g.runtime] || ((_a) => g.runtime))(agility);
+            const isOpen = open.has(g.runtime);
+            const versions = [...g.versions].slice(0, 6);
+            return (
+              <Box key={g.runtime}>
+                <Box
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  aria-label={`${label}: ${g.devices.size} device(s)`}
+                  onClick={() => toggle(g.runtime)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggle(g.runtime);
+                    }
+                  }}
+                  sx={{ cursor: "pointer", borderRadius: 0.5, px: 0.5, mx: -0.5, "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}` } }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
+                    <Tooltip title={RUNTIME_HINT[g.runtime] || ""} arrow>
+                      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: "help" }}>
+                        {label}
+                        {versions.length ? <Box component="span" sx={{ color: TEXT_MUTED, fontWeight: 400 }}> · seen: {versions.join(", ")}{g.versions.size > 6 ? "…" : ""}</Box> : null}
+                      </Typography>
                     </Tooltip>
-                  ))}
-                </Stack>
+                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, whiteSpace: "nowrap" }}>
+                      {g.devices.size} device{g.devices.size === 1 ? "" : "s"}
+                    </Typography>
+                  </Stack>
+                  <LinearProgress
+                    variant="determinate"
+                    value={(g.devices.size / max) * 100}
+                    sx={{ mt: 0.5, height: 6, borderRadius: 3, bgcolor: BRAND.surfaceMuted, "& .MuiLinearProgress-bar": { borderRadius: 3, bgcolor: BRAND.alert.high } }}
+                  />
+                </Box>
+                {isOpen ? (
+                  <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.5 }}>
+                    {[...g.devices.values()].map((d) => (
+                      <Tooltip key={d.agentId} title={`${g.runtime} ${d.versions.filter(Boolean).join(", ")} — open in Inventory`} arrow>
+                        <Chip
+                          size="small"
+                          label={d.host}
+                          onClick={onSelectDevice ? () => onSelectDevice(d) : undefined}
+                          sx={{ height: 22, fontSize: TEXT.xs }}
+                        />
+                      </Tooltip>
+                    ))}
+                  </Stack>
+                ) : null}
               </Box>
-            ))}
-          </Stack>
-        </>
+            );
+          })}
+        </Stack>
       )}
     </SectionPaper>
   );
