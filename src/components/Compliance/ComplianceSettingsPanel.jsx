@@ -44,6 +44,7 @@ import {
 } from "../../api/compliance";
 import { BRAND, TEXT } from "../../theme/brand";
 import AsyncState from "../common/AsyncState";
+import SectionPaper from "../common/SectionPaper";
 
 // Setting metadata — drives the form rows without per-row JSX
 // duplication. Add a setting here and it lights up automatically.
@@ -90,7 +91,23 @@ const SETTINGS_DEFS = [
   }
 ];
 
-export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
+/**
+ * Los ajustes de cumplimiento del tenant.
+ *
+ * Dos formas de la MISMA pantalla, y el contenido no se duplica:
+ *
+ *   · `embedded` — una pestaña más de Security Compliance. Es la forma
+ *     principal desde el 2026-09-05: los umbrales y los frameworks que sigues
+ *     gobiernan el titular, la tabla y los exports de la página, así que
+ *     esconderlos tras un engrane los convertía en algo que hay que descubrir.
+ *   · diálogo — la de siempre, que se conserva porque `open`/`onClose` son
+ *     parte de su contrato y algún llamador puede seguir queriéndola.
+ *
+ * ⚠️ Si algún día no queda ningún llamador del diálogo, esta rama se BORRA.
+ * Dejar las dos vivas "por si acaso" es cómo una pantalla acaba teniendo dos
+ * sitios donde se edita lo mismo.
+ */
+export default function ComplianceSettingsPanel({ open, onClose, onToast, embedded = false }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -106,7 +123,9 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
   const [packDraft, setPackDraft] = useState(null);
 
   useEffect(() => {
-    if (!open) return;
+    // Embebido se monta ya visible: no hay `open` que esperar, y exigirlo
+    // dejaría la pestaña en blanco para siempre.
+    if (!embedded && !open) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -138,7 +157,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, embedded]);
 
   // Identify which fields have changed vs the on-server overrides.
   // Drives the Save button's enabled state + the patch shape we
@@ -205,7 +224,8 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
       setPackDraft(Array.isArray(active) && active.length ? new Set(active) : null);
     }
     setFieldErrors({});
-    onClose();
+    // Embebido no cierra nada: descartar los cambios ES la acción entera.
+    if (!embedded) onClose?.();
   }
 
   // Sprint 4 — pack helpers. Toggling from "all" to a subset seeds the
@@ -224,17 +244,10 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
       return next.size === 0 ? null : next;
     });
 
-  return (
-    <Dialog open={open} onClose={handleCancel} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", pb: 1 }}>
-        <Typography variant="h6" sx={{ flex: 1, fontWeight: 700, color: BRAND.dark }}>
-          Compliance settings
-        </Typography>
-        <IconButton aria-label="Close" size="small" onClick={handleCancel}>
-          <CloseOutlinedIcon fontSize="small" />
-        </IconButton>
-      </DialogTitle>
-      <DialogContent>
+  // ⚠️ UN SOLO CUERPO para las dos formas. Copiarlo en cada rama es cómo se
+  // acaba corrigiendo un campo en el diálogo y no en la pestaña.
+  const body = (
+    <>
         {/* NOTE: JSX children evaluate eagerly — the block below runs even
             while AsyncState shows loading/error and `settings` is still null,
             so every read of it stays optional-chained. */}
@@ -325,20 +338,60 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast }) {
             ) : null}
           </Stack>
         </AsyncState>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleCancel} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : null}
-        >
-          {saving ? "Saving..." : "Save changes"}
-        </Button>
-      </DialogActions>
+    </>
+  );
+
+  const actions = (
+    <>
+      {/* "Discard" y no "Cancel": embebido no hay diálogo que cancelar, y la
+          etiqueta tiene que decir lo que hace el botón donde está. */}
+      <Button onClick={handleCancel} disabled={saving || (embedded && !hasChanges)}>
+        {embedded ? "Discard changes" : "Cancel"}
+      </Button>
+      <Button
+        variant="contained"
+        onClick={handleSave}
+        disabled={!hasChanges || saving}
+        startIcon={saving ? <CircularProgress size={14} color="inherit" /> : null}
+      >
+        {saving ? "Saving..." : "Save changes"}
+      </Button>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <SectionPaper variant="panel" sx={{ p: { xs: 2, sm: 3 } }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+          Compliance settings
+        </Typography>
+        <Typography variant="caption" sx={{ color: BRAND.gray, display: "block", mb: 2 }}>
+          Thresholds and the frameworks you track. Both govern the headline, the
+          framework table and what the exports contain.
+        </Typography>
+        {body}
+        {/* Los botones no flotan: sin el marco del diálogo hace falta una
+            separación explícita, o "Guardar" se lee como parte del último
+            campo. */}
+        <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 3 }}>
+          {actions}
+        </Stack>
+      </SectionPaper>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={handleCancel} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", pb: 1 }}>
+        <Typography variant="h6" sx={{ flex: 1, fontWeight: 700, color: BRAND.dark }}>
+          Compliance settings
+        </Typography>
+        <IconButton aria-label="Close" size="small" onClick={handleCancel}>
+          <CloseOutlinedIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>{body}</DialogContent>
+      <DialogActions>{actions}</DialogActions>
     </Dialog>
   );
 }

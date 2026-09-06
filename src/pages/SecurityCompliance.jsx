@@ -311,9 +311,28 @@ function readUrlFilters() {
 const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
 
 // Deep-linkable via ?scpTab=. Same pattern Configurations uses for
-// ?settingsTab=. "baselines" is privileged-only — resolveTab() downgrades
-// it to "posture" for USER-role members.
-const SCP_TABS = ["posture", "baselines", "catalog"];
+// ?settingsTab=. "baselines" y "settings" son sólo para roles con gestión —
+// `effectiveTab` las degrada a "posture" para un USER.
+//
+// ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
+// `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
+// volvería a "posture". Añadir un <Tab> sin tocar esto lo deja muerto.
+const SCP_TABS = ["posture", "baselines", "catalog", "settings"];
+
+/**
+ * Estilo de pestaña, el mismo que Asset Management (`Assets.jsx`).
+ *
+ * Duplicado y no importado a propósito: son dos páginas independientes y
+ * `Assets.jsx` no exporta el suyo. Si aparece una tercera, el sitio de esto es
+ * `theme/brand.js`, no un import cruzado entre páginas.
+ */
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
 
 export default function SecurityCompliance({ initialTab }) {
   // ADR-0011 Phase 3 — gate on the "security_compliance" capability
@@ -377,7 +396,11 @@ export default function SecurityCompliance({ initialTab }) {
   }, [tab]);
   // Baselines is privileged-only (the page itself hard-blocks USER, but
   // the tab shouldn't even render). Deep links degrade to Posture.
-  const effectiveTab = tab === "baselines" && !canManage ? "posture" : tab;
+  // Las dos pestañas privilegiadas caen a Fleet status si el rol no las
+  // tiene: un `?scpTab=settings` guardado por un ADMIN no puede dejar a un
+  // USER mirando una pantalla vacía.
+  const effectiveTab =
+    (tab === "baselines" || tab === "settings") && !canManage ? "posture" : tab;
 
   // ── Fase C — baseline modes on the Posture tab ─────────────────────
   //
@@ -855,7 +878,6 @@ export default function SecurityCompliance({ initialTab }) {
   // Sprint 5 — settings panel open/close. Boolean state; the panel
   // component owns the form state internally. (The catalog dialog's
   // sibling state left in Fase B — the catalog is a tab now.)
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
 
   // Framework picker label lookup.
   const frameworkLabels = React.useMemo(() => {
@@ -950,6 +972,8 @@ export default function SecurityCompliance({ initialTab }) {
             "The endpoint state you require — and whether the agent may correct drift automatically. Posture shows the evidence of that state."
           ) : effectiveTab === "catalog" ? (
             "Every control Tracenium evaluates, across platforms and frameworks. Read-only — the catalog is global."
+          ) : effectiveTab === "settings" ? (
+            "Thresholds and the frameworks you track. Both change what the rest of this page reports — and what the exports contain."
           ) : (
             <>
               Verdict is derived from published benchmarks (CIS) and standards (NIST SP 800-53, NIST CSF).
@@ -1064,6 +1088,11 @@ export default function SecurityCompliance({ initialTab }) {
           alignItems="center"
           flexWrap="wrap"
           useFlexGap
+          // A la derecha, debajo de Export/Refresh: los mandos de la página
+          // quedan en una sola columna en vez de repartidos por las dos
+          // esquinas. Envuelve a la izquierda en pantallas estrechas, que es
+          // donde el título ya se llevó su propia línea.
+          justifyContent="flex-end"
           sx={{ mb: 2 }}
         >
           {/* Sólo cuando hay grupos: un selector con una única opción
@@ -1103,75 +1132,86 @@ export default function SecurityCompliance({ initialTab }) {
               </MenuItem>
             ))}
           </Select>
-          {/* Los umbrales y los frameworks que sigues son ajustes de lo
-              que estás mirando, no una acción: van con los filtros. */}
-          {canManage ? (
-            <Tooltip title="Compliance settings" arrow placement="bottom">
-              <IconButton
-                aria-label="Compliance settings"
-                size="small"
-                onClick={() => setSettingsOpen(true)}
-                sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1 }}
-              >
-                <SettingsOutlinedIcon sx={{ fontSize: ICON.lg }} />
-              </IconButton>
-            </Tooltip>
-          ) : null}
         </Stack>
       ) : null}
 
-      {/* Fase B — the module's three faces: what we observe (Posture),
-          what we require (Baselines, privileged), what we evaluate
-          (Catalog). Same Tabs styling as Configurations. */}
-      <Tabs
-        value={effectiveTab}
-        onChange={(_e, next) => setTab(next)}
-        sx={{
-          mb: 2,
-          borderBottom: `1px solid ${BRAND.border}`,
-          "& .MuiTab-root": {
-            textTransform: "none",
-            fontWeight: 700,
-            color: BRAND.dark,
-            minHeight: 48,
-            outline: "none",
-            "&:focus": { outline: "none" },
-          },
-          "& .Mui-selected": { color: `${BRAND.teal} !important` },
-          "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
-        }}
-      >
-        <Tab
-          // La etiqueta cambia; el `value` NO: `?scpTab=posture` vive en
-          // enlaces guardados y en la barra de direcciones de la gente.
-          //
-          // Y no se llama "Status" a secas porque esta misma pantalla ya tiene
-          // un filtro "Status" (el de los equipos): dos cosas distintas con el
-          // mismo nombre a un palmo de distancia es justo el tipo de ruido que
-          // esta pasada viene a quitar.
-          value="posture"
-          label="Fleet status"
-          icon={<GppGoodOutlinedIcon fontSize="small" />}
-          iconPosition="start"
-          sx={{ gap: 0.75 }}
-        />
-        {canManage ? (
+      {/* Las caras del módulo: lo que observamos (Fleet status), lo que
+          exigimos (Baselines), lo que evaluamos (Catalog) y cómo se mide
+          (Settings).
+
+          Mismo formato que Asset Management —envueltos en SectionPaper, sin
+          padding, scrollable— para que las dos páginas con pestañas se vean
+          igual. Antes eran unos Tabs sueltos con su propio borde inferior. */}
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={effectiveTab}
+          onChange={(_e, next) => setTab(next)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 62,
+            "& .MuiTabs-indicator": {
+              height: 3,
+              borderRadius: 999,
+              backgroundColor: BRAND.teal,
+            },
+          }}
+        >
           <Tab
-            value="baselines"
-            label="Baselines"
-            icon={<ShieldOutlinedIcon fontSize="small" />}
+            // La etiqueta cambia; el `value` NO: `?scpTab=posture` vive en
+            // enlaces guardados y en la barra de direcciones de la gente.
+            //
+            // Y no se llama "Status" a secas porque esta misma pantalla ya tiene
+            // un filtro "Status" (el de los equipos): dos cosas distintas con el
+            // mismo nombre a un palmo de distancia es justo el tipo de ruido que
+            // esta pasada viene a quitar.
+            value="posture"
+            label="Fleet status"
+            icon={<GppGoodOutlinedIcon fontSize="small" />}
             iconPosition="start"
-            sx={{ gap: 0.75 }}
+            sx={TAB_SX}
           />
-        ) : null}
-        <Tab
-          value="catalog"
-          label="Catalog"
-          icon={<MenuBookOutlinedIcon fontSize="small" />}
-          iconPosition="start"
-          sx={{ gap: 0.75 }}
-        />
-      </Tabs>
+          {canManage ? (
+            <Tab
+              value="baselines"
+              label="Baselines"
+              icon={<ShieldOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              sx={TAB_SX}
+            />
+          ) : null}
+          <Tab
+            value="catalog"
+            label="Catalog"
+            icon={<MenuBookOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            sx={TAB_SX}
+          />
+          {/* Era un engrane en la fila de filtros. Los umbrales y los
+              frameworks que sigues gobiernan el titular, la tabla de
+              frameworks y lo que llevan los exports — eso no es un ajuste
+              lateral, es una de las caras de la página. Detrás de un icono
+              había que descubrirlo.
+
+              Va la ÚLTIMA a propósito: es lo que se toca de vez en cuando,
+              no el trabajo diario. */}
+          {canManage ? (
+            <Tab
+              value="settings"
+              // La etiqueta dice "Compliance Settings" aunque el `value` sea
+              // `settings`: el value es la clave de `?scpTab=` y va corta; la
+              // etiqueta es lo que lee el operador y ahí "Settings" a secas se
+              // confundiría con los ajustes del tenant, que están en otra
+              // página del menú.
+              label="Compliance Settings"
+              icon={<SettingsOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              sx={TAB_SX}
+            />
+          ) : null}
+        </Tabs>
+      </SectionPaper>
 
       {effectiveTab === "baselines" ? (
         <React.Suspense
@@ -1185,6 +1225,10 @@ export default function SecurityCompliance({ initialTab }) {
               switching to Posture, not a page navigation. */}
           <SecurityBaselines embedded onNavigate={() => setTab("posture")} />
         </React.Suspense>
+      ) : null}
+
+      {effectiveTab === "settings" ? (
+        <ComplianceSettingsPanel embedded onToast={showToast} />
       ) : null}
 
       {effectiveTab === "catalog" ? (
@@ -1474,13 +1518,13 @@ export default function SecurityCompliance({ initialTab }) {
                   list, so nobody wonders where the other frameworks went. */}
               {data?.packActive ? (
                 <Tooltip
-                  title={`You track ${frameworks.length} of the ${data.totalFrameworks} frameworks in the catalog. Change that in Compliance settings.`}
+                  title={`You track ${frameworks.length} of the ${data.totalFrameworks} frameworks in the catalog. Change that in the Settings tab.`}
                   arrow
                 >
                   <Chip
                     size="small"
                     label={`Tracking ${frameworks.length} of ${data.totalFrameworks}`}
-                    onClick={canManage ? () => setSettingsOpen(true) : undefined}
+                    onClick={canManage ? () => setTab("settings") : undefined}
                     clickable={canManage}
                     sx={{ ml: 1, height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
                   />
@@ -1994,14 +2038,6 @@ export default function SecurityCompliance({ initialTab }) {
         ) : undefined}
       </Snackbar>
 
-      {/* Sprint 5 — tenant compliance settings dialog. Triggered
-          from the header icon. Posts to PUT /settings; uses the
-          same showToast surface as the lifecycle actions. */}
-      <ComplianceSettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onToast={showToast}
-      />
       </>
       )}
     </Box>

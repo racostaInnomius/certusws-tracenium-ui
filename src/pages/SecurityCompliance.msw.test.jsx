@@ -337,7 +337,29 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     // The filters are NOT in that row — they sit below it.
     expect(within(titleRow).queryByRole("combobox", { name: "Filter by framework" })).toBeNull();
     expect(screen.getByRole("combobox", { name: "Filter by framework" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Compliance settings" })).toBeInTheDocument();
+
+    // ⚠️ El engrane YA NO EXISTE: los ajustes son una pestaña. Se afirma su
+    // ausencia, no sólo la presencia de la pestaña — un refactor que deje los
+    // dos deja dos sitios donde se edita lo mismo.
+    expect(screen.queryByRole("button", { name: "Compliance settings" })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Compliance Settings/ })).toBeInTheDocument();
+  });
+
+  it("los ajustes son una PESTAÑA, y traen su propio contenido", async () => {
+    // Estaban tras un engrane en la fila de filtros. Gobiernan el titular, la
+    // tabla de frameworks y lo que llevan los exports — eso no es un ajuste
+    // lateral, y detrás de un icono había que descubrirlo.
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("tab", { name: /Compliance Settings/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Compliance settings" })).toBeInTheDocument()
+    );
+    // Embebida, no en diálogo: si abriera el modal de antes, esto existiría.
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("hides the filter row on tabs that nothing filters", async () => {
@@ -353,7 +375,6 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     await waitFor(() =>
       expect(screen.queryByRole("combobox", { name: "Filter by framework" })).toBeNull()
     );
-    expect(screen.queryByRole("button", { name: "Compliance settings" })).toBeNull();
   });
 
   // ── SOC 2 no es un estándar de configuración ──────────────────────
