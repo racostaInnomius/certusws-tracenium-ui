@@ -64,11 +64,11 @@ describe("OverviewTab", () => {
       ],
     });
     render(<OverviewTab />);
-    // 2 of the 4 are still in flight (running + queued).
-    await waitFor(async () => {
-      const card = await cardValue("Active deployments");
-      expect(card.getByText("2")).toBeInTheDocument();
-    });
+    // 2 of the 4 are still in flight (running + queued). Ahora lo dice el
+    // titular de la franja, no una tarjeta: es LA respuesta a "¿tengo algo en
+    // marcha?", y con 8 en vuelo el resto de la franja sobra.
+    expect(await screen.findByText(/2 deployments in flight/i)).toBeInTheDocument();
+    expect(screen.getByText(/8 devices still to report/i)).toBeInTheDocument();
   });
 
   it("treats already-installed and reboot-required as successful in the rate", async () => {
@@ -103,8 +103,9 @@ describe("OverviewTab", () => {
     });
     render(<OverviewTab />);
 
-    const card = await cardValue("Success rate");
-    expect(card.getByText("100%")).toBeInTheDocument();
+    // El dato sigue, en la franja y como frase. La tarjeta de «Success rate»
+    // se fue con las otras cuatro; lo que no se fue es la noticia.
+    expect(await screen.findByText("All 10 succeeded")).toBeInTheDocument();
     // Sin fallos no hay bloque que encabezar.
     expect(screen.queryByText(/installs failed/i)).toBeNull();
   });
@@ -124,7 +125,7 @@ describe("OverviewTab", () => {
     render(<OverviewTab />);
     // 1 of 2 active sites covered.
     await waitFor(async () => {
-      const card = await cardValue("Site coverage");
+      const card = await cardValue("Sites with a DP");
       expect(card.getByText("1/2")).toBeInTheDocument();
     });
   });
@@ -145,7 +146,9 @@ describe("OverviewTab", () => {
     respond("get", /\/api\/v1\/software-delivery.*/, { ok: false }, { status: 500 });
     render(<OverviewTab />);
     // Cards still mount, showing the em-dash placeholder instead of throwing.
-    await waitFor(() => expect(screen.getByText("Packages")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Deployable packages")).toBeInTheDocument()
+    );
   });
 });
 
@@ -164,8 +167,7 @@ describe("OverviewTab · la tarjeta de intakes tras retirar la pestaña", () => 
     seed({ intakes: [{ id: 1, status: "pending_review" }] });
     render(<OverviewTab onNavigateTab={onNavigateTab} />);
 
-    const label = await screen.findByText("Intakes to review");
-    await userEvent.click(label.closest(".MuiPaper-root"));
+    await userEvent.click(await screen.findByRole("button", { name: /awaiting review/i }));
 
     expect(onNavigateTab).toHaveBeenCalledTimes(1);
     const [destino, opciones] = onNavigateTab.mock.calls[0];
@@ -182,8 +184,7 @@ describe("OverviewTab · la tarjeta de intakes tras retirar la pestaña", () => 
     seed({ intakes: [{ id: 1, status: "pending_review" }] });
     render(<OverviewTab onNavigateTab={onNavigateTab} />);
 
-    const label = await screen.findByText("Intakes to review");
-    await userEvent.click(label.closest(".MuiPaper-root"));
+    await userEvent.click(await screen.findByRole("button", { name: /awaiting review/i }));
 
     expect(onNavigateTab.mock.calls[0][0]).not.toBe("intake");
   });

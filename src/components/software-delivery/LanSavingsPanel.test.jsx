@@ -150,3 +150,56 @@ describe("LanSavingsPanel · con DPs, las dos poblaciones por separado", () => {
     expect(screen.getByText(/no downloads recorded/i)).toBeInTheDocument();
   });
 });
+
+describe("LanSavingsPanel · una llamada rota se DICE, no se esconde", () => {
+  // ⚠️ ESTE ES EL FALLO QUE LLEGÓ A PRODUCCIÓN.
+  //
+  // La fila de updates de agente no se pintaba y el panel quedaba idéntico al
+  // de un tenant que no usa el DP — con 398 eventos detrás. La causa no era el
+  // panel sino el `.catch(() => null)` del Overview, pero el panel lo hacía
+  // indistinguible: sin datos y sin poder preguntar se veían igual.
+  it("enseña la fila caída en vez de omitirla", () => {
+    render(
+      <LanSavingsPanel
+        agentStats={null}
+        softwareStats={T111_SOFTWARE}
+        hasDistributionPoints
+        agentFailed
+      />
+    );
+
+    expect(screen.getByText("Agent updates")).toBeInTheDocument();
+    expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
+    // Y no inventa un porcentaje para lo que no pudo leer.
+    expect(screen.queryByText("0%")).toBeNull();
+  });
+
+  // Sin datos Y sin fallo, la fila sigue sobrando: esto fija que el arreglo no
+  // se pasó de frenada resucitando filas vacías.
+  it("sigue omitiendo la fila cuando simplemente no hay eventos", () => {
+    render(
+      <LanSavingsPanel
+        agentStats={{ dp: 0, cdn: 0, origin: 0, unknown: 0 }}
+        softwareStats={T111_SOFTWARE}
+        hasDistributionPoints
+      />
+    );
+    expect(screen.queryByText("Agent updates")).toBeNull();
+  });
+
+  // ⚠️ Con TODO caído, "No downloads recorded" es una afirmación sobre la
+  // flota que no podemos sostener: no llegamos ni a preguntar.
+  it("no afirma que no hubo descargas cuando no pudo preguntar", () => {
+    render(
+      <LanSavingsPanel agentStats={null} softwareStats={null} hasDistributionPoints agentFailed softwareFailed />
+    );
+    expect(screen.queryByText(/no downloads recorded/i)).toBeNull();
+    expect(screen.getAllByText(/couldn't load/i)).toHaveLength(2);
+  });
+
+  // Ni ofrece el discurso de "configura un DP" apoyado en un dato que no leyó.
+  it("no vende el setup de DPs sobre una llamada caída", () => {
+    render(<LanSavingsPanel agentStats={null} softwareStats={null} hasDistributionPoints={false} agentFailed />);
+    expect(screen.queryByText(/no distribution points yet/i)).toBeNull();
+  });
+});

@@ -55,8 +55,26 @@ export function lanSplit(stats) {
   };
 }
 
-function Row({ label, stats, hint }) {
+function Row({ label, stats, hint, failed }) {
   const s = lanSplit(stats);
+
+  // ⚠️ "No pude cargar" y "no hay datos" NO son lo mismo, y esta fila es la
+  // prueba: salió a producción invisible —con 398 eventos detrás— porque la
+  // llamada fallaba y el panel simplemente no la pintaba. Sin datos la fila
+  // sobra; con la llamada rota, la fila es justo lo que hay que decir.
+  if (failed) {
+    return (
+      <Box sx={{ mt: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+          {label}
+        </Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: ROLE.caution }}>
+          Couldn't load this figure — the request failed
+        </Typography>
+      </Box>
+    );
+  }
+
   if (!s.total) return null;
 
   return (
@@ -102,10 +120,20 @@ function Row({ label, stats, hint }) {
   );
 }
 
-export default function LanSavingsPanel({ agentStats, softwareStats, hasDistributionPoints }) {
+export default function LanSavingsPanel({
+  agentStats,
+  softwareStats,
+  hasDistributionPoints,
+  agentFailed = false,
+  softwareFailed = false,
+}) {
   const agent = lanSplit(agentStats);
   const software = lanSplit(softwareStats);
-  const anyData = agent.total > 0 || software.total > 0;
+  const anyFailed = agentFailed || softwareFailed;
+  // Una llamada rota cuenta como "hay algo que enseñar": si no, el panel diría
+  // "no downloads recorded", que es una AFIRMACIÓN sobre la flota que no
+  // podemos sostener cuando ni siquiera pudimos preguntar.
+  const anyData = agent.total > 0 || software.total > 0 || anyFailed;
 
   // ⚠️ EL DATO MANDA SOBRE LA CONFIGURACIÓN.
   //
@@ -115,7 +143,9 @@ export default function LanSavingsPanel({ agentStats, softwareStats, hasDistribu
   // lista puede estar vacía porque se retiró después, o porque esa llamada
   // falló y degradó a []. Lo cazó un test que sembraba dp:90 sin DPs.
   const anyLanTraffic = agent.dp + software.dp > 0;
-  const showSetupPitch = !hasDistributionPoints && !anyLanTraffic;
+  // Con una llamada caída tampoco se puede afirmar que no haya DPs sirviendo:
+  // el argumento de venta iría encima de un dato que no llegamos a leer.
+  const showSetupPitch = !hasDistributionPoints && !anyLanTraffic && !anyFailed;
 
   return (
     <SectionPaper variant="card" sx={{ p: 2 }}>
@@ -151,11 +181,13 @@ export default function LanSavingsPanel({ agentStats, softwareStats, hasDistribu
           <Row
             label="Agent updates"
             stats={agentStats}
+            failed={agentFailed}
             hint="Endpoints that got their own agent build from a distribution point instead of the internet."
           />
           <Row
             label="Software installs"
             stats={softwareStats}
+            failed={softwareFailed}
             hint="Third-party packages deployed from the catalog."
           />
         </>
