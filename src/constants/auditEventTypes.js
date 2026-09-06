@@ -118,6 +118,8 @@ const EVENT_TYPE_CATALOG = {
   ENTITLEMENTS_REDUCED:   { label: "Entitlements reduced",         category: "Billing" },
   REPORT_RUN:             { label: "Report generated",             category: "Billing" },
   REPORT_EMAILED:         { label: "Report emailed",               category: "Billing" },
+  // R0.6: quién se descargó un archivado, por el portal o por API key.
+  REPORT_DOWNLOADED:      { label: "Report downloaded",           category: "Billing" },
 
   // ── Cobro fallido ────────────────────────────────────────────────
   // ⚠️ Faltaba, así que la pantalla enseñaba el tipo crudo `PAYMENT_FAILED`
