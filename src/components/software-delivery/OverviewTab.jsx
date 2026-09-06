@@ -29,6 +29,7 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 
 import SectionPaper from "../common/SectionPaper";
 import InstallFailuresPanel from "./InstallFailuresPanel";
+import LanSavingsPanel from "./LanSavingsPanel";
 import SummaryCard from "../common/SummaryCard";
 import CompositionBars from "../common/CompositionBars";
 import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
@@ -41,6 +42,7 @@ import {
   listSites,
   listDistributionPoints,
   getDeploymentTimeseries,
+  getAgentUpdateSources,
   getDownloadTierStats,
 } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
@@ -82,6 +84,7 @@ export default function OverviewTab({ onNavigateTab }) {
     dps: [],
     buckets: [],
     tiers: null,
+    agentTiers: null,
   });
 
   React.useEffect(() => {
@@ -97,8 +100,9 @@ export default function OverviewTab({ onNavigateTab }) {
       listDistributionPoints().catch(() => null),
       getDeploymentTimeseries(windowKey).catch(() => null),
       getDownloadTierStats(windowKey).catch(() => null),
+      getAgentUpdateSources(windowKey).catch(() => null),
     ])
-      .then(([pkgs, deps, intakes, sites, dps, ts, tiers]) => {
+      .then(([pkgs, deps, intakes, sites, dps, ts, tiers, agentTiers]) => {
         if (cancelled) return;
         setData({
           packages: listFrom(pkgs),
@@ -108,6 +112,7 @@ export default function OverviewTab({ onNavigateTab }) {
           dps: listFrom(dps),
           buckets: Array.isArray(ts?.buckets) ? ts.buckets : [],
           tiers: tiers?.stats ?? null,
+          agentTiers: agentTiers?.stats ?? null,
         });
       })
       .finally(() => {
@@ -371,19 +376,10 @@ export default function OverviewTab({ onNavigateTab }) {
       {/* ── Download sources + catalog mix ──────────────────────── */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <CompositionBars
-            title="Download sources"
-            items={stats.tierItems}
-            totalLabel="downloads"
-            emptyLabel="No downloads recorded in this window"
-            minHeight={230}
-            headerExtra={
-              stats.dpShare != null ? (
-                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                  {stats.dpShare}% served from the LAN
-                </Typography>
-              ) : null
-            }
+          <LanSavingsPanel
+            agentStats={data.agentTiers}
+            softwareStats={data.tiers}
+            hasDistributionPoints={data.dps.length > 0}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>

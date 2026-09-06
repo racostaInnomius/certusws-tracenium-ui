@@ -105,6 +105,18 @@ export async function getDownloadTierStats(window = "30d") {
   return httpGetJson(`${BASE}/analytics/tier-stats${buildQuery({ window })}`);
 }
 
+/**
+ * De dónde bajaron los endpoints su PROPIO agente.
+ *
+ * ⚠️ Población distinta de `getDownloadTierStats`, que sólo mide software de
+ * terceros. En tenant 111 esa diferencia son 9 eventos contra 397: el panel
+ * llegó a decir "0% served from the LAN" mientras el DP servía casi
+ * cuatrocientas descargas de agente.
+ */
+export async function getAgentUpdateSources(window = "30d") {
+  return httpGetJson(`${BASE}/analytics/agent-update-sources${buildQuery({ window })}`);
+}
+
 // ── Distribution (Phase B) — sites + distribution points ──────────
 
 export async function listSites() {

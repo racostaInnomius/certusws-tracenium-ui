@@ -129,11 +129,15 @@ describe("OverviewTab", () => {
     });
   });
 
+  // ⚠️ Sembrado SIN distribution points a propósito: si hay tráfico servido por
+  // LAN, evidentemente hubo un DP sirviéndolo (la lista puede venir vacía
+  // porque se retiró, o porque esa llamada degradó a []). El dato manda sobre
+  // la configuración — la primera versión del panel escondía esto.
   it("surfaces the LAN share when tier stats are present", async () => {
     seed({ tiers: { dp: 90, cdn: 8, origin: 2, unknown: 0, total: 100 } });
     render(<OverviewTab />);
     await waitFor(() =>
-      expect(screen.getByText(/90% served from the LAN/i)).toBeInTheDocument()
+      expect(screen.getByText("90%")).toBeInTheDocument()
     );
   });
 
