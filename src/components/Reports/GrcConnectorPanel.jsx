@@ -22,6 +22,7 @@ import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import {
   listApiKeys, createApiKey, revokeApiKey,
   listGrcTargets, createGrcTarget, updateGrcTarget, deleteGrcTarget, testGrcTarget,
+  listGrcDeliveries,
 } from "../../api/reports";
 import { BRAND, TEXT } from "../../theme/brand";
 import { useConfirm } from "../common/ConfirmDialog";
@@ -53,6 +54,7 @@ export default function GrcConnectorPanel({ onNotify }) {
   const confirm = useConfirm();
   const [keys, setKeys] = React.useState([]);
   const [targets, setTargets] = React.useState([]);
+  const [deliveries, setDeliveries] = React.useState([]);
   const [secretsConfigured, setSecretsConfigured] = React.useState(true);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(null);
@@ -75,7 +77,20 @@ export default function GrcConnectorPanel({ onNotify }) {
     }
   }, []);
 
-  React.useEffect(() => { load(); }, [load]);
+  // El historial de entregas es ADITIVO: va en su propia llamada y se traga
+  // su error. Metido en el Promise.all de arriba, un backend antiguo sin el
+  // endpoint —o un fallo pasajero— dejaba la pantalla entera en blanco, sin
+  // claves ni destinos, por no poder pintar una lista informativa.
+  const loadDeliveries = React.useCallback(async () => {
+    try {
+      const d = await listGrcDeliveries({ limit: 10 });
+      setDeliveries(d?.deliveries || []);
+    } catch {
+      setDeliveries([]);
+    }
+  }, []);
+
+  React.useEffect(() => { load(); loadDeliveries(); }, [load, loadDeliveries]);
 
   const notify = (message, severity = "success") => onNotify?.({ message, severity });
 
@@ -186,6 +201,14 @@ export default function GrcConnectorPanel({ onNotify }) {
     }
   };
 
+  // Una entrega guarda el id del destino, no su nombre: el destino puede
+  // haberse borrado y la fila sobrevive a propósito (el historial no se
+  // reescribe). Cuando el destino sigue existiendo, se enseña su etiqueta.
+  const targetLabelById = React.useMemo(
+    () => Object.fromEntries(targets.map((t) => [t.id, t.label])),
+    [targets]
+  );
+
   const setF = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const canCreateTarget = form.label.trim() && (form.kind === "webhook" ? form.url.trim() && form.secret.length >= 16 : form.clientId.trim() && form.clientSecret && form.resourceId.trim());
 
@@ -267,6 +290,46 @@ export default function GrcConnectorPanel({ onNotify }) {
                   </IconButton>
                 </span>
               </Tooltip>
+            </Box>
+          ))}
+        </Stack>
+      )}
+
+      {/* ── Entregas recientes ── */}
+      {/*
+        El endpoint existía y nadie lo llamaba: `grc_deliveries` se llenaba y
+        sólo se podía mirar entrando a la base de datos. Sin esto, "¿llegó el
+        informe de este mes?" no tiene respuesta en el portal — y el chip de
+        "última entrega" del destino sólo cuenta el último intento, no por qué
+        falló ni cuántas veces.
+      */}
+      <Box sx={{ mt: 2, mb: 0.5 }}>
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>Recent deliveries</Typography>
+      </Box>
+      {deliveries.length === 0 ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="grc-deliveries-empty">
+          No deliveries yet. A scheduled run with a target attached pushes here when it completes.
+        </Typography>
+      ) : (
+        <Stack spacing={0.5} data-testid="grc-deliveries">
+          {deliveries.map((d) => (
+            <Box key={d.id} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Chip size="small" label={d.status} color={deliveryColor(d.status)} variant="outlined" />
+              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, minWidth: 160 }}>
+                {targetLabelById[d.targetId] || (d.targetId ? `target ${d.targetId}` : "—")}
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, minWidth: 130 }}>{formatWhen(d.startedAt)}</Typography>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, minWidth: 70 }}>
+                {d.runId ? `run ${d.runId}` : ""}
+              </Typography>
+              {/*
+                El motivo del fallo va VISIBLE, no en un tooltip: es lo único
+                que se puede accionar de una entrega fallida, y un tooltip no
+                existe para quien navega con teclado ni se puede copiar.
+              */}
+              <Typography sx={{ fontSize: TEXT.xs, color: d.error ? BRAND.alert.errorText : BRAND.gray, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {d.error || (d.httpStatus ? `HTTP ${d.httpStatus}` : "")}
+              </Typography>
             </Box>
           ))}
         </Stack>

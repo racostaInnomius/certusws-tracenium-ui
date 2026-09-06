@@ -62,4 +62,47 @@ describe("GrcConnectorPanel", () => {
     await screen.findByText("Revoked");
     expect(screen.getByRole("button", { name: /new target/i }).disabled).toBe(true);
   });
+
+  // El endpoint de entregas existía desde E4 y nadie lo llamaba: `grc_deliveries`
+  // se llenaba y sólo se podía mirar entrando a la base de datos. "¿Llegó el
+  // informe de este mes?" no tenía respuesta en el portal.
+  it("muestra las entregas recientes, con el motivo del fallo a la vista", async () => {
+    respond("get", `${BASE}/api-keys`, { ok: true, keys: [], scopes: ["reports:read"] });
+    respond("get", `${BASE}/grc/targets`, {
+      ok: true,
+      secretsConfigured: true,
+      targets: [{ id: 3, kind: "webhook", label: "Drata hook", config: { url: "https://grc.example.com/t" }, enabled: true }],
+    });
+    respond("get", `${BASE}/grc/deliveries`, {
+      ok: true,
+      deliveries: [
+        { id: 11, targetId: 3, runId: 42, status: "failed", httpStatus: 500, error: "webhook returned 500", startedAt: "2026-09-05T06:00:00Z" },
+        { id: 10, targetId: 3, runId: 41, status: "ok", httpStatus: 200, error: null, startedAt: "2026-08-01T06:00:00Z" },
+      ],
+    });
+
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
+
+    await screen.findByTestId("grc-deliveries");
+    // El motivo va como texto, no en un tooltip: es lo único accionable de una
+    // entrega fallida, y un tooltip no existe para el teclado ni se copia.
+    expect(screen.getByText("webhook returned 500")).toBeTruthy();
+    expect(screen.getByText("run 42")).toBeTruthy();
+    // La entrega guarda el id del destino; la etiqueta se resuelve contra la
+    // lista de destinos para que la fila diga algo a un humano.
+    expect(screen.getAllByText("Drata hook").length).toBeGreaterThan(0);
+  });
+
+  it("si el historial de entregas falla, el panel sigue en pie", async () => {
+    // Aditivo: una lista informativa no puede llevarse por delante las claves
+    // y los destinos, que es lo que de verdad se administra aquí.
+    respond("get", `${BASE}/api-keys`, { ok: true, keys: [], scopes: ["reports:read"] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [], secretsConfigured: true });
+    respond("get", `${BASE}/grc/deliveries`, { error: "boom" }, { status: 500 });
+
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
+
+    expect(await screen.findByTestId("grc-targets-empty")).toBeTruthy();
+    expect(await screen.findByTestId("grc-deliveries-empty")).toBeTruthy();
+  });
 });
