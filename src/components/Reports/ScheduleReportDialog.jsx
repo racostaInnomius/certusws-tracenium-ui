@@ -107,7 +107,11 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
         reportKey: reportType.key,
         format,
         params,
-        periodMonths: hasPeriod ? periodMonths : 1,
+        // ⚠️ Se OMITE cuando el tipo no cubre un periodo. Mandar un 1 de
+        // relleno hacía que el servidor guardara un dato que nunca iba a
+        // usar; ahora lo rechaza, y con razón: la programación decía "cada N
+        // meses" y el documento traía siempre los últimos 30 días.
+        ...(hasPeriod ? { periodMonths } : {}),
         recipientMemberIds: checkedIds,
         recipientExternal: externalCheck.unique,
         ...(checkedTargetIds.length ? { targetIds: checkedTargetIds } : {}),

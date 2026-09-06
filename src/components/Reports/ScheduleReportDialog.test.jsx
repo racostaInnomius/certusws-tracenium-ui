@@ -128,3 +128,28 @@ describe("ScheduleReportDialog — sesión de MSP con cliente abierto", () => {
     expect(calls[0].params.tenantId).toBe("42");
   });
 });
+
+// ── Un tipo SIN periodo no manda periodMonths (plan R0, punto 5) ────
+//
+// El servidor lo rechaza desde R0.5, y con razón: guardar un periodo que no
+// se usa hacía que la programación dijera "cada N meses" mientras el
+// documento traía siempre los últimos 30 días.
+describe("ScheduleReportDialog — tipo sin periodo", () => {
+  const CBOM = { key: "cdp.cbom", label: "CBOM", formats: ["json"] };
+
+  it("ni ofrece el selector ni manda el campo", async () => {
+    respond("get", "/api/v1/tenants/:tenantId/members", { ok: true, items: [{ id: 11, email: "admin@acme.test", isActive: true }] });
+    const posts = respond("post", "/api/v1/reports/schedules", { ok: true, schedule: { id: 1 } });
+
+    render(<ScheduleReportDialog open reportType={CBOM} onClose={() => {}} onCreated={() => {}} />);
+
+    await screen.findByText("admin@acme.test", { exact: false });
+    expect(screen.queryByLabelText("Period")).toBeNull();
+
+    await userEvent.click(screen.getByText("admin@acme.test", { exact: false }));
+    await userEvent.click(screen.getByRole("button", { name: /create schedule/i }));
+
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0].body).not.toHaveProperty("periodMonths");
+  });
+});
