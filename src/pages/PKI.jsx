@@ -213,6 +213,11 @@ export default function PKI({ onNavigate } = {}) {
   // grants OWNER/ADMIN this capability and withholds it from USER, so
   // built-in-role behavior is unchanged.
   const [myPermissions, setMyPermissions] = React.useState(null);
+  // El MISMO endpoint devuelve `role` junto a `permissions`, y es el rol
+  // EFECTIVO que resuelve el servidor (consciente de MSP). Leerlo de aquí
+  // evita reimplementar en el portal la pregunta "¿qué rol tengo sobre el
+  // tenant activo?", que es donde `auth.role` se equivoca en sesiones MSP.
+  const [myRole, setMyRole] = React.useState(null);
 
   React.useEffect(() => {
     if (!tenantId) return;
@@ -221,10 +226,12 @@ export default function PKI({ onNavigate } = {}) {
       .then((resp) => {
         if (!alive) return;
         setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+        setMyRole(resp?.role ?? null);
       })
       .catch(() => {
         if (!alive) return;
         setMyPermissions(new Set());
+        setMyRole(null);
       });
     return () => {
       alive = false;
@@ -690,6 +697,14 @@ export default function PKI({ onNavigate } = {}) {
   const canRevoke =
     selectedCertificate &&
     !["revoked", "expired", "rotated"].includes(certStatus);
+  // Dos ejes distintos, que antes no lo eran: `canRevoke` dice si el
+  // CERTIFICADO admite revocación; `mayRevoke` dice si QUIEN mira tiene
+  // permiso. Revocar corta el gRPC del equipo al instante y no se deshace
+  // desde el portal —un certificado revocado tampoco sirve para renovarse—,
+  // así que el backend lo pide con ADMIN/OWNER además de la capacidad `pki`.
+  // Aquí no se duplica esa decisión: se pregunta por el rol que resolvió el
+  // servidor, y si no cuadra ni se pinta el formulario.
+  const mayRevoke = myRole === "ADMIN" || myRole === "OWNER";
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
@@ -872,6 +887,7 @@ export default function PKI({ onNavigate } = {}) {
               revokeReason={revokeReason}
               setRevokeReason={setRevokeReason}
               canRevoke={canRevoke}
+              mayRevoke={mayRevoke}
               revokeLoading={revokeLoading}
               onRevoke={handleRevoke}
               onPickCert={loadCertificateDetail}
@@ -1086,7 +1102,7 @@ function InspectorTab(props) {
     deviceCertificates, certificateActivity,
     deviceCertColumns, activityColumns,
     detailLoading, revokeReason, setRevokeReason,
-    canRevoke, revokeLoading, onRevoke, onPickCert,
+    canRevoke, mayRevoke, revokeLoading, onRevoke, onPickCert,
     getHostname,
   } = props;
 
@@ -1203,6 +1219,13 @@ function InspectorTab(props) {
                 <Typography variant="overline" sx={{ color: BRAND.alert.error, fontWeight: 800, letterSpacing: 1.2 }}>
                   Revocation
                 </Typography>
+                {!mayRevoke ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                    Revoking cuts the agent off immediately and cannot be undone from here — the
+                    device has to be enrolled again. Only an ADMIN or OWNER of this tenant can do it.
+                  </Typography>
+                ) : (
+                <>
                 <TextField
                   label="Reason"
                   size="small"
@@ -1230,6 +1253,8 @@ function InspectorTab(props) {
                     — revocation is not applicable.
                   </Typography>
                 ) : null}
+                </>
+                )}
               </Box>
             </Box>
           )}
