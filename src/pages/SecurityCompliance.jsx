@@ -1088,11 +1088,10 @@ export default function SecurityCompliance({ initialTab }) {
           alignItems="center"
           flexWrap="wrap"
           useFlexGap
-          // A la derecha, debajo de Export/Refresh: los mandos de la página
-          // quedan en una sola columna en vez de repartidos por las dos
-          // esquinas. Envuelve a la izquierda en pantallas estrechas, que es
-          // donde el título ya se llevó su propia línea.
-          justifyContent="flex-end"
+          // Alineados a la izquierda, en su propia fila bajo la cabecera:
+          // arrancan donde arranca el contenido de la página, así que la
+          // vista cae sobre ellos al bajar del título en vez de tener que
+          // cruzar a la derecha.
           sx={{ mb: 2 }}
         >
           {/* Sólo cuando hay grupos: un selector con una única opción
