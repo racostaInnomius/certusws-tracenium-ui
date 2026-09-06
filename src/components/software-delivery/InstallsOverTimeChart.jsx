@@ -54,6 +54,88 @@ const SERIES = [
   { key: "failed", name: "Failed", color: BRAND.alert.errorText },
 ];
 
+/** Alto de una línea de texto a TEXT.xs, con aire. Es el paso del apilado. */
+const LABEL_LINE = 14;
+
+/**
+ * Dos etiquetas se estorban cuando sus valores quedan a menos de este trozo del
+ * rango del eje. Con un área de ~220 px, 5% ≈ 11 px ≈ una línea de texto.
+ */
+const COLLISION_FRACTION = 0.05;
+
+/**
+ * Desplazamiento vertical de cada etiqueta de fin, para que dos series que
+ * acaban en el mismo sitio no se pinten una encima de la otra.
+ *
+ * ⚠️ EL BUG QUE ESTO ARREGLA SE VEÍA EN PRODUCCIÓN. Las etiquetas se colocaban
+ * todas en `y={y}`, así que cuando las dos series terminaban en el mismo valor
+ * —lo normal en un tenant tranquilo: ambas en 0— los dos `<text>` caían en
+ * coordenadas idénticas y salía `0 faileded`, las dos palabras superpuestas.
+ *
+ * Se calcula desde los VALORES y no desde píxeles porque en este punto no
+ * existe la escala del gráfico todavía; el rango se toma de TODAS las filas,
+ * que es lo que escala el eje, no sólo de la última.
+ *
+ * Se ordena por valor descendente para que la etiqueta de arriba corresponda a
+ * la línea de arriba: el eje está invertido (más valor, menos `y`).
+ */
+export function endLabelOffsets(data, series = SERIES) {
+  const rows = Array.isArray(data) ? data : [];
+  const offsets = new Map();
+  const last = rows[rows.length - 1];
+  if (!last) return offsets;
+
+  const ending = series
+    .map((s) => ({ key: s.key, value: last[s.key] }))
+    .filter((e) => typeof e.value === "number" && Number.isFinite(e.value));
+  if (ending.length < 2) return offsets;
+
+  let min = Infinity;
+  let max = -Infinity;
+  for (const row of rows) {
+    for (const s of series) {
+      const v = row?.[s.key];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+  }
+  const range = max - min;
+
+  // Agrupa en cadena: A cerca de B y B cerca de C es un solo grupo de tres.
+  const sorted = [...ending].sort((a, b) => b.value - a.value);
+  let group = [sorted[0]];
+  const groups = [group];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = group[group.length - 1];
+    // Rango 0 = todas las series planas en el mismo valor: colisión segura.
+    const collides =
+      range === 0 || (prev.value - sorted[i].value) / range < COLLISION_FRACTION;
+    if (collides) {
+      group.push(sorted[i]);
+    } else {
+      group = [sorted[i]];
+      groups.push(group);
+    }
+  }
+
+  // Sólo se toca lo que se estorba: una etiqueta sola se queda en su línea.
+  //
+  // ⚠️ SE APILA HACIA ARRIBA, NUNCA HACIA ABAJO. Centrar el grupo repartía la
+  // separación en las dos direcciones, y la de abajo empujaba la etiqueta
+  // contra las marcas del eje X — medido en el navegador: `0 failed` acababa
+  // solapando el tick `09-06`. Cambiar un solape por otro no es arreglarlo.
+  // La de más abajo se queda donde estaba y las demás suben.
+  for (const g of groups) {
+    if (g.length < 2) continue;
+    g.forEach((e, i) => {
+      offsets.set(e.key, -(g.length - 1 - i) * LABEL_LINE);
+    });
+  }
+  return offsets;
+}
+
 /**
  * The value at the end of a line, drawn once.
  *
@@ -66,7 +148,7 @@ const SERIES = [
  * and silently rendered nothing at all: the chart looked finished and had no
  * labels. Hence the index check, and hence the test that counts them.
  */
-function endLabelRenderer({ color, name, lastIndex }) {
+function endLabelRenderer({ color, name, lastIndex, offsetY = 0 }) {
   return function EndLabel(props) {
     const { x, y, value, index } = props;
     if (index !== lastIndex || value == null) return null;
@@ -74,7 +156,7 @@ function endLabelRenderer({ color, name, lastIndex }) {
       <text
         x={x + 8}
         y={y}
-        dy={4}
+        dy={4 + offsetY}
         fill={color}
         fontSize={TEXT.xs}
         fontWeight={700}
@@ -109,6 +191,10 @@ export function InstallsLegend() {
 }
 
 export default function InstallsOverTimeChart({ data }) {
+  // Se calcula una vez por render y se reparte: cada serie sólo conoce su
+  // propio punto, así que la separación no puede decidirse dentro del label.
+  const offsets = endLabelOffsets(data);
+
   return (
     <Box sx={{ height: "100%" }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -154,6 +240,7 @@ export default function InstallsOverTimeChart({ data }) {
                 color: s.color,
                 name: s.name,
                 lastIndex: (data?.length ?? 0) - 1,
+                offsetY: offsets.get(s.key) ?? 0,
               })}
             />
           ))}

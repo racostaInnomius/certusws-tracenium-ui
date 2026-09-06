@@ -29,7 +29,7 @@ vi.mock("recharts", async () => {
   };
 });
 
-import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
+import InstallsOverTimeChart, { InstallsLegend, endLabelOffsets } from "./InstallsOverTimeChart";
 import { BRAND, ROLE } from "../../theme/brand";
 
 afterEach(cleanup);
@@ -118,5 +118,98 @@ describe("InstallsLegend", () => {
     render(<InstallsLegend />);
     const label = screen.getByText("Succeeded");
     expect(label).not.toHaveStyle({ color: ROLE.positive });
+  });
+});
+
+// ⚠️ EL BUG QUE SE VEÍA EN PRODUCCIÓN.
+//
+// Las dos etiquetas de fin se colocaban en `y={y}` sin separarse. Cuando las
+// series terminaban en el mismo valor —lo normal en un tenant tranquilo: ambas
+// en 0— los dos `<text>` caían en coordenadas idénticas y la captura mostraba
+// `0 faileded`: las dos palabras una encima de la otra.
+//
+// El cálculo es puro y se prueba sin render: los píxeles no existen todavía
+// cuando hay que decidir la separación.
+describe("endLabelOffsets · dos etiquetas no se pisan", () => {
+  it("separa las series que terminan en el MISMO valor", () => {
+    // La forma exacta de la captura: días con actividad y el último en 0/0.
+    const off = endLabelOffsets([
+      { day: "09-01", succeeded: 1, failed: 6 },
+      { day: "09-06", succeeded: 0, failed: 0 },
+    ]);
+
+    expect(off.get("succeeded")).toBeDefined();
+    expect(off.get("failed")).toBeDefined();
+    expect(off.get("succeeded")).not.toBe(off.get("failed"));
+    // ⚠️ Ninguna se mueve hacia ABAJO: ahí están las marcas del eje X, y
+    // empujar una etiqueta contra ellas cambia un solape por otro.
+    expect(off.get("succeeded")).toBeLessThanOrEqual(0);
+    expect(off.get("failed")).toBeLessThanOrEqual(0);
+  });
+
+  // El eje está invertido: más valor = menos `y`. La etiqueta de arriba tiene
+  // que ser la de la línea de arriba, o el arreglo cambia un solape por una
+  // confusión peor.
+  it("pone arriba la etiqueta de la serie más alta", () => {
+    // Cerca pero no iguales: 39 y 40 sobre un rango 0–40 quedan al 2,5%, por
+    // debajo del umbral. (9 y 10 sobre 0–10 están al 10% y NO chocan — lo
+    // comprobé al revés y el test me lo dijo.)
+    const off = endLabelOffsets([
+      { day: "d1", succeeded: 0, failed: 0 },
+      { day: "d2", succeeded: 39, failed: 40 },
+    ]);
+    // dy negativo = hacia arriba en SVG.
+    expect(off.get("failed")).toBeLessThan(off.get("succeeded"));
+  });
+
+  // ⚠️ Sólo se toca lo que se estorba. Desplazar etiquetas bien colocadas las
+  // alejaría de su línea, que es el problema que se intenta evitar.
+  it("no mueve nada cuando las series terminan lejos", () => {
+    const off = endLabelOffsets([
+      { day: "d1", succeeded: 0, failed: 0 },
+      { day: "d2", succeeded: 40, failed: 1 },
+    ]);
+    expect(off.size).toBe(0);
+  });
+
+  it("aguanta datos vacíos, una sola fila y valores ausentes", () => {
+    expect(endLabelOffsets([]).size).toBe(0);
+    expect(endLabelOffsets(undefined).size).toBe(0);
+    expect(endLabelOffsets([{ day: "d1" }]).size).toBe(0);
+    // Una sola serie con valor: no hay con quién chocar.
+    expect(endLabelOffsets([{ day: "d1", succeeded: 3 }]).size).toBe(0);
+  });
+
+  // Todo plano en el mismo valor: el rango es 0 y la división por rango sería
+  // NaN. Es el caso más común de todos —una flota sin actividad— así que no
+  // puede depender de una casualidad aritmética.
+  it("separa aunque TODO el rango sea plano", () => {
+    const off = endLabelOffsets([
+      { day: "d1", succeeded: 0, failed: 0 },
+      { day: "d2", succeeded: 0, failed: 0 },
+    ]);
+    expect(off.size).toBe(2);
+    expect(off.get("succeeded")).not.toBe(off.get("failed"));
+  });
+});
+
+describe("las etiquetas separadas siguen siendo dos y legibles", () => {
+  it("con ambas series en 0 dibuja DOS etiquetas, no una encima de otra", () => {
+    const { container } = render(
+      <InstallsOverTimeChart
+        data={[
+          { day: "09-01", succeeded: 1, failed: 6 },
+          { day: "09-06", succeeded: 0, failed: 0 },
+        ]}
+      />
+    );
+    const labels = [...container.querySelectorAll("text")].filter((t) =>
+      /succeeded|failed/i.test(t.textContent || "")
+    );
+    expect(labels).toHaveLength(2);
+
+    // La prueba de que no se solapan: sus `dy` difieren.
+    const dys = labels.map((t) => Number(t.getAttribute("dy")));
+    expect(new Set(dys).size).toBe(2);
   });
 });
