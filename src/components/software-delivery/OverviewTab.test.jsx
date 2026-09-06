@@ -83,10 +83,30 @@ describe("OverviewTab", () => {
       ],
     });
     render(<OverviewTab />);
-    await waitFor(async () => {
-      const card = await cardValue("Success rate");
-      expect(card.getByText("90%")).toBeInTheDocument();
+
+    // ⚠️ CAMBIÓ LA PRESENTACIÓN, NO LA DERIVACIÓN (fase 4).
+    //
+    // Con fallos, el bloque de cabecera dice "1 of 10 installs failed" — la
+    // misma cuenta, con numerador Y denominador, y encima lleva a la causa. La
+    // tarjeta de "11% suelto" era la versión decorativa del mismo dato, y
+    // mantener las dos duplica en la franja superior justo lo que la fase 4
+    // limpia. El porcentaje sigue estando cuando NO hay fallos (test de abajo).
+    expect(await screen.findByText(/1 of 10 installs failed/i)).toBeInTheDocument();
+    expect(screen.queryByText("Success rate")).toBeNull();
+  });
+
+  it("muestra el porcentaje cuando no hay nada que atender", async () => {
+    seed({
+      deployments: [
+        { id: 1, status: "completed", counts: counts({ success: 9, already_installed: 1 }) },
+      ],
     });
+    render(<OverviewTab />);
+
+    const card = await cardValue("Success rate");
+    expect(card.getByText("100%")).toBeInTheDocument();
+    // Sin fallos no hay bloque que encabezar.
+    expect(screen.queryByText(/installs failed/i)).toBeNull();
   });
 
   it("reports site coverage counting only ACTIVE distribution points", async () => {

@@ -269,6 +269,10 @@ export default function SoftwareDelivery() {
           onNavigateTab={(key, opts) => {
             setActiveTab(TAB_INDEX[key] ?? 0);
             if (opts?.reviewQueue) setOpenReviewQueue(true);
+            // Una causa de fallo con UN solo despliegue detrás abre ese
+            // despliegue: reutiliza la misma vía que el deploy recién lanzado,
+            // y es donde viven los resultados por equipo que la causa promete.
+            if (opts?.deploymentId != null) setAutoOpenDeploymentId(opts.deploymentId);
           }}
         />
       ) : activeTab === 1 ? (

@@ -28,6 +28,7 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 
 import SectionPaper from "../common/SectionPaper";
+import InstallFailuresPanel from "./InstallFailuresPanel";
 import SummaryCard from "../common/SummaryCard";
 import CompositionBars from "../common/CompositionBars";
 import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
@@ -156,6 +157,7 @@ export default function OverviewTab({ onNavigateTab }) {
       devicesInFlight,
       successRate: percent(succeeded, settled),
       settled,
+      failed,
       pendingIntakes: pendingIntakes.length,
       intakesCapped: intakes.length >= 200,
       lowConfidence,
@@ -208,6 +210,20 @@ export default function OverviewTab({ onNavigateTab }) {
 
   return (
     <Stack spacing={2}>
+      {/* ── Lo que hay que atender, antes que nada ──────────────── */}
+      {!loading ? (
+        <InstallFailuresPanel
+          deployments={data.deployments}
+          failed={stats.failed}
+          settled={stats.settled}
+          onOpen={(_cause, single) =>
+            // Con un solo despliegue detrás se abre ESE, reutilizando la
+            // fontanería que la página ya tiene para el deploy recién lanzado.
+            onNavigateTab?.("deployments", single ? { deploymentId: single.id } : undefined)
+          }
+        />
+      ) : null}
+
       {/* ── KPI row ─────────────────────────────────────────────── */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
@@ -232,6 +248,11 @@ export default function OverviewTab({ onNavigateTab }) {
             sx={{ height: "100%" }}
           />
         </Grid>
+        {/* ⚠️ Con fallos, el bloque de arriba YA dice "8 de 9 fallaron" y
+            además lleva a la causa. Repetirlo aquí como un 11% suelto es la
+            versión decorativa del mismo dato. Sin fallos, esta tarjeta sí es
+            la noticia. */}
+        {stats.failed ? null : (
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
           <SummaryCard
             title="Success rate"
@@ -242,7 +263,7 @@ export default function OverviewTab({ onNavigateTab }) {
             titleHint={`Across the last ${DEPLOYMENT_SAMPLE} deployments. Counts installed, already-installed and reboot-required as successful.`}
             sx={{ height: "100%" }}
           />
-        </Grid>
+        </Grid>)}
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
           <SummaryCard
             title="Intakes to review"
@@ -260,6 +281,11 @@ export default function OverviewTab({ onNavigateTab }) {
             sx={{ height: "100%" }}
           />
         </Grid>
+        {/* ⚠️ `0/0` NO es una cobertura del 0%: es "este tenant no tiene sitios
+            configurados". Mostrarlo como métrica gasta una tarjeta en un
+            estado vacío disfrazado de dato — cuatro de las cinco de esta fila
+            estaban así en tenant 111. */}
+        {stats.totalActiveSites === 0 ? null : (
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
           <SummaryCard
             title="Site coverage"
@@ -271,7 +297,7 @@ export default function OverviewTab({ onNavigateTab }) {
             onClick={() => onNavigateTab?.("distribution")}
             sx={{ height: "100%" }}
           />
-        </Grid>
+        </Grid>)}
       </Grid>
 
       {/* ── Trend + outcomes ────────────────────────────────────── */}
