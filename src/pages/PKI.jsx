@@ -56,6 +56,7 @@ import {
 
 import { BRAND, DATAGRID_SX, ICON, NEUTRAL, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import { formatDate } from "../utils/format";
@@ -181,7 +182,7 @@ function DetailRow({ label, value, mono = false }) {
   );
 }
 
-export default function PKI() {
+export default function PKI({ onNavigate } = {}) {
   const confirm = useConfirm();
   const initialParamsRef = React.useRef({
     days: getSearchParam("pkiDays", "30"),
@@ -697,6 +698,7 @@ export default function PKI() {
         title="PKI"
         subtitle="Certificate coverage, lifecycle, activity and remediation for the current tenant."
         icon={<VpnKeyOutlinedIcon />}
+        back={<BackToSettings onNavigate={onNavigate} />}
         actions={
           <>
             {/* Auto-refresh was moved to the Overview page (a single,

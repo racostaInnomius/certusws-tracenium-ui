@@ -31,6 +31,7 @@ import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 
 import { BRAND, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import AsyncState from "../components/common/AsyncState";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -161,18 +162,9 @@ export default function LocationSites({ onNavigate }) {
         title="Location sites"
         subtitle="Map network ranges to site names. Devices on a mapped range show the site instead of the raw subnet."
         icon={<PlaceOutlinedIcon />}
+        back={<BackToSettings onNavigate={onNavigate} />}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
-            {onNavigate ? (
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => onNavigate("configurations")}
-                sx={{ color: BRAND.gray }}
-              >
-                ← Settings
-              </Button>
-            ) : null}
             <Button
               variant="contained"
               startIcon={<AddOutlinedIcon />}

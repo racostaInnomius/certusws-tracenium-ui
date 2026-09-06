@@ -30,10 +30,10 @@ import {
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
-import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 
 import { httpGetJson, httpPutJson } from "../api/http";
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
@@ -213,18 +213,8 @@ export default function SessionSettings({ onNavigate }) {
         title="Session security"
         subtitle="Control how soon the portal signs operators out after a period of inactivity."
         icon={<TimerOutlinedIcon />}
+        back={<BackToSettings onNavigate={onNavigate} />}
       />
-
-      <Box sx={{ mb: 2 }}>
-        <Button
-          size="small"
-          startIcon={<ArrowBackOutlinedIcon />}
-          onClick={() => onNavigate?.("configurations")}
-          sx={{ color: BRAND.gray }}
-        >
-          Back to Settings
-        </Button>
-      </Box>
 
       {error ? (
         <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>

@@ -23,6 +23,11 @@ vi.mock("../msp/mspApi", () => ({
 vi.mock("../api/roles", () => ({
   listTenantRoles: vi.fn().mockResolvedValue({ items: [] }),
 }));
+vi.mock("../api/certificates", () => ({
+  getCertificateSummary: vi.fn().mockResolvedValue({
+    summary: { total: 12, active: 9, pending: 0, revoked: 3, expiring_30d: 2, devices_without_active_cert: 1 },
+  }),
+}));
 vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({
     auth: { tenantId: 7 },
@@ -68,5 +73,25 @@ describe("Configurations (Settings) — Roles & permissions card (ADR-0011)", ()
 
     card.closest("[class*='MuiPaper']").click();
     expect(onNavigate).toHaveBeenCalledWith("roles");
+  });
+});
+
+// PKI dejó de ser una entrada del menú lateral y pasó a ser una tarjeta de
+// esta pestaña: son los certificados de identidad mTLS del agente, algo que
+// se mira cuando un equipo no enrola, no trabajo diario.
+describe("Configurations — tarjeta de PKI", () => {
+  it("enseña el resumen de certificados y lleva a la página de PKI", async () => {
+    const onNavigate = vi.fn();
+    render(<Configurations onNavigate={onNavigate} />);
+
+    const tarjeta = await screen.findByText("PKI");
+    expect(await screen.findByText("9")).toBeTruthy();          // activos
+    // Lo accionable va a la vista: 2 caducan en 30 días, 1 equipo sin
+    // certificado. Una tarjeta que sólo dice "9" no dice si hay que actuar.
+    expect(screen.getByText(/Expiring 30d/i)).toBeTruthy();
+    expect(screen.getByText(/Devices without cert/i)).toBeTruthy();
+
+    tarjeta.click();
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith("pki"));
   });
 });

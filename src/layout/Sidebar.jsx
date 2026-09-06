@@ -31,7 +31,6 @@ import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlin
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
-import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
@@ -772,7 +771,13 @@ export default function Sidebar({
       ? [{ label: "Billing", key: "billing", icon: <CreditCardOutlinedIcon /> }]
       : []),
     { label: "Device Enrollment", key: "enrollment", icon: <InstallDesktopOutlinedIcon /> },
-    { label: "PKI", key: "pki", icon: <VpnKeyOutlinedIcon /> },
+    // PKI ya no vive aquí: es una tarjeta de Settings › Tenant Settings.
+    // Son los certificados de identidad mTLS del propio agente —se miran
+    // cuando algo no enrola, no a diario—, y tenerlos en el menú los
+    // ponía al mismo nivel que Software Delivery o Patch Management. La
+    // clave `pki` sigue en pageRegistry: los enlaces profundos siguen
+    // funcionando. Ojo, NO confundir con Crypto Discovery (CDP), que sí
+    // es un área de producto y sigue arriba.
     // Agent Settings NO es una entrada aparte: es la segunda división
     // dentro de Settings (?settingsTab=agent). Las dos son configuración
     // del tenant, y separarlas obligaba al operador a saber que la cadencia

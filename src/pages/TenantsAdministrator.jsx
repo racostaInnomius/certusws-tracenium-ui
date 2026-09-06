@@ -42,6 +42,7 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 import { BRAND, DATAGRID_SX, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import StaffSubscriptions from "../components/Billing/StaffSubscriptions";
@@ -451,7 +452,7 @@ function ConfirmDeleteDialog({
   );
 }
 
-export default function TenantsAdministrator({ mode = "global", onBack }) {
+export default function TenantsAdministrator({ mode = "global", onBack, onNavigate }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
@@ -1046,6 +1047,11 @@ export default function TenantsAdministrator({ mode = "global", onBack }) {
             : "Manage tenants and tenant members"
         }
         icon={<BusinessOutlinedIcon />}
+        // En modo tenant esta página es una tarjeta de Settings y vuelve
+        // allí. En modo global se llega desde el portafolio de vendor y
+        // su salida es `onBack` ("Back to All tenants"), que NO es lo
+        // mismo: dos orígenes, dos vueltas.
+        back={isTenantMode ? <BackToSettings onNavigate={onNavigate} /> : null}
         actions={
           onBack ? (
             <Button

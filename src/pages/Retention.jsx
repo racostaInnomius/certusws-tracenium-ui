@@ -38,6 +38,7 @@ import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import {
   getRetentionStats,
@@ -303,18 +304,9 @@ export default function Retention({ onNavigate }) {
         title="Database retention"
         subtitle="Per-tenant cleanup policy for high-volume audit and snapshot tables."
         icon={<StorageOutlinedIcon />}
+        back={<BackToSettings onNavigate={onNavigate} />}
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
-            {onNavigate ? (
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => onNavigate("configurations")}
-                sx={{ color: BRAND.gray }}
-              >
-                ← Settings
-              </Button>
-            ) : null}
             <Tooltip title="Refresh stats">
               <span>
                 <IconButton

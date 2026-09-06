@@ -17,6 +17,13 @@
 //     stack without overflowing.
 //   - Chips: a separate row under the title used for lightweight meta
 //     (e.g. Overview's Freshness chip + error). Optional.
+//   - Back:  optional breadcrumb-ish control rendered ABOVE the title,
+//     top-left. Va aquí y no en `actions` a propósito: `actions` es la
+//     esquina de "qué puedo hacer en esta página" (refrescar, exportar,
+//     crear), y un "volver" metido ahí compite con la acción primaria y
+//     cambia de sitio según cuántos botones tenga cada página. Arriba a
+//     la izquierda está siempre en el mismo píxel, que es lo que hace
+//     que se encuentre sin buscarlo.
 //
 // The component is deliberately dumb — it owns no state, doesn't know
 // about refresh cadence or URL params. Pages compose their own
@@ -32,6 +39,7 @@ export default function PageHeader({
   icon = null,
   chips = null,
   actions = null,
+  back = null,
   sx = null,
 }) {
   return (
@@ -44,6 +52,7 @@ export default function PageHeader({
       sx={{ mb: 2, ...(sx || {}) }}
     >
       <Box sx={{ minWidth: 0 }}>
+        {back ? <Box sx={{ mb: 0.5, ml: -1 }}>{back}</Box> : null}
         {/* Icon sits in the same row as the title only — not the whole
             title+subtitle block. center alignment puts the icon
             vertically in the middle of the title's line height so it

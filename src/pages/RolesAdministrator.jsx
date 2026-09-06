@@ -60,6 +60,7 @@ import {
 } from "../api/roles";
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 
@@ -341,7 +342,7 @@ function DeleteRoleDialog({ open, role, submitting, error, onClose, onConfirm })
   );
 }
 
-export default function RolesAdministrator() {
+export default function RolesAdministrator({ onNavigate } = {}) {
   const { auth } = useAuthContext();
   // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
   // portfolio navigation the selected tenant lives in the MSP context and
@@ -473,6 +474,7 @@ export default function RolesAdministrator() {
         title="Roles & Permissions"
         subtitle="Create custom roles and choose exactly which parts of Tracenium each one can use."
         icon={<AdminPanelSettingsOutlinedIcon />}
+        back={<BackToSettings onNavigate={onNavigate} />}
         actions={
           <Button
             variant="contained"

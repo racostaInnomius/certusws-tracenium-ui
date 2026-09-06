@@ -37,10 +37,12 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import HandshakeOutlinedIcon from "@mui/icons-material/HandshakeOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import { httpGetJson } from "../api/http";
 import { getRetentionStats } from "../api/retention";
 import { listTenantRoles } from "../api/roles";
+import { getCertificateSummary } from "../api/certificates";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { fetchMyPartner } from "../msp/mspApi";
 import JoinPartnerDialog from "../msp/JoinPartnerDialog";
@@ -293,6 +295,32 @@ export default function Configurations({ onNavigate, initialTab }) {
     };
   }, [tenantId]);
 
+  // Resumen de PKI, para la tarjeta que sustituye a la entrada del menú.
+  // Mismo fail-open que las de arriba: si la lectura falla se enseña la
+  // tarjeta con "—" en vez de esconderla, porque la tarjeta ES la puerta
+  // para ir a averiguar por qué falla.
+  const [certSummary, setCertSummary] = React.useState(null);
+  const [certSummaryLoading, setCertSummaryLoading] = React.useState(true);
+  React.useEffect(() => {
+    let cancelled = false;
+    getCertificateSummary()
+      .then((data) => {
+        if (!cancelled) setCertSummary(data?.summary ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setCertSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCertSummaryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const certsActive = certSummary?.active ?? null;
+  const certsExpiring = certSummary?.expiring_30d ?? 0;
+  const certsMissing = certSummary?.devices_without_active_cert ?? 0;
+
   // Per-tenant session security (auto-logout) read separately. Doesn't
   // need stale-while-revalidate because the value is tiny + cached on
   // the server. Fail-open: render the card with N/A if the read errors,
@@ -505,6 +533,49 @@ export default function Configurations({ onNavigate, initialTab }) {
                 variant={customRoleCount ? "success" : "neutral"}
                 loading={rolesCountLoading}
               />
+            }
+          />
+        </Grid>
+
+        {/* PKI — los certificados de identidad mTLS del propio agente.
+            Era una entrada del menú lateral; se movió aquí porque es
+            configuración del tenant que se mira cuando algo no enrola,
+            no trabajo diario, y en el menú competía con las áreas de
+            producto. La página sigue siendo la misma y su enlace
+            profundo (?page=pki) no cambió.
+
+            ⚠️ No es Crypto Discovery: aquello inventaría los
+            certificados que hay EN los equipos; esto es la identidad con
+            la que el agente habla con el control plane. */}
+        <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
+          <SettingsCard
+            title="PKI"
+            valueHint={
+              certsExpiring
+                ? `Active certificates · ${certsExpiring} expiring within 30 days`
+                : "Agent identity certificates (mTLS)"
+            }
+            value={certsActive === null ? "—" : String(certsActive)}
+            icon={<VpnKeyOutlinedIcon />}
+            accent={certsExpiring || certsMissing ? BRAND.alert.warning : BRAND.teal}
+            tint={certsExpiring || certsMissing ? BRAND.alert.warningSoft : BRAND.tealSoft}
+            loading={certSummaryLoading}
+            onClick={() => onNavigate?.("pki")}
+            footer={
+              <>
+                <StatChip
+                  label="Expiring 30d"
+                  count={certsExpiring}
+                  variant={certsExpiring ? "warning" : "neutral"}
+                  loading={certSummaryLoading}
+                />
+                <StatChip
+                  label="Devices without cert"
+                  count={certsMissing}
+                  variant={certsMissing ? "warning" : "success"}
+                  loading={certSummaryLoading}
+                />
+              </>
             }
           />
         </Grid>

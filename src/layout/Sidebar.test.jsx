@@ -108,13 +108,30 @@ describe("Administration", () => {
       "Audit",
       "Billing",
       "Device Enrollment",
-      "PKI",
       "Settings",
     ]);
   });
 
+  // PKI salió del menú: es una tarjeta de Settings › Tenant Settings. La
+  // clave `pki` sigue en pageRegistry, así que ?page=pki y los marcadores
+  // existentes no se rompen — sólo desaparece la entrada del menú.
+  //
+  // ⚠️ Efecto colateral asumido: Settings se gatea con isPrivileged
+  // (OWNER/ADMIN), y el backend de PKI gatea por CAPACIDAD. Un rol
+  // personalizado con la capacidad `pki` pero sin ser OWNER/ADMIN pierde
+  // el punto de entrada visible, aunque el servidor le deje entrar por el
+  // enlace directo.
+  it("PKI ya no está en el menú lateral", () => {
+    auth = asRole("OWNER");
+    render(<Sidebar selected="overview" />);
+    // (Crypto Discovery, que NO es lo mismo —inventaría los certificados
+    // que hay EN los equipos—, sigue arriba entre las áreas de producto;
+    // aquí no aparece porque este fixture no habilita su plugin.)
+    expect(menu()).not.toContain("PKI");
+  });
+
   it("⚠️ estar bajo Administration NO significa ser sólo para admins", () => {
-    // Audit, PKI y Device Enrollment se muestran SIEMPRE: sus rutas de backend
+    // Audit y Device Enrollment se muestran SIEMPRE: sus rutas de backend
     // gatean por CAPACIDAD desde ADR-0011 Phase 3, no por rol. Esconderlas a
     // quien no es OWNER/ADMIN dejaría fuera a un rol personalizado que TIENE
     // la capacidad y al que el servidor sí deja entrar — la regresión que esa
@@ -125,7 +142,6 @@ describe("Administration", () => {
 
     const labels = menu();
     expect(labels).toContain("Audit");
-    expect(labels).toContain("PKI");
     expect(labels).toContain("Device Enrollment");
   });
 

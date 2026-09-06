@@ -73,8 +73,8 @@ export const PAGE_REGISTRY = {
   tokens: () => <TokensAdministrator />,
 
   tenants: () => <TenantsAdministrator mode="global" />,
-  "tenant-members": () => <TenantsAdministrator mode="tenant" />,
-  roles: () => <RolesAdministrator />,
+  "tenant-members": (ctx) => <TenantsAdministrator mode="tenant" onNavigate={ctx.onNavigate} />,
+  roles: (ctx) => <RolesAdministrator onNavigate={ctx.onNavigate} />,
 
   welcome: (ctx) => <Welcome onNavigate={ctx.onNavigate} />,
 
@@ -110,7 +110,11 @@ export const PAGE_REGISTRY = {
   policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 
   audit: () => <Audit />,
-  pki: () => <PKI />,
+  // PKI dejó de ser una entrada del menú lateral: es una tarjeta de
+  // Settings › Tenant Settings. La clave sigue viva —los enlaces
+  // profundos y los marcadores no se rompen— y recibe `onNavigate` para
+  // poder volver a la tarjeta de la que ahora se entra.
+  pki: (ctx) => <PKI onNavigate={ctx.onNavigate} />,
   ad: () => <SecurityCompliance />,
   patch: (ctx) => <PatchManagement onNavigate={ctx.onNavigate} />,
 
