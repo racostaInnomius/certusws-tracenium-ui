@@ -257,7 +257,7 @@ function memberKey(m, i) {
   return `${m.agentId ?? "-"}:${m.fingerprint256 ?? m.name ?? i}:${m.port ?? ""}`;
 }
 
-function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown }) {
+function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown, onOpenCertificate }) {
   const [members, setMembers] = React.useState(null);
   const [membersError, setMembersError] = React.useState(null);
   React.useEffect(() => {
@@ -355,8 +355,35 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown }) 
           const key = m.keyAlgorithm ? `${m.keyAlgorithm}${m.keySizeBits ? `-${m.keySizeBits}` : ""}` : null;
           const expires = typeof m.notAfter === "string" && m.notAfter ? m.notAfter.slice(0, 10) : null;
           const bits = [where, key, expires ? `expires ${expires}` : null].filter(Boolean);
+          // Un miembro con huella en un equipo tiene ficha propia en el
+          // inventario; uno de origen (sin agente) no la tiene.
+          const open = !outside && onOpenCertificate && typeof m.fingerprint256 === "string" && m.fingerprint256
+            ? () => onOpenCertificate(m.fingerprint256)
+            : null;
           return (
-            <Box key={memberKey(m, i)} sx={{ fontSize: TEXT.sm, borderBottom: `1px solid ${BRAND.border}`, pb: 0.5 }}>
+            <Box
+              key={memberKey(m, i)}
+              {...(open
+                ? {
+                    role: "button",
+                    tabIndex: 0,
+                    "aria-label": `Open certificate ${memberTitle(m)}`,
+                    onClick: open,
+                    onKeyDown: (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        open();
+                      }
+                    }
+                  }
+                : {})}
+              sx={{
+                fontSize: TEXT.sm,
+                borderBottom: `1px solid ${BRAND.border}`,
+                pb: 0.5,
+                ...(open ? { cursor: "pointer", "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, borderRadius: 0.5 } } : {})
+              }}
+            >
               <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{memberTitle(m)}</Typography>
               <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                 {bits.join(" · ")}
@@ -375,7 +402,7 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown }) 
 
 // ── Panel ─────────────────────────────────────────────────────────────
 
-export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutside }) {
+export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutside, onOpenCertificate }) {
   const [data, setData] = React.useState(null);
   const [snapshots, setSnapshots] = React.useState([]);
   const [pqc, setPqc] = React.useState(null);
@@ -386,6 +413,9 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
   const [planFor, setPlanFor] = React.useState(null);
   const [snapshotBusy, setSnapshotBusy] = React.useState(false);
   const [showExcluded, setShowExcluded] = React.useState(false);
+  // Una tarjeta de ola es un contador: clic = la tabla filtrada a esa ola
+  // (asignada o sugerida). Otro clic la quita.
+  const [waveFilter, setWaveFilter] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -413,7 +443,10 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
     };
   }, [refreshNonce, nonce]);
 
-  const systems = (data?.systems ?? []).filter((s) => showExcluded || !s.plan?.excluded);
+  const effectiveWave = (s) => s.plan?.wave ?? s.suggestedWave;
+  const systems = (data?.systems ?? []).filter(
+    (s) => (showExcluded || !s.plan?.excluded) && (waveFilter == null || effectiveWave(s) === waveFilter)
+  );
   const waves = data?.waves ?? [];
   const byWave = React.useMemo(() => {
     const m = {};
@@ -458,8 +491,31 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
         <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 1 }}>Waves</Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           {waves.map((w) => (
-            <Tooltip key={w.wave} title={w.why} arrow>
-              <Box sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1, px: 1.5, py: 1, minWidth: 170 }}>
+            <Tooltip key={w.wave} title={`${w.why}${waveFilter === w.wave ? " — click to show all waves" : " — click to list these systems"}`} arrow>
+              <Box
+                role="button"
+                tabIndex={0}
+                aria-pressed={waveFilter === w.wave}
+                aria-label={`Wave ${w.wave}: ${fmt(byWave[w.wave]?.assigned ?? 0)} assigned, ${fmt(byWave[w.wave]?.suggested ?? 0)} suggested`}
+                onClick={() => setWaveFilter((cur) => (cur === w.wave ? null : w.wave))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setWaveFilter((cur) => (cur === w.wave ? null : w.wave));
+                  }
+                }}
+                sx={{
+                  border: `1px solid ${waveFilter === w.wave ? BRAND.tealText : BRAND.border}`,
+                  bgcolor: waveFilter === w.wave ? BRAND.tealSoft : undefined,
+                  borderRadius: 1,
+                  px: 1.5,
+                  py: 1,
+                  minWidth: 170,
+                  cursor: "pointer",
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.rowHover },
+                  "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, outlineOffset: 2 }
+                }}
+              >
                 <Stack direction="row" spacing={0.75} alignItems="center">
                   <WaveChip wave={w.wave} waves={waves} />
                   <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{w.label}</Typography>
@@ -475,9 +531,14 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
 
       <SectionPaper>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>
-            Systems to migrate {data ? `(${systems.length})` : ""}
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>
+              Systems to migrate {data ? `(${systems.length})` : ""}
+            </Typography>
+            {waveFilter != null ? (
+              <Chip size="small" label={`wave ${waveFilter}`} onDelete={() => setWaveFilter(null)} sx={{ height: 22, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }} />
+            ) : null}
+          </Stack>
           <FormControlLabel
             control={<Switch size="small" checked={showExcluded} onChange={(e) => setShowExcluded(e.target.checked)} />}
             label={<Typography sx={{ fontSize: TEXT.md }}>Show excluded</Typography>}
@@ -570,10 +631,19 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
           exige CNSA 2.0, y qué anclas habría que reemplazar. */}
       {pqc ? (
         <>
-          <AgilityBlockersPanel pqc={pqc} />
+          <AgilityBlockersPanel
+            pqc={pqc}
+            // Un equipo bloqueado → sus certificados en Inventory (vista por equipo).
+            onSelectDevice={onDrillDown ? (d) => onDrillDown({ view: "devices", search: d.host || d.agentId }) : undefined}
+          />
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems="stretch">
-            <Box sx={{ flex: 1, minWidth: 0 }}><CnsaPanel pqc={pqc} /></Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}><TrustAnchorsPanel pqc={pqc} /></Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <CnsaPanel pqc={pqc} onSelect={onDrillDown ? (f) => onDrillDown({ ...f, hasPrivateKey: true }) : undefined} />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              {/* Un ancla vive en un almacén de raíces: la lista la esconde salvo que se pidan. */}
+              <TrustAnchorsPanel pqc={pqc} onSelect={onOpenCertificate ? (row) => onOpenCertificate(row.fingerprint256) : undefined} />
+            </Box>
           </Stack>
         </>
       ) : null}
@@ -589,6 +659,7 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
             setSelected(null);
             drill(s);
           }}
+          onOpenCertificate={onOpenCertificate}
         />
       </Drawer>
 

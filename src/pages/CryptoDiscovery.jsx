@@ -44,7 +44,6 @@ import {
   Typography,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
 import useCdpFilter from "../hooks/useCdpFilter";
 import {
   ExposureFunnel,
@@ -64,17 +63,29 @@ import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import CloseIcon from "@mui/icons-material/Close";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+// Iconos de pestaña — mismo patrón que Asset Management (icono + etiqueta).
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import RouteOutlinedIcon from "@mui/icons-material/RouteOutlined";
+import ExploreOutlinedIcon from "@mui/icons-material/ExploreOutlined";
+import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
+import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
+import KeyOffOutlinedIcon from "@mui/icons-material/KeyOffOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
+import SectionPaper from "../components/common/SectionPaper";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import {
   ActionRequiredPanel,
   HygienePanel,
   IssuersPanel,
+  OverviewCard,
   TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
+import CdpSettingsTab from "../components/CryptoDiscovery/CdpSettingsTab";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
@@ -122,7 +133,20 @@ const TAB = {
   inventory: 3,
   anchors: 4,
   orphans: 5,
-  policy: 6
+  // Repaso UI 2026-09-05: «Access policy» pasa a «Settings» y concentra
+  // todo lo que se configura (conectores, import de CBOM, matriz de
+  // aprobación, enlace a la policy del agente). Mismo índice.
+  settings: 6
+};
+
+// Mismo estilo de pestaña que Asset Management (Assets.jsx), para ir
+// homologando: icono delante, sin mayúsculas forzadas, indicador teal.
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark }
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -209,7 +233,10 @@ function TabPanel({ value, index, children }) {
 
 // ── Dashboard tab ────────────────────────────────────────────────────
 
-function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside }) {
+// Repaso UI 2026-09-05: el Dashboard es un OVERVIEW. Cifras y gráficos
+// que llevan a su pestaña; la prosa (modo «explicar») vive en Explore y
+// Roadmap, donde se mira con calma.
+function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
   const [summary, setSummary] = React.useState(null);
   const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -218,6 +245,8 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
   // que el que cae lo diga — sin esto los paneles se pintaban vacíos, que
   // se lee como "no hay nada que mostrar" en vez de "no pude cargarlo".
   const [panelsError, setPanelsError] = React.useState(null);
+  // «Cargando» y «no hay» son cosas distintas: la petición terminó o no.
+  const [panelsLoaded, setPanelsLoaded] = React.useState(false);
   // Fase 1: el embudo de propiedad va PRIMERO. Es la cifra que separa lo
   // que el cliente posee de lo que le llega con el sistema.
   const [exposure, setExposure] = React.useState(null);
@@ -229,7 +258,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
   // simplemente NO se pintaba: la primera cifra de la página desaparecía
   // sin decir por qué (revisión UI 2026-09-05).
   const [chartsError, setChartsError] = React.useState([]);
-  const [explain, toggleExplain] = useExplainMode();
   React.useEffect(() => {
     let alive = true;
     setChartsError([]);
@@ -265,6 +293,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
       .catch((err) => {
         if (alive) setError(err?.message || String(err));
       });
+    setPanelsLoaded(false);
     getCdpDashboard()
       .then((resp) => {
         if (alive) {
@@ -277,7 +306,8 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
           setDashboard(null);
           setPanelsError(err?.message || String(err));
         }
-      });
+      })
+      .finally(() => alive && setPanelsLoaded(true));
     return () => {
       alive = false;
     };
@@ -350,11 +380,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
 
   const d = dashboard ?? {};
 
+  const ov = d.overview ?? {};
+  const outside = exposure?.outside;
+
   return (
     <Stack spacing={2}>
-      <Stack direction="row" justifyContent="flex-end">
-        <ExplainToggle on={explain} onToggle={toggleExplain} />
-      </Stack>
       {chartsError.length > 0 ? (
         <Alert severity="warning">
           <AlertTitle>Part of the dashboard didn&apos;t load</AlertTitle>
@@ -363,9 +393,10 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
       ) : null}
       <ExposureFunnel
         exposure={exposure}
-        explain={explain}
+        explain={false}
         onSelect={(f) => onDrillDown?.(f, { replace: true })}
-        onOpenOutside={onOpenOutside}
+        onOpenOutside={() => onOpenTab?.(TAB.explore)}
+        onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
       />
       <Grid container spacing={2}>
         {cards.map((card) => (
@@ -407,7 +438,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
       {/* Row 1 — when does the fleet break (against the deadlines), and what do I do today. */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 7 }}>
-          <TimelinePanel timeline={timeline} explain={explain} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
+          <TimelinePanel timeline={timeline} explain={false} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
         </Grid>
         <Grid size={{ xs: 12, lg: 5 }}>
           <ActionRequiredPanel
@@ -417,19 +448,88 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
         </Grid>
       </Grid>
 
-      {/* Row 2 — posture: who signs, what's unhealthy, which devices. Where
-          certificates live is a question for Explore, not a third copy here. */}
+      {/* Row 2 — one card per tab: the numbers, and a click to get there.
+          Issuers moved to Explore (it is a distribution, not a headline). */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-          <IssuersPanel
-            issuers={d.topIssuers}
-            onSelect={(issuer) => onDrillDown?.({ issuer })}
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <OverviewCard
+            title="Roadmap"
+            icon={<RouteOutlinedIcon fontSize="small" />}
+            onOpen={() => onOpenTab?.(TAB.roadmap)}
+            hint={ov.roadmap ? `As of the ${ov.roadmap.snapshotDate} snapshot. The Roadmap tab recomputes live.` : null}
+            empty={panelsLoaded ? "No readiness snapshot yet — open the Roadmap to record one." : "Loading…"}
+            metrics={
+              ov.roadmap
+                ? [
+                    { label: "systems", value: ov.roadmap.systemsTotal },
+                    { label: "with a wave", value: ov.roadmap.systemsPlanned, color: ov.roadmap.systemsPlanned ? BRAND.tealText : undefined },
+                    { label: "valid past 2035", value: ov.roadmap.ownBeyondDisallowed, color: ov.roadmap.ownBeyondDisallowed ? BRAND.alert.high : undefined },
+                    { label: "can't migrate", value: ov.roadmap.devicesBlocked ?? undefined }
+                  ]
+                : []
+            }
           />
         </Grid>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <OverviewCard
+            title="Outside your devices"
+            icon={<CloudOutlinedIcon fontSize="small" />}
+            onOpen={() => onOpenTab?.(TAB.explore)}
+            empty={exposure ? "No connectors or imports yet — add them in Settings." : "Loading…"}
+            metrics={
+              outside && outside.assets > 0
+                ? [
+                    { label: "sources", value: outside.sources },
+                    { label: "certificates", value: outside.certificates },
+                    { label: "quantum-broken", value: outside.quantumBroken, color: outside.quantumBroken ? BRAND.alert.high : undefined },
+                    { label: "in use", value: outside.inUse }
+                  ]
+                : []
+            }
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <OverviewCard
+            title="Trust anchors"
+            icon={<VerifiedUserOutlinedIcon fontSize="small" />}
+            onOpen={() => onOpenTab?.(TAB.anchors)}
+            empty={panelsLoaded ? "No trust anchors reported yet." : "Loading…"}
+            metrics={
+              ov.anchors
+                ? [
+                    { label: "anchors", value: ov.anchors.total },
+                    { label: "distrusted", value: ov.anchors.distrusted, color: ov.anchors.distrusted ? BRAND.alert.error : undefined },
+                    { label: "on a minority", value: ov.anchors.novel, color: ov.anchors.novel ? BRAND.alert.high : undefined }
+                  ]
+                : []
+            }
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+          <OverviewCard
+            title="Orphan keys"
+            icon={<KeyOffOutlinedIcon fontSize="small" />}
+            onOpen={() => onOpenTab?.(TAB.orphans)}
+            hint="Keys a device generated for a certificate that never arrived. Empty means «none recorded», not «none exist»."
+            empty={panelsLoaded ? "None recorded." : "Loading…"}
+            metrics={
+              ov.orphanKeys && ov.orphanKeys.total > 0
+                ? [
+                    { label: "without certificate", value: ov.orphanKeys.total },
+                    { label: "older than 14 days", value: ov.orphanKeys.stale, color: ov.orphanKeys.stale ? BRAND.alert.error : undefined }
+                  ]
+                : []
+            }
+          />
+        </Grid>
+      </Grid>
+
+      {/* Row 3 — what's unhealthy and which devices carry it. */}
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <HygienePanel flags={d.flags} onSelect={(flag) => onDrillDown?.({ flag })} />
         </Grid>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <TopDevicesPanel devices={d.topDevices} onSelect={(row) => onOpenDevices?.(row)} />
         </Grid>
       </Grid>
@@ -439,13 +539,16 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenOutside 
 
 // ── Explore tab (fase 1): distribución por clave + línea de tiempo ───
 
-function CdpExploreTab({ refreshNonce, onDrillDown }) {
+function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
   const [scope, setScope] = React.useState("all");
   const [explain, toggleExplain] = useExplainMode();
   const [facets, setFacets] = React.useState(null);
   // Stores vive aquí: «dónde viven» es una dimensión de la exploración,
   // no una pestaña aparte ni un tercer panel en el Dashboard.
   const [stores, setStores] = React.useState(null);
+  // Emisores: era un panel del Dashboard; es una distribución (quién
+  // firma), así que vive aquí y obedece el mismo ámbito «solo lo mío».
+  const [issuers, setIssuers] = React.useState(null);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -454,12 +557,18 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
     const filter = scope === "own" ? { hasPrivateKey: true } : {};
     Promise.all([
       getCdpFacets({ by: ["key_algorithm", "key_size_bits"], stack: "ownership", ...filter }),
-      getCdpStores(filter)
+      getCdpStores(filter),
+      getCdpFacets({ by: ["issuer_cn"], limit: 8, ...filter }).catch(() => null)
     ])
-      .then(([f, st]) => {
+      .then(([f, st, iss]) => {
         if (!alive) return;
         setFacets(f ?? null);
         setStores(st ?? null);
+        setIssuers(
+          iss?.rows
+            ? iss.rows.map((r) => ({ issuer: r.keys?.issuer_cn || "Unknown", count: Number(r.certs ?? 0), expiringSoon: 0 }))
+            : null
+        );
       })
       .catch((err) => alive && setError(err?.message || String(err)));
     return () => {
@@ -484,14 +593,22 @@ function CdpExploreTab({ refreshNonce, onDrillDown }) {
         </Alert>
       ) : null}
       <KeyDistributionPanel facets={facets} onSelect={select} explain={explain} />
-      <StoresPanel
-        stores={stores?.stores}
-        javaOnlyVendorBundles={stores?.javaOnlyVendorBundles === true}
-        onSelect={select}
-        explain={explain}
-      />
-      {/* Fase 4: lo que vive donde no hay agente, importado como CBOM. */}
-      <CbomAssetsPanel refreshNonce={refreshNonce} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <StoresPanel
+            stores={stores?.stores}
+            javaOnlyVendorBundles={stores?.javaOnlyVendorBundles === true}
+            onSelect={select}
+            onOpenPolicy={onOpenSettings}
+            explain={explain}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <IssuersPanel issuers={issuers} onSelect={(issuer) => select({ issuer })} />
+        </Grid>
+      </Grid>
+      {/* Fase 4: lo que vive donde no hay agente. Solo lectura; se configura en Settings. */}
+      <CbomAssetsPanel refreshNonce={refreshNonce} onSelect={(f) => onDrillDown?.(f, { replace: true })} onOpenSettings={onOpenSettings} />
     </Stack>
   );
 }
@@ -512,10 +629,15 @@ function CdpInventoryTab({ refreshNonce }) {
   // chips; `flag` e `issuer` solo se podían fijar desde el Dashboard.
   // Con una sola fuente de verdad, cada control de abajo lee y escribe
   // la misma cosa, y un enlace copiado conserva la vista.
-  const [filter, patchFilter] = useCdpFilter();
+  const [filter, patchFilter, replaceFilter] = useCdpFilter();
   // Agrupación: por certificado (defecto) o por equipo. Vive en la URL
   // como el resto, así que un enlace a «equipos con este emisor» existe.
   const view = filter.view === "devices" ? "devices" : "certs";
+  // Orden en servidor (la lista está paginada: ordenar la página sería
+  // mentir). Solo las columnas que el backend sabe ordenar.
+  const [sortModel, setSortModel] = React.useState([{ field: "notAfter", sort: "asc" }]);
+  const sort = view === "certs" && sortModel[0] ? { sortBy: sortModel[0].field, sortDir: sortModel[0].sort } : {};
+  const sortKey = `${sort.sortBy ?? ""}:${sort.sortDir ?? ""}`;
   const search = filter.search ?? "";
   const status = filter.status ?? "";
   const includeRoots = filter.includeRoots === true;
@@ -555,8 +677,34 @@ function CdpInventoryTab({ refreshNonce }) {
     hasPrivateKey: hasPrivateKey || undefined,
     hasFlags: hasFlags || undefined,
     eku: eku || undefined,
+    ...sort,
     ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== ""))
   });
+  // Todo filtro activo tiene chip: nunca hay un filtro invisible actuando.
+  const activeChips = [
+    status ? { key: "status", label: `Status: ${STATUS_META[status]?.label ?? status}` } : null,
+    flag ? { key: "flag", label: `Flag: ${FLAG_LABELS[flag] ? FLAG_LABELS[flag].split(" — ")[0].split(" (")[0] : flag}` } : null,
+    eku ? { key: "eku", label: `Purpose: ${eku}` } : null,
+    issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
+    hasPrivateKey ? { key: "hasPrivateKey", label: "With private key" } : null,
+    hasFlags ? { key: "hasFlags", label: "Flagged only" } : null,
+    includeRoots ? { key: "includeRoots", label: "Including system roots" } : null,
+    ...[
+      ["keyAlgorithm", "Algorithm"],
+      ["keySizeBits", "Key size"],
+      ["family", "Family"],
+      ["source", "Source"],
+      ["scope", "Scope"],
+      ["storeName", "Store"],
+      ["agentId", "Device"],
+      ["notAfterFrom", "Expires from"],
+      ["notAfterTo", "Expires before"]
+    ].map(([k, label]) => (nav[k] != null && nav[k] !== "" ? { key: k, label: `${label}: ${nav[k]}` } : null))
+  ].filter(Boolean);
+  const clearFilters = () => {
+    replaceFilter({ view: filter.view });
+    setPaginationModel((m) => ({ ...m, page: 0 }));
+  };
   const exportCsv = async () => {
     setExporting(true);
     setExportError(null);
@@ -609,7 +757,7 @@ function CdpInventoryTab({ refreshNonce }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, refreshNonce]);
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, sortKey, refreshNonce]);
 
   const certColumns = [
     {
@@ -627,7 +775,7 @@ function CdpInventoryTab({ refreshNonce }) {
     {
       field: "notAfter",
       headerName: "Expires",
-      width: 110,
+      width: 120,
       valueFormatter: (value) => formatDate(value),
     },
     {
@@ -652,7 +800,7 @@ function CdpInventoryTab({ refreshNonce }) {
       sortable: false,
       renderCell: (params) => (params.value ? <KeyOutlinedIcon fontSize="small" /> : null),
     },
-    { field: "deviceCount", headerName: "Devices", width: 90 },
+    { field: "deviceCount", headerName: "Devices", width: 90, align: "right", headerAlign: "right" },
     {
       field: "flags",
       headerName: "Flags",
@@ -662,6 +810,9 @@ function CdpInventoryTab({ refreshNonce }) {
       renderCell: (params) => <FlagChips flags={params.value} />,
     },
   ];
+  // La vista por equipo no ordena en servidor (todavía): sin flechas que
+  // prometan lo que no hacen.
+  const deviceColumnsBase = (cols) => cols.map((c) => ({ ...c, sortable: false }));
 
   // Vista por equipo: los contadores son sobre los certificados que
   // cumplen el filtro actual, no sobre todo el equipo. Con
@@ -677,7 +828,7 @@ function CdpInventoryTab({ refreshNonce }) {
       valueGetter: (value, row) => value || row.agentId,
     },
     { field: "platform", headerName: "Platform", width: 110 },
-    { field: "certCount", headerName: "Matching", width: 100 },
+    { field: "certCount", headerName: "Matching", width: 100, description: "Certificates on this device that match the current filters" },
     { field: "withPrivateKey", headerName: "With key", width: 100 },
     {
       field: "expiring",
@@ -702,138 +853,102 @@ function CdpInventoryTab({ refreshNonce }) {
 
   return (
     <Box>
-      <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", alignItems: "center" }}>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={view}
-          aria-label="Group by"
-          onChange={(_e, v) => {
-            if (v && v !== view) setAndReset({ view: v === "devices" ? "devices" : "" });
-          }}
-        >
-          <ToggleButton value="certs" aria-label="By certificate">By certificate</ToggleButton>
-          <ToggleButton value="devices" aria-label="By device">By device</ToggleButton>
-        </ToggleButtonGroup>
-        <TextField
-          size="small"
-          label={view === "devices" ? "Search device / subject / issuer" : "Search subject / issuer / fingerprint"}
-          value={search}
-          onChange={(e) => setAndReset({ search: e.target.value })}
-          sx={{ minWidth: 280 }}
-        />
-        <TextField
-          size="small"
-          select
-          label="Status"
-          value={status}
-          onChange={(e) => setAndReset({ status: e.target.value })}
-          sx={{ minWidth: 140 }}
-        >
-          <MenuItem value="">All</MenuItem>
-          <MenuItem value="active">Active</MenuItem>
-          <MenuItem value="expiring">Expiring</MenuItem>
-          <MenuItem value="expired">Expired</MenuItem>
-        </TextField>
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={includeRoots}
-              onChange={(e) => setAndReset({ includeRoots: e.target.checked })}
-            />
-          }
-          label={<Typography sx={{ fontSize: TEXT.md }}>Show system roots</Typography>}
-        />
-        {/*
-          Los filtros que antes solo se podían fijar desde el Dashboard
-          tienen control propio. Se sigue pudiendo llegar por drill-down,
-          pero también cambiarlos aquí sin volver atrás.
-        */}
-        <TextField
-          size="small"
-          select
-          label="Flag"
-          value={flag}
-          onChange={(e) => setAndReset({ flag: e.target.value })}
-          sx={{ minWidth: 200 }}
-        >
-          <MenuItem value="">Any</MenuItem>
-          {Object.entries(FLAG_LABELS).map(([k, v]) => (
-            <MenuItem key={k} value={k}>{v}</MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          size="small"
-          select
-          label="Purpose (EKU)"
-          value={eku}
-          onChange={(e) => setAndReset({ eku: e.target.value })}
-          sx={{ minWidth: 170 }}
-        >
-          <MenuItem value="">Any</MenuItem>
-          <MenuItem value="serverAuth">TLS server</MenuItem>
-          <MenuItem value="clientAuth">TLS client</MenuItem>
-          <MenuItem value="codeSigning">Code signing</MenuItem>
-          <MenuItem value="emailProtection">S/MIME</MenuItem>
-          <MenuItem value="smartCardLogon">Smart card logon</MenuItem>
-          <MenuItem value="remoteDesktopAuth">Remote Desktop</MenuItem>
-        </TextField>
-        <TextField
-          size="small"
-          label="Issuer"
-          value={issuer}
-          onChange={(e) => setAndReset({ issuer: e.target.value })}
-          sx={{ minWidth: 180 }}
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={hasPrivateKey}
-              onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })}
-            />
-          }
-          label={<Typography sx={{ fontSize: TEXT.md }}>With private key</Typography>}
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              size="small"
-              checked={hasFlags}
-              onChange={(e) => setAndReset({ hasFlags: e.target.checked })}
-            />
-          }
-          label={<Typography sx={{ fontSize: TEXT.md }}>Flagged only</Typography>}
-        />
-        {[
-          ["keyAlgorithm", "Algorithm"],
-          ["keySizeBits", "Key size"],
-          ["family", "Family"],
-          ["source", "Source"],
-          ["scope", "Scope"],
-          ["storeName", "Store"],
-          ["agentId", "Device"],
-          ["notAfterFrom", "Expires from"],
-          ["notAfterTo", "Expires before"]
-        ].map(([k, label]) =>
-          nav[k] != null && nav[k] !== "" ? (
-            <Chip
-              key={k}
-              size="small"
-              label={`${label}: ${nav[k]}`}
-              onDelete={() => setAndReset({ [k]: "" })}
-              sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, maxWidth: 360 }}
-            />
-          ) : null
-        )}
-        <Box sx={{ flex: 1 }} />
-        {view === "certs" ? (
-          <Button size="small" variant="outlined" onClick={exportCsv} disabled={exporting}>
-            {exporting ? "Exporting…" : `Export CSV${rowCount ? ` (${rowCount.toLocaleString()})` : ""}`}
-          </Button>
+      {/*
+        Repaso UI 2026-09-05: la barra tenía 10 controles y los chips en
+        una sola fila. Ahora tres filas con un papel cada una: (1) qué lista
+        y cómo se busca, (2) los filtros, (3) lo que está activo, con
+        «Clear». Cada filtro activo tiene chip: nunca hay uno invisible.
+      */}
+      <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ xs: "stretch", md: "center" }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={view}
+            aria-label="Group by"
+            onChange={(_e, v) => {
+              if (v && v !== view) setAndReset({ view: v === "devices" ? "devices" : "" });
+            }}
+            sx={{ flexShrink: 0 }}
+          >
+            <ToggleButton value="certs" aria-label="By certificate">By certificate</ToggleButton>
+            <ToggleButton value="devices" aria-label="By device">By device</ToggleButton>
+          </ToggleButtonGroup>
+          <TextField
+            size="small"
+            label={view === "devices" ? "Search device / subject / issuer" : "Search subject / issuer / fingerprint"}
+            value={search}
+            onChange={(e) => setAndReset({ search: e.target.value })}
+            sx={{ flex: 1, minWidth: 240 }}
+          />
+          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+            {loading ? "Loading…" : `${rowCount.toLocaleString()} ${view === "devices" ? "device(s)" : "certificate(s)"}`}
+          </Typography>
+          {view === "certs" ? (
+            <Button size="small" variant="outlined" onClick={exportCsv} disabled={exporting || rowCount === 0} sx={{ flexShrink: 0 }}>
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+          ) : null}
+        </Stack>
+
+        <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1, alignItems: "center" }}>
+          <TextField size="small" select label="Status" value={status} onChange={(e) => setAndReset({ status: e.target.value })} sx={{ minWidth: 130 }}>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Active</MenuItem>
+            <MenuItem value="expiring">Expiring</MenuItem>
+            <MenuItem value="expired">Expired</MenuItem>
+          </TextField>
+          {/*
+            Los filtros que antes solo se podían fijar desde el Dashboard
+            tienen control propio. Se sigue pudiendo llegar por drill-down,
+            pero también cambiarlos aquí sin volver atrás.
+          */}
+          <TextField size="small" select label="Flag" value={flag} onChange={(e) => setAndReset({ flag: e.target.value })} sx={{ minWidth: 190 }}>
+            <MenuItem value="">Any</MenuItem>
+            {Object.entries(FLAG_LABELS).map(([k, v]) => (
+              <MenuItem key={k} value={k}>{v}</MenuItem>
+            ))}
+          </TextField>
+          <TextField size="small" select label="Purpose (EKU)" value={eku} onChange={(e) => setAndReset({ eku: e.target.value })} sx={{ minWidth: 160 }}>
+            <MenuItem value="">Any</MenuItem>
+            <MenuItem value="serverAuth">TLS server</MenuItem>
+            <MenuItem value="clientAuth">TLS client</MenuItem>
+            <MenuItem value="codeSigning">Code signing</MenuItem>
+            <MenuItem value="emailProtection">S/MIME</MenuItem>
+            <MenuItem value="smartCardLogon">Smart card logon</MenuItem>
+            <MenuItem value="remoteDesktopAuth">Remote Desktop</MenuItem>
+          </TextField>
+          <TextField size="small" label="Issuer" value={issuer} onChange={(e) => setAndReset({ issuer: e.target.value })} sx={{ minWidth: 170 }} />
+          <FormControlLabel
+            control={<Switch size="small" checked={hasPrivateKey} onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })} />}
+            label={<Typography sx={{ fontSize: TEXT.md }}>With private key</Typography>}
+          />
+          <FormControlLabel
+            control={<Switch size="small" checked={hasFlags} onChange={(e) => setAndReset({ hasFlags: e.target.checked })} />}
+            label={<Typography sx={{ fontSize: TEXT.md }}>Flagged only</Typography>}
+          />
+          <FormControlLabel
+            control={<Switch size="small" checked={includeRoots} onChange={(e) => setAndReset({ includeRoots: e.target.checked })} />}
+            label={<Typography sx={{ fontSize: TEXT.md }}>Show system roots</Typography>}
+          />
+        </Stack>
+
+        {activeChips.length > 0 ? (
+          <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1, alignItems: "center" }} aria-label="Active filters">
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Active</Typography>
+            {activeChips.map((c) => (
+              <Chip
+                key={c.key}
+                size="small"
+                label={c.label}
+                onDelete={() => setAndReset({ [c.key]: "" })}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700, maxWidth: 360 }}
+              />
+            ))}
+            <Button size="small" onClick={clearFilters}>Clear filters</Button>
+          </Stack>
         ) : null}
-      </Stack>
+      </SectionPaper>
       {exportError ? <Alert severity="error" sx={{ mb: 1.5 }}>Export failed: {exportError}</Alert> : null}
 
       {loadError ? (
@@ -841,6 +956,17 @@ function CdpInventoryTab({ refreshNonce }) {
           <AlertTitle>Couldn&apos;t load</AlertTitle>
           {loadError} — the table is empty because the query failed, not because
           there is nothing to show.
+        </Alert>
+      ) : null}
+      {!loading && !loadError && rowCount === 0 ? (
+        <Alert
+          severity="info"
+          sx={{ mb: 1.5 }}
+          action={activeChips.length > 0 ? <Button color="inherit" size="small" onClick={clearFilters}>Clear filters</Button> : null}
+        >
+          {activeChips.length > 0 || search
+            ? `No ${view === "devices" ? "devices" : "certificates"} match the current filters.`
+            : "No certificates reported yet. They appear once devices with the Crypto Discovery plugin check in."}
         </Alert>
       ) : null}
 
@@ -857,13 +983,20 @@ function CdpInventoryTab({ refreshNonce }) {
           <DataGrid
             autoHeight
             rows={rows}
-            columns={view === "devices" ? deviceColumns : certColumns}
+            columns={view === "devices" ? deviceColumnsBase(deviceColumns) : certColumns}
             loading={loading}
             rowCount={rowCount}
             paginationMode="server"
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
-            pageSizeOptions={[10, 25, 50]}
+            pageSizeOptions={[10, 25, 50, 100]}
+            sortingMode="server"
+            sortModel={view === "certs" ? sortModel : []}
+            onSortModelChange={(m) => {
+              if (view !== "certs") return;
+              setSortModel(m.length ? m : [{ field: "notAfter", sort: "asc" }]);
+              setPaginationModel((p) => ({ ...p, page: 0 }));
+            }}
             disableRowSelectionOnClick
             disableColumnMenu
             onRowClick={(params) =>
@@ -880,7 +1013,7 @@ function CdpInventoryTab({ refreshNonce }) {
         anchor="right"
         open={Boolean(drawerCert)}
         onClose={() => setDrawerCert(null)}
-        PaperProps={{ sx: { width: { xs: "100%", sm: 480 } } }}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 560 } } }}
       >
         <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
           <IconButton aria-label="Close certificate details" onClick={() => setDrawerCert(null)} size="small">
@@ -1153,6 +1286,8 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
   const [data, setData] = React.useState({ items: [], counts: {} });
   const [onlyFindings, setOnlyFindings] = React.useState(true);
   const [distrustFor, setDistrustFor] = React.useState(null);
+  // Una fila es un certificado: clic = su ficha (cadena, equipos, flags).
+  const [drawerCert, setDrawerCert] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -1230,7 +1365,14 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
         // envía Apple no hay nada que retirar: el sistema operativo
         // decide su estado por separado.
         params.row.actionable ? (
-          <Button size="small" onClick={() => setDistrustFor(params.row)}>
+          <Button
+            size="small"
+            onClick={(e) => {
+              // Que el botón no abra además la ficha de la fila.
+              e.stopPropagation();
+              setDistrustFor(params.row);
+            }}
+          >
             Stop trusting
           </Button>
         ) : null,
@@ -1300,10 +1442,25 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
           loading={loading}
           disableRowSelectionOnClick
           disableColumnMenu
+          onRowClick={(params) => setDrawerCert(params.row.fingerprint256)}
           initialState={{ sorting: { sortModel: [{ field: "deviceCount", sort: "desc" }] } }}
-          sx={DATAGRID_SX}
+          sx={{ ...DATAGRID_SX, "& .MuiDataGrid-row": { cursor: "pointer" } }}
         />
       </Box>
+
+      <Drawer
+        anchor="right"
+        open={Boolean(drawerCert)}
+        onClose={() => setDrawerCert(null)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 560 } } }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
+          <IconButton aria-label="Close certificate details" onClick={() => setDrawerCert(null)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {drawerCert ? <CertificateDetailDrawer key={drawerCert} fingerprint={drawerCert} flagLabels={FLAG_LABELS} /> : null}
+      </Drawer>
     </Box>
   );
 }
@@ -1315,7 +1472,19 @@ export default function CryptoDiscovery() {
   const [filter, patchFilter, replaceFilter] = useCdpFilter();
   const tab = filter.tab ?? 0;
   const setTab = React.useCallback((v) => patchFilter({ tab: v }), [patchFilter]);
+  // Refresco como en Asset Management: botón + auto-refresco opcional
+  // (RefreshControl), en vez de un IconButton propio.
   const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const triggerRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    setRefreshNonce((n) => n + 1);
+    window.setTimeout(() => setRefreshing(false), 1200);
+  }, []);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(triggerRefresh, "cdpAutoRefresh", "0");
+  // Ficha de certificado abierta desde otra pestaña (roadmap, anclas a
+  // reemplazar): la ficha es la misma que en Inventory.
+  const [pageCert, setPageCert] = React.useState(null);
 
   // ADR-0011 fase 3 — emisión e instalación.
   const [issuanceOpen, setIssuanceOpen] = React.useState(false);
@@ -1363,7 +1532,7 @@ export default function CryptoDiscovery() {
   );
 
   return (
-    <Box>
+    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
         title="Crypto Discovery"
         subtitle="X.509 certificates discovered on managed devices — inventory, expiry and hygiene"
@@ -1385,45 +1554,52 @@ export default function CryptoDiscovery() {
             >
               Issue certificate
             </Button>
-            <Tooltip title="Refresh" arrow>
-              <IconButton aria-label="Refresh" onClick={() => setRefreshNonce((n) => n + 1)}>
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={triggerRefresh}
+              loading={refreshing}
+            />
           </Stack>
         }
       />
 
       {/*
-        Siete pestañas no caben en un portátil de 13": `scrollable` en vez
-        de dejar que MUI las apriete hasta cortar etiquetas.
+        Barra de pestañas con el mismo estilo que Asset Management (icono +
+        etiqueta dentro de un panel, indicador teal). `scrollable`: siete
+        pestañas no caben en un portátil de 13".
       */}
-      <Tabs
-        value={tab}
-        onChange={(_e, v) => setTab(v)}
-        variant="scrollable"
-        scrollButtons="auto"
-        allowScrollButtonsMobile
-        aria-label="Crypto Discovery sections"
-        sx={{ borderBottom: `1px solid ${BRAND.border}` }}
-      >
-        <Tab label="Dashboard" {...tabA11y(TAB.dashboard)} />
-        <Tab label="Roadmap" {...tabA11y(TAB.roadmap)} />
-        <Tab label="Explore" {...tabA11y(TAB.explore)} />
-        <Tab label="Inventory" {...tabA11y(TAB.inventory)} />
-        <Tab label="Trust anchors" {...tabA11y(TAB.anchors)} />
-        {/*
-          ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
-          una huérfana es un ítem del inventario, y el punto de la
-          decisión es que se mire, no que esté.
-        */}
-        <Tab label="Orphan keys" {...tabA11y(TAB.orphans)} />
-        {/* ADR-0009 phase 2 keeps ONE approval matrix for every privileged
-            capability, so cdp.cert.install and cdp.anchor.distrust used to be
-            rendered inside Remote Control alongside rcp.* — somebody else's
-            settings on your screen. Shared data, separate screens. */}
-        <Tab label="Access policy" {...tabA11y(TAB.policy)} />
-      </Tabs>
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={tab}
+          onChange={(_e, v) => setTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          aria-label="Crypto Discovery sections"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 62,
+            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal }
+          }}
+        >
+          <Tab icon={<DashboardOutlinedIcon fontSize="small" />} iconPosition="start" label="Dashboard" {...tabA11y(TAB.dashboard)} sx={TAB_SX} />
+          <Tab icon={<RouteOutlinedIcon fontSize="small" />} iconPosition="start" label="Roadmap" {...tabA11y(TAB.roadmap)} sx={TAB_SX} />
+          <Tab icon={<ExploreOutlinedIcon fontSize="small" />} iconPosition="start" label="Explore" {...tabA11y(TAB.explore)} sx={TAB_SX} />
+          <Tab icon={<ListAltOutlinedIcon fontSize="small" />} iconPosition="start" label="Inventory" {...tabA11y(TAB.inventory)} sx={TAB_SX} />
+          <Tab icon={<VerifiedUserOutlinedIcon fontSize="small" />} iconPosition="start" label="Trust anchors" {...tabA11y(TAB.anchors)} sx={TAB_SX} />
+          {/*
+            ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
+            una huérfana es un ítem del inventario, y el punto de la
+            decisión es que se mire, no que esté.
+          */}
+          <Tab icon={<KeyOffOutlinedIcon fontSize="small" />} iconPosition="start" label="Orphan keys" {...tabA11y(TAB.orphans)} sx={TAB_SX} />
+          {/* Settings: conectores, import de CBOM, matriz de aprobación
+              (ADR-0009: una matriz, filas cdp.*) y enlace a la policy del
+              agente. Aquí se configura; en las otras pestañas se mira. */}
+          <Tab icon={<SettingsOutlinedIcon fontSize="small" />} iconPosition="start" label="Settings" {...tabA11y(TAB.settings)} sx={TAB_SX} />
+        </Tabs>
+      </SectionPaper>
 
       <TabPanel value={tab} index={TAB.dashboard}>
         <CdpDashboard
@@ -1432,7 +1608,7 @@ export default function CryptoDiscovery() {
           onOpenDevices={(row) =>
             replaceFilter({ tab: TAB.inventory, view: "devices", ...(row?.host || row?.agentId ? { search: row.host || row.agentId } : {}) })
           }
-          onOpenOutside={() => setTab(TAB.explore)}
+          onOpenTab={setTab}
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>
@@ -1443,10 +1619,11 @@ export default function CryptoDiscovery() {
           // inventario de equipos: sus miembros viven en «Outside your
           // devices», en Explore.
           onOpenOutside={() => setTab(TAB.explore)}
+          onOpenCertificate={setPageCert}
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.explore}>
-        <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} />
+        <CdpExploreTab refreshNonce={refreshNonce} onDrillDown={drillDown} onOpenSettings={() => setTab(TAB.settings)} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.inventory}>
         <CdpInventoryTab refreshNonce={refreshNonce} />
@@ -1464,13 +1641,23 @@ export default function CryptoDiscovery() {
         la matriz de aprobación, y «Access policy» quedaba en blanco. El
         test de la página fija que cada Tab tenga exactamente un panel.
       */}
-      <TabPanel value={tab} index={TAB.policy}>
-        <AccessPolicyMatrix
-          prefix="cdp."
-          title="Privileged access policy"
-          description="Which crypto discovery capabilities need a second person’s approval before they can be used. Installing a certificate and distrusting a trust anchor both change what a machine will accept."
-        />
+      <TabPanel value={tab} index={TAB.settings}>
+        <CdpSettingsTab refreshNonce={refreshNonce} onSourcesChanged={() => setRefreshNonce((n) => n + 1)} />
       </TabPanel>
+
+      <Drawer
+        anchor="right"
+        open={Boolean(pageCert)}
+        onClose={() => setPageCert(null)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 560 } } }}
+      >
+        <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1, pb: 0 }}>
+          <IconButton aria-label="Close certificate details" onClick={() => setPageCert(null)} size="small">
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Box>
+        {pageCert ? <CertificateDetailDrawer key={pageCert} fingerprint={pageCert} flagLabels={FLAG_LABELS} /> : null}
+      </Drawer>
 
       <CertIssuanceDialog
         open={issuanceOpen}

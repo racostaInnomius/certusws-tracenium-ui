@@ -235,7 +235,8 @@ function RemoveConnectorDialog({ connector, busy, onClose, onConfirm }) {
   );
 }
 
-export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
+/** `embedded`: sin cabecera ni separador propios — la pestaña Settings ya los pone. */
+export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded = false }) {
   const [state, setState] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
@@ -302,14 +303,13 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged }) {
   const secretsConfigured = state?.secretsConfigured !== false;
 
   return (
-    <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
+    <Box sx={embedded ? undefined : { mt: 2, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Connectors</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
-        Read-only pulls from places without an agent, refreshed daily: Azure Key Vault, AWS Certificate Manager,
-        Google Cloud, HashiCorp Vault PKI, Kubernetes (TLS secrets and cert-manager) and the public Certificate
-        Transparency logs for your domains. Each reports its certificates and keys, who uses them and, where the
-        source knows it, what it will issue next. A certificate that also lives on a device is matched by fingerprint.
-        Each connector is one system in the roadmap.
+        Refreshed daily. Azure Key Vault, AWS Certificate Manager, Google Cloud, HashiCorp Vault PKI, Kubernetes (TLS
+        secrets and cert-manager) and the public Certificate Transparency logs for your domains. Each reports its
+        certificates and keys, who uses them and, where the source knows it, what it will issue next. A certificate
+        that also lives on a device is matched by fingerprint.
       </Typography>
       {error ? <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert> : null}
       {state && !secretsConfigured ? (

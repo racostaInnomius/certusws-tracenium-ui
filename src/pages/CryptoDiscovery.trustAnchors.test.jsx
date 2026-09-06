@@ -50,7 +50,10 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listCdpCertificates: vi.fn(async () => ({ items: [], total: 0 })),
     listCdpDevices: vi.fn(async () => ({ items: [], total: 0 })),
     listCdpTrustAnchors: (...a) => listCdpTrustAnchors(...a),
-    distrustAnchor: vi.fn()
+    distrustAnchor: vi.fn(),
+    getCdpCertificateDetail: vi.fn(async () => ({ ok: true, certificate: null })),
+    listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
+    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] }))
   };
 });
 
@@ -204,6 +207,17 @@ describe("pestaña Trust anchors", () => {
 
     await waitFor(() => expect(screen.getByText("18")).toBeTruthy(), { timeout: 4000 });
     expect(screen.queryByText(/of them recent/)).toBeNull();
+  });
+
+  it("⭐ una fila abre la ficha del certificado; «Stop trusting» no la abre además", async () => {
+    listCdpTrustAnchors.mockResolvedValue({
+      items: [ancla()],
+      counts: { total: 1, distrusted: 0, novel: 1, vendorBundleOnly: 0 }
+    });
+    await abrirPestaña();
+    const cell = await screen.findByText(/ACME Internal Root CA/, {}, { timeout: 4000 });
+    cell.click();
+    expect(await screen.findByRole("button", { name: /close certificate details/i })).toBeInTheDocument();
   });
 
   it("un fallo de carga se dice, no se calla", async () => {

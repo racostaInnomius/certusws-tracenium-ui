@@ -41,7 +41,8 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listCdpCertificates: (...a) => listCdpCertificates(...a),
     listCdpDevices: vi.fn(async () => ({ items: [], total: 0 })),
     listCdpTrustAnchors: vi.fn(async () => ({ items: [] })),
-    listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 }))
+    listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
+    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] }))
   };
 });
 vi.mock("../api/remoteControl", async (importOriginal) => {
@@ -99,6 +100,21 @@ describe("KPI clicables", () => {
         expect.objectContaining({ status: "expired", hasPrivateKey: true })
       )
     );
+  });
+
+  it("⭐ las tarjetas de resumen llevan a su pestaña (el Dashboard es un overview)", async () => {
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    (await screen.findByRole("button", { name: /^Open Roadmap$/i }, { timeout: 4000 })).click();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /^roadmap$/i })).toHaveAttribute("aria-selected", "true"));
+    expect(new URLSearchParams(window.location.search).get("cdpTab")).toBe("1");
+    // Sin datos de resumen (dashboard vacío en este mock) la tarjeta no
+    // pinta ceros: dice que no hay snapshot.
+    screen.getByRole("tab", { name: /^dashboard$/i }).click();
+    expect(await screen.findByText(/No readiness snapshot yet/i)).toBeInTheDocument();
   });
 
   it("un KPI REEMPLAZA el filtro anterior: es una vista, no un refinamiento", async () => {

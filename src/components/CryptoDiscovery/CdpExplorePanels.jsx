@@ -158,7 +158,29 @@ function FunnelStep({ label, value, sub, onSelect, emphasis }) {
   );
 }
 
-export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
+/** Un tramo de texto que navega: mismo aspecto que un enlace, con teclado. */
+function LinkText({ onClick, children, sx }) {
+  if (!onClick) return <Box component="span" sx={sx}>{children}</Box>;
+  return (
+    <Box
+      component="span"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      sx={{ cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3, "&:hover": { color: BRAND.tealText }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, borderRadius: 0.5 }, ...sx }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+export function ExposureFunnel({ exposure, onSelect, onOpenOutside, onOpenRoadmap, explain }) {
   const e = exposure;
   if (!e) return null;
   const pct = e.total ? Math.round((e.own / e.total) * 1000) / 10 : 0;
@@ -193,6 +215,8 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
           label="Devices that can't migrate yet"
           value={e.devicesBlocked == null ? "—" : e.devicesBlocked}
           sub={e.devicesBlocked == null ? "not evaluated" : "runtime or OS blocks post-quantum"}
+          // La lista de esos equipos, con lo que los bloquea, está en Roadmap.
+          onSelect={onOpenRoadmap && e.devicesBlocked ? onOpenRoadmap : undefined}
         />
       </Stack>
       <Explain on={explain}>
@@ -234,8 +258,8 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
           {e.kemMeasured ? (
             <>
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-                {fmt(e.kem?.endpoints)} TLS endpoints
-                {e.kem?.probes ? ` (${fmt(e.kem.probes)} remote)` : ""} ·{" "}
+                <LinkText onClick={onSelect ? () => onSelect({ source: "listener" }) : null}>{fmt(e.kem?.endpoints)} TLS endpoints</LinkText>
+                {e.kem?.probes ? <> (<LinkText onClick={onSelect ? () => onSelect({ source: "probe" }) : null}>{fmt(e.kem.probes)} remote</LinkText>)</> : ""} ·{" "}
                 <Box component="span" sx={{ color: e.kem?.hybrid ? BRAND.alert.success : BRAND.alert.errorText, fontWeight: 700 }}>
                   {fmt(e.kem?.hybrid)} negotiate post-quantum key exchange
                 </Box>
@@ -254,7 +278,7 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, explain }) {
           ) : (
             <>
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-                {fmt(e.listeners)} TLS services on {fmt(e.listenerDevices)} devices ·{" "}
+                <LinkText onClick={onSelect ? () => onSelect({ source: "listener" }) : null}>{fmt(e.listeners)} TLS services</LinkText> on {fmt(e.listenerDevices)} devices ·{" "}
                 <Box component="span" sx={{ color: TEXT_MUTED }}>post-quantum key exchange not measured yet</Box>
               </Typography>
               <Explain on={explain}>

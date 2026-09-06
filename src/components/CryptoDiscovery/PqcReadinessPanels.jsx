@@ -57,7 +57,32 @@ function formatDate(value) {
 
 // ── 1. The anchor metric ─────────────────────────────────────────────
 
-export function TrustAnchorsPanel({ pqc }) {
+/**
+ * Una fila que cuenta certificados o equipos NAVEGA (repaso UI 2026-09-05:
+ * «todas las gráficas que permitan seleccionar certificados deberían llevar
+ * al detalle»). Ratón y teclado, con nombre accesible.
+ */
+function rowActionProps(onActivate, label) {
+  if (!onActivate) return {};
+  return {
+    role: "button",
+    tabIndex: 0,
+    "aria-label": label,
+    onClick: onActivate,
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onActivate();
+      }
+    }
+  };
+}
+const ROW_ACTION_SX = (clickable) =>
+  clickable
+    ? { cursor: "pointer", "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, outlineOffset: -2, borderRadius: 0.5 } }
+    : {};
+
+export function TrustAnchorsPanel({ pqc, onSelect }) {
   const rows = Array.isArray(pqc?.trustAnchorsAtRisk) ? pqc.trustAnchorsAtRisk : [];
   const year = pqc?.disallowedYear ?? 2035;
 
@@ -72,7 +97,11 @@ export function TrustAnchorsPanel({ pqc }) {
       ) : (
         <Stack divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
           {rows.map((row) => (
-            <Box key={row.fingerprint256} sx={{ py: 1, px: 0.5 }}>
+            <Box
+              key={row.fingerprint256}
+              sx={{ py: 1, px: 0.5, ...ROW_ACTION_SX(Boolean(onSelect)) }}
+              {...rowActionProps(onSelect ? () => onSelect(row) : null, `Open ${row.subjectCN || row.fingerprint256}`)}
+            >
               <Typography
                 sx={{
                   fontSize: TEXT.md,
@@ -105,7 +134,7 @@ export function TrustAnchorsPanel({ pqc }) {
 
 // ── 4. Agility blockers ──────────────────────────────────────────────
 
-export function AgilityBlockersPanel({ pqc }) {
+export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
   const agility = pqc?.agility;
   const blockers = Array.isArray(agility?.blockers) ? agility.blockers : [];
 
@@ -113,7 +142,7 @@ export function AgilityBlockersPanel({ pqc }) {
   const byDevice = new Map();
   for (const b of blockers) {
     const key = b.agentId;
-    if (!byDevice.has(key)) byDevice.set(key, { host: b.host || b.agentId, items: [] });
+    if (!byDevice.has(key)) byDevice.set(key, { agentId: b.agentId, host: b.host || b.agentId, items: [] });
     byDevice.get(key).items.push(b);
   }
 
@@ -144,11 +173,15 @@ export function AgilityBlockersPanel({ pqc }) {
           </Typography>
           <Stack divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
             {[...byDevice.values()].map((device) => (
-              <Box key={device.host} sx={{ py: 1, px: 0.5 }}>
+              <Box
+                key={device.agentId || device.host}
+                sx={{ py: 1, px: 0.5, ...ROW_ACTION_SX(Boolean(onSelectDevice)) }}
+                {...rowActionProps(onSelectDevice ? () => onSelectDevice(device) : null, `Open device ${device.host}`)}
+              >
                 <Typography sx={{ fontSize: TEXT.md, fontWeight: 600 }}>{device.host}</Typography>
                 <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5 }}>
-                  {device.items.map((item) => (
-                    <Tooltip key={`${item.runtime}-${item.version}`} title={item.reason} arrow>
+                  {device.items.map((item, i) => (
+                    <Tooltip key={`${item.runtime}-${item.version}-${i}`} title={item.reason} arrow>
                       <Chip
                         size="small"
                         label={`${item.runtime} ${item.version}`}
@@ -185,22 +218,26 @@ export function AgilityBlockersPanel({ pqc }) {
  * bears on a purchasing decision this year — unlike the 2030/2035
  * horizon above it, which comes from a NIST draft.
  */
-export function CnsaPanel({ pqc }) {
+export function CnsaPanel({ pqc, onSelect }) {
   const cnsa = pqc?.cnsa;
   if (!cnsa) return null;
 
   const c = cnsa.certificates || {};
   const next = (cnsa.gates || []).find((g) => !g.passed);
 
+  // Cuarto elemento: el filtro de inventario que enseña EXACTAMENTE esa
+  // cifra. Las dos clases post-cuánticas comparten familia `pq_safe`, así
+  // que no tienen filtro exacto y no navegan: mejor inertes que engañosas.
   const rows = [
-    ["Approved parameter sets", c.approved, "ML-KEM-1024 or ML-DSA-87 throughout."],
+    ["Approved parameter sets", c.approved, "ML-KEM-1024 or ML-DSA-87 throughout.", null],
     [
       "Post-quantum, not approved",
       c.pqNotApproved,
-      "Genuinely post-quantum, but a parameter set CNSA 2.0 excludes — ML-DSA-44/65, ML-KEM-512/768, or SLH-DSA, which the suite omits entirely. A parameter change, not a migration."
+      "Genuinely post-quantum, but a parameter set CNSA 2.0 excludes — ML-DSA-44/65, ML-KEM-512/768, or SLH-DSA, which the suite omits entirely. A parameter change, not a migration.",
+      null
     ],
-    ["Quantum-vulnerable", c.quantumVulnerable, "RSA, ECDSA and friends. A full algorithm migration."],
-    ["Not classified", c.unknown, "No algorithm we could read. Neither passed nor failed."]
+    ["Quantum-vulnerable", c.quantumVulnerable, "RSA, ECDSA and friends. A full algorithm migration.", { family: "quantum_broken" }],
+    ["Not classified", c.unknown, "No algorithm we could read. Neither passed nor failed.", { family: "unknown" }]
   ];
 
   return (
@@ -223,13 +260,14 @@ export function CnsaPanel({ pqc }) {
       ) : null}
 
       <Stack spacing={0.75}>
-        {rows.map(([label, value, hint]) => (
+        {rows.map(([label, value, hint, filter]) => (
           <Tooltip key={label} title={hint} arrow>
             <Stack
               direction="row"
               justifyContent="space-between"
               alignItems="baseline"
-              sx={{ cursor: "help" }}
+              sx={{ cursor: "help", px: 0.5, mx: -0.5, ...ROW_ACTION_SX(Boolean(onSelect && filter)) }}
+              {...rowActionProps(onSelect && filter ? () => onSelect(filter) : null, `${label}: ${value ?? 0}`)}
             >
               <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{label}</Typography>
               <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>

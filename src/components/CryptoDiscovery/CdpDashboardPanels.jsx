@@ -25,6 +25,7 @@ import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
+// `TEXT_MUTED` sustituye a BRAND.gray como color de texto (contraste).
 
 // ── shared bits ──────────────────────────────────────────────────────
 
@@ -87,6 +88,55 @@ function daysUntil(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return Math.round((d.getTime() - Date.now()) / 86400000);
+}
+
+// ── 0. Overview card ─────────────────────────────────────────────────
+//
+// Repaso UI 2026-09-05: el Dashboard es una vista rápida de las demás
+// pestañas. Cada tarjeta: un título (la pestaña), dos o tres cifras con
+// etiqueta, y un clic que lleva allí. Sin prosa: la explicación vive en
+// la pestaña.
+
+export function OverviewCard({ title, icon, metrics, onOpen, empty, hint }) {
+  const clickable = typeof onOpen === "function";
+  const rows = Array.isArray(metrics) ? metrics.filter((m) => m && m.value != null) : [];
+  return (
+    <SectionPaper
+      sx={{
+        p: 2,
+        height: "100%",
+        cursor: clickable ? "pointer" : "default",
+        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        "&:hover": clickable ? { borderColor: BRAND.teal, boxShadow: "0 4px 12px rgba(59,64,77,0.08)" } : undefined,
+        ...ROW_FOCUS_SX,
+      }}
+      {...rowActionProps(clickable ? onOpen : null, `Open ${title}`)}
+    >
+      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1.25 }}>
+        {icon ? <Box sx={{ color: BRAND.tealText, display: "flex" }}>{icon}</Box> : null}
+        <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>{title}</Typography>
+        {hint ? (
+          <Tooltip title={hint} arrow>
+            <Box component="span" sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, cursor: "help", borderBottom: `1px dotted ${BRAND.borderStrong}` }}>?</Box>
+          </Tooltip>
+        ) : null}
+      </Stack>
+      {rows.length === 0 ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{empty || "Nothing to show yet."}</Typography>
+      ) : (
+        <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          {rows.map((m) => (
+            <Box key={m.label} sx={{ minWidth: 72 }}>
+              <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: m.color || BRAND.dark, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" }}>
+                {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".04em" }}>{m.label}</Typography>
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </SectionPaper>
+  );
 }
 
 // ── 1. Expiry horizon ────────────────────────────────────────────────

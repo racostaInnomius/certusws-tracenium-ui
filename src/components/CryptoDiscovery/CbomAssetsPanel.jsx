@@ -11,10 +11,10 @@
 
 import * as React from "react";
 import { Alert, Box, Button, Chip, Stack, TextField, Typography } from "@mui/material";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCryptoAssetsSummary, importCdpCbom, listCryptoAssets } from "../../api/cdp";
-import CdpConnectorsPanel from "./CdpConnectorsPanel";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const TYPE_LABEL = {
@@ -95,12 +95,16 @@ export function CbomImportForm({ onImported }) {
   );
 }
 
-export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
+/**
+ * Solo LECTURA (repaso UI 2026-09-05): el alta de conectores y el import
+ * de CBOM viven en Settings. Aquí se mira lo que trajeron; `onOpenSettings`
+ * lleva a donde se configura.
+ */
+export default function CbomAssetsPanel({ refreshNonce, onSelect, onOpenSettings }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
   const [source, setSource] = React.useState("");
   const [error, setError] = React.useState(null);
-  const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
     let alive = true;
@@ -115,29 +119,36 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect }) {
     return () => {
       alive = false;
     };
-  }, [refreshNonce, nonce, source]);
+  }, [refreshNonce, source]);
 
   const total = (summary?.sources ?? []).reduce((s, x) => s + x.assets, 0);
 
   return (
     <SectionPaper>
       {/* Mismo nombre que el bloque del embudo que lleva aquí («Outside your devices»). */}
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, mb: 0.5 }}>Outside your devices</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 0.5 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>Outside your devices</Typography>
+        {onOpenSettings ? (
+          <Button size="small" startIcon={<SettingsOutlinedIcon fontSize="small" />} onClick={onOpenSettings} sx={{ flexShrink: 0 }}>
+            Manage sources
+          </Button>
+        ) : null}
+      </Stack>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1.5 }}>
         Crypto assets from places without an agent, shown by source and never mixed with what agents saw on devices:
-        CycloneDX 1.6 files imported from code scanners, container images or other inventories; what an{" "}
-        <strong>AD CS</strong> Certification Authority reports it issued (enabled per policy); SSH host keys the agents
-        read from disk; and the connectors below.
+        connectors (vaults, clouds, clusters, public CT logs), what an <strong>AD CS</strong> Certification Authority
+        reports it issued, SSH host keys the agents read from disk, and imported CycloneDX inventories.
       </Typography>
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Import a CBOM</Typography>
-      <CbomImportForm onImported={() => setNonce((n) => n + 1)} />
-      <CdpConnectorsPanel refreshNonce={refreshNonce} onChanged={() => setNonce((n) => n + 1)} />
       {error ? <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert> : null}
 
       {summary && total === 0 ? (
-        <Alert severity="info" sx={{ mt: 1.5 }}>
-          Nothing outside your devices yet. Add a connector above, enable AD CS in the Crypto Discovery policy, or
-          export this tenant&apos;s own CBOM from Reports and import it here to see the round trip.
+        <Alert
+          severity="info"
+          sx={{ mt: 1.5 }}
+          action={onOpenSettings ? <Button color="inherit" size="small" onClick={onOpenSettings}>Open Settings</Button> : null}
+        >
+          Nothing outside your devices yet. Add a connector or import a CBOM in Settings, or enable AD CS in the Crypto
+          Discovery policy.
         </Alert>
       ) : null}
 

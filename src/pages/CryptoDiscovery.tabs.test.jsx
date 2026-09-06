@@ -47,6 +47,7 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listCdpDevices: vi.fn(async () => ({ items: [], total: 0 })),
     listCdpTrustAnchors: vi.fn(async () => ({ items: [] })),
     listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
+    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
     distrustAnchor: vi.fn(),
     destroyEndpointKey: vi.fn()
   };
@@ -70,7 +71,7 @@ afterEach(() => {
 });
 
 describe("pestañas de Crypto Discovery", () => {
-  it("⭐ «Access policy» pinta la matriz, y «Claves huérfanas» NO la pinta", async () => {
+  it("⭐ «Settings» pinta la matriz, y «Orphan keys» NO la pinta", async () => {
     render(
       <ConfirmProvider>
         <CryptoDiscovery />
@@ -85,11 +86,32 @@ describe("pestañas de Crypto Discovery", () => {
     // apilados bajo una sola pestaña.
     expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
 
-    const policy = screen.getByRole("tab", { name: /access policy/i });
+    const policy = screen.getByRole("tab", { name: /^settings$/i });
     policy.click();
     // Este era el otro síntoma: la pestaña en blanco.
     await screen.findByText(/Privileged access policy/i);
     expect(screen.queryByText(/without that meaning/i)).not.toBeInTheDocument();
+  });
+
+  it("⭐ Settings concentra lo configurable: conectores, import de CBOM y enlace a la policy; Explore solo mira", async () => {
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    const settings = await screen.findByRole("tab", { name: /^settings$/i }, { timeout: 4000 });
+    settings.click();
+    await screen.findByText(/Sources outside your devices/i);
+    expect(screen.getByText(/^Connectors$/)).toBeInTheDocument();
+    expect(screen.getByText("Import a CBOM")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open Policies/i })).toHaveAttribute("href", "?page=policies");
+    expect(await screen.findByText(/Privileged access policy/i)).toBeInTheDocument();
+
+    // Explore enseña lo que trajeron y remite a Settings; no repite el alta.
+    screen.getByRole("tab", { name: /^explore$/i }).click();
+    await screen.findByRole("button", { name: /Manage sources/i });
+    expect(screen.queryByText("Import a CBOM")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add azure key vault/i })).not.toBeInTheDocument();
   });
 
   it("cada Tab de la barra tiene un panel, y ningún índice se repite", async () => {
