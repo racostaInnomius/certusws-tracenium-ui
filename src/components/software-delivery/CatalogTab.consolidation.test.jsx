@@ -193,3 +193,49 @@ describe("CatalogTab — the review queue surfaces where the packages are going"
     expect(screen.queryByText(/waiting for review/i)).toBeNull();
   });
 });
+
+describe("CatalogTab — la procedencia se abre desde la fila", () => {
+  // ⚠️ EL EMPAREJAMIENTO ES LA PARTE FRÁGIL, Y ES LA QUE ESTO FIJA.
+  //
+  // La procedencia sale de cruzar dos listas: los paquetes y los intakes. El
+  // enlace es `intake.packageId → package.id`, y el intake tiene ADEMÁS su
+  // propio `id`, distinto. Emparejar por la clave equivocada no rompe nada
+  // visible: enseña la procedencia de OTRO paquete, o ninguna.
+  //
+  // Por eso el fixture usa ids deliberadamente distintos (intake 9 → paquete
+  // 1): con un `id` en vez de `packageId` la búsqueda falla y el panel dice
+  // "sin análisis" para un paquete que sí lo tiene.
+  const INTAKE_DE_WINZIP = {
+    id: 9,
+    packageId: 1,
+    filename: "winzip-setup.exe",
+    sha256: "c".repeat(64),
+    facts: { platform: "windows", format: "exe", installerType: "innosetup" },
+    detectionSignals: [],
+    verification: { verdict: "warn", reasons: ["unsigned"] },
+    proposedConfig: null,
+    aiError: null,
+  };
+
+  it("muestra la procedencia del paquete correcto", async () => {
+    setup({ intakes: [INTAKE_DE_WINZIP] });
+    await screen.findByText("WinZip");
+
+    await userEvent.click(screen.getByRole("button", { name: /provenance of winzip/i }));
+
+    // El nombre del fichero subido sólo puede venir del intake emparejado.
+    expect(await screen.findByText("winzip-setup.exe")).toBeInTheDocument();
+    expect(screen.queryByText(/no analysis on record/i)).toBeNull();
+  });
+
+  // El paquete tecleado desde una URL no tiene intake: la respuesta correcta es
+  // decirlo, no esconder el botón.
+  it("dice que no hay análisis para el paquete tecleado", async () => {
+    setup({ intakes: [INTAKE_DE_WINZIP] });
+    await screen.findByText("7-Zip");
+
+    await userEvent.click(screen.getByRole("button", { name: /provenance of 7-zip/i }));
+
+    expect(await screen.findByText(/no analysis on record/i)).toBeInTheDocument();
+  });
+});

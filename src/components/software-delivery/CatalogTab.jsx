@@ -66,6 +66,7 @@ import { listFrom } from "../../api/shape";
 
 import PackageDialog from "./PackageDialog";
 import IntakeReviewDrawer from "./IntakeReviewDrawer";
+import PackageProvenanceDrawer from "./PackageProvenanceDrawer";
 import DeletePackageDialog from "./DeletePackageDialog";
 import DeployWizardDialog from "./DeployWizardDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
@@ -105,6 +106,9 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
   // Cola de intakes pendientes de revisión — no son catálogo TODAVÍA, así que
   // el sitio donde el operador los busca es aquí, no en una pestaña aparte.
   const [pendingIntakes, setPendingIntakes] = React.useState(0);
+  const [intakes, setIntakes] = React.useState([]);
+  // Fila cuya procedencia se está mirando.
+  const [provenanceFor, setProvenanceFor] = React.useState(null);
 
   const [deployOpen, setDeployOpen] = React.useState(false);
   const [deployItem, setDeployItem] = React.useState(null);
@@ -143,10 +147,29 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       const res = await listIntakes();
       const rows = listFrom(res, { context: "sdpIntake" });
       setPendingIntakes(rows.filter((r) => r.status === "pending_review").length);
+      // La MISMA lista da la procedencia de cada paquete: al aprobar, el intake
+      // guarda `packageId`. No hace falta endpoint nuevo — sólo dejar de tirar
+      // lo que ya se está pidiendo.
+      setIntakes(rows);
     } catch {
       setPendingIntakes(0);
+      setIntakes([]);
     }
   }, []);
+
+  /**
+   * Procedencia por id de paquete.
+   *
+   * ⚠️ Un paquete SIN entrada aquí no es un error: entró por la vía de URL y no
+   * tiene análisis. El cajón dice justamente eso.
+   */
+  const provenanceByPackage = React.useMemo(() => {
+    const m = new Map();
+    for (const it of intakes) {
+      if (it?.packageId != null) m.set(String(it.packageId), it);
+    }
+    return m;
+  }, [intakes]);
 
   React.useEffect(() => {
     loadPending();
@@ -453,6 +476,20 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       sortable: false,
       renderCell: (p) => (
         <Stack direction="row" spacing={0.25}>
+          {/* ⚠️ Se ofrece en TODAS las filas, incluidas las que no tienen
+              análisis. Para un paquete tecleado desde una URL la respuesta es
+              que no hay procedencia, y decirlo es más útil que esconder el
+              botón: el chip "Unverified" avisa y esto explica qué significa. */}
+          <Tooltip title="Where this package came from">
+            <IconButton
+              aria-label={`Provenance of ${p.row.name}`}
+              size="small"
+              onClick={() => setProvenanceFor(p.row)}
+              sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
+            >
+              <ShieldOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
           {canManage && p.row.isActive ? (
             <Tooltip title="Deploy to fleet">
               <IconButton
@@ -632,6 +669,13 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
           autoHeight
         />
       )}
+
+      <PackageProvenanceDrawer
+        open={Boolean(provenanceFor)}
+        onClose={() => setProvenanceFor(null)}
+        pkg={provenanceFor}
+        intake={provenanceFor ? provenanceByPackage.get(String(provenanceFor.id)) ?? null : null}
+      />
 
       <IntakeReviewDrawer
         open={reviewOpen}
