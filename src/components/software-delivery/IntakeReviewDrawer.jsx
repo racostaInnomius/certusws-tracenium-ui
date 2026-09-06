@@ -1,10 +1,20 @@
-// src/components/software-delivery/IntakeTab.jsx
+// src/components/software-delivery/IntakeReviewDrawer.jsx
 //
-// The SDP AI-intake review queue. Operators upload an installer; the backend
-// verifies it (integrity gate), stores it, and — if distributable — asks the AI
-// to propose a silent-install config. This tab lists those intakes with their
-// security verdict and lets an admin review (approve → creates a catalog
-// package) or reject each pending proposal.
+// La cola de instaladores subidos que esperan revisión.
+//
+// POR QUÉ DEJÓ DE SER UNA PESTAÑA (fase 3)
+//
+// "AI Intake" era una pestaña-destino: se iba allí a subir un instalador. La
+// fase 2 movió esa puerta al catálogo, y con ella se fue la razón de visitarla.
+// Lo que quedaba dentro no es una sección de la página: es un paso del flujo
+// del catálogo —revisar lo que subiste antes de publicarlo— y su sitio es
+// colgando del catálogo, no compitiendo con él en la barra de pestañas.
+//
+// ⚠️ AQUÍ NO SE SUBE NADA, Y ES DELIBERADO. La pestaña traía su propio botón
+// "Upload installer" y su propio diálogo, duplicando exactamente lo que la
+// fase 2 unificó. Un refactor que conserva las dos puertas no ha refactorizado
+// nada: ver [[feedback_refactor_replaces_not_adds]]. Se sube desde el catálogo;
+// esto sólo revisa.
 
 import * as React from "react";
 import {
@@ -12,6 +22,8 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Drawer,
+  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -19,24 +31,22 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+
 import { BRAND, TEXT } from "../../theme/brand";
-import {
-  listIntakes,
-  uploadIntake,
-  approveIntake,
-  rejectIntake,
-} from "../../api/softwareDelivery";
+import { listFrom } from "../../api/shape";
+import { approveIntake, listIntakes, rejectIntake } from "../../api/softwareDelivery";
+import { intakeToPackageItem } from "./intakeMapping";
 import VerdictBadge from "./VerdictBadge";
-import IntakeUploadDialog from "./IntakeUploadDialog";
 import IntakeVerdictBanner from "./IntakeVerdictBanner";
 import IntakeProposalBanner from "./IntakeProposalBanner";
 import PackageDialog from "./PackageDialog";
-import { intakeToPackageItem } from "./intakeMapping";
-import { listFrom } from "../../api/shape";
 
+// Copiado tal cual de la pestaña que esto reemplaza: mismos tokens, mismas
+// etiquetas. Reescribirlo "parecido" fue mi primer intento y metió hexes a mano
+// y nombres distintos — un movimiento no es una reescritura.
 const STATUS_STYLES = {
   pending_review: { label: "Pending review", bg: BRAND.tealSoft, color: BRAND.tealText },
   approved: { label: "Approved", bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
@@ -44,6 +54,12 @@ const STATUS_STYLES = {
   blocked: { label: "Blocked", bg: BRAND.alert?.errorSoft, color: BRAND.alert?.error },
 };
 
+const STAGE_TONES = {
+  ok: { bg: BRAND.alert?.successSoft, border: BRAND.alert?.success, color: BRAND.alert?.success },
+  warn: { bg: BRAND.alert?.warningSoft, border: BRAND.alert?.warning, color: BRAND.alert?.warning },
+  crit: { bg: BRAND.alert?.errorSoft, border: BRAND.alert?.error, color: BRAND.alert?.error },
+  neutral: { bg: BRAND.surface, border: BRAND.border, color: BRAND.dark },
+};
 function formatTime(value) {
   if (!value) return "—";
   const d = new Date(value);
@@ -54,16 +70,12 @@ function errorMessage(err, fallback) {
   return err?.body?.message || err?.message || fallback;
 }
 
-export default function IntakeTab({ canManage, notify }) {
+export default function IntakeReviewDrawer({ open, onClose, canManage, notify, onChanged }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-
-  const [uploadOpen, setUploadOpen] = React.useState(false);
-  const [uploading, setUploading] = React.useState(false);
-
   const [reviewIntake, setReviewIntake] = React.useState(null);
   const [reviewSubmitting, setReviewSubmitting] = React.useState(false);
-  // Pipeline stage the operator drilled into; null = show everything.
+  // Etapa en la que el operador se metió; null = todo.
   const [stageFilter, setStageFilter] = React.useState(null);
 
   const load = React.useCallback(async () => {
@@ -78,28 +90,11 @@ export default function IntakeTab({ canManage, notify }) {
     }
   }, [notify]);
 
+  // Se carga al ABRIR, no al montar: el cajón vive junto al catálogo y pedir la
+  // cola en cada render de la página sería trabajo que nadie mira.
   React.useEffect(() => {
-    load();
-  }, [load]);
-
-  const handleUpload = async (file, hints) => {
-    setUploading(true);
-    try {
-      const res = await uploadIntake(file, hints);
-      const verdict = res?.intake?.verification?.verdict ?? res?.intake?.verdict;
-      setUploadOpen(false);
-      if (verdict === "blocked") {
-        notify?.("error", `Upload blocked by the integrity gate — not distributable.`);
-      } else {
-        notify?.("success", `Uploaded and analyzed (${verdict}). Review the proposal to publish it.`);
-      }
-      await load();
-    } catch (err) {
-      notify?.("error", errorMessage(err, "Upload failed"));
-    } finally {
-      setUploading(false);
-    }
-  };
+    if (open) load();
+  }, [open, load]);
 
   const handleApprove = async (payload) => {
     if (!reviewIntake) return;
@@ -109,6 +104,9 @@ export default function IntakeTab({ canManage, notify }) {
       setReviewIntake(null);
       notify?.("success", "Approved — package added to the catalog.");
       await load();
+      // ⚠️ Aprobar CREA un paquete. Sin avisar, el catálogo de detrás se queda
+      // mostrando una lista a la que le falta justo lo que acabas de publicar.
+      onChanged?.();
     } catch (err) {
       notify?.("error", errorMessage(err, "Approve failed"));
     } finally {
@@ -121,16 +119,14 @@ export default function IntakeTab({ canManage, notify }) {
       await rejectIntake(intake.id);
       notify?.("success", "Intake rejected.");
       await load();
+      onChanged?.();
     } catch (err) {
       notify?.("error", errorMessage(err, "Reject failed"));
     }
   };
 
-  // ── Pipeline stages ────────────────────────────────────────────
-  //
-  // The intake flow is upload → verify → review → catalog, but a flat table
-  // never communicated that. Each stage is a predicate over data the list
-  // already returns; clicking one filters the table below it.
+  // El flujo es subir → verificar → revisar → catálogo, y una tabla plana nunca
+  // comunicó eso. Cada etapa es un predicado sobre datos que la lista ya trae.
   const stages = React.useMemo(() => {
     const verdictOf = (it) => it.verification?.verdict ?? it.verdict;
     return [
@@ -149,99 +145,74 @@ export default function IntakeTab({ canManage, notify }) {
     return stage ? items.filter(stage.match) : items;
   }, [items, stageFilter, stages]);
 
-  const STAGE_TONES = {
-    ok: { bg: BRAND.alert?.successSoft, border: BRAND.alert?.success, color: BRAND.alert?.success },
-    warn: { bg: BRAND.alert?.warningSoft, border: BRAND.alert?.warning, color: BRAND.alert?.warning },
-    crit: { bg: BRAND.alert?.errorSoft, border: BRAND.alert?.error, color: BRAND.alert?.error },
-    neutral: { bg: BRAND.surface, border: BRAND.border, color: BRAND.dark },
-  };
-
   return (
-    <Box>
-      {/* Pipeline */}
-      {!loading && items.length > 0 ? (
-        <Box
-          sx={{
-            display: "flex",
-            gap: 1,
-            mb: 2,
-            overflowX: "auto",
-            pb: 0.5,
-          }}
-        >
-          {stages.map((stage, idx) => {
-            const tone = STAGE_TONES[stage.tone] || STAGE_TONES.neutral;
-            const selected = (stageFilter ?? "all") === stage.key;
-            return (
-              <React.Fragment key={stage.key}>
-                <Box
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setStageFilter(stage.key === "all" ? null : stage.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setStageFilter(stage.key === "all" ? null : stage.key);
-                    }
-                  }}
-                  sx={{
-                    flex: "1 1 0",
-                    minWidth: 116,
-                    cursor: "pointer",
-                    borderRadius: 2,
-                    px: 1.5,
-                    py: 1.25,
-                    textAlign: "center",
-                    bgcolor: tone.bg,
-                    border: `1px solid ${selected ? tone.border : BRAND.border}`,
-                    outline: selected ? `1px solid ${tone.border}` : "none",
-                    transition: "transform .12s ease",
-                    "&:hover": { transform: "translateY(-1px)" },
-                    "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
-                  }}
-                >
-                  <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, lineHeight: 1, color: tone.color }}>
-                    {stage.count}
-                  </Typography>
-                  <Typography sx={{ fontSize: TEXT.xs, fontWeight: 600, color: BRAND.gray, mt: 0.5 }}>
-                    {stage.label}
-                  </Typography>
-                </Box>
-                {idx < stages.length - 1 ? (
-                  <Box sx={{ display: "flex", alignItems: "center", color: BRAND.border, flex: "0 0 auto" }}>
-                    <ChevronRightIcon fontSize="small" />
-                  </Box>
-                ) : null}
-              </React.Fragment>
-            );
-          })}
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{ sx: { width: { xs: "100%", md: 900 }, p: 3 } }}
+    >
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2, mb: 2 }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
+            Uploads awaiting review
+          </Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.5 }}>
+            Each file was verified and given a proposed install configuration. Approving
+            publishes it to the catalog.
+          </Typography>
         </Box>
-      ) : null}
-
-      {/* Toolbar */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
-          Upload an installer — it's verified, then AI proposes an install config for your review.
-        </Typography>
-        <Box sx={{ flex: 1 }} />
         <Button
           onClick={load}
           startIcon={<RefreshOutlinedIcon />}
-          sx={{ textTransform: "none", color: BRAND.gray, borderColor: BRAND.border }}
+          sx={{ textTransform: "none", color: BRAND.gray }}
         >
           Refresh
         </Button>
-        {canManage ? (
-          <Button
-            onClick={() => setUploadOpen(true)}
-            startIcon={<AutoAwesomeOutlinedIcon />}
-            variant="contained"
-            sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
-          >
-            Upload installer
-          </Button>
-        ) : null}
+        <IconButton onClick={onClose} aria-label="Close review queue" size="small">
+          <CloseOutlinedIcon fontSize="small" />
+        </IconButton>
       </Box>
+
+      {items.length > 0 ? (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, flexWrap: "wrap" }}>
+          {stages.map((stage, idx) => (
+            <React.Fragment key={stage.key}>
+              <Box
+                role="button"
+                tabIndex={0}
+                aria-pressed={(stageFilter ?? "all") === stage.key}
+                onClick={() => setStageFilter(stage.key === "all" ? null : stage.key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setStageFilter(stage.key === "all" ? null : stage.key);
+                  }
+                }}
+                sx={{
+                  px: 1.5,
+                  py: 0.75,
+                  borderRadius: 2,
+                  cursor: "pointer",
+                  border: `1px solid ${(stageFilter ?? "all") === stage.key ? (STAGE_TONES[stage.tone] || STAGE_TONES.neutral).border : BRAND.border}`,
+                  bgcolor: (stageFilter ?? "all") === stage.key ? (STAGE_TONES[stage.tone] || STAGE_TONES.neutral).bg : "transparent",
+                  "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
+                }}
+              >
+                <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, lineHeight: 1, color: (STAGE_TONES[stage.tone] || STAGE_TONES.neutral).color }}>
+                  {stage.count}
+                </Typography>
+                <Typography sx={{ fontSize: TEXT.xs, fontWeight: 600, color: BRAND.gray, mt: 0.5 }}>
+                  {stage.label}
+                </Typography>
+              </Box>
+              {idx < stages.length - 1 ? (
+                <ChevronRightIcon fontSize="small" sx={{ color: BRAND.border }} />
+              ) : null}
+            </React.Fragment>
+          ))}
+        </Box>
+      ) : null}
 
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -249,7 +220,10 @@ export default function IntakeTab({ canManage, notify }) {
         </Box>
       ) : items.length === 0 ? (
         <Box sx={{ p: 4, textAlign: "center", color: BRAND.gray }}>
-          No intakes yet. Upload an installer to get an AI-proposed configuration.
+          {/* ⚠️ Nombra la puerta que EXISTE. La subida vive en el catálogo desde
+              la fase 2; mandar aquí a un botón que no está es como quedó el
+              estado vacío del catálogo tras renombrar el suyo. */}
+          Nothing waiting. Use “Add package” in the catalog to upload an installer.
         </Box>
       ) : (
         <Table size="small">
@@ -266,7 +240,11 @@ export default function IntakeTab({ canManage, notify }) {
           <TableBody>
             {visibleItems.map((it) => {
               const verdict = it.verification?.verdict ?? it.verdict;
-              const status = STATUS_STYLES[it.status] || { label: it.status, bg: BRAND.darkSoft, color: BRAND.gray };
+              const status = STATUS_STYLES[it.status] || {
+                label: it.status,
+                bg: BRAND.darkSoft,
+                color: BRAND.gray,
+              };
               const reasons = it.verification?.reasons;
               const isPending = it.status === "pending_review";
               return (
@@ -299,7 +277,9 @@ export default function IntakeTab({ canManage, notify }) {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>{formatTime(it.createdAt)}</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                      {formatTime(it.createdAt)}
+                    </Typography>
                   </TableCell>
                   <TableCell align="right">
                     {canManage && isPending ? (
@@ -330,13 +310,6 @@ export default function IntakeTab({ canManage, notify }) {
         </Table>
       )}
 
-      <IntakeUploadDialog
-        open={uploadOpen}
-        submitting={uploading}
-        onClose={() => (uploading ? null : setUploadOpen(false))}
-        onSubmit={handleUpload}
-      />
-
       <PackageDialog
         open={Boolean(reviewIntake)}
         mode="approve"
@@ -353,6 +326,6 @@ export default function IntakeTab({ canManage, notify }) {
         onClose={() => (reviewSubmitting ? null : setReviewIntake(null))}
         onSubmit={handleApprove}
       />
-    </Box>
+    </Drawer>
   );
 }

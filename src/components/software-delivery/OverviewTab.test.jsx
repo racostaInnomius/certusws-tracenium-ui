@@ -4,8 +4,9 @@
 // already fetches, so these tests lock down the DERIVATIONS (the part that
 // can silently go wrong) rather than the layout.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { server, respond } from "../../test/msw/server";
 import OverviewTab from "./OverviewTab";
@@ -121,5 +122,45 @@ describe("OverviewTab", () => {
     render(<OverviewTab />);
     // Cards still mount, showing the em-dash placeholder instead of throwing.
     await waitFor(() => expect(screen.getByText("Packages")).toBeInTheDocument());
+  });
+});
+
+describe("OverviewTab · la tarjeta de intakes tras retirar la pestaña", () => {
+  // ⚠️ EL ENLACE MUERTO QUE LA FASE 3 PODÍA DEJAR.
+  //
+  // Esta tarjeta navegaba a `onNavigateTab("intake")`. Al retirar esa pestaña,
+  // `TAB_INDEX["intake"]` pasa a ser undefined y el `?? 0` de la página deja al
+  // operador en el Overview: el clic parece no hacer nada. No hay error, no hay
+  // aviso — exactamente la clase de fallo silencioso que se cuela en un
+  // refactor que quita superficie.
+  //
+  // Ahora lleva al CATÁLOGO y pide abrir la cola, que es donde la revisión vive.
+  it("lleva al catálogo y pide abrir la cola de revisión", async () => {
+    const onNavigateTab = vi.fn();
+    seed({ intakes: [{ id: 1, status: "pending_review" }] });
+    render(<OverviewTab onNavigateTab={onNavigateTab} />);
+
+    const label = await screen.findByText("Intakes to review");
+    await userEvent.click(label.closest(".MuiPaper-root"));
+
+    expect(onNavigateTab).toHaveBeenCalledTimes(1);
+    const [destino, opciones] = onNavigateTab.mock.calls[0];
+    expect(destino).toBe("catalog");
+    // Sin esta intención el operador aterriza en el catálogo sin la cola
+    // abierta, y la tarjeta habría prometido más de lo que entrega.
+    expect(opciones?.reviewQueue).toBe(true);
+  });
+
+  // ⚠️ Afirma que NO queda ninguna referencia a la pestaña retirada. Si alguien
+  // reintroduce "intake" como destino, esto cae aquí y no en producción.
+  it("ya no navega a la pestaña retirada", async () => {
+    const onNavigateTab = vi.fn();
+    seed({ intakes: [{ id: 1, status: "pending_review" }] });
+    render(<OverviewTab onNavigateTab={onNavigateTab} />);
+
+    const label = await screen.findByText("Intakes to review");
+    await userEvent.click(label.closest(".MuiPaper-root"));
+
+    expect(onNavigateTab.mock.calls[0][0]).not.toBe("intake");
   });
 });

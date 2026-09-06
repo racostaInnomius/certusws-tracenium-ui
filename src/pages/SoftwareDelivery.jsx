@@ -12,7 +12,6 @@ import * as React from "react";
 import { Box, Tabs, Tab, Typography } from "@mui/material";
 import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
@@ -29,7 +28,6 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 import CatalogTab from "../components/software-delivery/CatalogTab";
 import DeploymentsTab from "../components/software-delivery/DeploymentsTab";
-import IntakeTab from "../components/software-delivery/IntakeTab";
 import DistributionTab from "../components/software-delivery/DistributionTab";
 import OverviewTab from "../components/software-delivery/OverviewTab";
 
@@ -41,8 +39,10 @@ const TAB_INDEX = {
   overview: 0,
   catalog: 1,
   deployments: 2,
-  intake: 3,
-  distribution: 4,
+  // ⚠️ Sin `intake`: la fase 3 retiró esa pestaña. Revisar lo que subiste es
+  // un paso del flujo del catálogo y vive en un cajón colgado de él, no como
+  // sección propia compitiendo en la barra.
+  distribution: 3,
 };
 
 const TAB_SX = {
@@ -164,6 +164,10 @@ export default function SoftwareDelivery() {
     message: "",
   });
   const [autoOpenDeploymentId, setAutoOpenDeploymentId] = React.useState(null);
+  // Intención "abre la cola de revisión" que llega desde el Overview. Mismo
+  // patrón que autoOpenDeploymentId: la página la transporta y la pestaña la
+  // consume.
+  const [openReviewQueue, setOpenReviewQueue] = React.useState(false);
 
   const notify = React.useCallback((severity, message) => {
     setSnackbar({ open: true, severity, message });
@@ -252,12 +256,6 @@ export default function SoftwareDelivery() {
             sx={TAB_SX}
           />
           <Tab
-            icon={<AutoAwesomeOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="AI Intake"
-            sx={TAB_SX}
-          />
-          <Tab
             icon={<HubOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Distribution"
@@ -267,13 +265,19 @@ export default function SoftwareDelivery() {
       </SectionPaper>
 
       {activeTab === 0 ? (
-        <OverviewTab onNavigateTab={(key) => setActiveTab(TAB_INDEX[key] ?? 0)} />
+        <OverviewTab
+          onNavigateTab={(key, opts) => {
+            setActiveTab(TAB_INDEX[key] ?? 0);
+            if (opts?.reviewQueue) setOpenReviewQueue(true);
+          }}
+        />
       ) : activeTab === 1 ? (
         <CatalogTab
           canManage={canManage}
           notify={notify}
           onDeployFire={handleDeployFired}
-          onNavigateTab={(key) => setActiveTab(TAB_INDEX[key] ?? 0)}
+          openReviewQueue={openReviewQueue}
+          onConsumedReviewQueue={() => setOpenReviewQueue(false)}
         />
       ) : activeTab === 2 ? (
         <DeploymentsTab
@@ -282,8 +286,6 @@ export default function SoftwareDelivery() {
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
-      ) : activeTab === 3 ? (
-        <IntakeTab canManage={canManage} notify={notify} />
       ) : (
         <DistributionTab canManage={canManage} notify={notify} />
       )}

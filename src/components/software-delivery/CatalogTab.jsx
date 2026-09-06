@@ -65,12 +65,23 @@ import {
 import { listFrom } from "../../api/shape";
 
 import PackageDialog from "./PackageDialog";
+import IntakeReviewDrawer from "./IntakeReviewDrawer";
 import DeletePackageDialog from "./DeletePackageDialog";
 import DeployWizardDialog from "./DeployWizardDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import { isVerifiedPackage, originLabel } from "./packageOrigin";
 
-export default function CatalogTab({ canManage, notify, onDeployFire, onNavigateTab }) {
+export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue }) {
+  // La cola de revisión cuelga del catálogo desde la fase 3.
+  const [reviewOpen, setReviewOpen] = React.useState(false);
+
+  // El Overview puede pedir que se abra directamente. Se consume una vez para
+  // que volver a esta pestaña más tarde no la reabra sola.
+  React.useEffect(() => {
+    if (!openReviewQueue) return;
+    setReviewOpen(true);
+    onConsumedReviewQueue?.();
+  }, [openReviewQueue, onConsumedReviewQueue]);
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
@@ -576,15 +587,16 @@ export default function CatalogTab({ canManage, notify, onDeployFire, onNavigate
           icon={<ShieldOutlinedIcon fontSize="small" />}
           sx={{ mb: 1.5, borderRadius: 2, fontSize: TEXT.sm }}
           action={
-            onNavigateTab ? (
-              <Button
-                size="small"
-                onClick={() => onNavigateTab("intake")}
-                sx={{ textTransform: "none", fontWeight: 700 }}
-              >
-                Review
-              </Button>
-            ) : null
+            // ⚠️ Abre el cajón, NO navega. Antes mandaba a la pestaña "AI
+            // Intake", que la fase 3 retiró: revisar lo que subiste es un paso
+            // del flujo del catálogo, no otra sección de la página.
+            <Button
+              size="small"
+              onClick={() => setReviewOpen(true)}
+              sx={{ textTransform: "none", fontWeight: 700 }}
+            >
+              Review
+            </Button>
           }
         >
           {pendingIntakes === 1
@@ -620,6 +632,19 @@ export default function CatalogTab({ canManage, notify, onDeployFire, onNavigate
           autoHeight
         />
       )}
+
+      <IntakeReviewDrawer
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        canManage={canManage}
+        notify={notify}
+        onChanged={() => {
+          // Aprobar publica un paquete y rechazar cambia la cola: las dos
+          // cosas que esta página muestra detrás del cajón.
+          load();
+          loadPending();
+        }}
+      />
 
       <IntakeUploadDialog
         open={uploadOpen}

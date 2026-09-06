@@ -251,7 +251,12 @@ export default function OverviewTab({ onNavigateTab }) {
             accent={stats.pendingIntakes > 0 ? ROLE.caution : BRAND.teal}
             tint={stats.pendingIntakes > 0 ? ROLE.cautionSoft : BRAND.tealSoft}
             titleHint="Uploads verified and awaiting an approve/reject decision."
-            onClick={() => onNavigateTab?.("intake")}
+            // ⚠️ Ya no hay pestaña "intake" (fase 3). Lleva al catálogo y pide
+            // abrir la cola de revisión: sin el segundo argumento esto sería un
+            // enlace muerto —TAB_INDEX["intake"] es undefined y el `?? 0` te
+            // dejaría en el Overview— que es exactamente el fallo silencioso
+            // que la retirada de la pestaña podía introducir.
+            onClick={() => onNavigateTab?.("catalog", { reviewQueue: true })}
             sx={{ height: "100%" }}
           />
         </Grid>
