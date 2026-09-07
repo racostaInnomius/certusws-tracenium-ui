@@ -195,6 +195,16 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
         notify("success", `Uploaded and analyzed (${verdict}). Review it to publish.`);
       }
       await loadPending();
+      // ⚠️ SE ABRE LA REVISIÓN, NO SE ANUNCIA.
+      //
+      // Antes esto terminaba en un banner fino sobre la tabla y un snackbar que
+      // se va solo. En campo costó encontrar por dónde seguir — y con razón: la
+      // pantalla quedaba igual que antes de subir, salvo una línea de texto. El
+      // paso siguiente a subir es revisar, siempre, así que se entra en él.
+      //
+      // Bloqueado NO abre nada: ahí no hay nada que aprobar, y el error es lo
+      // que hay que leer.
+      if (verdict !== "blocked") setReviewOpen(true);
     } catch (err) {
       notify("error", err?.body?.message || err?.message || "Upload failed");
     } finally {

@@ -18,9 +18,26 @@ import {
   Typography,
 } from "@mui/material";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BRAND, TEXT } from "../../theme/brand";
 
 const SHA256_RE = /^[0-9a-f]{64}$/i;
+
+/**
+ * El techo del servidor, para poder rechazar ANTES de subir.
+ *
+ * ⚠️ Duplica `DEFAULT_MAX_UPLOAD_BYTES` de intake-upload.ts a propósito, y la
+ * alternativa era peor: sin esto, un MSI de 260 MiB se sube entero —minutos de
+ * espera— para que el servidor lo rechace al final. Si allí se cambia, aquí
+ * también; el mensaje nombra el límite para que el desajuste se note.
+ */
+export const MAX_UPLOAD_BYTES = 314_572_800; // 300 MiB
+
+export function tooLargeMessage(size, limit = MAX_UPLOAD_BYTES) {
+  if (!size || size <= limit) return null;
+  const mib = (n) => `${Math.round(n / 1048576)} MiB`;
+  return `That file is ${mib(size)}; the intake limit is ${mib(limit)}.`;
+}
 
 function emptyHints() {
   return { name: "", vendor: "", version: "", declaredSha256: "" };
@@ -30,6 +47,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
   const [file, setFile] = React.useState(null);
   const [hints, setHints] = React.useState(emptyHints);
   const [error, setError] = React.useState(null);
+  const [hintsOpen, setHintsOpen] = React.useState(false);
   const inputRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -37,6 +55,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
     setFile(null);
     setHints(emptyHints());
     setError(null);
+    setHintsOpen(false);
   }, [open]);
 
   const update = (patch) => setHints((p) => ({ ...p, ...patch }));
@@ -44,6 +63,11 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
   const handleSubmit = () => {
     if (!file) {
       setError("Choose an installer file to upload.");
+      return;
+    }
+    const tooLarge = tooLargeMessage(file.size);
+    if (tooLarge) {
+      setError(tooLarge);
       return;
     }
     const sha = hints.declaredSha256.trim();
@@ -75,8 +99,12 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
               type="file"
               hidden
               onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setError(null);
+                const picked = e.target.files?.[0] ?? null;
+                setFile(picked);
+                // Se avisa al ELEGIR, no al enviar: enterarse de que no cabe
+                // después de esperar la subida es la peor versión del mismo
+                // mensaje.
+                setError(picked ? tooLargeMessage(picked.size) : null);
               }}
             />
             <Button
@@ -97,12 +125,41 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
             ) : null}
           </Box>
 
-          <Typography
-            variant="caption"
-            sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}
+          {/* ⚠️ PLEGADO, Y NO ES COSMÉTICA.
+              Estos campos eran lo segundo que veías, así que se rellenaban — y
+              luego el extractor los pisaba, porque el rótulo ya decía
+              "extracted values win". Con el MSI de Chrome se tecleó
+              "Chrome Enterprise / Google" y el fichero traía dentro
+              "Google Chrome / Google LLC / 152.0.7977.83": trabajo tirado.
+              Los formatos con metadatos (MSI, DEB, RPM, PKG) no los necesitan;
+              siguen aquí para cuando el binario no trae nada. */}
+          <Box
+            component="button"
+            type="button"
+            onClick={() => setHintsOpen((v) => !v)}
+            aria-expanded={hintsOpen}
+            sx={{
+              display: "flex", alignItems: "center", gap: 0.5, border: 0, p: 0,
+              bgcolor: "transparent", cursor: "pointer", color: BRAND.gray,
+              fontSize: TEXT.sm, fontWeight: 700, textAlign: "left",
+            }}
           >
-            Hints (optional — extracted values win)
-          </Typography>
+            <ExpandMoreIcon
+              fontSize="small"
+              sx={{ transform: hintsOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }}
+            />
+            Name, vendor and version are read from the file
+          </Box>
+          {!hintsOpen ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: -1.5 }}>
+              Open this only to override them, or to declare a SHA-256 to check the upload against.
+            </Typography>
+          ) : null}
+          {/* Plegado NO se renderiza, en vez de esconderse con display:none: un
+              campo invisible pero presente sigue siendo algo que las
+              herramientas encuentran y que un test puede dar por visible. El
+              estado vive en `hints`, así que al reabrir sigue lo tecleado. */}
+          {hintsOpen ? (
           <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "1fr 1fr" }}>
             <TextField size="small" label="Name" value={hints.name} onChange={(e) => update({ name: e.target.value })} />
             <TextField size="small" label="Vendor" value={hints.vendor} onChange={(e) => update({ vendor: e.target.value })} />
@@ -115,6 +172,7 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
               inputProps={{ style: { fontFamily: "monospace", fontSize: TEXT.sm } }}
             />
           </Box>
+          ) : null}
 
           {error ? (
             <Box
