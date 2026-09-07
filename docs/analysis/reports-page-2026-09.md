@@ -340,13 +340,13 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 
 | Fase | Ítem | Repo | Estado | Evidencia |
 |---|---|---|---|---|
-| U1 | PageHeader + subtítulo + acciones | UI | pendiente | |
-| U1 | RefreshControl + nonce a las 4 secciones | UI | pendiente | |
-| U1 | Cuatro pestañas con estado en la URL | UI | pendiente | |
-| U2 | `/runs` con filtros + paginación en servidor (**itest**) | backend | pendiente | |
-| U2 | Historial: alcance, destinatarios, origen, tamaño | UI | pendiente | |
-| U2 | Entregas GRC por run | UI | pendiente | |
-| U2 | Re-entrega manual desde el historial | UI | pendiente | |
+| U1 | PageHeader + subtítulo + acciones | UI | hecho (`206e185`) | Icono, subtítulo y slot de acciones; era la única página del menú sin cabecera canónica. |
+| U1 | RefreshControl + nonce a las 4 secciones | UI | hecho (`206e185`) | El nonce alcanza a Settings, que carga por su cuenta y no pasa por `loadData`. Test que falla si se quita. |
+| U1 | Cuatro pestañas con estado en la URL | UI | hecho (`206e185`) | `?reportsTab=`, para enlazar desde otra página y no perder el sitio al recargar. Los 23 tests que había abren ahora su pestaña. |
+| U2 | `/runs` con filtros + paginación en servidor (**itest**) | backend | hecho (`df165df`) | key/status/trigger/actor/from/to + limit/offset; total con `COUNT(*) OVER()` de la MISMA consulta. `list-runs-filter.itest.ts`, 13 casos contra Postgres real; revertir los comodines del ILIKE o el total tumba tres. |
+| U2 | Historial: alcance, destinatarios, origen, tamaño | UI | hecho (`a73ac5c`) | Los cuatro venían ya en el DTO y se tiraban. Un envío parcial se lee como tal ("2 de 4 enviados"), no como éxito. |
+| U2 | Entregas GRC por run | UI | pendiente | Queda cruzar `grc_deliveries.run_id` en la fila del run. |
+| U2 | Re-entrega manual desde el historial | UI | hecho (`a73ac5c`) | Consumidor de `deliverRunToGrcTarget`, que llevaba desde E4 sin ninguno. El destino se elige por su nombre. |
 | U3 | Editar programación (PATCH) | UI | pendiente | |
 | U3 | "New schedule" desde la pestaña | UI | pendiente | |
 | U3 | Fichas de programación con destinos por nombre | UI | pendiente | |
