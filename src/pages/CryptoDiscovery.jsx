@@ -80,6 +80,18 @@ import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
 import SectionPaper from "../components/common/SectionPaper";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// El informe propio de esta página: el CBOM (CycloneDX 1.6), que es el
+// inventario cripto en el formato que espera la herramienta del auditor.
+//
+// ⚠️ Sin gate de rol, a diferencia de las otras páginas: `cdp.cbom` NO declara
+// `minRole` en el registro, así que el backend se lo sirve a cualquier miembro
+// activo del tenant con el plugin encendido. Esconderlo tras ADMIN/OWNER aquí
+// se lo quitaría a gente a la que el servidor sí le contesta — la regresión
+// que ADR-0011 fase 3 vino a arreglar. El gate real es el plugin, y de eso ya
+// se encarga el catálogo de Reports.
+const CBOM_KEY = "cdp.cbom";
 import {
   ActionRequiredPanel,
   HygienePanel,
@@ -1504,7 +1516,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
 
 // ── Page ─────────────────────────────────────────────────────────────
 
-export default function CryptoDiscovery() {
+export default function CryptoDiscovery({ onNavigate }) {
   // Pestaña y filtro viven en la URL (ver hooks/useCdpFilter.js).
   const [filter, patchFilter, replaceFilter] = useCdpFilter();
   const tab = filter.tab ?? 0;
@@ -1583,14 +1595,24 @@ export default function CryptoDiscovery() {
               esconderla en una de las dos la haría invisible desde la
               otra.
             */}
+            {/* Sin `size="small"`: iba más bajo que el "Refresh" de al lado,
+                que es un Button de tamaño por defecto, y en una fila alineada
+                al centro eso se lee como un descuido. */}
             <Button
               variant="outlined"
-              size="small"
               startIcon={<AddCircleOutlineIcon />}
               onClick={() => setIssuanceOpen(true)}
             >
               Issue certificate
             </Button>
+            <GoToReportButton
+              onNavigate={onNavigate}
+              reportKey={CBOM_KEY}
+              // El CBOM sólo existe en JSON — es un formato de intercambio para
+              // otra herramienta, no un documento para leer.
+              format="json"
+              tooltip="Crypto Bill of Materials (CycloneDX)"
+            />
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}

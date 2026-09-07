@@ -126,7 +126,7 @@ export const PAGE_REGISTRY = {
   // Crypto Discovery (CDP) — certificate inventory discovered ON the
   // devices by the cdp agent plugin. Distinct from PKI (the agent's
   // own mTLS identity certs).
-  cdp: () => <CryptoDiscovery />,
+  cdp: (ctx) => <CryptoDiscovery onNavigate={ctx.onNavigate} />,
 
   "remote-control": (ctx) => <RemoteControl onNavigate={ctx.onNavigate} />,
   alerts: () => <Alerts />,
