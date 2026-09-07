@@ -1,19 +1,23 @@
 // src/components/RemoteControl/AccessTab.jsx
 //
-// Everything about WHO is allowed in and WHY, in one place:
+// El REGISTRO de quién entró, a qué y con qué ticket. ADR-0009 fase 1 existe
+// para recoger justamente estos datos, y se estaban escribiendo en una tabla
+// que nadie podía leer.
 //
-//   · the approval-policy matrix (device class × capability), which used to
-//     be a dialog behind a header button. The matrix component is shared —
-//     Crypto Discovery renders the same one over its own capabilities — and
-//     this tab passes the "rcp." prefix so only Remote Control's rows show;
-//   · the access record — who connected, to what, under which ticket. The
-//     endpoint and its API client already existed (listAccessRequests) and
-//     nothing rendered them. ADR-0009 phase 1 exists to COLLECT the data
-//     with which the policy gets calibrated, and the data was being written
-//     to a table nobody could read.
+// ── ⚠️ Por qué la matriz de vistobueno ya NO está aquí ───────────────
 //
-// Putting them side by side is the point: the matrix is the decision, the
-// log is the evidence you'd base it on.
+// Estuvo en esta pestaña, al lado del registro, con el argumento de que "la
+// matriz es la decisión y el log es la evidencia". La práctica lo desmintió
+// el 2026-09-07: un operador al que el gate frenó una shell descubrió que
+// tenía, en la MISMA pantalla y a un clic, el interruptor para apagarlo — y
+// lo apagó, que es lo razonable cuando estás bloqueado y llevas prisa.
+//
+// Un control que existe para obligar a que intervenga una segunda persona no
+// puede estar desactivable por la primera sin salir de donde está esperando.
+// Se ha movido a los ajustes del agente (sección Remote Control), que es
+// donde se configura el plugin y adonde hay que ir a propósito.
+//
+// Aquí se queda la evidencia, que es lo que esta pestaña sabe contar.
 
 import * as React from "react";
 import {
@@ -33,7 +37,6 @@ import {
 } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { listAccessRequests } from "../../api/remoteControl";
-import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 
 const STATUS_META = {
   approved: { label: "Approved", fg: ROLE.positive, bg: ROLE.positiveSoft },
@@ -144,20 +147,9 @@ function AccessLog({ refreshNonce = 0 }) {
   );
 }
 
-export default function AccessTab({ notify, refreshNonce = 0 }) {
+export default function AccessTab({ refreshNonce = 0 }) {
   return (
     <Stack spacing={2}>
-      {/* Filtered to rcp.* — Crypto Discovery's capabilities share this matrix
-          in the DATA but they are not settings of this screen, and rendering
-          them here read as somebody else's configuration leaking in. They
-          have their own tab under Crypto Discovery. */}
-      <AccessPolicyMatrix
-        prefix="rcp."
-        title="Privileged access policy"
-        description="Which remote control capabilities need a second person’s approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation."
-        notify={notify}
-        refreshNonce={refreshNonce}
-      />
       <AccessLog refreshNonce={refreshNonce} />
     </Stack>
   );

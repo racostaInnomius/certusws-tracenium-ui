@@ -149,6 +149,15 @@ function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 20
   respond("get", "/api/v1/policies/tenants/t-1/policy/history", HISTORY);
   respond("get", "/api/v1/asset-groups", GROUPS);
   respond("get", "/api/v1/cdp/probe-candidates", { ok: true, candidates: [] });
+  // La matriz de vistobueno de RCP se configura desde esta pantalla desde el
+  // 2026-09-07 (antes estaba en la pestaña Access de Remote Control, donde
+  // quien el gate frenaba podía apagarlo de un clic). La sección la pide en
+  // ámbito tenant.
+  respond("get", "/api/v1/remote-control/access-policy", {
+    ok: true,
+    items: [],
+    approvers: { eligible: 2, canApprove: true }
+  });
 }
 
 function renderPage(props = {}) {

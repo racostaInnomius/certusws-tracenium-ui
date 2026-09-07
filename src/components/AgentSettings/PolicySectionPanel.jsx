@@ -12,6 +12,7 @@ import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import SectionFields from "./SectionFields";
 import CdpProbeCandidates from "./CdpProbeCandidates";
+import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 
 export default function PolicySectionPanel({
   section,
@@ -68,6 +69,28 @@ export default function PolicySectionPanel({
         <>
           <SectionFields sectionId={section.id} form={form} onChange={onChange} scope={scope} compareForm={compareForm} readOnly={readOnly} />
           {section.id === "cdp" ? <CdpProbeCandidates form={form} onChange={onChange} readOnly={readOnly} /> : null}
+          {/* ⚠️ El vistobueno se configura AQUÍ y ya no en la página de Remote
+              Control.
+
+              Vivía en la pestaña Access, junto a la cola de aprobaciones: la
+              misma pantalla donde un operador descubre que el gate le frena
+              tenía el interruptor para apagarlo, a un clic. Un control que
+              existe para obligar a que intervenga una segunda persona no
+              puede desactivarlo, sin salir de la pantalla, justo quien está
+              esperando esa segunda persona. Pasó en producción el 07-sep.
+
+              Solo en ámbito TENANT: la matriz es del tenant entero y no del
+              equipo que se esté editando, y enseñarla mientras se edita el
+              parche de un equipo diría que es suya. */}
+          {section.id === "rcp" && scope === "tenant" && !readOnly ? (
+            <Box sx={{ mt: 2 }}>
+              <AccessPolicyMatrix
+                prefix="rcp."
+                title="Privileged access policy"
+                description="Which remote control capabilities need a second person's approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation."
+              />
+            </Box>
+          ) : null}
         </>
       )}
     </Box>

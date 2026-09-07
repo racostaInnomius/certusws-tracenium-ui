@@ -179,7 +179,21 @@ describe("lazy loading per tab", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Access/ }));
 
     await waitFor(() => expect(listAccessRequests).toHaveBeenCalled());
-    await waitFor(() => expect(getAccessPolicy).toHaveBeenCalled());
+  });
+
+  it("⚠️ y la MATRIZ ya no se lee desde aquí: vive en los ajustes", async () => {
+    // Estaba en esta pestaña, junto a la cola de aprobaciones, y el 07-sep
+    // pasó lo previsible: al operador que el gate frenó le bastó un clic —en
+    // la misma pantalla— para apagarlo. Un control que obliga a que
+    // intervenga una segunda persona no puede desactivarlo la primera sin
+    // salir de donde está esperando. Ver PolicySectionPanel.rcpMatrix.test.
+    render(<RemoteControl />);
+    await waitFor(() => expect(getConnectableDevices).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("tab", { name: /Access/ }));
+    await waitFor(() => expect(listAccessRequests).toHaveBeenCalled());
+
+    expect(getAccessPolicy).not.toHaveBeenCalled();
   });
 });
 

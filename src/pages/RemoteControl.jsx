@@ -553,7 +553,7 @@ export default function RemoteControl({ onNavigate }) {
       </TabPanel>
 
       <TabPanel value={activeTab} index={TAB_ACCESS}>
-        <AccessTab notify={notify} refreshNonce={refreshNonce} />
+        <AccessTab refreshNonce={refreshNonce} />
       </TabPanel>
 
       <BrandSnackbar

@@ -240,9 +240,17 @@ export const FIELD_SPECS = {
       key: "features.remoteRequireConsent",
       label: "Require user consent",
       code: "rcp.consent",
-      sub: "Two doors: the user approves before a session opens, and again before an operator takes control.",
+      // ⚠️ Decía "Two doors… before a SESSION opens", y eso era literalmente
+      // lo que hacía: preguntaba también antes de una shell o una
+      // transferencia. En un servidor virtual no hay nadie que conteste, así
+      // que el aviso vencía solo y la sesión moría por `consent_timeout`.
+      // Desde el 2026-09-07 solo aplica a la pantalla, que es donde hay una
+      // persona delante viendo lo que consiente.
+      sub: "Screen sharing only: the person at the device approves before you can see their screen, and again before you take control. Shell and file sessions do not ask — a server has nobody at it; those are governed by approval instead.",
       type: "switch",
-      warnWhenOn: "Devices whose agent cannot show the prompt have every remote session REFUSED, not opened without asking. Check the agent is up to date across the devices this policy reaches. Switching it off restores access immediately.",
+      warnWhenOn:
+        "Screen sessions on devices whose agent cannot show the prompt are REFUSED, not opened without asking. " +
+        "To keep it on for people's computers and off for servers, use “Apply to devices…” on this section with a device group — the override follows the group as its membership changes.",
     },
     {
       key: "features.remoteRecordScreen",

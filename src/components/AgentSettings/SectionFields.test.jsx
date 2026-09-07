@@ -69,10 +69,34 @@ describe("SectionFields in tenant scope", () => {
     expect(screen.getByText(/Must be between 60 and 86400/)).toBeInTheDocument();
   });
 
-  it("warns while a fail-closed switch is on", () => {
+  it("warns while a fail-closed switch is on, y dice a QUÉ alcanza", () => {
+    // ⚠️ El aviso decía "every remote session REFUSED", y era verdad: el
+    // consentimiento se pedía también antes de una shell o una
+    // transferencia. En un servidor virtual no hay nadie que conteste, así
+    // que el aviso vencía solo y la sesión moría por `consent_timeout`.
+    // Desde el 2026-09-07 solo alcanza a la pantalla, y el texto tiene que
+    // decirlo: un aviso que exagera su radio se acaba ignorando entero.
     const form = tenantForm();
     render(<SectionFields sectionId="rcp" form={{ ...form, features: { ...form.features, remoteRequireConsent: true } }} onChange={() => {}} />);
-    expect(screen.getByText(/every remote session REFUSED/)).toBeInTheDocument();
+
+    const aviso = screen.getByText(/REFUSED/);
+    expect(aviso.textContent).toMatch(/Screen sessions/i);
+    expect(aviso.textContent).not.toMatch(/every remote session/i);
+    // Y dice cómo tenerlo encendido para los portátiles y apagado para los
+    // servidores, que es la pregunta que sigue a encenderlo.
+    expect(aviso.textContent).toMatch(/Apply to devices/i);
+  });
+
+  it("⚠️ la descripción no promete que se pregunte en una shell", () => {
+    // Decía "before a session opens". Quien lo lea tiene que saber que una
+    // shell contra un servidor NO va a preguntar a nadie — porque no hay
+    // nadie— y que eso lo gobierna el vistobueno, no esto.
+    const form = tenantForm();
+    render(<SectionFields sectionId="rcp" form={form} onChange={() => {}} />);
+    // Sale dos veces —la descripción de la fila y el resumen de la sección—,
+    // así que se miran todas y basta con que lo diga alguna.
+    const subs = screen.getAllByText(/Screen sharing only/i);
+    expect(subs.some((el) => /Shell and file sessions do not ask/i.test(el.textContent))).toBe(true);
   });
 });
 
