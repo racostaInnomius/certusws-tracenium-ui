@@ -1,5 +1,11 @@
 // src/components/Reports/ScheduleReportDialog.jsx
 //
+// ⚠️ CREAR **y EDITAR** (U3 del rediseño). Sin la edición, cambiar un
+// destinatario obligaba a borrar y recrear — y con eso se rompía el vínculo
+// con el historial: los runs anteriores apuntan por `report_runs.schedule_id`
+// a una programación que ya no existe. El `PATCH` acepta formato, params,
+// periodo, destinatarios y destinos desde R0.5; sólo faltaba llegar hasta él.
+//
 // ADR-0014 E3 — "every month, the usual". A schedule stores format,
 // the type's non-month params (framework, asset group), how many closed
 // months the report should cover, and who receives it. Dates are never
@@ -14,7 +20,7 @@ import {
 } from "@mui/material";
 import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { listTenantMembers } from "../../api/tenants";
-import { createReportSchedule, listGrcTargets } from "../../api/reports";
+import { createReportSchedule, updateReportSchedule, listGrcTargets } from "../../api/reports";
 import { getFrameworks } from "../../api/compliance";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
@@ -22,7 +28,10 @@ import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
 import { BRAND, TEXT } from "../../theme/brand";
 import { PERIOD_OPTIONS, scheduleParamDefs, typeHasPeriod } from "./reportSchedules";
 
-export default function ScheduleReportDialog({ open, onClose, reportType, onCreated }) {
+export default function ScheduleReportDialog({ open, onClose, reportType, schedule = null, onCreated, onUpdated }) {
+  // `schedule` presente = edición. El tipo no se cambia editando: sería otra
+  // programación, y su historial dejaría de tener sentido.
+  const editing = Boolean(schedule);
   // ⚠️ El tenant EFECTIVO, no el del token. En una sesión de MSP con un
   // cliente abierto, `auth.tenantId` es el del operador: la lista de
   // miembros salía vacía y no se podía ni enviar ni programar para el
@@ -48,12 +57,14 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
 
   React.useEffect(() => {
     if (!open || !reportType) return;
-    setFormat(reportType.formats?.[0] || "");
-    setPeriodMonths(1);
-    setValues({});
-    setCheckedIds([]);
-    setCheckedTargetIds([]);
-    setExternalText("");
+    // Editando se parte de lo GUARDADO; creando, de los valores por defecto.
+    // Un formulario de edición que arranca vacío no edita: pisa.
+    setFormat(schedule?.format || reportType.formats?.[0] || "");
+    setPeriodMonths(schedule?.periodMonths ?? 1);
+    setValues(schedule?.params ? { ...schedule.params } : {});
+    setCheckedIds(schedule?.recipientMemberIds ? [...schedule.recipientMemberIds] : []);
+    setCheckedTargetIds(schedule?.targetIds ? [...schedule.targetIds] : []);
+    setExternalText((schedule?.recipientExternal || []).join(", "));
     setError("");
     setLoading(true);
     const needsFrameworks = paramDefs.some((p) => p.kind === "framework");
@@ -71,13 +82,14 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
         setGroups(gs);
         setTargets(ts);
         const fwParam = paramDefs.find((p) => p.kind === "framework");
-        if (fwParam && fws.length) {
+        // Sólo al CREAR: editando, el framework guardado manda.
+        if (fwParam && fws.length && !schedule) {
           const soc2 = fws.find((f) => /^soc2/i.test(f.framework));
           setValues((prev) => ({ ...prev, [fwParam.name]: fws.length === 1 ? fws[0].framework : soc2?.framework || "" }));
         }
       })
       .finally(() => setLoading(false));
-  }, [open, reportType, paramDefs, tenantId]);
+  }, [open, reportType, paramDefs, tenantId, schedule]);
 
   if (!reportType) return null;
 
@@ -103,8 +115,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
         const v = values[p.name];
         if (v !== undefined && v !== null && v !== "") params[p.name] = v;
       }
-      const res = await createReportSchedule({
-        reportKey: reportType.key,
+      const payload = {
         format,
         params,
         // ⚠️ Se OMITE cuando el tipo no cubre un periodo. Mandar un 1 de
@@ -114,12 +125,22 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
         ...(hasPeriod ? { periodMonths } : {}),
         recipientMemberIds: checkedIds,
         recipientExternal: externalCheck.unique,
-        ...(checkedTargetIds.length ? { targetIds: checkedTargetIds } : {}),
-      });
-      onCreated?.(res?.schedule);
+        // ⚠️ Editando se manda SIEMPRE, incluso vacío: es la única forma de
+        // quitar el último destino. Omitirlo cuando está vacío dejaría un
+        // destino imposible de borrar desde la pantalla.
+        ...(editing || checkedTargetIds.length ? { targetIds: checkedTargetIds } : {}),
+      };
+
+      if (editing) {
+        const res = await updateReportSchedule(schedule.id, payload);
+        onUpdated?.(res?.schedule);
+      } else {
+        const res = await createReportSchedule({ reportKey: reportType.key, ...payload });
+        onCreated?.(res?.schedule);
+      }
       onClose();
     } catch (err) {
-      setError(err?.message || "Could not create the schedule.");
+      setError(err?.message || `Could not ${editing ? "update" : "create"} the schedule.`);
     } finally {
       setSaving(false);
     }
@@ -127,7 +148,9 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="xs">
-      <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>Schedule "{reportType.label}"</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+        {editing ? `Edit schedule · ${reportType.label}` : `Schedule "${reportType.label}"`}
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
@@ -230,7 +253,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, onCrea
       <DialogActions>
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={!canSave} sx={{ textTransform: "none" }}>
-          {saving ? "Saving…" : "Create schedule"}
+          {saving ? "Saving…" : editing ? "Save changes" : "Create schedule"}
         </Button>
       </DialogActions>
     </Dialog>

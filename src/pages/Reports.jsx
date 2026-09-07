@@ -41,6 +41,8 @@ import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
@@ -54,12 +56,13 @@ import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import {
   getReportTypes, getReportRuns, runReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
-  listGrcTargets, deliverRunToGrcTarget,
+  listGrcTargets, deliverRunToGrcTarget, listGrcDeliveries,
 } from "../api/reports";
 import {
   describeDelivery, describePeriod, formatBytes, formatWhen, recipientCount,
   runStatusColor, runStatusLabel, summarizeParams, summarizeRunParams, triggerLabel, typeHasPeriod,
 } from "../components/Reports/reportSchedules";
+import { deliveryColor } from "../components/Reports/grcConnector";
 import { BRAND, TEXT } from "../theme/brand";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
@@ -112,6 +115,14 @@ export default function Reports() {
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const [emailTarget, setEmailTarget] = React.useState(null);
   const [scheduleTarget, setScheduleTarget] = React.useState(null);
+  // Programación que se está EDITANDO. El tipo se resuelve del catálogo: la
+  // fila guarda su `reportKey`, y el diálogo necesita el tipo entero para
+  // saber qué params pedir.
+  const [editingSchedule, setEditingSchedule] = React.useState(null);
+  // Menú de "New schedule": una programación es SIEMPRE de un tipo, así que lo
+  // primero que hay que elegir es cuál. Abrir el diálogo sin tipo dejaría un
+  // formulario que no sabe qué params pedir.
+  const [newScheduleAnchor, setNewScheduleAnchor] = React.useState(null);
   const [previewTarget, setPreviewTarget] = React.useState(null); // fila del catálogo
   // Types that declare `params` ask for them first (ReportParamsDialog);
   // `paramsTarget` remembers what to do once the operator confirms.
@@ -150,6 +161,18 @@ export default function Reports() {
    */
   const [grcTargets, setGrcTargets] = React.useState([]);
   const [redeliverAnchor, setRedeliverAnchor] = React.useState(null); // { el, run }
+  /**
+   * Entregas GRC indexadas por run.
+   *
+   * `grc_deliveries.run_id` existe desde E4 y nadie lo cruzaba: las entregas
+   * vivían sueltas en el panel del conector, así que mirando un run no había
+   * forma de saber si llegó a su destino. Un informe generado y no entregado
+   * se lee igual que uno entregado, que es justo lo que no puede pasar.
+   *
+   * Se piden en UNA llamada y se indexan, en vez de una por fila: veinticinco
+   * peticiones para pintar una columna es cómo se degrada una tabla.
+   */
+  const [deliveriesByRun, setDeliveriesByRun] = React.useState({});
   const patchRunFilter = React.useCallback((delta) => {
     setRunFilter((f) => ({ ...f, ...delta }));
     // Cambiar un filtro vuelve a la primera página: quedarse en la 4 de un
@@ -199,6 +222,19 @@ export default function Reports() {
         ...runFilter,
       });
       setRuns(res?.runs || []);
+      // Las entregas de ESTA página, en una sola petición. Aditivo: un tenant
+      // sin conector GRC no tiene entregas y la columna queda vacía, lo que no
+      // puede tumbar el historial.
+      listGrcDeliveries({ limit: 200 })
+        .then((d) => {
+          const porRun = {};
+          for (const del of d?.deliveries || []) {
+            if (del.runId == null) continue;
+            (porRun[del.runId] ||= []).push(del);
+          }
+          setDeliveriesByRun(porRun);
+        })
+        .catch(() => setDeliveriesByRun({}));
       // `total` es el de LA CONSULTA. Sin él el paginador no sabe cuántas
       // páginas hay y el operador no sabe si lo que busca quedó fuera.
       setRunsTotal(Number(res?.total ?? 0));
@@ -561,7 +597,7 @@ export default function Reports() {
     {
       field: "scheduleActions",
       headerName: "",
-      minWidth: 110,
+      minWidth: 150,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
@@ -570,6 +606,18 @@ export default function Reports() {
             <span>
               <IconButton size="small" aria-label="Run now" disabled={busyScheduleId === params.row.id} onClick={() => handleRunSchedule(params.row)}>
                 <PlayArrowOutlinedIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Edit schedule">
+            <span>
+              <IconButton
+                size="small"
+                aria-label={`Edit schedule ${params.row.id}`}
+                disabled={busyScheduleId === params.row.id}
+                onClick={() => setEditingSchedule(params.row)}
+              >
+                <EditOutlinedIcon fontSize="small" />
               </IconButton>
             </span>
           </Tooltip>
@@ -681,6 +729,34 @@ export default function Reports() {
       ),
     },
     {
+      field: "grc",
+      headerName: "GRC",
+      minWidth: 110,
+      sortable: false,
+      // Un informe generado y NO entregado se leía igual que uno entregado.
+      // `grc_deliveries.run_id` existía desde E4 y nadie lo cruzaba.
+      renderCell: (params) => {
+        const dels = deliveriesByRun[params.row.id] || [];
+        if (dels.length === 0) return null;
+        const fallidas = dels.filter((d) => d.status === "failed");
+        const peor = fallidas[0] || dels[0];
+        return (
+          <Tooltip
+            title={dels
+              .map((d) => `${d.status}${d.error ? ` · ${d.error}` : ""}${d.httpStatus ? ` · HTTP ${d.httpStatus}` : ""}`)
+              .join("\n")}
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              color={deliveryColor(peor.status)}
+              label={dels.length > 1 ? `${peor.status} ·${dels.length}` : peor.status}
+            />
+          </Tooltip>
+        );
+      },
+    },
+    {
       field: "download",
       headerName: "",
       minWidth: 100,
@@ -775,9 +851,24 @@ export default function Reports() {
 
       {activeTab === TAB.schedules ? (
         <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.schedules}`} aria-labelledby={`reports-tab-${TAB.schedules}`}>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-            Monthly on the 1st. Each run is archived with its SHA-256 and emailed to its recipients.
-          </Typography>
+          {/* "New schedule" AQUÍ, además de en la tarjeta del catálogo. Quien
+              entra a gestionar programaciones no tiene por qué adivinar que se
+              crean desde otra pestaña. */}
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5, gap: 2 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+              Monthly on the 1st. Each run is archived with its SHA-256 and emailed to its recipients.
+            </Typography>
+            {canSchedule ? (
+              <Button
+                size="small"
+                startIcon={<AddOutlinedIcon />}
+                onClick={(e) => setNewScheduleAnchor(e.currentTarget)}
+                sx={{ textTransform: "none", flexShrink: 0 }}
+              >
+                New schedule
+              </Button>
+            ) : null}
+          </Stack>
           {schedules.length === 0 ? (
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="schedules-empty">
               {canSchedule
@@ -921,6 +1012,22 @@ export default function Reports() {
           })
         : null}
 
+      {/* Elegir el tipo antes de programar. */}
+      <Menu
+        open={Boolean(newScheduleAnchor)}
+        anchorEl={newScheduleAnchor}
+        onClose={() => setNewScheduleAnchor(null)}
+      >
+        {rows.map((r) => (
+          <MenuItem
+            key={r.key}
+            onClick={() => { setNewScheduleAnchor(null); setScheduleTarget(r); }}
+          >
+            {r.label}
+          </MenuItem>
+        ))}
+      </Menu>
+
       {/* Menú de re-entrega: un destino por línea, por su NOMBRE. "1 destino"
           no dice si es el bueno cuando hay tres. */}
       <Menu
@@ -960,11 +1067,16 @@ export default function Reports() {
         onResult={handleEmailResult}
       />
       <ScheduleReportDialog
-        open={Boolean(scheduleTarget)}
-        reportType={scheduleTarget}
-        onClose={() => setScheduleTarget(null)}
+        open={Boolean(scheduleTarget) || Boolean(editingSchedule)}
+        reportType={scheduleTarget || typeByKey[editingSchedule?.reportKey] || null}
+        schedule={editingSchedule}
+        onClose={() => { setScheduleTarget(null); setEditingSchedule(null); }}
         onCreated={() => {
           setSnackbar({ open: true, message: "Schedule created. First run on the 1st of next month.", severity: "success" });
+          loadSchedules();
+        }}
+        onUpdated={() => {
+          setSnackbar({ open: true, message: "Schedule updated.", severity: "success" });
           loadSchedules();
         }}
       />

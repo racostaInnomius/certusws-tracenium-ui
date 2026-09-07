@@ -754,11 +754,129 @@ describe("Reports — U2: el historial", () => {
     expect(deliverCalls[0].body).toEqual({ runId: 42 });
   });
 
+  it("la entrega GRC se ve EN LA FILA del run que la originó", async () => {
+    // `grc_deliveries.run_id` existía desde E4 y nadie lo cruzaba: las
+    // entregas vivían sueltas en el panel del conector, así que un informe
+    // generado y NO entregado se leía igual que uno entregado.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [] });
+    respond("get", `${BASE}/runs`, { ok: true, total: 1, runs: [RUN] });
+    respond("get", `${BASE}/grc/deliveries`, {
+      ok: true,
+      deliveries: [{ id: 1, runId: 42, targetId: 3, status: "failed", httpStatus: 500, error: "webhook returned 500" }],
+    });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
+
+    expect(await screen.findByText("failed")).toBeTruthy();
+  });
+
+  it("una entrega de OTRO run no se pinta en esta fila", async () => {
+    // El contraste: sin el cruce por `runId`, cualquier entrega aparecería en
+    // cualquier fila y la columna no significaría nada.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [] });
+    respond("get", `${BASE}/runs`, { ok: true, total: 1, runs: [RUN] });
+    respond("get", `${BASE}/grc/deliveries`, {
+      ok: true,
+      deliveries: [{ id: 1, runId: 999, targetId: 3, status: "failed" }],
+    });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
+
+    await screen.findByText("schedule:7");
+    expect(screen.queryByText("failed")).toBeNull();
+  });
+
   it("sin destinos GRC no se ofrece la re-entrega", async () => {
     montarHistorial({ ok: true, total: 1, runs: [RUN] });
     await abrirPestana(/history/i);
 
     await screen.findByText("schedule:7");
     expect(screen.queryByRole("button", { name: /re-deliver/i })).toBeNull();
+  });
+});
+
+// ── U3 · programaciones: crear desde su pestaña y EDITAR ─────────────
+describe("Reports — U3: programaciones", () => {
+  const SCHED = {
+    id: 3,
+    reportKey: "scp.evidence-pack",
+    format: "pdf",
+    params: { framework: "cis_win11" },
+    periodMonths: 3,
+    recipientMemberIds: [11],
+    recipientExternal: ["auditor@example.com"],
+    targetIds: [],
+    enabled: true,
+    nextRunAt: "2026-10-01T06:00:00.000Z",
+    lastRunAt: null,
+    lastRunStatus: null,
+  };
+
+  const montar = () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [SCHED] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [] });
+    respond("get", "/api/v1/tenants/7/members", { ok: true, items: [{ id: 11, email: "ana@acme.test", isActive: true }] });
+    respond("get", /\/api\/v1\/security\/compliance\/frameworks.*/, { ok: true, frameworks: [{ framework: "cis_win11", shortName: "CIS Win11" }] });
+    return render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it('se puede crear desde la propia pestaña, no sólo desde el catálogo', async () => {
+    // Quien entra a gestionar programaciones no tiene por qué adivinar que se
+    // crean en otra pestaña.
+    montar();
+    await screen.findAllByText("Evidence Pack");
+    await abrirPestana(/schedules/i);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /new schedule/i }));
+    // Una programación es siempre DE un tipo: lo primero es elegir cuál.
+    await user.click(await screen.findByRole("menuitem", { name: "Evidence Pack" }));
+
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("⭐ una programación se puede EDITAR, con sus valores ya puestos", async () => {
+    // Sin esto, cambiar un destinatario obligaba a borrar y recrear — y eso
+    // rompe el vínculo con su historial, porque los runs anteriores apuntan a
+    // la programación vieja.
+    montar();
+    await screen.findAllByText("Evidence Pack");
+    await abrirPestana(/schedules/i);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /edit schedule 3/i }));
+
+    const dialogo = await screen.findByRole("dialog");
+    // Parte de lo GUARDADO: un formulario de edición que arranca vacío no
+    // edita, pisa.
+    expect(dialogo.textContent).toMatch(/Edit schedule/i);
+    expect(screen.getByDisplayValue("auditor@example.com")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /save changes/i })).toBeTruthy();
+  });
+
+  it("guardar la edición manda un PATCH, no crea otra", async () => {
+    const patchCalls = respond("patch", `${BASE}/schedules/3`, { ok: true, schedule: SCHED });
+    const postCalls = respond("post", `${BASE}/schedules`, { ok: true, schedule: SCHED });
+    montar();
+    await screen.findAllByText("Evidence Pack");
+    await abrirPestana(/schedules/i);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /edit schedule 3/i }));
+    await screen.findByRole("dialog");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(patchCalls).toHaveLength(1));
+    // Y NO crea una segunda: duplicar la programación al editarla dejaría dos
+    // enviando lo mismo.
+    expect(postCalls).toHaveLength(0);
   });
 });
