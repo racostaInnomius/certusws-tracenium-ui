@@ -345,12 +345,12 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 | U1 | Cuatro pestañas con estado en la URL | UI | hecho (`206e185`) | `?reportsTab=`, para enlazar desde otra página y no perder el sitio al recargar. Los 23 tests que había abren ahora su pestaña. |
 | U2 | `/runs` con filtros + paginación en servidor (**itest**) | backend | hecho (`df165df`) | key/status/trigger/actor/from/to + limit/offset; total con `COUNT(*) OVER()` de la MISMA consulta. `list-runs-filter.itest.ts`, 13 casos contra Postgres real; revertir los comodines del ILIKE o el total tumba tres. |
 | U2 | Historial: alcance, destinatarios, origen, tamaño | UI | hecho (`a73ac5c`) | Los cuatro venían ya en el DTO y se tiraban. Un envío parcial se lee como tal ("2 de 4 enviados"), no como éxito. |
-| U2 | Entregas GRC por run | UI | pendiente | Queda cruzar `grc_deliveries.run_id` en la fila del run. |
+| U2 | Entregas GRC por run | UI | hecho (`1215911`) | Cruzadas por `run_id` en una sola llamada e indexadas; una entrega de otro run NO se pinta en esta fila, que es lo que hace que la columna signifique algo. |
 | U2 | Re-entrega manual desde el historial | UI | hecho (`a73ac5c`) | Consumidor de `deliverRunToGrcTarget`, que llevaba desde E4 sin ninguno. El destino se elige por su nombre. |
-| U3 | Editar programación (PATCH) | UI | pendiente | |
-| U3 | "New schedule" desde la pestaña | UI | pendiente | |
-| U3 | Fichas de programación con destinos por nombre | UI | pendiente | |
-| U3 | Catálogo por tarjetas con último run | UI | pendiente | |
-| U4 | Preview para los 4 tipos que faltan | UI | pendiente | |
-| U4 | `json` en `audit.events` | backend | pendiente | |
-| U4 | GRC a Settings + mensaje de permiso | UI | pendiente | |
+| U3 | Editar programación (PATCH) | UI | hecho (`1215911`) | El diálogo parte de lo guardado; `targetIds` se manda aunque vaya vacío, o el último destino sería imposible de borrar. |
+| U3 | "New schedule" desde la pestaña | UI | hecho (`1215911`) | Con selección de tipo primero: una programación es siempre DE un tipo. |
+| U3 | Fichas de programación con destinos por nombre | UI | pendiente | La tabla sigue siendo DataGrid; los destinos por nombre están en el diálogo de edición, no en la fila. |
+| U3 | Catálogo por tarjetas con último run | UI | hecho (`aa9db7c`) | Agrupadas por `group`, con último run, chip `params` y `role="group"` etiquetado. Vacío que explica la causa. |
+| U4 | Preview para los 4 tipos que faltan | UI | hecho (`fb04e3d`) | Preview genérico para todo tipo con json: colecciones y documento, sin inventar un titular. De 1 a 6 de 6. |
+| U4 | `json` en `audit.events` | backend | hecho (`5feab8a`) | Habilita su preview y repone por el motor el export JSON retirado de la página de Audit. Mismos filtros y tope que el CSV; la capacidad `audit_log` se sigue exigiendo. |
+| U4 | GRC a Settings + mensaje de permiso | UI | hecho (`206e185` + `fb04e3d`) | El panel vive en la pestaña Settings desde U1; el 403 pasa a mensaje y deja de ofrecer acciones que rebotan. Un 500 sigue siendo error. |
