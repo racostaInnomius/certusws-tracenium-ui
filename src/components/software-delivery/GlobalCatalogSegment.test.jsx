@@ -199,3 +199,69 @@ describe("GlobalCatalogSegment · los estados que no son datos", () => {
     expect(await screen.findByText(/your decision to deploy it/i)).toBeInTheDocument();
   });
 });
+
+describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
+  it("ofrece la acción por título cuando no tiene nada de él", async () => {
+    setup([V153]);
+    expect(await screen.findByRole("button", { name: /add for my fleet/i })).toBeInTheDocument();
+  });
+
+  // Con algo del título ya enlazado, la acción masiva sobra: lo que queda es
+  // elegir una variante concreta, y para eso se abre.
+  it("no la ofrece si ya tiene algo de ese título", async () => {
+    setup([{ ...V153, linkedPackageId: 88 }]);
+    await screen.findByText("Google Chrome");
+    expect(screen.queryByRole("button", { name: /add for my fleet/i })).toBeNull();
+  });
+
+  // ⚠️ EL RESULTADO ES UN INFORME, NO UN «HECHO». Que no haya nada publicado
+  // para una plataforma de su flota es justo lo que el operador necesita saber;
+  // callarlo le dejaría creyendo que ya está cubierto.
+  it("dice qué falta por publicar para su flota", async () => {
+    const notify = vi.fn();
+    api.getGlobalCatalog.mockResolvedValue({ entries: [V153] });
+    api.linkGlobalTitle.mockResolvedValue({
+      linked: [{ entryId: 2, packageId: 9, platform: "windows", arch: "x64" }],
+      unavailable: [{ platform: "linux", arch: "x64", devices: 12 }],
+      alreadyLinked: 0,
+      assumedArch: null,
+    });
+    render(<GlobalCatalogSegment notify={notify} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith("success", expect.stringContaining("nothing published for linux"))
+    );
+  });
+
+  // ⚠️ Y si hubo que SUPONER la arquitectura, se dice. Es el estado normal
+  // hasta que la flota corra el agente que la reporta; presentarlo como un
+  // hecho sería exactamente lo que el ADR descarta.
+  it("declara la arquitectura supuesta", async () => {
+    const notify = vi.fn();
+    api.getGlobalCatalog.mockResolvedValue({ entries: [V153] });
+    api.linkGlobalTitle.mockResolvedValue({
+      linked: [{ entryId: 2, packageId: 9, platform: "windows", arch: "x64" }],
+      unavailable: [],
+      alreadyLinked: 0,
+      assumedArch: { arch: "x64", devices: 40 },
+    });
+    render(<GlobalCatalogSegment notify={notify} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith("success", expect.stringContaining("assumed x64 for 40 devices"))
+    );
+  });
+
+  // Nada que enlazar no es un éxito: la flota no coincide con lo publicado.
+  it("no lo canta como éxito cuando no enlazó nada", async () => {
+    const notify = vi.fn();
+    api.getGlobalCatalog.mockResolvedValue({ entries: [V153] });
+    api.linkGlobalTitle.mockResolvedValue({ linked: [], unavailable: [], alreadyLinked: 0, assumedArch: null });
+    render(<GlobalCatalogSegment notify={notify} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("info", expect.stringContaining("nothing matched your fleet")));
+  });
+});

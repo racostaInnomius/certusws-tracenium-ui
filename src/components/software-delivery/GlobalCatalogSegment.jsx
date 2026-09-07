@@ -34,7 +34,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
-import { getGlobalCatalog, linkGlobalEntry } from "../../api/softwareDelivery";
+import { getGlobalCatalog, linkGlobalEntry, linkGlobalTitle } from "../../api/softwareDelivery";
 
 /**
  * Títulos con sus variantes, y qué tiene ya este tenant.
@@ -156,6 +156,41 @@ export default function GlobalCatalogSegment({ notify, onLinked }) {
   }, []);
 
   React.useEffect(() => { load(); }, [load]);
+
+  /**
+   * ADR-0016 F5/F6 — enlaza de una vez lo que la flota necesita.
+   *
+   * ⚠️ EL RESULTADO ES UN INFORME, NO UN «HECHO». Puede haber objetivos sin
+   * publicar («tienes 12 Linux y no publicamos esto para Linux») y arquitectura
+   * supuesta porque la flota aún no la reporta. Suponer en silencio es lo que
+   * el ADR descarta: si algo se dio por hecho, se dice.
+   */
+  const linkWholeTitle = async (g) => {
+    setBusy(true);
+    try {
+      const r = await linkGlobalTitle(g.titleKey);
+      const partes = [];
+      if (r?.linked?.length) partes.push(`${r.linked.length} added`);
+      if (r?.alreadyLinked) partes.push(`${r.alreadyLinked} already there`);
+      for (const u of r?.unavailable ?? []) {
+        partes.push(`nothing published for ${u.platform} (${u.devices} device${u.devices === 1 ? "" : "s"})`);
+      }
+      if (r?.assumedArch) {
+        partes.push(`assumed ${r.assumedArch.arch} for ${r.assumedArch.devices} device${r.assumedArch.devices === 1 ? "" : "s"} that don't report architecture yet`);
+      }
+      const hayAlgo = Boolean(r?.linked?.length);
+      notify?.(
+        hayAlgo ? "success" : "info",
+        partes.length ? `${g.title}: ${partes.join(" · ")}` : `${g.title}: nothing matched your fleet.`
+      );
+      await load();
+      onLinked?.();
+    } catch (err) {
+      notify?.("error", err?.body?.message || err?.message || "Could not add it.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const link = async (entry) => {
     setBusy(true);
@@ -280,6 +315,21 @@ export default function GlobalCatalogSegment({ notify, onLinked }) {
                     la 152, hay la 153». Es la única comparación que el operador
                     necesita para decidir, y decidir es suyo — no se re-enlaza
                     solo. */}
+                {/* ⚠️ La acción por título va ANTES de abrir: es la que
+                    resuelve el caso normal —«quiero Chrome en mi flota»— sin
+                    obligar a elegir variante. Abrir sigue estando para quien
+                    quiera una concreta. */}
+                {g.linkedCount === 0 ? (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={busy}
+                    onClick={(e) => { e.stopPropagation(); linkWholeTitle(g); }}
+                    sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
+                  >
+                    Add for my fleet
+                  </Button>
+                ) : null}
                 {g.hasUpdate ? (
                   <Chip
                     size="small"

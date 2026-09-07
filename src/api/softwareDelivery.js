@@ -188,3 +188,17 @@ export async function getGlobalCatalog() {
 export async function linkGlobalEntry(entryId) {
   return httpPostJson(`${BASE}/global-catalog/${encodeURIComponent(entryId)}/link`, {});
 }
+
+/**
+ * Enlaza de un título las variantes que la flota necesita (F5/F6).
+ *
+ * Devuelve un informe, no un "ok": qué se enlazó, qué objetivos de la flota no
+ * tienen nada publicado, y si hubo que suponer la arquitectura. La UI lo
+ * enseña — suponer en silencio es lo que el ADR descarta.
+ */
+export async function linkGlobalTitle(titleKey) {
+  return httpPostJson(
+    `${BASE}/global-catalog/title/${encodeURIComponent(titleKey)}/link`,
+    {}
+  );
+}
