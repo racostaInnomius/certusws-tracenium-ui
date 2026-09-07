@@ -58,6 +58,13 @@ const TYPES = {
       formats: ["csv"],
     },
     {
+      key: "global.fleet-health",
+      label: "Fleet Health Report",
+      description: "Cross-domain executive summary.",
+      group: "Global",
+      formats: ["json", "csv", "pdf"],
+    },
+    {
       key: "scp.evidence-pack",
       label: "Evidence Pack",
       description: "Audit-ready evidence for one framework over a period.",
@@ -100,7 +107,10 @@ describe("Reports page", () => {
     expect(screen.getByText("Audit Events")).toBeInTheDocument();
     // A type NOT present in the server response must never appear —
     // proves there's no client-side catalog to drift from the backend.
-    expect(screen.queryByText("Fleet Health Report")).not.toBeInTheDocument();
+    // (Era "Fleet Health Report"; ese tipo pasó al fixture cuando el botón de
+    // Overview empezó a entrar por aquí, así que el ejemplo de "ausente" es
+    // ahora otro que el servidor tampoco devuelve.)
+    expect(screen.queryByText("CVE Exposure")).not.toBeInTheDocument();
   });
 
   it("renders the recent-runs history from the server", async () => {
@@ -368,5 +378,80 @@ describe("Reports — borrar una programación pide confirmación", () => {
     await userEvent.click(await screen.findByRole("button", { name: /delete schedule/i, hidden: false }).catch(() => screen.getByText("Delete schedule")));
 
     await waitFor(() => expect(deletes).toHaveLength(1));
+  });
+});
+
+// ── Llegar con el informe ya elegido (?reportKey=) ──
+//
+// Es por donde entra el botón "Report" de Overview. Antes ese botón abría un
+// diálogo propio que descargaba por `/api/v1/fleet-report`: el fichero salía
+// y no quedaba constancia. `report_runs` es el ledger del que cuelgan la
+// re-entrega y el SHA-256, así que un export que lo esquiva es una copia sin
+// trazabilidad.
+describe("Reports — preselección por URL", () => {
+  it("pide confirmación y genera POR EL MOTOR, dejando la ejecución registrada", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    const runCalls = respond("get", `${BASE}/global.fleet-health/run`, { ok: true });
+    window.history.replaceState({}, "", "/?page=reports&reportKey=global.fleet-health&reportFormat=pdf");
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    // No dispara solo: generar arma el PDF entero y deja una fila con el
+    // nombre de quien lo pidió. Un clic en OTRA página no puede provocar eso
+    // sin preguntar.
+    const dialogo = await screen.findByRole("dialog");
+    expect(dialogo.textContent).toMatch(/Fleet Health Report/);
+    expect(runCalls).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: /generate pdf/i }));
+
+    await waitFor(() => expect(runCalls).toHaveLength(1));
+    expect(runCalls[0].search.format).toBe("pdf");
+    // Y el parámetro se consume: recargar no vuelve a preguntar por un
+    // informe que el operador ya decidió.
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBeNull();
+  });
+
+  it("si se cancela no se genera nada", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    const runCalls = respond("get", `${BASE}/global.fleet-health/run`, { ok: true });
+    window.history.replaceState({}, "", "/?page=reports&reportKey=global.fleet-health");
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findByRole("dialog");
+    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(runCalls).toHaveLength(0);
+  });
+
+  it("un tipo que no está en el catálogo lo dice, no se queda callado", async () => {
+    // El catálogo sólo trae lo que esta sesión puede ver (el backend filtra
+    // por plugin y por rol). Un silencio se lee como que la app se colgó.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    window.history.replaceState({}, "", "/?page=reports&reportKey=pmp.cve-exposure");
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    expect(await screen.findByText(/not available for this tenant or for your role/i)).toBeTruthy();
+  });
+
+  it("sin el parámetro no pregunta nada", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    window.history.replaceState({}, "", "/?page=reports");
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findAllByText("Evidence Pack");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

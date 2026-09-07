@@ -12,13 +12,24 @@
 // out 10+ parallel requests with allSettled — any failing endpoint
 // leaves its slot in a quiet zero state instead of blanking the page.
 
-import { useCallback, useMemo, useState, lazy, Suspense } from "react";
+import { useCallback, useMemo, lazy, Suspense } from "react";
+import { updateSearchParams } from "../utils/browserState";
+
+// La clave del catálogo de reportes (`REPORT_REGISTRY`) que corresponde a
+// este panel. El botón de arriba no genera nada: manda a Reports con este
+// informe ya elegido, y allí se confirma y se genera por el MOTOR.
+//
+// Antes abría aquí mismo un diálogo que descargaba por `/api/v1/fleet-report`.
+// El fichero salía igual, pero no quedaba constancia: `report_runs` es el
+// ledger que contesta "¿quién se llevó qué y cuándo?" y del que cuelgan la
+// re-entrega y el SHA-256 del artefacto. Un export que lo esquiva es una copia
+// sin trazabilidad circulando por ahí — y eran nueve puertas así.
+const FLEET_HEALTH_KEY = "global.fleet-health";
 import { Box, Button, Grid, Stack, Tooltip, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import { fetchOverviewBundle } from "../api/overview";
 import { useAuthContext } from "../auth/AuthContext";
-import FleetReportDialog from "../components/Overview/FleetReportDialog";
 import HeroKpis from "../components/Overview/HeroKpis";
 import AttentionPanel from "../components/Overview/AttentionPanel";
 import RecentActivity from "../components/Overview/RecentActivity";
@@ -109,7 +120,7 @@ function ChartSlot({ height = 280 }) {
   );
 }
 
-export default function Overview() {
+export default function Overview({ onNavigate } = {}) {
   // Stale-while-revalidate cache. On second visit (or after a reload
   // within the same session) the page paints from cache instantly and
   // refetches in the background — `loading` stays false, `refreshing`
@@ -161,7 +172,6 @@ export default function Overview() {
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const canManage = isActiveMember && (tenantRole === "ADMIN" || tenantRole === "OWNER");
-  const [reportOpen, setReportOpen] = useState(false);
 
   // Build a device_id → hostname index from the hosts bundle so the
   // Latest alerts strip can render hostnames instead of raw UUIDs.
@@ -214,7 +224,13 @@ export default function Overview() {
                     size="small"
                     variant="outlined"
                     startIcon={<AssessmentOutlinedIcon sx={{ fontSize: ICON.md }} />}
-                    onClick={() => setReportOpen(true)}
+                    onClick={() => {
+                      // A Reports, con el informe ya elegido. Allí se pide
+                      // confirmación y se genera POR EL MOTOR, que es lo que
+                      // deja la fila en `report_runs`.
+                      updateSearchParams({ reportKey: FLEET_HEALTH_KEY, reportFormat: "pdf" });
+                      onNavigate?.("reports");
+                    }}
                     sx={{ textTransform: "none" }}
                   >
                     Report
@@ -231,8 +247,6 @@ export default function Overview() {
           </Stack>
         }
       />
-
-      <FleetReportDialog open={reportOpen} onClose={() => setReportOpen(false)} />
 
       {/* Row 1 — Hero KPIs (full width, all cards now clickable) */}
       <Box sx={{ mb: 2 }}>

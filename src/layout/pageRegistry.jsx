@@ -55,6 +55,11 @@ export const PAGE_REGISTRY = {
     />
   ),
 
+  // Overview no tenía entrada propia: caía por el `renderPage` de abajo, que
+  // la montaba SIN contexto. Ahora la necesita — su botón "Report" navega a
+  // Reports con el informe ya elegido.
+  overview: (ctx) => <Overview onNavigate={ctx.onNavigate} />,
+
   configurations: (ctx) => <Configurations onNavigate={ctx.onNavigate} />,
 
   // Device Enrollment is the combined surface — sidebar entry for
@@ -148,5 +153,5 @@ export const PAGE_REGISTRY = {
 // for.
 export function renderPage(selectedPage, ctx = {}) {
   const entry = PAGE_REGISTRY[selectedPage];
-  return entry ? entry(ctx) : <Overview />;
+  return entry ? entry(ctx) : <Overview onNavigate={ctx.onNavigate} />;
 }

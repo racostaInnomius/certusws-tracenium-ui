@@ -32,6 +32,7 @@ import {
   describePeriod, formatWhen, recipientCount, runStatusColor, runStatusLabel, summarizeParams, triggerLabel, typeHasPeriod,
 } from "../components/Reports/reportSchedules";
 import { BRAND, TEXT } from "../theme/brand";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 export default function Reports() {
   const confirm = useConfirm();
@@ -99,7 +100,7 @@ export default function Reports() {
 
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
 
-  const handleRun = async (key, format, params) => {
+  const handleRun = React.useCallback(async (key, format, params) => {
     setRunningKey(`${key}:${format}`);
     try {
       await runReport(key, format, params);
@@ -111,7 +112,74 @@ export default function Reports() {
     } finally {
       setRunningKey(null);
     }
-  };
+  }, [loadData]);
+
+  /**
+   * Llegada desde otra página con un informe ya elegido (`?reportKey=`).
+   *
+   * Lo usa el botón "Report" de Overview. Antes abría ahí mismo un diálogo
+   * propio que descargaba por `/api/v1/fleet-report`: el fichero salía, pero
+   * NO quedaba constancia. `report_runs` es el ledger que contesta "¿quién se
+   * llevó qué y cuándo?" —y de donde cuelgan la re-entrega y el hash del
+   * artefacto—, así que un export que lo esquiva es una copia sin trazabilidad
+   * circulando por ahí. Ahora se genera por el motor, como cualquier otro.
+   *
+   * Se PIDE CONFIRMACIÓN en vez de disparar al aterrizar: generar un informe
+   * no es gratis (arma el PDF entero) y deja una fila con el nombre de quien
+   * lo pidió. Que un clic en otra página produzca eso sin preguntar convierte
+   * un enlace en un botón de acción a distancia.
+   */
+  const preselectDoneRef = React.useRef(false);
+  React.useEffect(() => {
+    if (preselectDoneRef.current) return;
+    const wanted = getSearchParam("reportKey", "");
+    if (!wanted) return;
+    // Esperar al catálogo: sin él no se sabe si el tipo existe, qué formatos
+    // admite ni cómo se llama en la confirmación.
+    if (loading || rows.length === 0) return;
+
+    preselectDoneRef.current = true;
+    // El parámetro se consume: si se queda en la URL, cada recarga vuelve a
+    // preguntar por un informe que el operador ya decidió.
+    updateSearchParams({ reportKey: "", reportFormat: "" });
+
+    const row = typeByKey[wanted];
+    if (!row) {
+      // El catálogo sólo trae lo que esta sesión puede ver (el backend filtra
+      // por plugin y por rol), así que "no está" significa "no te toca" —
+      // decirlo es mejor que un silencio que se lee como que la app se colgó.
+      setSnackbar({
+        open: true,
+        message: `"${wanted}" is not available for this tenant or for your role.`,
+        severity: "warning",
+      });
+      return;
+    }
+
+    const formats = Array.isArray(row.formats) ? row.formats : [];
+    const wantedFormat = getSearchParam("reportFormat", "");
+    const format = formats.includes(wantedFormat) ? wantedFormat : (formats.includes("pdf") ? "pdf" : formats[0]);
+    if (!format) return;
+
+    (async () => {
+      const ok = await confirm({
+        title: `Generate "${row.label}"?`,
+        body:
+          `It will be built now as ${String(format).toUpperCase()} and downloaded.\n\n` +
+          "The run is recorded in this tenant's report history with your name, the time and the file's SHA-256, so it can be re-sent or verified later.",
+        confirmText: `Generate ${String(format).toUpperCase()}`,
+      });
+      if (!ok) return;
+      // Un tipo con parámetros los pide primero: confirmarlo no es lo mismo
+      // que saber sobre qué periodo o framework se quiere.
+      if (row.params?.length) {
+        setParamsTarget({ row, format, intent: "run" });
+        return;
+      }
+      handleRun(row.key, format);
+    })();
+  }, [confirm, handleRun, loading, rows, typeByKey]);
+
 
   const handleEmailResult = (result) => {
     const sentCount = result?.sent?.length || 0;

@@ -8,6 +8,11 @@ import { PAGE_REGISTRY, renderPage } from "./pageRegistry";
 describe("PAGE_REGISTRY", () => {
   it("exposes every sidebar route key", () => {
     const expected = [
+      // Overview tenía que llegar por el fallback de `renderPage`, que la
+      // montaba SIN contexto. Ahora es una entrada como las demás porque
+      // necesita `onNavigate`: su botón "Report" manda a Reports con el
+      // informe ya elegido.
+      "overview",
       "assets",
       "configurations",
       "enrollment",
