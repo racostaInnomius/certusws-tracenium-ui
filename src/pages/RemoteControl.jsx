@@ -50,6 +50,15 @@ import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import PageHeader from "../components/common/PageHeader";
+import GoToReportButton from "../components/common/GoToReportButton";
+import { getMyCapabilities } from "../api/roles";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
+
+// El informe que cubre lo que pasa por esta página: su sección de actividad
+// cuenta las sesiones de soporte remoto del periodo. No hay un tipo "rcp" en
+// el catálogo y no se inventa uno aquí — la clave tiene que existir en
+// `REPORT_REGISTRY` o Reports avisa de que no está disponible.
+const FLEET_HEALTH_KEY = "global.fleet-health";
 import SectionPaper from "../components/common/SectionPaper";
 import { invalidateCachePrefix } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
@@ -287,7 +296,7 @@ function AccessRecordDialog({ pending, onCancel, onConfirm }) {
   );
 }
 
-export default function RemoteControl() {
+export default function RemoteControl({ onNavigate }) {
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: "",
@@ -323,6 +332,25 @@ export default function RemoteControl() {
   }, [refreshAll]);
 
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "rcAutoRefresh");
+
+  // ¿Se le ofrece el informe? El tipo declara `minRole: ["ADMIN","OWNER"]`, así
+  // que a quien no lo sea le saldría una puerta que termina en "no
+  // disponible". El rol lo da el servidor —es el EFECTIVO sobre el tenant
+  // activo—, no `auth.role`, que en una sesión MSP no es el del cliente
+  // abierto. Falla cerrado: mientras no llegue, no se pinta.
+  const reportTenantId = useEffectiveTenantId();
+  const [myRole, setMyRole] = React.useState(null);
+  React.useEffect(() => {
+    if (!reportTenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(reportTenantId)
+      .then((resp) => alive && setMyRole(resp?.role ?? null))
+      .catch(() => alive && setMyRole(null));
+    return () => {
+      alive = false;
+    };
+  }, [reportTenantId]);
+  const canReport = ["ADMIN", "OWNER"].includes(String(myRole || ""));
 
   // Deep link: Asset Management's Actions menu links here with
   // `?highlightAgentId=<agentId>` so the operator lands on the exact device
@@ -425,14 +453,23 @@ export default function RemoteControl() {
         icon={<DesktopWindowsOutlinedIcon />}
         actions={
           <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {/* Sin `size="small"`: iba más bajo que el "Refresh" de al lado,
+                que es un Button de tamaño por defecto, y en una fila alineada
+                al centro eso se lee como un descuido. */}
             <Button
-              size="small"
               variant="contained"
               startIcon={<AddOutlinedIcon fontSize="small" />}
               onClick={() => setWizardOpen(true)}
             >
               Start a session
             </Button>
+            {canReport ? (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={FLEET_HEALTH_KEY}
+                tooltip="Fleet health report"
+              />
+            ) : null}
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
@@ -516,7 +553,7 @@ export default function RemoteControl() {
       </TabPanel>
 
       <TabPanel value={activeTab} index={TAB_ACCESS}>
-        <AccessTab notify={notify} />
+        <AccessTab notify={notify} refreshNonce={refreshNonce} />
       </TabPanel>
 
       <BrandSnackbar

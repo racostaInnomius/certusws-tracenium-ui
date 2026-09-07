@@ -64,7 +64,7 @@ function StatusChip({ status }) {
   );
 }
 
-function AccessLog() {
+function AccessLog({ refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -77,7 +77,7 @@ function AccessLog() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [refreshNonce]);
 
   return (
     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
@@ -144,7 +144,7 @@ function AccessLog() {
   );
 }
 
-export default function AccessTab({ notify }) {
+export default function AccessTab({ notify, refreshNonce = 0 }) {
   return (
     <Stack spacing={2}>
       {/* Filtered to rcp.* — Crypto Discovery's capabilities share this matrix
@@ -156,8 +156,9 @@ export default function AccessTab({ notify }) {
         title="Privileged access policy"
         description="Which remote control capabilities need a second person’s approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation."
         notify={notify}
+        refreshNonce={refreshNonce}
       />
-      <AccessLog />
+      <AccessLog refreshNonce={refreshNonce} />
     </Stack>
   );
 }

@@ -27,6 +27,24 @@ const getDeviceFacets = vi.fn();
 const getSessionDetail = vi.fn();
 const getSessionFileTransfers = vi.fn();
 
+// La página resuelve el ROL para decidir si ofrece el botón de informe, y eso
+// la ata a la sesión. Aquí sólo hace falta que exista: el rol se deja en USER
+// para que estos casos midan las pestañas y no la cabecera.
+vi.mock("../auth/AuthContext", () => ({
+  useAuthContext: () => ({
+    auth: { tenantId: 1, tenantMember: { role: "USER", isActive: true } },
+    loading: false,
+    refreshAuth: vi.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}));
+vi.mock("../msp/MspContext", () => ({
+  useMspOptional: () => ({ activeTenant: null }),
+}));
+vi.mock("../api/roles", () => ({
+  getMyCapabilities: () => Promise.resolve({ role: "USER", permissions: [] }),
+}));
+
 vi.mock("../api/remoteControl", () => ({
   getRemoteControlSummary: (...a) => getRemoteControlSummary(...a),
   getConnectableDevices: (...a) => getConnectableDevices(...a),

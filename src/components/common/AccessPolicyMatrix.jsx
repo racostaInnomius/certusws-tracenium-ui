@@ -50,7 +50,7 @@ import { getAccessPolicy, setAccessPolicyCell } from "../../api/remoteControl";
  *   vocabulary of the plugin that owns these capabilities.
  * @param {Function} notify   (severity, message)
  */
-export default function AccessPolicyMatrix({ prefix, title, description, notify }) {
+export default function AccessPolicyMatrix({ prefix, title, description, notify, refreshNonce = 0 }) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState("");
@@ -98,7 +98,11 @@ export default function AccessPolicyMatrix({ prefix, title, description, notify 
     return () => {
       alive = false;
     };
-  }, []);
+    // El nonce lo sube el "Refresh" de la página anfitriona. Sin él, esta
+    // matriz se quedaba con la foto del montaje: quien acabara de cambiar la
+    // política de aprobación en otra pestaña —o en otra sesión— seguía viendo
+    // la anterior, y el botón de refrescar no la corregía.
+  }, [refreshNonce]);
 
   const mine = React.useMemo(
     () => rows.filter((r) => String(r.capability || "").startsWith(prefix)),

@@ -128,7 +128,7 @@ export const PAGE_REGISTRY = {
   // own mTLS identity certs).
   cdp: () => <CryptoDiscovery />,
 
-  "remote-control": () => <RemoteControl />,
+  "remote-control": (ctx) => <RemoteControl onNavigate={ctx.onNavigate} />,
   alerts: () => <Alerts />,
   reports: () => <Reports />,
 
