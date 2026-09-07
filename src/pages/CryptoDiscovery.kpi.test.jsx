@@ -42,7 +42,8 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listCdpDevices: vi.fn(async () => ({ items: [], total: 0 })),
     listCdpTrustAnchors: vi.fn(async () => ({ items: [] })),
     listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
-    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] }))
+    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
+    listCdpAdcsSources: vi.fn(async () => ({ ok: true, sources: [] }))
   };
 });
 vi.mock("../api/remoteControl", async (importOriginal) => {

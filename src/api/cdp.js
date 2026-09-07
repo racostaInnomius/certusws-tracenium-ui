@@ -248,8 +248,18 @@ export async function deleteCdpConnector(id) {
   return httpDeleteJson(`${BASE}/connectors/${encodeURIComponent(id)}`);
 }
 
+/** Historial de ejecuciones de un conector, la más reciente primero. */
+export async function listCdpConnectorRuns(id, { limit = 20 } = {}) {
+  return httpGetJson(`${BASE}/connectors/${encodeURIComponent(id)}/runs${buildQuery({ limit })}`);
+}
+
 export async function runCdpConnector(id, { dryRun = false } = {}) {
   return httpPostJson(`${BASE}/connectors/${encodeURIComponent(id)}/run${dryRun ? "?dryRun=1" : ""}`, {}, { timeoutMs: 120000 });
+}
+
+/** Lectores AD CS: las CAs que han reportado y su salud de lectura. */
+export async function listCdpAdcsSources() {
+  return httpGetJson(`${BASE}/adcs/sources`);
 }
 
 // §5.2: servicios TLS internos vistos por los agentes (conexiones salientes).

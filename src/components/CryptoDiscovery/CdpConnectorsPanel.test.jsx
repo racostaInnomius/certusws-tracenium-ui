@@ -9,8 +9,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 const listCdpConnectors = vi.fn();
 const createCdpConnector = vi.fn();
 const runCdpConnector = vi.fn();
+const listCdpConnectorRuns = vi.fn();
 vi.mock("../../api/cdp", () => ({
   listCdpConnectors: (...a) => listCdpConnectors(...a),
+  listCdpConnectorRuns: (...a) => listCdpConnectorRuns(...a),
   createCdpConnector: (...a) => createCdpConnector(...a),
   runCdpConnector: (...a) => runCdpConnector(...a),
   updateCdpConnector: vi.fn(),
@@ -168,5 +170,24 @@ describe("ConnectorForm — Public CT logs", () => {
     await waitFor(() =>
       expect(createCdpConnector).toHaveBeenCalledWith({ kind: "ct", label: "Our domains", config: { domains: "example.com, corp.example.net", includeSubdomains: true, includeExpired: false }, clientSecret: "" })
     );
+  });
+
+  it("⭐ «History» enseña las ejecuciones, con el fallo del planificador y la buena de la víspera", async () => {
+    listCdpConnectors.mockResolvedValue({
+      ok: true, secretsConfigured: true,
+      connectors: [{ connectorId: 2, kind: "ct", label: "Public domains", config: { domains: ["example.com"] }, enabled: true, hasSecret: false, lastStatus: "failed", lastRunAt: "2026-09-06T22:31:56Z", lastError: "fetch failed" }]
+    });
+    listCdpConnectorRuns.mockResolvedValue({ ok: true, runs: [
+      { runId: 3, startedAt: "2026-09-06T22:31:56Z", status: "failed", trigger: "scheduled", assets: 0, removed: 0, error: "fetch failed", summary: null },
+      { runId: 2, startedAt: "2026-09-05T22:22:47Z", status: "ok", trigger: "manual", assets: 8, removed: 0, error: null, summary: { certificates: 8, keys: 0, matchedFleetCertificates: 0, complete: true, durationMs: 38254 } }
+    ] });
+    render(<CdpConnectorsPanel refreshNonce={0} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^history$/i }));
+    await waitFor(() => expect(listCdpConnectorRuns).toHaveBeenCalledWith(2, { limit: 20 }));
+    const table = await screen.findByLabelText(/run history/i);
+    expect(table.textContent).toContain("scheduled");
+    expect(table.textContent).toContain("fetch failed");
+    expect(table.textContent).toContain("8 certificate(s), 0 key(s) · 0 retired · 0 on devices · 38s");
+    expect(screen.getByRole("button", { name: /hide history/i })).toBeInTheDocument();
   });
 });

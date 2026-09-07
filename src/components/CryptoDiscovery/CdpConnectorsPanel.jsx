@@ -13,7 +13,7 @@
 import * as React from "react";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
-import { createCdpConnector, deleteCdpConnector, listCdpConnectors, runCdpConnector, updateCdpConnector } from "../../api/cdp";
+import { createCdpConnector, deleteCdpConnector, listCdpConnectorRuns, listCdpConnectors, runCdpConnector, updateCdpConnector } from "../../api/cdp";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
@@ -202,6 +202,70 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
   );
 }
 
+/**
+ * Historial de ejecuciones de un conector (repaso 2026-09-06). Antes solo
+ * se veía la última, así que un fallo esporádico del planificador (crt.sh
+ * caído a las 22:31) tapaba la ejecución buena de la víspera y no había
+ * forma de saber si el conector «suele» funcionar.
+ */
+function RunHistory({ connectorId, nonce }) {
+  const [runs, setRuns] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true;
+    setError(null);
+    listCdpConnectorRuns(connectorId, { limit: 20 })
+      .then((r) => alive && setRuns(r?.runs ?? []))
+      .catch((e) => {
+        if (!alive) return;
+        setRuns([]);
+        setError(e?.message || String(e));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [connectorId, nonce]);
+
+  if (error) return <Alert severity="error" sx={{ mt: 1 }}>Couldn&apos;t load the history: {error}</Alert>;
+  if (runs == null) return <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1 }}>Loading history…</Typography>;
+  if (runs.length === 0) return <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1 }}>No runs recorded yet. «Test» runs are dry and are not recorded.</Typography>;
+  const secs = (ms) => (ms == null ? "" : ` · ${Math.round(Number(ms) / 1000)}s`);
+  return (
+    <Box sx={{ mt: 1, overflowX: "auto" }} aria-label="Run history">
+      <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", fontSize: TEXT.xs }}>
+        <Box component="thead">
+          <Box component="tr" sx={{ textAlign: "left", color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>
+            <Box component="th" sx={{ py: 0.5, pr: 1.5 }}>When</Box>
+            <Box component="th" sx={{ pr: 1.5 }}>Trigger</Box>
+            <Box component="th" sx={{ pr: 1.5 }}>Result</Box>
+            <Box component="th">Detail</Box>
+          </Box>
+        </Box>
+        <Box component="tbody">
+          {runs.map((r) => (
+            <Box component="tr" key={r.runId} sx={{ borderTop: `1px solid ${BRAND.border}` }}>
+              <Box component="td" sx={{ py: 0.5, pr: 1.5, whiteSpace: "nowrap" }}>{when(r.startedAt)}</Box>
+              <Box component="td" sx={{ pr: 1.5 }}>{r.trigger === "scheduled" ? "scheduled" : "manual"}</Box>
+              <Box component="td" sx={{ pr: 1.5 }}>
+                {r.status === "ok" ? (
+                  <Chip size="small" label="ok" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.successSoft, color: BRAND.alert.success, fontWeight: 700 }} />
+                ) : (
+                  <Chip size="small" label="failed" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700 }} />
+                )}
+              </Box>
+              <Box component="td" sx={{ color: r.error ? BRAND.alert.errorText : BRAND.dark }}>
+                {r.error
+                  ? r.error
+                  : `${fmt(r.summary?.certificates ?? r.assets)} certificate(s), ${fmt(r.summary?.keys ?? 0)} key(s) · ${fmt(r.removed)} retired · ${fmt(r.summary?.matchedFleetCertificates ?? 0)} on devices${r.summary?.complete === false ? " · listing incomplete" : ""}${secs(r.summary?.durationMs)}`}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 function StatusChip({ c }) {
   if (!c.lastStatus) return <Chip size="small" label="never run" variant="outlined" />;
   if (c.lastStatus === "ok") return <Chip size="small" label="ok" sx={{ bgcolor: BRAND.alert.successSoft, color: BRAND.alert.success, fontWeight: 700 }} />;
@@ -242,6 +306,8 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
   const [busyId, setBusyId] = React.useState(null);
   const [runResult, setRunResult] = React.useState(null);
   const [toRemove, setToRemove] = React.useState(null);
+  // Conectores con el historial desplegado.
+  const [historyOpen, setHistoryOpen] = React.useState(() => new Set());
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
@@ -348,6 +414,20 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
                   {busyId === c.connectorId ? "Running…" : "Run now"}
                 </Button>
                 <Button size="small" disabled={busyId != null} onClick={() => toggle(c)}>{c.enabled ? "Disable" : "Enable"}</Button>
+                <Button
+                  size="small"
+                  aria-expanded={historyOpen.has(c.connectorId)}
+                  onClick={() =>
+                    setHistoryOpen((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(c.connectorId)) next.delete(c.connectorId);
+                      else next.add(c.connectorId);
+                      return next;
+                    })
+                  }
+                >
+                  {historyOpen.has(c.connectorId) ? "Hide history" : "History"}
+                </Button>
                 <Button size="small" color="error" disabled={busyId != null} onClick={() => setToRemove(c)}>Remove</Button>
               </Stack>
               <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
@@ -364,6 +444,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
                       (runResult.summary?.complete === false ? " · listing incomplete (keys denied?): nothing retired" : "")}
                 </Alert>
               ) : null}
+              {historyOpen.has(c.connectorId) ? <RunHistory connectorId={c.connectorId} nonce={nonce} /> : null}
             </Box>
           ))}
         </Stack>

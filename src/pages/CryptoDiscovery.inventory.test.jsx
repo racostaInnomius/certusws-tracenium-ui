@@ -37,7 +37,8 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listCdpDeviceCertificates: vi.fn(async () => ({ items: [] })),
     listCdpTrustAnchors: vi.fn(async () => ({ items: [] })),
     listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
-    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] }))
+    listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
+    listCdpAdcsSources: vi.fn(async () => ({ ok: true, sources: [] }))
   };
 });
 
