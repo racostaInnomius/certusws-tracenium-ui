@@ -60,7 +60,7 @@ export default function PluginsView({ catalog, form, entitled, coverage, onOpenS
                     {r.description ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{r.description}</Typography> : null}
                   </TableCell>
                   <TableCell>
-                    <Chip size="small" label={r.required ? "Active · required" : chip.label} sx={{ bgcolor: chip.bg, color: chip.fg, fontWeight: 700 }} />
+                    <Chip size="small" label={chip.label} sx={{ bgcolor: chip.bg, color: chip.fg, fontWeight: 700 }} />
                   </TableCell>
                   <TableCell>{tierLabel(r.tier)}</TableCell>
                   <TableCell>
