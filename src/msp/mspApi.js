@@ -176,3 +176,33 @@ export async function fetchPendingClients(mspId, options = {}) {
 export async function createManagedClient(mspId, { name, adminSubject, adminEmail } = {}) {
   return httpPostJson(`/api/v1/msp/admin/msps/${encodeURIComponent(mspId)}/clients`, { name, adminSubject, adminEmail });
 }
+
+// ── Catálogo global (ADR-0016 F1) — vendor-only ───────────────────────
+//
+// Mismo gate que el resto de este bloque: el backend devuelve 403 VENDOR_ONLY a
+// quien no sea staff de Tracenium. `no-store` porque publicar y despublicar
+// cambian la lista y hay que verlo al momento — el mismo motivo que el resto de
+// las lecturas de administración.
+
+/** Lo publicado, con cuántos tenants lo tienen enlazado. */
+export async function fetchGlobalCatalog(options = {}) {
+  return httpGetJson("/api/v1/msp/admin/global-catalog", { cache: "no-store", ...options });
+}
+
+/** Los paquetes de Tracenium que se pueden publicar, y cuáles ya lo están. */
+export async function fetchPublishablePackages(options = {}) {
+  return httpGetJson("/api/v1/msp/admin/global-catalog/publishable", {
+    cache: "no-store",
+    ...options,
+  });
+}
+
+/** Publica un paquete. El backend rechaza cualquiera que no sea de Tracenium. */
+export async function publishToGlobalCatalog(packageId, title) {
+  return httpPostJson("/api/v1/msp/admin/global-catalog", { packageId, title });
+}
+
+/** Retira una entrada. 409 si algún tenant la tiene enlazada. */
+export async function unpublishFromGlobalCatalog(entryId) {
+  return httpDeleteJson(`/api/v1/msp/admin/global-catalog/${encodeURIComponent(entryId)}`);
+}

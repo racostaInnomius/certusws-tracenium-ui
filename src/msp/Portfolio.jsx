@@ -27,6 +27,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
+import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 import DomainOutlinedIcon from "@mui/icons-material/DomainOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
@@ -37,6 +38,7 @@ import { fetchMspClients, fetchMyMemberships } from "./mspApi";
 import PortfolioGrid from "./PortfolioGrid";
 import ConsolidatedStrip from "./ConsolidatedStrip";
 import MspAdmin from "./MspAdmin";
+import GlobalCatalogAdmin from "./GlobalCatalogAdmin";
 import MspTeamDialog from "./MspTeamDialog";
 import ClaimCodesDialog from "./ClaimCodesDialog";
 
@@ -48,6 +50,7 @@ export default function Portfolio({ onManageTenants }) {
   // button in the top-level vendor view; closing it reloads the portfolio
   // so any hierarchy change (new MSP, reassigned client) is reflected.
   const [adminOpen, setAdminOpen] = React.useState(false);
+  const [catalogOpen, setCatalogOpen] = React.useState(false);
 
   // Self-service: MSPs the caller OWNs → "Manage team" / "Add a client".
   // Fetched only at the MSP-operator level (empty for the vendor). If they
@@ -158,6 +161,14 @@ export default function Portfolio({ onManageTenants }) {
   // Vendor opened the admin surface — render it in place of the grid. On
   // close, refresh the portfolio so a newly created MSP / reassigned
   // client shows up immediately.
+  // Catálogo global (ADR-0016 F1): otra superficie vendor-only, misma
+  // mecánica que MspAdmin — sustituye la rejilla en vez de abrir un diálogo.
+  // No comparte pantalla con la gestión de partners porque es otro trabajo:
+  // aquélla ordena el árbol de tenants, ésta publica binarios.
+  if (catalogOpen && level === "vendor") {
+    return <GlobalCatalogAdmin onClose={() => setCatalogOpen(false)} />;
+  }
+
   if (adminOpen && level === "vendor") {
     return (
       <MspAdmin
@@ -192,6 +203,21 @@ export default function Portfolio({ onManageTenants }) {
                 }}
               >
                 Manage Tenants
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<PublicOutlinedIcon />}
+                onClick={() => setCatalogOpen(true)}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: BRAND.teal,
+                  color: BRAND.tealText,
+                  "&:hover": { borderColor: BRAND.tealText, bgcolor: BRAND.tealSoft },
+                }}
+              >
+                Global catalog
               </Button>
               <Button
                 size="small"
