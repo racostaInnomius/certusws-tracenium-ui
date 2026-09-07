@@ -111,6 +111,10 @@ export default function CdpCertFacets({ filter, onSelect, refreshNonce, view = "
       })}
       <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
         {view === "devices" ? "Devices" : "Certificates"} under the current filters, the same way the table counts them.
+        {/* Medido en T111: 18 de 724 certificados están a la vez en un almacén y
+            servidos por un listener, así que Source suma 742. No es un error;
+            se dice para que nadie sume la columna esperando el total. */}
+        {" "}A certificate present in more than one source or scope counts in each of them.
       </Typography>
     </Stack>
   );

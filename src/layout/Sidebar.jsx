@@ -709,7 +709,9 @@ export default function Sidebar({
     // Crypto Discovery (CDP) — cert inventory ON the devices. Distinto de
     // PKI (Administration), que son los certs de identidad mTLS del propio
     // agente.
-    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon />, badge: "Beta" },
+    // Sin «Beta» desde 2026-09-06: inventario, roadmap, conectores y
+    // settings desplegados y en uso; la etiqueta ya no describía el estado.
+    { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon /> },
     // Device Management (MDM/MAM) es un área de producto por derecho
     // propio (aquí aterriza el MDM propio), no un ajuste de configuración.
     //

@@ -73,19 +73,22 @@ describe("los plugins, en orden de ciclo de vida", () => {
       "Security Compliance",
       "Remote Control",
       "Patch Management",
-      "Crypto DiscoveryBeta",
+      "Crypto Discovery",
       "MDM / MAMBeta",
     ]);
   });
 
-  it("Remote Control ya no lleva la pastilla de Beta", () => {
-    // Crypto Discovery y MDM/MAM sí la conservan: siguen siéndolo.
+  it("Remote Control y Crypto Discovery ya no llevan la pastilla de Beta; MDM/MAM sí", () => {
+    // Crypto Discovery la perdió el 2026-09-06: inventario, roadmap,
+    // conectores y settings desplegados y en uso. MDM/MAM sigue siéndolo.
     auth = asRole("OWNER");
     render(<Sidebar selected="overview" />);
 
     const rc = screen.getByText("Remote Control").closest("div[role='button']");
     expect(within(rc).queryByText("Beta")).toBeNull();
-    expect(screen.getByText("Crypto Discovery").closest("div[role='button']").textContent)
+    const cdp = screen.getByText("Crypto Discovery").closest("div[role='button']");
+    expect(within(cdp).queryByText("Beta")).toBeNull();
+    expect(screen.getByText("MDM / MAM").closest("div[role='button']").textContent)
       .toContain("Beta");
   });
 });
