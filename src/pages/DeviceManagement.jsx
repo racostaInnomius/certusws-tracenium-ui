@@ -28,6 +28,13 @@ import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// No hay un tipo "mdm" en el catálogo de informes, y no se inventa uno aquí:
+// la clave tiene que existir en `REPORT_REGISTRY` o Reports avisa de que no
+// está disponible. Los equipos gestionados son parte de la flota, y el informe
+// de flota es el que los cuenta.
+const FLEET_HEALTH_KEY = "global.fleet-health";
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
@@ -91,6 +98,10 @@ export default function DeviceManagement({ onNavigate }) {
   // already applied to Jobs.jsx/Audit.jsx/PKI.jsx/SecurityBaselines.jsx.
   // Defaults to disabled while the fetch is in flight (fail-closed).
   const [myPermissions, setMyPermissions] = React.useState(null);
+  // El mismo endpoint devuelve el rol EFECTIVO que resuelve el servidor, y el
+  // botón de informe lo necesita: `auth.role` no es el rol sobre el cliente
+  // activo en una sesión de cartera MSP.
+  const [myRole, setMyRole] = React.useState(null);
 
   React.useEffect(() => {
     if (!tenantId) return;
@@ -99,6 +110,7 @@ export default function DeviceManagement({ onNavigate }) {
       .then((resp) => {
         if (!alive) return;
         setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+        setMyRole(resp?.role ?? null);
       })
       .catch(() => {
         if (!alive) return;
@@ -111,6 +123,11 @@ export default function DeviceManagement({ onNavigate }) {
 
   const capabilitiesLoading = isActiveMember && myPermissions === null;
   const canManage = isActiveMember && Boolean(myPermissions?.has("device_management"));
+  // ⚠️ No es `canManage`: aquello es la capacidad `device_management` y esto es
+  // el ROL. `global.fleet-health` declara `minRole: ["ADMIN","OWNER"]`, así que
+  // a quien gestione dispositivos sin ser administrador le saldría una puerta
+  // que termina en "no disponible".
+  const canReport = isActiveMember && ["ADMIN", "OWNER"].includes(String(myRole || ""));
 
   const [policyRow, setPolicyRow] = React.useState(null);
   // ManagedAppSection is props-driven against `form.managedApp`.
@@ -325,12 +342,21 @@ export default function DeviceManagement({ onNavigate }) {
         subtitle="Mobile and managed-device policy (MDM / MAM). Per-device actions — lock, selective wipe, alert — are on each device in Asset Management."
         icon={<PhonelinkSetupOutlinedIcon />}
         actions={
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={load}
-            loading={loading}
-          />
+          <>
+            {canReport ? (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={FLEET_HEALTH_KEY}
+                tooltip="Fleet health report"
+              />
+            ) : null}
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={load}
+              loading={loading}
+            />
+          </>
         }
       />
 
