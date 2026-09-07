@@ -59,6 +59,13 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// ⭐ ESTA página sí tiene su propio tipo de informe en el catálogo, a
+// diferencia de Software Delivery o Remote Control: `pmp.cve-exposure` es
+// exposición a CVE, que es exactamente lo que se administra aquí. Por eso no
+// hereda el de flota.
+const CVE_EXPOSURE_KEY = "pmp.cve-exposure";
 import JobTracker from "../components/common/JobTracker";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useAuthContext } from "../auth/AuthContext";
@@ -456,6 +463,7 @@ export default function PatchManagement({ onNavigate }) {
     data: queueData,
     loading: queueLoading,
     refreshing: queueRefreshing,
+    refetch: refetchQueue,
   } = useCachedFetch(`patchManagement:queue:${tenantId || "none"}`, queueLoader);
 
   // Deep-link flash: Asset Management's "Actions" menu links here with
@@ -501,6 +509,10 @@ export default function PatchManagement({ onNavigate }) {
   // to false while the fetch is in flight (fail-closed).
   const isActiveMember = auth?.tenantMember?.isActive === true;
   const [myPermissions, setMyPermissions] = React.useState(null);
+  // El mismo endpoint devuelve el rol EFECTIVO que resuelve el servidor
+  // (consciente de MSP), y el botón de informe lo necesita: `auth.role` no es
+  // el rol sobre el cliente activo en una sesión de cartera.
+  const [myRole, setMyRole] = React.useState(null);
   React.useEffect(() => {
     if (!tenantId) return undefined;
     let alive = true;
@@ -508,6 +520,7 @@ export default function PatchManagement({ onNavigate }) {
       .then((resp) => {
         if (!alive) return;
         setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+        setMyRole(resp?.role ?? null);
       })
       .catch(() => {
         if (!alive) return;
@@ -518,6 +531,11 @@ export default function PatchManagement({ onNavigate }) {
     };
   }, [tenantId]);
   const isAdmin = isActiveMember && Boolean(myPermissions?.has("patch_management"));
+  // ⚠️ No es `isAdmin`: aquello es la capacidad `patch_management` y esto es el
+  // ROL. `pmp.cve-exposure` declara `minRole: ["ADMIN","OWNER"]`, así que a un
+  // rol de parcheo que no sea administrador le saldría una puerta que termina
+  // en "no disponible".
+  const canReport = isActiveMember && ["ADMIN", "OWNER"].includes(String(myRole || ""));
 
   // Tenant policy — the source of truth for "is PMP active". Cached
   // so toggling between pages doesn't flash the placeholder while
@@ -569,10 +587,25 @@ export default function PatchManagement({ onNavigate }) {
     [devicesRes]
   );
 
+  /**
+   * Refrescar TODO lo que la página enseña, no sólo lo que carga la página.
+   *
+   * Eran dos llamadas —resumen y equipos— y con eso se daba por refrescada.
+   * Faltaban la cola de prioridad y las pestañas que traen su propia carga:
+   * Third-party, Vulnerabilities, los hallazgos y la configuración de
+   * seguridad. Pulsar Refresh con cualquiera de ellas delante no hacía nada
+   * visible, y el botón se comporta igual tanto si recarga como si no.
+   *
+   * El nonce es lo que alcanza a esas pestañas: no tienen `refetch` porque no
+   * pasan por `useCachedFetch`, cargan en un efecto propio.
+   */
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
   const refreshAll = React.useCallback(() => {
     refetchSummary();
     refetchDevices();
-  }, [refetchSummary, refetchDevices]);
+    refetchQueue?.();
+    setRefreshNonce((n) => n + 1);
+  }, [refetchSummary, refetchDevices, refetchQueue]);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(
     refreshAll,
     "patchAutoRefresh"
@@ -963,6 +996,13 @@ export default function PatchManagement({ onNavigate }) {
                 }}
               />
             )}
+            {canReport ? (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={CVE_EXPOSURE_KEY}
+                tooltip="CVE exposure report"
+              />
+            ) : null}
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
@@ -1204,24 +1244,27 @@ export default function PatchManagement({ onNavigate }) {
                   KEV checks.
                 </Typography>
                 <FindingsPanel
+                  refreshNonce={refreshNonce}
                   tabKey="patches"
                   category={PATCHING_CATEGORY}
                   openCheckId={pendingCheckId}
                   onOpened={() => setPendingCheckId(null)}
                   canManage={canManage}
-                  notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+                  notify={notify}
                 />
               </Box>
             </Box>
           ) : tab === "third-party" ? (
             <ThirdPartyTab
+              refreshNonce={refreshNonce}
               canManage={canManage}
-              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+              notify={notify}
             />
           ) : tab === "vulnerabilities" ? (
             <VulnerabilitiesTab
+              refreshNonce={refreshNonce}
               canManage={canManage}
-              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+              notify={notify}
             />
           ) : tab === "settings" ? (
             <ConfigurePanel
@@ -1229,16 +1272,17 @@ export default function PatchManagement({ onNavigate }) {
               devices={devices}
               section={configSection}
               onSectionChange={setConfigSection}
-              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+              notify={notify}
             />
           ) : tab === "security" ? (
             <SecurityConfigPanel
+              refreshNonce={refreshNonce}
               canManage={canManage}
               openCheckId={pendingCheckId}
               onOpened={() => setPendingCheckId(null)}
               domain={securityDomain}
               onDomainChange={setSecurityDomain}
-              notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+              notify={notify}
             />
           ) : (
             <CategoryPanel

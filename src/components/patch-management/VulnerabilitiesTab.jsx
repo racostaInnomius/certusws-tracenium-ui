@@ -9,6 +9,6 @@
 
 import VulnerabilityExposurePanel from "./VulnerabilityExposurePanel";
 
-export default function VulnerabilitiesTab({ canManage, notify }) {
-  return <VulnerabilityExposurePanel canManage={canManage} notify={notify} />;
+export default function VulnerabilitiesTab({ canManage, notify, refreshNonce = 0 }) {
+  return <VulnerabilityExposurePanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />;
 }

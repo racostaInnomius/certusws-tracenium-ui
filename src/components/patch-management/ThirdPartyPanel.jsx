@@ -32,7 +32,7 @@ function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
 }
 
-export default function ThirdPartyPanel({ canManage, notify }) {
+export default function ThirdPartyPanel({ canManage, notify, refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [confirm, setConfirm] = React.useState(null); // the entry pending remediation
@@ -52,7 +52,7 @@ export default function ThirdPartyPanel({ canManage, notify }) {
 
   React.useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshNonce]);
 
   const doRemediate = async () => {
     if (!confirm) return;

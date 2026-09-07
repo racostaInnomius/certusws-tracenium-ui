@@ -9,6 +9,6 @@
 
 import ThirdPartyPanel from "./ThirdPartyPanel";
 
-export default function ThirdPartyTab({ canManage, notify }) {
-  return <ThirdPartyPanel canManage={canManage} notify={notify} />;
+export default function ThirdPartyTab({ canManage, notify, refreshNonce = 0 }) {
+  return <ThirdPartyPanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />;
 }

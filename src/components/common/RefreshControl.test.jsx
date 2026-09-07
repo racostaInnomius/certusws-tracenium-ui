@@ -33,7 +33,7 @@ describe("RefreshControl — presentational", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it("loading=true → button reads 'Refreshing…' and is disabled", () => {
+  it("loading=true → el rótulo dice 'Refreshing…' pero el NOMBRE sigue siendo 'Refresh'", () => {
     render(
       <RefreshControl
         refreshSeconds="60"
@@ -42,8 +42,13 @@ describe("RefreshControl — presentational", () => {
         loading
       />
     );
-    const btn = screen.getByRole("button", { name: /Refreshing/i });
+    // El nombre accesible es estable a propósito: si cambiara con el estado,
+    // quien navega con lector de pantalla pierde de vista el botón justo
+    // mientras espera, y cualquier referencia a él por su nombre deja de
+    // encontrarlo a mitad de acción.
+    const btn = screen.getByRole("button", { name: "Refresh" });
     expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent(/Refreshing/i);
   });
 
   it("renders all cadence options and reports the chosen value", async () => {

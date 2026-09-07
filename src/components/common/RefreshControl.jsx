@@ -83,6 +83,11 @@ export default function RefreshControl({
           onRefresh?.();
         }}
         disabled={loading}
+        // Nombre accesible ESTABLE. El rótulo pasa a "Refreshing…" mientras
+        // carga, y sin esto el botón cambia de nombre justo cuando alguien con
+        // lector de pantalla querría saber qué está ocurriendo — y cualquier
+        // referencia a él por su nombre deja de encontrarlo a mitad de acción.
+        aria-label="Refresh"
         sx={{
           textTransform: "none",
           fontWeight: 700,
