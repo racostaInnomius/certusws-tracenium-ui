@@ -26,6 +26,20 @@ export const REFRESH_OPTIONS = [
 
 export const DEFAULT_REFRESH_SECONDS = "60";
 
+/**
+ * Altura común del control y del botón.
+ *
+ * Un `TextField size="small"` mide 40 px y un `Button` de tamaño por defecto
+ * 36,5: cuatro píxeles de diferencia en una fila alineada al centro, que se
+ * leen como un descuido en las once páginas que usan esto. Se fija aquí y en
+ * los dos, para que no puedan volver a separarse si MUI cambia sus defaults.
+ *
+ * Bajar el campo a 36,5 es seguro porque su etiqueta está SIEMPRE flotada: es
+ * un `select` que nunca está vacío, así que el rótulo vive en la muesca del
+ * borde y no puede chocar con el texto.
+ */
+const CONTROL_HEIGHT = 36.5;
+
 export default function RefreshControl({
   refreshSeconds,
   onRefreshSecondsChange,
@@ -35,30 +49,6 @@ export default function RefreshControl({
 }) {
   return (
     <>
-      <TextField
-        select
-        label="Auto refresh"
-        size="small"
-        value={refreshSeconds}
-        onChange={(e) => onRefreshSecondsChange?.(e.target.value)}
-        sx={{
-          minWidth: 140,
-          // Override MUI's default primary-blue focus ring with the
-          // brand teal so the control reads as part of Tracenium's
-          // palette, not as a stock MUI form field.
-          "& .MuiOutlinedInput-root": {
-            "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: BRAND.teal },
-            "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: BRAND.teal },
-          },
-          "& .MuiInputLabel-root.Mui-focused": { color: BRAND.teal },
-        }}
-      >
-        {options.map((opt) => (
-          <MenuItem key={opt.value} value={opt.value}>
-            {opt.label}
-          </MenuItem>
-        ))}
-      </TextField>
       <Button
         variant="outlined"
         startIcon={<RefreshOutlinedIcon />}
@@ -89,6 +79,7 @@ export default function RefreshControl({
         // referencia a él por su nombre deja de encontrarlo a mitad de acción.
         aria-label="Refresh"
         sx={{
+          height: CONTROL_HEIGHT,
           textTransform: "none",
           fontWeight: 700,
           borderColor: BRAND.teal,
@@ -98,6 +89,31 @@ export default function RefreshControl({
       >
         {loading ? "Refreshing…" : "Refresh"}
       </Button>
+      <TextField
+        select
+        label="Auto refresh"
+        size="small"
+        value={refreshSeconds}
+        onChange={(e) => onRefreshSecondsChange?.(e.target.value)}
+        sx={{
+          minWidth: 140,
+          "& .MuiInputBase-root": { height: CONTROL_HEIGHT },
+          // Override MUI's default primary-blue focus ring with the
+          // brand teal so the control reads as part of Tracenium's
+          // palette, not as a stock MUI form field.
+          "& .MuiOutlinedInput-root": {
+            "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: BRAND.teal },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: BRAND.teal },
+          },
+          "& .MuiInputLabel-root.Mui-focused": { color: BRAND.teal },
+        }}
+      >
+        {options.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </MenuItem>
+        ))}
+      </TextField>
     </>
   );
 }

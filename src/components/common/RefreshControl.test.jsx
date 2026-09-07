@@ -72,4 +72,42 @@ describe("RefreshControl — presentational", () => {
     await user.click(within(listbox).getByRole("option", { name: "Every 5 min" }));
     expect(onChange).toHaveBeenCalledWith("300");
   });
+
+  // ── Orden y altura de la fila (07-sep) ──────────────────────────
+  //
+  // El desplegable iba ANTES del botón, así que quedaba en medio de la fila de
+  // acciones en vez de cerrarla; y medía 40 px contra los 36,5 del botón —
+  // cuatro píxeles que en una fila alineada al centro se leen como un
+  // descuido, en las once páginas que usan este control.
+  it("el botón va primero y el desplegable cierra la fila", () => {
+    const { container } = render(
+      <RefreshControl refreshSeconds="60" onRefreshSecondsChange={() => {}} onRefresh={() => {}} />
+    );
+
+    const boton = screen.getByRole("button", { name: "Refresh" });
+    const campo = screen.getByLabelText(/auto refresh/i).closest(".MuiFormControl-root");
+
+    // `compareDocumentPosition` mide el orden REAL en el DOM, que es el que
+    // decide la posición visual en un flex row — no el orden en que se
+    // escribieron los props.
+    expect(boton.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(container).toBeTruthy();
+  });
+
+  it("los dos declaran la MISMA altura", () => {
+    // jsdom no maqueta, así que no se puede medir en píxeles: se comprueba que
+    // ambos la declaran, que es lo que impide que vuelvan a separarse cuando
+    // MUI cambie sus defaults.
+    render(
+      <RefreshControl refreshSeconds="60" onRefreshSecondsChange={() => {}} onRefresh={() => {}} />
+    );
+
+    const boton = screen.getByRole("button", { name: "Refresh" });
+    const input = screen.getByLabelText(/auto refresh/i).closest(".MuiInputBase-root");
+
+    const alturaBoton = getComputedStyle(boton).height;
+    const alturaCampo = getComputedStyle(input).height;
+    expect(alturaBoton).toBe(alturaCampo);
+    expect(alturaBoton).not.toBe("");
+  });
 });
