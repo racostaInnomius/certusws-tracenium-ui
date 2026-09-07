@@ -25,6 +25,8 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -125,8 +127,16 @@ function StatusChip({ status }) {
   );
 }
 
+// Baselines de 800-53. Un cliente responde por la suya, no por los 1.014
+// controles; Moderate es la que piden FedRAMP y la mayoría de contratos, y
+// es la vista por defecto. "All" enseña el catálogo entero.
+const BASELINES = ["low", "moderate", "high"];
+const DEFAULT_BASELINE = "moderate";
+
 export default function FrameworkControlsPanel({ framework, assetGroupId, agentId, reloadKey }) {
   const [state, setState] = React.useState({ loading: true, error: null, controls: [] });
+  const [baseline, setBaseline] = React.useState(DEFAULT_BASELINE);
+  React.useEffect(() => { setBaseline(DEFAULT_BASELINE); }, [framework]);
 
   React.useEffect(() => {
     if (!framework) return undefined;
@@ -156,9 +166,17 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
     };
   }, [framework, assetGroupId, agentId, reloadKey]);
 
+  // Sólo los estándares con baselines (800-53) enseñan el selector; el
+  // filtro es local porque las baselines viajan en cada fila.
+  const hasBaselines = React.useMemo(() => state.controls.some((r) => Array.isArray(r.baselines)), [state.controls]);
+  const visible = React.useMemo(
+    () => (hasBaselines && baseline !== "all" ? state.controls.filter((r) => Array.isArray(r.baselines) && r.baselines.includes(baseline)) : state.controls),
+    [state.controls, hasBaselines, baseline]
+  );
+
   const summary = React.useMemo(() => {
     const c = { pass: 0, fail: 0, review: 0, not_assessed: 0, not_applicable: 0, no_evidence: 0, organizational: 0, automatable_gap: 0 };
-    for (const row of state.controls) {
+    for (const row of visible) {
       if (c[row.status] !== undefined) c[row.status] += 1;
       // De lo no cubierto, cuánto PODRÍA cubrirse. Un control manual no
       // lo cierra ningún agente; el resto es evidencia que aún no
@@ -166,11 +184,11 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
       if (row.status === "no_evidence" && row.automated !== false) c.automatable_gap += 1;
     }
     return c;
-  }, [state.controls]);
+  }, [visible]);
 
   // Los organizativos no entran en el denominador: no son controles que
   // un software pueda cubrir, así que "cobertura" se mide sobre el resto.
-  const deviceEvidenceable = state.controls.length - summary.organizational;
+  const deviceEvidenceable = visible.length - summary.organizational;
   const covered = deviceEvidenceable - summary.no_evidence;
   const coveragePct = deviceEvidenceable
     ? Math.round((covered / deviceEvidenceable) * 100)
@@ -210,10 +228,24 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
           es el veredicto sobre esa parte. Enseñar sólo la segunda es lo
           que hacía que un 80% se leyera como "80% de CIS" cuando era el
           80% de un 2%. */}
+      {hasBaselines ? (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontWeight: 700, textTransform: "uppercase" }}>Baseline</Typography>
+          <ToggleButtonGroup size="small" exclusive value={baseline} onChange={(_, v) => { if (v) setBaseline(v); }} aria-label="Baseline">
+            {BASELINES.map((b) => (
+              <ToggleButton key={b} value={b} sx={{ textTransform: "capitalize", fontSize: TEXT.xs, py: 0.25 }}>{b}</ToggleButton>
+            ))}
+            <ToggleButton value="all" sx={{ fontSize: TEXT.xs, py: 0.25 }}>All</ToggleButton>
+          </ToggleButtonGroup>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+            {baseline === "all" ? `${visible.length} controls` : `${visible.length} controls in the ${baseline} baseline`}
+          </Typography>
+        </Stack>
+      ) : null}
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700 }}>
         {summary.organizational > 0
-          ? `Tracenium covers ${covered} of the ${deviceEvidenceable} device-evidenceable controls in this standard (${coveragePct}%)`
-          : `Tracenium covers ${covered} of ${state.controls.length} controls in this standard (${coveragePct}%)`}
+          ? `Tracenium covers ${covered} of the ${deviceEvidenceable} device-evidenceable controls in this ${hasBaselines && baseline !== "all" ? "baseline" : "standard"} (${coveragePct}%)`
+          : `Tracenium covers ${covered} of ${visible.length} controls in this ${hasBaselines && baseline !== "all" ? "baseline" : "standard"} (${coveragePct}%)`}
       </Typography>
       {summary.organizational > 0 ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 0.5 }}>
@@ -251,7 +283,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
           </TableRow>
         </TableHead>
         <TableBody>
-          {state.controls.map((row) => (
+          {visible.map((row) => (
             <TableRow key={row.controlId} hover sx={row.status === "no_evidence" || row.status === "not_applicable" || row.status === "organizational" ? { opacity: 0.55 } : undefined}>
               <TableCell>
                 <Stack spacing={0.25}>

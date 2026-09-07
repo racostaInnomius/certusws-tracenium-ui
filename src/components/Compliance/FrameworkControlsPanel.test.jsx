@@ -9,7 +9,7 @@
 // diga en vez de dejar un hueco que se lee como "no hay controles".
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const getFrameworkControls = vi.fn();
 vi.mock("../../api/compliance", () => ({
@@ -258,5 +258,36 @@ describe("FrameworkControlsPanel", () => {
     // La cobertura se mide sobre lo que un software puede evidenciar: 1 de 1, no 1 de 3.
     expect(screen.getByText(/covers 1 of the 1 device-evidenceable controls in this standard \(100%\)/)).toBeInTheDocument();
     expect(screen.getByText(/The other 2 are organizational/)).toBeInTheDocument();
+  });
+
+  // ── Baselines de 800-53 (punto 3 de NIST) ───────────────────────────
+  it("filters 800-53 by baseline, Moderate by default, and recounts coverage on the visible set", async () => {
+    getFrameworkControls.mockResolvedValue({ ok: true, framework: "nist_800_53_rev5", controls: [
+      { controlId: "AC-7", controlTitle: "Unsuccessful Logon Attempts", checks: [{ checkId: "x" }], devicesPassing: 3, devicesFailing: 0, devicesNotAssessed: 0, status: "pass", automated: true, baselines: ["low", "moderate", "high"] },
+      { controlId: "AC-2(1)", controlTitle: "Automated System Account Management", checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0, status: "no_evidence", automated: false, baselines: ["moderate", "high"] },
+      { controlId: "AU-9(3)", controlTitle: "Cryptographic Protection", checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0, status: "no_evidence", automated: true, baselines: ["high"] },
+      { controlId: "PM-1", controlTitle: "Program Plan", checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0, status: "organizational", automated: false, baselines: null },
+    ] });
+    render(<FrameworkControlsPanel framework="nist_800_53_rev5" />);
+    await screen.findByText("AC-7");
+    expect(screen.getByRole("button", { name: "moderate" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("AC-2(1)")).toBeInTheDocument();
+    expect(screen.queryByText("AU-9(3)")).toBeNull();
+    expect(screen.queryByText("PM-1")).toBeNull();
+    expect(screen.getByText(/2 controls in the moderate baseline/)).toBeInTheDocument();
+    expect(screen.getByText(/covers 1 of 2 controls in this baseline \(50%\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "high" }));
+    expect(await screen.findByText("AU-9(3)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(await screen.findByText("PM-1")).toBeInTheDocument();
+    expect(screen.getByText(/4 controls$/)).toBeInTheDocument();
+  });
+
+  it("shows no baseline selector for a standard without baselines", async () => {
+    getFrameworkControls.mockResolvedValue(ok(CONTROLS));
+    render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
+    await screen.findByText("18.3.2");
+    expect(screen.queryByRole("group", { name: "Baseline" })).toBeNull();
   });
 });
