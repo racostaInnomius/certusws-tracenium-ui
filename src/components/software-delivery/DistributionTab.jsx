@@ -217,7 +217,7 @@ function DpDialog({ open, sites, onClose, onSaved, notify }) {
   );
 }
 
-export default function DistributionTab({ canManage, notify }) {
+export default function DistributionTab({ canManage, notify, refreshNonce = 0 }) {
   const [loading, setLoading] = React.useState(true);
   const [sites, setSites] = React.useState([]);
   const [dps, setDps] = React.useState([]);
@@ -247,7 +247,7 @@ export default function DistributionTab({ canManage, notify }) {
 
   React.useEffect(() => {
     reload();
-  }, [reload]);
+  }, [reload, refreshNonce]);
 
   const removeSite = async (site) => {
     try {

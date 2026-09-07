@@ -13,6 +13,7 @@
 import * as React from "react";
 import { Button, MenuItem, TextField } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import { clearApiCache } from "../../api/http";
 import { BRAND } from "../../theme/brand";
 
 export const REFRESH_OPTIONS = [
@@ -61,7 +62,26 @@ export default function RefreshControl({
       <Button
         variant="outlined"
         startIcon={<RefreshOutlinedIcon />}
-        onClick={onRefresh}
+        onClick={() => {
+          // ⚠️ TIRAR LA CACHÉ ANTES DE RECARGAR, o esto no refresca nada.
+          //
+          // `httpGetJson` sirve de una caché en memoria mientras la entrada
+          // esté fresca (60 s por defecto). Una página cuyo "refrescar" sólo
+          // vuelve a llamar a su `load` recibe exactamente los mismos datos
+          // que ya tenía, sin que salga una sola petición — y el operador se
+          // queda mirando una foto vieja convencido de que acaba de
+          // actualizarla, que es peor que no tener botón.
+          //
+          // Es el mismo patrón que ya usaban las escrituras
+          // (`invalidateAfterMutation`): corrección antes que optimizar. Pulsar
+          // esto es una petición explícita de datos frescos.
+          //
+          // El tick del auto-refresco NO lo hace: es una comodidad de fondo, y
+          // vaciar la caché de toda la app cada 30-60 s por si acaso le sale
+          // caro a un portal servido desde un Static Web App gratuito.
+          clearApiCache();
+          onRefresh?.();
+        }}
         disabled={loading}
         sx={{
           textTransform: "none",

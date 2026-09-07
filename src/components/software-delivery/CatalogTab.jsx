@@ -72,7 +72,7 @@ import DeployWizardDialog from "./DeployWizardDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import { isVerifiedPackage, originLabel } from "./packageOrigin";
 
-export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue }) {
+export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue, refreshNonce = 0 }) {
   // La cola de revisión cuelga del catálogo desde la fase 3.
   const [reviewOpen, setReviewOpen] = React.useState(false);
 
@@ -130,7 +130,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
 
   React.useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshNonce]);
 
   /**
    * How many uploads are analysed but not yet published.
@@ -173,7 +173,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
 
   React.useEffect(() => {
     loadPending();
-  }, [loadPending]);
+  }, [loadPending, refreshNonce]);
 
   /**
    * Upload an installer for analysis — the primary way in.

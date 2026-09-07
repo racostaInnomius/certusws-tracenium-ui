@@ -18,6 +18,8 @@ import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlin
 
 import { BRAND, TEXT } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
 import SectionPaper from "../components/common/SectionPaper";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useAuthContext } from "../auth/AuthContext";
@@ -55,7 +57,13 @@ const TAB_SX = {
 
 // ── Page shell ────────────────────────────────────────────────────
 
-export default function SoftwareDelivery() {
+// El informe que cubre lo que pasa por esta página: su sección de actividad
+// lleva los despliegues de software del periodo. No hay un tipo "sdp" en el
+// catálogo y no se inventa uno aquí — la clave tiene que existir en
+// `REPORT_REGISTRY` o Reports avisa de que no está disponible.
+const FLEET_HEALTH_KEY = "global.fleet-health";
+
+export default function SoftwareDelivery({ onNavigate }) {
   const { auth } = useAuthContext();
   // ⚠️ NOT `auth?.tenantId`. While the operator navigates the vendor/MSP
   // portfolio the selected tenant lives in the MSP context, and `auth` does
@@ -69,7 +77,28 @@ export default function SoftwareDelivery() {
   // the same split (software-delivery.routes.ts requireCapability
   // ("software_delivery")); this only decides what to render.
   // Defaults to false while the fetch is in flight (fail-closed).
+  // Refresco de página, mismo patrón que Asset Management: subir el nonce es
+  // la señal para que las pestañas vuelvan a pedir. Aquí las CUATRO lo miran
+  // — un botón de refrescar que sólo refresca la pestaña que su autor tenía
+  // delante es peor que no tenerlo, porque no se nota que mintió.
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const triggerRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    setRefreshNonce((n) => n + 1);
+    // Las pestañas no reportan cuándo terminan, así que el spinner es
+    // orientativo y se apaga solo. Mismo apaño (y misma limitación) que
+    // Asset Management.
+    window.setTimeout(() => setRefreshing(false), 1200);
+  }, []);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(triggerRefresh, "sdpAutoRefresh");
+
   const [myPermissions, setMyPermissions] = React.useState(null);
+  // El MISMO endpoint devuelve el rol EFECTIVO que resuelve el servidor
+  // (consciente de MSP). Se guarda porque el botón de informe lo necesita, y
+  // preguntarlo aquí es mejor que releer `auth.role`, que en una sesión MSP
+  // no es el rol sobre el cliente activo.
+  const [myRole, setMyRole] = React.useState(null);
   React.useEffect(() => {
     if (!tenantId) return undefined;
     let alive = true;
@@ -77,6 +106,7 @@ export default function SoftwareDelivery() {
       .then((resp) => {
         if (!alive) return;
         setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
+        setMyRole(resp?.role ?? null);
       })
       .catch(() => {
         if (!alive) return;
@@ -87,6 +117,11 @@ export default function SoftwareDelivery() {
     };
   }, [tenantId]);
   const isAdmin = isActive && Boolean(myPermissions?.has("software_delivery"));
+  // ⚠️ No es lo mismo que `isAdmin`: aquello es la capacidad `software_delivery`
+  // y esto es el ROL. El tipo de informe declara `minRole: ["ADMIN","OWNER"]`,
+  // así que un rol personalizado que gestiona despliegues pero no es
+  // administrador vería un botón que termina en "no disponible".
+  const canReport = isActive && ["ADMIN", "OWNER"].includes(String(myRole || ""));
 
   // Plugin catalog from the backend — needed for the required-plugin
   // semantics in getEnabledPluginSet (AMP is always enabled even if
@@ -184,6 +219,23 @@ export default function SoftwareDelivery() {
         title="Software Delivery"
         subtitle="Deploy third-party software to the fleet — catalog, target groups, per-device results"
         icon={<CloudDownloadOutlinedIcon />}
+        actions={
+          <>
+            {canReport ? (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={FLEET_HEALTH_KEY}
+                tooltip="Fleet health report"
+              />
+            ) : null}
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={triggerRefresh}
+              loading={refreshing}
+            />
+          </>
+        }
       />
 
       {/* Plugin-disabled banner. Renders only after we've resolved
@@ -266,6 +318,7 @@ export default function SoftwareDelivery() {
 
       {activeTab === 0 ? (
         <OverviewTab
+          refreshNonce={refreshNonce}
           onNavigateTab={(key, opts) => {
             setActiveTab(TAB_INDEX[key] ?? 0);
             if (opts?.reviewQueue) setOpenReviewQueue(true);
@@ -277,6 +330,7 @@ export default function SoftwareDelivery() {
         />
       ) : activeTab === 1 ? (
         <CatalogTab
+          refreshNonce={refreshNonce}
           canManage={canManage}
           notify={notify}
           onDeployFire={handleDeployFired}
@@ -285,13 +339,14 @@ export default function SoftwareDelivery() {
         />
       ) : activeTab === 2 ? (
         <DeploymentsTab
+          refreshNonce={refreshNonce}
           canManage={canManage}
           notify={notify}
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
       ) : (
-        <DistributionTab canManage={canManage} notify={notify} />
+        <DistributionTab canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
       )}
 
       <BrandSnackbar

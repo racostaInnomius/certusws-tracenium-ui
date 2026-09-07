@@ -27,7 +27,7 @@ import { listFrom } from "../../api/shape";
 
 import DeploymentDetailDrawer from "./DeploymentDetailDrawer";
 
-export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen }) {
+export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen, refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -51,7 +51,7 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
 
   React.useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshNonce]);
 
   // If the catalog tab fired a deploy and switched us here, auto-open
   // the drawer for the freshly-created deployment so the operator

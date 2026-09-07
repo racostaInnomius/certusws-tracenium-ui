@@ -77,7 +77,7 @@ function sumOutcomes(deployments, outcomes) {
 
 // Read-only surface: every call degrades to an empty card on failure, so
 // there is nothing to raise to the page-level snackbar.
-export default function OverviewTab({ onNavigateTab }) {
+export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
   const [loading, setLoading] = React.useState(true);
   const [windowKey, setWindowKey] = React.useState("30d");
   const [data, setData] = React.useState({
@@ -147,7 +147,7 @@ export default function OverviewTab({ onNavigateTab }) {
     return () => {
       cancelled = true;
     };
-  }, [windowKey]);
+  }, [windowKey, refreshNonce]);
 
   const stats = React.useMemo(() => {
     const { deployments, intakes, sites, dps } = data;
