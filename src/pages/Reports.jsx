@@ -156,7 +156,7 @@ export default function Reports() {
     preselectDoneRef.current = true;
     // El parámetro se consume: si se queda en la URL, cada recarga vuelve a
     // preguntar por un informe que el operador ya decidió.
-    updateSearchParams({ reportKey: "", reportFormat: "" });
+    updateSearchParams({ reportKey: "", reportFormat: "", reportParams: "" });
 
     const row = typeByKey[wanted];
     if (!row) {
@@ -169,6 +169,17 @@ export default function Reports() {
         severity: "warning",
       });
       return;
+    }
+
+    // Parámetros que manda quien enlaza (el framework seleccionado en
+    // Security Compliance, por ejemplo). Si vienen rotos se ignoran: mejor
+    // generar el informe con su alcance por defecto que no generar nada.
+    let linkedParams = null;
+    try {
+      const raw = getSearchParam("reportParams", "");
+      if (raw) linkedParams = JSON.parse(raw);
+    } catch {
+      linkedParams = null;
     }
 
     const formats = Array.isArray(row.formats) ? row.formats : [];
@@ -187,11 +198,11 @@ export default function Reports() {
       if (!ok) return;
       // Un tipo con parámetros los pide primero: confirmarlo no es lo mismo
       // que saber sobre qué periodo o framework se quiere.
-      if (row.params?.length) {
+      if (row.params?.length && !linkedParams) {
         setParamsTarget({ row, format, intent: "run" });
         return;
       }
-      handleRun(row.key, format);
+      handleRun(row.key, format, linkedParams || undefined);
     })();
   }, [confirm, handleRun, loading, rows, typeByKey]);
 

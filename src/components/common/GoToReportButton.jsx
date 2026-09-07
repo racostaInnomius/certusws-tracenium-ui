@@ -23,6 +23,11 @@ export default function GoToReportButton({
   onNavigate,
   reportKey,
   format = "pdf",
+  // Parámetros del informe (p. ej. `{ framework: "cis_win11" }`). Existen
+  // porque una página filtrada tiene que poder decir "genera LO QUE ESTOY
+  // MIRANDO": si el informe saliera con el alcance por defecto, sería otro
+  // documento que el que la pantalla prometía.
+  params = null,
   tooltip = "Generate this report",
   label = "Report",
 }) {
@@ -42,7 +47,14 @@ export default function GoToReportButton({
             // El parámetro viaja en la URL y lo consume la página de Reports
             // al usarlo, para que una recarga no vuelva a preguntar por un
             // informe ya decidido.
-            updateSearchParams({ reportKey, reportFormat: format });
+            updateSearchParams({
+              reportKey,
+              reportFormat: format,
+              // Como JSON en un solo parámetro: los nombres de los parámetros
+              // los pone cada tipo de informe, así que esparcirlos por la URL
+              // obligaría a esta capa a conocerlos.
+              reportParams: params && Object.keys(params).length ? JSON.stringify(params) : "",
+            });
             onNavigate("reports");
           }}
           sx={{

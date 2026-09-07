@@ -110,7 +110,7 @@ export const PAGE_REGISTRY = {
   // aliases so existing deep links (and the Patch Management CTA) keep
   // working; they just open Settings on the agent tab.
   "agent-settings": (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
-  "security-baselines": () => <SecurityCompliance initialTab="baselines" />,
+  "security-baselines": (ctx) => <SecurityCompliance initialTab="baselines" onNavigate={ctx.onNavigate} />,
   "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
   policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 
@@ -120,7 +120,7 @@ export const PAGE_REGISTRY = {
   // profundos y los marcadores no se rompen— y recibe `onNavigate` para
   // poder volver a la tarjeta de la que ahora se entra.
   pki: (ctx) => <PKI onNavigate={ctx.onNavigate} />,
-  ad: () => <SecurityCompliance />,
+  ad: (ctx) => <SecurityCompliance onNavigate={ctx.onNavigate} />,
   patch: (ctx) => <PatchManagement onNavigate={ctx.onNavigate} />,
 
   // Crypto Discovery (CDP) — certificate inventory discovered ON the

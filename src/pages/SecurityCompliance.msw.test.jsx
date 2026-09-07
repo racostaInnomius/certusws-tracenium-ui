@@ -124,7 +124,7 @@ const ASSET_GROUPS = {
   ],
 };
 
-function mountPage({ settings = SETTINGS } = {}) {
+function mountPage({ settings = SETTINGS, onNavigate = vi.fn() } = {}) {
   respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
   respond("get", `${BASE}/summary`, SUMMARY);
   respond("get", `${BASE}/frameworks`, FRAMEWORKS);
@@ -136,7 +136,9 @@ function mountPage({ settings = SETTINGS } = {}) {
   // ADR-0011 Phase 3 — canManage now comes from this endpoint instead
   // of MOCK_AUTH's role directly; ADMIN holds security_compliance.
   respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
-  return render(<ConfirmProvider><SecurityCompliance /></ConfirmProvider>);
+  // La página siempre recibe `onNavigate` del pageRegistry; sin él el botón
+  // de informe no se pinta (no tendría a dónde ir).
+  return { ...render(<ConfirmProvider><SecurityCompliance onNavigate={onNavigate} /></ConfirmProvider>), onNavigate };
 }
 
 describe("SecurityCompliance — real envelopes over MSW", () => {
@@ -322,17 +324,23 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
   // ── Cabecera: acciones arriba, filtros debajo ─────────────────────
   // Los siete controles compartían fila con el título, no cabían, y el
   // bloque entero envolvía bajo el subtítulo. Se separan por naturaleza:
-  // verbos (exportar/refrescar) en la línea del título, filtros (grupo,
+  // verbos (informe/refrescar) en la línea del título, filtros (grupo,
   // framework, ajustes) en su propio renglón.
-  it("keeps exports and refresh in the title row, filters in their own", async () => {
+  it("keeps the report action and refresh in the title row, filters in their own", async () => {
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
 
     const titleRow = screen.getByRole("heading", { name: "Security Compliance" }).closest("div")
       ?.parentElement?.parentElement;
     expect(titleRow).toBeTruthy();
-    expect(within(titleRow).getByRole("button", { name: /Export CSV/ })).toBeInTheDocument();
-    expect(within(titleRow).getByRole("button", { name: /Export PDF/ })).toBeInTheDocument();
+    expect(within(titleRow).getByRole("button", { name: /^Report$/ })).toBeInTheDocument();
+    expect(within(titleRow).getByRole("button", { name: /^Refresh$/ })).toBeInTheDocument();
+
+    // ⚠️ "Export CSV" y "Export PDF" YA NO EXISTEN aquí: descargaban por
+    // `/api/v1/compliance/export.*` y no dejaban fila en `report_runs`. Se
+    // afirma su AUSENCIA — si vuelven, vuelve la copia sin trazabilidad.
+    expect(screen.queryByRole("button", { name: /Export CSV/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Export PDF/ })).toBeNull();
 
     // The filters are NOT in that row — they sit below it.
     expect(within(titleRow).queryByRole("combobox", { name: "Filter by framework" })).toBeNull();
@@ -590,5 +598,46 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
 
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
     expect(screen.queryByText(/controls mapped/)).not.toBeInTheDocument();
+  });
+
+  // ── El informe se genera POR EL MOTOR ─────────────────────────────
+  //
+  // "Export CSV" y "Export PDF" descargaban por `/api/v1/compliance/export.*`:
+  // el fichero salía y no quedaba fila en `report_runs`. Para un informe de
+  // CUMPLIMIENTO eso es lo contrario de lo que se le pide — una copia
+  // circulando sin poder decir quién se la llevó ni si es la que se firmó.
+  it("el botón lleva a Reports con el tipo del catálogo, no descarga aquí", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const { onNavigate } = mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Report$/ }));
+
+    expect(onNavigate).toHaveBeenCalledWith("reports");
+    const params = new URL(window.location.href).searchParams;
+    // El tipo del registro envuelve los MISMOS handlers que servían la ruta
+    // vieja, así que el fichero es el mismo — con su fila en el ledger.
+    expect(params.get("reportKey")).toBe("scp.compliance-evidence");
+  });
+
+  it("arrastra el framework seleccionado, para que el informe cubra lo que se está mirando", async () => {
+    // Los exports viejos respetaban el filtro. Perderlo al pasar por el motor
+    // habría sido cambiar el documento por otro sin decirlo.
+    const { fireEvent } = await import("@testing-library/react");
+    const { onNavigate } = mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    const opciones = await screen.findAllByRole("option");
+    const cis = opciones.find((o) => /cis/i.test(o.textContent || ""));
+    fireEvent.click(cis);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Report$/ }));
+
+    expect(onNavigate).toHaveBeenCalledWith("reports");
+    const enviados = JSON.parse(
+      new URL(window.location.href).searchParams.get("reportParams") || "{}"
+    );
+    expect(enviados.framework).toBeTruthy();
   });
 });

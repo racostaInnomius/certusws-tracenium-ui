@@ -54,13 +54,11 @@ import {
 import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 // Sprint 4 — diff + export
-import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 // Sprint 5 — settings panel trigger
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 import FilterAltOutlinedIcon from "@mui/icons-material/FilterAltOutlined";
 // Sprint 6 — PDF export + bulk actions
-import PictureAsPdfOutlinedIcon from "@mui/icons-material/PictureAsPdfOutlined";
 
 import {
   getComplianceSummary,
@@ -69,10 +67,6 @@ import {
   getDevicePosture,
   getDeviceDetail,
   getDeviceTimeseries,
-  // Sprint 4
-  downloadFindingsCsv,
-  // Sprint 6
-  downloadFindingsPdf
 } from "../api/compliance";
 import { BRAND, ICON, ROLE, TEXT } from "../theme/brand";
 import {
@@ -101,6 +95,12 @@ import {
 } from "../components/Policies/policyTransforms";
 import { baselineModeForCategory } from "../components/Compliance/capabilityBridge";
 import PageHeader from "../components/common/PageHeader";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// El tipo del catálogo que envuelve los MISMOS handlers que servían
+// `/api/v1/compliance/export.csv|pdf`: el fichero que sale es el mismo, pero
+// pasando por el motor queda su fila en `report_runs`.
+const COMPLIANCE_EVIDENCE_KEY = "scp.compliance-evidence";
 import SectionPaper from "../components/common/SectionPaper";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
@@ -334,7 +334,7 @@ const TAB_SX = {
   "&.Mui-selected": { color: BRAND.dark },
 };
 
-export default function SecurityCompliance({ initialTab }) {
+export default function SecurityCompliance({ initialTab, onNavigate }) {
   // ADR-0011 Phase 3 — gate on the "security_compliance" capability
   // instead of a hardcoded OWNER/ADMIN name check (was: ADMIN/OWNER may
   // mutate, USER is read-only). The backend enforces the same split
@@ -432,7 +432,12 @@ export default function SecurityCompliance({ initialTab }) {
       securityForm
         ? baselineModeForCategory(securityForm, category, (cap) => capabilityAuto(cap.key, cap.enforcer))
         : null,
-    [securityForm]
+    // `capabilityAuto` faltaba y ya lo avisaba exhaustive-deps: es un
+    // useCallback estable de usePluginCatalog que sólo cambia cuando llega la
+    // matriz de remediación, así que omitirlo dejaba este cálculo mirando la
+    // matriz de antes. Sale aquí al quitar los botones de export porque el
+    // compilador de React abandonaba el componente antes por otro motivo.
+    [securityForm, capabilityAuto]
   );
 
   const [selectedFramework, setSelectedFramework] = React.useState(""); // "" = overall
@@ -780,7 +785,8 @@ export default function SecurityCompliance({ initialTab }) {
         });
       }
     },
-    [canRemediate, tenantId, securityForm, confirmDialog, showToast]
+    // Mismo caso que arriba: `capabilityAuto` se usa dentro y faltaba.
+    [canRemediate, tenantId, securityForm, confirmDialog, showToast, capabilityAuto]
   );
 
   // Sprint 4 — one-click remediation on the open device. Delegates to
@@ -850,30 +856,6 @@ export default function SecurityCompliance({ initialTab }) {
   // X-Tenant-Id override actually reaches the backend; failures surface
   // through the same toast as the rest of the page instead of navigating
   // the tab to a raw error response.
-  const [exportingCsv, setExportingCsv] = React.useState(false);
-  const [exportingPdf, setExportingPdf] = React.useState(false);
-
-  const handleExportCsv = React.useCallback(async () => {
-    setExportingCsv(true);
-    try {
-      await downloadFindingsCsv({ framework: selectedFramework || undefined });
-    } catch (err) {
-      showToast({ severity: "error", message: err?.message || "Could not export CSV." });
-    } finally {
-      setExportingCsv(false);
-    }
-  }, [selectedFramework, showToast]);
-
-  const handleExportPdf = React.useCallback(async () => {
-    setExportingPdf(true);
-    try {
-      await downloadFindingsPdf({ framework: selectedFramework || undefined });
-    } catch (err) {
-      showToast({ severity: "error", message: err?.message || "Could not export PDF." });
-    } finally {
-      setExportingPdf(false);
-    }
-  }, [selectedFramework, showToast]);
 
   // Sprint 5 — settings panel open/close. Boolean state; the panel
   // component owns the form state internally. (The catalog dialog's
@@ -996,65 +978,30 @@ export default function SecurityCompliance({ initialTab }) {
              acciones arriba, filtros debajo — le devuelve al título su
              línea y agrupa los filtros como lo que son: un conjunto. */
           <Stack direction="row" spacing={1} alignItems="center">
-            {/* Sprint 4 — CSV export. Fetched as an authenticated blob
-                (see handleExportCsv) rather than a plain anchor href, so
-                the X-Tenant-Id header for MSP-drilled sessions actually
-                reaches the backend. Filter is the currently selected
-                framework so the operator can "save what they're looking
-                at" without a separate export dialog. */}
-            {/* Exports are admin-gated (requireTenantAdmin on the
-                backend) — they hand the full evidence set to whoever
-                clicks, so USER-role members don't get the buttons. */}
+            {/* ⚠️ Aquí había "Export CSV" y "Export PDF", que descargaban por
+                `/api/v1/compliance/export.csv|pdf`. El fichero salía y no
+                quedaba fila en `report_runs` — el ledger del que cuelgan la
+                re-entrega y el SHA-256 con el que se verifica lo entregado.
+                Para un informe de CUMPLIMIENTO eso es lo contrario de lo que
+                se le pide: una copia circulando sin poder decir quién se la
+                llevó ni si es la que se firmó.
+
+                El botón lleva a Reports con `scp.compliance-evidence` —el
+                tipo del registro que envuelve ESOS MISMOS handlers, así que
+                el fichero es el mismo— y arrastra el framework que está
+                seleccionado, para que el documento cubra lo que la pantalla
+                estaba enseñando y no el alcance por defecto. */}
             {canManage ? (
-            <Tooltip
-              title={
-                selectedFramework
-                  ? `Export findings for ${selectedFrameworkLabel} as CSV`
-                  : "Export all findings as CSV (every mapped framework)"
-              }
-              arrow
-              placement="bottom"
-            >
-              <span>
-                <Button
-                  onClick={handleExportCsv}
-                  disabled={exportingCsv}
-                  size="small"
-                  variant="outlined"
-                  startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: ICON.md }} />}
-                  sx={{ textTransform: "none" }}
-                >
-                  {exportingCsv ? "Exporting…" : "Export CSV"}
-                </Button>
-              </span>
-            </Tooltip>
-            ) : null}
-            {/* Sprint 6 — PDF export. Same authenticated-blob pattern as
-                CSV; pdfkit emits Content-Disposition so the filename
-                still comes from the backend. */}
-            {canManage ? (
-            <Tooltip
-              title={
-                selectedFramework
-                  ? `Export findings for ${selectedFrameworkLabel} as PDF`
-                  : "Export all findings as PDF"
-              }
-              arrow
-              placement="bottom"
-            >
-              <span>
-                <Button
-                  onClick={handleExportPdf}
-                  disabled={exportingPdf}
-                  size="small"
-                  variant="outlined"
-                  startIcon={<PictureAsPdfOutlinedIcon sx={{ fontSize: ICON.md }} />}
-                  sx={{ textTransform: "none" }}
-                >
-                  {exportingPdf ? "Exporting…" : "Export PDF"}
-                </Button>
-              </span>
-            </Tooltip>
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={COMPLIANCE_EVIDENCE_KEY}
+                params={selectedFramework ? { framework: selectedFramework } : null}
+                tooltip={
+                  selectedFramework
+                    ? `Compliance evidence for ${selectedFrameworkLabel}`
+                    : "Compliance evidence for every mapped framework"
+                }
+              />
             ) : null}
             <RefreshControl
               refreshSeconds={refreshSeconds}

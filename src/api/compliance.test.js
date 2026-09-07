@@ -6,14 +6,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { API_BASE, respond } from "../test/msw/server";
-import { setActiveTenantId } from "./http";
 import {
   acknowledgeFinding,
   buildFindingsCsvUrl,
   buildFindingsPdfUrl,
   bulkFindingOp,
-  downloadFindingsCsv,
-  downloadFindingsPdf,
   getComplianceCatalog,
   getComplianceSettings,
   getComplianceSummary,
@@ -39,11 +36,14 @@ import {
 // anchor click) that aren't the point of these tests — the point is the
 // authenticated request underneath it. Keep every other browserState
 // export real, replace only saveBlob with a spy.
+// `saveBlob` sigue mockeado aunque este fichero ya no lo afirme: los
+// constructores de URL que sí se prueban aquí importan del mismo módulo, y
+// dejar el mock evita que un futuro test de descarga escriba en el disco del
+// que lo corra.
 vi.mock("../utils/browserState", async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, saveBlob: vi.fn() };
 });
-import { saveBlob } from "../utils/browserState";
 
 const BASE = "/api/v1/security/compliance";
 
@@ -309,56 +309,18 @@ describe("export URL builders (pure functions)", () => {
   });
 });
 
-// ── Regression guard: export downloads must go through the credentialed
-// httpGetBlob path, not a plain <a href> ──
+// Los tests de `downloadFindingsCsv` / `downloadFindingsPdf` se fueron con
+// las funciones. Eran los dos botones de export de Security Compliance, que
+// bajaban el fichero por `/export/findings.{csv,pdf}` sin dejar fila en
+// `report_runs`; ese fichero sale ahora por el motor de reportes
+// (`scp.compliance-evidence`, que envuelve los mismos handlers del backend) y
+// lo prueban `SecurityCompliance.msw.test.jsx` y `Reports.test.jsx`.
 //
-// The URL builders above produce a public, absolute href. Rendering that
-// as a Security Compliance page `<a href>` (the pre-fix behavior) can't
-// attach the X-Tenant-Id header an MSP operator's drilled-in session needs
-// — the export would silently come back for the operator's own tenant
-// instead of the client actually being viewed. downloadFindingsCsv/Pdf
-// fetch through http.js like every other request, so the header rides
-// along the same way it does for JSON reads.
-describe("export downloads (authenticated blob path)", () => {
-  it("downloadFindingsCsv requests the relative endpoint with credentials and saves the blob", async () => {
-    const calls = respond("get", `${BASE}/export/findings.csv`, { ok: true });
-
-    await downloadFindingsCsv({ framework: "cis-win11", includeClosed: true, maxRows: 500 });
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0].pathname).toBe(`${BASE}/export/findings.csv`);
-    expect(calls[0].search).toEqual({
-      framework: "cis-win11",
-      includeClosed: "true",
-      maxRows: "500",
-    });
-    expect(calls[0].credentials).toBe("include");
-    expect(saveBlob).toHaveBeenCalledTimes(1);
-    expect(saveBlob.mock.calls[0][1]).toBe("tracenium-compliance-cis-win11.csv");
-  });
-
-  it("downloadFindingsPdf requests the relative endpoint and falls back to an 'all' filename", async () => {
-    const calls = respond("get", `${BASE}/export/findings.pdf`, { ok: true });
-
-    await downloadFindingsPdf({ maxDevices: 10 });
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0].pathname).toBe(`${BASE}/export/findings.pdf`);
-    expect(calls[0].search).toEqual({ includeClosed: "false", maxDevices: "10" });
-    expect(saveBlob.mock.calls.at(-1)[1]).toBe("tracenium-compliance-all.pdf");
-  });
-
-  it("carries X-Tenant-Id for an MSP-drilled session — the header a plain <a href> could never send", async () => {
-    const calls = respond("get", `${BASE}/export/findings.csv`, { ok: true });
-    try {
-      setActiveTenantId("42");
-      await downloadFindingsCsv({});
-      expect(calls[0].headers["x-tenant-id"]).toBe("42");
-    } finally {
-      setActiveTenantId(null);
-    }
-  });
-});
+// ⚠️ La lección que los justificaba NO se pierde y sigue viva en el motor: un
+// export no puede ser un `<a href>` porque una navegación del navegador no
+// lleva el `X-Tenant-Id` que necesita una sesión MSP, y el fichero volvería
+// del tenant del operador en vez del cliente que está mirando. `runReport` usa
+// la misma vía de blob autenticado por eso mismo.
 
 it("getFleetComplianceTimeseries passes the window in days", async () => {
   const calls = respond("get", "/api/v1/security/compliance/fleet-timeseries", { ok: true, buckets: [] });
