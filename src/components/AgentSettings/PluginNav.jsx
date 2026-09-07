@@ -36,6 +36,9 @@ function Entry({ item, active, disabled, badge, overridden = false, onSelect }) 
           sx: { fontSize: TEXT.base, fontWeight: active ? 700 : 500, color: active ? BRAND.tealText : BRAND.dark },
         }}
       />
+      {item.kind === "plan" ? (
+        <Chip size="small" label="plan" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.surfaceMuted, color: BRAND.gray, border: `1px solid ${BRAND.border}` }} />
+      ) : null}
       {overridden ? (
         <Tooltip title="This device overrides settings in this section" arrow>
           <Chip size="small" label="override" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.cyanSoft, color: BRAND.dark, mr: badge ? 0.5 : 0 }} />

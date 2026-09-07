@@ -59,3 +59,24 @@ export function formatDiffValue(value) {
   if (typeof value === "string") return value === "" ? '""' : value;
   return JSON.stringify(value);
 }
+
+/**
+ * What an override PATCH changes with respect to the tenant document: one
+ * entry per leaf of the patch, with the tenant's value as `before`. Paths
+ * the tenant does not carry come out as `added`. This is the drawer of
+ * the Overrides view; the patch is the unit of reading.
+ */
+export function overrideDiff(tenantJson, overrideJson) {
+  const tenant = flattenPolicy(tenantJson ?? {});
+  const patch = flattenPolicy(overrideJson ?? {});
+  const entries = [];
+  for (const [path, after] of [...patch.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (path === "plugins.enabled" || path.startsWith("modules.")) continue;
+    const hasBefore = tenant.has(path);
+    const before = tenant.get(path);
+    if (!hasBefore) entries.push({ path, before: undefined, after, kind: "added" });
+    else if (!same(before, after)) entries.push({ path, before, after, kind: "changed" });
+    else entries.push({ path, before, after, kind: "same" });
+  }
+  return entries;
+}

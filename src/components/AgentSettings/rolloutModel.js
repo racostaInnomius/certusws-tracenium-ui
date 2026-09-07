@@ -167,3 +167,47 @@ export const BUCKET_LABEL = {
   error: "Error",
   excluded: "Excluded",
 };
+
+/**
+ * Convergence after the last tenant change: how many ACTIVE devices were on
+ * their desired version at each moment since `since` (the tenant policy's
+ * updated_at). Points are the ACK instants of in-sync devices, cumulative,
+ * plus a first point at `since` (0) and a last one at `now`. Catalog
+ * reversions (`desired_change_reason === "catalog_rollout"`) after `since`
+ * come out as `markers`, so the chart can say "this dip was the catalog".
+ *
+ * A device acknowledged before `since` while still in sync (clock skew, or
+ * a device that never needed the new base) counts from `since`.
+ */
+export function convergenceSeries(rows, { since, now = Date.now(), staleDays = STALE_DAYS } = {}) {
+  const start = since ? Date.parse(since) : NaN;
+  const list = Array.isArray(rows) ? rows : [];
+  if (!Number.isFinite(start)) return { points: [], markers: [], active: 0, inSync: 0, since: null };
+  const active = list.filter((r) => classifyRolloutRow(r, { now, staleDays }) !== "excluded");
+  const acks = [];
+  const markerSet = new Map();
+  for (const row of active) {
+    const bucket = classifyRolloutRow(row, { now, staleDays });
+    if (bucket === "in_sync") {
+      const t = Date.parse(row?.last_ack_at);
+      acks.push(Number.isFinite(t) && t > start ? t : start);
+    }
+    if (row?.desired_change_reason === "catalog_rollout") {
+      const t = Date.parse(row?.desired_changed_at);
+      if (Number.isFinite(t) && t > start) {
+        const key = Math.floor(t / 60000); // one marker per minute, not per device
+        markerSet.set(key, key * 60000);
+      }
+    }
+  }
+  acks.sort((a, b) => a - b);
+  const points = [{ t: start, inSync: 0 }];
+  let n = 0;
+  for (const t of acks) {
+    n += 1;
+    points.push({ t, inSync: n });
+  }
+  const end = Math.max(now, start);
+  if (points[points.length - 1].t !== end) points.push({ t: end, inSync: n });
+  return { points, markers: [...markerSet.values()].sort((a, b) => a - b), active: active.length, inSync: n, since: start };
+}

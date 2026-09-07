@@ -1,29 +1,43 @@
 // src/components/AgentSettings/PolicyRolloutView.jsx
 //
-// Where the policy actually is. Four numbers over the ACTIVE fleet, a bar
-// per acknowledged version, and the device table filtered by bucket.
+// Where the policy actually is. Four numbers over the ACTIVE fleet, the
+// convergence since the last tenant change (with catalog reversions marked
+// so they are not read as failures), a bar per acknowledged version, and
+// the device table filtered by state with a resend for the pending ones.
 // Devices unseen for longer than the stale window are counted apart
-// ("excluded") rather than as behind: the old "ACK OK 48 / 65" mixed in
-// agents that had been gone for months and made every tenant look
-// half-rolled-out.
+// ("excluded") rather than as behind.
 
 import * as React from "react";
 import Grid from "@mui/material/Grid";
-import { Box, Chip, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  LabelList,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as ChartTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
-import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import CloudOffOutlinedIcon from "@mui/icons-material/CloudOffOutlined";
+import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import { BRAND, DATAGRID_SX, ROLE, TEXT } from "../../theme/brand";
 import OnlineDot from "../common/OnlineDot";
 import { formatDate } from "../../utils/format";
-import { formatRelativeTime, renderAckChip, renderSourceChip, SummaryCard } from "../Policies/policyDisplay";
-import { BUCKET_LABEL, STALE_DAYS, summarizeRollout, versionLabel } from "./rolloutModel";
+import { formatRelativeTime, SummaryCard } from "../Policies/policyDisplay";
+import { BUCKET_LABEL, convergenceSeries, STALE_DAYS, summarizeRollout, versionLabel } from "./rolloutModel";
+import { MONO_FONT } from "./fieldSpecs";
 
 const CHART_MARGIN = { top: 8, right: 32, left: 8, bottom: 8 };
-const Y_TICK = { fontSize: TEXT.sm, fontFamily: "monospace" };
+const Y_TICK = { fontSize: TEXT.sm, fontFamily: MONO_FONT };
+const X_TICK = { fontSize: TEXT.xs };
 
 function BarShape(props) {
   const { x, y, width, height, payload } = props;
@@ -32,8 +46,7 @@ function BarShape(props) {
 }
 
 const FILTERS = [
-  { id: "all", label: "All active" },
-  { id: "in_sync", label: BUCKET_LABEL.in_sync },
+  { id: "all", label: "Active" },
   { id: "pending", label: BUCKET_LABEL.pending },
   { id: "offline", label: BUCKET_LABEL.offline },
   { id: "error", label: BUCKET_LABEL.error },
@@ -48,9 +61,20 @@ const BUCKET_CHIP = {
   excluded: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
 };
 
-export default function PolicyRolloutView({ statusRows, deviceMap, loading = false, onOpenDevice, now }) {
+function sinceLabel(t, start) {
+  const ms = t - start;
+  if (ms <= 0) return "change";
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `+${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `+${h} h`;
+  return `+${Math.round(h / 24)} d`;
+}
+
+export default function PolicyRolloutView({ statusRows, deviceMap, tenantUpdatedAt = null, loading = false, onOpenDevice, onResendPending, resending = false, now }) {
   const [filter, setFilter] = React.useState("all");
   const summary = React.useMemo(() => summarizeRollout(statusRows, { now }), [statusRows, now]);
+  const convergence = React.useMemo(() => convergenceSeries(statusRows, { since: tenantUpdatedAt, now }), [statusRows, tenantUpdatedAt, now]);
 
   const rows = React.useMemo(() => {
     const list = Array.isArray(statusRows) ? statusRows : [];
@@ -59,101 +83,94 @@ export default function PolicyRolloutView({ statusRows, deviceMap, loading = fal
     return withBucket.filter((r) => r.bucket === filter);
   }, [statusRows, filter, summary]);
 
+  const pendingIds = React.useMemo(
+    () => (Array.isArray(statusRows) ? statusRows : []).filter((r) => summary.bucketOf(r) === "pending").map((r) => r.device_id),
+    [statusRows, summary]
+  );
+
   const chartData = React.useMemo(
     () => summary.byVersion.map((v) => ({ label: v.label, count: v.count, isCurrent: v.isCurrent, raw: v.version })),
     [summary]
   );
-  const chartHeight = Math.max(160, chartData.length * 40 + 40);
+  const barHeight = Math.max(160, chartData.length * 40 + 40);
+  const convData = React.useMemo(() => convergence.points.map((p) => ({ t: p.t, inSync: p.inSync })), [convergence]);
 
   const columns = React.useMemo(
     () => [
       {
         field: "device_id",
         headerName: "Device",
-        minWidth: 180,
+        minWidth: 190,
         flex: 1,
-        valueGetter: (_v, row) => deviceMap?.get(row.device_id)?.hostname || row.device_id,
-      },
-      {
-        field: "is_connected",
-        headerName: "Online",
-        minWidth: 70,
-        flex: 0.25,
+        valueGetter: (_v, row) => deviceMap?.get(row.device_id)?.hostname || row.csr_common_name || row.device_id,
         renderCell: (params) => {
           const online = params.row?.is_connected === true;
-          const seen = params.row?.last_heartbeat;
+          const seen = params.row?.last_seen_at || params.row?.last_heartbeat;
           const title = online ? "Online" : seen ? `Offline · last seen ${formatRelativeTime(seen)}` : "Offline · never seen";
-          return <OnlineDot online={online} title={title} />;
+          return (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+              <OnlineDot online={online} title={title} />
+              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis" }}>{params.value}</Typography>
+            </Box>
+          );
         },
+      },
+      {
+        field: "agent",
+        headerName: "Agent",
+        minWidth: 80,
+        flex: 0.3,
+        valueGetter: (_v, row) => deviceMap?.get(row.device_id)?.agentVersion || "—",
+        renderCell: (params) => <Typography variant="caption" sx={{ fontFamily: MONO_FONT }}>{params.value}</Typography>,
+      },
+      {
+        field: "last_ack_policy_version",
+        headerName: "Effective version",
+        minWidth: 160,
+        flex: 0.6,
+        valueGetter: (_v, row) => versionLabel(row.last_ack_policy_version, summary.currentBase),
+        renderCell: (params) => (
+          <Tooltip title={`acknowledged ${params.row.last_ack_policy_version || "—"} · desired ${params.row.desired_policy_version || "—"}`} arrow>
+            <Typography variant="caption" sx={{ fontFamily: MONO_FONT }}>{params.value}</Typography>
+          </Tooltip>
+        ),
       },
       {
         field: "bucket",
         headerName: "State",
         minWidth: 120,
-        flex: 0.5,
+        flex: 0.45,
         renderCell: (params) => {
           const c = BUCKET_CHIP[params.value] || BUCKET_CHIP.excluded;
-          return <Chip size="small" label={BUCKET_LABEL[params.value] || params.value} sx={{ bgcolor: c.bg, color: c.fg, fontWeight: 700 }} />;
+          const label = params.value === "offline" && (params.row.last_seen_at || params.row.last_heartbeat)
+            ? `offline ${formatRelativeTime(params.row.last_seen_at || params.row.last_heartbeat)}`
+            : BUCKET_LABEL[params.value] || params.value;
+          return <Chip size="small" label={label} sx={{ bgcolor: c.bg, color: c.fg, fontWeight: 700 }} />;
         },
       },
       {
-        field: "desired_policy_source",
-        headerName: "Source",
-        minWidth: 110,
-        flex: 0.4,
-        renderCell: (params) => renderSourceChip(params.value),
-      },
-      {
-        field: "last_ack_policy_version",
-        headerName: "Acknowledged",
-        minWidth: 150,
-        flex: 0.6,
-        valueGetter: (_v, row) => versionLabel(row.last_ack_policy_version, summary.currentBase),
-        renderCell: (params) => (
-          <Tooltip title={params.row.last_ack_policy_version || "—"} arrow>
-            <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{params.value}</Typography>
-          </Tooltip>
-        ),
-      },
-      {
-        field: "desired_policy_version",
-        headerName: "Desired",
-        minWidth: 150,
-        flex: 0.6,
-        valueGetter: (_v, row) => versionLabel(row.desired_policy_version, summary.currentBase),
-        renderCell: (params) => (
-          <Tooltip title={params.row.desired_policy_version || "—"} arrow>
-            <Typography variant="caption" sx={{ fontFamily: "monospace" }}>{params.value}</Typography>
-          </Tooltip>
-        ),
-      },
-      {
-        field: "last_ack_status",
-        headerName: "ACK",
-        minWidth: 120,
-        flex: 0.4,
-        renderCell: (params) => renderAckChip(params.row.last_ack_status, null),
-      },
-      {
         field: "last_ack_at",
-        headerName: "ACK at",
-        minWidth: 120,
-        flex: 0.4,
+        headerName: "Last ACK",
+        minWidth: 190,
+        flex: 0.7,
         renderCell: (params) =>
           params.value ? (
             <Tooltip title={formatDate(params.value)} arrow>
-              <Typography variant="caption">{formatRelativeTime(params.value)}</Typography>
+              <Typography variant="caption">
+                {formatRelativeTime(params.value)}
+                {params.row.last_ack_message ? ` · ${params.row.last_ack_message}` : ""}
+              </Typography>
             </Tooltip>
           ) : (
             <Typography variant="caption" sx={{ color: "text.secondary" }}>Never</Typography>
           ),
       },
       {
-        field: "last_ack_message",
-        headerName: "Message",
-        minWidth: 180,
-        flex: 0.8,
-        valueGetter: (_v, row) => row.last_ack_message || "—",
+        field: "desired_policy_source",
+        headerName: "Source",
+        minWidth: 140,
+        flex: 0.5,
+        valueGetter: (_v, row) => (row.has_override === true || row.desired_policy_source === "device" ? "Tenant + override" : "Tenant"),
       },
     ],
     [deviceMap, summary.currentBase]
@@ -171,49 +188,82 @@ export default function PolicyRolloutView({ statusRows, deviceMap, loading = fal
 
       <Grid container spacing={1.5} sx={{ mb: 2 }}>
         <Grid size={{ xs: 6, md: 3 }}>
-          <SummaryCard title="In sync" value={summary.inSync} hint={`of ${summary.active} active`} icon={<CheckCircleOutlineOutlinedIcon />} accent={ROLE.positive} tint={ROLE.positiveSoft} />
+          <SummaryCard title="Up to date" value={summary.inSync} hint={`of ${summary.active} active${summary.active ? ` · ${Math.round((summary.inSync / summary.active) * 100)} %` : ""}`} icon={<CheckCircleOutlineOutlinedIcon />} accent={ROLE.positive} tint={ROLE.positiveSoft} />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
-          <SummaryCard title="Pending" value={summary.pending} hint="online, not yet on the desired version" icon={<HourglassEmptyOutlinedIcon />} accent={ROLE.caution} tint={ROLE.cautionSoft} />
+          <SummaryCard title="Pending" value={summary.pending} hint={summary.error ? `online, no ACK yet · ${summary.error} rejected` : "online, no ACK yet"} icon={<HourglassEmptyOutlinedIcon />} accent={ROLE.caution} tint={ROLE.cautionSoft} />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
-          <SummaryCard title="Offline" value={summary.offline} hint="will converge on reconnect" icon={<CloudOffOutlinedIcon />} accent={BRAND.dark} tint={BRAND.darkSoft} />
+          <SummaryCard title="Offline" value={summary.offline} hint="will receive it on reconnect" icon={<CloudOffOutlinedIcon />} accent={BRAND.dark} tint={BRAND.darkSoft} />
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
-          <SummaryCard title="Errors" value={summary.error} hint="agent rejected the policy" icon={<ErrorOutlineOutlinedIcon />} accent={ROLE.critical} tint={ROLE.criticalSoft} />
+          <SummaryCard title="Excluded" value={summary.excluded} hint="retired or never seen" icon={<BlockOutlinedIcon />} accent={BRAND.gray} tint={BRAND.surfaceMuted} />
         </Grid>
       </Grid>
 
-      {chartData.length > 0 ? (
-        <Box sx={{ mb: 2, p: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2, bgcolor: BRAND.surfaceMuted }}>
-          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
-            Acknowledged versions (active fleet)
-            {summary.currentBase ? (
-              <Typography component="span" sx={{ ml: 1, fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
-                current base {summary.currentBase}
-              </Typography>
-            ) : null}
-          </Typography>
-          <Box sx={{ height: chartHeight, width: "100%", minWidth: 0 }} data-testid="rollout-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={CHART_MARGIN} barCategoryGap={8}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="label" width={200} tick={Y_TICK} />
-                <ChartTooltip formatter={(value) => [`${value}`, "Devices"]} labelFormatter={(_l, payload) => payload?.[0]?.payload?.raw || _l} />
-                <Bar dataKey="count" shape={<BarShape />} isAnimationActive={false}>
-                  <LabelList dataKey="count" position="right" style={{ fontSize: TEXT.sm, fill: BRAND.dark }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <Box sx={{ p: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2, bgcolor: BRAND.surfaceMuted, height: "100%" }}>
+            <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+              Convergence since the last change
+              {convergence.since ? (
+                <Typography component="span" sx={{ ml: 1, fontSize: TEXT.xs, color: BRAND.gray }}>
+                  {summary.currentBase ? <span style={{ fontFamily: MONO_FONT }}>{summary.currentBase} · </span> : null}
+                  {formatDate(new Date(convergence.since))}
+                </Typography>
+              ) : null}
+            </Typography>
+            {convergence.since && convData.length > 1 ? (
+              <Box sx={{ height: 200, width: "100%", minWidth: 0 }} data-testid="convergence-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={convData} margin={CHART_MARGIN}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(t) => sinceLabel(t, convergence.since)} tick={X_TICK} />
+                    <YAxis allowDecimals={false} domain={[0, Math.max(convergence.active, 1)]} width={32} tick={X_TICK} />
+                    <ChartTooltip formatter={(value) => [`${value} of ${convergence.active}`, "Up to date"]} labelFormatter={(t) => formatDate(new Date(t))} />
+                    {convergence.markers.map((m) => (
+                      <ReferenceLine key={m} x={m} stroke={ROLE.caution} strokeDasharray="4 3" label={{ value: "catalog", fill: ROLE.caution, fontSize: TEXT.xs, position: "top" }} />
+                    ))}
+                    <Area type="stepAfter" dataKey="inSync" stroke={BRAND.teal} fill={BRAND.teal} fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+            ) : (
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>No tenant policy change recorded yet.</Typography>
+            )}
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 0.5 }}>
+              Devices on the current effective version over time. Dashed lines are catalog changes (probe suffix): the fleet re-versions without a policy edit.
+            </Typography>
           </Box>
-          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-            Teal = every device on that version is on its desired version. Suffixes after the base come from probe-catalog and gateway reversioning, not from a new save.
-          </Typography>
-        </Box>
-      ) : null}
+        </Grid>
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <Box sx={{ p: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2, bgcolor: BRAND.surfaceMuted, height: "100%" }}>
+            <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>By effective version</Typography>
+            {chartData.length > 0 ? (
+              <Box sx={{ height: barHeight, width: "100%", minWidth: 0 }} data-testid="rollout-chart">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} layout="vertical" margin={CHART_MARGIN} barCategoryGap={8}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={X_TICK} />
+                    <YAxis type="category" dataKey="label" width={150} tick={Y_TICK} />
+                    <ChartTooltip formatter={(value) => [`${value}`, "Devices"]} labelFormatter={(_l, payload) => payload?.[0]?.payload?.raw || _l} />
+                    <Bar dataKey="count" shape={<BarShape />} isAnimationActive={false}>
+                      <LabelList dataKey="count" position="right" style={{ fontSize: TEXT.sm, fill: BRAND.dark }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            ) : (
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>No acknowledgements yet.</Typography>
+            )}
+            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+              Base + catalog suffix (+ gateway role, + override). Grouped by suffix so a catalog change does not look like an edit. Excluded: {summary.excluded}.
+            </Typography>
+          </Box>
+        </Grid>
+      </Grid>
 
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, flexWrap: "wrap", mb: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 1 }}>
         <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_e, v) => { if (v) setFilter(v); }} aria-label="Rollout filter">
           {FILTERS.map((f) => (
             <ToggleButton key={f.id} value={f.id} sx={{ textTransform: "none", px: 1.25 }}>
@@ -221,7 +271,18 @@ export default function PolicyRolloutView({ statusRows, deviceMap, loading = fal
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
-        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{rows.length} device{rows.length === 1 ? "" : "s"} · click a row to open its override</Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>{rows.length} device{rows.length === 1 ? "" : "s"} · click a row to open it</Typography>
+        {onResendPending ? (
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={resending || pendingIds.length === 0}
+            onClick={() => onResendPending(pendingIds)}
+            sx={{ ml: "auto", textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal }}
+          >
+            {resending ? "Resending…" : `Resend to pending${pendingIds.length ? ` (${pendingIds.length})` : ""}`}
+          </Button>
+        ) : null}
       </Box>
 
       <Box sx={{ width: "100%", overflowX: "auto" }}>

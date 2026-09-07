@@ -533,6 +533,14 @@ export function readFormFromPolicy(policy, catalog = []) {
       maxTokensPerDay:
         Number(policy?.ai?.maxTokensPerDay) > 0 ? Number(policy.ai.maxTokensPerDay) : "",
     },
+    // Remote Control transfer cap (policyJson.remoteControl.maxUploadBytes).
+    // The agent reads it (remoteFileMaxUploadBytes) and until Agent
+    // Settings phase D it was only reachable through the raw JSON editor.
+    // Blank = agent default.
+    remoteControl: {
+      maxUploadBytes:
+        Number(policy?.remoteControl?.maxUploadBytes) > 0 ? Number(policy.remoteControl.maxUploadBytes) : "",
+    },
     // SDP distribution (Phase D) — per-device download bandwidth cap in
     // Kbps, applied by the agent's downloader (curl --limit-rate). Blank =
     // full speed.
@@ -722,6 +730,10 @@ export function formToPolicy(form, catalog = []) {
     if (denyExtensions.length > 0) rcpFile.denyExtensions = denyExtensions;
     if (Object.keys(rcpFile).length > 0) {
       policy.rcp = { ...(policy.rcp || {}), file: rcpFile };
+    }
+    const maxUpload = Number(form?.remoteControl?.maxUploadBytes);
+    if (Number.isInteger(maxUpload) && maxUpload > 0) {
+      policy.remoteControl = { maxUploadBytes: maxUpload };
     }
   }
 

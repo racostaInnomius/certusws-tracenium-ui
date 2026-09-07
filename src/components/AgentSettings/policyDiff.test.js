@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { diffPolicies, flattenPolicy, formatDiffValue } from "./policyDiff";
+import { diffPolicies, flattenPolicy, formatDiffValue, overrideDiff } from "./policyDiff";
 
 describe("flattenPolicy", () => {
   it("produces dotted leaves with arrays kept whole", () => {
@@ -57,5 +57,22 @@ describe("formatDiffValue", () => {
     expect(formatDiffValue("abc")).toBe("abc");
     expect(formatDiffValue([1, 2])).toBe("[1,2]");
     expect(formatDiffValue(true)).toBe("true");
+  });
+});
+
+describe("overrideDiff", () => {
+  const tenant = { update: { intervalSeconds: 21600 }, features: { selfUpdate: true, remoteShell: true }, cdp: { intervalSeconds: 3600 }, plugins: { enabled: ["amp"] } };
+
+  it("lists the patch's leaves with the tenant value as before, and ignores plan-derived keys", () => {
+    const entries = overrideDiff(tenant, { cdp: { intervalSeconds: 900 }, features: { remoteShell: false }, ai: { enabled: true }, plugins: { enabled: ["amp", "cdp"] } });
+    expect(entries).toEqual([
+      { path: "ai.enabled", before: undefined, after: true, kind: "added" },
+      { path: "cdp.intervalSeconds", before: 3600, after: 900, kind: "changed" },
+      { path: "features.remoteShell", before: true, after: false, kind: "changed" },
+    ]);
+  });
+
+  it("marks a pinned value that equals the tenant's as same", () => {
+    expect(overrideDiff(tenant, { update: { intervalSeconds: 21600 } })).toEqual([{ path: "update.intervalSeconds", before: 21600, after: 21600, kind: "same" }]);
   });
 });

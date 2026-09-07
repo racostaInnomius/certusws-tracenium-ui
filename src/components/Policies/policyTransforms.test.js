@@ -197,6 +197,22 @@ describe("formToPolicy", () => {
   });
 });
 
+describe("remoteControl.maxUploadBytes round-trip (Agent Settings phase D)", () => {
+  const catalog = [{ key: "amp", required: true }, { key: "rcp", impliesModule: "remoteControl" }];
+  it("reads the cap and writes it back only when Remote Control is on", () => {
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp", "rcp"] }, remoteControl: { maxUploadBytes: 2147483648 } }, catalog);
+    expect(form.remoteControl.maxUploadBytes).toBe(2147483648);
+    expect(formToPolicy(form, catalog).remoteControl).toEqual({ maxUploadBytes: 2147483648 });
+    const off = readFormFromPolicy({ plugins: { enabled: ["amp"] }, remoteControl: { maxUploadBytes: 5 } }, catalog);
+    expect(formToPolicy(off, catalog).remoteControl).toBeUndefined();
+  });
+  it("blank = agent default: no key", () => {
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp", "rcp"] } }, catalog);
+    expect(form.remoteControl.maxUploadBytes).toBe("");
+    expect(formToPolicy(form, catalog).remoteControl).toBeUndefined();
+  });
+});
+
 describe("isEmptyPolicy", () => {
   it("is true for null / non-object / empty object", () => {
     expect(isEmptyPolicy(null)).toBe(true);

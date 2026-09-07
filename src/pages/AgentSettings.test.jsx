@@ -101,6 +101,22 @@ const OVERRIDES = {
       overridden_paths: ["cdp"],
       provenance: { cdp: { batchId: "b-1", groupId: 26 } },
     },
+    {
+      device_id: "dev-3",
+      policy_version: "1788500000005",
+      policy_hash: "sha256:babe",
+      policy_json: { update: { intervalSeconds: 3600 } },
+      updated_at: iso(0.3),
+      csr_common_name: "DESKTOP-THREE",
+      last_seen_at: iso(2),
+      is_connected: false,
+      last_ack_status: 0,
+      last_ack_at: iso(3),
+      desired_policy_version: `${TENANT_VERSION}-o1111aaaa`,
+      last_ack_policy_version: OLD,
+      overridden_paths: ["update"],
+      provenance: {},
+    },
   ],
 };
 
@@ -132,6 +148,7 @@ function mockBase({ catalog = CATALOG, policy = TENANT_POLICY, policyStatus = 20
   respond("get", "/api/v1/policies/tenants/t-1/policy/overrides/batches", BATCHES);
   respond("get", "/api/v1/policies/tenants/t-1/policy/history", HISTORY);
   respond("get", "/api/v1/asset-groups", GROUPS);
+  respond("get", "/api/v1/cdp/probe-candidates", { ok: true, candidates: [] });
 }
 
 function renderPage(props = {}) {
@@ -170,6 +187,9 @@ describe("navigation", () => {
     expect(within(nav).getByText("Remote Control")).toBeInTheDocument();
     expect(within(nav).getByText("Policy rollout")).toBeInTheDocument();
     expect(within(nav).getByText("Overrides")).toBeInTheDocument();
+    // The plan comes from the catalog's entitlements: amp/scp/pmp/sdp → highest tier "pro".
+    expect(within(nav).getByText("Plan · Professional")).toBeInTheDocument();
+    expect(within(nav).getByText("plan")).toBeInTheDocument();
     // cdp and sdp are not in plugins.enabled → dimmed, not hidden
     const cdp = within(nav).getByText("Crypto Discovery").closest("[role=button]");
     expect(cdp).toHaveAttribute("aria-disabled", "true");
@@ -181,7 +201,7 @@ describe("navigation", () => {
     renderPage();
     await settled();
     expect(screen.getByRole("heading", { name: "Security Compliance" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Evaluation interval (seconds)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Evaluation interval")).toBeInTheDocument();
   });
 
   it("shows the plan view read-only: no toggles, a status and a plan per plugin", async () => {
@@ -211,10 +231,10 @@ describe("saving the tenant policy", () => {
     renderPage();
     await settled();
 
-    const save = screen.getByRole("button", { name: /Review and save/ });
+    const save = screen.getByRole("button", { name: "Save Agent" });
     expect(save).toBeDisabled(); // nothing changed yet
 
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
     expect(await screen.findByText("1 unsaved change")).toBeInTheDocument();
     // the nav badge points at the section the change lives in
     expect(screen.getByLabelText("1 unsaved change in Agent")).toBeInTheDocument();
@@ -234,7 +254,7 @@ describe("saving the tenant policy", () => {
     expect(call.headers["if-match"]).toBe(TENANT_VERSION);
     // The agent domain: update + the agent's own feature flags, nothing else.
     expect(call.body).toEqual({ update: { intervalSeconds: 7200 }, features: { selfUpdate: true } });
-    expect(await screen.findByText("Agent settings saved")).toBeInTheDocument();
+    expect(await screen.findByText("Agent saved")).toBeInTheDocument();
   });
 
   it("refuses to save while the plugin catalog is empty", async () => {
@@ -242,9 +262,9 @@ describe("saving the tenant policy", () => {
     const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true });
     renderPage();
     await settled();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
     await screen.findByText("1 unsaved change");
-    expect(screen.getByRole("button", { name: /Review and save/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save Agent" })).toBeDisabled();
     expect(patches).toHaveLength(0);
   });
 
@@ -252,18 +272,18 @@ describe("saving the tenant policy", () => {
     mockBase({ policyStatus: 500 });
     renderPage();
     expect(await screen.findByText("Couldn't read the current policy")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
     await screen.findByText("1 unsaved change");
-    expect(screen.getByRole("button", { name: /Review and save/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save Agent" })).toBeDisabled();
   });
 
   it("blocks an out-of-range interval", async () => {
     mockBase();
     renderPage();
     await settled();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "5" } });
     await screen.findByText("1 unsaved change");
-    expect(screen.getByRole("button", { name: /Review and save/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save Agent" })).toBeDisabled();
     expect(screen.getByText(/Update probe interval must be between/)).toBeInTheDocument();
   });
 
@@ -272,8 +292,8 @@ describe("saving the tenant policy", () => {
     respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: false, code: "STALE_POLICY" }, { status: 409 });
     renderPage();
     await settled();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
-    fireEvent.click(await screen.findByRole("button", { name: /Review and save/ }));
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Save Agent" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/modified by someone else/)).toBeInTheDocument();
@@ -281,17 +301,34 @@ describe("saving the tenant policy", () => {
 });
 
 describe("saving two sections", () => {
+  it("Discard puts the current section back without touching the other one", async () => {
+    mockBase();
+    renderPage();
+    await settled();
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
+    fireEvent.click(screen.getByText("Security Compliance"));
+    fireEvent.change(await screen.findByLabelText("Evaluation interval"), { target: { value: "3600" } });
+    await screen.findByText(/● 2 unsaved changes/);
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(await screen.findByText(/● 1 unsaved change/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Evaluation interval")).toHaveValue(null);
+    expect(screen.getByLabelText("1 unsaved change in Agent")).toBeInTheDocument();
+  });
+
   it("writes one PATCH per domain, chaining If-Match on the version each one returns", async () => {
     mockBase();
     const agentPatches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true, policyVersion: "1788476540001" });
     const scpPatches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/scp", { ok: true, policyVersion: "1788476540002" });
     renderPage();
     await settled();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
     fireEvent.click(screen.getByText("Security Compliance"));
-    fireEvent.change(await screen.findByLabelText("Evaluation interval (seconds)"), { target: { value: "3600" } });
-    expect(await screen.findByText("2 unsaved changes")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Review and save/ }));
+    fireEvent.change(await screen.findByLabelText("Evaluation interval"), { target: { value: "3600" } });
+    expect(await screen.findByText(/2 unsaved changes in 2 sections/)).toBeInTheDocument();
+    // The section button writes only its own domain…
+    expect(screen.getByRole("button", { name: "Save Security Compliance" })).toBeEnabled();
+    // …and "View diff · save all" writes every touched domain.
+    fireEvent.click(screen.getByRole("button", { name: /View diff · save all/ }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Writes: Agent, Security Compliance\./)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
@@ -311,46 +348,98 @@ describe("tools", () => {
     expect(await screen.findByRole("heading", { name: "Policy rollout" })).toBeInTheDocument();
     expect(screen.getByText(/\(1 excluded\)/)).toBeInTheDocument();
     // dev-1 and dev-2 in sync, dev-3 offline-behind; dev-4 excluded
-    expect(screen.getByText("of 3 active")).toBeInTheDocument();
+    expect(screen.getByText(/of 3 active · 67 %/)).toBeInTheDocument();
     expect(screen.getByTestId("rollout-chart")).toBeInTheDocument();
+    // Convergence since the tenant's last change (updated_at), with the current base named.
+    expect(screen.getByTestId("convergence-chart")).toBeInTheDocument();
+    // Agent version and source columns from the wireframe.
+    expect(screen.getAllByText("1.1.60").length).toBeGreaterThan(0);
+    expect(screen.getByText("Tenant + override")).toBeInTheDocument();
     // the excluded device is not in the default table
     expect(screen.queryByText("GHOST-FOUR")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Excluded" }));
     expect(await screen.findByText("GHOST-FOUR")).toBeInTheDocument();
   });
 
-  it("overrides: lists the devices with a patch, the paths each one changes, and resets them all explicitly", async () => {
+  it("rollout: resend to pending pushes each pending device", async () => {
     mockBase();
-    const resets = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/reset", { ok: true, reset: 1, sent: 1, batchId: "b-1" });
+    // dev-2 pending: online, acked an older version than desired.
+    server.use(
+      http.get(`${import.meta.env.VITE_API_BASE}/api/v1/policies/tenants/t-1/policy-status`, () =>
+        HttpResponse.json({ ok: true, items: STATUS.items.map((r) => (r.device_id === "dev-2" ? { ...r, desired_policy_source: "tenant", desired_policy_version: CURRENT, last_ack_policy_version: OLD } : r)) })
+      )
+    );
+    const pushes = respond("post", "/api/v1/policies/devices/dev-2/policy/push", { ok: true, sent: true });
+    renderPage();
+    await settled();
+    fireEvent.click(screen.getByText("Policy rollout"));
+    const resend = await screen.findByRole("button", { name: /Resend to pending \(1\)/ });
+    fireEvent.click(resend);
+    await waitFor(() => expect(pushes).toHaveLength(1));
+    expect(await screen.findByText(/Resent to 1 pending device · 1 delivered immediately/)).toBeInTheDocument();
+  });
+
+  it("overrides: one row per batch and per device with its own patch, the diff in a drawer, and reset all", async () => {
+    mockBase();
+    const resets = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/reset", { ok: true, reset: 2, sent: 1, batchId: "b-1" });
     renderPage();
     await settled();
     fireEvent.click(screen.getByText("Overrides"));
-    expect(await screen.findByText("SRV-OVERRIDE")).toBeInTheDocument();
-    expect(screen.queryByText("LAPTOP-ONE")).toBeNull();
-    expect(screen.getByText(/1 device runs a policy of its own/)).toBeInTheDocument();
-    expect(screen.getByText("cdp ↗")).toBeInTheDocument();
+    // dev-2's patch came from the batch → it is the batch's row, not a device row.
+    expect(await screen.findByText("SQL Servers")).toBeInTheDocument();
+    expect(screen.getByText("(1 device)")).toBeInTheDocument();
+    expect(screen.queryByText("SRV-OVERRIDE")).toBeNull();
+    // dev-3 set its own → a device row with the section it touches.
+    expect(screen.getByText("DESKTOP-THREE")).toBeInTheDocument();
+    expect(screen.getAllByText("Agent").length).toBeGreaterThan(0);
+    expect(screen.getByText(/2 overrides:/)).toBeInTheDocument();
+
+    // The diff is the unit of reading: the drawer shows the tenant value struck through.
+    const row = screen.getByText("DESKTOP-THREE").closest("[role=row]");
+    fireEvent.click(within(row).getByRole("button", { name: "View diff" }));
+    const drawer = await screen.findByTestId("override-drawer");
+    expect(within(drawer).getByText("update.intervalSeconds")).toBeInTheDocument();
+    expect(within(drawer).getByText(/21600 \(tenant\)/)).toBeInTheDocument();
+    expect(within(drawer).getByText("3600")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Reset all to tenant policy/ }));
     const confirmDialog = await screen.findByRole("dialog");
-    fireEvent.click(within(confirmDialog).getByRole("button", { name: /Reset 1 override/ }));
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /Reset 2 overrides/ }));
     await waitFor(() => expect(resets).toHaveLength(1));
-    expect(await screen.findByText(/1 override reset · 1 delivered immediately/)).toBeInTheDocument();
+    expect(await screen.findByText(/2 overrides reset · 1 delivered immediately/)).toBeInTheDocument();
   });
 
-  it("overrides: lists the batches by provenance and revokes one", async () => {
+  it("overrides: the scope filter and the search narrow the list", async () => {
+    mockBase();
+    renderPage();
+    await settled();
+    fireEvent.click(screen.getByText("Overrides"));
+    await screen.findByText("SQL Servers");
+    fireEvent.click(screen.getByRole("button", { name: "Devices" }));
+    expect(screen.queryByText("SQL Servers")).toBeNull();
+    expect(screen.getByText("DESKTOP-THREE")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.change(screen.getByLabelText("Search overrides"), { target: { value: "sql" } });
+    expect(screen.getByText("SQL Servers")).toBeInTheDocument();
+    expect(screen.queryByText("DESKTOP-THREE")).toBeNull();
+  });
+
+  it("overrides: a batch row opens into its diff and can be revoked from there", async () => {
     mockBase();
     const revokes = respond("post", "/api/v1/policies/tenants/t-1/policy/overrides/batches/b-1/revoke", { ok: true, reverted: 1, sent: 1 });
     renderPage();
     await settled();
     fireEvent.click(screen.getByText("Overrides"));
-    const card = await screen.findByTestId("override-batch");
-    expect(within(card).getByText(/1 device via group SQL Servers/)).toBeInTheDocument();
-    expect(within(card).getByText(/Crypto Discovery · applied/)).toBeInTheDocument();
-    expect(within(card).getByText("in sync with group")).toBeInTheDocument();
-    // The device row marks the path as coming from a batch.
-    expect(await screen.findByText("cdp ↗")).toBeInTheDocument();
+    const row = (await screen.findByText("SQL Servers")).closest("[role=row]");
+    expect(within(row).getByText("Group")).toBeInTheDocument();
+    expect(within(row).getByText("Crypto Discovery")).toBeInTheDocument();
+    expect(within(row).getByText("1 / 1")).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "View diff" }));
+    const drawer = await screen.findByTestId("override-drawer");
+    expect(within(drawer).getByText("cdp.intervalSeconds")).toBeInTheDocument();
+    expect(within(drawer).getByText(/follows the group's membership/)).toBeInTheDocument();
 
-    fireEvent.click(within(card).getByRole("button", { name: "Revoke" }));
+    fireEvent.click(within(drawer).getByRole("button", { name: "Revoke batch" }));
     const confirmDialog = await screen.findByRole("dialog");
     expect(within(confirmDialog).getByText(/via group SQL Servers/)).toBeInTheDocument();
     fireEvent.click(within(confirmDialog).getByRole("button", { name: "Revoke batch" }));
@@ -364,7 +453,7 @@ describe("tools", () => {
     renderPage();
     await settled();
     fireEvent.click(screen.getByText("Overrides"));
-    fireEvent.click(await screen.findByRole("button", { name: /Apply to devices/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /New override/ }));
     const dialog = await screen.findByRole("dialog");
     const apply = within(dialog).getByRole("button", { name: "Apply" });
     expect(apply).toBeDisabled(); // no target, nothing differs
@@ -373,7 +462,7 @@ describe("tools", () => {
     fireEvent.change(within(dialog).getByLabelText("Group"), { target: { value: "26" } });
     fireEvent.click(within(dialog).getByLabelText(/Keep in sync/));
     expect(apply).toBeDisabled(); // still nothing differs from the tenant
-    fireEvent.change(within(dialog).getByLabelText("Evaluation interval (seconds)"), { target: { value: "3600" } });
+    fireEvent.change(within(dialog).getByLabelText("Evaluation interval"), { target: { value: "3600" } });
     expect(await within(dialog).findByText("compliance.intervalSeconds")).toBeInTheDocument();
     expect(apply).toBeEnabled();
 
@@ -433,14 +522,17 @@ describe("device scope", () => {
     respond("get", "/api/v1/policies/devices/dev-2/policy-status", DEV_STATUS);
     const patches = respond("patch", "/api/v1/policies/devices/dev-2/policy/domains/agent", { ok: true, policyVersion: "1788500000001" });
     renderPage();
-    expect(await screen.findByText(/SRV-OVERRIDE/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/SRV-OVERRIDE/)).length).toBeGreaterThan(0);
     expect(await screen.findByText("override 1788500000000 · 1 path")).toBeInTheDocument();
     // The nav marks the section the patch touches.
     const nav = screen.getByRole("navigation", { name: "Agent settings sections" });
     expect(within(nav).getByText("override")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
-    fireEvent.click(await screen.findByRole("button", { name: /Review and update override/ }));
+    // Every row says where its value comes from; the edited one flips to Override.
+    expect(screen.getAllByText("Inherits · Tenant").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
+    expect(await screen.findByText("Override")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Save override · Agent" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/only what differs from the tenant/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Update override" }));
@@ -460,8 +552,8 @@ describe("device scope", () => {
     renderPage();
     expect(await screen.findByText("no override · follows the tenant policy")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
-    fireEvent.click(await screen.findByRole("button", { name: /Review and create override/ }));
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Create override · Agent" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("update.intervalSeconds")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Create override" }));
@@ -479,7 +571,7 @@ describe("device scope", () => {
     respond("get", "/api/v1/policies/devices/dev-2/policy-status", DEV_STATUS);
     const patches = respond("patch", "/api/v1/policies/devices/dev-2/policy/domains/cdp", { ok: true, deleted: true });
     renderPage();
-    const reset = await screen.findByRole("button", { name: "Reset section to tenant" });
+    const reset = await screen.findByRole("button", { name: "Back to tenant · Crypto Discovery" });
     fireEvent.click(reset);
     const confirmDialog = await screen.findByRole("dialog");
     fireEvent.click(within(confirmDialog).getByRole("button", { name: "Reset section" }));
@@ -496,8 +588,8 @@ describe("device scope", () => {
     respond("get", "/api/v1/policies/devices/dev-2/policy-status", DEV_STATUS);
     renderPage();
     expect(await screen.findByText("Couldn't read the current policy")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Update probe interval (seconds)"), { target: { value: "7200" } });
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
     await screen.findByText("1 unsaved change");
-    expect(screen.getByRole("button", { name: /Review and/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Save override · Agent|Create override · Agent/ })).toBeDisabled();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyRolloutRow,
+  convergenceSeries,
   parsePolicyVersion,
   summarizeRollout,
   versionLabel,
@@ -138,5 +139,32 @@ describe("summarizeRollout", () => {
     expect(s.total).toBe(0);
     expect(s.byVersion).toEqual([]);
     expect(s.currentBase).toBe("");
+  });
+});
+
+describe("convergenceSeries", () => {
+  const since = new Date(NOW - 2 * DAY).toISOString();
+  const v = "1788476532943-rf2129992";
+  const rows = [
+    { device_id: "a", is_connected: true, desired_policy_version: v, last_ack_policy_version: v, last_ack_status: 0, last_ack_at: iso(1.5 * DAY) },
+    { device_id: "b", is_connected: true, desired_policy_version: v, last_ack_policy_version: v, last_ack_status: 0, last_ack_at: iso(1 * DAY), desired_changed_at: iso(1.2 * DAY), desired_change_reason: "catalog_rollout" },
+    { device_id: "c", is_connected: true, desired_policy_version: v, last_ack_policy_version: "old", last_ack_status: 0 },
+    { device_id: "d", is_connected: false, desired_policy_version: v, last_ack_policy_version: "old", last_ack_status: 0, last_heartbeat: iso(90 * DAY) },
+  ];
+
+  it("counts in-sync ACKs cumulatively from the change, over the active fleet, with catalog markers", () => {
+    const s = convergenceSeries(rows, { since, now: NOW });
+    expect(s.active).toBe(3);
+    expect(s.inSync).toBe(2);
+    expect(s.points.map((p) => p.inSync)).toEqual([0, 1, 2, 2]);
+    expect(s.points[0].t).toBe(Date.parse(since));
+    expect(s.points[s.points.length - 1].t).toBe(NOW);
+    expect(s.markers).toHaveLength(1);
+  });
+
+  it("an ACK older than the change counts from the change, and no change means no series", () => {
+    const s = convergenceSeries([{ ...rows[0], last_ack_at: iso(5 * DAY) }], { since, now: NOW });
+    expect(s.points[1].t).toBe(Date.parse(since));
+    expect(convergenceSeries(rows, { since: null, now: NOW }).points).toEqual([]);
   });
 });

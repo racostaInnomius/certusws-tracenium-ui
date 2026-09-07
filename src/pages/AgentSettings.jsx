@@ -96,7 +96,8 @@ import ApplyOverrideDialog from "../components/AgentSettings/ApplyOverrideDialog
 import HistoryPanel from "../components/AgentSettings/HistoryPanel";
 import { diffPolicies } from "../components/AgentSettings/policyDiff";
 import { agentConfigSlice, deviceDomainSlice, domainSlice, domainsTouched, formProblems, overriddenDomains } from "../components/AgentSettings/formGuards";
-import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, TOOL_VIEWS } from "../components/AgentSettings/sections";
+import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, sectionForPath, TOOL_VIEWS } from "../components/AgentSettings/sections";
+import { resetSectionTo } from "../components/AgentSettings/fieldSpecs";
 import { summarizeRollout } from "../components/AgentSettings/rolloutModel";
 import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges";
 
@@ -124,6 +125,21 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
   const { catalog, entitled, loading: catalogLoading } = usePluginCatalog();
+  // "Plan Enterprise" in the nav: the highest tier among the plugins the
+  // subscription includes. Derived from the catalog, no extra call.
+  const planLabel = React.useMemo(() => {
+    if (!entitled || !Array.isArray(catalog)) return null;
+    const order = ["starter", "professional", "pro", "enterprise"];
+    let best = -1;
+    for (const p of catalog) {
+      if (!entitled.has(String(p.key).toLowerCase())) continue;
+      const i = order.indexOf(String(p.tier_required ?? p.tierRequired ?? "").toLowerCase());
+      if (i > best) best = i;
+    }
+    if (best < 0) return null;
+    const t = order[best] === "pro" ? "professional" : order[best];
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }, [catalog, entitled]);
   const catalogReady = !catalogLoading && Array.isArray(catalog) && catalog.length > 0;
 
   // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId.
@@ -191,7 +207,8 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const [deviceDeleting, setDeviceDeleting] = React.useState(false);
   const [devicePolling, setDevicePolling] = React.useState(false);
 
-  const [diffDialog, setDiffDialog] = React.useState({ open: false, entries: [] });
+  const [diffDialog, setDiffDialog] = React.useState({ open: false, entries: [], domains: [] });
+  const [resendingPending, setResendingPending] = React.useState(false);
 
   // ── Loading ───────────────────────────────────────────────────────────
   const loadTenant = React.useCallback(async () => {
@@ -335,6 +352,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   );
   const overriddenSections = React.useMemo(() => overriddenDomains(overriddenPaths), [overriddenPaths]);
   const domainsToSave = React.useMemo(() => domainsTouched(diff), [diff]);
+  const sectionDiff = React.useMemo(() => diff.filter((e) => sectionForPath(e.path) === view), [diff, view]);
   const sectionLabel = React.useCallback((id) => sections.find((x) => x.id === id)?.label || id, [sections]);
 
   // Auto-refresh never overwrites an edit in progress (invariant 5).
@@ -411,10 +429,17 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     return null;
   };
 
-  const openSaveDialog = () => {
+  // "Save <Section>" reviews and writes ONE domain; "View diff" reviews and
+  // writes every touched domain. Both go through the same dialog.
+  const openSaveDialog = (mode = "section") => {
     const reason = saveBlockedReason();
     if (reason) { showSnack(reason, "error"); return; }
-    setDiffDialog({ open: true, entries: diff });
+    if (mode === "section") setDiffDialog({ open: true, entries: sectionDiff, domains: domainsTouched(sectionDiff) });
+    else setDiffDialog({ open: true, entries: diff, domains: domainsToSave });
+  };
+
+  const discardSection = () => {
+    setForm(resetSectionTo(view, form, baseline));
   };
 
   // One PATCH per touched domain, each carrying the version the previous
@@ -423,15 +448,16 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   // from the tenant; an empty slice returns that section to the tenant.
   const confirmSave = async () => {
     const reason = saveBlockedReason();
-    if (reason) { showSnack(reason, "error"); setDiffDialog({ open: false, entries: [] }); return; }
-    if (domainsToSave.length === 0) { showSnack("Nothing to save", "info"); setDiffDialog({ open: false, entries: [] }); return; }
+    if (reason) { showSnack(reason, "error"); setDiffDialog({ open: false, entries: [], domains: [] }); return; }
+    const domains = diffDialog.domains.length ? diffDialog.domains : domainsToSave;
+    if (domains.length === 0) { showSnack("Nothing to save", "info"); setDiffDialog({ open: false, entries: [], domains: [] }); return; }
     const setSaving = isDevice ? setDeviceSaving : setTenantSaving;
     try {
       setSaving(true);
       const fullSlice = agentConfigSlice(form, catalog, formToPolicy);
       let version = isDevice ? deviceEnv.version : tenantEnv.version;
       let createFirst = isDevice && !hasOverride;
-      for (const domain of domainsToSave) {
+      for (const domain of domains) {
         if (isDevice) {
           const slice = deviceDomainSlice(domain, fullSlice, tenantSliceAtLoad);
           if (createFirst && Object.keys(slice).length === 0) continue; // nothing to override yet
@@ -442,11 +468,11 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
           version = res?.policyVersion ?? version;
         }
       }
-      showSnack(isDevice ? (hasOverride ? "Device override updated" : "Device override created") : "Agent settings saved", "success");
-      setDiffDialog({ open: false, entries: [] });
+      showSnack(isDevice ? (hasOverride ? "Device override updated" : "Device override created") : `${domains.map(sectionLabel).join(", ")} saved`, "success");
+      setDiffDialog({ open: false, entries: [], domains: [] });
       if (isDevice) await Promise.all([loadDevice(selectedDeviceId), loadTenant()]); else await loadTenant();
     } catch (e) {
-      setDiffDialog({ open: false, entries: [] });
+      setDiffDialog({ open: false, entries: [], domains: [] });
       if (e?.status === 409) {
         console.warn("[agent-settings] save rejected: stale policy", e?.body);
         showSnack("The policy was modified by someone else. Reloaded — review your changes and save again.", "warning");
@@ -633,6 +659,46 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     }
   };
 
+  const handleResendPending = async (deviceIds) => {
+    if (!canManage || !Array.isArray(deviceIds) || deviceIds.length === 0) return;
+    try {
+      setResendingPending(true);
+      let sent = 0;
+      for (const id of deviceIds) {
+        try {
+          const res = await pushDevicePolicy(id);
+          if (res?.sent) sent += 1;
+        } catch (e) {
+          console.warn("[agent-settings] resend failed", id, e?.message);
+        }
+      }
+      showSnack(`Resent to ${deviceIds.length} pending device${deviceIds.length === 1 ? "" : "s"} · ${sent} delivered immediately`, sent === deviceIds.length ? "success" : "warning");
+      await loadTenant();
+    } finally {
+      setResendingPending(false);
+    }
+  };
+
+  const handleRemoveDeviceOverride = async (deviceId) => {
+    if (!canManage || !deviceId) return;
+    const ok = await confirm({
+      title: "Remove this device's override?",
+      body: "The device goes back to the tenant policy on its next sync.",
+      confirmText: "Remove override",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteDevicePolicy(deviceId);
+      showSnack("Device override removed", "success");
+      await loadTenant();
+      if (selectedDeviceId === deviceId) await loadDevice(deviceId);
+    } catch (e) {
+      console.error(e);
+      showSnack("Failed to remove the override", "error");
+    }
+  };
+
   const handleReviewHistory = async (entry) => {
     if (!tenantId || !entry?.id) return;
     try {
@@ -787,8 +853,10 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         rows={overrides}
         batches={batches}
         deviceMap={deviceMap}
+        tenantJson={tenantEnv.raw ?? {}}
         loading={tenantLoading}
         onEdit={openDeviceFromTool}
+        onRemoveDevice={handleRemoveDeviceOverride}
         onResetAll={handleResetOverrides}
         resetting={resettingOverrides}
         onApply={() => setApplyOpen(true)}
@@ -797,7 +865,18 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       />
     );
   } else if (view === "rollout") {
-    content = <PolicyRolloutView statusRows={tenantStatus} deviceMap={deviceMap} loading={tenantLoading} onOpenDevice={openDeviceFromTool} now={loadedAt} />;
+    content = (
+      <PolicyRolloutView
+        statusRows={tenantStatus}
+        deviceMap={deviceMap}
+        tenantUpdatedAt={tenantEnv.updatedAt}
+        loading={tenantLoading}
+        onOpenDevice={openDeviceFromTool}
+        onResendPending={handleResendPending}
+        resending={resendingPending}
+        now={loadedAt}
+      />
+    );
   } else if (isDevice && !selectedDeviceId) {
     content = (
       <Alert severity="info">Choose a device in the bar above to inspect or edit its override.</Alert>
@@ -819,7 +898,16 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     );
   } else {
     content = (
-      <PolicySectionPanel section={activeSection} form={form} onChange={setForm} catalog={catalog} onNavigate={onNavigate} onOpenPlugins={() => setView("plugins")} />
+      <PolicySectionPanel
+        section={activeSection}
+        form={form}
+        onChange={setForm}
+        onNavigate={onNavigate}
+        onOpenPlugins={() => setView("plugins")}
+        scope={scope}
+        compareForm={isDevice ? tenantBaseline : null}
+        deviceLabel={selectedDevice?.hostname || selectedDeviceId}
+      />
     );
   }
 
@@ -850,7 +938,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       <Grid container spacing={2} sx={{ mt: 1.5 }}>
         <Grid size={{ xs: 12, md: 3 }}>
           <SectionPaper variant="panel" sx={{ p: 1, minWidth: 0 }}>
-            <PluginNav sections={sections} tools={TOOL_VIEWS} active={view} onSelect={setView} changes={changes} overridden={isDevice ? overriddenSections : null} />
+            <PluginNav sections={sections} tools={TOOL_VIEWS} active={view} onSelect={setView} changes={changes} overridden={isDevice ? overriddenSections : null} planLabel={planLabel} />
           </SectionPaper>
         </Grid>
 
@@ -889,62 +977,72 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
             ) : null}
 
             {editing && (!isDevice || selectedDeviceId) ? (
-              <Box sx={{ mt: 2.5, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
+              <Box sx={{ mt: 2.5, pt: 1.5, borderTop: `1px solid ${BRAND.border}`, display: "flex", gap: 1, flexWrap: "wrap", alignItems: "center" }}>
                 <Button
                   variant="contained"
                   startIcon={<SaveOutlinedIcon />}
-                  onClick={openSaveDialog}
-                  disabled={saveDisabled}
+                  onClick={() => openSaveDialog("section")}
+                  disabled={saveDisabled || sectionDiff.length === 0}
                   sx={{ bgcolor: BRAND.teal, color: BRAND.surface, fontWeight: 700, textTransform: "none", "&:hover": { bgcolor: BRAND.tealHover } }}
                 >
-                  {saving ? "Saving…" : isDevice ? (hasOverride ? "Review and update override…" : "Review and create override…") : "Review and save…"}
+                  {saving ? "Saving…" : isDevice ? (hasOverride ? `Save override · ${sectionLabel(view)}` : `Create override · ${sectionLabel(view)}`) : `Save ${sectionLabel(view)}`}
                 </Button>
-                {!isDevice ? (
-                  <Button
-                    variant="outlined"
-                    startIcon={<SendOutlinedIcon />}
-                    onClick={handlePushTenant}
-                    disabled={tenantPushing}
-                    sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
-                  >
-                    {tenantPushing ? "Pushing…" : "Push to all"}
-                  </Button>
+                <Button onClick={discardSection} disabled={saving || sectionDiff.length === 0} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.dark }}>
+                  Discard
+                </Button>
+                {dirty ? (
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warning, fontWeight: 700 }}>
+                    ● {diff.length} unsaved change{diff.length === 1 ? "" : "s"}
+                    {domainsToSave.length > 1 ? ` in ${domainsToSave.length} sections` : ""}
+                  </Typography>
                 ) : (
-                  <>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>No unsaved changes</Typography>
+                )}
+                <Box sx={{ ml: "auto", display: "flex", gap: 1, flexWrap: "wrap" }}>
+                  {dirty ? (
+                    <Button onClick={() => openSaveDialog("all")} disabled={saveDisabled} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
+                      View diff{domainsToSave.length > 1 ? " · save all" : ""}
+                    </Button>
+                  ) : null}
+                  {!isDevice ? (
                     <Button
                       variant="outlined"
                       startIcon={<SendOutlinedIcon />}
-                      onClick={handlePushDevice}
-                      disabled={devicePushing || deviceLoading}
+                      onClick={handlePushTenant}
+                      disabled={tenantPushing}
                       sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
                     >
-                      {devicePushing ? "Pushing…" : "Push to device"}
+                      {tenantPushing ? "Pushing…" : "Push to all"}
                     </Button>
-                    {overriddenSections.has(view) ? (
+                  ) : (
+                    <>
                       <Button
                         variant="outlined"
-                        onClick={handleResetSection}
-                        disabled={deviceSaving || deviceLoading}
+                        startIcon={<SendOutlinedIcon />}
+                        onClick={handlePushDevice}
+                        disabled={devicePushing || deviceLoading}
+                        sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal, "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft } }}
+                      >
+                        {devicePushing ? "Pushing…" : "Push to device"}
+                      </Button>
+                      {overriddenSections.has(view) ? (
+                        <Button variant="outlined" onClick={handleResetSection} disabled={deviceSaving || deviceLoading} sx={{ textTransform: "none", fontWeight: 700 }}>
+                          Back to tenant · {sectionLabel(view)}
+                        </Button>
+                      ) : null}
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteOutlineOutlinedIcon />}
+                        onClick={handleDeleteDevice}
+                        disabled={deviceDeleting || !hasOverride || deviceLoading}
                         sx={{ textTransform: "none", fontWeight: 700 }}
                       >
-                        Reset section to tenant
+                        {deviceDeleting ? "Removing…" : "Remove override from this device"}
                       </Button>
-                    ) : null}
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<DeleteOutlineOutlinedIcon />}
-                      onClick={handleDeleteDevice}
-                      disabled={deviceDeleting || !hasOverride || deviceLoading}
-                      sx={{ textTransform: "none", fontWeight: 700 }}
-                    >
-                      {deviceDeleting ? "Removing…" : "Remove override"}
-                    </Button>
-                  </>
-                )}
-                {!dirty && !saving ? (
-                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, ml: 0.5 }}>No unsaved changes</Typography>
-                ) : null}
+                    </>
+                  )}
+                </Box>
               </Box>
             ) : null}
 
@@ -984,13 +1082,13 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       <PolicyDiffDialog
         open={diffDialog.open}
         entries={diffDialog.entries}
-        onClose={() => setDiffDialog({ open: false, entries: [] })}
+        onClose={() => setDiffDialog({ open: false, entries: [], domains: [] })}
         onConfirm={confirmSave}
         busy={saving}
         title={isDevice ? (hasOverride ? "Review override changes" : "Review the new override") : "Review tenant policy changes"}
         confirmText={isDevice ? (hasOverride ? "Update override" : "Create override") : "Save"}
         scopeLabel={isDevice ? selectedDevice?.hostname || selectedDeviceId : "Tenant policy"}
-        sectionsLabel={domainsToSave.length ? `Writes: ${domainsToSave.map(sectionLabel).join(", ")}${isDevice ? " — only what differs from the tenant is stored in the override." : "."}` : ""}
+        sectionsLabel={diffDialog.domains.length ? `Writes: ${diffDialog.domains.map(sectionLabel).join(", ")}${isDevice ? " — only what differs from the tenant is stored in the override." : "."}` : ""}
       />
 
       <ApplyOverrideDialog

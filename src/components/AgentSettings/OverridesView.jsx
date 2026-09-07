@@ -1,59 +1,89 @@
 // src/components/AgentSettings/OverridesView.jsx
 //
-// Every device running a policy patch of its own, as a first-class list.
-// Rows come from GET /policy/overrides (phase B): the override table with
-// the paths each patch fixes — the truth of what is stored, not the rollout
-// status that follows one heartbeat behind.
+// Every device and group with a policy of its own: which sections differ,
+// how many fields, whether it is applied, who created it. The diff is the
+// unit of reading — a row expands into the drawer below with only the
+// leaves that differ from the tenant, tenant value struck through.
 //
 // An override is a PATCH: the device inherits the tenant policy and changes
-// only the listed paths. A tenant push no longer resets anything; the
-// explicit "Reset all" here does, audited per device.
-//
-// Phase C: overrides applied through a batch ("12 devices via group SQL
-// Servers") are listed by provenance first, with revoke; devices whose
-// override was set by hand follow.
+// only the listed paths. A tenant push keeps overrides; "Reset all" and
+// revoking a batch are the explicit, audited ways to remove them.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, Tooltip, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
+import { BRAND, DATAGRID_SX, ROLE, TEXT } from "../../theme/brand";
 import OnlineDot from "../common/OnlineDot";
 import { formatDate } from "../../utils/format";
-import { formatRelativeTime, renderAckChip } from "../Policies/policyDisplay";
-import { SECTIONS, sectionForPath } from "./sections";
+import { formatRelativeTime } from "../Policies/policyDisplay";
+import { formatDiffValue, overrideDiff } from "./policyDiff";
+import { overrideRowsOf } from "./overrides";
+import { MONO_FONT } from "./fieldSpecs";
 
-const SECTION_LABEL = Object.fromEntries(SECTIONS.map((s) => [s.id, s.label]));
+const KIND_SIGN = { added: "+", removed: "−", changed: "~", same: "=" };
 
-/** "Crypto Discovery · cdp" for a path, so the operator reads a section, not a key. */
-function pathLabel(path) {
-  const section = sectionForPath(path);
-  const label = SECTION_LABEL[section] || section;
-  return `${label} · ${path}`;
+function AppliedChip({ item }) {
+  if (item.kind === "batch") {
+    const { ok, total } = item.applied;
+    const full = ok >= total;
+    return <Chip size="small" label={`${ok} / ${total}`} sx={{ bgcolor: full ? ROLE.positiveSoft : ROLE.cautionSoft, color: full ? ROLE.positive : ROLE.caution, fontWeight: 700 }} />;
+  }
+  const a = item.applied;
+  if (a.ack !== null && a.ack !== undefined && a.ack !== 0) return <Chip size="small" label="rejected" sx={{ bgcolor: ROLE.criticalSoft, color: ROLE.critical, fontWeight: 700 }} />;
+  if (a.inSync) return <Chip size="small" label="applied" sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 700 }} />;
+  if (!a.connected) return <Chip size="small" label={`pending · offline${a.lastSeen ? ` ${formatRelativeTime(a.lastSeen)}` : ""}`} sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 700 }} />;
+  return <Chip size="small" label="pending" sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 700 }} />;
 }
 
-function BatchCard({ batch, onRevoke, revoking }) {
-  const target = batch.group_name ? `via group ${batch.group_name}` : "via a device list";
-  const live = Number(batch.live_device_count ?? 0);
+function Drawer({ item, tenantJson, onEdit, onRemove, onRevoke, busy }) {
+  const entries = React.useMemo(() => overrideDiff(tenantJson, item?.json), [tenantJson, item]);
+  if (!item) return null;
+  const isBatch = item.kind === "batch";
   return (
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", p: 1.25, border: `1px solid ${BRAND.border}`, borderRadius: 2, bgcolor: BRAND.surfaceMuted }} data-testid="override-batch">
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>
-          {live} device{live === 1 ? "" : "s"} {target}
-        </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-          {SECTION_LABEL[batch.domain] || batch.domain} · applied {formatRelativeTime(batch.applied_at)}
-          {batch.applied_by ? ` by ${batch.applied_by}` : ""}
-          {Number(batch.device_count) !== live ? ` · ${batch.device_count} at the time` : ""}
+    <Box sx={{ mt: 1.5, p: 1.5, borderLeft: `3px solid ${BRAND.teal}`, bgcolor: BRAND.surfaceMuted, borderRadius: 1 }} data-testid="override-drawer">
+      <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>
+        {item.name} · difference from the tenant policy
+      </Typography>
+      <Box component="ul" aria-label="Override difference" sx={{ listStyle: "none", m: 0, p: 0, mt: 0.75, fontFamily: MONO_FONT, fontSize: TEXT.sm }}>
+        {entries.length === 0 ? (
+          <Typography component="li" sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>Identical to the tenant policy: this override pins what the tenant already has.</Typography>
+        ) : (
+          entries.map((e) => (
+            <Box component="li" key={e.path} sx={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 1, py: 0.25, color: e.kind === "same" ? BRAND.gray : BRAND.dark }}>
+              <span style={{ fontWeight: 800, color: e.kind === "added" ? ROLE.positive : e.kind === "changed" ? ROLE.caution : BRAND.gray }}>{KIND_SIGN[e.kind]}</span>
+              <span style={{ wordBreak: "break-all" }}>
+                <strong>{e.path}</strong>{" "}
+                {e.kind === "changed" ? <s style={{ color: BRAND.gray }}>{formatDiffValue(e.before)} (tenant)</s> : null}
+                {e.kind === "changed" ? " → " : " "}
+                <span>{formatDiffValue(e.after)}</span>
+              </span>
+            </Box>
+          ))
+        )}
+      </Box>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap", mt: 1 }}>
+        {isBatch ? (
+          <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => onRevoke?.(item.batch)} sx={{ textTransform: "none", fontWeight: 700 }}>
+            {busy ? "Revoking…" : "Revoke batch"}
+          </Button>
+        ) : (
+          <>
+            <Button size="small" onClick={() => onEdit?.(item.deviceId)} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
+              Edit on the device →
+            </Button>
+            <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => onRemove?.(item.deviceId)} sx={{ textTransform: "none", fontWeight: 700 }}>
+              Remove override
+            </Button>
+          </>
+        )}
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: "auto" }}>
+          {isBatch
+            ? `${item.applied.ok} of ${item.applied.total} devices still carry it${item.applied.sync ? " · follows the group's membership" : ""}`
+            : item.row?.desired_policy_version
+              ? `Effective policy ${item.row.desired_policy_version} · tenant < device`
+              : "tenant < device"}
         </Typography>
       </Box>
-      {batch.sync_membership ? (
-        <Tooltip title={batch.last_sync_at ? `Follows the group's membership · last checked ${formatRelativeTime(batch.last_sync_at)}` : "Follows the group's membership"} arrow>
-          <Chip size="small" label="in sync with group" sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }} />
-        </Tooltip>
-      ) : null}
-      <Button size="small" variant="outlined" color="error" disabled={revoking} onClick={() => onRevoke?.(batch)} sx={{ textTransform: "none", fontWeight: 700 }}>
-        {revoking ? "Revoking…" : "Revoke"}
-      </Button>
     </Box>
   );
 }
@@ -62,98 +92,93 @@ export default function OverridesView({
   rows,
   batches,
   deviceMap,
+  tenantJson,
   loading = false,
   onEdit,
+  onRemoveDevice,
   onResetAll,
   resetting = false,
   onApply,
   onRevokeBatch,
   revokingId = null,
 }) {
-  const list = Array.isArray(rows) ? rows : [];
-  const batchList = React.useMemo(() => (Array.isArray(batches) ? batches : []), [batches]);
-  const batchById = React.useMemo(() => new Map(batchList.map((b) => [b.id, b])), [batchList]);
+  const [filter, setFilter] = React.useState("all");
+  const [search, setSearch] = React.useState("");
+  const [selectedId, setSelectedId] = React.useState(null);
+
+  const items = React.useMemo(() => overrideRowsOf({ rows, batches, deviceMap }), [rows, batches, deviceMap]);
+  const visible = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (filter === "groups" && it.kind !== "batch") return false;
+      if (filter === "devices" && it.kind !== "device") return false;
+      if (!q) return true;
+      return `${it.name} ${it.sections.join(" ")} ${it.deviceId || ""}`.toLowerCase().includes(q);
+    });
+  }, [items, filter, search]);
+  const selected = visible.find((it) => it.id === selectedId) || null;
 
   const columns = React.useMemo(
     () => [
       {
-        field: "device_id",
-        headerName: "Device",
-        minWidth: 200,
-        flex: 1,
-        valueGetter: (_v, row) => deviceMap?.get(row.device_id)?.hostname || row.csr_common_name || row.device_id,
-      },
-      {
-        field: "is_connected",
-        headerName: "Online",
-        minWidth: 75,
-        flex: 0.25,
-        renderCell: (params) => {
-          const online = params.row?.is_connected === true;
-          const seen = params.row?.last_seen_at;
-          const title = online ? "Online" : seen ? `Offline · last seen ${formatRelativeTime(seen)}` : "Offline · never seen";
-          return <OnlineDot online={online} title={title} />;
-        },
-      },
-      {
-        field: "overridden_paths",
-        headerName: "Overrides",
-        minWidth: 260,
-        flex: 1.2,
-        sortable: false,
-        renderCell: (params) => (
-          <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", py: 0.5 }}>
-            {(params.value || []).map((p) => {
-              const prov = params.row?.provenance?.[sectionForPath(p)];
-              const batch = prov ? batchById.get(prov.batchId) : null;
-              const via = prov ? ` · via ${batch?.group_name ? `group ${batch.group_name}` : "batch"}` : "";
-              return (
-                <Tooltip key={p} title={`${pathLabel(p)}${via}`} arrow>
-                  <Chip
-                    size="small"
-                    label={prov ? `${p} ↗` : p}
-                    sx={{ bgcolor: prov ? BRAND.tealSoft : BRAND.cyanSoft, color: BRAND.dark, fontWeight: 700, fontFamily: "monospace" }}
-                  />
-                </Tooltip>
-              );
-            })}
-          </Box>
-        ),
-      },
-      {
-        field: "updated_at",
-        headerName: "Updated",
-        minWidth: 120,
-        flex: 0.4,
+        field: "scope",
+        headerName: "Scope",
+        minWidth: 90,
+        flex: 0.3,
         renderCell: (params) =>
-          params.value ? (
-            <Tooltip title={formatDate(params.value)} arrow>
-              <Typography variant="caption">{formatRelativeTime(params.value)}</Typography>
-            </Tooltip>
+          params.value === "device" ? (
+            <Chip size="small" label="Device" sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.dark, fontWeight: 700 }} />
           ) : (
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>—</Typography>
+            <Chip size="small" label={params.value === "group" ? "Group" : "List"} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }} />
           ),
       },
       {
-        field: "last_ack_status",
-        headerName: "ACK",
-        minWidth: 130,
-        flex: 0.5,
-        renderCell: (params) => renderAckChip(params.row.last_ack_status, null),
+        field: "name",
+        headerName: "Name",
+        minWidth: 200,
+        flex: 1,
+        renderCell: (params) => (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, minWidth: 0 }}>
+            {params.row.kind === "device" ? <OnlineDot online={params.row.connected} title={params.row.connected ? "Online" : "Offline"} /> : null}
+            <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, color: BRAND.dark, overflow: "hidden", textOverflow: "ellipsis" }}>{params.value}</Typography>
+            {params.row.kind === "batch" ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>({params.row.count} device{params.row.count === 1 ? "" : "s"})</Typography> : null}
+          </Box>
+        ),
+      },
+      { field: "sections", headerName: "Sections with override", minWidth: 200, flex: 1, valueGetter: (_v, row) => row.sections.join(" · ") },
+      { field: "fields", headerName: "Fields", minWidth: 70, flex: 0.25, align: "right", headerAlign: "right" },
+      { field: "applied", headerName: "Applied", minWidth: 150, flex: 0.5, sortable: false, renderCell: (params) => <AppliedChip item={params.row} /> },
+      {
+        field: "at",
+        headerName: "Created by",
+        minWidth: 170,
+        flex: 0.6,
+        renderCell: (params) => (
+          <Tooltip title={params.value ? formatDate(params.value) : ""} arrow>
+            <Typography sx={{ fontSize: TEXT.sm }}>{params.row.by} · {params.value ? formatRelativeTime(params.value) : "—"}</Typography>
+          </Tooltip>
+        ),
       },
       {
         field: "actions",
         headerName: "",
         sortable: false,
-        minWidth: 90,
+        minWidth: 150,
         renderCell: (params) => (
-          <Button size="small" onClick={() => onEdit?.(params.row.device_id)} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
-            Edit
-          </Button>
+          <Box sx={{ display: "flex", gap: 0.5 }}>
+            <Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedId(params.row.id); }} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
+              View diff
+            </Button>
+            {params.row.kind === "device" ? (
+              <Button size="small" onClick={(e) => { e.stopPropagation(); onEdit?.(params.row.deviceId); }} sx={{ textTransform: "none", fontWeight: 700, color: BRAND.tealText }}>
+                Edit
+              </Button>
+            ) : null}
+          </Box>
         ),
       },
     ],
-    [deviceMap, onEdit, batchById]
+    [onEdit]
   );
 
   return (
@@ -162,18 +187,18 @@ export default function OverridesView({
         <Box>
           <Typography component="h2" sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>Overrides</Typography>
           <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-            {list.length === 0
-              ? "No device runs a policy of its own. Every device follows the tenant policy."
-              : `${list.length} device${list.length === 1 ? "" : "s"} run${list.length === 1 ? "s" : ""} a policy of its own.`}
+            {items.length === 0
+              ? "No device or group runs a policy of its own. Every device follows the tenant policy."
+              : `${items.length} override${items.length === 1 ? "" : "s"}: what differs from the tenant policy, and where.`}
           </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {onApply ? (
             <Button size="small" variant="contained" onClick={onApply} sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}>
-              Apply to devices…
+              New override…
             </Button>
           ) : null}
-          {list.length > 0 && onResetAll ? (
+          {(Array.isArray(rows) ? rows.length : 0) > 0 && onResetAll ? (
             <Button size="small" variant="outlined" color="error" disabled={resetting} onClick={onResetAll} sx={{ textTransform: "none", fontWeight: 700 }}>
               {resetting ? "Resetting…" : "Reset all to tenant policy…"}
             </Button>
@@ -181,16 +206,23 @@ export default function OverridesView({
         </Box>
       </Box>
 
-      {batchList.length > 0 ? (
-        <Box sx={{ display: "grid", gap: 1, mb: 2 }}>
-          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark }}>Applied in batches</Typography>
-          {batchList.map((b) => (
-            <BatchCard key={b.id} batch={b} onRevoke={onRevokeBatch} revoking={revokingId === b.id} />
-          ))}
-        </Box>
-      ) : null}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", p: 1, border: `1px solid ${BRAND.border}`, borderRadius: 2, bgcolor: BRAND.surfaceMuted, mb: 1.5 }}>
+        <TextField
+          size="small"
+          placeholder="Search by device, group or section…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          slotProps={{ htmlInput: { "aria-label": "Search overrides" } }}
+          sx={{ flex: 1, minWidth: 220, "& .MuiInputBase-root": { bgcolor: BRAND.surface } }}
+        />
+        <ToggleButtonGroup exclusive size="small" value={filter} onChange={(_e, v) => { if (v) setFilter(v); }} aria-label="Override scope filter">
+          <ToggleButton value="all" sx={{ textTransform: "none", px: 1.5 }}>All</ToggleButton>
+          <ToggleButton value="groups" sx={{ textTransform: "none", px: 1.5 }}>Groups</ToggleButton>
+          <ToggleButton value="devices" sx={{ textTransform: "none", px: 1.5 }}>Devices</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
-      {list.length > 0 ? (
+      {items.length > 0 ? (
         <Alert severity="info" sx={{ mb: 1.5 }}>
           An override changes only the listed settings; everything else follows the tenant policy, including future tenant changes. A tenant push keeps overrides in place.
         </Alert>
@@ -200,18 +232,19 @@ export default function OverridesView({
         <DataGrid
           autoHeight
           disableRowSelectionOnClick
-          rows={list}
+          rows={visible}
           columns={columns}
           loading={loading}
-          getRowId={(row) => row.device_id}
-          getRowHeight={() => "auto"}
-          onRowClick={(params) => onEdit?.(params.row.device_id)}
+          getRowId={(row) => row.id}
+          onRowClick={(params) => setSelectedId(params.row.id)}
           pageSizeOptions={[10, 25, 50]}
           initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
           sx={DATAGRID_SX}
           localeText={{ noRowsLabel: "No overrides" }}
         />
       </Box>
+
+      <Drawer item={selected} tenantJson={tenantJson} onEdit={onEdit} onRemove={onRemoveDevice} onRevoke={onRevokeBatch} busy={selected?.kind === "batch" && revokingId === selected.batch.id} />
     </Box>
   );
 }

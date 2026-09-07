@@ -34,7 +34,7 @@ import { diffPolicies, formatDiffValue } from "./policyDiff";
 
 const KIND_SIGN = { added: "+", removed: "−", changed: "~" };
 
-export default function ApplyOverrideDialog({ open, onClose, onApply, sections, tenantForm, catalog, groups, busy = false }) {
+export default function ApplyOverrideDialog({ open, onClose, onApply, sections, tenantForm, catalog, groups, busy = false, initial = null }) {
   const applicable = React.useMemo(
     () => (Array.isArray(sections) ? sections : []).filter((s) => DOMAIN_PATHS[s.id] && s.enabled !== false),
     [sections]
@@ -50,12 +50,13 @@ export default function ApplyOverrideDialog({ open, onClose, onApply, sections, 
   React.useEffect(() => {
     if (!open) return;
     setForm(tenantForm);
-    setDomain((d) => (applicable.some((s) => s.id === d) ? d : applicable[0]?.id || ""));
-    setMode("group");
-    setGroupId("");
+    const wanted = initial?.domain && applicable.some((s) => s.id === initial.domain) ? initial.domain : null;
+    setDomain((d) => wanted || (applicable.some((s) => s.id === d) ? d : applicable[0]?.id || ""));
+    setMode(initial?.groupId ? "group" : "group");
+    setGroupId(initial?.groupId ? String(initial.groupId) : "");
     setDeviceIds(new Set());
-    setSyncMembership(false);
-  }, [open, tenantForm, applicable]);
+    setSyncMembership(Boolean(initial?.syncMembership));
+  }, [open, tenantForm, applicable, initial]);
 
   const section = applicable.find((s) => s.id === domain) || null;
   const tenantSlice = React.useMemo(() => agentConfigSlice(tenantForm, catalog, formToPolicy), [tenantForm, catalog]);
@@ -160,7 +161,7 @@ export default function ApplyOverrideDialog({ open, onClose, onApply, sections, 
 
         {section ? (
           <Box sx={{ mt: 2, p: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2 }}>
-            <PolicySectionPanel section={section} form={form} onChange={setForm} catalog={catalog} />
+            <PolicySectionPanel section={section} form={form} onChange={setForm} scope="device" compareForm={tenantForm} deviceLabel="new override" />
           </Box>
         ) : (
           <Alert severity="info" sx={{ mt: 2 }}>No section can be applied: every plugin section is inactive in this policy.</Alert>
