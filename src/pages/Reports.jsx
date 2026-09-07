@@ -16,6 +16,7 @@ import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -24,6 +25,7 @@ import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
+import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import {
   getReportTypes, getReportRuns, runReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
@@ -33,6 +35,18 @@ import {
 } from "../components/Reports/reportSchedules";
 import { BRAND, TEXT } from "../theme/brand";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
+
+/**
+ * Qué tipos saben enseñarse antes de generarse.
+ *
+ * Una vista previa NO es genérica: hay que saber qué significan los campos de
+ * ese informe para pintar KPIs y una tendencia. Por eso es un registro por
+ * clave y no una casilla en el catálogo — un tipo sin entrada aquí
+ * simplemente no ofrece el botón, en vez de abrir un diálogo vacío.
+ */
+const PREVIEW_BY_KEY = {
+  "global.fleet-health": FleetHealthPreview,
+};
 
 export default function Reports() {
   const confirm = useConfirm();
@@ -52,6 +66,7 @@ export default function Reports() {
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const [emailTarget, setEmailTarget] = React.useState(null);
   const [scheduleTarget, setScheduleTarget] = React.useState(null);
+  const [previewTarget, setPreviewTarget] = React.useState(null); // fila del catálogo
   // Types that declare `params` ask for them first (ReportParamsDialog);
   // `paramsTarget` remembers what to do once the operator confirms.
   const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "run" | "email" }
@@ -272,6 +287,16 @@ export default function Reports() {
               {format.toUpperCase()}
             </Button>
           ))}
+          {PREVIEW_BY_KEY[params.row.key] ? (
+            <Button
+              size="small"
+              startIcon={<VisibilityOutlinedIcon />}
+              onClick={() => setPreviewTarget(params.row)}
+              sx={{ textTransform: "none" }}
+            >
+              Preview
+            </Button>
+          ) : null}
           <Button
             size="small"
             startIcon={<MailOutlineIcon />}
@@ -530,6 +555,23 @@ export default function Reports() {
           />
         </Box>
       </Paper>
+
+      {/* Vista previa del tipo seleccionado. Se monta sólo cuando hay uno
+          elegido para no arrastrar Recharts en cada render de la página. */}
+      {previewTarget && PREVIEW_BY_KEY[previewTarget.key]
+        ? React.createElement(PREVIEW_BY_KEY[previewTarget.key], {
+            open: true,
+            reportKey: previewTarget.key,
+            onClose: () => setPreviewTarget(null),
+            generating: String(runningKey || "").startsWith(`${previewTarget.key}:`)
+              ? String(runningKey).split(":")[1]
+              : "",
+            // Generar desde la vista previa pasa por el MISMO `handleRun` que
+            // los botones del catálogo: una sola puerta, un solo sitio donde
+            // queda registrada la ejecución.
+            onGenerate: (format, params) => handleRun(previewTarget.key, format, params),
+          })
+        : null}
 
       <ReportParamsDialog
         open={Boolean(paramsTarget)}

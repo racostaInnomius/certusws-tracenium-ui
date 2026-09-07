@@ -455,3 +455,65 @@ describe("Reports — preselección por URL", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+// ── La vista previa, dentro de Reports ──
+//
+// Vivía en Overview y traía sus propios botones de descarga, que sacaban el
+// fichero por `/api/v1/fleet-report` sin dejar fila en `report_runs`. La
+// pantalla vuelve; la puerta de salida por su cuenta, no.
+describe("Reports — vista previa", () => {
+  const abrirCatalogo = () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    window.history.replaceState({}, "", "/?page=reports");
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it("sólo la ofrece el tipo que sabe enseñarse", async () => {
+    // Una vista previa no es genérica: hay que saber qué significan los
+    // campos de ESE informe. Un tipo sin vista previa no enseña un botón que
+    // abre un diálogo vacío.
+    abrirCatalogo();
+
+    await screen.findAllByText("Fleet Health Report");
+    const previews = screen.getAllByRole("button", { name: /^preview$/i });
+    expect(previews).toHaveLength(1);
+  });
+
+  it("se pinta con el JSON del MOTOR, no con la ruta legacy", async () => {
+    const previewCalls = respond("get", `${BASE}/global.fleet-health/run`, {
+      ok: true,
+      report: { tenant: { name: "Banco X" }, kpis: { devices: 40 }, trend: [], deltas: {} },
+    });
+    abrirCatalogo();
+
+    await screen.findAllByText("Fleet Health Report");
+    await userEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+
+    await waitFor(() => expect(previewCalls.length).toBeGreaterThan(0));
+    expect(previewCalls[0].search.format).toBe("json");
+    expect(await screen.findByText("Banco X")).toBeTruthy();
+  });
+
+  it("generar desde la vista previa pasa por el motor y arrastra el periodo", async () => {
+    const calls = respond("get", `${BASE}/global.fleet-health/run`, {
+      ok: true,
+      report: { tenant: { name: "Banco X" }, kpis: { devices: 40 }, trend: [], deltas: {} },
+    });
+    abrirCatalogo();
+
+    await screen.findAllByText("Fleet Health Report");
+    await userEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    await screen.findByText("Banco X");
+
+    await userEvent.click(screen.getByRole("button", { name: /generate pdf/i }));
+
+    await waitFor(() => expect(calls.some((c) => c.search.format === "pdf")).toBe(true));
+    const pdf = calls.find((c) => c.search.format === "pdf");
+    // El fichero cubre lo que se estaba mirando, no un rango por defecto
+    // distinto — eso sería una trampa silenciosa.
+    expect(pdf.search.from).toBeTruthy();
+    expect(pdf.search.to).toBeTruthy();
+  });
+});

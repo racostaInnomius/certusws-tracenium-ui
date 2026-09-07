@@ -109,6 +109,25 @@ export function buildParamsQuery(params) {
   return entries.map(([k, v]) => `&${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("");
 }
 
+/**
+ * Vista previa: el MISMO endpoint del motor, leído como JSON en vez de
+ * guardado como fichero.
+ *
+ * `runReport` baja un blob y lo guarda; una vista previa necesita el objeto
+ * para pintarlo. Es la única diferencia — la ruta, el gate por tipo y el
+ * registro en `report_runs` son idénticos, así que no hay una segunda puerta
+ * que mantener ni que se olvide de un permiso.
+ *
+ * `cache: false` porque una previsualización que enseñe una foto de hace un
+ * minuto contradice al panel que el operador acaba de mirar.
+ */
+export async function previewReport(key, params) {
+  return httpGetJson(
+    `${BASE}/${encodeURIComponent(key)}/run?format=json${buildParamsQuery(params)}`,
+    { cache: false }
+  );
+}
+
 export async function runReport(key, format, params) {
   const { blob, filename } = await httpGetBlob(
     `${BASE}/${encodeURIComponent(key)}/run?format=${encodeURIComponent(format)}${buildParamsQuery(params)}`
