@@ -171,3 +171,20 @@ export async function approveIntake(id, overrides = {}) {
 export async function rejectIntake(id) {
   return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/reject`, {});
 }
+
+// ── Catálogo global visto por este tenant (ADR-0016 F2) ───────────────
+
+/** Lo publicado por Tracenium, marcando qué tiene ya este tenant. */
+export async function getGlobalCatalog() {
+  return httpGetJson(`${BASE}/global-catalog`);
+}
+
+/**
+ * Enlaza una entrada al catálogo del tenant.
+ *
+ * Es una ACEPTACIÓN, no una re-verificación: el análisis de firma e integridad
+ * ocurrió una vez, al publicarse. El servidor registra quién acepta.
+ */
+export async function linkGlobalEntry(entryId) {
+  return httpPostJson(`${BASE}/global-catalog/${encodeURIComponent(entryId)}/link`, {});
+}

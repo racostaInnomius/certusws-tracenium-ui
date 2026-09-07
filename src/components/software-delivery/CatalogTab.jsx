@@ -39,6 +39,8 @@ import {
   Switch,
   Menu,
   Alert,
+  Tab,
+  Tabs,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
@@ -66,6 +68,7 @@ import { listFrom } from "../../api/shape";
 
 import PackageDialog from "./PackageDialog";
 import IntakeReviewDrawer from "./IntakeReviewDrawer";
+import GlobalCatalogSegment from "./GlobalCatalogSegment";
 import PackageProvenanceDrawer from "./PackageProvenanceDrawer";
 import DeletePackageDialog from "./DeletePackageDialog";
 import DeployWizardDialog from "./DeployWizardDialog";
@@ -75,6 +78,7 @@ import { isVerifiedPackage, originLabel } from "./packageOrigin";
 export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue, refreshNonce = 0 }) {
   // La cola de revisión cuelga del catálogo desde la fase 3.
   const [reviewOpen, setReviewOpen] = React.useState(false);
+  const [segment, setSegment] = React.useState("mine");
 
   // El Overview puede pedir que se abra directamente. Se consume una vez para
   // que volver a esta pestaña más tarde no la reabra sola.
@@ -546,6 +550,25 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
 
   return (
     <SectionPaper variant="panel" sx={{ p: 2 }}>
+      {/* ⚠️ UN SEGMENTO, NO UNA QUINTA PESTAÑA (ADR-0016 D8). La fase 2 de este
+          refactor se llama «one door into the catalog» y la fase 3 retiró la
+          pestaña de AI Intake con el mismo argumento. El catálogo de Tracenium
+          es una TERCERA PUERTA de entrada a este catálogo, no otra sección: las
+          dos listas contestan preguntas contiguas —«qué tengo» y «qué podría
+          tener»— y separarlas en pestañas obliga a ir y volver para compararlas. */}
+      <Tabs
+        value={segment}
+        onChange={(_e, v) => setSegment(v)}
+        sx={{ mb: 1.5, minHeight: 36, "& .MuiTab-root": { minHeight: 36, textTransform: "none", fontWeight: 700 } }}
+      >
+        <Tab value="mine" label="My catalog" />
+        <Tab value="global" label="Tracenium catalog" />
+      </Tabs>
+
+      {segment === "global" ? (
+        <GlobalCatalogSegment notify={notify} onLinked={load} />
+      ) : (
+      <>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1.5, alignItems: { sm: "center" } }}>
         <TextField
           size="small"
@@ -739,6 +762,8 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
         onConfirm={handleDeployFire}
         notify={notify}
       />
+      </>
+      )}
     </SectionPaper>
   );
 }
