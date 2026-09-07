@@ -213,3 +213,37 @@ describe("OverviewStatusBand · lo que se pinta y lo que no", () => {
     expect(onNavigateTab).toHaveBeenCalledWith("catalog", { reviewQueue: true });
   });
 });
+
+describe("OverviewStatusBand · el aviso del catálogo global (ADR-0016 F3)", () => {
+  function band(props = {}) {
+    return render(
+      <OverviewStatusBand
+        loading={false} packages={T111_PACKAGES} inFlightCount={0} devicesInFlight={0}
+        buckets={[{ bucket: "2026-08-18", succeeded: 6, failed: 0 }]}
+        pendingIntakes={0} coveredSites={2} totalActiveSites={2} uncoveredSites={0}
+        {...props}
+      />
+    );
+  }
+
+  // La banda es la superficie de «¿tengo algo que hacer?», y una versión nueva
+  // de algo que ya usas lo es.
+  it("enseña cuántas novedades hay", () => {
+    band({ catalogUpdates: 3 });
+    expect(screen.getByText("3 available")).toBeInTheDocument();
+  });
+
+  // ⚠️ Un cero significaría «estás al día», que es el estado por defecto y no
+  // merece sitio — la misma regla que dejó fuera las cuatro tarjetas en cero.
+  it("no gasta sitio cuando no hay ninguna", () => {
+    band({ catalogUpdates: 0 });
+    expect(screen.queryByText(/catalog updates/i)).toBeNull();
+  });
+
+  it("lleva al segmento del catálogo de Tracenium, no sólo a la pestaña", async () => {
+    const onNavigateTab = vi.fn();
+    band({ catalogUpdates: 2, onNavigateTab });
+    await userEvent.click(screen.getByRole("button", { name: /catalog updates/i }));
+    expect(onNavigateTab).toHaveBeenCalledWith("catalog", { globalCatalog: true });
+  });
+});

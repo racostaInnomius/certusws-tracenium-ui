@@ -75,13 +75,21 @@ import DeployWizardDialog from "./DeployWizardDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import { isVerifiedPackage, originLabel } from "./packageOrigin";
 
-export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue, refreshNonce = 0 }) {
+export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue, openGlobalCatalog, onConsumedGlobalCatalog, refreshNonce = 0 }) {
   // La cola de revisión cuelga del catálogo desde la fase 3.
   const [reviewOpen, setReviewOpen] = React.useState(false);
   const [segment, setSegment] = React.useState("mine");
 
   // El Overview puede pedir que se abra directamente. Se consume una vez para
   // que volver a esta pestaña más tarde no la reabra sola.
+  React.useEffect(() => {
+    if (!openGlobalCatalog) return;
+    // Se consume la instrucción al aplicarla: si quedara puesta, el segmento
+    // volvería a saltar solo cada vez que el operador vuelva a esta pestaña.
+    setSegment("global");
+    onConsumedGlobalCatalog?.();
+  }, [openGlobalCatalog, onConsumedGlobalCatalog]);
+
   React.useEffect(() => {
     if (!openReviewQueue) return;
     setReviewOpen(true);

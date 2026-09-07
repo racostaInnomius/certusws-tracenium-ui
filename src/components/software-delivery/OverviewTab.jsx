@@ -39,6 +39,7 @@ import {
   getDeploymentTimeseries,
   getAgentUpdateSources,
   getDownloadTierStats,
+  getGlobalCatalog,
 } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
 
@@ -65,7 +66,28 @@ const SOURCE_KEYS = [
   "buckets",
   "tiers",
   "agentTiers",
+  "globalCatalog",
 ];
+
+/**
+ * Cuántos títulos enlazados tienen una versión más nueva sin enlazar.
+ *
+ * ⚠️ SE CUENTAN TÍTULOS, NO ENTRADAS. Chrome con una versión nueva para Windows
+ * y otra para macOS es UNA novedad que atender, no dos: el operador decide una
+ * vez por producto. Contar entradas inflaría el aviso justo en los títulos
+ * multiplataforma, que son los que más se usan.
+ */
+export function countCatalogUpdates(entries) {
+  const rows = Array.isArray(entries) ? entries : [];
+  const conNovedad = new Set();
+  for (const e of rows) {
+    // Vigente + el tenant tiene otra versión del título + no tiene ésta.
+    if (e?.supersededBy == null && e?.linkedVersionOfTitle && e?.linkedPackageId == null) {
+      conNovedad.add(e.titleKey || e.title);
+    }
+  }
+  return conNovedad.size;
+}
 
 function sumOutcomes(deployments, outcomes) {
   let total = 0;
@@ -89,6 +111,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
     buckets: [],
     tiers: null,
     agentTiers: null,
+    globalCatalog: [],
     failures: new Set(),
   });
 
@@ -117,6 +140,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
       getDeploymentTimeseries(windowKey),
       getDownloadTierStats(windowKey),
       getAgentUpdateSources(windowKey),
+      getGlobalCatalog(),
     ])
       .then((results) => {
         if (cancelled) return;
@@ -138,6 +162,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
           buckets: Array.isArray(val(5)?.buckets) ? val(5).buckets : [],
           tiers: val(6)?.stats ?? null,
           agentTiers: val(7)?.stats ?? null,
+          globalCatalog: val(8)?.entries ?? [],
           failures,
         });
       })
@@ -213,6 +238,10 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
   // entre eventos que no tienen nada en medio; con densidad de verdad, la
   // forma dice cosas que los totales no.
   const sparse = shouldUseStrip(chartData);
+  const catalogUpdates = React.useMemo(
+    () => countCatalogUpdates(data.globalCatalog),
+    [data.globalCatalog]
+  );
 
   return (
     <Stack spacing={2}>
@@ -242,6 +271,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
         buckets={data.buckets}
         settled={stats.settled}
         failed={stats.failed}
+        catalogUpdates={catalogUpdates}
         pendingIntakes={stats.pendingIntakes}
         intakesCapped={stats.intakesCapped}
         coveredSites={stats.coveredSites}

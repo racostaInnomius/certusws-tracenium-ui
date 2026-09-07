@@ -9,7 +9,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 
 import { server, respond } from "../../test/msw/server";
-import OverviewTab from "./OverviewTab";
+import OverviewTab, { countCatalogUpdates } from "./OverviewTab";
 
 afterEach(() => {
   cleanup();
@@ -187,5 +187,50 @@ describe("OverviewTab · la tarjeta de intakes tras retirar la pestaña", () => 
     await userEvent.click(await screen.findByRole("button", { name: /awaiting review/i }));
 
     expect(onNavigateTab.mock.calls[0][0]).not.toBe("intake");
+  });
+});
+
+describe("countCatalogUpdates · se cuentan TÍTULOS, no entradas", () => {
+  const linked = (over) => ({
+    titleKey: "google-chrome", supersededBy: null,
+    linkedVersionOfTitle: "152.0.7977.83", linkedPackageId: null, ...over,
+  });
+
+  // ⚠️ Chrome con una versión nueva para Windows y otra para macOS es UNA
+  // novedad que atender, no dos: el operador decide una vez por producto.
+  // Contar entradas inflaría el aviso justo en los títulos multiplataforma,
+  // que son los que más se usan.
+  it("un título con dos plataformas cuenta una vez", () => {
+    expect(countCatalogUpdates([
+      linked({ platform: "windows" }),
+      linked({ platform: "macos" }),
+    ])).toBe(1);
+  });
+
+  it("títulos distintos suman", () => {
+    expect(countCatalogUpdates([
+      linked({ titleKey: "google-chrome" }),
+      linked({ titleKey: "microsoft-edge" }),
+    ])).toBe(2);
+  });
+
+  // Sin nada enlazado de ese título no hay novedad: es un producto que no usas.
+  it("no cuenta lo que el tenant nunca enlazó", () => {
+    expect(countCatalogUpdates([linked({ linkedVersionOfTitle: null })])).toBe(0);
+  });
+
+  // Ni lo que ya tiene.
+  it("no cuenta la versión que ya tiene enlazada", () => {
+    expect(countCatalogUpdates([linked({ linkedPackageId: 77 })])).toBe(0);
+  });
+
+  // Una versión superada no es novedad aunque el tenant no la tenga.
+  it("no cuenta versiones superadas", () => {
+    expect(countCatalogUpdates([linked({ supersededBy: 9 })])).toBe(0);
+  });
+
+  it("aguanta lo vacío y lo ausente", () => {
+    expect(countCatalogUpdates([])).toBe(0);
+    expect(countCatalogUpdates(undefined)).toBe(0);
   });
 });

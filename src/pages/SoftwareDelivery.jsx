@@ -203,6 +203,9 @@ export default function SoftwareDelivery({ onNavigate }) {
   // patrón que autoOpenDeploymentId: la página la transporta y la pestaña la
   // consume.
   const [openReviewQueue, setOpenReviewQueue] = React.useState(false);
+  // ADR-0016 F3: el aviso de la banda lleva al segmento del catálogo global,
+  // no sólo a la pestaña. Misma fontanería que la cola de revisión.
+  const [openGlobalCatalog, setOpenGlobalCatalog] = React.useState(false);
 
   const notify = React.useCallback((severity, message) => {
     setSnackbar({ open: true, severity, message });
@@ -322,6 +325,7 @@ export default function SoftwareDelivery({ onNavigate }) {
           onNavigateTab={(key, opts) => {
             setActiveTab(TAB_INDEX[key] ?? 0);
             if (opts?.reviewQueue) setOpenReviewQueue(true);
+            if (opts?.globalCatalog) setOpenGlobalCatalog(true);
             // Una causa de fallo con UN solo despliegue detrás abre ese
             // despliegue: reutiliza la misma vía que el deploy recién lanzado,
             // y es donde viven los resultados por equipo que la causa promete.
@@ -336,6 +340,8 @@ export default function SoftwareDelivery({ onNavigate }) {
           onDeployFire={handleDeployFired}
           openReviewQueue={openReviewQueue}
           onConsumedReviewQueue={() => setOpenReviewQueue(false)}
+          openGlobalCatalog={openGlobalCatalog}
+          onConsumedGlobalCatalog={() => setOpenGlobalCatalog(false)}
         />
       ) : activeTab === 2 ? (
         <DeploymentsTab

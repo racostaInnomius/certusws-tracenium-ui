@@ -162,6 +162,7 @@ export default function OverviewStatusBand({
   buckets,
   settled,
   failed,
+  catalogUpdates,
   pendingIntakes,
   intakesCapped,
   coveredSites,
@@ -234,6 +235,20 @@ export default function OverviewStatusBand({
             value={`All ${settled} succeeded`}
             tone={ROLE.positive}
             hint="Every settled per-device install in the sampled deployments landed successfully."
+          />
+        ) : null}
+
+        {/* ⚠️ ADR-0016 F3 — el aviso de versión nueva vive aquí porque ésta es
+            la superficie de «¿tengo algo que hacer?». Y sólo aparece si HAY
+            algo: un cero significaría «estás al día», que ya es el estado por
+            defecto y no merece sitio. */}
+        {catalogUpdates > 0 ? (
+          <Fact
+            label="Catalog updates"
+            value={`${catalogUpdates} available`}
+            tone={ROLE.caution}
+            hint="Newer versions of software you already linked from the Tracenium catalog. You decide whether to move."
+            onClick={() => onNavigateTab?.("catalog", { globalCatalog: true })}
           />
         ) : null}
 
