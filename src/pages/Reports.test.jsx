@@ -36,6 +36,12 @@ import Reports from "./Reports";
 afterEach(() => {
   cleanup();
   server.resetHandlers();
+  // ⚠️ La pestaña activa vive en la URL (`?reportsTab=`), a propósito: un
+  // enlace puede apuntar a una y una recarga no pierde el sitio. En los tests
+  // eso se filtra de uno al siguiente — el que abría "Schedules" dejaba al
+  // siguiente arrancando ahí, sin catálogo, y el fallo salía como "container
+  // undefined" en un test que nadie había tocado.
+  window.history.replaceState({}, "", "/");
 });
 
 const BASE = "/api/v1/reports";
@@ -92,6 +98,19 @@ const RUNS = {
   ],
 };
 
+/**
+ * Abre una pestaña por su rótulo.
+ *
+ * Desde U1 la página son cuatro pestañas y no cuatro tablas apiladas, así que
+ * un test que mira el historial o las programaciones tiene que ir allí
+ * primero. Se hace por el ROL de pestaña y su nombre visible, que es como
+ * llega un operador — no por el índice, que cambiaría al añadir la quinta.
+ */
+async function abrirPestana(nombre) {
+  const { fireEvent } = await import("@testing-library/react");
+  fireEvent.click(await screen.findByRole("tab", { name: nombre }));
+}
+
 describe("Reports page", () => {
   it("renders only the report types the server returns", async () => {
     respond("get", `${BASE}/types`, TYPES);
@@ -118,6 +137,7 @@ describe("Reports page", () => {
     respond("get", `${BASE}/runs`, RUNS);
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
 
     expect(await screen.findByText("op@tracenium.test")).toBeInTheDocument();
   });
@@ -225,9 +245,13 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/schedules`, SCHEDULES);
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await screen.findAllByText("Evidence Pack");
+    // El botón "Schedule" vive en el CATÁLOGO; la tabla de programaciones, en
+    // su pestaña. Son dos sitios desde U1.
+    expect(screen.getAllByRole("button", { name: /^schedule$/i })).toHaveLength(TYPES.types.length);
+
+    await abrirPestana(/schedules/i);
     expect(await screen.findByText("Previous month", { exact: false })).toBeTruthy();
     expect(screen.queryByTestId("schedules-empty")).toBeNull();
-    expect(screen.getAllByRole("button", { name: /^schedule$/i })).toHaveLength(TYPES.types.length);
   });
 
   it("a backend without schedules still renders the catalog", async () => {
@@ -236,6 +260,7 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/schedules`, { error: "NOT_FOUND" }, { status: 404 });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await screen.findByText("Evidence Pack");
+    await abrirPestana(/schedules/i);
     expect(await screen.findByTestId("schedules-empty")).toBeTruthy();
   });
 
@@ -250,6 +275,7 @@ describe("Reports — schedules (E3)", () => {
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     await screen.findAllByText("Evidence Pack");
+    await abrirPestana(/schedules/i);
     const vacio = await screen.findByTestId("schedules-empty");
     expect(vacio.textContent).toMatch(/administrators/i);
     expect(vacio.textContent).not.toMatch(/No schedules yet/i);
@@ -268,9 +294,11 @@ describe("Reports — schedules (E3)", () => {
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     await screen.findAllByText("Evidence Pack");
+    expect(screen.getAllByRole("button", { name: /^schedule$/i }).length).toBeGreaterThan(0);
+
+    await abrirPestana(/schedules/i);
     const vacio = await screen.findByTestId("schedules-empty");
     expect(vacio.textContent).toMatch(/No schedules yet/i);
-    expect(screen.getAllByRole("button", { name: /^schedule$/i }).length).toBeGreaterThan(0);
   });
 
   it("an archived run gets a download button that goes through the blob path", async () => {
@@ -287,6 +315,7 @@ describe("Reports — schedules (E3)", () => {
     );
     saveBlob.mockClear();
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
     const btn = await screen.findByRole("button", { name: /download archived copy/i });
     await userEvent.setup().click(btn);
     await waitFor(() => expect(saveBlob).toHaveBeenCalled());
@@ -313,6 +342,7 @@ describe("Reports — el historial", () => {
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
 
     await screen.findByText("schedule:5");
 
@@ -328,6 +358,7 @@ describe("Reports — el historial", () => {
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
 
     await screen.findByText("schedule:5");
     expect(screen.getByText(/^0123456789abcdef/)).toBeInTheDocument();
@@ -342,6 +373,7 @@ describe("Reports — el historial", () => {
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/history/i);
 
     expect(await screen.findByText("mailer_not_configured")).toBeInTheDocument();
   });
@@ -356,6 +388,7 @@ describe("Reports — borrar una programación pide confirmación", () => {
     const deletes = respond("delete", `${BASE}/schedules/5`, { ok: true });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/schedules/i);
     await screen.findByText("Previous month", { exact: false });
 
     await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
@@ -372,6 +405,7 @@ describe("Reports — borrar una programación pide confirmación", () => {
     const deletes = respond("delete", `${BASE}/schedules/5`, { ok: true });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/schedules/i);
     await screen.findByText("Previous month", { exact: false });
 
     await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
@@ -520,5 +554,101 @@ describe("Reports — vista previa", () => {
     // distinto — eso sería una trampa silenciosa.
     expect(pdf.search.from).toBeTruthy();
     expect(pdf.search.to).toBeTruthy();
+  });
+});
+
+// ── U1 · cabecera y pestañas (docs/analysis/reports-page-2026-09.md) ──
+//
+// Era la única página del MENÚ sin `PageHeader` —y por tanto sin control de
+// refresco— justo cuando pasó a ser el destino de once botones "Report".
+// Y eran cuatro Paper apilados en un scroll donde el resto del portal usa
+// pestañas.
+describe("Reports — U1: cabecera y pestañas", () => {
+  const montar = () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    return render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it("tiene cabecera canónica con refresco", async () => {
+    montar();
+    await screen.findAllByText("Evidence Pack");
+
+    expect(screen.getByRole("heading", { name: "Reports" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^refresh$/i })).toBeTruthy();
+    expect(screen.getByLabelText(/auto refresh/i)).toBeTruthy();
+  });
+
+  it("las cuatro pestañas, y sólo se pinta la activa", async () => {
+    // Que sólo se monte una es lo que hace que la página deje de ser un scroll
+    // de cuatro tablas — y de paso, que no se pidan datos de lo que no se ve.
+    montar();
+    await screen.findAllByText("Evidence Pack");
+
+    for (const n of [/catalog/i, /schedules/i, /history/i, /settings/i]) {
+      expect(screen.getByRole("tab", { name: n })).toBeTruthy();
+    }
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+  });
+
+  it("la pestaña viaja en la URL, para poder enlazarla y para no perderla al recargar", async () => {
+    montar();
+    await screen.findAllByText("Evidence Pack");
+
+    await abrirPestana(/history/i);
+
+    expect(new URL(window.location.href).searchParams.get("reportsTab")).toBe("history");
+  });
+
+  it("se abre en la pestaña que diga la URL", async () => {
+    window.history.replaceState({}, "", "/?page=reports&reportsTab=settings");
+    montar();
+
+    // La de Settings trae el conector GRC; el catálogo no está montado.
+    expect(await screen.findByText(/GRC platform pull the evidence-pack/i)).toBeTruthy();
+    expect(screen.queryByRole("grid", { name: /report catalog/i })).toBeNull();
+  });
+
+  it("refrescar vuelve a pedir el catálogo", async () => {
+    // Con la caché de 60 s de `httpGetJson`, volver a llamar al loader no
+    // garantiza una petición: es `RefreshControl` quien la tira antes.
+    const typeCalls = respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    await screen.findAllByText("Evidence Pack");
+    const antes = typeCalls.length;
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /^refresh$/i }));
+
+    await waitFor(() => expect(typeCalls.length).toBeGreaterThan(antes));
+  });
+});
+
+// El refresco tiene que alcanzar TAMBIÉN a la pestaña de Settings, que carga
+// por su cuenta y no pasa por el `loadData` de la página. Es la trampa de este
+// control en toda la app: un botón que sólo refresca lo que su autor tenía
+// delante se comporta igual que uno que funciona.
+describe("Reports — U1: el refresco alcanza a Settings", () => {
+  it("pulsar Refresh en Settings vuelve a pedir claves y destinos", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    const keyCalls = respond("get", `${BASE}/api-keys`, { ok: true, keys: [], scopes: [] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [], secretsConfigured: true });
+    respond("get", `${BASE}/grc/deliveries`, { ok: true, deliveries: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await screen.findAllByText("Evidence Pack");
+    await abrirPestana(/settings/i);
+
+    await waitFor(() => expect(keyCalls.length).toBeGreaterThan(0));
+    const antes = keyCalls.length;
+
+    await userEvent.setup().click(screen.getByRole("button", { name: /^refresh$/i }));
+
+    await waitFor(() => expect(keyCalls.length).toBeGreaterThan(antes), { timeout: 3000 });
   });
 });

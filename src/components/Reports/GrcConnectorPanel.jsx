@@ -50,7 +50,7 @@ function CopyButton({ value, label }) {
   );
 }
 
-export default function GrcConnectorPanel({ onNotify }) {
+export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
   const confirm = useConfirm();
   const [keys, setKeys] = React.useState([]);
   const [targets, setTargets] = React.useState([]);
@@ -90,7 +90,10 @@ export default function GrcConnectorPanel({ onNotify }) {
     }
   }, []);
 
-  React.useEffect(() => { load(); loadDeliveries(); }, [load, loadDeliveries]);
+  // `refreshNonce` lo sube el "Refresh" de la página. Sin él, refrescar con
+  // esta pestaña delante no haría nada: el panel carga por su cuenta y no
+  // pasa por el `loadData` de Reports.
+  React.useEffect(() => { load(); loadDeliveries(); }, [load, loadDeliveries, refreshNonce]);
 
   const notify = (message, severity = "success") => onNotify?.({ message, severity });
 

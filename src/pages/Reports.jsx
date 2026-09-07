@@ -9,17 +9,41 @@
 // their own ledger of what was generated, archived and sent) and a run
 // history that can hand back the archived file — the exact bytes whose
 // SHA-256 is on record.
+//
+// ── U1 del rediseño (docs/analysis/reports-page-2026-09.md) ──────────
+//
+// Cabecera canónica y CUATRO PESTAÑAS, donde había cuatro Paper apilados en un
+// scroll. Cada pestaña contesta una pregunta distinta:
+//
+//   Catalog    ¿qué puedo sacar?      ← la puerta de los once botones "Report"
+//   Schedules  ¿qué sale solo?
+//   History    ¿qué salió, quién se lo llevó, y es el fichero que firmé?
+//   Settings   ¿por dónde sale hacia fuera? (claves de API, destinos GRC)
+//
+// El contenido de cada una es EL MISMO de antes: U1 sólo cambia el contenedor.
+// El rediseño de cada tabla llega en U2-U4, y mezclarlo aquí habría hecho
+// imposible ver qué rompió qué.
+//
+// Esta página era la única del menú sin `PageHeader` —y por tanto sin control
+// de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, IconButton, Paper, Switch, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, IconButton, Switch, Tab, Tabs, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
+import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import BrandSnackbar from "../components/common/BrandSnackbar";
+import PageHeader from "../components/common/PageHeader";
+import SectionPaper from "../components/common/SectionPaper";
+import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
@@ -48,6 +72,25 @@ const PREVIEW_BY_KEY = {
   "global.fleet-health": FleetHealthPreview,
 };
 
+// Las cuatro pestañas por nombre. Se guardan en la URL para que los once
+// botones "Report" de las otras páginas puedan apuntar a la que toque, y para
+// que recargar no devuelva siempre al catálogo.
+const TAB = { catalog: 0, schedules: 1, history: 2, settings: 3 };
+const TAB_BY_NAME = { catalog: 0, schedules: 1, history: 2, settings: 3 };
+const NAME_BY_TAB = ["catalog", "schedules", "history", "settings"];
+
+function a11yProps(index) {
+  return { id: `reports-tab-${index}`, "aria-controls": `reports-tabpanel-${index}` };
+}
+
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
+
 export default function Reports() {
   const confirm = useConfirm();
   const [rows, setRows] = React.useState([]);
@@ -71,6 +114,17 @@ export default function Reports() {
   // `paramsTarget` remembers what to do once the operator confirms.
   const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "run" | "email" }
   const [emailParams, setEmailParams] = React.useState(null);
+
+  // Pestaña activa, persistida en la URL (`?reportsTab=`). Un enlace desde
+  // otra página puede así abrir la que corresponda, y una recarga no devuelve
+  // al catálogo perdiendo el sitio.
+  const [activeTab, setActiveTab] = React.useState(
+    () => TAB_BY_NAME[getSearchParam("reportsTab", "catalog")] ?? TAB.catalog
+  );
+  const handleTabChange = React.useCallback((_e, next) => {
+    setActiveTab(next);
+    updateSearchParams({ reportsTab: NAME_BY_TAB[next] });
+  }, []);
 
   const loadSchedules = React.useCallback(async () => {
     // Schedules are additive: a backend without the endpoint (or a
@@ -112,6 +166,31 @@ export default function Reports() {
   React.useEffect(() => {
     loadData();
   }, [loadData]);
+
+  /**
+   * Refresco de página.
+   *
+   * `loadData({silent})` ya recarga las TRES fuentes propias (catálogo,
+   * historial y programaciones). El panel de GRC carga por su cuenta, así que
+   * recibe un nonce: sin él, refrescar con la pestaña de Settings delante no
+   * haría nada, que es la trampa que este control tiene en toda la app —
+   * el botón se comporta igual tanto si recarga como si no.
+   *
+   * (La caché de GETs la tira `RefreshControl` antes de llamar aquí; sin eso
+   * `httpGetJson` serviría lo mismo que ya tenía durante 60 s.)
+   */
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const refreshAll = React.useCallback(async () => {
+    setRefreshing(true);
+    setRefreshNonce((n) => n + 1);
+    try {
+      await loadData({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadData]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "reportsAutoRefresh");
 
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
 
@@ -480,52 +559,54 @@ export default function Reports() {
   ];
 
   return (
-    <Box>
-      <Typography variant="h5" sx={{ fontWeight: 800, color: BRAND.dark, mb: 2 }}>
-        Reports
-      </Typography>
-
-      <Paper
-        sx={{ p: 2, mb: 3, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}
-      >
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
-          Catalog
-        </Typography>
-        <Box sx={{ width: "100%" }}>
-          <DataGrid
-            aria-label="Report catalog"
-            rows={rows}
-            columns={typeColumns}
-            loading={loading}
-            autoHeight
-            disableRowSelectionOnClick
-            hideFooterSelectedRowCount
-            pageSizeOptions={[10, 25]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-            sx={{ border: "none" }}
+    <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
+      <PageHeader
+        title="Reports"
+        subtitle="Generate, schedule and trace every report this tenant produces."
+        icon={<SummarizeOutlinedIcon />}
+        actions={
+          <RefreshControl
+            refreshSeconds={refreshSeconds}
+            onRefreshSecondsChange={setRefreshSeconds}
+            onRefresh={refreshAll}
+            loading={loading || refreshing}
           />
-        </Box>
-      </Paper>
+        }
+      />
 
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
-          Schedules
-        </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-          Monthly on the 1st. Each run is archived with its SHA-256 and emailed to its recipients.
-        </Typography>
-        {schedules.length === 0 ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="schedules-empty">
-            {canSchedule
-              ? 'No schedules yet. Use "Schedule" on a catalog row to get a report every month.'
-              : "Schedules are managed by this tenant's administrators. There may be some running; this account cannot see them."}
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 62,
+            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal },
+          }}
+        >
+          {/* El orden es el del recorrido: qué puedo sacar → qué sale solo →
+              qué salió → por dónde sale hacia fuera. */}
+          <Tab icon={<ListAltOutlinedIcon fontSize="small" />} iconPosition="start" label="Catalog" {...a11yProps(TAB.catalog)} sx={TAB_SX} />
+          <Tab icon={<EventRepeatOutlinedIcon fontSize="small" />} iconPosition="start" label="Schedules" {...a11yProps(TAB.schedules)} sx={TAB_SX} />
+          <Tab icon={<HistoryOutlinedIcon fontSize="small" />} iconPosition="start" label="History" {...a11yProps(TAB.history)} sx={TAB_SX} />
+          <Tab icon={<SettingsOutlinedIcon fontSize="small" />} iconPosition="start" label="Settings" {...a11yProps(TAB.settings)} sx={TAB_SX} />
+        </Tabs>
+      </SectionPaper>
+
+      {activeTab === TAB.catalog ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.catalog}`} aria-labelledby={`reports-tab-${TAB.catalog}`}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+            Everything this tenant can generate. Each run is recorded in the history with its
+            SHA-256, whoever ran it and the scope it covered.
           </Typography>
-        ) : (
           <Box sx={{ width: "100%" }}>
             <DataGrid
-              aria-label="Schedules"
-              rows={schedules}
-              columns={scheduleColumns}
+              aria-label="Report catalog"
+              rows={rows}
+              columns={typeColumns}
+              loading={loading}
               autoHeight
               disableRowSelectionOnClick
               hideFooterSelectedRowCount
@@ -534,38 +615,73 @@ export default function Reports() {
               sx={{ border: "none" }}
             />
           </Box>
-        )}
-      </Paper>
+        </SectionPaper>
+      ) : null}
 
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
-          GRC connector
-        </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-          Let Vanta, Drata or any GRC platform pull the evidence-pack JSON, or push each scheduled run to it.
-        </Typography>
-        <GrcConnectorPanel onNotify={({ message, severity }) => setSnackbar({ open: true, message, severity })} />
-      </Paper>
+      {activeTab === TAB.schedules ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.schedules}`} aria-labelledby={`reports-tab-${TAB.schedules}`}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+            Monthly on the 1st. Each run is archived with its SHA-256 and emailed to its recipients.
+          </Typography>
+          {schedules.length === 0 ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="schedules-empty">
+              {canSchedule
+                ? 'No schedules yet. Use "Schedule" on a catalog row to get a report every month.'
+                : "Schedules are managed by this tenant's administrators. There may be some running; this account cannot see them."}
+            </Typography>
+          ) : (
+            <Box sx={{ width: "100%" }}>
+              <DataGrid
+                aria-label="Schedules"
+                rows={schedules}
+                columns={scheduleColumns}
+                autoHeight
+                disableRowSelectionOnClick
+                hideFooterSelectedRowCount
+                pageSizeOptions={[10, 25]}
+                initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+                sx={{ border: "none" }}
+              />
+            </Box>
+          )}
+        </SectionPaper>
+      ) : null}
 
-      <Paper sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 1.5 }}>
-          Recent runs
-        </Typography>
-        <Box sx={{ width: "100%" }}>
-          <DataGrid
-            aria-label="Recent runs"
-            rows={runs.map((r, i) => ({ id: r.id ?? `evt-${i}`, ...r }))}
-            columns={runColumns}
-            loading={loading}
-            autoHeight
-            disableRowSelectionOnClick
-            hideFooterSelectedRowCount
-            pageSizeOptions={[10, 25]}
-            initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-            sx={{ border: "none" }}
+      {activeTab === TAB.history ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.history}`} aria-labelledby={`reports-tab-${TAB.history}`}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+            Every report this tenant produced, however it was triggered. The archived copy is the
+            exact bytes whose SHA-256 is on record.
+          </Typography>
+          <Box sx={{ width: "100%" }}>
+            <DataGrid
+              aria-label="Recent runs"
+              rows={runs.map((r, i) => ({ id: r.id ?? `evt-${i}`, ...r }))}
+              columns={runColumns}
+              loading={loading}
+              autoHeight
+              disableRowSelectionOnClick
+              hideFooterSelectedRowCount
+              pageSizeOptions={[10, 25]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              sx={{ border: "none" }}
+            />
+          </Box>
+        </SectionPaper>
+      ) : null}
+
+      {activeTab === TAB.settings ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.settings}`} aria-labelledby={`reports-tab-${TAB.settings}`}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
+            Let Vanta, Drata or any GRC platform pull the evidence-pack JSON, or push each scheduled
+            run to it.
+          </Typography>
+          <GrcConnectorPanel
+            refreshNonce={refreshNonce}
+            onNotify={({ message, severity }) => setSnackbar({ open: true, message, severity })}
           />
-        </Box>
-      </Paper>
+        </SectionPaper>
+      ) : null}
 
       {/* Vista previa del tipo seleccionado. Se monta sólo cuando hay uno
           elegido para no arrastrar Recharts en cada render de la página. */}
