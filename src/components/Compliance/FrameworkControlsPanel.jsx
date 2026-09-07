@@ -78,6 +78,16 @@ const STATUS_META = {
     bg: "transparent",
     help: "This control does not apply to the devices in scope (for example a domain-controller control on a workstation). It is not missing evidence.",
   },
+  // Un criterio de SOC 2 / ISO que es gobierno, RRHH, proveedores…: lo
+  // evidencian políticas y registros, no un equipo. No es un hueco de
+  // Tracenium y no cuenta contra la cobertura; la plataforma GRC del
+  // cliente es quien lo sostiene.
+  organizational: {
+    label: "Organizational",
+    fg: BRAND.gray,
+    bg: "transparent",
+    help: "Evidenced through policies, procedures and records, not through device telemetry. No endpoint software can measure it; your GRC platform holds this evidence. It does not count against device coverage.",
+  },
   no_evidence: {
     label: "Not covered",
     fg: BRAND.gray,
@@ -147,7 +157,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
   }, [framework, assetGroupId, agentId, reloadKey]);
 
   const summary = React.useMemo(() => {
-    const c = { pass: 0, fail: 0, review: 0, not_assessed: 0, not_applicable: 0, no_evidence: 0, automatable_gap: 0 };
+    const c = { pass: 0, fail: 0, review: 0, not_assessed: 0, not_applicable: 0, no_evidence: 0, organizational: 0, automatable_gap: 0 };
     for (const row of state.controls) {
       if (c[row.status] !== undefined) c[row.status] += 1;
       // De lo no cubierto, cuánto PODRÍA cubrirse. Un control manual no
@@ -158,9 +168,12 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
     return c;
   }, [state.controls]);
 
-  const covered = state.controls.length - summary.no_evidence;
-  const coveragePct = state.controls.length
-    ? Math.round((covered / state.controls.length) * 100)
+  // Los organizativos no entran en el denominador: no son controles que
+  // un software pueda cubrir, así que "cobertura" se mide sobre el resto.
+  const deviceEvidenceable = state.controls.length - summary.organizational;
+  const covered = deviceEvidenceable - summary.no_evidence;
+  const coveragePct = deviceEvidenceable
+    ? Math.round((covered / deviceEvidenceable) * 100)
     : 0;
 
   if (state.loading) {
@@ -198,8 +211,15 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
           que hacía que un 80% se leyera como "80% de CIS" cuando era el
           80% de un 2%. */}
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700 }}>
-        Tracenium covers {covered} of {state.controls.length} controls in this standard ({coveragePct}%)
+        {summary.organizational > 0
+          ? `Tracenium covers ${covered} of the ${deviceEvidenceable} device-evidenceable controls in this standard (${coveragePct}%)`
+          : `Tracenium covers ${covered} of ${state.controls.length} controls in this standard (${coveragePct}%)`}
       </Typography>
+      {summary.organizational > 0 ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 0.5 }}>
+          The other {summary.organizational} are organizational: evidenced through policies, procedures and records, not devices. They live in your GRC platform, not here.
+        </Typography>
+      ) : null}
       {summary.no_evidence > 0 ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1 }}>
           {summary.automatable_gap} of the {summary.no_evidence} uncovered controls are machine-checkable —
@@ -232,7 +252,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
         </TableHead>
         <TableBody>
           {state.controls.map((row) => (
-            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" || row.status === "not_applicable" ? { opacity: 0.55 } : undefined}>
+            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" || row.status === "not_applicable" || row.status === "organizational" ? { opacity: 0.55 } : undefined}>
               <TableCell>
                 <Stack spacing={0.25}>
                   <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
@@ -264,9 +284,11 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
                     </Typography>
                   ) : (
                     <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>
-                      {row.automated === false
-                        ? "manual review — no agent can check this"
-                        : "no check collects this yet"}
+                      {row.status === "organizational"
+                        ? "policies, procedures and records — not device telemetry"
+                        : row.automated === false
+                          ? "manual review — no agent can check this"
+                          : "no check collects this yet"}
                     </Typography>
                   )}
                   {/* Por qué no se pudo evaluar. Sin esto "Not assessed"

@@ -243,4 +243,20 @@ describe("FrameworkControlsPanel", () => {
     expect(screen.queryByText("N/A")).toBeNull();
     expect(screen.getByTestId("review-evidence-2.1.4").textContent).not.toMatch(/sample/);
   });
+
+  it("names organizational criteria for what they are and keeps them out of coverage", async () => {
+    getFrameworkControls.mockResolvedValue({ ok: true, framework: "soc2_tsc_2017", controls: [
+      { controlId: "CC6.1", controlTitle: "Logical access", checks: [{ checkId: "x" }], devicesPassing: 10, devicesFailing: 0, devicesNotAssessed: 0, status: "pass", automated: true },
+      { controlId: "CC1.1", controlTitle: "Commitment to integrity and ethical values", checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0, status: "organizational", automated: false },
+      { controlId: "CC1.2", controlTitle: "Board oversight", checks: [], devicesPassing: 0, devicesFailing: 0, devicesNotAssessed: 0, status: "organizational", automated: false },
+    ] });
+    render(<FrameworkControlsPanel framework="soc2_tsc_2017" />);
+    const row = (await screen.findByText("CC1.1")).closest("tr");
+    expect(within(row).getByText("Organizational")).toBeInTheDocument();
+    expect(within(row).queryByText("Not covered")).toBeNull();
+    expect(within(row).getByText(/policies, procedures and records/)).toBeInTheDocument();
+    // La cobertura se mide sobre lo que un software puede evidenciar: 1 de 1, no 1 de 3.
+    expect(screen.getByText(/covers 1 of the 1 device-evidenceable controls in this standard \(100%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/The other 2 are organizational/)).toBeInTheDocument();
+  });
 });
