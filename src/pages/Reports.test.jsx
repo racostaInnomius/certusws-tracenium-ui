@@ -652,3 +652,113 @@ describe("Reports — U1: el refresco alcanza a Settings", () => {
     await waitFor(() => expect(keyCalls.length).toBeGreaterThan(antes), { timeout: 3000 });
   });
 });
+
+// ── U2 · el historial (docs/analysis/reports-page-2026-09.md) ────────
+//
+// Estaba capado a 20 filas, sin filtros ni paginación, y tiraba la mitad de lo
+// que el backend ya le mandaba en cada run: alcance, destinatarios, de qué
+// programación salió y tamaño. Sin eso no contesta las tres preguntas por las
+// que existe un ledger.
+describe("Reports — U2: el historial", () => {
+  const RUN = {
+    id: 42,
+    occurredAt: "2026-09-01T06:00:00.000Z",
+    key: "scp.evidence-pack",
+    format: "pdf",
+    trigger: "schedule",
+    scheduleId: 7,
+    outcome: "sent",
+    actor: "schedule:7",
+    sha256: "abc123",
+    bytes: 2_200_000,
+    filename: "pack.pdf",
+    params: { framework: "cis_win11", from: "2026-07", to: "2026-09" },
+    recipients: ["a@x.test", "b@x.test", "c@x.test", "d@x.test"],
+    sent: 4,
+    downloadable: true,
+  };
+
+  const montarHistorial = (runsBody, extra = {}) => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    respond("get", `${BASE}/grc/targets`, extra.targets ?? { ok: true, targets: [] });
+    const runCalls = respond("get", `${BASE}/runs`, runsBody);
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    return runCalls;
+  };
+
+  it("enseña el alcance, a quién llegó, de qué programación salió y el tamaño", async () => {
+    // Los cuatro venían YA en el DTO y la tabla los tiraba.
+    montarHistorial({ ok: true, total: 1, runs: [RUN] });
+    await abrirPestana(/history/i);
+
+    await screen.findByText("schedule:7");
+    expect(screen.getByText(/cis_win11 · 2026-07 → 2026-09/)).toBeTruthy();  // alcance
+    expect(screen.getByText("4 destinatarios")).toBeTruthy();                 // a quién llegó
+    expect(screen.getByText("#7")).toBeTruthy();                              // qué programación
+    expect(screen.getByText("2.1 MB")).toBeTruthy();                          // tamaño
+  });
+
+  it("un envío parcial NO se lee como un éxito", async () => {
+    // "4 destinatarios" con 2 enviados esconde justo lo que hay que ver.
+    montarHistorial({ ok: true, total: 1, runs: [{ ...RUN, sent: 2 }] });
+    await abrirPestana(/history/i);
+
+    expect(await screen.findByText("2 de 4 enviados")).toBeTruthy();
+  });
+
+  it("los filtros los aplica el SERVIDOR, no el navegador", async () => {
+    const runCalls = montarHistorial({ ok: true, total: 0, runs: [] });
+    await abrirPestana(/history/i);
+    await waitFor(() => expect(runCalls.length).toBeGreaterThan(0));
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Filter by actor"), "ana");
+
+    // La petición lleva el filtro: filtrar en el cliente sobre lo ya
+    // descargado miente en cuanto hay más filas que la página.
+    await waitFor(() => {
+      expect(runCalls.some((c) => c.search.actor === "ana")).toBe(true);
+    });
+  });
+
+  it("pagina en servidor: pide offset y respeta el total de la consulta", async () => {
+    const runCalls = montarHistorial({ ok: true, total: 137, runs: [RUN] });
+    await abrirPestana(/history/i);
+    await waitFor(() => expect(runCalls.length).toBeGreaterThan(0));
+
+    // El paginador conoce las 137 aunque sólo tenga una fila en memoria.
+    expect(await screen.findByText(/of 137/i)).toBeTruthy();
+  });
+
+  it("⭐ se puede RE-ENTREGAR un run a un destino GRC", async () => {
+    // `deliverRunToGrcTarget` llevaba desde E4 sin un solo consumidor: la
+    // re-entrega manual, que es lo que la migración de `params` (R0.2) vino a
+    // habilitar, no tenía dónde pulsarse.
+    const deliverCalls = respond("post", `${BASE}/grc/targets/3/deliver`, {
+      ok: true,
+      result: { targetId: 3, status: "ok", httpStatus: 200 },
+    });
+    montarHistorial(
+      { ok: true, total: 1, runs: [RUN] },
+      { targets: { ok: true, targets: [{ id: 3, label: "Drata hook", enabled: true }] } }
+    );
+    await abrirPestana(/history/i);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /re-deliver run 42/i }));
+    // El destino se elige por su NOMBRE: "1 destino" no dice si es el bueno.
+    await user.click(await screen.findByRole("menuitem", { name: "Drata hook" }));
+
+    await waitFor(() => expect(deliverCalls).toHaveLength(1));
+    expect(deliverCalls[0].body).toEqual({ runId: 42 });
+  });
+
+  it("sin destinos GRC no se ofrece la re-entrega", async () => {
+    montarHistorial({ ok: true, total: 1, runs: [RUN] });
+    await abrirPestana(/history/i);
+
+    await screen.findByText("schedule:7");
+    expect(screen.queryByRole("button", { name: /re-deliver/i })).toBeNull();
+  });
+});

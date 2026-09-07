@@ -89,8 +89,19 @@ export async function getReportTypes() {
   return httpGetJson(`${BASE}/types`);
 }
 
-export async function getReportRuns({ limit } = {}) {
-  const qs = limit ? `?limit=${encodeURIComponent(limit)}` : "";
+/**
+ * Una página del historial, con sus filtros.
+ *
+ * Los filtros los aplica el SERVIDOR: traerse 500 filas para filtrarlas aquí
+ * funciona hasta el primer tenant con volumen, y entonces falla en silencio —
+ * la tabla dice "no hay nada" cuando lo que pasa es que lo buscado quedó fuera
+ * de lo que se trajo.
+ *
+ * Devuelve `{ runs, total, limit, offset }`; el total es el de LA CONSULTA, y
+ * es lo que deja al paginador saber cuántas páginas hay.
+ */
+export async function getReportRuns({ limit, offset, key, status, trigger, actor, from, to } = {}) {
+  const qs = buildParamsQuery({ limit, offset, key, status, trigger, actor, from, to }).replace(/^&/, "?");
   // ⚠️ `cache: false` como el resto del módulo. Era la única llamada sin él,
   // y el efecto se veía: tras "Run now" la página recargaba el historial y
   // recibía la entrada cacheada de hasta 60 s antes, así que el run recién

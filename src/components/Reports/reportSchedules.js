@@ -81,3 +81,53 @@ export function formatWhen(iso) {
   if (Number.isNaN(d.getTime())) return String(iso);
   return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+
+/**
+ * El alcance con el que se ejecutó un RUN, en una línea.
+ *
+ * No reusa `summarizeParams`: aquello lee los params de una programación
+ * guiándose por lo que el TIPO declara, y un run ya ejecutado puede llevar
+ * params de un tipo cuyo registro cambió después — o de uno que ya no existe.
+ * Aquí se enseña lo que la fila guarda, que es lo que de verdad se usó.
+ *
+ * `from`/`to` van juntos porque un periodo partido en dos celdas no se lee
+ * como un periodo.
+ */
+export function summarizeRunParams(params) {
+  if (!params || typeof params !== "object") return "";
+  const partes = [];
+  if (params.framework) partes.push(String(params.framework));
+  if (params.from || params.to) partes.push([params.from, params.to].filter(Boolean).join(" → "));
+  if (params.assetGroupId) partes.push(`grupo ${params.assetGroupId}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (["framework", "from", "to", "assetGroupId"].includes(k)) continue;
+    if (v === undefined || v === null || v === "") continue;
+    partes.push(`${k}: ${v}`);
+  }
+  return partes.join(" · ");
+}
+
+/** Tamaño de un artefacto, en la unidad que se lee de un vistazo. */
+export function formatBytes(n) {
+  const b = Number(n);
+  if (!Number.isFinite(b) || b <= 0) return "";
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * A quién llegó, y si llegó.
+ *
+ * `sent` puede ser menor que la lista: un envío parcial es un resultado
+ * distinto de un éxito, y decir sólo "4 destinatarios" lo esconde.
+ */
+export function describeDelivery(run) {
+  const total = run?.recipients?.length || 0;
+  if (!total) return "";
+  const sent = Number(run?.sent);
+  if (!Number.isFinite(sent) || sent === total) {
+    return `${total} destinatario${total === 1 ? "" : "s"}`;
+  }
+  return `${sent} de ${total} enviados`;
+}

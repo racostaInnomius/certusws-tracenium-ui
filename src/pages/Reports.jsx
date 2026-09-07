@@ -28,9 +28,10 @@
 // de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, IconButton, Switch, Tab, Tabs, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
+import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -53,9 +54,11 @@ import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import {
   getReportTypes, getReportRuns, runReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
+  listGrcTargets, deliverRunToGrcTarget,
 } from "../api/reports";
 import {
-  describePeriod, formatWhen, recipientCount, runStatusColor, runStatusLabel, summarizeParams, triggerLabel, typeHasPeriod,
+  describeDelivery, describePeriod, formatBytes, formatWhen, recipientCount,
+  runStatusColor, runStatusLabel, summarizeParams, summarizeRunParams, triggerLabel, typeHasPeriod,
 } from "../components/Reports/reportSchedules";
 import { BRAND, TEXT } from "../theme/brand";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
@@ -121,6 +124,39 @@ export default function Reports() {
   const [activeTab, setActiveTab] = React.useState(
     () => TAB_BY_NAME[getSearchParam("reportsTab", "catalog")] ?? TAB.catalog
   );
+  /**
+   * Historial: filtros y página, resueltos por el SERVIDOR.
+   *
+   * Filtrar en el cliente sobre lo que ya se trajo funciona hasta el primer
+   * tenant con volumen, y entonces miente: la tabla dice "no hay nada" cuando
+   * lo que pasa es que lo buscado quedó fuera de la página descargada.
+   */
+  const [runFilter, setRunFilter] = React.useState({
+    key: "", status: "", trigger: "", actor: "", from: "", to: "",
+  });
+  const [runsPage, setRunsPage] = React.useState({ page: 0, pageSize: 25 });
+  const [runsTotal, setRunsTotal] = React.useState(0);
+  const [runsLoading, setRunsLoading] = React.useState(false);
+  /**
+   * Destinos GRC, para poder RE-ENTREGAR un run desde el historial.
+   *
+   * ⚠️ `deliverRunToGrcTarget` llevaba desde E4 en la capa de API sin un solo
+   * consumidor: la re-entrega manual —que es justo lo que la migración de la
+   * forma de `params` (R0.2) vino a habilitar— no tenía dónde pulsarse. El
+   * backend estaba listo y probado; faltaba el botón.
+   *
+   * Se traga su error: es aditivo. Un tenant sin conector GRC simplemente no
+   * ve la opción, y eso no puede tumbar el historial.
+   */
+  const [grcTargets, setGrcTargets] = React.useState([]);
+  const [redeliverAnchor, setRedeliverAnchor] = React.useState(null); // { el, run }
+  const patchRunFilter = React.useCallback((delta) => {
+    setRunFilter((f) => ({ ...f, ...delta }));
+    // Cambiar un filtro vuelve a la primera página: quedarse en la 4 de un
+    // resultado que ahora tiene 2 enseña una tabla vacía sin motivo visible.
+    setRunsPage((p) => ({ ...p, page: 0 }));
+  }, []);
+
   const handleTabChange = React.useCallback((_e, next) => {
     setActiveTab(next);
     updateSearchParams({ reportsTab: NAME_BY_TAB[next] });
@@ -149,19 +185,48 @@ export default function Reports() {
    * El spinner tiene sentido al entrar, cuando de verdad no hay nada que
    * mirar; después estorba y hace perder el sitio.
    */
+  /**
+   * El historial va por su cuenta: depende de los filtros y de la página, y
+   * recargarlo entero cada vez que cambia un filtro pondría también el
+   * catálogo en estado de carga.
+   */
+  const loadRuns = React.useCallback(async () => {
+    setRunsLoading(true);
+    try {
+      const res = await getReportRuns({
+        limit: runsPage.pageSize,
+        offset: runsPage.page * runsPage.pageSize,
+        ...runFilter,
+      });
+      setRuns(res?.runs || []);
+      // `total` es el de LA CONSULTA. Sin él el paginador no sabe cuántas
+      // páginas hay y el operador no sabe si lo que busca quedó fuera.
+      setRunsTotal(Number(res?.total ?? 0));
+    } catch (err) {
+      setSnackbar({ open: true, message: err?.message || "Could not load the history.", severity: "error" });
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [runFilter, runsPage.page, runsPage.pageSize]);
+
+  React.useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
+
+
   const loadData = React.useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const [typesRes, runsRes] = await Promise.all([getReportTypes(), getReportRuns({ limit: 20 })]);
+      const typesRes = await getReportTypes();
       setRows((typesRes.types || []).map((t) => ({ id: t.key, ...t })));
-      setRuns(runsRes.runs || []);
+      await loadRuns();
       await loadSchedules();
     } catch (err) {
       setSnackbar({ open: true, message: err?.message || "Could not load reports.", severity: "error" });
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [loadSchedules]);
+  }, [loadRuns, loadSchedules]);
 
   React.useEffect(() => {
     loadData();
@@ -191,6 +256,15 @@ export default function Reports() {
     }
   }, [loadData]);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(refreshAll, "reportsAutoRefresh");
+
+  React.useEffect(() => {
+    let vivo = true;
+    listGrcTargets()
+      .then((r) => vivo && setGrcTargets((r?.targets || []).filter((t) => t.enabled)))
+      .catch(() => vivo && setGrcTargets([]));
+    return () => { vivo = false; };
+  }, [refreshNonce]);
+
 
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
 
@@ -309,8 +383,7 @@ export default function Reports() {
       await fn();
       if (okMessage) setSnackbar({ open: true, message: okMessage, severity: "success" });
       await loadSchedules();
-      const runsRes = await getReportRuns({ limit: 20 }).catch(() => null);
-      if (runsRes) setRuns(runsRes.runs || []);
+      await loadRuns();
     } catch (err) {
       setSnackbar({ open: true, message: err?.message || "Schedule action failed.", severity: "error" });
     } finally {
@@ -340,6 +413,20 @@ export default function Reports() {
       if (r?.failed) throw new Error(r.errors?.[0]?.error || "Run failed.");
       if (r?.skipped) throw new Error("Skipped: the plugin behind this report is not enabled on the tenant.");
     }, "Report generated.");
+
+  const handleRedeliver = async (run, target) => {
+    setRedeliverAnchor(null);
+    try {
+      const res = await deliverRunToGrcTarget(target.id, run.id);
+      const r = res?.result;
+      if (r && r.status !== "ok") {
+        throw new Error(r.error || `Delivery failed (HTTP ${r.httpStatus ?? "?"})`);
+      }
+      setSnackbar({ open: true, message: `Re-delivered to "${target.label}".`, severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err?.message || "Re-delivery failed.", severity: "error" });
+    }
+  };
 
   const handleDownloadRun = async (run) => {
     try {
@@ -511,8 +598,60 @@ export default function Reports() {
       valueGetter: (_v, row) => typeByKey[row.key]?.label || row.key,
     },
     { field: "format", headerName: "Format", minWidth: 80, valueFormatter: (v) => String(v || "").toUpperCase() },
-    { field: "trigger", headerName: "Via", minWidth: 100, valueFormatter: (v) => triggerLabel(v) },
-    { field: "actor", headerName: "By", minWidth: 200, flex: 1 },
+    {
+      field: "trigger",
+      headerName: "Via",
+      minWidth: 130,
+      // De qué programación salió, no sólo "schedule". Un historial que dice
+      // "programado" y no CUÁL obliga a adivinar cuando hay más de una.
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", minWidth: 0 }}>
+          <Typography sx={{ fontSize: TEXT.sm }}>{triggerLabel(params.row.trigger)}</Typography>
+          {params.row.scheduleId ? (
+            <Typography variant="caption" sx={{ color: BRAND.gray }}>
+              #{params.row.scheduleId}
+            </Typography>
+          ) : null}
+        </Box>
+      ),
+    },
+    {
+      field: "actor",
+      headerName: "By",
+      minWidth: 190,
+      flex: 0.8,
+      // A quién llegó, debajo de quién lo pidió: son la misma pregunta vista
+      // desde los dos lados, y el dato ya viajaba en el DTO sin pintarse.
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", height: "100%", minWidth: 0 }}>
+          <Typography sx={{ fontSize: TEXT.sm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {params.row.actor || "—"}
+          </Typography>
+          {describeDelivery(params.row) ? (
+            <Typography variant="caption" sx={{ color: BRAND.gray }}>
+              {describeDelivery(params.row)}
+            </Typography>
+          ) : null}
+        </Box>
+      ),
+    },
+    {
+      field: "params",
+      headerName: "Scope",
+      minWidth: 190,
+      flex: 0.9,
+      sortable: false,
+      // Con qué alcance se generó. Dos evidence packs del mismo tipo y el
+      // mismo día pueden cubrir framework y periodo distintos: sin esto son
+      // dos filas idénticas.
+      valueGetter: (_v, row) => summarizeRunParams(row.params) || "—",
+    },
+    {
+      field: "bytes",
+      headerName: "Size",
+      minWidth: 90,
+      valueGetter: (_v, row) => formatBytes(row.bytes) || "—",
+    },
     {
       field: "outcome",
       headerName: "Outcome",
@@ -544,17 +683,33 @@ export default function Reports() {
     {
       field: "download",
       headerName: "",
-      minWidth: 60,
+      minWidth: 100,
       sortable: false,
       filterable: false,
-      renderCell: (params) =>
-        params.row.downloadable ? (
-          <Tooltip title="Download archived copy">
-            <IconButton size="small" aria-label="Download archived copy" onClick={() => handleDownloadRun(params.row)}>
-              <DownloadOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ) : null,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", gap: 0.25 }}>
+          {params.row.downloadable ? (
+            <Tooltip title="Download archived copy">
+              <IconButton size="small" aria-label="Download archived copy" onClick={() => handleDownloadRun(params.row)}>
+                <DownloadOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {/* Re-entregar a un destino GRC. Sólo cuando hay destinos y el run
+              tiene id: un run de una lista sin id no se puede referenciar. */}
+          {grcTargets.length > 0 && params.row.id ? (
+            <Tooltip title="Re-deliver to a GRC destination">
+              <IconButton
+                size="small"
+                aria-label={`Re-deliver run ${params.row.id}`}
+                onClick={(e) => setRedeliverAnchor({ el: e.currentTarget, run: params.row })}
+              >
+                <SendOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </Box>
+      ),
     },
   ];
 
@@ -653,17 +808,83 @@ export default function Reports() {
             Every report this tenant produced, however it was triggered. The archived copy is the
             exact bytes whose SHA-256 is on record.
           </Typography>
+          {/* ── Filtros ──────────────────────────────────────────────────
+              En su propia fila y no en la cabecera: son un conjunto, y
+              mezclarlos con los verbos de la página fue lo que hizo ilegible
+              la cabecera de Security Compliance.
+
+              Los aplica el SERVIDOR. Filtrar aquí sobre lo ya descargado
+              funciona hasta el primer tenant con volumen, y entonces la tabla
+              dice "no hay nada" cuando lo que pasa es que lo buscado quedó
+              fuera de la página. */}
+          <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap", rowGap: 1 }}>
+            <TextField
+              select size="small" label="Report" value={runFilter.key}
+              onChange={(e) => patchRunFilter({ key: e.target.value })}
+              sx={{ minWidth: 190 }} inputProps={{ "aria-label": "Filter by report" }}
+            >
+              <MenuItem value="">All reports</MenuItem>
+              {rows.map((r) => <MenuItem key={r.key} value={r.key}>{r.label}</MenuItem>)}
+            </TextField>
+            <TextField
+              select size="small" label="Outcome" value={runFilter.status}
+              onChange={(e) => patchRunFilter({ status: e.target.value })}
+              sx={{ minWidth: 150 }} inputProps={{ "aria-label": "Filter by outcome" }}
+            >
+              <MenuItem value="">Any outcome</MenuItem>
+              <MenuItem value="ok">Generated</MenuItem>
+              <MenuItem value="sent">Sent</MenuItem>
+              <MenuItem value="not_sent">Not sent</MenuItem>
+              <MenuItem value="failed">Failed</MenuItem>
+            </TextField>
+            <TextField
+              select size="small" label="Via" value={runFilter.trigger}
+              onChange={(e) => patchRunFilter({ trigger: e.target.value })}
+              sx={{ minWidth: 140 }} inputProps={{ "aria-label": "Filter by trigger" }}
+            >
+              <MenuItem value="">Any origin</MenuItem>
+              <MenuItem value="manual">Manual</MenuItem>
+              <MenuItem value="schedule">Scheduled</MenuItem>
+              <MenuItem value="email">Email</MenuItem>
+            </TextField>
+            <TextField
+              size="small" label="Actor" value={runFilter.actor}
+              onChange={(e) => patchRunFilter({ actor: e.target.value })}
+              placeholder="ana@…" sx={{ minWidth: 160 }} inputProps={{ "aria-label": "Filter by actor" }}
+            />
+            <TextField
+              size="small" type="date" label="From" value={runFilter.from}
+              onChange={(e) => patchRunFilter({ from: e.target.value })}
+              InputLabelProps={{ shrink: true }} sx={{ minWidth: 150 }} inputProps={{ "aria-label": "From date" }}
+            />
+            <TextField
+              size="small" type="date" label="To" value={runFilter.to}
+              onChange={(e) => patchRunFilter({ to: e.target.value })}
+              InputLabelProps={{ shrink: true }} sx={{ minWidth: 150 }} inputProps={{ "aria-label": "To date" }}
+            />
+            {Object.values(runFilter).some(Boolean) ? (
+              <Button size="small" onClick={() => { setRunFilter({ key: "", status: "", trigger: "", actor: "", from: "", to: "" }); setRunsPage((p) => ({ ...p, page: 0 })); }} sx={{ textTransform: "none" }}>
+                Clear filters
+              </Button>
+            ) : null}
+          </Stack>
+
           <Box sx={{ width: "100%" }}>
             <DataGrid
               aria-label="Recent runs"
               rows={runs.map((r, i) => ({ id: r.id ?? `evt-${i}`, ...r }))}
               columns={runColumns}
-              loading={loading}
+              loading={runsLoading}
               autoHeight
               disableRowSelectionOnClick
               hideFooterSelectedRowCount
-              pageSizeOptions={[10, 25]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+              // Paginación EN SERVIDOR: `rowCount` es el total de la consulta,
+              // no el de las filas que hay en memoria.
+              paginationMode="server"
+              rowCount={runsTotal}
+              paginationModel={runsPage}
+              onPaginationModelChange={setRunsPage}
+              pageSizeOptions={[25, 50, 100]}
               sx={{ border: "none" }}
             />
           </Box>
@@ -699,6 +920,20 @@ export default function Reports() {
             onGenerate: (format, params) => handleRun(previewTarget.key, format, params),
           })
         : null}
+
+      {/* Menú de re-entrega: un destino por línea, por su NOMBRE. "1 destino"
+          no dice si es el bueno cuando hay tres. */}
+      <Menu
+        open={Boolean(redeliverAnchor)}
+        anchorEl={redeliverAnchor?.el || null}
+        onClose={() => setRedeliverAnchor(null)}
+      >
+        {grcTargets.map((t) => (
+          <MenuItem key={t.id} onClick={() => handleRedeliver(redeliverAnchor.run, t)}>
+            {t.label}
+          </MenuItem>
+        ))}
+      </Menu>
 
       <ReportParamsDialog
         open={Boolean(paramsTarget)}
