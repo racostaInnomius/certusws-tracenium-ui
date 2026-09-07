@@ -336,6 +336,16 @@ añade entonces — con 0 filas hoy, un índice especulativo es adivinar.
 
 ## 6. Seguimiento
 
+**Las catorce filas cerradas el 2026-09-07, SIN desplegar.** El plan se ejecutó
+en el orden previsto (U1→U4) y cada fase quedó desplegable por separado.
+
+Lo que NO entró y sigue abierto:
+
+- Presets de parámetros guardables (ítem 22 de R3): pide tabla nueva y decidir
+  a quién pertenece un preset.
+- El preview del evidence pack enseña su JSON, no el PDF renderizado: es otra
+  pieza y otro peso de bundle (decisión §5.2, sin tomar).
+
 Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (fecha)`.
 
 | Fase | Ítem | Repo | Estado | Evidencia |
@@ -349,7 +359,7 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 | U2 | Re-entrega manual desde el historial | UI | hecho (`a73ac5c`) | Consumidor de `deliverRunToGrcTarget`, que llevaba desde E4 sin ninguno. El destino se elige por su nombre. |
 | U3 | Editar programación (PATCH) | UI | hecho (`1215911`) | El diálogo parte de lo guardado; `targetIds` se manda aunque vaya vacío, o el último destino sería imposible de borrar. |
 | U3 | "New schedule" desde la pestaña | UI | hecho (`1215911`) | Con selección de tipo primero: una programación es siempre DE un tipo. |
-| U3 | Fichas de programación con destinos por nombre | UI | pendiente | La tabla sigue siendo DataGrid; los destinos por nombre están en el diálogo de edición, no en la fila. |
+| U3 | Fichas de programación con destinos por nombre | UI | hecho (`7e11713`) | Ficha con alcance, destinatarios, destinos POR NOMBRE y las dos fechas; un destino borrado se dice por su id en vez de desaparecer. Run now / Edit / Delete en su menú. Sin "Duplicate", a propósito. |
 | U3 | Catálogo por tarjetas con último run | UI | hecho (`aa9db7c`) | Agrupadas por `group`, con último run, chip `params` y `role="group"` etiquetado. Vacío que explica la causa. |
 | U4 | Preview para los 4 tipos que faltan | UI | hecho (`fb04e3d`) | Preview genérico para todo tipo con json: colecciones y documento, sin inventar un titular. De 1 a 6 de 6. |
 | U4 | `json` en `audit.events` | backend | hecho (`5feab8a`) | Habilita su preview y repone por el motor el export JSON retirado de la página de Audit. Mismos filtros y tope que el CSV; la capacidad `audit_log` se sigue exigiendo. |
