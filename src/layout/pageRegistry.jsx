@@ -129,7 +129,7 @@ export const PAGE_REGISTRY = {
   cdp: (ctx) => <CryptoDiscovery onNavigate={ctx.onNavigate} />,
 
   "remote-control": (ctx) => <RemoteControl onNavigate={ctx.onNavigate} />,
-  alerts: () => <Alerts />,
+  alerts: (ctx) => <Alerts onNavigate={ctx.onNavigate} />,
   reports: () => <Reports />,
 
   // Retention — admin-only drilldown reached from the "Database retention"

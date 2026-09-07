@@ -38,6 +38,20 @@ import {
 } from "@mui/material";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// Las alertas se DERIVAN de los eventos de auditoría (lo dice el subtítulo de
+// la página), así que el informe que da el material del que salen es el rastro
+// de auditoría. No hay tipo "alerts" en el catálogo y no se inventa uno.
+//
+// Sólo existe en CSV: es un volcado del rastro para analizarlo fuera, no un
+// documento para leer.
+//
+// Sin gate de rol aquí: `audit.events` no declara `minRole`. Lo que sí exige
+// —desde hoy— es la capacidad `audit_log`, la misma que pide la página de
+// Audit, y de eso se encarga el catálogo de Reports: a quien no la tenga, el
+// informe no le aparece.
+const AUDIT_EVENTS_KEY = "audit.events";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
@@ -237,7 +251,7 @@ const TIME_WINDOWS = [
 
 const DEFAULT_WINDOW_HOURS = 24 * 7; // product decision: 7 days default
 
-export default function Alerts() {
+export default function Alerts({ onNavigate }) {
   const [windowHours, setWindowHours] = React.useState(DEFAULT_WINDOW_HOURS);
   const [minSeverity, setMinSeverity] = React.useState(""); // "" = all
   const [sourceFilter, setSourceFilter] = React.useState(""); // "" = all
@@ -380,6 +394,12 @@ export default function Alerts() {
             >
               Manage rules
             </Button>
+            <GoToReportButton
+              onNavigate={onNavigate}
+              reportKey={AUDIT_EVENTS_KEY}
+              format="csv"
+              tooltip="Audit event trail (CSV)"
+            />
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
