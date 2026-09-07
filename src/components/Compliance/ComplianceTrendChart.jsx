@@ -54,8 +54,18 @@ function shortLabel(iso) {
 }
 
 // "cis_windows_11_v3.0" → "CIS Windows 11 v3.0"
+// Etiquetas de las series de familia (family:cis = la media de todos los
+// benchmarks CIS activos, ponderada por equipos). El backend las emite
+// junto a las de cada benchmark.
+const FAMILY_SERIES_LABEL = { cis: "CIS Benchmarks (all)", disa_stig: "DISA STIG (all)" };
+
 function prettyFramework(key) {
-  return String(key)
+  const raw = String(key);
+  if (raw.startsWith("family:")) {
+    const fam = raw.slice("family:".length);
+    return FAMILY_SERIES_LABEL[fam] || `${prettyFramework(fam)} (all)`;
+  }
+  return raw
     .replace(/_/g, " ")
     .replace(/\b(cis|nist|pci|iso|soc2|hipaa|csf|stig)\b/gi, (m) => m.toUpperCase())
     .replace(/\s+/g, " ")

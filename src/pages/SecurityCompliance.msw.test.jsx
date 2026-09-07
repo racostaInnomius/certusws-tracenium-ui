@@ -641,3 +641,114 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(enviados.framework).toBeTruthy();
   });
 });
+
+// ── Selector por FAMILIA ─────────────────────────────────────────────
+// "CIS y DISA están listados por cada uno de los OS; si elijo NIST una
+//  sola selección aplica a toda la flota — debemos mostrar el nombre del
+//  benchmark/framework y no individual por OS."
+// El backend agrupa (`families`) y expande `family:cis` a los benchmarks
+// activos; aquí se fija lo que la página hace con eso.
+describe("SecurityCompliance — familias de frameworks", () => {
+  const FRAMEWORKS_FAM = {
+    ok: true,
+    frameworks: [
+      { framework: "cis_windows_11_v5.1.0", family: "cis", shortName: "CIS Win11", mappedChecks: 90, catalogChecks: 94 },
+      { framework: "cis_ubuntu_24_v2.0.0", family: "cis", shortName: "CIS Ubuntu 24", mappedChecks: 90, catalogChecks: 94 },
+      { framework: "nist_800_53_rev5", family: "nist_800_53", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
+    ],
+    families: [
+      { family: "cis", label: "CIS Benchmarks", key: "family:cis", frameworks: ["cis_ubuntu_24_v2.0.0", "cis_windows_11_v5.1.0"] },
+      { family: "nist_800_53", label: "NIST 800-53", key: "nist_800_53_rev5", frameworks: ["nist_800_53_rev5"] },
+    ],
+    packActive: false,
+    totalFrameworks: 3,
+    activeFrameworks: null,
+  };
+  const SUMMARY_FAM = {
+    ok: true,
+    packActive: false,
+    items: [
+      { framework: "cis_windows_11_v5.1.0", devicesReporting: 8, devicesScored: 8, devicesCompliant: 1, devicesNonCompliant: 7, avgScore: 20, totalPassed: 80, totalFailed: 320, totalApplicable: 400 },
+      { framework: "cis_ubuntu_24_v2.0.0", devicesReporting: 4, devicesScored: 4, devicesCompliant: 0, devicesNonCompliant: 4, avgScore: 40, totalPassed: 40, totalFailed: 60, totalApplicable: 100 },
+      { framework: "nist_800_53_rev5", devicesReporting: 12, devicesScored: 12, devicesCompliant: 10, devicesNonCompliant: 2, avgScore: 84, totalPassed: 100, totalFailed: 20, totalApplicable: 120 },
+    ],
+    families: [
+      { framework: "family:cis", family: "cis", frameworks: ["cis_ubuntu_24_v2.0.0", "cis_windows_11_v5.1.0"], devicesReporting: 12, devicesScored: 12, devicesCompliant: 1, devicesNonCompliant: 11, avgScore: 26.7, totalPassed: 120, totalFailed: 380, totalApplicable: 500 },
+    ],
+  };
+  const DEVICES_FAM = {
+    ok: true,
+    framework: "family:cis",
+    count: 2,
+    items: [
+      { agentId: "dev-a", hostname: "WS-ALPHA", platform: "windows", agentVersion: "1.1.61", overallStatus: "fail", overallScore: 55, scoresByFramework: {}, frameworkScore: { framework: "cis_windows_11_v5.1.0", score: 20, passed: 8, failed: 32, applicable: 40 }, patchSummary: null, collectedAtUtc: "2026-09-07T00:00:00Z" },
+      { agentId: "dev-b", hostname: "SRV-UBU", platform: "linux", agentVersion: "1.1.61", overallStatus: "fail", overallScore: 40, scoresByFramework: {}, frameworkScore: { framework: "cis_ubuntu_24_v2.0.0", score: 40, passed: 10, failed: 15, applicable: 25 }, patchSummary: null, collectedAtUtc: "2026-09-07T00:00:00Z" },
+    ],
+  };
+
+  function mountFamilies() {
+    respond("get", "/api/v1/asset-groups", ASSET_GROUPS);
+    respond("get", `${BASE}/summary`, SUMMARY);
+    respond("get", `${BASE}/frameworks`, FRAMEWORKS_FAM);
+    respond("get", `${BASE}/framework-summary`, SUMMARY_FAM);
+    const deviceCalls = respond("get", `${BASE}/devices`, DEVICES_FAM);
+    respond("get", `${BASE}/settings`, SETTINGS);
+    respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
+    respond("get", "/api/v1/tenants/1/roles/me/capabilities", { role: "ADMIN", permissions: ["security_compliance"] });
+    render(<ConfirmProvider><SecurityCompliance onNavigate={vi.fn()} /></ConfirmProvider>);
+    return { deviceCalls };
+  }
+
+  it("el selector enseña 'CIS Benchmarks' una vez, no un benchmark por SO", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountFamilies();
+    await screen.findByText("WS-ALPHA");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByRole("option", { name: /CIS Benchmarks/ })).toBeInTheDocument();
+    expect(within(listbox).getByText("2 benchmarks")).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "NIST 800-53" })).toBeInTheDocument();
+    expect(within(listbox).queryByRole("option", { name: /CIS Win11/ })).toBeNull();
+    expect(within(listbox).queryByRole("option", { name: /CIS Ubuntu 24/ })).toBeNull();
+  });
+
+  it("la tabla tiene UNA fila por familia, con sus benchmarks desplegables", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountFamilies();
+    const familyRow = await screen.findByTestId("family-row-family:cis");
+    expect(within(familyRow).getByText("CIS Benchmarks")).toBeInTheDocument();
+    // La suma del backend, no la de un miembro.
+    expect(within(familyRow).getByText("12")).toBeInTheDocument();
+    expect(within(familyRow).getByText("120 / 500")).toBeInTheDocument();
+    // Los miembros no están hasta que se piden…
+    expect(screen.queryByText("cis_ubuntu_24_v2.0.0")).toBeNull();
+    // La fila entera es role=button, y ARIA vuelve presentacionales a sus
+    // hijos: el botón de dentro no se ve por rol, sólo por texto.
+    fireEvent.click(within(familyRow).getByText("Show 2 benchmarks in use"));
+    // …y al pedirlos aparecen con su id, cada uno con sus números.
+    expect(await screen.findByText("cis_ubuntu_24_v2.0.0")).toBeInTheDocument();
+    expect(screen.getByText("cis_windows_11_v5.1.0")).toBeInTheDocument();
+    expect(screen.getByText("40 / 100")).toBeInTheDocument();
+    // Y NIST, familia de un miembro, sigue siendo una fila normal.
+    expect(screen.getByText("nist_800_53_rev5")).toBeInTheDocument();
+  });
+
+  it("elegir la familia manda family:cis y rotula cada equipo con el benchmark que lo midió", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const { deviceCalls } = mountFamilies();
+    await screen.findByText("WS-ALPHA");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Filter by framework" }));
+    fireEvent.click(await screen.findByRole("option", { name: /CIS Benchmarks/ }));
+
+    await waitFor(() => expect(deviceCalls.some((c) => c.search.framework === "family:cis")).toBe(true));
+    // El titular lee la fila sumada de la familia.
+    expect(await screen.findByText("Measured against CIS Benchmarks")).toBeInTheDocument();
+    expect(await screen.findByText(/1 of 12 devices/)).toBeInTheDocument();
+    // Cada fila dice contra qué benchmark se midió: "8 / 40" de Windows
+    // 11 y "10 / 25" de Ubuntu no son comparables sin ese rótulo.
+    const alpha = (await screen.findByText("8 / 40")).closest("td");
+    expect(within(alpha).getByText("CIS Win11")).toBeInTheDocument();
+    const ubu = screen.getByText("10 / 25").closest("td");
+    expect(within(ubu).getByText("CIS Ubuntu 24")).toBeInTheDocument();
+  });
+});

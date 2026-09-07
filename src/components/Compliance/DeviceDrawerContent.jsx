@@ -439,7 +439,7 @@ export default function DeviceDrawerContent({
                 </FormControl>
               </Stack>
               {controlsFramework ? (
-                <FrameworkControlsPanel framework={controlsFramework} agentId={agentId} />
+                <FrameworkControlsPanel framework={controlsFramework} agentId={agentId} frameworkLabels={frameworkLabels} />
               ) : null}
             </Paper>
           ) : null}

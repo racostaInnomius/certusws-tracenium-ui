@@ -291,3 +291,49 @@ describe("FrameworkControlsPanel", () => {
     expect(screen.queryByRole("group", { name: "Baseline" })).toBeNull();
   });
 });
+
+// ── Familias: una sección por benchmark, nunca una fusión ────────────
+//
+// `family:cis` responde con `sections`: los benchmarks CIS presentes en el
+// ámbito. "1.1.1" de Windows 11 no es "1.1.1" de Ubuntu 24.04, así que
+// cada sección lleva su titular, su cobertura y su tabla.
+describe("FrameworkControlsPanel — familia", () => {
+  const labels = new Map([
+    ["cis_ubuntu_24_v2.0.0", "CIS Ubuntu 24.04"],
+    ["cis_windows_11_v5.1.0", "CIS Windows 11"],
+  ]);
+
+  it("pinta una sección por benchmark presente, rotulada con su nombre y su id", async () => {
+    getFrameworkControls.mockResolvedValue({
+      ok: true,
+      framework: "family:cis",
+      family: "cis",
+      sections: [
+        { framework: "cis_ubuntu_24_v2.0.0", controls: [{ controlId: "4.1", controlTitle: "Firewall", controlLevel: "L1", checks: [{ checkId: "linux.firewall.enabled" }], devicesPassing: 3, devicesFailing: 0, devicesNotAssessed: 0, status: "pass" }] },
+        { framework: "cis_windows_11_v5.1.0", controls: CONTROLS },
+      ],
+    });
+    render(<FrameworkControlsPanel framework="family:cis" frameworkLabels={labels} />);
+
+    const ubuntu = await screen.findByTestId("family-section-cis_ubuntu_24_v2.0.0");
+    expect(within(ubuntu).getByText("CIS Ubuntu 24.04")).toBeInTheDocument();
+    expect(within(ubuntu).getByText("cis_ubuntu_24_v2.0.0")).toBeInTheDocument();
+    expect(within(ubuntu).getByText(/covers 1 of 1 controls/i)).toBeInTheDocument();
+    expect(within(ubuntu).getByText("4.1")).toBeInTheDocument();
+
+    const windows = screen.getByTestId("family-section-cis_windows_11_v5.1.0");
+    expect(within(windows).getByText("CIS Windows 11")).toBeInTheDocument();
+    expect(within(windows).getByText(/covers 3 of 3 controls/i)).toBeInTheDocument();
+    // Los controles de una sección no se cuelan en la otra.
+    expect(within(ubuntu).queryByText("18.9.12")).toBeNull();
+    // Y la llamada lleva la familia tal cual: el backend la expande.
+    expect(getFrameworkControls).toHaveBeenCalledWith(expect.objectContaining({ framework: "family:cis" }));
+  });
+
+  it("sin benchmark presente en el ámbito lo dice, y no 'sin controles'", async () => {
+    getFrameworkControls.mockResolvedValue({ ok: true, framework: "family:cis", family: "cis", sections: [] });
+    render(<FrameworkControlsPanel framework="family:cis" agentId="dev-1" />);
+    expect(await screen.findByText(/No device in scope has reported against a benchmark of this family yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/No catalog checks are mapped/)).toBeNull();
+  });
+});

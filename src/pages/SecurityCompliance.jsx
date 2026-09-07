@@ -575,10 +575,17 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     return {
       summary: byKey.summary?.summary ?? null,
       frameworks: Array.isArray(byKey.frameworks?.frameworks) ? byKey.frameworks.frameworks : [],
+      // Familias: "CIS Benchmarks" una vez en el selector, no un
+      // benchmark por SO. Cada entrada trae la `key` que se manda en
+      // `?framework=` (family:cis, o el id cuando es de un miembro).
+      // Un backend anterior no la envía: la página cae a la lista plana.
+      families: Array.isArray(byKey.frameworks?.families) ? byKey.frameworks.families : [],
       // Sprint 4 — compliance pack telemetry from /frameworks.
       packActive: Boolean(byKey.frameworks?.packActive),
       totalFrameworks: Number(byKey.frameworks?.totalFrameworks) || 0,
       frameworkSummary: Array.isArray(byKey.frameworkSummary?.items) ? byKey.frameworkSummary.items : [],
+      // Una fila por familia de varios miembros, ya sumada en el backend.
+      familySummary: Array.isArray(byKey.frameworkSummary?.families) ? byKey.frameworkSummary.families : [],
       devices: Array.isArray(byKey.devices?.items) ? byKey.devices.items : [],
       // El backend recorta a 2000 equipos. Si lo hace hay que decirlo:
       // una lista incompleta presentada como completa es peor que una
@@ -608,11 +615,19 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // on every render and re-run.
   const frameworks = React.useMemo(() => data?.frameworks ?? [], [data]);
 
+  const frameworkSummary = React.useMemo(() => data?.frameworkSummary ?? [], [data]);
+  const families = React.useMemo(() => data?.families ?? [], [data]);
+
   React.useEffect(() => {
     if (frameworkTouched || selectedFramework) return;
-    if (frameworks.length === 1) setSelectedFramework(frameworks[0].framework);
-  }, [frameworks, frameworkTouched, selectedFramework]);
-  const frameworkSummary = React.useMemo(() => data?.frameworkSummary ?? [], [data]);
+    // Un tenant que sigue exactamente un estándar abre sobre él. Con
+    // familias, "un estándar" es una entrada del selector: un tenant que
+    // sólo sigue benchmarks CIS abre sobre "CIS Benchmarks", no sobre uno
+    // de sus miembros.
+    if (families.length === 1 && families[0]?.key) setSelectedFramework(families[0].key);
+    else if (families.length === 0 && frameworks.length === 1) setSelectedFramework(frameworks[0].framework);
+  }, [frameworks, families, frameworkTouched, selectedFramework]);
+  const familySummary = React.useMemo(() => data?.familySummary ?? [], [data]);
   const devices = React.useMemo(() => data?.devices ?? [], [data]);
   const errorMsg = error ? error?.message || "Failed to load compliance data" : null;
 
@@ -865,8 +880,61 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const frameworkLabels = React.useMemo(() => {
     const map = new Map();
     for (const f of frameworks) map.set(f.framework, f.shortName || f.framework);
+    // Las claves de familia (family:cis) también se rotulan: aparecen en
+    // el titular, en la tabla y en el chip del filtro.
+    for (const fam of families) if (fam?.key && fam.label) map.set(fam.key, fam.label);
     return map;
-  }, [frameworks]);
+  }, [frameworks, families]);
+
+  // Lo que enseña el selector: una entrada por familia. Sin `families`
+  // (backend anterior) cae a un benchmark por línea, como siempre.
+  const frameworkOptions = React.useMemo(() => {
+    if (families.length > 0) {
+      return families.map((fam) => ({
+        key: fam.key,
+        label: fam.label,
+        members: Array.isArray(fam.frameworks) ? fam.frameworks : [],
+      }));
+    }
+    return frameworks.map((f) => ({ key: f.framework, label: f.shortName || f.framework, members: [f.framework] }));
+  }, [families, frameworks]);
+
+  // Filas de la tabla de frameworks. Una familia de varios miembros es UNA
+  // fila (la suma que trae el backend) con sus benchmarks debajo,
+  // desplegables; el resto son las filas de siempre. Sólo entran los
+  // frameworks con equipos reportando, como hasta ahora.
+  const summaryRows = React.useMemo(() => {
+    const byFramework = new Map(frameworkSummary.map((f) => [f.framework, f]));
+    if (families.length === 0) return frameworkSummary.map((f) => ({ row: f, members: null }));
+    const out = [];
+    for (const fam of families) {
+      const memberIds = Array.isArray(fam.frameworks) ? fam.frameworks : [];
+      if (memberIds.length <= 1) {
+        const row = byFramework.get(fam.key);
+        if (row) out.push({ row, members: null });
+        continue;
+      }
+      const members = memberIds.map((id) => byFramework.get(id)).filter(Boolean);
+      const row = familySummary.find((f) => f.framework === fam.key);
+      if (row) out.push({ row, members });
+      else if (members.length > 0) {
+        // Backend con familias pero sin la fila sumada: se enseñan los
+        // miembros sueltos antes que inventar una suma en el cliente.
+        for (const m of members) out.push({ row: m, members: null });
+      }
+    }
+    return out;
+  }, [families, familySummary, frameworkSummary]);
+  // Qué familias tienen sus benchmarks a la vista.
+  const [openFamilies, setOpenFamilies] = React.useState(() => new Set());
+  const toggleFamily = React.useCallback((key) => {
+    setOpenFamilies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Cuánto del catálogo mapea a cada estándar. Sin esto, elegir CIS
   // Windows 11 daba un score calculado sobre 11 de 94 controles con nada
@@ -1072,9 +1140,17 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             sx={{ minWidth: 220, bgcolor: BRAND.surface }}
           >
             <MenuItem value="">All frameworks (weighted)</MenuItem>
-            {frameworks.map((f) => (
-              <MenuItem key={f.framework} value={f.framework}>
-                {f.shortName || f.framework}
+            {/* Una entrada por familia: "CIS Benchmarks" mide cada equipo
+                contra el benchmark de SU sistema operativo, igual que
+                NIST o PCI son una sola entrada para toda la flota. */}
+            {frameworkOptions.map((o) => (
+              <MenuItem key={o.key} value={o.key}>
+                {o.label}
+                {o.members.length > 1 ? (
+                  <Typography component="span" sx={{ ml: 0.75, fontSize: TEXT.xs, color: BRAND.gray }}>
+                    {o.members.length} benchmarks
+                  </Typography>
+                ) : null}
               </MenuItem>
             ))}
           </Select>
@@ -1227,8 +1303,11 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         // arrastrar los globales (que dirían otra cosa que el titular),
         // se sustituyen por los controles fallidos de ese framework, que
         // es el dato equivalente y sí está.
+        // Una familia (family:cis) tiene su fila sumada en `familySummary`.
         const fwRow = selectedFramework
-          ? frameworkSummary.find((f) => f.framework === selectedFramework) || null
+          ? frameworkSummary.find((f) => f.framework === selectedFramework) ||
+            familySummary.find((f) => f.framework === selectedFramework) ||
+            null
           : null;
         const scoped = Boolean(selectedFramework);
 
@@ -1438,9 +1517,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             {selectedFramework ? (
               <Chip
                 size="small"
-                label={`Filtering by ${
-                  frameworks.find((f) => f.framework === selectedFramework)?.shortName || selectedFramework
-                }`}
+                label={`Filtering by ${selectedFrameworkLabel}`}
                 sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
               />
             ) : null}
@@ -1510,19 +1587,30 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {frameworkSummary.length === 0 && !loading ? (
+              {summaryRows.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ color: BRAND.gray, py: 3 }}>
                     No devices have reported compliance yet.
                   </TableCell>
                 </TableRow>
               ) : (
-                frameworkSummary.map((f) => (
+                summaryRows.flatMap(({ row, members }) => {
+                  // Una familia pinta su fila sumada y, si está abierta,
+                  // un benchmark por línea debajo, con sangría. Las tres
+                  // clases de fila comparten el mismo render.
+                  const rows = [{ f: row, isFamily: Array.isArray(members), indent: false, memberCount: members?.length ?? 0 }];
+                  if (Array.isArray(members) && openFamilies.has(row.framework)) {
+                    for (const m of members) rows.push({ f: m, isFamily: false, indent: true, memberCount: 0 });
+                  }
+                  return rows;
+                }).map(({ f, isFamily, indent, memberCount }) => (
                   <React.Fragment key={f.framework}>
                   <TableRow
                     hover
+                    data-testid={isFamily ? `family-row-${f.framework}` : undefined}
                     sx={{
                       cursor: "pointer",
+                      ...(indent ? { bgcolor: BRAND.darkSoft } : null),
                       "& > *": { borderBottom: expandedFramework === f.framework ? "none" : undefined },
                     }}
                     onClick={() => {
@@ -1564,14 +1652,31 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                         </IconButton>
                       </Tooltip>
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={indent ? { pl: 4 } : undefined}>
                       <Stack>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
                           {frameworkLabels.get(f.framework) || f.framework}
                         </Typography>
-                        <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                          {f.framework}
-                        </Typography>
+                        {isFamily ? (
+                          /* Cuántos benchmarks tienen equipos, y el botón que
+                             los enseña. Desplegar los miembros NO filtra ni
+                             abre los controles: es la tercera acción de la
+                             fila y va aparte de las otras dos. */
+                          <Button
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFamily(f.framework);
+                            }}
+                            sx={{ alignSelf: "flex-start", px: 0.5, py: 0, minWidth: 0, fontSize: TEXT.xs, textTransform: "none", color: BRAND.tealText }}
+                          >
+                            {`${openFamilies.has(f.framework) ? "Hide" : "Show"} ${memberCount} benchmark${memberCount === 1 ? "" : "s"} in use`}
+                          </Button>
+                        ) : (
+                          <Typography variant="caption" sx={{ color: BRAND.gray }}>
+                            {f.framework}
+                          </Typography>
+                        )}
                         <CoverageNote coverage={frameworkCoverage.get(f.framework)} />
                         {ATTESTATION_FRAMEWORK_NOTE[f.framework] ? (
                           <Tooltip arrow placement="bottom-start" title={ATTESTATION_FRAMEWORK_NOTE[f.framework]}>
@@ -1614,6 +1719,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                           framework={f.framework}
                           assetGroupId={assetGroupId}
                           reloadKey={refreshToken}
+                          frameworkLabels={frameworkLabels}
                         />
                       </Collapse>
                     </TableCell>
@@ -1850,6 +1956,14 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                       {selectedFramework ? (
                         <TableCell align="right">
                           {useFw ? `${passed} / ${applicable}` : "—"}
+                          {/* Con una familia cada fila se midió contra
+                              OTRO benchmark (el de su SO): se dice cuál,
+                              o "8 / 10" no significa nada comparable. */}
+                          {useFw && d.frameworkScore.framework && d.frameworkScore.framework !== selectedFramework ? (
+                            <Typography variant="caption" sx={{ display: "block", color: BRAND.gray }}>
+                              {frameworkLabels.get(d.frameworkScore.framework) || d.frameworkScore.framework}
+                            </Typography>
+                          ) : null}
                         </TableCell>
                       ) : null}
                       <TableCell align="right">

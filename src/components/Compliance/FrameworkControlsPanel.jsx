@@ -13,6 +13,11 @@
 // Se carga bajo demanda, al desplegar la fila del framework: son datos
 // que casi nadie mira en la primera pantalla y no merecen pagar el
 // coste de la carga inicial de la portada.
+//
+// Una FAMILIA (`family:cis` = todos los benchmarks CIS activos) responde
+// por secciones, una por benchmark presente en el ámbito, y aquí se
+// pintan una debajo de otra con su propio titular. Nunca se fusionan:
+// "1.1.1" de Windows 11 no es "1.1.1" de Ubuntu 24.04.
 
 import * as React from "react";
 import {
@@ -133,45 +138,20 @@ function StatusChip({ status }) {
 const BASELINES = ["low", "moderate", "high"];
 const DEFAULT_BASELINE = "moderate";
 
-export default function FrameworkControlsPanel({ framework, assetGroupId, agentId, reloadKey }) {
-  const [state, setState] = React.useState({ loading: true, error: null, controls: [] });
+/**
+ * Los controles de UN benchmark ya cargados: titular de cobertura,
+ * veredicto y tabla. Separado de la carga para que una familia pueda
+ * pintar una instancia por sección con el mismo código.
+ */
+function ControlsBody({ controls, agentId }) {
   const [baseline, setBaseline] = React.useState(DEFAULT_BASELINE);
-  React.useEffect(() => { setBaseline(DEFAULT_BASELINE); }, [framework]);
-
-  React.useEffect(() => {
-    if (!framework) return undefined;
-    let alive = true;
-    setState({ loading: true, error: null, controls: [] });
-    getFrameworkControls({ framework, assetGroupId: assetGroupId || undefined, agentId: agentId || undefined })
-      .then((res) => {
-        if (!alive) return;
-        setState({
-          loading: false,
-          error: null,
-          controls: Array.isArray(res?.controls) ? res.controls : [],
-        });
-      })
-      .catch((err) => {
-        if (!alive) return;
-        // Un panel que falla se dice, no se deja en blanco: un hueco mudo
-        // aquí se lee como "no hay controles", que es lo contrario.
-        setState({
-          loading: false,
-          error: err?.body?.message || err?.message || "Could not load the controls for this framework.",
-          controls: [],
-        });
-      });
-    return () => {
-      alive = false;
-    };
-  }, [framework, assetGroupId, agentId, reloadKey]);
 
   // Sólo los estándares con baselines (800-53) enseñan el selector; el
   // filtro es local porque las baselines viajan en cada fila.
-  const hasBaselines = React.useMemo(() => state.controls.some((r) => Array.isArray(r.baselines)), [state.controls]);
+  const hasBaselines = React.useMemo(() => controls.some((r) => Array.isArray(r.baselines)), [controls]);
   const visible = React.useMemo(
-    () => (hasBaselines && baseline !== "all" ? state.controls.filter((r) => Array.isArray(r.baselines) && r.baselines.includes(baseline)) : state.controls),
-    [state.controls, hasBaselines, baseline]
+    () => (hasBaselines && baseline !== "all" ? controls.filter((r) => Array.isArray(r.baselines) && r.baselines.includes(baseline)) : controls),
+    [controls, hasBaselines, baseline]
   );
 
   const summary = React.useMemo(() => {
@@ -194,23 +174,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
     ? Math.round((covered / deviceEvidenceable) * 100)
     : 0;
 
-  if (state.loading) {
-    return (
-      <Box sx={{ display: "grid", placeItems: "center", py: 3 }}>
-        <CircularProgress size={20} sx={{ color: BRAND.teal }} />
-      </Box>
-    );
-  }
-
-  if (state.error) {
-    return (
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert?.errorText, py: 2 }} role="alert">
-        {state.error}
-      </Typography>
-    );
-  }
-
-  if (state.controls.length === 0) {
+  if (controls.length === 0) {
     return (
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, py: 2 }}>
         No catalog checks are mapped to this framework yet, so there is nothing to report against it.
@@ -369,4 +333,92 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
       </Table>
     </Box>
   );
+}
+
+/**
+ * `framework` puede ser un benchmark concreto o una familia
+ * (`family:cis`). `frameworkLabels` (Map id → nombre corto) rotula las
+ * secciones de una familia; sin él sale el id.
+ */
+export default function FrameworkControlsPanel({ framework, assetGroupId, agentId, reloadKey, frameworkLabels }) {
+  const [state, setState] = React.useState({ loading: true, error: null, controls: [], sections: null });
+
+  React.useEffect(() => {
+    if (!framework) return undefined;
+    let alive = true;
+    setState({ loading: true, error: null, controls: [], sections: null });
+    getFrameworkControls({ framework, assetGroupId: assetGroupId || undefined, agentId: agentId || undefined })
+      .then((res) => {
+        if (!alive) return;
+        setState({
+          loading: false,
+          error: null,
+          controls: Array.isArray(res?.controls) ? res.controls : [],
+          // Una familia responde por secciones; un framework, con `controls`.
+          sections: Array.isArray(res?.sections) ? res.sections : null,
+        });
+      })
+      .catch((err) => {
+        if (!alive) return;
+        // Un panel que falla se dice, no se deja en blanco: un hueco mudo
+        // aquí se lee como "no hay controles", que es lo contrario.
+        setState({
+          loading: false,
+          error: err?.body?.message || err?.message || "Could not load the controls for this framework.",
+          controls: [],
+          sections: null,
+        });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [framework, assetGroupId, agentId, reloadKey]);
+
+  if (state.loading) {
+    return (
+      <Box sx={{ display: "grid", placeItems: "center", py: 3 }}>
+        <CircularProgress size={20} sx={{ color: BRAND.teal }} />
+      </Box>
+    );
+  }
+
+  if (state.error) {
+    return (
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert?.errorText, py: 2 }} role="alert">
+        {state.error}
+      </Typography>
+    );
+  }
+
+  if (state.sections) {
+    if (state.sections.length === 0) {
+      // Sin equipos con snapshot en el ámbito no hay benchmark que
+      // enseñar. No es "sin controles": es que nadie ha reportado aún.
+      return (
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, py: 2 }}>
+          No device in scope has reported against a benchmark of this family yet.
+        </Typography>
+      );
+    }
+    return (
+      <Stack spacing={1} divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />} sx={{ py: 0.5 }}>
+        {state.sections.map((s) => (
+          <Box key={s.framework} data-testid={`family-section-${s.framework}`}>
+            {/* Cada sección es SU benchmark, con el id debajo del nombre:
+                un auditor coteja contra "CIS Ubuntu 24.04 v2.0.0", no
+                contra "CIS". */}
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, pt: 1 }}>
+              {frameworkLabels?.get?.(s.framework) || s.framework}
+            </Typography>
+            <Typography variant="caption" sx={{ color: BRAND.gray }}>
+              {s.framework}
+            </Typography>
+            <ControlsBody controls={Array.isArray(s.controls) ? s.controls : []} agentId={agentId} />
+          </Box>
+        ))}
+      </Stack>
+    );
+  }
+
+  return <ControlsBody key={framework} controls={state.controls} agentId={agentId} />;
 }
