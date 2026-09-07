@@ -97,7 +97,7 @@ export const PAGE_REGISTRY = {
   // per-device results).
   "software-delivery": (ctx) => <SoftwareDelivery onNavigate={ctx.onNavigate} />,
 
-  jobs: () => <Jobs />,
+  jobs: (ctx) => <Jobs onNavigate={ctx.onNavigate} />,
 
   // The old single "Policies" page was split into three surfaces, one
   // per audience: agent/plugin behavior (platform operator), security
