@@ -114,7 +114,7 @@ export const PAGE_REGISTRY = {
   "device-management": (ctx) => <DeviceManagement onNavigate={ctx.onNavigate} />,
   policies: (ctx) => <Configurations onNavigate={ctx.onNavigate} initialTab="agent" />,
 
-  audit: () => <Audit />,
+  audit: (ctx) => <Audit onNavigate={ctx.onNavigate} />,
   // PKI dejó de ser una entrada del menú lateral: es una tarjeta de
   // Settings › Tenant Settings. La clave sigue viva —los enlaces
   // profundos y los marcadores no se rompen— y recibe `onNavigate` para

@@ -21,7 +21,6 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import BlockOutlinedIcon from "@mui/icons-material/BlockOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
@@ -42,9 +41,7 @@ import { listKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
-  downloadTextFile,
   getSearchParam,
-  toCsv,
   updateSearchParams,
 } from "../utils/browserState";
 
@@ -54,6 +51,16 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+
+// El informe del rastro de auditoría, en el catálogo del motor. Sólo existe en
+// CSV: es un volcado para analizar fuera, no un documento para leer.
+//
+// Sin gate de rol aquí, y no por descuido: `audit.events` no declara
+// `minRole`. Lo que exige es la capacidad `audit_log` —la misma que gatea esta
+// página—, y eso lo comprueba el servidor; el catálogo de Reports ni siquiera
+// se lo ofrece a quien no la tenga.
+const AUDIT_EVENTS_KEY = "audit.events";
 import { getEventTypeMeta, groupFacetsByCategory } from "../constants/auditEventTypes";
 import { listFrom } from "../api/shape";
 import { resolveActor } from "../utils/auditActor";
@@ -198,7 +205,7 @@ function toIsoOrUndefined(value) {
  */
 const BREAKDOWN_WINDOW_DAYS = 30;
 
-export default function Audit() {
+export default function Audit({ onNavigate }) {
   const initialParamsRef = React.useRef({
     deviceId: getSearchParam("auditDeviceId", ""),
     eventType: getSearchParam("auditEventType", ""),
@@ -516,26 +523,23 @@ export default function Audit() {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
   }, []);
 
-  const handleExportCsv = React.useCallback(() => {
-    const csv = toCsv(rows);
-    downloadTextFile(`audit-events-${new Date().toISOString()}.csv`, csv || "id\n", "text/csv;charset=utf-8");
-  }, [rows]);
-
-  const handleExportJson = React.useCallback(() => {
-    const payload = {
-      exportedAtUtc: new Date().toISOString(),
-      filters: queryParams,
-      summary,
-      totalRows,
-      items: rows,
-      selectedEvent,
-    };
-    downloadTextFile(
-      `audit-events-${new Date().toISOString()}.json`,
-      JSON.stringify(payload, null, 2),
-      "application/json;charset=utf-8"
-    );
-  }, [queryParams, rows, selectedEvent, summary, totalRows]);
+  /*
+   * ⚠️ Aquí estaban `handleExportCsv` y `handleExportJson`, que serializaban
+   * las filas YA CARGADAS a un fichero desde el navegador.
+   *
+   * Dos problemas, y el segundo es el gordo:
+   *
+   *  1. Exportaban la PÁGINA, no la consulta. Con la paginación en 25 filas,
+   *     un "export" de una investigación de 4.000 eventos se llevaba 25 y no
+   *     lo decía en ninguna parte.
+   *  2. No dejaban rastro. Un fichero con el rastro de auditoría del tenant
+   *     salía del portal sin que constara quién se lo llevó — en la página
+   *     cuyo oficio es exactamente responder a esa pregunta.
+   *
+   * Lo sustituye el botón que lleva a Reports con `audit.events`: el CSV lo
+   * arma el servidor con la consulta entera y la ejecución queda en
+   * `report_runs` con su actor y su SHA-256.
+   */
 
   const columns = [
     {
@@ -718,36 +722,17 @@ export default function Audit() {
         icon={<FactCheckOutlinedIcon />}
         actions={
           <>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadOutlinedIcon />}
-              onClick={handleExportCsv}
-              disabled={rows.length === 0}
-              sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                borderColor: BRAND.teal,
-                color: BRAND.teal,
-                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              CSV
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadOutlinedIcon />}
-              onClick={handleExportJson}
-              disabled={rows.length === 0}
-              sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                borderColor: BRAND.teal,
-                color: BRAND.teal,
-                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              JSON
-            </Button>
+            {/* Los filtros de la pantalla VIAJAN con el informe: el CSV que
+                sale cubre la consulta que se está mirando, no el rastro
+                entero. `queryParams` usa exactamente las mismas claves que
+                lee `parseAuditQuery` en el backend. */}
+            <GoToReportButton
+              onNavigate={onNavigate}
+              reportKey={AUDIT_EVENTS_KEY}
+              format="csv"
+              params={queryParams}
+              tooltip="Audit event trail (CSV) for the current filters"
+            />
             {/* Reset moved into the filter bar as "Clear filters"
                 — surfaces only when there's something to clear, and
                 keeps the header focused on the high-level actions
