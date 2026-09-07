@@ -392,8 +392,17 @@ export default function DeviceDrawerContent({
                         <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }} noWrap>
                           {frameworkLabels.get(fw) || fw}
                         </Typography>
+                        {/* `controls` es el roll-up por CONTROL del estándar
+                            (evaluador ≥ 1.2.37). Sin él, lo que hay son
+                            checks, y se dice "checks": un control de
+                            Windows con dos valores de registro contaba dos. */}
                         <Typography variant="caption" sx={{ color: BRAND.gray }}>
-                          {b.passed}/{b.applicable} controls passing
+                          {b.controls
+                            ? `${b.controls.met}/${b.controls.total} controls met` +
+                              (b.controls.notMet ? ` · ${b.controls.notMet} not met` : "") +
+                              (b.controls.review ? ` · ${b.controls.review} need review` : "") +
+                              (b.controls.notApplicable ? ` · ${b.controls.notApplicable} n/a` : "")
+                            : `${b.passed}/${b.applicable} checks passing`}
                         </Typography>
                       </Box>
                       <ScoreBar value={b.score} />

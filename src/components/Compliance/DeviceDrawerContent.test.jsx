@@ -210,3 +210,17 @@ describe("controls of one standard on this device", () => {
     expect(screen.queryByText("Controls on this device")).toBeNull();
   });
 });
+
+// ── "N/M controls" contaba checks (sep-2026) ───────────────────────────
+describe("per-framework headline counts controls, not checks", () => {
+  it("uses the control roll-up when the evaluator provides it", () => {
+    const data = { ...deviceData, device: { ...deviceData.device, scoresByFramework: { fw: { score: 60, passed: 300, failed: 200, applicable: 500, controls: { met: 210, notMet: 190, review: 12, notApplicable: 55, notAssessed: 3, mapped: 470, total: 535 } } } } };
+    render(<DeviceDrawerContent {...baseProps} data={data} />);
+    expect(screen.getByText("210/535 controls met · 190 not met · 12 need review · 55 n/a")).toBeInTheDocument();
+  });
+  it("says 'checks' when only the check counts exist", () => {
+    const data = { ...deviceData, device: { ...deviceData.device, scoresByFramework: { fw: { score: 60, passed: 300, failed: 200, applicable: 500 } } } };
+    render(<DeviceDrawerContent {...baseProps} data={data} />);
+    expect(screen.getByText("300/500 checks passing")).toBeInTheDocument();
+  });
+});
