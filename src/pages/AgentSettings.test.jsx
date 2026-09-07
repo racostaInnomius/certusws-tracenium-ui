@@ -200,8 +200,9 @@ describe("navigation", () => {
     mockBase();
     renderPage();
     await settled();
+    // The section's rows need the catalog (scp must be "on"); wait for them.
+    expect(await screen.findByLabelText("Evaluation interval")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Security Compliance" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Evaluation interval")).toBeInTheDocument();
   });
 
   it("shows the plan view read-only: no toggles, a status and a plan per plugin", async () => {
@@ -494,6 +495,22 @@ describe("tools", () => {
     await waitFor(() => expect(restores).toHaveLength(1));
     expect(restores[0].headers["if-match"]).toBe(TENANT_VERSION);
     expect(await screen.findByText(`Restored version ${OLD_VERSION}`)).toBeInTheDocument();
+  });
+});
+
+describe("apply to a group from the scope bar", () => {
+  it("opens the same dialog as New override…, on the current section, in group mode", async () => {
+    window.history.replaceState({}, "", "/?agentDevice=dev-1&agentSection=scp");
+    mockBase();
+    server.use(http.get(`${import.meta.env.VITE_API_BASE}/api/v1/policies/devices/dev-1/policy`, () => HttpResponse.json({ ok: false }, { status: 404 })));
+    respond("get", "/api/v1/policies/devices/dev-1/effective-policy", { ok: true, policy: { source: "tenant", policy_version: CURRENT, overriddenPaths: [], policy_json: TENANT_POLICY.policy.policy_json } });
+    respond("get", "/api/v1/policies/devices/dev-1/policy-status", { ok: true, status: STATUS.items[0] });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Apply to a group/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Section")).toHaveValue("scp");
+    expect(within(dialog).getByLabelText("Group")).toBeInTheDocument();
+    expect(within(dialog).getByText("SQL Servers · dynamic · 3 devices")).toBeInTheDocument();
   });
 });
 
