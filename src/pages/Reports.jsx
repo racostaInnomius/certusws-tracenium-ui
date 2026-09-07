@@ -52,6 +52,7 @@ import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
 import ReportTypeCard from "../components/Reports/ReportTypeCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
+import GenericJsonPreview from "../components/Reports/GenericJsonPreview";
 import {
   getReportTypes, getReportRuns, runReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
@@ -76,6 +77,21 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 const PREVIEW_BY_KEY = {
   "global.fleet-health": FleetHealthPreview,
 };
+
+/**
+ * ¿Se puede previsualizar este tipo?
+ *
+ * Cualquiera que sepa dar JSON: el preview genérico enseña de qué tamaño es el
+ * informe, qué colecciones trae y el propio documento. No adivina un titular
+ * que no puede calcular — para eso están los previews a medida como el de
+ * flota, que sí saben qué significan sus campos.
+ *
+ * `audit.events` ganó `json` en el backend justamente para entrar aquí: era el
+ * único informe del catálogo que había que sacar a ciegas.
+ */
+function puedePrevisualizarse(type) {
+  return Boolean(PREVIEW_BY_KEY[type?.key]) || (type?.formats || []).includes("json");
+}
 
 // Las cuatro pestañas por nombre. Se guardan en la URL para que los once
 // botones "Report" de las otras páginas puedan apuntar a la que toque, y para
@@ -834,7 +850,7 @@ export default function Reports() {
                             ? String(runningKey).split(":")[1]
                             : ""
                         }
-                        canPreview={Boolean(PREVIEW_BY_KEY[t.key])}
+                        canPreview={puedePrevisualizarse(t)}
                         canSchedule={canSchedule}
                         onRun={(format) =>
                           t.params?.length
@@ -1006,10 +1022,12 @@ export default function Reports() {
 
       {/* Vista previa del tipo seleccionado. Se monta sólo cuando hay uno
           elegido para no arrastrar Recharts en cada render de la página. */}
-      {previewTarget && PREVIEW_BY_KEY[previewTarget.key]
-        ? React.createElement(PREVIEW_BY_KEY[previewTarget.key], {
+      {previewTarget
+        ? React.createElement(PREVIEW_BY_KEY[previewTarget.key] || GenericJsonPreview, {
             open: true,
             reportKey: previewTarget.key,
+            reportLabel: previewTarget.label,
+            formats: previewTarget.formats || [],
             onClose: () => setPreviewTarget(null),
             generating: String(runningKey || "").startsWith(`${previewTarget.key}:`)
               ? String(runningKey).split(":")[1]

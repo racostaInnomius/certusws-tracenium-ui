@@ -500,15 +500,20 @@ describe("Reports — vista previa", () => {
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
   };
 
-  it("sólo la ofrece el tipo que sabe enseñarse", async () => {
-    // Una vista previa no es genérica: hay que saber qué significan los
-    // campos de ESE informe. Un tipo sin vista previa no enseña un botón que
-    // abre un diálogo vacío.
+  it("la ofrece todo tipo que sepa dar JSON — y sólo ésos", async () => {
+    // Desde U4 el preview genérico cubre cualquier informe con formato json:
+    // enseña tamaño, colecciones y el documento, sin adivinar un titular que
+    // no puede calcular. Los que no dan json siguen sin ofrecerlo, porque un
+    // PDF no se pinta en pantalla.
     abrirCatalogo();
 
     await screen.findAllByText("Fleet Health Report");
-    const previews = screen.getAllByRole("button", { name: /^preview$/i });
-    expect(previews).toHaveLength(1);
+    const conJson = TYPES.types.filter((t) => t.formats.includes("json"));
+    expect(screen.getAllByRole("button", { name: /^preview$/i })).toHaveLength(conJson.length);
+
+    // El de sólo-CSV del fixture no lo tiene.
+    const soloCsv = screen.getByRole("group", { name: "Audit Events" });
+    expect(within(soloCsv).queryByRole("button", { name: /^preview$/i })).toBeNull();
   });
 
   it("se pinta con el JSON del MOTOR, no con la ruta legacy", async () => {
@@ -518,8 +523,8 @@ describe("Reports — vista previa", () => {
     });
     abrirCatalogo();
 
-    await screen.findAllByText("Fleet Health Report");
-    await userEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    const tarjeta = await screen.findByRole("group", { name: "Fleet Health Report" });
+    await userEvent.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
 
     await waitFor(() => expect(previewCalls.length).toBeGreaterThan(0));
     expect(previewCalls[0].search.format).toBe("json");
@@ -536,8 +541,8 @@ describe("Reports — vista previa", () => {
     });
     abrirCatalogo();
 
-    await screen.findAllByText("Fleet Health Report");
-    await userEvent.click(screen.getByRole("button", { name: /^preview$/i }));
+    const tarjeta = await screen.findByRole("group", { name: "Fleet Health Report" });
+    await userEvent.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
     await screen.findByText("Banco X");
 
     await userEvent.click(screen.getByRole("button", { name: /generate pdf/i }));
@@ -934,5 +939,62 @@ describe("Reports — U3: catálogo por tarjetas", () => {
 
     const vacio = await screen.findByTestId("catalog-empty");
     expect(vacio.textContent).toMatch(/plugins the tenant has enabled and by your role/i);
+  });
+});
+
+// ── U4 · vista previa genérica ──────────────────────────────────────
+//
+// `FleetHealthPreview` sabe qué significan los campos de SU informe y por eso
+// pinta KPIs y una tendencia. Eso no se generaliza: un CBOM y un pack de
+// evidencia no comparten forma, y un componente que la adivinara enseñaría
+// basura con confianza.
+//
+// Lo que sí se puede dar para cualquiera es lo que contesta la pregunta que
+// trae aquí: "¿esto es lo que creo, antes de generarlo o firmarlo?".
+describe("Reports — U4: vista previa genérica", () => {
+  const montar = () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    return render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it("enseña qué trae el informe y cuánto, sin inventarse un titular", async () => {
+    // Distinguir "el informe está vacío" de "el informe no se pudo construir"
+    // es justo lo que un volcado sin resumen no deja hacer.
+    const previewCalls = respond("get", `${BASE}/cdp.cbom/run`, {
+      ok: true,
+      components: [{ name: "rsa-2048" }, { name: "ecdsa-p256" }],
+      metadata: { tool: "tracenium" },
+    });
+    montar();
+
+    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    await userEvent.setup().click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
+
+    await waitFor(() => expect(previewCalls.length).toBeGreaterThan(0));
+    // Por el MOTOR y marcado como vista previa: mirar no deja fila en el
+    // ledger, que es de los ficheros que salen.
+    expect(previewCalls[0].search.format).toBe("json");
+    expect(previewCalls[0].search.preview).toBe("1");
+
+    expect(await screen.findByText("components: 2")).toBeTruthy();
+    expect(screen.getByLabelText("Report preview JSON")).toBeTruthy();
+  });
+
+  it("desde la vista previa se genera POR LA PÁGINA, no desde el diálogo", async () => {
+    // Una sola puerta de salida: es el único sitio donde queda registrada la
+    // ejecución.
+    respond("get", `${BASE}/cdp.cbom/run`, { ok: true, components: [] });
+    montar();
+
+    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    const user = userEvent.setup();
+    await user.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
+    await screen.findByLabelText("Report preview JSON");
+
+    // El botón lleva nombre accesible ESTABLE: el rótulo pasa a "…" mientras
+    // genera, y sin eso se queda sin nombre justo cuando hace falta.
+    expect(screen.getByRole("button", { name: "Generate JSON" })).toBeTruthy();
   });
 });

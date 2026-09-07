@@ -105,4 +105,34 @@ describe("GrcConnectorPanel", () => {
     expect(await screen.findByTestId("grc-targets-empty")).toBeTruthy();
     expect(await screen.findByTestId("grc-deliveries-empty")).toBeTruthy();
   });
+
+  // Un 403 NO es un fallo: es "esto no es para ti". Se pintaba en rojo en
+  // mitad de la página, y a un miembro sin permisos eso le dice que algo se ha
+  // roto — cuando lo que pasa es que el conector lo administra otro.
+  it("a quien no puede administrarlo se lo DICE, no le enseña un error", async () => {
+    respond("get", `${BASE}/api-keys`, { error: "FORBIDDEN" }, { status: 403 });
+    respond("get", `${BASE}/grc/targets`, { error: "FORBIDDEN" }, { status: 403 });
+    respond("get", `${BASE}/grc/deliveries`, { error: "FORBIDDEN" }, { status: 403 });
+
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
+
+    const aviso = await screen.findByTestId("grc-forbidden");
+    expect(aviso.textContent).toMatch(/managed by this tenant's administrators/i);
+    // Y no se ofrecen acciones que van a rebotar.
+    expect(screen.queryByRole("button", { name: /new key/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /new target/i })).toBeNull();
+  });
+
+  it("un fallo de VERDAD sí se enseña como error", async () => {
+    // El contraste: si todo se tratara como "sin permiso", un backend caído se
+    // leería como una cuestión de permisos y nadie miraría el servidor.
+    respond("get", `${BASE}/api-keys`, { error: "BOOM" }, { status: 500 });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [], secretsConfigured: true });
+    respond("get", `${BASE}/grc/deliveries`, { ok: true, deliveries: [] });
+
+    render(<ConfirmProvider><GrcConnectorPanel /></ConfirmProvider>);
+
+    await waitFor(() => expect(screen.queryByTestId("grc-forbidden")).toBeNull());
+    expect(await screen.findByTestId("api-keys-empty")).toBeTruthy();
+  });
 });

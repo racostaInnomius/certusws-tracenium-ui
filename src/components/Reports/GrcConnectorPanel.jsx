@@ -57,6 +57,7 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
   const [deliveries, setDeliveries] = React.useState([]);
   const [secretsConfigured, setSecretsConfigured] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [forbidden, setForbidden] = React.useState(false);
   const [busy, setBusy] = React.useState(null);
   const [keyDialog, setKeyDialog] = React.useState(false);
   const [keyLabel, setKeyLabel] = React.useState("");
@@ -72,8 +73,17 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
       setTargets(t?.targets || []);
       setSecretsConfigured(t?.secretsConfigured !== false);
       setError("");
+      setForbidden(false);
     } catch (err) {
-      setError(err?.message || "Could not load the GRC connector.");
+      // ⚠️ Un 403 NO es un fallo: es "esto no es para ti". Pintarlo en rojo
+      // en mitad de la página le decía a un miembro sin permisos que algo se
+      // había roto, y lo que pasaba es que el conector lo administra otro.
+      if (err?.status === 403) {
+        setForbidden(true);
+        setError("");
+      } else {
+        setError(err?.message || "Could not load the GRC connector.");
+      }
     }
   }, []);
 
@@ -217,8 +227,16 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
 
   return (
     <Box>
+      {forbidden ? (
+        <Typography sx={{ color: BRAND.gray, fontSize: TEXT.sm }} data-testid="grc-forbidden">
+          The GRC connector is managed by this tenant&apos;s administrators. API keys and push
+          destinations are not visible to this account.
+        </Typography>
+      ) : null}
       {error ? <Typography sx={{ color: BRAND.alert.errorText, fontSize: TEXT.sm, mb: 1 }}>{error}</Typography> : null}
 
+      {forbidden ? null : (
+      <>
       {/* ── API keys ── */}
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
         <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>API keys (pull)</Typography>
@@ -336,6 +354,9 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
             </Box>
           ))}
         </Stack>
+      )}
+
+      </>
       )}
 
       {/* ── New key ── */}
