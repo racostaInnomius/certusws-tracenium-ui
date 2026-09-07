@@ -1302,7 +1302,7 @@ function AddMembersDialog({ open, onClose, onConfirm, excludeIds, groupName }) {
 
 // ── Main page component ──────────────────────────────────────────
 
-export default function AssetGroups() {
+export default function AssetGroups({ refreshNonce = 0 }) {
   const { auth } = useAuthContext();
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
@@ -1374,7 +1374,7 @@ export default function AssetGroups() {
   React.useEffect(() => {
     setLoading(true);
     Promise.all([loadGroups(), loadDevices(), loadCoverage()]).finally(() => setLoading(false));
-  }, [loadGroups, loadDevices, loadCoverage]);
+  }, [loadGroups, loadDevices, loadCoverage, refreshNonce]);
 
   const handleDelete = async (group) => {
     const ok = await confirm({

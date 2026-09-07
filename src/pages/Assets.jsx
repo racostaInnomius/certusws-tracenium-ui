@@ -97,9 +97,19 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     });
   }, []);
 
-  // Page-level refresh — bumping the nonce signals child tabs to
-  // re-fetch. Each tab opts in by depending on `refreshNonce` in its
-  // load effects (today: AssetsDashboard; others can wire it later).
+  // Refresco de página — subir el nonce es la señal para que las pestañas
+  // vuelvan a pedir.
+  //
+  // ⚠️ Lo miran LAS CINCO. Antes sólo AssetsDashboard y WindowsGpos: pulsar
+  // Refresh con Asset Groups, Software o Hardware delante no hacía
+  // absolutamente nada, y no se notaba — el botón se comporta igual tanto si
+  // recarga como si no. Un refresco que depende de la pestaña que tengas
+  // abierta es peor que ninguno, porque enseña datos viejos con el gesto de
+  // haberlos actualizado.
+  //
+  // (La otra mitad del problema estaba en el propio control: `httpGetJson`
+  // servía de su caché de 60 s, así que ni siquiera las pestañas cableadas
+  // salían a la red. Ver RefreshControl.)
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const [refreshing, setRefreshing] = React.useState(false);
   const triggerRefresh = React.useCallback(() => {
@@ -236,15 +246,15 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={activeTab} index={1}>
-        <AssetGroups />
+        <AssetGroups refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={2}>
-        <SoftwareInventory />
+        <SoftwareInventory refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={3}>
-        <HardwareInventory initialSearch={pendingHardwareSearch} />
+        <HardwareInventory initialSearch={pendingHardwareSearch} refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={4}>

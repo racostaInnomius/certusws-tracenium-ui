@@ -331,7 +331,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function SoftwareInventory() {
+export default function SoftwareInventory({ refreshNonce = 0 }) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -540,12 +540,13 @@ export default function SoftwareInventory() {
   React.useEffect(() => {
     loadSummary();
     loadRankings();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshNonce]);
 
   React.useEffect(() => {
     if (!appLevelDetail) return;
     loadDetail();
-  }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize]);
+  }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize, refreshNonce]);
 
   React.useEffect(() => {
     if (appLevelDetail || selectedHost) return;
@@ -557,6 +558,7 @@ export default function SoftwareInventory() {
     hostPaginationModel.page,
     hostPaginationModel.pageSize,
     hostSortModel,
+    refreshNonce,
   ]);
 
   React.useEffect(() => {

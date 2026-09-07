@@ -273,7 +273,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function HardwareInventory({ initialSearch = "" }) {
+export default function HardwareInventory({ initialSearch = "", refreshNonce = 0 }) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -386,7 +386,7 @@ export default function HardwareInventory({ initialSearch = "" }) {
 
   React.useEffect(() => {
     loadDetail();
-  }, [search, fleetFilter, paginationModel.page, paginationModel.pageSize]);
+  }, [search, fleetFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
 
   const refreshAll = () => {
     reloadSummary();
