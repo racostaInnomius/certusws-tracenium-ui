@@ -413,6 +413,21 @@ export default function HardwareInventory({ initialSearch = "", refreshNonce = 0
       },
     },
     { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.45 },
+    {
+      field: "arch",
+      headerName: "Arch",
+      minWidth: 90,
+      flex: 0.35,
+      // ⚠️ Junto a Platform, no junto a CPU. La pareja que decide qué binario
+      // se instala es (plataforma, arquitectura); el modelo de procesador es
+      // otra cosa — y adivinar el arch desde ese modelo es justo lo que
+      // ADR-0016 descarta.
+      //
+      // El guion no dice "arquitectura desconocida", dice "este agente todavía
+      // no la reporta": el campo llega a partir de 1.1.63, así que durante el
+      // despliegue habrá filas sin él.
+      renderCell: (params) => params.value || "—",
+    },
     { field: "distro", headerName: "OS", minWidth: 150, flex: 0.7 },
     {
       field: "osVersionFriendly",
