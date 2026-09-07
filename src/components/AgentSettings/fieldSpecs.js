@@ -208,10 +208,20 @@ export const FIELD_SPECS = {
       },
     },
     {
-      key: "cdp.adcsEnabled",
-      label: "Read AD CS issuance",
-      sub: "Reads what Active Directory Certificate Services issued. Only acts on a CA server; other devices ignore it.",
-      type: "switch",
+      // Repaso 2026-09-07: era un toggle a nivel de tenant para algo que
+      // solo aplica a los servidores con rol de CA. Ahora se nombran.
+      key: "cdp.adcsHosts",
+      label: "AD CS: certification authority servers",
+      sub: "Hostnames of the Windows servers with the Certification Authority role, one per line (NetBIOS or FQDN). Only the agent installed on those servers reads what the CA issued and with which template; every other device ignores this. Empty = off.",
+      type: "lines",
+      mono: true,
+      placeholder: "MSIG-RADIUS-CA\nca02.corp.example",
+      validate: (v) => {
+        const lines = String(v ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const bad = lines.filter((h) => !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$/.test(h) || h.length > 253);
+        if (bad.length > 0) return `Not a hostname — ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? "…" : ""}`;
+        return lines.length > 50 ? "At most 50 CA servers." : null;
+      },
     },
   ],
   rcp: [

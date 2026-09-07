@@ -31,18 +31,19 @@ describe("probeTargets en la policy", () => {
 import { readFormFromPolicy, formToPolicy } from "./policyTransforms";
 
 describe("cdp.adcs en la policy", () => {
-  const catalog = [{ key: "amp" }, { key: "cdp" }];
+  const catalog = [{ key: "cdp" }];
   const withCdp = (adcs) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp: { adcs } });
-  it("hidrata `enabled` solo si es exactamente true", () => {
-    expect(readFormFromPolicy(withCdp({ enabled: true }), catalog).cdp.adcsEnabled).toBe(true);
-    expect(readFormFromPolicy(withCdp({ enabled: "true" }), catalog).cdp.adcsEnabled).toBe(false);
-    expect(readFormFromPolicy({ cdp: {} }, catalog).cdp.adcsEnabled).toBe(false);
+  it("⭐ del bloque al formulario: los CA servers, uno por línea; sin hosts, vacío", () => {
+    expect(readFormFromPolicy(withCdp({ enabled: true, hosts: ["msig-radius-ca", "ca02.corp.example"] }), catalog).cdp.adcsHosts).toBe("msig-radius-ca\nca02.corp.example");
+    // Un bloque viejo (solo `enabled`) ya no enciende nada: no nombra CAs.
+    expect(readFormFromPolicy(withCdp({ enabled: true }), catalog).cdp.adcsHosts).toBe("");
+    expect(readFormFromPolicy({ cdp: {} }, catalog).cdp.adcsHosts).toBe("");
   });
-
-  it("serializa `{enabled:true}` cuando está ON y omite la clave cuando está OFF", () => {
-    const on = formToPolicy(readFormFromPolicy(withCdp({ enabled: true }), catalog), catalog);
-    expect(on.cdp?.adcs).toEqual({ enabled: true });
-    const off = formToPolicy(readFormFromPolicy(withCdp({ enabled: false }), catalog), catalog);
+  it("del formulario al bloque: saneado, en minúsculas, deduplicado; vacío omite el bloque", () => {
+    const base = readFormFromPolicy(withCdp(undefined), catalog);
+    const on = formToPolicy({ ...base, cdp: { ...base.cdp, adcsHosts: " MSIG-RADIUS-CA \nmsig-radius-ca\n\nca02.corp.example" } }, catalog);
+    expect(on.cdp?.adcs).toEqual({ enabled: true, hosts: ["msig-radius-ca", "ca02.corp.example"] });
+    const off = formToPolicy({ ...base, cdp: { ...base.cdp, adcsHosts: "" } }, catalog);
     expect(off.cdp?.adcs).toBeUndefined();
   });
 });

@@ -564,8 +564,9 @@ export function readFormFromPolicy(policy, catalog = []) {
       certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
       probeTargets: (policy?.cdp?.probeTargets ?? []).join("\n"),
-      // Conector AD CS (fase 4b): opt-in, solo actúa en un CA server.
-      adcsEnabled: policy?.cdp?.adcs?.enabled === true,
+      // Conector AD CS: los hostnames de los CA servers, uno por línea.
+      // Vacío = apagado (repaso 2026-09-07: dejó de ser un toggle).
+      adcsHosts: (policy?.cdp?.adcs?.hosts ?? []).join("\n"),
     },
   };
 }
@@ -774,8 +775,13 @@ export function formToPolicy(form, catalog = []) {
     ).slice(0, CDP_PROBE_TARGETS_MAX);
     if (targets.length > 0) cdp.probeTargets = targets;
 
-    // Conector AD CS: solo cuando está ON (omit-when-empty, como el resto).
-    if (form?.cdp?.adcsEnabled === true) cdp.adcs = { enabled: true };
+    // Conector AD CS: solo con CA servers nombrados (omit-when-empty, como
+    // el resto). `enabled: true` acompaña por compatibilidad con agentes
+    // que aún no conocen `hosts`; los nuevos gatean por nombre.
+    const adcsHosts = Array.from(
+      new Set(String(form?.cdp?.adcsHosts ?? "").split(/\r?\n/).map((h) => h.trim().toLowerCase()).filter((h) => h.length > 0 && h.length <= 253))
+    ).slice(0, 50);
+    if (adcsHosts.length > 0) cdp.adcs = { enabled: true, hosts: adcsHosts };
 
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }

@@ -64,8 +64,9 @@ function AdcsReaders({ refreshNonce }) {
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
         A Windows Certification Authority is read by the Tracenium agent installed <strong>on the CA server itself</strong>: it
         runs <code>certutil -view</code> locally, read-only, in increments by RequestID, and reports what the CA issued and
-        with which template. Enable it in Agent Settings → Crypto Discovery → <em>AD CS reader</em>, only for the CA
-        servers. Nothing to configure here; this is where you see whether it works.
+        with which template. Name the CA servers in Agent Settings → Crypto Discovery → <em>AD CS: certification authority
+        servers</em>; only those hostnames read, every other device ignores it. Nothing to configure here; this is where
+        you see whether it works.
       </Typography>
       {error ? <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert> : null}
       {sources && sources.length === 0 && !error ? (
