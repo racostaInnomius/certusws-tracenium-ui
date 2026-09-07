@@ -89,14 +89,12 @@ export const FIELD_SPECS = {
     {
       key: "features.deviceInfoWidget",
       label: "Device info widget",
-      badge: "agent 1.1.24+",
       sub: "An always-on-top \u201cDevice info\u201d tab at the top-centre of Windows endpoints: user, computer name, IP, serial, with a Copy all button for support tickets. The tray status window and the macOS menubar show the same info regardless.",
       type: "switch",
     },
     {
       key: "features.locationTracking",
       label: "Location tracking",
-      badge: "agent 1.1.28+",
       sub: "Asks Windows for the endpoint\u2019s position and shows it on the device map. Needs location services on the endpoint; macOS and Linux report nothing for now. Turning it off erases stored coordinates. Coordinates are personal data.",
       type: "switch",
     },
