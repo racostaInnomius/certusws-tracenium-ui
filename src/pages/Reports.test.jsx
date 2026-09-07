@@ -149,15 +149,11 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    // La fila del CATÁLOGO es la que trae botones de formato; la del
-    // historial no. Es el discriminador estable ahora que las dos tablas
-    // muestran la misma etiqueta.
-    const celdas = await screen.findAllByText("Crypto Bill of Materials (CBOM)");
-    const row = celdas
-      .map((c) => c.closest("[role='row']"))
-      .find((r) => r && within(r).queryByRole("button", { name: /json/i }));
-    const jsonButton = within(row).getByRole("button", { name: /json/i });
-    await userEvent.click(jsonButton);
+    // La TARJETA del catálogo, por su nombre accesible: es un `role="group"`
+    // etiquetado con el informe, así que localizarla no depende de la
+    // maquetación ni de que la etiqueta salga también en el historial.
+    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    await userEvent.click(within(tarjeta).getByRole("button", { name: /json/i }));
 
     await waitFor(() => expect(runCalls).toHaveLength(1));
     expect(runCalls[0].search).toEqual({ format: "json" });
@@ -198,8 +194,8 @@ describe("Reports page (types with params)", () => {
     const runCalls = respond("get", `${BASE}/scp.evidence-pack/run`, { ok: true });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    const row = (await screen.findByText("Evidence Pack")).closest("[role='row']");
-    await userEvent.click(within(row).getByRole("button", { name: "PDF" }));
+    const tarjeta = await screen.findByRole("group", { name: "Evidence Pack" });
+    await userEvent.click(within(tarjeta).getByRole("button", { name: "PDF" }));
 
     // Diálogo de parámetros, no descarga inmediata.
     expect(runCalls).toHaveLength(0);
@@ -878,5 +874,65 @@ describe("Reports — U3: programaciones", () => {
     // Y NO crea una segunda: duplicar la programación al editarla dejaría dos
     // enviando lo mismo.
     expect(postCalls).toHaveLength(0);
+  });
+});
+
+// ── U3 · el catálogo por tarjetas ───────────────────────────────────
+describe("Reports — U3: catálogo por tarjetas", () => {
+  const montar = (runsBody = RUNS) => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, runsBody);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    return render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it("agrupa por el `group` que manda el servidor", async () => {
+    // Se pintaba como una COLUMNA DE TEXTO: un dato que sólo sirve para
+    // agrupar, ocupando ancho en cada fila y sin agrupar nada.
+    montar();
+
+    await screen.findByRole("group", { name: "Evidence Pack" });
+    for (const g of ["CDP", "Audit", "SCP"]) {
+      expect(screen.getByText(g)).toBeTruthy();
+    }
+  });
+
+  it("cada tarjeta enseña su ÚLTIMO run, que es lo que se pregunta antes de generar otro", async () => {
+    // Estaba en `report_runs` desde E3 y obligaba a bajar a otra tabla.
+    montar({
+      ok: true,
+      total: 1,
+      runs: [{ id: 1, occurredAt: "2026-09-01T06:00:00.000Z", key: "cdp.cbom", format: "json", trigger: "manual", outcome: "ok", actor: "ana@acme.test" }],
+    });
+
+    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    expect(within(tarjeta).getByText(/ana@acme.test/)).toBeTruthy();
+
+    // Y el que no se ha generado nunca lo dice, en vez de dejar el hueco.
+    const otra = screen.getByRole("group", { name: "Audit Events" });
+    expect(within(otra).getByText(/never generated/i)).toBeTruthy();
+  });
+
+  it("un tipo que pide parámetros lo AVISA antes de pulsar", async () => {
+    // Si no, pulsar un formato abre un diálogo por sorpresa.
+    montar();
+
+    const tarjeta = await screen.findByRole("group", { name: "Evidence Pack" });
+    expect(within(tarjeta).getByText("params")).toBeTruthy();
+
+    const sinParams = screen.getByRole("group", { name: "Audit Events" });
+    expect(within(sinParams).queryByText("params")).toBeNull();
+  });
+
+  it("un catálogo vacío explica POR QUÉ", async () => {
+    // El servidor filtra por plugin y por rol: "no hay nada" tiene una causa
+    // concreta, y decirla ahorra un ticket.
+    respond("get", `${BASE}/types`, { ok: true, types: [] });
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    const vacio = await screen.findByTestId("catalog-empty");
+    expect(vacio.textContent).toMatch(/plugins the tenant has enabled and by your role/i);
   });
 });

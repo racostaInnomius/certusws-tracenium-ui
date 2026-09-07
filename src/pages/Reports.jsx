@@ -28,7 +28,7 @@
 // de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid, IconButton, Menu, MenuItem, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
@@ -36,9 +36,7 @@ import SummarizeOutlinedIcon from "@mui/icons-material/SummarizeOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import MailOutlineIcon from "@mui/icons-material/MailOutline";
 import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
@@ -52,6 +50,7 @@ import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
+import ReportTypeCard from "../components/Reports/ReportTypeCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import {
   getReportTypes, getReportRuns, runReport,
@@ -304,6 +303,39 @@ export default function Reports() {
 
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
 
+  /**
+   * El catálogo, agrupado por el `group` que ya manda el servidor.
+   *
+   * Se pintaba como una COLUMNA DE TEXTO en una tabla — un dato que sólo sirve
+   * para agrupar, ocupando ancho en cada fila y sin agrupar nada.
+   */
+  const catalogGroups = React.useMemo(() => {
+    const porGrupo = new Map();
+    for (const r of rows) {
+      const g = r.group || "Other";
+      if (!porGrupo.has(g)) porGrupo.set(g, []);
+      porGrupo.get(g).push(r);
+    }
+    return [...porGrupo.entries()];
+  }, [rows]);
+
+  /**
+   * El último run de cada tipo, para enseñarlo en su tarjeta.
+   *
+   * Sale del historial que la página ya tiene: es la pregunta que se hace
+   * ANTES de generar —"¿no lo habrá sacado ya alguien esta mañana?"— y estaba
+   * a dos pantallas.
+   *
+   * ⚠️ Es el último de la PÁGINA cargada del historial, no el último absoluto.
+   * Con el historial filtrado puede no ser el más reciente de todos; se
+   * prefiere eso a una consulta por tipo sólo para pintar una línea.
+   */
+  const lastRunByKey = React.useMemo(() => {
+    const porTipo = {};
+    for (const r of runs) if (r.key && !porTipo[r.key]) porTipo[r.key] = r;
+    return porTipo;
+  }, [runs]);
+
   const handleRun = React.useCallback(async (key, format, params) => {
     setRunningKey(`${key}:${format}`);
     try {
@@ -472,70 +504,12 @@ export default function Reports() {
     }
   };
 
-  const typeColumns = [
-    { field: "group", headerName: "Group", minWidth: 100 },
-    { field: "label", headerName: "Report", minWidth: 220, flex: 1 },
-    { field: "description", headerName: "Description", minWidth: 320, flex: 1.4 },
-    {
-      field: "actions",
-      headerName: "Run now",
-      minWidth: 340,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: "flex", gap: 0.5 }}>
-          {(params.row.formats || []).map((format) => (
-            <Button
-              key={format}
-              size="small"
-              startIcon={<DownloadOutlinedIcon />}
-              disabled={runningKey === `${params.row.key}:${format}`}
-              onClick={() =>
-                params.row.params?.length
-                  ? setParamsTarget({ row: params.row, format, intent: "run" })
-                  : handleRun(params.row.key, format)
-              }
-              sx={{ textTransform: "none" }}
-            >
-              {format.toUpperCase()}
-            </Button>
-          ))}
-          {PREVIEW_BY_KEY[params.row.key] ? (
-            <Button
-              size="small"
-              startIcon={<VisibilityOutlinedIcon />}
-              onClick={() => setPreviewTarget(params.row)}
-              sx={{ textTransform: "none" }}
-            >
-              Preview
-            </Button>
-          ) : null}
-          <Button
-            size="small"
-            startIcon={<MailOutlineIcon />}
-            onClick={() =>
-              params.row.params?.length
-                ? setParamsTarget({ row: params.row, format: params.row.formats?.[0], intent: "email" })
-                : setEmailTarget(params.row)
-            }
-            sx={{ textTransform: "none" }}
-          >
-            Email
-          </Button>
-          {canSchedule ? (
-            <Button
-              size="small"
-              startIcon={<EventRepeatOutlinedIcon />}
-              onClick={() => setScheduleTarget(params.row)}
-              sx={{ textTransform: "none" }}
-            >
-              Schedule
-            </Button>
-          ) : null}
-        </Box>
-      ),
-    },
-  ];
+  /*
+   * Aquí estaba `typeColumns`: el catálogo era un DataGrid con el grupo como
+   * columna de texto y hasta CINCO botones en la celda de acciones. Ahora son
+   * tarjetas agrupadas (`ReportTypeCard`), donde los formatos respiran y cabe
+   * el último run — la pregunta que se hace ANTES de generar otro.
+   */
 
   const scheduleColumns = [
     {
@@ -832,20 +806,55 @@ export default function Reports() {
             Everything this tenant can generate. Each run is recorded in the history with its
             SHA-256, whoever ran it and the scope it covered.
           </Typography>
-          <Box sx={{ width: "100%" }}>
-            <DataGrid
-              aria-label="Report catalog"
-              rows={rows}
-              columns={typeColumns}
-              loading={loading}
-              autoHeight
-              disableRowSelectionOnClick
-              hideFooterSelectedRowCount
-              pageSizeOptions={[10, 25]}
-              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-              sx={{ border: "none" }}
-            />
-          </Box>
+          {loading && rows.length === 0 ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>Loading…</Typography>
+          ) : rows.length === 0 ? (
+            /* Un catálogo vacío tiene una causa concreta, y decirla ahorra un
+               ticket: el servidor filtra por plugin y por rol, así que "no hay
+               nada" significa "este tenant no tiene ningún plugin que produzca
+               informes, o tu rol no alcanza ninguno". */
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="catalog-empty">
+              No reports available for this tenant. The catalog is filtered by the plugins the
+              tenant has enabled and by your role — ask an administrator if you expected one here.
+            </Typography>
+          ) : (
+            catalogGroups.map(([grupo, tipos]) => (
+              <Box key={grupo} sx={{ mb: 3 }}>
+                <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, mb: 1 }}>
+                  {grupo}
+                </Typography>
+                <Grid container spacing={2} alignItems="stretch">
+                  {tipos.map((t) => (
+                    <Grid key={t.key} size={{ xs: 12, sm: 6, lg: 4 }}>
+                      <ReportTypeCard
+                        type={t}
+                        lastRun={lastRunByKey[t.key] || null}
+                        runningFormat={
+                          String(runningKey || "").startsWith(`${t.key}:`)
+                            ? String(runningKey).split(":")[1]
+                            : ""
+                        }
+                        canPreview={Boolean(PREVIEW_BY_KEY[t.key])}
+                        canSchedule={canSchedule}
+                        onRun={(format) =>
+                          t.params?.length
+                            ? setParamsTarget({ row: t, format, intent: "run" })
+                            : handleRun(t.key, format)
+                        }
+                        onPreview={() => setPreviewTarget(t)}
+                        onEmail={() =>
+                          t.params?.length
+                            ? setParamsTarget({ row: t, format: t.formats?.[0], intent: "email" })
+                            : setEmailTarget(t)
+                        }
+                        onSchedule={() => setScheduleTarget(t)}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            ))
+          )}
         </SectionPaper>
       ) : null}
 
