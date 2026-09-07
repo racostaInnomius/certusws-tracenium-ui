@@ -95,7 +95,7 @@ import PolicyDiffDialog from "../components/AgentSettings/PolicyDiffDialog";
 import ApplyOverrideDialog from "../components/AgentSettings/ApplyOverrideDialog";
 import HistoryPanel from "../components/AgentSettings/HistoryPanel";
 import { diffPolicies } from "../components/AgentSettings/policyDiff";
-import { agentConfigSlice, deviceDomainSlice, domainSlice, domainsTouched, formProblems, overriddenDomains } from "../components/AgentSettings/formGuards";
+import { agentConfigSlice, deviceDomainSlice, DOMAIN_PATHS, domainSlice, domainsTouched, formProblems, overriddenDomains } from "../components/AgentSettings/formGuards";
 import { buildSections, changesBySection, DEFAULT_SECTION, isKnownView, sectionForPath, TOOL_VIEWS } from "../components/AgentSettings/sections";
 import { resetSectionTo } from "../components/AgentSettings/fieldSpecs";
 import { summarizeRollout } from "../components/AgentSettings/rolloutModel";
@@ -104,6 +104,7 @@ import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges
 const SECTION_PARAM = "agentSection";
 const DEVICE_PARAM = "agentDevice";
 const TOOL_IDS = new Set(TOOL_VIEWS.map((t) => t.id));
+const DOMAIN_SECTION_OK = (id) => Boolean(DOMAIN_PATHS[id]);
 
 function normalizeDevices(items) {
   return (Array.isArray(items) ? items : [])
@@ -172,6 +173,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const [groups, setGroups] = React.useState([]);
   const [history, setHistory] = React.useState([]);
   const [applyOpen, setApplyOpen] = React.useState(false);
+  const [applyInitial, setApplyInitial] = React.useState(null);
   const [applying, setApplying] = React.useState(false);
   const [revokingId, setRevokingId] = React.useState(null);
   const [restoring, setRestoring] = React.useState(false);
@@ -859,7 +861,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         onRemoveDevice={handleRemoveDeviceOverride}
         onResetAll={handleResetOverrides}
         resetting={resettingOverrides}
-        onApply={() => setApplyOpen(true)}
+        onApply={() => { setApplyInitial(null); setApplyOpen(true); }}
         onRevokeBatch={handleRevokeBatch}
         revokingId={revokingId}
       />
@@ -929,6 +931,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         onScopeChange={handleScopeChange}
         device={isDevice ? selectedDevice : null}
         onPickDevice={handlePickDevice}
+        onApplyToGroup={() => { setApplyInitial({ domain: DOMAIN_SECTION_OK(view) ? view : null }); setApplyOpen(true); }}
         versionText={scopeVersionText}
         rolloutText={scopeRolloutText}
         onOpenRollout={!isDevice ? () => setView("rollout") : null}
@@ -1100,6 +1103,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         catalog={catalog}
         groups={groups}
         busy={applying}
+        initial={applyInitial}
       />
 
       <PolicyDiffDialog

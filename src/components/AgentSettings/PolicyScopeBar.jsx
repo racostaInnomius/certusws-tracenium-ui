@@ -22,6 +22,7 @@ import {
   Typography,
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 
@@ -31,6 +32,9 @@ export function DevicePickerDialog({ open, onClose, onPick, currentId }) {
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>Choose a device</DialogTitle>
       <DialogContent dividers>
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
+          One device to inspect or override. To change many at once, close this and use “Apply to a group…”.
+        </Typography>
         <KnownDevicesPicker
           open={open}
           selectedIds={selected}
@@ -54,6 +58,7 @@ export default function PolicyScopeBar({
   onScopeChange,
   device,
   onPickDevice,
+  onApplyToGroup = null,
   versionText,
   rolloutText,
   onOpenRollout,
@@ -104,6 +109,20 @@ export default function PolicyScopeBar({
           >
             {device ? "Change device" : "Choose device"}
           </Button>
+          {onApplyToGroup ? (
+            // A group is a way to pick devices, not a scope: applying to one
+            // fans out an override per member. Same dialog as Overrides ›
+            // New override…, reachable from here so it is not missed.
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<GroupWorkOutlinedIcon />}
+              onClick={onApplyToGroup}
+              sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal }}
+            >
+              Apply to a group…
+            </Button>
+          ) : null}
         </Box>
       ) : null}
 
