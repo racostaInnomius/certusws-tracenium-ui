@@ -375,6 +375,16 @@ describe("Reports — el historial", () => {
   });
 });
 
+/**
+ * Abre el menú de acciones de una ficha de programación.
+ *
+ * Desde U3 las programaciones son fichas y no filas: Run now / Edit / Delete
+ * viven en su menú `⋮`, no como tres iconos sueltos por fila.
+ */
+async function menuDeProgramacion(id) {
+  await userEvent.click(await screen.findByRole("button", { name: `Schedule ${id} actions` }));
+}
+
 describe("Reports — borrar una programación pide confirmación", () => {
   it("cancelar no borra nada", async () => {
     // Se lleva por delante destinatarios y destinos GRC, y no hay deshacer.
@@ -387,7 +397,8 @@ describe("Reports — borrar una programación pide confirmación", () => {
     await abrirPestana(/schedules/i);
     await screen.findByText("Previous month", { exact: false });
 
-    await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
+    await menuDeProgramacion(5);
+    await userEvent.click(await screen.findByRole("menuitem", { name: /delete/i }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
@@ -404,8 +415,9 @@ describe("Reports — borrar una programación pide confirmación", () => {
     await abrirPestana(/schedules/i);
     await screen.findByText("Previous month", { exact: false });
 
-    await userEvent.click(screen.getByRole("button", { name: /delete schedule/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /delete schedule/i, hidden: false }).catch(() => screen.getByText("Delete schedule")));
+    await menuDeProgramacion(5);
+    await userEvent.click(await screen.findByRole("menuitem", { name: /delete/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /delete schedule/i }));
 
     await waitFor(() => expect(deletes).toHaveLength(1));
   });
@@ -853,7 +865,8 @@ describe("Reports — U3: programaciones", () => {
     await abrirPestana(/schedules/i);
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /edit schedule 3/i }));
+    await menuDeProgramacion(3);
+    await user.click(await screen.findByRole("menuitem", { name: /edit/i }));
 
     const dialogo = await screen.findByRole("dialog");
     // Parte de lo GUARDADO: un formulario de edición que arranca vacío no
@@ -871,7 +884,8 @@ describe("Reports — U3: programaciones", () => {
     await abrirPestana(/schedules/i);
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /edit schedule 3/i }));
+    await menuDeProgramacion(3);
+    await user.click(await screen.findByRole("menuitem", { name: /edit/i }));
     await screen.findByRole("dialog");
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
@@ -996,5 +1010,96 @@ describe("Reports — U4: vista previa genérica", () => {
     // El botón lleva nombre accesible ESTABLE: el rótulo pasa a "…" mientras
     // genera, y sin eso se queda sin nombre justo cuando hace falta.
     expect(screen.getByRole("button", { name: "Generate JSON" })).toBeTruthy();
+  });
+});
+
+// ── U3 · fichas de programación ─────────────────────────────────────
+//
+// Eran ocho columnas apretadas donde lo importante —qué manda, a quién y
+// cuándo— quedaba repartido y ninguna celda lo contaba entero.
+describe("Reports — U3: fichas de programación", () => {
+  const SCHED = {
+    id: 9,
+    reportKey: "scp.evidence-pack",
+    format: "pdf",
+    params: { framework: "cis_win11" },
+    periodMonths: 3,
+    recipientMemberIds: [11],
+    recipientExternal: ["auditor@example.com"],
+    targetIds: [3, 4],
+    enabled: true,
+    nextRunAt: "2026-10-01T06:00:00.000Z",
+    lastRunAt: "2026-09-01T06:00:00.000Z",
+    lastRunStatus: "sent",
+  };
+
+  const montar = (targets) => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [SCHED] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets });
+    return render(<ConfirmProvider><Reports /></ConfirmProvider>);
+  };
+
+  it("⭐ los destinos GRC salen por su NOMBRE, no por su cuenta", async () => {
+    // "2 destinos" no dice si son los buenos, y en una programación mensual el
+    // error se descubre un mes después.
+    montar([
+      { id: 3, label: "Drata hook", enabled: true },
+      { id: 4, label: "Vanta prod", enabled: true },
+    ]);
+    await abrirPestana(/schedules/i);
+
+    const ficha = await screen.findByRole("group", { name: /Schedule Evidence Pack/i });
+    expect(ficha.textContent).toContain("Drata hook");
+    expect(ficha.textContent).toContain("Vanta prod");
+  });
+
+  it("un destino BORRADO se dice por su id, no desaparece", async () => {
+    // Una programación que empuja a un destino que ya no existe es justo lo
+    // que hay que ver; esconderlo la deja pareciendo correcta.
+    montar([{ id: 3, label: "Drata hook", enabled: true }]);
+    await abrirPestana(/schedules/i);
+
+    const ficha = await screen.findByRole("group", { name: /Schedule Evidence Pack/i });
+    expect(ficha.textContent).toContain("Drata hook");
+    expect(ficha.textContent).toContain("target 4");
+  });
+
+  it("un destino DESHABILITADO se sigue nombrando", async () => {
+    // Nombrarlo siempre; re-entregar, sólo a los encendidos. Son dos preguntas
+    // distintas y antes se resolvían con la misma lista filtrada.
+    montar([
+      { id: 3, label: "Drata hook", enabled: false },
+      { id: 4, label: "Vanta prod", enabled: true },
+    ]);
+    await abrirPestana(/schedules/i);
+
+    const ficha = await screen.findByRole("group", { name: /Schedule Evidence Pack/i });
+    expect(ficha.textContent).toContain("Drata hook");
+  });
+
+  it("la ficha cuenta qué manda, a quién y cuándo, sin abrir nada", async () => {
+    montar([{ id: 3, label: "Drata hook", enabled: true }, { id: 4, label: "Vanta prod", enabled: true }]);
+    await abrirPestana(/schedules/i);
+
+    const ficha = await screen.findByRole("group", { name: /Schedule Evidence Pack/i });
+    expect(ficha.textContent).toMatch(/PDF/);                 // qué formato
+    expect(ficha.textContent).toMatch(/Previous 3 months/i);  // qué periodo
+    expect(ficha.textContent).toMatch(/2 recipients/i);       // a quién
+    expect(ficha.textContent).toMatch(/Next/);                // cuándo la próxima
+    expect(ficha.textContent).toMatch(/Sent/i);               // cómo fue la última
+  });
+
+  it("una programación que no ha corrido nunca lo dice", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [{ ...SCHED, lastRunAt: null, lastRunStatus: null }] });
+    respond("get", `${BASE}/grc/targets`, { ok: true, targets: [] });
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await abrirPestana(/schedules/i);
+
+    const ficha = await screen.findByRole("group", { name: /Schedule Evidence Pack/i });
+    expect(ficha.textContent).toMatch(/never run yet/i);
   });
 });

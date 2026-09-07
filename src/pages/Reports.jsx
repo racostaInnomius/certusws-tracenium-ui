@@ -28,7 +28,7 @@
 // de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, Grid, IconButton, Menu, MenuItem, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, Grid, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
@@ -37,10 +37,7 @@ import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
-import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
@@ -51,6 +48,7 @@ import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
 import ReportTypeCard from "../components/Reports/ReportTypeCard";
+import ScheduleCard from "../components/Reports/ScheduleCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import GenericJsonPreview from "../components/Reports/GenericJsonPreview";
 import {
@@ -59,8 +57,8 @@ import {
   listGrcTargets, deliverRunToGrcTarget, listGrcDeliveries,
 } from "../api/reports";
 import {
-  describeDelivery, describePeriod, formatBytes, formatWhen, recipientCount,
-  runStatusColor, runStatusLabel, summarizeParams, summarizeRunParams, triggerLabel, typeHasPeriod,
+  describeDelivery, formatBytes, formatWhen,
+  runStatusColor, runStatusLabel, summarizeRunParams, triggerLabel,
 } from "../components/Reports/reportSchedules";
 import { deliveryColor } from "../components/Reports/grcConnector";
 import { BRAND, TEXT } from "../theme/brand";
@@ -311,7 +309,9 @@ export default function Reports() {
   React.useEffect(() => {
     let vivo = true;
     listGrcTargets()
-      .then((r) => vivo && setGrcTargets((r?.targets || []).filter((t) => t.enabled)))
+      // TODOS, no sólo los habilitados: una programación puede apuntar a uno
+      // deshabilitado o borrado, y ahí es donde hace falta saber su nombre.
+      .then((r) => vivo && setGrcTargets(r?.targets || []))
       .catch(() => vivo && setGrcTargets([]));
     return () => { vivo = false; };
   }, [refreshNonce]);
@@ -346,6 +346,13 @@ export default function Reports() {
    * Con el historial filtrado puede no ser el más reciente de todos; se
    * prefiere eso a una consulta por tipo sólo para pintar una línea.
    */
+  const targetsById = React.useMemo(
+    () => Object.fromEntries(grcTargets.map((t) => [t.id, t])),
+    [grcTargets]
+  );
+  // Re-entregar sólo tiene sentido a un destino ENCENDIDO; nombrarlo, siempre.
+  const enabledTargets = React.useMemo(() => grcTargets.filter((t) => t.enabled), [grcTargets]);
+
   const lastRunByKey = React.useMemo(() => {
     const porTipo = {};
     for (const r of runs) if (r.key && !porTipo[r.key]) porTipo[r.key] = r;
@@ -527,101 +534,13 @@ export default function Reports() {
    * el último run — la pregunta que se hace ANTES de generar otro.
    */
 
-  const scheduleColumns = [
-    {
-      field: "reportKey",
-      headerName: "Report",
-      minWidth: 220,
-      flex: 1,
-      valueGetter: (_v, row) => typeByKey[row.reportKey]?.label || row.reportKey,
-    },
-    { field: "format", headerName: "Format", minWidth: 80, valueFormatter: (v) => String(v || "").toUpperCase() },
-    {
-      field: "params",
-      headerName: "Scope",
-      minWidth: 200,
-      flex: 1,
-      sortable: false,
-      valueGetter: (_v, row) => {
-        const type = typeByKey[row.reportKey];
-        const scope = summarizeParams(row, type);
-        const period = typeHasPeriod(type) ? describePeriod(row.periodMonths) : "";
-        return [scope, period].filter(Boolean).join(" · ") || "—";
-      },
-    },
-    {
-      field: "recipients",
-      headerName: "Recipients",
-      minWidth: 100,
-      valueGetter: (_v, row) => recipientCount(row),
-    },
-    { field: "nextRunAt", headerName: "Next run", minWidth: 160, valueFormatter: (v) => formatWhen(v) },
-    {
-      field: "lastRunStatus",
-      headerName: "Last run",
-      minWidth: 200,
-      renderCell: (params) =>
-        params.row.lastRunAt ? (
-          <Tooltip title={formatWhen(params.row.lastRunAt)}>
-            <Chip size="small" label={runStatusLabel(params.row.lastRunStatus)} color={runStatusColor(params.row.lastRunStatus)} variant="outlined" />
-          </Tooltip>
-        ) : (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>Never</Typography>
-        ),
-    },
-    {
-      field: "enabled",
-      headerName: "Enabled",
-      minWidth: 90,
-      sortable: false,
-      renderCell: (params) => (
-        <Switch
-          size="small"
-          checked={Boolean(params.row.enabled)}
-          disabled={busyScheduleId === params.row.id}
-          onChange={() => handleToggleSchedule(params.row)}
-          inputProps={{ "aria-label": `Enable schedule ${params.row.id}` }}
-        />
-      ),
-    },
-    {
-      field: "scheduleActions",
-      headerName: "",
-      minWidth: 150,
-      sortable: false,
-      filterable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: "flex", gap: 0.25 }}>
-          <Tooltip title="Run now">
-            <span>
-              <IconButton size="small" aria-label="Run now" disabled={busyScheduleId === params.row.id} onClick={() => handleRunSchedule(params.row)}>
-                <PlayArrowOutlinedIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Edit schedule">
-            <span>
-              <IconButton
-                size="small"
-                aria-label={`Edit schedule ${params.row.id}`}
-                disabled={busyScheduleId === params.row.id}
-                onClick={() => setEditingSchedule(params.row)}
-              >
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Delete schedule">
-            <span>
-              <IconButton size="small" aria-label="Delete schedule" disabled={busyScheduleId === params.row.id} onClick={() => handleDeleteSchedule(params.row)}>
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
-      ),
-    },
-  ];
+  /*
+   * Aquí estaba `scheduleColumns`: ocho columnas apretadas donde lo
+   * importante —qué manda, a quién y cuándo— quedaba repartido y ninguna celda
+   * lo contaba entero. Ahora son fichas (`ScheduleCard`), con los destinos GRC
+   * por su NOMBRE: "1 destino" no dice si es el bueno cuando hay tres, y en
+   * una programación mensual el error se descubre un mes después.
+   */
 
   const runColumns = [
     { field: "occurredAt", headerName: "When", minWidth: 170, valueFormatter: (v) => formatWhen(v) },
@@ -763,7 +682,7 @@ export default function Reports() {
           ) : null}
           {/* Re-entregar a un destino GRC. Sólo cuando hay destinos y el run
               tiene id: un run de una lista sin id no se puede referenciar. */}
-          {grcTargets.length > 0 && params.row.id ? (
+          {enabledTargets.length > 0 && params.row.id ? (
             <Tooltip title="Re-deliver to a GRC destination">
               <IconButton
                 size="small"
@@ -901,19 +820,21 @@ export default function Reports() {
                 : "Schedules are managed by this tenant's administrators. There may be some running; this account cannot see them."}
             </Typography>
           ) : (
-            <Box sx={{ width: "100%" }}>
-              <DataGrid
-                aria-label="Schedules"
-                rows={schedules}
-                columns={scheduleColumns}
-                autoHeight
-                disableRowSelectionOnClick
-                hideFooterSelectedRowCount
-                pageSizeOptions={[10, 25]}
-                initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
-                sx={{ border: "none" }}
-              />
-            </Box>
+            <Stack spacing={1.5}>
+              {schedules.map((sch) => (
+                <ScheduleCard
+                  key={sch.id}
+                  schedule={sch}
+                  type={typeByKey[sch.reportKey]}
+                  targetsById={targetsById}
+                  busy={busyScheduleId === sch.id}
+                  onToggle={handleToggleSchedule}
+                  onRun={handleRunSchedule}
+                  onEdit={setEditingSchedule}
+                  onDelete={handleDeleteSchedule}
+                />
+              ))}
+            </Stack>
           )}
         </SectionPaper>
       ) : null}
@@ -1062,7 +983,7 @@ export default function Reports() {
         anchorEl={redeliverAnchor?.el || null}
         onClose={() => setRedeliverAnchor(null)}
       >
-        {grcTargets.map((t) => (
+        {enabledTargets.map((t) => (
           <MenuItem key={t.id} onClick={() => handleRedeliver(redeliverAnchor.run, t)}>
             {t.label}
           </MenuItem>
