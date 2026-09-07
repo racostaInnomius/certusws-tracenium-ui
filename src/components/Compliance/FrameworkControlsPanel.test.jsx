@@ -205,4 +205,42 @@ describe("FrameworkControlsPanel", () => {
     render(<FrameworkControlsPanel framework="cis_windows_11_v3.0" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("boom controls");
   });
+
+  // ── Revisión y "no aplica" (cierre de brecha CIS, sep-2026) ─────────
+  it("shows 'Needs review' with the evidence the agent read, never as met", async () => {
+    getFrameworkControls.mockResolvedValue(ok([
+      { controlId: "2.1.4", controlTitle: "Ensure only approved services are listening", checks: [{ checkId: "linux.listen.listening_services_review_x" }], devicesPassing: 0, devicesFailing: 0, devicesReview: 3, devicesNotApplicable: 0, devicesNotAssessed: 0, reviewEvidence: { count: 2, sockets: ["tcp 0.0.0.0:22", "tcp 127.0.0.1:25"] }, status: "review" },
+    ]));
+    render(<FrameworkControlsPanel framework="cis_ubuntu_24_v2.0.0" />);
+    const row = (await screen.findByText("2.1.4")).closest("tr");
+    expect(within(row).getByText("Needs review")).toBeInTheDocument();
+    expect(within(row).queryByText("Met")).toBeNull();
+    expect(within(row).getByTestId("review-evidence-2.1.4").textContent).toMatch(/sockets: \["tcp 0\.0\.0\.0:22"/);
+    expect(within(row).getByTestId("review-evidence-2.1.4").textContent).toMatch(/sample from one device/);
+    expect(screen.getByText(/1 need review/)).toBeInTheDocument();
+  });
+
+  it("tells 'Not applicable' apart from 'Not assessed'", async () => {
+    getFrameworkControls.mockResolvedValue(ok([
+      { controlId: "2.2.1", controlTitle: "DC only thing", checks: [{ checkId: "windows.x" }], devicesPassing: 0, devicesFailing: 0, devicesReview: 0, devicesNotApplicable: 50, devicesNotAssessed: 0, notAssessedReasons: ["condition on 'domain.role' not met (value workstation)"], status: "not_applicable" },
+    ]));
+    render(<FrameworkControlsPanel framework="cis_windows_server_2022_v5.1.0" />);
+    const row = (await screen.findByText("2.2.1")).closest("tr");
+    expect(within(row).getByText("Not applicable")).toBeInTheDocument();
+    expect(within(row).queryByText("Not assessed")).toBeNull();
+    // El motivo de una guarda no es un hueco de evidencia: no se pinta como aviso.
+    expect(within(row).queryByText(/condition on/)).toBeNull();
+    expect(screen.getByText(/1 not applicable/)).toBeInTheDocument();
+  });
+
+  it("scopes to one device: passes agentId, hides the N/A column and drops the 'sample' label", async () => {
+    getFrameworkControls.mockResolvedValue(ok([
+      { controlId: "2.1.4", controlTitle: "Listening", checks: [{ checkId: "x" }], devicesPassing: 0, devicesFailing: 0, devicesReview: 1, devicesNotApplicable: 0, devicesNotAssessed: 0, reviewEvidence: { count: 1 }, status: "review" },
+    ]));
+    render(<FrameworkControlsPanel framework="cis_ubuntu_24_v2.0.0" agentId="agent-7" />);
+    await waitFor(() => expect(getFrameworkControls).toHaveBeenCalledWith({ framework: "cis_ubuntu_24_v2.0.0", assetGroupId: undefined, agentId: "agent-7" }));
+    await screen.findByText("2.1.4");
+    expect(screen.queryByText("N/A")).toBeNull();
+    expect(screen.getByTestId("review-evidence-2.1.4").textContent).not.toMatch(/sample/);
+  });
 });

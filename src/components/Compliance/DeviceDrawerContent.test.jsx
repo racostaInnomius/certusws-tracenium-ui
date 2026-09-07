@@ -12,8 +12,9 @@ vi.mock("../../api/compliance", () => ({
   revokeFindingAcknowledgement: vi.fn().mockResolvedValue({ ok: true }),
   updateFindingRemediationStatus: vi.fn().mockResolvedValue({ ok: true }),
   bulkFindingOp: vi.fn().mockResolvedValue({ ok: true, summary: { ok: 1, failed: 0, total: 1 } }),
+  getFrameworkControls: vi.fn().mockResolvedValue({ ok: true, framework: "cis_windows_11_v5.1.0", controls: [] }),
 }));
-import { getDeviceFleetRanking } from "../../api/compliance";
+import { getDeviceFleetRanking, getFrameworkControls } from "../../api/compliance";
 import DeviceDrawerContent from "./DeviceDrawerContent";
 
 const baseProps = {
@@ -180,5 +181,32 @@ describe("a failed request is not an empty device", () => {
     expect(screen.queryByText(/couldn't load this device/i)).toBeNull();
     rerender(<DeviceDrawerContent {...baseProps} data={null} error="boom" loading={false} />);
     expect(screen.getByText(/couldn't load this device/i)).toBeInTheDocument();
+  });
+});
+
+// ── Controles del estándar en ESTE equipo (sep-2026) ───────────────────
+// Hasta ahora el drawer sólo listaba checks; la pregunta "¿cuántos de los
+// 535 controles de CIS cumple este equipo?" no tenía pantalla.
+describe("controls of one standard on this device", () => {
+  const withFrameworks = {
+    ...deviceData,
+    device: { ...deviceData.device, scoresByFramework: { "cis_windows_11_v5.1.0": { score: 40, passed: 200, failed: 300, applicable: 500 } } },
+  };
+
+  it("loads the framework controls only after a standard is chosen, scoped to the device", async () => {
+    render(<DeviceDrawerContent {...baseProps} data={withFrameworks} frameworkLabels={new Map([["cis_windows_11_v5.1.0", "CIS Windows 11"]])} />);
+    expect(screen.getByText("Controls on this device")).toBeInTheDocument();
+    expect(getFrameworkControls).not.toHaveBeenCalled();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /Standard/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "CIS Windows 11" }));
+    await waitFor(() =>
+      expect(getFrameworkControls).toHaveBeenCalledWith({ framework: "cis_windows_11_v5.1.0", assetGroupId: undefined, agentId: "agent-1" })
+    );
+  });
+
+  it("does not offer the section on a device without framework scores", () => {
+    render(<DeviceDrawerContent {...baseProps} data={deviceData} />);
+    expect(screen.queryByText("Controls on this device")).toBeNull();
   });
 });

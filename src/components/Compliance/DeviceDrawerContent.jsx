@@ -16,11 +16,14 @@ import {
   Box,
   Button,
   CircularProgress,
+  FormControl,
   Grid,
   IconButton,
+  InputLabel,
   Menu,
   MenuItem,
   Paper,
+  Select,
   Stack,
   Typography
 } from "@mui/material";
@@ -42,6 +45,7 @@ import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
 import FleetRankingLine from "./FleetRankingLine";
+import FrameworkControlsPanel from "./FrameworkControlsPanel";
 import BulkFindingToolbar from "./BulkFindingToolbar";
 import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
@@ -223,6 +227,11 @@ export default function DeviceDrawerContent({
     // no has visto es exactamente lo que un registro de compliance no
     // puede permitirse.
   } = useBulkSelection({ findings: visibleFindings, resetKey: agentId, onToast, onRequestRefetch });
+  // Controles del estándar en ESTE equipo. Se carga sólo al elegir un
+  // framework: un benchmark son 300–500 filas y el drawer abre por lo que
+  // falla, no por la tabla entera.
+  const [controlsFramework, setControlsFramework] = React.useState("");
+  React.useEffect(() => { setControlsFramework(""); }, [agentId]);
 
   if (!agentId) return null;
 
@@ -392,6 +401,37 @@ export default function DeviceDrawerContent({
                   </Grid>
                 ))}
               </Grid>
+            </Paper>
+          ) : null}
+
+          {/* Controls of one standard on this device ---------------------- */}
+          {device.scoresByFramework && Object.keys(device.scoresByFramework).length > 0 ? (
+            <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, border: `1px solid ${BRAND.border}`, mb: 2 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ mb: controlsFramework ? 1 : 0 }}>
+                <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase" }}>
+                  Controls on this device
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 220 }}>
+                  <InputLabel id={`controls-fw-${agentId}`}>Standard</InputLabel>
+                  <Select
+                    labelId={`controls-fw-${agentId}`}
+                    label="Standard"
+                    value={controlsFramework}
+                    onChange={(e) => setControlsFramework(e.target.value)}
+                    inputProps={{ "aria-label": "Standard" }}
+                  >
+                    <MenuItem value="">
+                      <em>Choose a standard</em>
+                    </MenuItem>
+                    {Object.keys(device.scoresByFramework).map((fw) => (
+                      <MenuItem key={fw} value={fw}>{frameworkLabels.get(fw) || fw}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+              {controlsFramework ? (
+                <FrameworkControlsPanel framework={controlsFramework} agentId={agentId} />
+              ) : null}
             </Paper>
           ) : null}
 

@@ -60,6 +60,24 @@ const STATUS_META = {
   // control que SÍ medimos y no pudimos juzgar (falta el DATO); éste ni
   // siquiera lo miramos (falta el TRABAJO). Mezclarlos volvería a dejar
   // al cliente sin saber cuánto del estándar cubrimos de verdad.
+  // Los "Audit …" de CIS: el benchmark pide comparar contra la política
+  // del sitio, no hay valor correcto. Tracenium adjunta lo que leyó y una
+  // persona decide. Nunca cuenta como cumplido ni como fallo.
+  review: {
+    label: "Needs review",
+    fg: BRAND.alert?.warningText,
+    bg: BRAND.alert?.warningSoft,
+    help: "The standard asks a person to compare this setting with your policy. Tracenium attaches what it read on the device; it never passes or fails on its own.",
+  },
+  // Guarda `when` no cumplida en todos los equipos del alcance: un
+  // control de controlador de dominio en un workstation, un control de
+  // GDM sin GDM instalado. No es un hueco de evidencia.
+  not_applicable: {
+    label: "Not applicable",
+    fg: BRAND.gray,
+    bg: "transparent",
+    help: "This control does not apply to the devices in scope (for example a domain-controller control on a workstation). It is not missing evidence.",
+  },
   no_evidence: {
     label: "Not covered",
     fg: BRAND.gray,
@@ -67,6 +85,15 @@ const STATUS_META = {
     help: "Tracenium does not collect evidence for this control yet. It is part of the standard and counts against coverage — it is not a finding about your devices.",
   },
 };
+
+/** Evidencia capturada → texto legible, una línea por clave. */
+function formatEvidence(ev) {
+  if (!ev || typeof ev !== "object") return "";
+  return Object.entries(ev)
+    .filter(([k]) => k !== "note")
+    .map(([k, v]) => `${k}: ${v === null || v === undefined ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+    .join("\n");
+}
 
 function StatusChip({ status }) {
   const meta = STATUS_META[status] || STATUS_META.not_assessed;
@@ -88,14 +115,14 @@ function StatusChip({ status }) {
   );
 }
 
-export default function FrameworkControlsPanel({ framework, assetGroupId, reloadKey }) {
+export default function FrameworkControlsPanel({ framework, assetGroupId, agentId, reloadKey }) {
   const [state, setState] = React.useState({ loading: true, error: null, controls: [] });
 
   React.useEffect(() => {
     if (!framework) return undefined;
     let alive = true;
     setState({ loading: true, error: null, controls: [] });
-    getFrameworkControls({ framework, assetGroupId: assetGroupId || undefined })
+    getFrameworkControls({ framework, assetGroupId: assetGroupId || undefined, agentId: agentId || undefined })
       .then((res) => {
         if (!alive) return;
         setState({
@@ -117,10 +144,10 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
     return () => {
       alive = false;
     };
-  }, [framework, assetGroupId, reloadKey]);
+  }, [framework, assetGroupId, agentId, reloadKey]);
 
   const summary = React.useMemo(() => {
-    const c = { pass: 0, fail: 0, not_assessed: 0, no_evidence: 0, automatable_gap: 0 };
+    const c = { pass: 0, fail: 0, review: 0, not_assessed: 0, not_applicable: 0, no_evidence: 0, automatable_gap: 0 };
     for (const row of state.controls) {
       if (c[row.status] !== undefined) c[row.status] += 1;
       // De lo no cubierto, cuánto PODRÍA cubrirse. Un control manual no
@@ -184,6 +211,8 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
         Of those {covered}: {summary.pass} met
         <Box component="span" sx={{ fontWeight: 400, color: BRAND.gray }}>
           {summary.fail > 0 ? ` · ${summary.fail} not met` : ""}
+          {summary.review > 0 ? ` · ${summary.review} need review` : ""}
+          {summary.not_applicable > 0 ? ` · ${summary.not_applicable} not applicable` : ""}
           {summary.not_assessed > 0 ? ` · ${summary.not_assessed} not assessed` : ""}
         </Box>
       </Typography>
@@ -196,11 +225,14 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
             <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Devices met</TableCell>
             <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Devices failing</TableCell>
             <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Not assessed</TableCell>
+            {agentId ? null : (
+              <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>N/A</TableCell>
+            )}
           </TableRow>
         </TableHead>
         <TableBody>
           {state.controls.map((row) => (
-            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" ? { opacity: 0.55 } : undefined}>
+            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" || row.status === "not_applicable" ? { opacity: 0.55 } : undefined}>
               <TableCell>
                 <Stack spacing={0.25}>
                   <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
@@ -242,9 +274,20 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
                       lo contrario: evidencia que nunca llegó. El motivo
                       lo escribe el evaluador en cada hallazgo y hasta
                       ahora no salía a ninguna pantalla. */}
-                  {row.notAssessedReasons?.length ? (
+                  {row.notAssessedReasons?.length && row.status !== "not_applicable" && row.status !== "review" ? (
                     <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert?.warningText }}>
                       {row.notAssessedReasons.join(" · ")}
+                    </Typography>
+                  ) : null}
+                  {/* Lo que leyó el agente para que la persona decida. Con
+                      un equipo es exacto; con un grupo es la muestra de uno. */}
+                  {row.status === "review" && row.reviewEvidence ? (
+                    <Typography
+                      component="pre"
+                      data-testid={`review-evidence-${row.controlId}`}
+                      sx={{ fontSize: TEXT.xs, color: BRAND.dark, fontFamily: "monospace", whiteSpace: "pre-wrap", m: 0, mt: 0.5, p: 0.75, bgcolor: BRAND.darkSoft, borderRadius: 1, maxHeight: 160, overflow: "auto" }}
+                    >
+                      {(agentId ? "" : "sample from one device\n") + formatEvidence(row.reviewEvidence)}
                     </Typography>
                   ) : null}
                 </Stack>
@@ -261,6 +304,11 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, reload
               <TableCell align="right" sx={{ color: BRAND.gray }}>
                 {row.devicesNotAssessed}
               </TableCell>
+              {agentId ? null : (
+                <TableCell align="right" sx={{ color: BRAND.gray }}>
+                  {row.devicesNotApplicable ?? 0}
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

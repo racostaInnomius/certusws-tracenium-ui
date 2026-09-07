@@ -68,8 +68,10 @@ export async function getCategoryDevices(category) {
 // Per-control posture for one framework: which controls you meet, which
 // you fail, which nobody could evaluate. The answer to the auditor's
 // question, which everything else on the page inverts.
-export async function getFrameworkControls({ framework, assetGroupId } = {}) {
-  return httpGetJson(`${BASE}/framework-controls${buildQuery({ framework, assetGroupId })}`);
+// `agentId` scopes the same table to one device (the device drawer);
+// `assetGroupId` to a group. The device wins when both are given.
+export async function getFrameworkControls({ framework, assetGroupId, agentId } = {}) {
+  return httpGetJson(`${BASE}/framework-controls${buildQuery({ framework, assetGroupId, agentId })}`);
 }
 
 export async function getFrameworkSummary(params = {}) {
