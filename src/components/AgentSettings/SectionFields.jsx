@@ -107,7 +107,15 @@ export function FieldRow({ spec, form, onChange, scope = "tenant", compareForm =
           <Typography sx={{ fontSize: TEXT.xs, color: isError ? ROLE.critical : ROLE.caution, mt: 0.25, fontWeight: 600 }}>{message}</Typography>
         ) : null}
         {showWarnOn ? (
-          <Alert severity="error" variant="outlined" sx={{ mt: 0.75, py: 0, fontSize: TEXT.xs }}>{spec.warnWhenOn}</Alert>
+          // A caution, not an error: the switch is valid, it just reaches
+          // devices whose agent may be too old for it. Amber, not red.
+          <Alert
+            severity="warning"
+            icon={false}
+            sx={{ mt: 0.75, py: 0.25, fontSize: TEXT.xs, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, border: `1px solid ${BRAND.alert.warning}`, "& .MuiAlert-message": { py: 0.25 } }}
+          >
+            {spec.warnWhenOn}
+          </Alert>
         ) : null}
       </Box>
       <Box sx={{ display: "flex", justifyContent: { xs: "flex-start", md: "flex-end" } }}>

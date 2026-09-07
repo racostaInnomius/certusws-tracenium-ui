@@ -1,4 +1,4 @@
-// src/pages/Overview.reportButton.test.jsx
+// src/pages/reportButton.test.jsx
 //
 // El botón "Report" de Overview no genera nada: manda a Reports con el
 // informe ya elegido, y allí se confirma y se genera POR EL MOTOR.
@@ -26,6 +26,7 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 import Overview from "./Overview";
+import Assets from "./Assets";
 
 afterEach(() => {
   cleanup();
@@ -86,6 +87,58 @@ describe('Overview — el botón "Report"', () => {
     try {
       renderOverview(vi.fn());
       await screen.findByText("Overview");
+      expect(screen.queryByRole("button", { name: /^report$/i })).toBeNull();
+    } finally {
+      MOCK_AUTH.tenantMember.role = "ADMIN";
+    }
+  });
+});
+
+// Asset Management lleva el mismo botón: la página administra la flota y el
+// informe que la resume es el mismo. No hay un tipo "assets" en el catálogo y
+// no se inventa uno — la clave tiene que existir en el registro del backend.
+describe('Asset Management — el botón "Report"', () => {
+  function renderAssets(onNavigate) {
+    server.use(
+      http.all(/.*\/api\/.*/, () =>
+        HttpResponse.json({ ok: true, items: [], devices: [], hosts: [], summary: {}, total: 0 })
+      )
+    );
+    window.history.replaceState({}, "", "/?page=assets");
+    render(
+      <ConfirmProvider>
+        <Assets onNavigate={onNavigate} onAssetsEmptyStateChange={vi.fn()} suppressEmptyStateOverlay />
+      </ConfirmProvider>
+    );
+  }
+
+  it("lleva a Reports con el mismo informe preseleccionado", async () => {
+    const onNavigate = vi.fn();
+    renderAssets(onNavigate);
+
+    await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith("reports");
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("global.fleet-health");
+  });
+
+  it("comparte el control con Overview, así que va a la misma altura que Refresh", async () => {
+    // El botón se pintaba `size="small"` y quedaba 6 px por debajo del
+    // "Refresh" de al lado, que es un Button de tamaño por defecto. Ahora los
+    // dos salen del mismo componente, que no pasa `size`.
+    renderAssets(vi.fn());
+
+    const report = await screen.findByRole("button", { name: /^report$/i });
+    const refresh = screen.getByRole("button", { name: /^refresh$/i });
+    expect(report.className).not.toMatch(/sizeSmall/);
+    expect(refresh.className).not.toMatch(/sizeSmall/);
+  });
+
+  it("a quien no es ADMIN/OWNER no se le ofrece", async () => {
+    MOCK_AUTH.tenantMember.role = "USER";
+    try {
+      renderAssets(vi.fn());
+      await screen.findByText("Asset Management");
       expect(screen.queryByRole("button", { name: /^report$/i })).toBeNull();
     } finally {
       MOCK_AUTH.tenantMember.role = "ADMIN";

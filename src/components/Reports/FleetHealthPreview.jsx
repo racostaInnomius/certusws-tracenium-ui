@@ -19,10 +19,11 @@
 //     el periodo elegido viaja con ella para que el fichero cubra lo que se
 //     está mirando.
 //
-// ⚠️ Abrir la vista previa DEJA una fila en el ledger, con formato `json`. El
-// backend registra toda ejecución en el `finish` de la respuesta y no
-// distingue "mirar" de "descargar" — y no debería: quien abre esto ve los
-// mismos datos que llevaría el PDF.
+// Abrir la vista previa NO deja fila en `report_runs`: `previewReport` marca
+// la petición con `preview=1` y el backend se salta el ledger. Ese ledger es
+// de los ficheros que SALEN —de él cuelgan la re-entrega y el SHA-256—, y una
+// fila sin fichero que re-entregar entierra a las que sí lo tienen. El evento
+// de auditoría sí queda: mirar es una acción con actor y momento.
 
 import * as React from "react";
 import { scoreBandRole } from "../../theme/scoreBands";

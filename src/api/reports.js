@@ -122,8 +122,14 @@ export function buildParamsQuery(params) {
  * minuto contradice al panel que el operador acaba de mirar.
  */
 export async function previewReport(key, params) {
+  // `preview=1` le dice al backend que esto se MIRA, no que sale un fichero:
+  // no escribe fila en `report_runs`. Ese ledger existe para lo que se
+  // entrega —de él cuelgan la re-entrega y el SHA-256—, y una fila sin
+  // fichero que re-entregar entierra a las que sí lo tienen. El evento de
+  // auditoría sí se escribe: mirar el informe sigue siendo una acción con
+  // actor y momento.
   return httpGetJson(
-    `${BASE}/${encodeURIComponent(key)}/run?format=json${buildParamsQuery(params)}`,
+    `${BASE}/${encodeURIComponent(key)}/run?format=json&preview=1${buildParamsQuery(params)}`,
     { cache: false }
   );
 }

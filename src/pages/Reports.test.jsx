@@ -493,6 +493,9 @@ describe("Reports — vista previa", () => {
 
     await waitFor(() => expect(previewCalls.length).toBeGreaterThan(0));
     expect(previewCalls[0].search.format).toBe("json");
+    // Marcada como vista previa: el backend se salta el ledger. Mirar no es
+    // entregar, y `report_runs` es de lo que se entrega.
+    expect(previewCalls[0].search.preview).toBe("1");
     expect(await screen.findByText("Banco X")).toBeTruthy();
   });
 
@@ -511,6 +514,8 @@ describe("Reports — vista previa", () => {
 
     await waitFor(() => expect(calls.some((c) => c.search.format === "pdf")).toBe(true));
     const pdf = calls.find((c) => c.search.format === "pdf");
+    // Y generar NO lleva la marca: ese sí queda en el ledger.
+    expect(pdf.search.preview).toBeUndefined();
     // El fichero cubre lo que se estaba mirando, no un rango por defecto
     // distinto — eso sería una trampa silenciosa.
     expect(pdf.search.from).toBeTruthy();

@@ -13,7 +13,7 @@
 // leaves its slot in a quiet zero state instead of blanking the page.
 
 import { useCallback, useMemo, lazy, Suspense } from "react";
-import { updateSearchParams } from "../utils/browserState";
+import GoToReportButton from "../components/common/GoToReportButton";
 
 // La clave del catálogo de reportes (`REPORT_REGISTRY`) que corresponde a
 // este panel. El botón de arriba no genera nada: manda a Reports con este
@@ -25,9 +25,8 @@ import { updateSearchParams } from "../utils/browserState";
 // re-entrega y el SHA-256 del artefacto. Un export que lo esquiva es una copia
 // sin trazabilidad circulando por ahí — y eran nueve puertas así.
 const FLEET_HEALTH_KEY = "global.fleet-health";
-import { Box, Button, Grid, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Grid, Stack, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
-import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import { fetchOverviewBundle } from "../api/overview";
 import { useAuthContext } from "../auth/AuthContext";
 import HeroKpis from "../components/Overview/HeroKpis";
@@ -72,7 +71,7 @@ const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.Co
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { BRAND, ICON, ROLE } from "../theme/brand";
+import { BRAND, ROLE } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
@@ -218,25 +217,11 @@ export default function Overview({ onNavigate } = {}) {
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
             {canManage ? (
-              <Tooltip title="Fleet health report" arrow placement="bottom">
-                <span>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<AssessmentOutlinedIcon sx={{ fontSize: ICON.md }} />}
-                    onClick={() => {
-                      // A Reports, con el informe ya elegido. Allí se pide
-                      // confirmación y se genera POR EL MOTOR, que es lo que
-                      // deja la fila en `report_runs`.
-                      updateSearchParams({ reportKey: FLEET_HEALTH_KEY, reportFormat: "pdf" });
-                      onNavigate?.("reports");
-                    }}
-                    sx={{ textTransform: "none" }}
-                  >
-                    Report
-                  </Button>
-                </span>
-              </Tooltip>
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={FLEET_HEALTH_KEY}
+                tooltip="Fleet health report"
+              />
             ) : null}
             <RefreshControl
               refreshSeconds={refreshSeconds}

@@ -28,6 +28,15 @@ import { BRAND } from "../theme/brand";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
+import GoToReportButton from "../components/common/GoToReportButton";
+import { useAuthContext } from "../auth/AuthContext";
+
+// El informe que cubre lo que se administra en esta página: composición de la
+// flota (equipos por plataforma, fabricantes) además del resto del resumen.
+// No hay un tipo "assets" en el catálogo, y no se inventa uno aquí — la clave
+// tiene que existir en `REPORT_REGISTRY` o Reports avisa de que no está
+// disponible en vez de generarlo.
+const FLEET_HEALTH_KEY = "global.fleet-health";
 
 function TabPanel({ children, value, index }) {
   return (
@@ -104,6 +113,15 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   }, []);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(triggerRefresh, "assetsAutoRefresh");
 
+  // Mismo criterio que Overview: este tipo declara `minRole: ["ADMIN","OWNER"]`
+  // en el registro, así que enseñar el botón a un USER sería ofrecerle una
+  // puerta que termina en "no disponible". Sólo decide qué se PINTA — quien
+  // manda es el gate del backend.
+  const { auth } = useAuthContext();
+  const canReport =
+    auth?.tenantMember?.isActive === true &&
+    ["ADMIN", "OWNER"].includes(String(auth?.tenantMember?.role || ""));
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
@@ -111,12 +129,21 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         subtitle="Monitor devices, inventory and agent distribution"
         icon={<ComputerOutlinedIcon />}
         actions={
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={triggerRefresh}
-            loading={refreshing}
-          />
+          <>
+            {canReport ? (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={FLEET_HEALTH_KEY}
+                tooltip="Fleet health report"
+              />
+            ) : null}
+            <RefreshControl
+              refreshSeconds={refreshSeconds}
+              onRefreshSecondsChange={setRefreshSeconds}
+              onRefresh={triggerRefresh}
+              loading={refreshing}
+            />
+          </>
         }
       />
 
