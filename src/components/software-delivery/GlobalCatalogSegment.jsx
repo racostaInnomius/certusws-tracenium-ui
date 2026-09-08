@@ -124,7 +124,7 @@ function Variant({ entry, onLink, busy }) {
           onClick={() => onLink(entry)}
           sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
         >
-          Add to my catalog
+          Add this version
         </Button>
       )}
     </Stack>
@@ -318,7 +318,17 @@ export default function GlobalCatalogSegment({ notify, onLinked }) {
                 {/* ⚠️ La acción por título va ANTES de abrir: es la que
                     resuelve el caso normal —«quiero Chrome en mi flota»— sin
                     obligar a elegir variante. Abrir sigue estando para quien
-                    quiera una concreta. */}
+                    quiera una concreta.
+
+                    ⚠️ LOS DOS BOTONES DICEN «Add … version(s)» A PROPÓSITO.
+                    Van al MISMO sitio —el catálogo del tenant— y lo único que
+                    los separa es CUÁNTAS variantes eligen: éste las que
+                    encajan con la flota, el de cada fila la que pulsaste.
+                    Se llamaba «Add for my fleet», y sonaba a desplegar
+                    justo debajo de un banner que se molesta en decir que
+                    añadir no es desplegar. Si vuelves a nombrarlos por
+                    destino en vez de por alcance, vuelve la misma pregunta:
+                    «¿en qué se diferencia de añadir al catálogo?». */}
                 {g.linkedCount === 0 ? (
                   <Button
                     size="small"
@@ -327,7 +337,7 @@ export default function GlobalCatalogSegment({ notify, onLinked }) {
                     onClick={(e) => { e.stopPropagation(); linkWholeTitle(g); }}
                     sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
                   >
-                    Add for my fleet
+                    Add matching versions
                   </Button>
                 ) : null}
                 {g.hasUpdate ? (

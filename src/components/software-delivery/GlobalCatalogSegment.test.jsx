@@ -141,7 +141,7 @@ describe("GlobalCatalogSegment · el aviso de versión nueva", () => {
     // se calla. La misma frase dos veces en una tarjeta hace dudar de si
     // hablan de cosas distintas.
     expect(screen.getAllByText("In your catalog")).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: /add to my catalog/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /add this version/i })).toBeNull();
   });
 });
 
@@ -150,7 +150,7 @@ describe("GlobalCatalogSegment · enlazar", () => {
     setup([V153]);
     api.linkGlobalEntry.mockResolvedValue({ ok: true });
     await userEvent.click(await screen.findByRole("button", { name: /google chrome/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add to my catalog/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add this version/i }));
 
     expect(api.linkGlobalEntry).toHaveBeenCalledWith(V153.id);
     await waitFor(() => expect(api.getGlobalCatalog).toHaveBeenCalledTimes(2));
@@ -165,7 +165,7 @@ describe("GlobalCatalogSegment · enlazar", () => {
     render(<GlobalCatalogSegment notify={notify} />);
 
     await userEvent.click(await screen.findByRole("button", { name: /google chrome/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add to my catalog/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add this version/i }));
 
     await waitFor(() =>
       expect(notify).toHaveBeenCalledWith("error", expect.stringContaining("already has a package"))
@@ -203,7 +203,7 @@ describe("GlobalCatalogSegment · los estados que no son datos", () => {
 describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
   it("ofrece la acción por título cuando no tiene nada de él", async () => {
     setup([V153]);
-    expect(await screen.findByRole("button", { name: /add for my fleet/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /add matching versions/i })).toBeInTheDocument();
   });
 
   // Con algo del título ya enlazado, la acción masiva sobra: lo que queda es
@@ -211,7 +211,7 @@ describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
   it("no la ofrece si ya tiene algo de ese título", async () => {
     setup([{ ...V153, linkedPackageId: 88 }]);
     await screen.findByText("Google Chrome");
-    expect(screen.queryByRole("button", { name: /add for my fleet/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /add matching versions/i })).toBeNull();
   });
 
   // ⚠️ EL RESULTADO ES UN INFORME, NO UN «HECHO». Que no haya nada publicado
@@ -228,7 +228,7 @@ describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
     });
     render(<GlobalCatalogSegment notify={notify} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /add matching versions/i }));
     await waitFor(() =>
       expect(notify).toHaveBeenCalledWith("success", expect.stringContaining("nothing published for linux"))
     );
@@ -248,7 +248,7 @@ describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
     });
     render(<GlobalCatalogSegment notify={notify} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /add matching versions/i }));
     await waitFor(() =>
       expect(notify).toHaveBeenCalledWith("success", expect.stringContaining("assumed x64 for 40 devices"))
     );
@@ -261,7 +261,7 @@ describe("GlobalCatalogSegment · enlazar el título entero (F5/F6)", () => {
     api.linkGlobalTitle.mockResolvedValue({ linked: [], unavailable: [], alreadyLinked: 0, assumedArch: null });
     render(<GlobalCatalogSegment notify={notify} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /add for my fleet/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /add matching versions/i }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("info", expect.stringContaining("nothing matched your fleet")));
   });
 });
