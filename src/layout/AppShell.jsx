@@ -1209,6 +1209,7 @@ export default function AppShell() {
             wide Papers (DataGrids) scroll internally via the :has() rule
             in index.css. */}
         <Box
+          data-scroll-root
           sx={{
             flex: 1,
             minWidth: 0,
@@ -1220,6 +1221,26 @@ export default function AppShell() {
             overflowY: "auto",
             overflowX: "hidden",
             position: "relative",
+            // ── Barra de scroll invisible ────────────────────────────
+            //
+            // `overflow-y: auto` significa "barra sólo cuando haga falta", y
+            // esa barra OCUPA ancho: la página larga pierde ~15 px de zona
+            // útil y la corta no. Como todas las pestañas de una página se
+            // pintan dentro de ESTE mismo contenedor, cambiar de una pestaña
+            // larga a una corta reflotaba todo el contenido a la derecha y al
+            // revés — las tarjetas cambiaban de tamaño al navegar, que es lo
+            // que se veía mal.
+            //
+            // Ocultarla lo quita porque una barra que no se pinta tampoco
+            // reserva hueco. El scroll sigue funcionando igual: rueda,
+            // trackpad, teclado (el contenedor es enfocable por su contenido)
+            // y `scrollIntoView`. Lo que se pierde es la señal visual de que
+            // hay más abajo — a cambio de que la maquetación no se mueva.
+            //
+            // Va JUNTO al `overflowY` que la provoca, no en index.css, para
+            // que no puedan separarse.
+            scrollbarWidth: "none",              // Firefox (y Chromium ≥121)
+            "&::-webkit-scrollbar": { display: "none" },  // WebKit/Blink
           }}
         >
           <React.Suspense fallback={<PageFallback />}>
