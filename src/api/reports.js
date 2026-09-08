@@ -145,11 +145,33 @@ export async function previewReport(key, params) {
   );
 }
 
-export async function runReport(key, format, params) {
+/**
+ * Genera el informe y DEVUELVE el artefacto, sin descargarlo.
+ *
+ * Separado de `runReport` porque generar y quedárselo son dos decisiones. El
+ * catálogo pregunta qué formato, genera, y sólo entonces ofrece descargar o
+ * mandar por correo: mientras el informe no existe, esos botones no tienen
+ * sobre qué actuar.
+ *
+ * ⚠️ Genera de verdad — deja su fila en `report_runs` con su SHA-256 y el
+ * nombre de quien la pidió. No es una vista previa; para mirar sin registrar
+ * está `previewReport`.
+ *
+ * Las corridas interactivas NO se archivan en el blob (eso lo hace el barrido
+ * de programaciones), así que estos bytes son la ÚNICA copia: quien los
+ * quiera, que los descargue de aquí. `GET /runs/:id/download` contesta 404
+ * para ellas.
+ */
+export async function generateReport(key, format, params) {
   const { blob, filename } = await httpGetBlob(
     `${BASE}/${encodeURIComponent(key)}/run?format=${encodeURIComponent(format)}${buildParamsQuery(params)}`
   );
-  saveBlob(blob, filename || `${key}.${format}`);
+  return { blob, filename: filename || `${key}.${format}` };
+}
+
+export async function runReport(key, format, params) {
+  const { blob, filename } = await generateReport(key, format, params);
+  saveBlob(blob, filename);
 }
 
 // { sent: string[], failed: {email, sent, reason}[] }

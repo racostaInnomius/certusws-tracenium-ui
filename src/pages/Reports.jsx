@@ -28,7 +28,7 @@
 // de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, Grid, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
@@ -47,12 +47,13 @@ import EmailReportDialog from "../components/Reports/EmailReportDialog";
 import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
-import ReportTypeCard from "../components/Reports/ReportTypeCard";
+import ReportTypeRow from "../components/Reports/ReportTypeRow";
+import GenerateReportDialog from "../components/Reports/GenerateReportDialog";
 import ScheduleCard from "../components/Reports/ScheduleCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import GenericJsonPreview from "../components/Reports/GenericJsonPreview";
 import {
-  getReportTypes, getReportRuns, runReport,
+  getReportTypes, getReportRuns, runReport, generateReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
   listGrcTargets, deliverRunToGrcTarget, listGrcDeliveries,
 } from "../api/reports";
@@ -62,7 +63,7 @@ import {
 } from "../components/Reports/reportSchedules";
 import { deliveryColor } from "../components/Reports/grcConnector";
 import { BRAND, TEXT } from "../theme/brand";
-import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { getSearchParam, saveBlob, updateSearchParams } from "../utils/browserState";
 
 /**
  * Qué tipos saben enseñarse antes de generarse.
@@ -139,8 +140,24 @@ export default function Reports() {
   const [previewTarget, setPreviewTarget] = React.useState(null); // fila del catálogo
   // Types that declare `params` ask for them first (ReportParamsDialog);
   // `paramsTarget` remembers what to do once the operator confirms.
-  const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "run" | "email" }
+  const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "generate" | "email" }
   const [emailParams, setEmailParams] = React.useState(null);
+
+  /**
+   * El flujo de generar, que ahora tiene pasos.
+   *
+   * Antes cada formato era un botón que descargaba de golpe. Ahora se
+   * pregunta el formato, se genera, y sobre el fichero YA hecho se ofrece
+   * descargarlo o mandarlo — que es cuando esas dos opciones significan algo.
+   *
+   * El artefacto se queda EN MEMORIA porque las corridas interactivas no se
+   * archivan (sólo lo hace el barrido de programaciones), así que `blob` es la
+   * única copia hasta que alguien la baje.
+   */
+  const [genTarget, setGenTarget] = React.useState(null);   // fila del catálogo
+  const [genPhase, setGenPhase] = React.useState("choose"); // choose | running | done
+  const [genResult, setGenResult] = React.useState(null);   // { blob, filename, bytes, format, params }
+  const [genError, setGenError] = React.useState("");
 
   // Pestaña activa, persistida en la URL (`?reportsTab=`). Un enlace desde
   // otra página puede así abrir la que corresponda, y una recarga no devuelve
@@ -320,22 +337,6 @@ export default function Reports() {
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
 
   /**
-   * El catálogo, agrupado por el `group` que ya manda el servidor.
-   *
-   * Se pintaba como una COLUMNA DE TEXTO en una tabla — un dato que sólo sirve
-   * para agrupar, ocupando ancho en cada fila y sin agrupar nada.
-   */
-  const catalogGroups = React.useMemo(() => {
-    const porGrupo = new Map();
-    for (const r of rows) {
-      const g = r.group || "Other";
-      if (!porGrupo.has(g)) porGrupo.set(g, []);
-      porGrupo.get(g).push(r);
-    }
-    return [...porGrupo.entries()];
-  }, [rows]);
-
-  /**
    * El último run de cada tipo, para enseñarlo en su tarjeta.
    *
    * Sale del historial que la página ya tiene: es la pregunta que se hace
@@ -372,6 +373,39 @@ export default function Reports() {
       setRunningKey(null);
     }
   }, [loadData]);
+
+  /**
+   * Genera y se queda el artefacto, sin descargarlo todavía.
+   *
+   * `handleRun` sigue existiendo para quien SÍ quiere el fichero de una vez
+   * (la vista previa y el enlace `?reportKey=` de otras páginas, donde ya se
+   * confirmó qué se quiere). Esto es lo que usa el catálogo, que pregunta
+   * después qué hacer con lo generado.
+   */
+  const generar = React.useCallback(async (row, format, params) => {
+    setGenPhase("running");
+    setGenError("");
+    try {
+      const { blob, filename } = await generateReport(row.key, format, params);
+      setGenResult({ blob, filename, bytes: blob?.size ?? 0, format, params: params || null });
+      setGenPhase("done");
+      // El catálogo enseña el último run de cada tipo; sin esto la fila sigue
+      // diciendo "Never generated" justo después de generarlo.
+      loadData({ silent: true });
+    } catch (err) {
+      setGenError(err?.message || "Report failed.");
+      // Se vuelve a la pregunta, no se cierra: el error se lee al lado del
+      // botón que lo produjo y se puede reintentar sin volver a buscar la fila.
+      setGenPhase("choose");
+    }
+  }, [loadData]);
+
+  const cerrarGeneracion = React.useCallback(() => {
+    setGenTarget(null);
+    setGenPhase("choose");
+    setGenResult(null);
+    setGenError("");
+  }, []);
 
   /**
    * Llegada desde otra página con un informe ya elegido (`?reportKey=`).
@@ -529,9 +563,12 @@ export default function Reports() {
 
   /*
    * Aquí estaba `typeColumns`: el catálogo era un DataGrid con el grupo como
-   * columna de texto y hasta CINCO botones en la celda de acciones. Ahora son
-   * tarjetas agrupadas (`ReportTypeCard`), donde los formatos respiran y cabe
-   * el último run — la pregunta que se hace ANTES de generar otro.
+   * columna de texto y hasta CINCO botones en la celda de acciones. Pasó a
+   * tarjetas y de ahí a FILAS (`ReportTypeRow`): seis informes en tarjetas
+   * ocupaban pantalla y media, y el catálogo se lee de arriba abajo buscando
+   * una línea. También desapareció el agrupado por `group`: cinco cabeceras
+   * para seis filas costaban más alto que las filas, así que de qué página
+   * sale lo dice un chip en cada una.
    */
 
   /*
@@ -753,42 +790,25 @@ export default function Reports() {
               tenant has enabled and by your role — ask an administrator if you expected one here.
             </Typography>
           ) : (
-            catalogGroups.map(([grupo, tipos]) => (
-              <Box key={grupo} sx={{ mb: 3 }}>
-                <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, mb: 1 }}>
-                  {grupo}
-                </Typography>
-                <Grid container spacing={2} alignItems="stretch">
-                  {tipos.map((t) => (
-                    <Grid key={t.key} size={{ xs: 12, sm: 6, lg: 4 }}>
-                      <ReportTypeCard
-                        type={t}
-                        lastRun={lastRunByKey[t.key] || null}
-                        runningFormat={
-                          String(runningKey || "").startsWith(`${t.key}:`)
-                            ? String(runningKey).split(":")[1]
-                            : ""
-                        }
-                        canPreview={puedePrevisualizarse(t)}
-                        canSchedule={canSchedule}
-                        onRun={(format) =>
-                          t.params?.length
-                            ? setParamsTarget({ row: t, format, intent: "run" })
-                            : handleRun(t.key, format)
-                        }
-                        onPreview={() => setPreviewTarget(t)}
-                        onEmail={() =>
-                          t.params?.length
-                            ? setParamsTarget({ row: t, format: t.formats?.[0], intent: "email" })
-                            : setEmailTarget(t)
-                        }
-                        onSchedule={() => setScheduleTarget(t)}
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            ))
+            /* Una LISTA, no una rejilla de fichas: seis informes ocupaban
+               pantalla y media y había que hacer scroll para ver un catálogo
+               de seis cosas. Sin encabezados de grupo — con seis informes
+               repartidos en cinco grupos, las cabeceras costaban más alto que
+               las propias filas; de qué página sale lo dice un chip en cada
+               una, con el nombre que esa página tiene en el menú. */
+            <Box sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
+              {rows.map((t) => (
+                <ReportTypeRow
+                  key={t.key}
+                  type={t}
+                  lastRun={lastRunByKey[t.key] || null}
+                  busy={String(runningKey || "").startsWith(`${t.key}:`) || (genTarget?.key === t.key && genPhase === "running")}
+                  canPreview={puedePrevisualizarse(t)}
+                  onGenerate={() => { setGenResult(null); setGenError(""); setGenPhase("choose"); setGenTarget(t); }}
+                  onPreview={() => setPreviewTarget(t)}
+                />
+              ))}
+            </Box>
           )}
         </SectionPaper>
       ) : null}
@@ -816,7 +836,7 @@ export default function Reports() {
           {schedules.length === 0 ? (
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="schedules-empty">
               {canSchedule
-                ? 'No schedules yet. Use "Schedule" on a catalog row to get a report every month.'
+                ? 'No schedules yet. Use "New schedule" above to get any report in the catalog every month, emailed to whoever needs it.'
                 : "Schedules are managed by this tenant's administrators. There may be some running; this account cannot see them."}
             </Typography>
           ) : (
@@ -990,11 +1010,50 @@ export default function Reports() {
         ))}
       </Menu>
 
+      {/* Generar en pasos: formato → (alcance, si lo pide) → generado, y sólo
+          entonces descargar o mandar. Se esconde mientras el diálogo de
+          parámetros está abierto: son dos pasos del MISMO flujo, no dos
+          diálogos a la vez. */}
+      <GenerateReportDialog
+        open={Boolean(genTarget) && !paramsTarget}
+        type={genTarget}
+        phase={genPhase}
+        result={genResult}
+        error={genError}
+        canEmail
+        onGenerate={(format) => {
+          if (!genTarget) return;
+          if (genTarget.params?.length) {
+            setParamsTarget({ row: genTarget, format, intent: "generate" });
+          } else {
+            generar(genTarget, format);
+          }
+        }}
+        onDownload={(r) => {
+          if (r?.blob) saveBlob(r.blob, r.filename);
+          cerrarGeneracion();
+        }}
+        onEmail={(r) => {
+          const row = genTarget;
+          const params = r?.params || null;
+          cerrarGeneracion();
+          if (!row) return;
+          setEmailParams(params);
+          setEmailTarget(row);
+        }}
+        onClose={cerrarGeneracion}
+      />
+
       <ReportParamsDialog
         open={Boolean(paramsTarget)}
         reportType={paramsTarget?.row || null}
         format={paramsTarget?.format}
-        onClose={() => setParamsTarget(null)}
+        onClose={() => {
+          // Cancelar el alcance cancela la generación entera: volver al paso
+          // del formato dejaría al operador en un diálogo del que ya salió.
+          setParamsTarget(null);
+          if (paramsTarget?.intent === "generate") cerrarGeneracion();
+        }}
         onSubmit={(values) => {
           const t = paramsTarget;
           setParamsTarget(null);
@@ -1003,7 +1062,7 @@ export default function Reports() {
             setEmailParams(values);
             setEmailTarget(t.row);
           } else {
-            handleRun(t.row.key, t.format, values);
+            generar(t.row, t.format, values);
           }
         }}
       />

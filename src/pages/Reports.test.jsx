@@ -42,6 +42,12 @@ afterEach(() => {
   // siguiente arrancando ahí, sin catálogo, y el fallo salía como "container
   // undefined" en un test que nadie había tocado.
   window.history.replaceState({}, "", "/");
+  // `saveBlob` es un doble de módulo: vive fuera del árbol y NO lo limpia
+  // `cleanup()`, así que su contador se acumulaba a lo largo de los 51 tests.
+  // Mientras sólo se afirmaba "se llamó", nadie lo notó; en cuanto un test
+  // afirma "NO se llamó todavía" —que es lo que separa generar de descargar—
+  // hereda las llamadas de los anteriores y falla sin culpa propia.
+  saveBlob.mockClear();
 });
 
 const BASE = "/api/v1/reports";
@@ -149,30 +155,48 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    // La TARJETA del catálogo, por su nombre accesible: es un `role="group"`
+    // La FILA del catálogo, por su nombre accesible: es un `role="group"`
     // etiquetado con el informe, así que localizarla no depende de la
     // maquetación ni de que la etiqueta salga también en el historial.
-    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
-    await userEvent.click(within(tarjeta).getByRole("button", { name: /json/i }));
+    const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
+
+    // Generar es ahora una pregunta: hasta confirmarla no sale petición.
+    expect(runCalls).toHaveLength(0);
+    const dialogo = await screen.findByRole("dialog");
+    await userEvent.click(within(dialogo).getByRole("button", { name: "Generate" }));
 
     await waitFor(() => expect(runCalls).toHaveLength(1));
     expect(runCalls[0].search).toEqual({ format: "json" });
     expect(runCalls[0].credentials).toBe("include");
+
+    // ⚠️ Generar NO descarga. El fichero existe, y es AHORA cuando se
+    // pregunta qué hacer con él: descargarlo o mandarlo.
+    expect(saveBlob).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole("button", { name: /^Download$/ }));
     expect(saveBlob).toHaveBeenCalledTimes(1);
     // No <a href> anywhere on the page for a report download.
     expect(document.querySelector("a[href*='/reports/']")).toBeNull();
   });
 
-  it("clicking Email opens the dialog for that row's report type", async () => {
+  // ⚠️ "Email" YA NO ESTÁ EN EL CATÁLOGO, y se afirma su ausencia: no se puede
+  // mandar lo que todavía no existe. Se ofrece sobre el informe ya generado,
+  // que es cuando la opción significa algo.
+  it("Email no se ofrece antes de generar; sí sobre lo ya generado", async () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/cdp.cbom/run`, { ok: true });
     respond("get", "/api/v1/tenants/7/members", { items: [] });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    const emailButtons = await screen.findAllByRole("button", { name: /email/i });
-    await userEvent.click(emailButtons[0]);
+    const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    expect(within(fila).queryByRole("button", { name: /email/i })).toBeNull();
 
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: /Email it/i }));
     expect(await screen.findByText(/Email "Crypto Bill of Materials \(CBOM\)"/i)).toBeInTheDocument();
   });
 
@@ -194,10 +218,15 @@ describe("Reports page (types with params)", () => {
     const runCalls = respond("get", `${BASE}/scp.evidence-pack/run`, { ok: true });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    const tarjeta = await screen.findByRole("group", { name: "Evidence Pack" });
-    await userEvent.click(within(tarjeta).getByRole("button", { name: "PDF" }));
+    const fila = await screen.findByRole("group", { name: "Evidence Pack" });
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
 
-    // Diálogo de parámetros, no descarga inmediata.
+    // Primero el FORMATO. El tipo ofrece PDF y JSON, así que hay pregunta.
+    const formatos = await screen.findByRole("dialog");
+    await userEvent.click(within(formatos).getByRole("button", { name: "PDF" }));
+    await userEvent.click(within(formatos).getByRole("button", { name: "Continue" }));
+
+    // Y sólo después el alcance. Nada ha salido a la red todavía.
     expect(runCalls).toHaveLength(0);
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByLabelText("Framework")).toHaveTextContent("SOC 2 (TSC 2017)"));
@@ -209,6 +238,9 @@ describe("Reports page (types with params)", () => {
 
     await waitFor(() => expect(runCalls).toHaveLength(1));
     expect(runCalls[0].search).toEqual({ format: "pdf", framework: "soc2_tsc_2017", from: "2026-06", to: "2026-08" });
+    // Generar no descarga: hay que pedirlo.
+    expect(saveBlob).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole("button", { name: /^Download$/ }));
     expect(saveBlob).toHaveBeenCalled();
   });
 });
@@ -235,19 +267,30 @@ const SCHEDULES = {
 };
 
 describe("Reports — schedules (E3)", () => {
-  it("renders the schedules panel from the server and offers Schedule on every catalog row", async () => {
+  it("programar NO se hace desde el catálogo, sino desde su pestaña — para cualquier tipo", async () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, SCHEDULES);
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await screen.findAllByText("Evidence Pack");
-    // El botón "Schedule" vive en el CATÁLOGO; la tabla de programaciones, en
-    // su pestaña. Son dos sitios desde U1.
-    expect(screen.getAllByRole("button", { name: /^schedule$/i })).toHaveLength(TYPES.types.length);
+
+    // ⚠️ Se afirma la AUSENCIA. Había un "Schedule" por fila del catálogo
+    // compitiendo con la acción principal, y llevaba al mismo sitio que la
+    // pestaña. Si vuelve, vuelven los dos caminos.
+    expect(screen.queryAllByRole("button", { name: /^schedule$/i })).toHaveLength(0);
 
     await abrirPestana(/schedules/i);
     expect(await screen.findByText("Previous month", { exact: false })).toBeTruthy();
     expect(screen.queryByTestId("schedules-empty")).toBeNull();
+
+    // Y desde aquí se llega a CUALQUIER tipo del catálogo: quitar el botón de
+    // la fila no quita capacidad, sólo el segundo camino.
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.click(screen.getByRole("button", { name: /New schedule/i }));
+    const menu = await screen.findByRole("menu");
+    for (const t of TYPES.types) {
+      expect(within(menu).getByRole("menuitem", { name: t.label })).toBeInTheDocument();
+    }
   });
 
   it("a backend without schedules still renders the catalog", async () => {
@@ -276,7 +319,7 @@ describe("Reports — schedules (E3)", () => {
     expect(vacio.textContent).toMatch(/administrators/i);
     expect(vacio.textContent).not.toMatch(/No schedules yet/i);
     await waitFor(() =>
-      expect(screen.queryAllByRole("button", { name: /^schedule$/i })).toHaveLength(0)
+      expect(screen.queryAllByRole("button", { name: /New schedule/i })).toHaveLength(0)
     );
   });
 
@@ -290,11 +333,13 @@ describe("Reports — schedules (E3)", () => {
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
     await screen.findAllByText("Evidence Pack");
-    expect(screen.getAllByRole("button", { name: /^schedule$/i }).length).toBeGreaterThan(0);
 
     await abrirPestana(/schedules/i);
     const vacio = await screen.findByTestId("schedules-empty");
     expect(vacio.textContent).toMatch(/No schedules yet/i);
+    // Y el botón que ese texto nombra existe de verdad: decirle a alguien que
+    // use "New schedule" y que no esté es peor que no decir nada.
+    expect(screen.getByRole("button", { name: /New schedule/i })).toBeInTheDocument();
   });
 
   it("an archived run gets a download button that goes through the blob path", async () => {
@@ -309,7 +354,6 @@ describe("Reports — schedules (E3)", () => {
         new HttpResponse("%PDF", { headers: { "Content-Type": "application/pdf", "Content-Disposition": 'attachment; filename="pack.pdf"' } })
       )
     );
-    saveBlob.mockClear();
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
     await abrirPestana(/history/i);
     const btn = await screen.findByRole("button", { name: /download archived copy/i });
@@ -896,8 +940,8 @@ describe("Reports — U3: programaciones", () => {
   });
 });
 
-// ── U3 · el catálogo por tarjetas ───────────────────────────────────
-describe("Reports — U3: catálogo por tarjetas", () => {
+// ── U3 · el catálogo, ahora por filas ────────────────────────────────
+describe("Reports — U3: catálogo por filas", () => {
   const montar = (runsBody = RUNS) => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, runsBody);
@@ -905,18 +949,23 @@ describe("Reports — U3: catálogo por tarjetas", () => {
     return render(<ConfirmProvider><Reports /></ConfirmProvider>);
   };
 
-  it("agrupa por el `group` que manda el servidor", async () => {
-    // Se pintaba como una COLUMNA DE TEXTO: un dato que sólo sirve para
-    // agrupar, ocupando ancho en cada fila y sin agrupar nada.
+  // ⚠️ El `group` del servidor es la SIGLA del plugin —"SCP", "PMP", "CDP"—
+  // porque es lo que usan el gate y los entitlements. En la consola nadie ve
+  // esas siglas: ve "Security Compliance" en el menú, y ese es el nombre con
+  // el que busca su informe. Se afirma el rótulo Y la ausencia de la sigla.
+  it("dice de qué página sale con el nombre del menú, no con la sigla del plugin", async () => {
     montar();
 
-    await screen.findByRole("group", { name: "Evidence Pack" });
-    for (const g of ["CDP", "Audit", "SCP"]) {
-      expect(screen.getByText(g)).toBeTruthy();
-    }
+    const fila = await screen.findByRole("group", { name: "Evidence Pack" });
+    expect(within(fila).getByText("Security Compliance")).toBeTruthy();
+    expect(within(fila).queryByText("SCP")).toBeNull();
+
+    const cbom = screen.getByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    expect(within(cbom).getByText("Crypto Discovery")).toBeTruthy();
+    expect(within(cbom).queryByText("CDP")).toBeNull();
   });
 
-  it("cada tarjeta enseña su ÚLTIMO run, que es lo que se pregunta antes de generar otro", async () => {
+  it("cada fila enseña su ÚLTIMO run, que es lo que se pregunta antes de generar otro", async () => {
     // Estaba en `report_runs` desde E3 y obligaba a bajar a otra tabla.
     montar({
       ok: true,
@@ -924,8 +973,8 @@ describe("Reports — U3: catálogo por tarjetas", () => {
       runs: [{ id: 1, occurredAt: "2026-09-01T06:00:00.000Z", key: "cdp.cbom", format: "json", trigger: "manual", outcome: "ok", actor: "ana@acme.test" }],
     });
 
-    const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
-    expect(within(tarjeta).getByText(/ana@acme.test/)).toBeTruthy();
+    const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    expect(within(fila).getByText(/2026/)).toBeTruthy();
 
     // Y el que no se ha generado nunca lo dice, en vez de dejar el hueco.
     const otra = screen.getByRole("group", { name: "Audit Events" });
@@ -936,8 +985,8 @@ describe("Reports — U3: catálogo por tarjetas", () => {
     // Si no, pulsar un formato abre un diálogo por sorpresa.
     montar();
 
-    const tarjeta = await screen.findByRole("group", { name: "Evidence Pack" });
-    expect(within(tarjeta).getByText("params")).toBeTruthy();
+    const fila = await screen.findByRole("group", { name: "Evidence Pack" });
+    expect(within(fila).getByText("params")).toBeTruthy();
 
     const sinParams = screen.getByRole("group", { name: "Audit Events" });
     expect(within(sinParams).queryByText("params")).toBeNull();
