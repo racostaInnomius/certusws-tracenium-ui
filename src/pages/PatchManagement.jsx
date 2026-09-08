@@ -17,9 +17,12 @@ import {
   IconButton,
   Tab,
   Tabs,
+  TextField,
+  InputAdornment,
   Tooltip,
   Typography,
 } from "@mui/material";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined";
@@ -39,6 +42,7 @@ import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/r
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
+import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -592,6 +596,20 @@ export default function PatchManagement({ onNavigate }) {
     [devicesRes]
   );
 
+  // Search over the devices table. The endpoint returns the whole fleet and
+  // the grid pages it here, so the search runs in front of the grid. The
+  // pagination model is controlled for one reason: typing must land you on
+  // page 1 of the results, not on page 4 of a list that no longer has one.
+  const [deviceSearch, setDeviceSearch] = React.useState("");
+  const [devicePagination, setDevicePagination] = React.useState(() => ({
+    page: 0,
+    pageSize: hadIncomingHighlight ? 50 : 10,
+  }));
+  const visibleDevices = React.useMemo(
+    () => filterPatchDevices(devices, deviceSearch),
+    [devices, deviceSearch]
+  );
+
   /**
    * Refrescar TODO lo que la página enseña, no sólo lo que carga la página.
    *
@@ -891,16 +909,19 @@ export default function PatchManagement({ onNavigate }) {
         // and found 0 pending patches — that's a calm "OK" state,
         // not a victory call (we reserve "Healthy" for the explicit
         // provider-reported healthy).
+        // Labels live in deviceSearch.js so the search box matches what the
+        // chip says; only the colours are decided here.
+        const L = DEVICE_STATUS_LABEL;
         const meta = {
-          idle:              { label: "Idle",              fg: BRAND.gray,     bg: BRAND.surfaceMuted },
-          inventory_only:    { label: "Inventory only",    fg: BRAND.dark,     bg: BRAND.darkSoft     },
-          scan_pending:      { label: "Scan pending",      fg: BRAND.tealText, bg: BRAND.tealSoft     },
-          updates_available: { label: "Updates avail.",    fg: ROLE.caution,   bg: ROLE.cautionSoft   },
-          installing:        { label: "Installing",        fg: BRAND.tealText, bg: BRAND.tealSoft     },
-          reboot_required:   { label: "Reboot pending",    fg: ROLE.critical,  bg: ROLE.criticalSoft  },
-          healthy:           { label: "Healthy",           fg: ROLE.positive,  bg: ROLE.positiveSoft  },
-          error:             { label: "Error",             fg: ROLE.critical,  bg: ROLE.criticalSoft  },
-          unknown:           { label: "Unknown",           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
+          idle:              { label: L.idle,              fg: BRAND.gray,     bg: BRAND.surfaceMuted },
+          inventory_only:    { label: L.inventory_only,    fg: BRAND.dark,     bg: BRAND.darkSoft     },
+          scan_pending:      { label: L.scan_pending,      fg: BRAND.tealText, bg: BRAND.tealSoft     },
+          updates_available: { label: L.updates_available, fg: ROLE.caution,   bg: ROLE.cautionSoft   },
+          installing:        { label: L.installing,        fg: BRAND.tealText, bg: BRAND.tealSoft     },
+          reboot_required:   { label: L.reboot_required,   fg: ROLE.critical,  bg: ROLE.criticalSoft  },
+          healthy:           { label: L.healthy,           fg: ROLE.positive,  bg: ROLE.positiveSoft  },
+          error:             { label: L.error,             fg: ROLE.critical,  bg: ROLE.criticalSoft  },
+          unknown:           { label: L.unknown,           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
         };
         const m = meta[v] || meta.unknown;
         const chip = (
@@ -1134,26 +1155,58 @@ export default function PatchManagement({ onNavigate }) {
           rather than placeholders. */}
       {pmpEnabled ? (
         <SectionPaper id="patch-devices-panel" variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1.5 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 1.5,
+              mb: 1.5,
+            }}
+          >
             <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
               Devices
             </Typography>
-            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-              {devices.length} reporting
+            <TextField
+              size="small"
+              placeholder="Search hostname, platform, status…"
+              value={deviceSearch}
+              onChange={(e) => {
+                setDeviceSearch(e.target.value);
+                setDevicePagination((prev) => ({ ...prev, page: 0 }));
+              }}
+              inputProps={{ "aria-label": "Search devices" }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ flex: "1 1 260px", maxWidth: 420, "& .MuiOutlinedInput-root": { bgcolor: BRAND.surface } }}
+            />
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", ml: "auto" }}>
+              {deviceSearch.trim()
+                ? `${visibleDevices.length} of ${devices.length} devices`
+                : `${devices.length} reporting`}
             </Typography>
           </Box>
           <Box sx={{ width: "100%" }}>
             <DataGrid
               autoHeight
-              rows={devices}
+              rows={visibleDevices}
               columns={deviceColumns}
               getRowId={(row) => row.agentId}
               disableRowSelectionOnClick
               onRowClick={(params) => openDrawer(params.row)}
               pageSizeOptions={[10, 25, 50]}
-              initialState={{
-                pagination: { paginationModel: { pageSize: hadIncomingHighlight ? 50 : 10 } }
-              }}
+              paginationModel={devicePagination}
+              onPaginationModelChange={setDevicePagination}
+              localeText={
+                deviceSearch.trim()
+                  ? { noRowsLabel: `No devices match “${deviceSearch.trim()}”` }
+                  : undefined
+              }
               // Row-level pulse for the device we just arrived to highlight
               // (see the deep-link effect above) — same treatment Jobs.jsx
               // gives a just-dispatched job.
