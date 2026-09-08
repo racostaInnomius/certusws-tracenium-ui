@@ -339,6 +339,12 @@ añade entonces — con 0 filas hoy, un índice especulativo es adivinar.
 **Las catorce filas cerradas el 2026-09-07, SIN desplegar.** El plan se ejecutó
 en el orden previsto (U1→U4) y cada fase quedó desplegable por separado.
 
+**U5 (2026-09-08), fuera del plan original.** Con la página ya montada, el
+catálogo por tarjetas de U3 seguía sin caber en pantalla y ofrecía cuatro
+acciones por fila donde hay una. U5 lo aprieta a una lista y convierte generar
+en una pregunta. Lo que U3 acertó —el último run en la fila, el chip `params`,
+el `role="group"` etiquetado, el vacío que explica su causa— se conserva.
+
 Lo que NO entró y sigue abierto:
 
 - Presets de parámetros guardables (ítem 22 de R3): pide tabla nueva y decidir
@@ -364,3 +370,4 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 | U4 | Preview para los 4 tipos que faltan | UI | hecho (`fb04e3d`) | Preview genérico para todo tipo con json: colecciones y documento, sin inventar un titular. De 1 a 6 de 6. |
 | U4 | `json` en `audit.events` | backend | hecho (`5feab8a`) | Habilita su preview y repone por el motor el export JSON retirado de la página de Audit. Mismos filtros y tope que el CSV; la capacidad `audit_log` se sigue exigiendo. |
 | U4 | GRC a Settings + mensaje de permiso | UI | hecho (`206e185` + `fb04e3d`) | El panel vive en la pestaña Settings desde U1; el 403 pasa a mensaje y deja de ofrecer acciones que rebotan. Un 500 sigue siendo error. |
+| U5 | Catálogo compacto + generar en pasos | UI | hecho (`bacc8c2`) | Las tarjetas de U3 seguían pidiendo scroll para seis informes: pasan a FILAS (59 px, catálogo entero en 355 px, medido a 1280x800). Fuera de la fila el botón por formato, "Schedule" y "Email": el formato se pregunta al generar, programar tiene su pestaña y mandar se decide sobre lo ya generado. Los grupos se dicen con el nombre del menú, no con la sigla del plugin. |
