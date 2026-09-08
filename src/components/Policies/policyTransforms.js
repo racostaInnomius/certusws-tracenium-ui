@@ -138,6 +138,8 @@ export const SECURITY_MODES = [
 //
 // `enforcer: true`  → agent has a working pmp.remediate handler.
 //                     Mode "auto" actually does something.
+// `detectOnly: true` → nunca habrá remediador (BitLocker, SIP, FileVault):
+//                     la UI no ofrece "auto" ni promete que llegará.
 // `enforcer: false` → policy is stored but agent doesn't enforce
 //                     yet. UI grays the mode selector at "auto" and
 //                     marks the card "report-only available, auto
@@ -230,6 +232,7 @@ export const SECURITY_CAPABILITIES = [
     description: "Report whether SIP is enabled. Cannot be remediated remotely — enabling SIP requires booting into the Recovery OS.",
     osTags: ["macOS"],
     enforcer: false,
+    detectOnly: true,
     fields: [
       { key: "required", label: "Required to be enabled", type: "boolean",
         default: true, trueLabel: "Require", falseLabel: "Allow disabled" },
@@ -241,6 +244,7 @@ export const SECURITY_CAPABILITIES = [
     description: "Report whether FileVault is on. Cannot be remediated remotely — enabling it prompts the user for their password and a Recovery Key.",
     osTags: ["macOS"],
     enforcer: false,
+    detectOnly: true,
     fields: [
       { key: "required", label: "Required to be enabled", type: "boolean",
         default: true, trueLabel: "Require", falseLabel: "Allow disabled" },
@@ -270,9 +274,14 @@ export const SECURITY_CAPABILITIES = [
   {
     key: "bitlocker",
     label: "BitLocker (Windows)",
-    description: "Ensure system drive is encrypted with BitLocker. Collector reports current status; auto-remediation in a later release.",
+    // Detección solamente, y a propósito: cifrar un disco en remoto exige
+    // comprobar el TPM, custodiar la clave de recuperación y reiniciar.
+    // Un agente que lo hiciera solo dejaría equipos sin arrancar o sin
+    // clave. No es "en una versión posterior": no se va a hacer.
+    description: "Report whether the system drive is encrypted with BitLocker. Detection only — the agent never enables encryption (it needs a TPM check, recovery-key escrow and a reboot). Remediate through your MDM or GPO.",
     osTags: ["Windows"],
     enforcer: false,
+    detectOnly: true,
     fields: [
       { key: "required", label: "Required on system drive", type: "boolean", default: true },
     ],

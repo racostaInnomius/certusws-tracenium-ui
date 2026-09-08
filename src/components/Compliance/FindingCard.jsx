@@ -21,6 +21,7 @@ import {
   Typography,
 } from "@mui/material";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
@@ -89,6 +90,10 @@ export default function FindingCard({
   // card offers "Explain" and mounts FindingExplanation on demand; the
   // panel owns the request. Off by default so the read-only/USER view
   // and existing tests are untouched.
+  // Remediación genérica (2026-09): el fix como fichero (.reg/.inf/GPO) y
+  // el aviso de dominio. `onExportFix(finding, format)`; null = sin PMP.
+  onExportFix = null,
+  partOfDomain = null,
   canExplain = false
 }) {
   const [explainOpen, setExplainOpen] = React.useState(false);
@@ -431,6 +436,56 @@ export default function FindingCard({
                 </Button>
               </Tooltip>
             ) : null}
+            {/* Sin botón de fix: se dice POR QUÉ (la guarda) en vez de
+                dejar un hueco. La persona tiene el .reg abajo si quiere. */}
+            {finding.status === "fail" && !finding.agentRemediable && finding.remediationPlan?.guard ? (
+              <Tooltip title="This value is not written by the agent on its own: the change can lock people out or break authentication. Export the fix and apply it deliberately." arrow>
+                <Chip
+                  size="small"
+                  label={`Not automated: ${finding.remediationPlan.guard}`}
+                  sx={{ height: 24, fontSize: TEXT.xs, bgcolor: BRAND.alert?.warningSoft, color: BRAND.alert?.warningText, cursor: "help", maxWidth: 420 }}
+                />
+              </Tooltip>
+            ) : null}
+            {/* Professional: sin PMP no hay botón, pero sí el camino — el
+                mismo "Show me how" de What to fix first. */}
+            {!readOnly && finding.status === "fail" && !finding.agentRemediable && !onExportFix && finding.remediationSummary && !open ? (
+              <Tooltip title="Patch Management can apply this fix for you. Without it, read what to change and where." arrow>
+                <Button size="small" variant="outlined" onClick={() => setOpen(true)} sx={{ textTransform: "none" }}>
+                  Show me how
+                </Button>
+              </Tooltip>
+            ) : null}
+            {/* Enterprise: el fix como fichero. Es lo que perdura en un
+                equipo de dominio (la GPO) y lo que se revisa antes de tocar
+                una clave con guarda. */}
+            {!readOnly && onExportFix && finding.status === "fail" && finding.remediationPlan?.artifact ? (
+              <Tooltip
+                title={
+                  finding.remediationPlan.artifact === "reg"
+                    ? "Download a .reg file with the value this check expects, to import by hand or push through your own tooling."
+                    : "Download a secedit .inf template with the account/security policy value this check expects."
+                }
+                arrow
+              >
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DownloadOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                  onClick={() => onExportFix(finding, finding.remediationPlan.artifact)}
+                  sx={{ textTransform: "none" }}
+                >
+                  {finding.remediationPlan.artifact === "reg" ? "Export .reg" : "Export .inf"}
+                </Button>
+              </Tooltip>
+            ) : null}
+            {!readOnly && onExportFix && finding.status === "fail" && finding.remediationPlan?.artifact === "reg" ? (
+              <Tooltip title="Download a PowerShell script (GroupPolicy module) that sets this value in a GPO — the fix that survives the domain's policy refresh." arrow>
+                <Button size="small" variant="text" onClick={() => onExportFix(finding, "gpo")} sx={{ textTransform: "none", color: BRAND.teal }}>
+                  GPO script
+                </Button>
+              </Tooltip>
+            ) : null}
             {/* Fase C — this drift is auto-fixable but the baseline is
                 only reporting it. Only on failing findings: a pass
                 doesn't need fixing and the chip would be noise. */}
@@ -483,6 +538,14 @@ export default function FindingCard({
               <CircularProgress size={16} sx={{ ml: 0.5, alignSelf: "center" }} />
             ) : null}
           </Stack>
+          {/* Unido a dominio y clave bajo Software\Policies: nuestro fix
+              prevalece hasta que una GPO escriba ESA clave; entonces gana el
+              dominio en cada refresco. No impide aplicar: lo dice. */}
+          {finding.status === "fail" && finding.remediationPlan?.gpoManaged && partOfDomain === true ? (
+            <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: BRAND.gray }}>
+              Domain-joined device: this key lives under Group Policy. The fix holds until a GPO that manages the same key refreshes it; to make it stick, apply it as a GPO.
+            </Typography>
+          ) : null}
           {explainOpen && finding.id ? <FindingExplanation findingId={finding.id} /> : null}
         </Box>
         <Button

@@ -12,6 +12,7 @@ import * as React from "react";
 import {
   Box,
   Chip,
+  Tooltip,
   FormControlLabel,
   MenuItem,
   Switch,
@@ -131,13 +132,21 @@ export default function SecurityPolicySection({
                     {cap.osTags.map((t) => (
                       <Chip key={t} label={t} size="small" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />
                     ))}
-                    {!capabilityAuto(cap.key, cap.enforcer) && (
+                    {cap.detectOnly ? (
+                      <Tooltip title="The agent reports this state but will never change it. Remediate through your MDM or Group Policy." arrow>
+                        <Chip
+                          label="detection only"
+                          size="small"
+                          sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: BRAND.gray, cursor: "help" }}
+                        />
+                      </Tooltip>
+                    ) : !capabilityAuto(cap.key, cap.enforcer) ? (
                       <Chip
                         label="auto coming soon"
                         size="small"
                         sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
                       />
-                    )}
+                    ) : null}
                     {(() => {
                       // Fase C — live evidence badge. Deliberately last
                       // in the chip row: intent chips first, then what
@@ -181,7 +190,7 @@ export default function SecurityPolicySection({
                   helperText={entry.mode == null ? "Inherits default" : ""}
                 >
                   <MenuItem value="">(inherit default)</MenuItem>
-                  {SECURITY_MODES.map((m) => {
+                  {SECURITY_MODES.filter((m) => !(cap.detectOnly && m.value === "auto")).map((m) => {
                     const isAuto = m.value === "auto";
                     const notBuilt = !capabilityAuto(cap.key, cap.enforcer) && isAuto;
                     const notPaid = !autoEntitled && isAuto;

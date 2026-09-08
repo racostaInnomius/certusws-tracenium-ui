@@ -87,7 +87,7 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 // policy domain without leaving the Posture tab.
 import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
 // Sprint 4 — one-click fix from the finding card (crosswalk-gated).
-import { remediate as remediateFinding, getDevicesAffectedByCheck } from "../api/patchManagement";
+import { remediate as remediateFinding, getDevicesAffectedByCheck, downloadRemediationArtifact } from "../api/patchManagement";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -813,13 +813,19 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const handleRemediateFinding = React.useCallback(
     async (finding) => {
       if (!canManage || !drawerAgentId || !finding?.checkId) return;
+      // Unido a dominio y clave bajo Policies: se aplica igual (nuestro
+      // valor prevalece hasta que una GPO escriba esa clave), pero se dice.
+      const domainNote =
+        finding.remediationPlan?.gpoManaged && drawerData?.device?.partOfDomain === true
+          ? " This device is domain-joined and the key lives under Group Policy: the fix holds until a GPO that manages the same key refreshes it. For a lasting fix, export the GPO script."
+          : "";
       const ok = await confirmDialog({
         title: "Remediate on this device?",
         body:
           `The agent will run its fix for "${finding.title || finding.checkId}" on this ` +
           "device now (apply mode). Some fixes need a reboot to fully take effect; the " +
           "finding is marked remediated once the agent confirms, and the next scan " +
-          "verifies it.",
+          "verifies it." + domainNote,
         confirmText: "Fix now",
         danger: true,
       });
@@ -850,7 +856,30 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         });
       }
     },
-    [canManage, drawerAgentId, confirmDialog, showToast, refetchDrawer]
+    [canManage, drawerAgentId, drawerData, confirmDialog, showToast, refetchDrawer]
+  );
+
+  // El fix como fichero: .reg / .inf de secedit / script de GPO con el
+  // valor que el check espera. Enterprise (PMP): es una remediación.
+  const handleExportFix = React.useCallback(
+    async (finding, format) => {
+      if (!finding?.checkId) return;
+      try {
+        const name = await downloadRemediationArtifact({ checkIds: [finding.checkId], format });
+        showToast({ severity: "success", message: name ? `Downloaded ${name}.` : "Fix exported." });
+      } catch (e) {
+        showToast({
+          severity: "error",
+          message:
+            e?.status === 403
+              ? "Patch Management plugin is not enabled for this tenant."
+              : e?.status === 404
+                ? "This check has no registry or security-policy value to export."
+                : e?.body?.message || e?.message || "Failed to export the fix.",
+        });
+      }
+    },
+    [showToast]
   );
 
   // Fase C — bundle handed to the category breakdown (chips + actions).
@@ -2086,6 +2115,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           }
           onOpenBaselines={() => setTab("baselines")}
           onRemediateFinding={canManage ? handleRemediateFinding : null}
+          onExportFix={canRemediate ? handleExportFix : null}
           onOpenVulnerabilities={() => {
             closeDrawer();
             navigateTo("patch", { pmTab: "vulnerabilities" });

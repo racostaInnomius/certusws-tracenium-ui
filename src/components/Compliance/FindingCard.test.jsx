@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import FindingCard from "./FindingCard";
 
 afterEach(cleanup);
@@ -151,6 +151,47 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(screen.queryByText("Fix now")).toBeNull();
     renderWith({ status: "fail", agentRemediable: true });
     expect(screen.queryByText("Fix now")).toBeNull();
+  });
+
+  // ── Remediación genérica: guarda, "Show me how", artefactos, dominio ──
+  it("sin fix automático por una guarda, lo DICE en vez de dejar un hueco", () => {
+    renderWith({ status: "fail", agentRemediable: false, remediationPlan: { auto: false, guard: "LSA authentication settings can break logons and domain trust", artifact: "reg", gpoManaged: false } }, { onRemediate: vi.fn(), onExportFix: vi.fn() });
+    expect(screen.queryByText("Fix now")).toBeNull();
+    expect(screen.getByText(/Not automated: LSA authentication settings/)).toBeInTheDocument();
+  });
+
+  it("Professional (sin onExportFix): 'Show me how' abre los detalles con la remediación", () => {
+    renderWith({ status: "fail", agentRemediable: false, remediationSummary: "Configure HKLM\\X via Group Policy (CIS 18.9.7)." }, { onRemediate: vi.fn() });
+    expect(screen.queryByText("Fix now")).toBeNull();
+    expect(screen.queryByText("Export .reg")).toBeNull();
+    fireEvent.click(screen.getByText("Show me how"));
+    expect(screen.getByText(/Configure HKLM/)).toBeInTheDocument();
+    expect(screen.queryByText("Show me how")).toBeNull();
+  });
+
+  it("Enterprise: exporta el .reg y el script de GPO con el formato pedido", () => {
+    const onExportFix = vi.fn();
+    const finding = { status: "fail", agentRemediable: true, remediationPlan: { auto: true, guard: null, artifact: "reg", gpoManaged: true } };
+    renderWith(finding, { onRemediate: vi.fn(), onExportFix });
+    screen.getByText("Export .reg").click();
+    expect(onExportFix).toHaveBeenCalledWith(expect.objectContaining({ checkId: baseFinding.checkId }), "reg");
+    screen.getByText("GPO script").click();
+    expect(onExportFix).toHaveBeenLastCalledWith(expect.anything(), "gpo");
+  });
+
+  it("secedit exporta .inf y no ofrece script de GPO", () => {
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: { auto: true, guard: null, artifact: "inf", gpoManaged: false } }, { onRemediate: vi.fn(), onExportFix: vi.fn() });
+    expect(screen.getByText("Export .inf")).toBeInTheDocument();
+    expect(screen.queryByText("GPO script")).toBeNull();
+  });
+
+  it("en un equipo de dominio con clave bajo Policies avisa, y sólo entonces", () => {
+    const plan = { auto: true, guard: null, artifact: "reg", gpoManaged: true };
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: plan }, { onRemediate: vi.fn(), partOfDomain: true });
+    expect(screen.getByText(/Domain-joined device: this key lives under Group Policy/)).toBeInTheDocument();
+    cleanup();
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: plan }, { onRemediate: vi.fn(), partOfDomain: false });
+    expect(screen.queryByText(/Domain-joined device/)).toBeNull();
   });
 
   it("clicking Fix now hands the finding to the handler", () => {

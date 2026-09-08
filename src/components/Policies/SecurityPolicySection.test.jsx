@@ -17,9 +17,24 @@ describe("SecurityPolicySection", () => {
 
   it("marks non-enforcer capabilities with 'auto coming soon'", () => {
     render(<SecurityPolicySection form={emptyForm} onChange={() => {}} />);
-    const placeholders = SECURITY_CAPABILITIES.filter((c) => !c.enforcer);
+    // Las de detección solamente NO prometen un auto que no va a llegar.
+    const placeholders = SECURITY_CAPABILITIES.filter((c) => !c.enforcer && !c.detectOnly);
     // Each placeholder capability shows the chip.
     expect(screen.getAllByText("auto coming soon").length).toBe(placeholders.length);
+  });
+
+  it("BitLocker, SIP y FileVault son 'detection only': sin chip de 'coming soon' y sin opción auto", () => {
+    render(<SecurityPolicySection form={emptyForm} onChange={() => {}} />);
+    const detectOnly = SECURITY_CAPABILITIES.filter((c) => c.detectOnly).map((c) => c.key);
+    expect(detectOnly).toEqual(expect.arrayContaining(["bitlocker", "sip", "filevault"]));
+    expect(screen.getAllByText("detection only").length).toBe(detectOnly.length);
+    // El selector de modo de BitLocker no ofrece "auto" ni deshabilitado.
+    const idx = SECURITY_CAPABILITIES.findIndex((c) => c.key === "bitlocker");
+    const modeSelect = screen.getAllByRole("combobox", { name: /Mode/ })[idx];
+    fireEvent.mouseDown(modeSelect);
+    const listbox = screen.getByRole("listbox");
+    expect(within(listbox).queryByText(/Auto/)).toBeNull();
+    expect(within(listbox).getByText(/Report only/)).toBeInTheDocument();
   });
 
   it("emits a mode change that patches the right capability", () => {
