@@ -31,3 +31,34 @@ export function validateParams(params, values) {
   return errors;
 }
 
+
+/**
+ * Lo que enseña el selector de framework de un informe: una entrada por
+ * FAMILIA cuando el backend las manda ("CIS Benchmarks" una vez, no un
+ * benchmark por SO — el pack de evidencia acepta `family:cis`), y la lista
+ * plana de frameworks con un backend anterior. Misma forma en los dos
+ * casos: `{ framework, shortName }`, para que los selectores no cambien.
+ */
+export function frameworkOptionsFrom(res) {
+  const families = Array.isArray(res?.families) ? res.families : [];
+  if (families.length > 0) {
+    return families
+      .filter((f) => f && f.key)
+      .map((f) => ({
+        framework: f.key,
+        shortName: Array.isArray(f.frameworks) && f.frameworks.length > 1 ? `${f.label} (${f.frameworks.length} benchmarks)` : f.label || f.key,
+      }));
+  }
+  return Array.isArray(res?.frameworks) ? res.frameworks : [];
+}
+
+/**
+ * Preselección: la única opción, o SOC 2 si está — la razón por la que
+ * existe el pack. Si no, nada: que la persona elija.
+ */
+export function defaultFrameworkOption(options) {
+  if (!Array.isArray(options) || options.length === 0) return "";
+  if (options.length === 1) return options[0].framework;
+  const soc2 = options.find((o) => /^soc2/i.test(String(o.framework)));
+  return soc2?.framework || "";
+}

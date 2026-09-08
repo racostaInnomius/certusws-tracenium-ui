@@ -22,6 +22,7 @@ import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { listTenantMembers } from "../../api/tenants";
 import { createReportSchedule, updateReportSchedule, listGrcTargets } from "../../api/reports";
 import { getFrameworks } from "../../api/compliance";
+import { frameworkOptionsFrom, defaultFrameworkOption } from "./reportParams";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
 import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
@@ -72,7 +73,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
     const hasJson = (reportType.formats || []).includes("json");
     Promise.all([
       listTenantMembers(tenantId).then((r) => (r?.items || []).filter((m) => m.isActive && m.email)).catch(() => []),
-      needsFrameworks ? getFrameworks().then((r) => (Array.isArray(r?.frameworks) ? r.frameworks : [])).catch(() => []) : Promise.resolve([]),
+      needsFrameworks ? getFrameworks().then((r) => frameworkOptionsFrom(r)).catch(() => []) : Promise.resolve([]),
       needsGroups ? listAssetGroups().then((r) => listFrom(r, { context: "scheduleReportGroups" })).catch(() => []) : Promise.resolve([]),
       hasJson ? listGrcTargets().then((r) => (r?.targets || []).filter((t) => t.enabled)).catch(() => []) : Promise.resolve([]),
     ])
@@ -84,8 +85,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
         const fwParam = paramDefs.find((p) => p.kind === "framework");
         // Sólo al CREAR: editando, el framework guardado manda.
         if (fwParam && fws.length && !schedule) {
-          const soc2 = fws.find((f) => /^soc2/i.test(f.framework));
-          setValues((prev) => ({ ...prev, [fwParam.name]: fws.length === 1 ? fws[0].framework : soc2?.framework || "" }));
+          setValues((prev) => ({ ...prev, [fwParam.name]: defaultFrameworkOption(fws) }));
         }
       })
       .finally(() => setLoading(false));

@@ -18,6 +18,7 @@ import {
   FormControl, InputLabel, MenuItem, Select, TextField, Typography,
 } from "@mui/material";
 import { getFrameworks } from "../../api/compliance";
+import { frameworkOptionsFrom, defaultFrameworkOption } from "./reportParams";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
 import { BRAND, TEXT } from "../../theme/brand";
@@ -51,7 +52,7 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
     if (!needsFrameworks && !needsGroups) return;
     setLoading(true);
     Promise.all([
-      needsFrameworks ? getFrameworks().then((r) => (Array.isArray(r?.frameworks) ? r.frameworks : [])).catch(() => []) : Promise.resolve([]),
+      needsFrameworks ? getFrameworks().then((r) => frameworkOptionsFrom(r)).catch(() => []) : Promise.resolve([]),
       needsGroups ? listAssetGroups().then((r) => listFrom(r, { context: "reportParamsGroups" })).catch(() => []) : Promise.resolve([]),
     ])
       .then(([fws, gs]) => {
@@ -61,8 +62,7 @@ export default function ReportParamsDialog({ open, onClose, reportType, format, 
         // reason this dialog exists.
         const fwParam = params.find((p) => p.kind === "framework");
         if (fwParam && fws.length) {
-          const soc2 = fws.find((f) => /^soc2/i.test(f.framework));
-          setValues((prev) => ({ ...prev, [fwParam.name]: prev[fwParam.name] || (fws.length === 1 ? fws[0].framework : soc2?.framework || "") }));
+          setValues((prev) => ({ ...prev, [fwParam.name]: prev[fwParam.name] || defaultFrameworkOption(fws) }));
         }
       })
       .finally(() => setLoading(false));
