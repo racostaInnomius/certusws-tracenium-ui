@@ -345,6 +345,11 @@ acciones por fila donde hay una. U5 lo aprieta a una lista y convierte generar
 en una pregunta. Lo que U3 acertó —el último run en la fila, el chip `params`,
 el `role="group"` etiquetado, el vacío que explica su causa— se conserva.
 
+U5 destapó además la raíz de dos quejas que parecían de UI: el fichero de una
+corrida interactiva sólo existía en el navegador de quien la pidió. Cerrar sin
+descargar lo perdía, y mandarlo obligaba a regenerar. Archivarlas lo cierra —y
+deja posible lo que hoy no existe: generar el día 30 y mandar otro día.
+
 Lo que NO entró y sigue abierto:
 
 - Presets de parámetros guardables (ítem 22 de R3): pide tabla nueva y decidir
@@ -371,3 +376,5 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 | U4 | `json` en `audit.events` | backend | hecho (`5feab8a`) | Habilita su preview y repone por el motor el export JSON retirado de la página de Audit. Mismos filtros y tope que el CSV; la capacidad `audit_log` se sigue exigiendo. |
 | U4 | GRC a Settings + mensaje de permiso | UI | hecho (`206e185` + `fb04e3d`) | El panel vive en la pestaña Settings desde U1; el 403 pasa a mensaje y deja de ofrecer acciones que rebotan. Un 500 sigue siendo error. |
 | U5 | Catálogo compacto + generar en pasos | UI | hecho (`bacc8c2`) | Las tarjetas de U3 seguían pidiendo scroll para seis informes: pasan a FILAS (59 px, catálogo entero en 355 px, medido a 1280x800). Fuera de la fila el botón por formato, "Schedule" y "Email": el formato se pregunta al generar, programar tiene su pestaña y mandar se decide sobre lo ya generado. Los grupos se dicen con el nombre del menú, no con la sigla del plugin. |
+| U5 | Archivar las corridas interactivas + retención | backend | hecho (`7c6c91e`) | Se capturan los bytes que salen (los handlers escriben en `res`; `audit.events` no tiene constructor de adjunto para `json`, así que reconstruir no vale). Tope 25 MB. ⚠️ La retención de 3 es SÓLO para `manual`/`email`: podar lo programado dejaría un pack mensual en tres meses cuando ADR-0014 va de doce. `report-retention.itest.ts`, 9 casos. |
+| U5 | `POST /runs/:id/email` — mandar sin regenerar | backend + UI | hecho (`7c6c91e` + `78f4170`) | Regenerar producía otra fila y otro SHA-256: "el informe que miré" y "el que mandé" eran dos documentos. El id del run no cabe en una cabecera (se escribe en el `finish`), así que se resuelve por la corrida más reciente del tipo COMPROBANDO EL TAMAÑO — sin eso, dos personas generando a la vez se mandan el fichero de la otra. |
