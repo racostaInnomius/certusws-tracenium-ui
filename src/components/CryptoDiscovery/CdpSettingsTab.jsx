@@ -17,6 +17,7 @@ import SectionPaper from "../common/SectionPaper";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
 import { CbomImportForm } from "./CbomAssetsPanel";
+import CdpRemoteProbes from "./CdpRemoteProbes";
 import { listCdpAdcsSources } from "../../api/cdp";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
@@ -120,6 +121,10 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Import a CBOM</Typography>
           <CbomImportForm onImported={onSourcesChanged} />
         </Box>
+      </SectionPaper>
+
+      <SectionPaper>
+        <CdpRemoteProbes refreshNonce={refreshNonce} />
       </SectionPaper>
 
       <SectionPaper>

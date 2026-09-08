@@ -336,6 +336,7 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
   it("yields blanks when the policy has no cdp block", () => {
     expect(readFormFromPolicy({}).cdp).toEqual({
       adcsHosts: "",
+      probeHosts: "",
       intervalSeconds: "",
       javaKeystorePaths: "",
       // The probe is opt-in, so "no block" has to read as off — not as

@@ -176,7 +176,7 @@ export const FIELD_SPECS = {
     {
       key: "cdp.scanTlsListeners",
       label: "Probe local TLS services",
-      sub: "Captures the certificate each service actually serves, which can differ from every store. Enables chain validation and \u201cwhich process serves this certificate\u201d. Every probe goes to 127.0.0.1 and closes at the handshake; SSH, SMTP, MySQL, PostgreSQL and other cleartext-first ports are never probed.",
+      sub: "Runs on every device under this policy. Captures the certificate each local service actually serves (which can differ from every store), what the handshake negotiates, and which process serves it. Every probe goes to 127.0.0.1 and closes at the handshake; SMTP, IMAP, POP3, LDAP, PostgreSQL and MySQL get their StartTLS preamble, while SSH, telnet, DNS, MSSQL and Oracle are never probed (SSH host keys are read from disk instead). The same switch also reports the internal TLS services each device connects to, as suggestions for remote probing.",
       type: "switch",
     },
     {
@@ -194,9 +194,25 @@ export const FIELD_SPECS = {
       },
     },
     {
+      // Repaso 2026-09-07: sin `probeHosts`, cada equipo bajo la policy
+      // sondeaba cada objetivo. Como con los CA servers: se nombran.
+      key: "cdp.probeHosts",
+      label: "Remote probes run from",
+      sub: "Hostnames of the two or three devices that run the remote probes, one per line (NetBIOS or FQDN); pick devices in the network segments that can reach the targets. Every other device ignores the target list. Empty = nobody probes.",
+      type: "lines",
+      mono: true,
+      placeholder: "MSIG-RADIUS-CA\nprobe01.corp.example",
+      validate: (v) => {
+        const lines = String(v ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const bad = lines.filter((h) => !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$/.test(h) || h.length > 253);
+        if (bad.length > 0) return `Not a hostname — ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? "…" : ""}`;
+        return lines.length > 50 ? "At most 50 devices." : null;
+      },
+    },
+    {
       key: "cdp.probeTargets",
-      label: "Probe remote TLS services",
-      sub: "No agent needed: devices running this policy connect to each host:port, record the certificate served and what the handshake negotiates, including whether the server accepts a post-quantum key exchange (X25519MLKEM768). One host:port per line; loopback is rejected. Cleartext-first ports (SMTP, IMAP, POP3, LDAP, PostgreSQL, MySQL) get their StartTLS preamble.",
+      label: "Remote TLS services to probe",
+      sub: "No agent needed on the target: the devices named above connect to each host:port, record the certificate served and what the handshake negotiates, including whether the server accepts a post-quantum key exchange (X25519MLKEM768). One host:port per line; loopback is rejected. Cleartext-first ports (SMTP, IMAP, POP3, LDAP, PostgreSQL, MySQL) get their StartTLS preamble. Suggestions from what devices already connect to are in Crypto Discovery → Settings.",
       type: "lines",
       mono: true,
       placeholder: "lb.corp.example:443\nvcenter.corp.example:443\n10.0.0.12:636",

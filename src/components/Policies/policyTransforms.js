@@ -564,6 +564,8 @@ export function readFormFromPolicy(policy, catalog = []) {
       certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
       probeTargets: (policy?.cdp?.probeTargets ?? []).join("\n"),
+      // Quién sondea: hostnames, uno por línea. Vacío = nadie.
+      probeHosts: (policy?.cdp?.probeHosts ?? []).join("\n"),
       // Conector AD CS: los hostnames de los CA servers, uno por línea.
       // Vacío = apagado (repaso 2026-09-07: dejó de ser un toggle).
       adcsHosts: (policy?.cdp?.adcs?.hosts ?? []).join("\n"),
@@ -774,6 +776,10 @@ export function formToPolicy(form, catalog = []) {
       new Set(splitTargetLines(form?.cdp?.probeTargets).filter((t) => invalidProbeTargets(t).length === 0).map((t) => t.toLowerCase()))
     ).slice(0, CDP_PROBE_TARGETS_MAX);
     if (targets.length > 0) cdp.probeTargets = targets;
+    const probeHosts = Array.from(
+      new Set(String(form?.cdp?.probeHosts ?? "").split(/\r?\n/).map((h) => h.trim().toLowerCase()).filter((h) => h.length > 0 && h.length <= 253))
+    ).slice(0, 50);
+    if (probeHosts.length > 0) cdp.probeHosts = probeHosts;
 
     // Conector AD CS: solo con CA servers nombrados (omit-when-empty, como
     // el resto). `enabled: true` acompaña por compatibilidad con agentes

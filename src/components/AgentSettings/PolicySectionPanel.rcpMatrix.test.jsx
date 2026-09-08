@@ -31,7 +31,6 @@ vi.mock("../../api/remoteControl", () => ({
   setAccessPolicyCell: vi.fn(async () => ({ ok: true })),
   listAccessRequests: vi.fn(async () => ({ ok: true, items: [] }))
 }));
-vi.mock("../../api/cdp", () => ({ listCdpProbeCandidates: vi.fn(async () => ({ items: [] })) }));
 
 import PolicySectionPanel from "./PolicySectionPanel";
 import AccessTab from "../RemoteControl/AccessTab";

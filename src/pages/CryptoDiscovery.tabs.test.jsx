@@ -49,6 +49,7 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
     listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
     listCdpAdcsSources: vi.fn(async () => ({ ok: true, sources: [] })),
+    listCdpProbeCandidates: vi.fn(async () => ({ ok: true, candidates: [] })),
     distrustAnchor: vi.fn(),
     destroyEndpointKey: vi.fn()
   };
@@ -62,6 +63,16 @@ vi.mock("../api/remoteControl", async (importOriginal) => {
     setAccessPolicyCell: vi.fn()
   };
 });
+
+vi.mock("../api/policies", async (importOriginal) => {
+  const real = await importOriginal();
+  return {
+    ...real,
+    getTenantPolicy: vi.fn(async () => ({ policy_version: 1, policy_json: { cdp: {} } })),
+    patchTenantPolicyDomain: vi.fn(async () => ({ ok: true, policyVersion: 2 }))
+  };
+});
+vi.mock("../hooks/useEffectiveTenantId", () => ({ useEffectiveTenantId: () => "1" }));
 
 import CryptoDiscovery from "./CryptoDiscovery";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";

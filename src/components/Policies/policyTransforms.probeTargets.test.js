@@ -30,6 +30,20 @@ describe("probeTargets en la policy", () => {
 // Conector AD CS (fase 4b): opt-in; solo se escribe cuando está ON.
 import { readFormFromPolicy, formToPolicy } from "./policyTransforms";
 
+describe("cdp.probeHosts — quién sondea", () => {
+  const catalog = [{ key: "cdp" }];
+  const withCdp = (cdp) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp });
+  it("⭐ del bloque al formulario y vuelta: saneado, en minúsculas, deduplicado; vacío omite la clave", () => {
+    expect(readFormFromPolicy(withCdp({ probeHosts: ["msig-radius-ca", "probe01.corp.example"] }), catalog).cdp.probeHosts).toBe("msig-radius-ca\nprobe01.corp.example");
+    const base = readFormFromPolicy(withCdp({}), catalog);
+    const on = formToPolicy({ ...base, cdp: { ...base.cdp, probeTargets: "lb.corp:443", probeHosts: " MSIG-RADIUS-CA \nmsig-radius-ca\n\nprobe01.corp.example" } }, catalog);
+    expect(on.cdp?.probeHosts).toEqual(["msig-radius-ca", "probe01.corp.example"]);
+    expect(on.cdp?.probeTargets).toEqual(["lb.corp:443"]);
+    const off = formToPolicy({ ...base, cdp: { ...base.cdp, probeHosts: "" } }, catalog);
+    expect(off.cdp?.probeHosts).toBeUndefined();
+  });
+});
+
 describe("cdp.adcs en la policy", () => {
   const catalog = [{ key: "cdp" }];
   const withCdp = (adcs) => ({ plugins: { enabled: ["amp", "cdp"] }, cdp: { adcs } });

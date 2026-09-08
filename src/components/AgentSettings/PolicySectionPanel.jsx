@@ -11,7 +11,6 @@ import { Alert, Box, Button, Typography } from "@mui/material";
 import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import SectionFields from "./SectionFields";
-import CdpProbeCandidates from "./CdpProbeCandidates";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 
 export default function PolicySectionPanel({
@@ -68,7 +67,6 @@ export default function PolicySectionPanel({
       ) : (
         <>
           <SectionFields sectionId={section.id} form={form} onChange={onChange} scope={scope} compareForm={compareForm} readOnly={readOnly} />
-          {section.id === "cdp" ? <CdpProbeCandidates form={form} onChange={onChange} readOnly={readOnly} /> : null}
           {/* ⚠️ El vistobueno se configura AQUÍ y ya no en la página de Remote
               Control.
 
