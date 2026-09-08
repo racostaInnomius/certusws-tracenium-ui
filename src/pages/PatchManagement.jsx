@@ -408,8 +408,10 @@ export default function PatchManagement({ onNavigate }) {
   // `auth` does not carry it, so this read silently resolved to nothing.
   const tenantId = useEffectiveTenantId();
 
-  // Which finding the queue asked us to open, cleared once the panel has it.
+  // Which finding / CVE the queue asked us to open, cleared once the panel
+  // has it.
   const [pendingCheckId, setPendingCheckId] = React.useState(null);
+  const [pendingCveId, setPendingCveId] = React.useState(null);
 
   /**
    * Take the operator to the row the queue just recommended — the actual row,
@@ -421,8 +423,11 @@ export default function PatchManagement({ onNavigate }) {
    */
   const handleOpenFromQueue = React.useCallback((item) => {
     if (item.kind === "cve") {
-      // Exposure has no per-CVE detail view, so its tab is as far as we can
-      // honestly take you.
+      // Exposure has no per-CVE detail view; the row is the destination. The
+      // panel scrolls to it and lights it up — switching tabs alone did
+      // nothing visible when the operator was already on Vulnerabilities,
+      // which is where "See exposure" looked broken.
+      setPendingCveId(item.id);
       setTab("vulnerabilities");
       return;
     }
@@ -1265,6 +1270,8 @@ export default function PatchManagement({ onNavigate }) {
               refreshNonce={refreshNonce}
               canManage={canManage}
               notify={notify}
+              openCveId={pendingCveId}
+              onOpened={() => setPendingCveId(null)}
             />
           ) : tab === "settings" ? (
             <ConfigurePanel

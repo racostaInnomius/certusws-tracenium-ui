@@ -9,6 +9,14 @@
 
 import VulnerabilityExposurePanel from "./VulnerabilityExposurePanel";
 
-export default function VulnerabilitiesTab({ canManage, notify, refreshNonce = 0 }) {
-  return <VulnerabilityExposurePanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} />;
+export default function VulnerabilitiesTab({ canManage, notify, refreshNonce = 0, openCveId = null, onOpened }) {
+  return (
+    <VulnerabilityExposurePanel
+      canManage={canManage}
+      notify={notify}
+      refreshNonce={refreshNonce}
+      openCveId={openCveId}
+      onOpened={onOpened}
+    />
+  );
 }
