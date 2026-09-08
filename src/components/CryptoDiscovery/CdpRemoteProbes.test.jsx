@@ -22,12 +22,12 @@ const listCdpProbeCandidates = vi.fn();
 vi.mock("../../api/cdp", () => ({ listCdpProbeCandidates: (...a) => listCdpProbeCandidates(...a) }));
 vi.mock("../../hooks/useEffectiveTenantId", () => ({ useEffectiveTenantId: () => "111" }));
 
-import CdpRemoteProbes from "./CdpRemoteProbes";
+import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
 
 const CDP = { scanTlsListeners: true, probeHosts: ["msig-radius-ca"], probeTargets: ["10.0.0.9:636"], adcs: { hosts: ["msig-radius-ca"] } };
 
 beforeEach(() => {
-  getTenantPolicy.mockResolvedValue({ ok: true, policy_version: 7, policy_json: { cdp: CDP } });
+  getTenantPolicy.mockResolvedValue({ ok: true, policy: { tenant_id: "111", policy_version: 7, policy_json: { cdp: CDP } } });
   patchTenantPolicyDomain.mockResolvedValue({ ok: true, policyVersion: 8 });
   listCdpProbeCandidates.mockResolvedValue({
     ok: true,
@@ -52,7 +52,7 @@ describe("CdpRemoteProbes", () => {
     expect(tenantId).toBe("111");
     expect(domain).toBe("cdp");
     expect(slice).toEqual({ cdp: { ...CDP, probeTargets: ["10.0.0.9:636", "10.0.0.5:443"] } });
-    expect(opts).toEqual({ expectedVersion: 7 });
+    expect(opts).toEqual({ expectedVersion: "7" });
     expect(await screen.findByText(/10\.0\.0\.5:443 added/i)).toBeInTheDocument();
   });
 
@@ -74,8 +74,23 @@ describe("CdpRemoteProbes", () => {
   });
 
   it("sin equipos que sondeen, avisa de que los objetivos no se sondean", async () => {
-    getTenantPolicy.mockResolvedValue({ ok: true, policy_version: 1, policy_json: { cdp: { probeTargets: ["10.0.0.9:636"] } } });
+    getTenantPolicy.mockResolvedValue({ ok: true, policy: { policy_version: 1, policy_json: { cdp: { probeTargets: ["10.0.0.9:636"] } } } });
     render(<CdpRemoteProbes />);
     expect(await screen.findByText(/No device is named to run the probes, so the targets below are not probed/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ 428 en producción: la fila viene DENTRO de `policy`; sin versión no se escribe", async () => {
+    // Lo que contestó el servidor al primer Add real. La versión y el JSON
+    // están en `res.policy`, no en la raíz.
+    const env = envelopeOf({ ok: true, policy: { policy_version: 1788500000000, policy_json: { cdp: CDP } } });
+    expect(env.version).toBe("1788500000000");
+    expect(env.cdp).toEqual(CDP);
+    // Y una respuesta sin versión no puede acabar en un PATCH: sin If-Match el
+    // servidor la rechaza, y con el bloque cdp vacío la habría borrado.
+    getTenantPolicy.mockResolvedValue({ ok: true, policy: { policy_json: { cdp: CDP } } });
+    render(<CdpRemoteProbes />);
+    fireEvent.click(await screen.findByRole("button", { name: /Add 10\.0\.0\.5:443/i }));
+    expect(await screen.findByText(/policy version could not be read/i)).toBeInTheDocument();
+    expect(patchTenantPolicyDomain).not.toHaveBeenCalled();
   });
 });

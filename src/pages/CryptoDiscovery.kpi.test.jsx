@@ -56,7 +56,7 @@ vi.mock("../api/policies", async (importOriginal) => {
   const real = await importOriginal();
   return {
     ...real,
-    getTenantPolicy: vi.fn(async () => ({ policy_version: 1, policy_json: { cdp: {} } })),
+    getTenantPolicy: vi.fn(async () => ({ ok: true, policy: { policy_version: 1, policy_json: { cdp: {} } } })),
     patchTenantPolicyDomain: vi.fn(async () => ({ ok: true, policyVersion: 2 }))
   };
 });

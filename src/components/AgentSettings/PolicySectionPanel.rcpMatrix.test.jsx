@@ -77,6 +77,14 @@ describe("la matriz de vistobueno vive en los ajustes", () => {
     expect(matrixTitle()).not.toBeInTheDocument();
   });
 
+  it("también en la sección Crypto Discovery: es un cambio de permisos, no un ajuste del plugin", async () => {
+    // Vivía en Crypto Discovery → Settings, al alcance de cualquiera que
+    // entrase a la página del plugin. Movida el 08-sep.
+    renderPanel({ section: { id: "cdp", label: "Crypto Discovery", description: "Certificados." } });
+    await waitFor(() => expect(matrixTitle()).toBeInTheDocument());
+    expect(screen.getByText(/crypto discovery capabilities/i)).toBeInTheDocument();
+  });
+
   it("ni en la sección de otro plugin", async () => {
     renderPanel({ section: { id: "amp", label: "Asset Management", description: "Inventario." } });
     await new Promise((r) => setTimeout(r, 0));

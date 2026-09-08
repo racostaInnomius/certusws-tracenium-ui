@@ -479,9 +479,12 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
       </Grid>
 
       {/* Row 2 — one card per tab: the numbers, and a click to get there.
-          Issuers moved to Explore (it is a distribution, not a headline). */}
+          Issuers moved to Explore (it is a distribution, not a headline).
+          Orphan keys dropped from the row (08-sep): four cards wrapped into
+          two ragged rows, and its numbers are almost always zero — the tab
+          keeps them. Three cards, one row. */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <OverviewCard
             title="Roadmap"
             icon={<RouteOutlinedIcon fontSize="small" />}
@@ -500,7 +503,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
             }
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <OverviewCard
             title="Outside your devices"
             icon={<CloudOutlinedIcon fontSize="small" />}
@@ -518,7 +521,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
             }
           />
         </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <OverviewCard
             title="Trust anchors"
             icon={<VerifiedUserOutlinedIcon fontSize="small" />}
@@ -530,23 +533,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
                     { label: "anchors", value: ov.anchors.total },
                     { label: "distrusted", value: ov.anchors.distrusted, color: ov.anchors.distrusted ? BRAND.alert.error : undefined },
                     { label: "on a minority", value: ov.anchors.novel, color: ov.anchors.novel ? BRAND.alert.high : undefined }
-                  ]
-                : []
-            }
-          />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <OverviewCard
-            title="Orphan keys"
-            icon={<KeyOffOutlinedIcon fontSize="small" />}
-            onOpen={() => onOpenTab?.(TAB.orphans)}
-            hint="Keys a device generated for a certificate that never arrived. Empty means «none recorded», not «none exist»."
-            empty={panelsLoaded ? "None recorded." : "Loading…"}
-            metrics={
-              ov.orphanKeys && ov.orphanKeys.total > 0
-                ? [
-                    { label: "without certificate", value: ov.orphanKeys.total },
-                    { label: "older than 14 days", value: ov.orphanKeys.stale, color: ov.orphanKeys.stale ? BRAND.alert.error : undefined }
                   ]
                 : []
             }

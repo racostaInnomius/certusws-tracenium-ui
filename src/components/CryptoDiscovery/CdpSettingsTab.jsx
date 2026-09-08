@@ -14,7 +14,6 @@ import * as React from "react";
 import { Alert, Box, Button, Chip, Stack, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import SectionPaper from "../common/SectionPaper";
-import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
 import { CbomImportForm } from "./CbomAssetsPanel";
 import CdpRemoteProbes from "./CdpRemoteProbes";
@@ -128,23 +127,12 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       </SectionPaper>
 
       <SectionPaper>
-        <SectionTitle sub="What the agents scan on each device — interval, Java keystore and certificate file paths, TLS listener ports, remote probe targets and the AD CS reader — is part of the agent policy, so it is set per policy and per device group.">
+        <SectionTitle sub="What the agents scan on each device — interval, Java keystore and certificate file paths, TLS listener ports, who runs the remote probes and the AD CS reader — is part of the agent policy, so it is set per policy and per device group. The approval matrix — which crypto discovery capabilities need a second person’s sign-off — is set there too: it is a permissions change, for administrators.">
           Scan policy (agents)
         </SectionTitle>
         <Button component="a" href="?page=policies" size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}>
           Open Policies → Crypto Discovery
         </Button>
-      </SectionPaper>
-
-      <SectionPaper>
-        {/* ADR-0009 phase 2 keeps ONE approval matrix for every privileged
-            capability; the cdp.* rows are rendered here so this screen holds
-            everything an operator configures for Crypto Discovery. */}
-        <AccessPolicyMatrix
-          prefix="cdp."
-          title="Privileged access policy"
-          description="Which crypto discovery capabilities need a second person’s approval before they can be used. Installing a certificate and distrusting a trust anchor both change what a machine will accept."
-        />
       </SectionPaper>
     </Stack>
   );

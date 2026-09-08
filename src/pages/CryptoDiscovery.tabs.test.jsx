@@ -68,7 +68,7 @@ vi.mock("../api/policies", async (importOriginal) => {
   const real = await importOriginal();
   return {
     ...real,
-    getTenantPolicy: vi.fn(async () => ({ policy_version: 1, policy_json: { cdp: {} } })),
+    getTenantPolicy: vi.fn(async () => ({ ok: true, policy: { policy_version: 1, policy_json: { cdp: {} } } })),
     patchTenantPolicyDomain: vi.fn(async () => ({ ok: true, policyVersion: 2 }))
   };
 });
@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 describe("pestañas de Crypto Discovery", () => {
-  it("⭐ «Settings» pinta la matriz, y «Orphan keys» NO la pinta", async () => {
+  it("⭐ «Settings» pinta lo suyo, y «Orphan keys» NO lo pinta; la matriz de vistobueno ya no está aquí", async () => {
     render(
       <ConfirmProvider>
         <CryptoDiscovery />
@@ -94,15 +94,18 @@ describe("pestañas de Crypto Discovery", () => {
     huerfanas.click();
     // El texto de honestidad del panel de huérfanas: prueba de que ESTÁ.
     await screen.findByText(/without that meaning there are none/i);
-    // Y la matriz de aprobación NO: este era el síntoma —dos paneles
-    // apilados bajo una sola pestaña.
-    expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
+    // Y lo de Settings NO: este era el síntoma —dos paneles apilados bajo
+    // una sola pestaña.
+    expect(screen.queryByText(/Remote TLS probes/i)).not.toBeInTheDocument();
 
     const policy = screen.getByRole("tab", { name: /^settings$/i });
     policy.click();
     // Este era el otro síntoma: la pestaña en blanco.
-    await screen.findByText(/Privileged access policy/i);
+    await screen.findByText(/Remote TLS probes/i);
     expect(screen.queryByText(/without that meaning/i)).not.toBeInTheDocument();
+    // La matriz de vistobueno se movió a Agent Settings (08-sep): es un
+    // cambio de permisos y no puede estar en la página del plugin.
+    expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
   });
 
   it("⭐ Settings concentra lo configurable: conectores, import de CBOM y enlace a la policy; Explore solo mira", async () => {
@@ -117,7 +120,8 @@ describe("pestañas de Crypto Discovery", () => {
     expect(screen.getByText(/^Connectors$/)).toBeInTheDocument();
     expect(screen.getByText("Import a CBOM")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Policies/i })).toHaveAttribute("href", "?page=policies");
-    expect(await screen.findByText(/Privileged access policy/i)).toBeInTheDocument();
+    expect(screen.getByText("Public domains")).toBeInTheDocument();
+    expect(screen.getByLabelText(/add a domain/i)).toBeInTheDocument();
 
     // Explore enseña lo que trajeron y remite a Settings; no repite el alta.
     screen.getByRole("tab", { name: /^explore$/i }).click();

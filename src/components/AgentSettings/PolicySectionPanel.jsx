@@ -13,6 +13,16 @@ import { BRAND, TEXT } from "../../theme/brand";
 import SectionFields from "./SectionFields";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 
+// Plugins con capacidades privilegiadas y, por tanto, con matriz de
+// vistobueno. Es un cambio de permisos: vive aquí, en Agent Settings —solo
+// ADMIN/OWNER llegan a esta página—, y no en la pantalla del plugin donde
+// quien está frenado por el gate lo tendría a un clic. La de Crypto
+// Discovery se movió el 08-sep por la misma razón que la de Remote Control.
+const APPROVAL_MATRIX = {
+  rcp: "Which remote control capabilities need a second person's approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation.",
+  cdp: "Which crypto discovery capabilities need a second person’s approval before they can be used. Installing a certificate and distrusting a trust anchor both change what a machine will accept."
+};
+
 export default function PolicySectionPanel({
   section,
   form,
@@ -80,13 +90,9 @@ export default function PolicySectionPanel({
               Solo en ámbito TENANT: la matriz es del tenant entero y no del
               equipo que se esté editando, y enseñarla mientras se edita el
               parche de un equipo diría que es suya. */}
-          {section.id === "rcp" && scope === "tenant" && !readOnly ? (
+          {APPROVAL_MATRIX[section.id] && scope === "tenant" && !readOnly ? (
             <Box sx={{ mt: 2 }}>
-              <AccessPolicyMatrix
-                prefix="rcp."
-                title="Privileged access policy"
-                description="Which remote control capabilities need a second person's approval before they can be used. Connecting to a server and connecting to a laptop are not the same operation."
-              />
+              <AccessPolicyMatrix prefix={`${section.id}.`} title="Privileged access policy" description={APPROVAL_MATRIX[section.id]} />
             </Box>
           ) : null}
         </>

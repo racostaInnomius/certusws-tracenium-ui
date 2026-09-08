@@ -14,6 +14,7 @@ import * as React from "react";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { createCdpConnector, deleteCdpConnector, listCdpConnectorRuns, listCdpConnectors, runCdpConnector, updateCdpConnector } from "../../api/cdp";
+import CdpPublicDomains from "./CdpPublicDomains";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
@@ -87,7 +88,8 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
           <MenuItem value="gcp">Google Cloud</MenuItem>
           <MenuItem value="vault">HashiCorp Vault</MenuItem>
           <MenuItem value="k8s">Kubernetes</MenuItem>
-          <MenuItem value="ct">Public CT logs (crt.sh)</MenuItem>
+          {/* «Public CT logs» ya no se ofrece aquí: los dominios públicos
+              tienen su propio bloque (CdpPublicDomains), siempre visible. */}
         </TextField>
         <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : kind === "k8s" ? "Prod cluster" : kind === "ct" ? "Our domains" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
         {kind === "ct" ? (
@@ -151,14 +153,7 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
           {busy ? "Saving…" : `Add ${KIND_LABEL[kind]}`}
         </Button>
       </Stack>
-      {kind === "ct" ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
-          No credentials: Certificate Transparency logs are public. Lists every certificate a public CA (Let&apos;s
-          Encrypt, ZeroSSL, DigiCert, Sectigo, Google…) logged for these domains, via crt.sh. A certificate here that
-          no device has is either a service without an agent or someone requesting certificates for your domains on
-          their own. crt.sh is a community service: large domain lists are read slowly and capped.
-        </Typography>
-      ) : kind === "k8s" ? (
+      {kind === "k8s" ? (
         <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
           Reads <code>kubernetes.io/tls</code> secrets (only that type), cert-manager <code>Certificate</code> objects
           and which Ingress uses each certificate. RBAC: get/list on secrets, list on certificates.cert-manager.io,
@@ -370,10 +365,12 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
 
   return (
     <Box sx={embedded ? undefined : { mt: 2, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
+      {state ? <CdpPublicDomains connectors={connectors} onChanged={() => { onChanged?.(); reload(); }} /> : null}
+      <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}` }} />
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Connectors</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
-        Refreshed daily. Azure Key Vault, AWS Certificate Manager, Google Cloud, HashiCorp Vault PKI, Kubernetes (TLS
-        secrets and cert-manager) and the public Certificate Transparency logs for your domains. Each reports its
+        Refreshed daily. Azure Key Vault, AWS Certificate Manager, Google Cloud, HashiCorp Vault PKI and Kubernetes (TLS
+        secrets and cert-manager); the public domains above are one more connector, listed here too. Each reports its
         certificates and keys, who uses them and, where the source knows it, what it will issue next. A certificate
         that also lives on a device is matched by fingerprint.
       </Typography>

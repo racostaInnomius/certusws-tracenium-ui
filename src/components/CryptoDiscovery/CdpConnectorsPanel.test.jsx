@@ -153,23 +153,15 @@ describe("ConnectorForm — Kubernetes", () => {
   });
 });
 
-describe("ConnectorForm — Public CT logs", () => {
-  it("⭐ no pide secreto y se puede crear aunque el servidor no tenga clave de sellado", async () => {
+describe("Dominios públicos (CT)", () => {
+  it("⭐ ya no van en el desplegable de tipos: tienen su bloque, y funciona sin clave de sellado", async () => {
     listCdpConnectors.mockResolvedValue({ ok: true, secretsConfigured: false, connectors: [] });
-    createCdpConnector.mockResolvedValue({ ok: true, connector: { connectorId: 6, kind: "ct", label: "Our domains", config: { domains: ["example.com"] }, enabled: true, hasSecret: false } });
     render(<CdpConnectorsPanel refreshNonce={0} />);
     await screen.findByText(/CDP_CONNECTOR_SECRETS_KEY/);
+    expect(screen.getByText("Public domains")).toBeInTheDocument();
+    expect(screen.getByLabelText(/add a domain/i)).not.toBeDisabled();
     fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
-    fireEvent.click(await screen.findByRole("option", { name: /public ct logs/i }));
-    fireEvent.change(screen.getByLabelText(/^label/i), { target: { value: "Our domains" } });
-    fireEvent.change(screen.getByLabelText(/^domains/i), { target: { value: "example.com, corp.example.net" } });
-    expect(screen.queryByLabelText(/secret/i)).not.toBeInTheDocument();
-    const add = screen.getByRole("button", { name: /add public ct logs/i });
-    expect(add).not.toBeDisabled();
-    fireEvent.click(add);
-    await waitFor(() =>
-      expect(createCdpConnector).toHaveBeenCalledWith({ kind: "ct", label: "Our domains", config: { domains: "example.com, corp.example.net", includeSubdomains: true, includeExpired: false }, clientSecret: "" })
-    );
+    expect(screen.queryByRole("option", { name: /public ct logs/i })).not.toBeInTheDocument();
   });
 
   it("⭐ «History» enseña las ejecuciones, con el fallo del planificador y la buena de la víspera", async () => {

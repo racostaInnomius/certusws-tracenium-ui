@@ -26,11 +26,21 @@ import { CDP_PROBE_TARGETS_MAX, invalidProbeTargets } from "../Policies/policyTr
 
 const MONO = "ui-monospace, Menlo, monospace";
 
-/** La policy llega con dos ortografías según el endpoint; se normaliza una vez. */
-function envelopeOf(res) {
+/**
+ * GET /policies/tenants/:id/policy contesta `{ ok, policy: { policy_version,
+ * policy_json, … } }`: la fila va DENTRO de `policy`. La primera versión de
+ * esto leía `policy_version` en la raíz —null— y el servidor contestó 428
+ * PRECONDITION_REQUIRED al primer «Add» real (08-sep). Peor: leía `res.policy`
+ * como si fuera el JSON y sacaba un bloque `cdp` vacío, así que de haber
+ * pasado el If-Match habría borrado `adcs`, `scan…` y `probeHosts` con el
+ * replace-slice. Por eso `write` se niega sin versión.
+ */
+export function envelopeOf(res) {
   if (!res) return { version: null, cdp: {} };
-  const json = res.policy_json ?? res.policyJson ?? res.policy ?? {};
-  return { version: res.policy_version ?? res.policyVersion ?? null, cdp: json?.cdp && typeof json.cdp === "object" ? json.cdp : {} };
+  const row = res.policy && typeof res.policy === "object" && ("policy_json" in res.policy || "policyJson" in res.policy || "policy_version" in res.policy || "policyVersion" in res.policy) ? res.policy : res;
+  const json = row.policy_json ?? row.policyJson ?? {};
+  const version = row.policy_version ?? row.policyVersion ?? null;
+  return { version: version == null ? null : String(version), cdp: json?.cdp && typeof json.cdp === "object" ? json.cdp : {} };
 }
 
 export default function CdpRemoteProbes({ refreshNonce }) {
@@ -67,11 +77,15 @@ export default function CdpRemoteProbes({ refreshNonce }) {
 
   const write = async (nextTargets, what) => {
     if (!tenantId || !env) return;
+    if (env.version == null) {
+      setNotice({ sev: "error", text: "The policy version could not be read, so nothing was saved. Reload and try again." });
+      return;
+    }
     setSaving(true);
     setNotice(null);
     try {
       const res = await patchTenantPolicyDomain(tenantId, "cdp", { cdp: { ...env.cdp, probeTargets: nextTargets } }, { expectedVersion: env.version });
-      setEnv({ version: res?.policyVersion ?? env.version, cdp: { ...env.cdp, probeTargets: nextTargets } });
+      setEnv({ version: res?.policyVersion != null ? String(res.policyVersion) : env.version, cdp: { ...env.cdp, probeTargets: nextTargets } });
       setNotice({ sev: "success", text: `${what}. The devices under “Runs from” pick it up on their next policy refresh.` });
       setNonce((n) => n + 1);
     } catch (e) {
