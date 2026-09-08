@@ -24,8 +24,7 @@ import {
 import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { getBrowserInventory } from "../../api/inventoryDashboard";
-
-const MAX_VERSION_CHIPS = 4;
+import CreateDeviceGroupButton from "../common/CreateDeviceGroupButton";
 
 export default function BrowserInventoryPanel({ notify }) {
   const [families, setFamilies] = React.useState([]);
@@ -84,15 +83,20 @@ export default function BrowserInventoryPanel({ notify }) {
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Browser</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Devices</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Fleet-latest by platform</TableCell>
+                {/* ⚠️ "Latest packaged" NO es la version del fabricante: es la
+                    que tenemos empaquetada en Software Delivery. No existe
+                    ningun sync con Google, Microsoft ni Mozilla, asi que la
+                    columna se llama por lo que sabe. */}
+                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Latest packaged</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Behind</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Version spread</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Versions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {families.map((f) => {
-                const extra = f.versions.length - MAX_VERSION_CHIPS;
-                const multiPlatform = Array.isArray(f.platforms) && f.platforms.length > 1;
                 const behind = Array.isArray(f.behindDevices) ? f.behindDevices : [];
+                const packaged = Array.isArray(f.packaged) ? f.packaged : [];
+                const versiones = Number(f.distinctVersionCount ?? 0);
                 const abierto = expanded === f.family;
                 return (
                   <TableRow key={f.family} hover>
@@ -129,6 +133,39 @@ export default function BrowserInventoryPanel({ notify }) {
                       )}
                     </TableCell>
                     <TableCell>
+                      {packaged.length > 0 ? (
+                        <Stack spacing={0.25}>
+                          {packaged.map((p) => (
+                            <Typography
+                              key={p.platform}
+                              sx={{ fontSize: TEXT.xs, fontFamily: "monospace", color: BRAND.dark }}
+                            >
+                              <Box component="span" sx={{ color: BRAND.gray, mr: 0.5 }}>
+                                {p.platform}
+                              </Box>
+                              {p.version}
+                              {/* Hay paquete mas nuevo que lo mejor de la flota:
+                                  es lo unico de esta columna sobre lo que se
+                                  puede actuar hoy. */}
+                              {p.newerThanFleet ? (
+                                <Box component="span" sx={{ color: BRAND.alert?.warning, fontWeight: 700, ml: 0.5 }}>
+                                  ↑
+                                </Box>
+                              ) : null}
+                            </Typography>
+                          ))}
+                        </Stack>
+                      ) : (
+                        // ⚠️ No hay paquete. Es una respuesta, no un hueco: es
+                        // la fila con equipos atrasados y nada que empujarles.
+                        <Tooltip title="No package in Software Delivery for this browser">
+                          <Typography sx={{ fontSize: TEXT.xs, color: "text.disabled" }}>
+                            not packaged
+                          </Typography>
+                        </Tooltip>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       {f.behindCount > 0 ? (
                         // ⚠️ Clicable. El resumen decia "9 atrasados" y no
                         // habia forma de saber CUALES sin recorrer la flota a
@@ -152,34 +189,23 @@ export default function BrowserInventoryPanel({ notify }) {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-                        {f.versions.slice(0, MAX_VERSION_CHIPS).map((v) => (
-                          <Chip
-                            key={`${v.platform || "?"}-${v.version}`}
-                            size="small"
-                            // La plataforma solo se nombra cuando la familia
-                            // vive en mas de una: en una flota de un solo SO
-                            // seria ruido en cada chip.
-                            label={
-                              multiPlatform
-                                ? `${v.version} · ${v.platform} · ${v.deviceCount}`
-                                : `${v.version} · ${v.deviceCount}`
-                            }
-                            sx={{
-                              height: 20,
-                              fontSize: TEXT.xs,
-                              fontFamily: "monospace",
-                              bgcolor: v.outdated ? BRAND.alert?.warningSoft : BRAND.tealSoft,
-                              color: v.outdated ? BRAND.alert?.warning : BRAND.tealText,
-                            }}
-                          />
-                        ))}
-                        {extra > 0 ? (
-                          <Tooltip title={f.versions.slice(MAX_VERSION_CHIPS).map((v) => `${v.version} (${v.deviceCount})`).join(", ")}>
-                            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>+{extra} more</Typography>
-                          </Tooltip>
-                        ) : null}
-                      </Box>
+                      {/* ⚠️ Un numero donde habia una fila de chips. Con 500
+                          equipos los chips no caben —Edge ya mostraba "+6
+                          more"— y el detalle accionable, QUE equipos estan
+                          atrasados, se despliega debajo desde el chip de
+                          "behind". Contar version distintas ordena la tabla;
+                          enumerarlas no cabia ni servia. */}
+                      <Tooltip title={versiones > 1 ? "Distinct versions across the fleet" : ""}>
+                        <Typography
+                          sx={{
+                            fontSize: TEXT.md,
+                            fontWeight: versiones > 1 ? 700 : 400,
+                            color: versiones > 1 ? BRAND.dark : "text.secondary",
+                          }}
+                        >
+                          {versiones}
+                        </Typography>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
@@ -190,10 +216,24 @@ export default function BrowserInventoryPanel({ notify }) {
                 .filter((f) => expanded === f.family && Array.isArray(f.behindDevices) && f.behindDevices.length > 0)
                 .map((f) => (
                   <TableRow key={`${f.family}-behind`}>
-                    <TableCell colSpan={5} sx={{ bgcolor: BRAND.surfaceMuted, py: 1 }}>
-                      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark, mb: 0.75 }}>
-                        {f.family}: devices behind their platform&apos;s newest version
-                      </Typography>
+                    <TableCell colSpan={6} sx={{ bgcolor: BRAND.surfaceMuted, py: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
+                        <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark }}>
+                          {f.family}: devices behind their platform&apos;s newest version
+                        </Typography>
+                        <Box sx={{ flex: 1 }} />
+                        {/* ⚠️ Aqui terminaba el callejon: el listado decia QUE
+                            equipos, y lo siguiente era copiarlos a mano para
+                            armar el deploy. Con 23 es tedioso; con 230 nadie lo
+                            hace. El grupo lo consume Software Delivery como
+                            destino tal cual. */}
+                        <CreateDeviceGroupButton
+                          deviceIds={f.behindDevices.map((d) => d.agentId)}
+                          namePrefix={`${f.family} behind`}
+                          origin={`Browser inventory · ${f.family} behind their platform's newest version`}
+                          notify={notify}
+                        />
+                      </Box>
                       <Stack spacing={0.4}>
                         {f.behindDevices.map((d) => (
                           <Typography key={d.agentId} sx={{ fontSize: TEXT.xs, color: BRAND.dark }}>

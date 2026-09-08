@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("../../api/inventoryDashboard", () => ({ getBrowserInventory: vi.fn() }));
+vi.mock("../../api/assetGroups", () => ({ createAssetGroup: vi.fn() }));
 import { getBrowserInventory } from "../../api/inventoryDashboard";
+import { createAssetGroup } from "../../api/assetGroups";
 import BrowserInventoryPanel from "./BrowserInventoryPanel";
 
 afterEach(() => {
@@ -112,5 +114,85 @@ describe("BrowserInventoryPanel — el maximo es por plataforma", () => {
   it("explica que la comparacion es dentro de la misma plataforma", async () => {
     render1();
     expect(await screen.findByText(/on the same platform/i)).toBeTruthy();
+  });
+
+  // ───────────────────────────────────────────────────────────────────
+  // Las dos columnas nuevas y la salida hacia Software Delivery.
+  // ───────────────────────────────────────────────────────────────────
+  const CON_PAQUETE = {
+    totalDevicesWithBrowser: 24,
+    families: [
+      {
+        family: "Chrome",
+        deviceCount: 24,
+        latestVersion: "152.0.7977.76",
+        behindCount: 2,
+        versions: [],
+        distinctVersionCount: 7,
+        platforms: [{ platform: "windows", latestVersion: "152.0.7977.76", deviceCount: 24, behindCount: 2 }],
+        packaged: [{ platform: "windows", version: "152.0.7977.83", packageId: "5", newerThanFleet: true }],
+        behindDevices: [
+          { agentId: "a1", hostname: "CHAYBANG", platform: "windows", version: "151.0.7922.170", latestForPlatform: "152.0.7977.76" },
+          { agentId: "a2", hostname: "Celina", platform: "windows", version: "152.0.7977.64", latestForPlatform: "152.0.7977.76" },
+        ],
+      },
+      {
+        family: "Edge",
+        deviceCount: 53,
+        latestVersion: "152.0.4191.66",
+        behindCount: 34,
+        versions: [],
+        distinctVersionCount: 10,
+        platforms: [{ platform: "windows", latestVersion: "152.0.4191.66", deviceCount: 53, behindCount: 34 }],
+        packaged: [],
+        behindDevices: [],
+      },
+    ],
+  };
+
+  it("cuenta las versiones en vez de enumerarlas en chips", async () => {
+    // Con 500 equipos los chips no caben: Edge ya mostraba "+6 more".
+    getBrowserInventory.mockResolvedValue(CON_PAQUETE);
+    render(<BrowserInventoryPanel />);
+
+    expect(await screen.findByText("7")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
+  });
+
+  it("muestra la versión empaquetada y marca cuando es más nueva que la flota", async () => {
+    getBrowserInventory.mockResolvedValue(CON_PAQUETE);
+    render(<BrowserInventoryPanel />);
+
+    expect(await screen.findByText(/152\.0\.7977\.83/)).toBeInTheDocument();
+  });
+
+  it("⚠️ 'not packaged' es una respuesta: 34 atrasados y nada que empujarles", async () => {
+    getBrowserInventory.mockResolvedValue(CON_PAQUETE);
+    render(<BrowserInventoryPanel />);
+
+    expect(await screen.findByText("not packaged")).toBeInTheDocument();
+  });
+
+  it("⚠️ desde la lista de atrasados se crea el grupo que consume Software Delivery", async () => {
+    // Aquí terminaba el callejón: el listado decía QUÉ equipos y lo siguiente
+    // era copiarlos a mano. Con 230 nadie lo hace.
+    createAssetGroup.mockResolvedValue({ id: 42, name: "x" });
+    getBrowserInventory.mockResolvedValue(CON_PAQUETE);
+    const notify = vi.fn();
+    render(<BrowserInventoryPanel notify={notify} />);
+
+    fireEvent.click(await screen.findByText("2 behind"));
+    fireEvent.click(await screen.findByText(/Create device group \(2\)/));
+    fireEvent.click(await screen.findByText("Create group"));
+
+    await waitFor(() => expect(createAssetGroup).toHaveBeenCalled());
+    const payload = createAssetGroup.mock.calls[0][0];
+    expect(payload.kind).toBe("static");
+    expect(payload.deviceIds).toEqual(["a1", "a2"]);
+    // ⚠️ El nombre lleva la fecha: un grupo estático es una foto, y quien lo
+    // despliegue dentro de un mes tiene que poder verlo en el nombre.
+    expect(payload.name).toMatch(/Chrome behind · \d{4}-\d{2}-\d{2}/);
+    expect(payload.description).toMatch(/does not refresh/);
   });
 });
