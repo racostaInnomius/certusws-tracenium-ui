@@ -58,3 +58,43 @@ describe("ComplianceSettingsPanel states", () => {
     await waitFor(() => expect(screen.getByText(/network down/i)).toBeInTheDocument());
   });
 });
+
+// ── El Refresh del anfitrión ─────────────────────────────────────────
+// Embebido como pestaña de Security Compliance, el panel leía una sola vez al
+// montarse: el botón Refresh de la cabecera no llegaba hasta aquí. `reloadKey`
+// lo trae — pero un refresco no puede tragarse lo que alguien está
+// escribiendo, y esta página se refresca sola cada 60 s por defecto.
+describe("ComplianceSettingsPanel — reloadKey", () => {
+  it("recarga cuando el anfitrión refresca", async () => {
+    getComplianceSettings.mockResolvedValue({ ok: true, settings });
+    const { rerender } = render(<ComplianceSettingsPanel embedded reloadKey={0} onToast={() => {}} />);
+    await waitFor(() => expect(getComplianceSettings).toHaveBeenCalledTimes(1));
+
+    rerender(<ComplianceSettingsPanel embedded reloadKey={1} onToast={() => {}} />);
+    await waitFor(() => expect(getComplianceSettings).toHaveBeenCalledTimes(2));
+  });
+
+  it("NO recarga si hay cambios sin guardar — el refresco no pisa el borrador", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    getComplianceSettings.mockResolvedValue({ ok: true, settings });
+    const { rerender } = render(<ComplianceSettingsPanel embedded reloadKey={0} onToast={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByText("Minimum applicable checks for scoring")).toBeInTheDocument()
+    );
+    expect(getComplianceSettings).toHaveBeenCalledTimes(1);
+
+    // Activar el override del primer ajuste ensucia el borrador: siembra un
+    // valor propio donde el servidor no tiene ninguno.
+    fireEvent.click(screen.getAllByRole("switch")[0]);
+    await waitFor(() => expect(screen.getByRole("spinbutton")).toBeInTheDocument());
+
+    rerender(<ComplianceSettingsPanel embedded reloadKey={1} onToast={() => {}} />);
+
+    // Margen suficiente para que la recarga hubiera llegado de no estar el
+    // guard: sin esta espera el test pasaría también con la llamada en vuelo.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(getComplianceSettings).toHaveBeenCalledTimes(1);
+    // Y el campo que estaba editando sigue en pantalla.
+    expect(screen.getByRole("spinbutton")).toBeInTheDocument();
+  });
+});

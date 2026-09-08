@@ -15,7 +15,7 @@
 // A full settings page would be empty padding. A drawer/dialog keeps
 // the SCP page as the single landing surface.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -107,7 +107,10 @@ const SETTINGS_DEFS = [
  * Dejar las dos vivas "por si acaso" es cómo una pantalla acaba teniendo dos
  * sitios donde se edita lo mismo.
  */
-export default function ComplianceSettingsPanel({ open, onClose, onToast, embedded = false }) {
+// `reloadKey` — el Refresh de la página que aloja el panel. Embebido como
+// pestaña, este panel leía UNA vez al montarse y el botón de la cabecera no
+// llegaba hasta aquí.
+export default function ComplianceSettingsPanel({ open, onClose, onToast, embedded = false, reloadKey = 0 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -122,10 +125,24 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast, embedd
   const [allFrameworks, setAllFrameworks] = useState([]);
   const [packDraft, setPackDraft] = useState(null);
 
+  // ⚠️ Un refresco NO puede tragarse lo que alguien está escribiendo.
+  //
+  // Con el panel embebido como pestaña, el Refresh de la cabecera —y el
+  // auto-refresco, que por defecto dispara cada 60 s— vuelven a leer los
+  // ajustes y resembrarían `draft` con lo que hay en el servidor. Quien
+  // estuviera ajustando un umbral vería su número volver solo, sin nada que
+  // lo explique, y probablemente lo achacaría a que el campo no guarda.
+  //
+  // Se mira en una ref y no en la dependencia del efecto a propósito: como
+  // dependencia, dejar el formulario limpio (deshacer una edición) volvería
+  // a disparar una carga que nadie pidió.
+  const hasChangesRef = useRef(false);
+
   useEffect(() => {
     // Embebido se monta ya visible: no hay `open` que esperar, y exigirlo
     // dejaría la pestaña en blanco para siempre.
     if (!embedded && !open) return;
+    if (reloadKey > 0 && hasChangesRef.current) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -157,7 +174,7 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast, embedd
     return () => {
       cancelled = true;
     };
-  }, [open, embedded]);
+  }, [open, embedded, reloadKey]);
 
   // Identify which fields have changed vs the on-server overrides.
   // Drives the Save button's enabled state + the patch shape we
@@ -184,6 +201,15 @@ export default function ComplianceSettingsPanel({ open, onClose, onToast, embedd
   }, [draft, settings, packDraft]);
 
   const hasChanges = Object.keys(patch).length > 0;
+
+  // Se sincroniza en un efecto, no durante el render: escribir en una ref
+  // mientras se renderiza es un efecto lateral, y el compilador de React lo
+  // marca. Va después del efecto de carga en el mismo commit, así que cuando
+  // llega un `reloadKey` la ref todavía dice si el formulario estaba sucio
+  // ANTES del refresco — que es justo la pregunta.
+  useEffect(() => {
+    hasChangesRef.current = hasChanges;
+  }, [hasChanges]);
 
   async function handleSave() {
     setSaving(true);

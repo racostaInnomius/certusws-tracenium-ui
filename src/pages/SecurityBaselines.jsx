@@ -47,10 +47,14 @@ import { DetailRow, shortHash } from "../components/Policies/policyDisplay";
 import SecurityPolicySection from "../components/Policies/SecurityPolicySection";
 
 // `embedded` — rendered as the Baselines tab inside Security Compliance
-// (Fase B) rather than as a standalone page: skips the PageHeader (the
-// host page owns the header) and keeps its own RefreshControl in a slim
-// right-aligned row, same convention as AgentSettings inside Settings.
-export default function SecurityBaselines({ onNavigate, embedded = false }) {
+// (Fase B) rather than as a standalone page: the host page owns the header,
+// so this skips the PageHeader AND the refresh row.
+//
+// ⚠️ Tenía aquí su propio RefreshControl, en una fila estrecha bajo la
+// cabecera del anfitrión. Eran DOS refrescos y DOS cadencias de auto-refresco
+// una encima de otra, contra los mismos endpoints — y el de la cabecera, que
+// es el que se busca, ni siquiera llegaba hasta aquí. `reloadKey` lo trae.
+export default function SecurityBaselines({ onNavigate, embedded = false, reloadKey = 0 }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
 
@@ -118,8 +122,26 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
   const [categorySummary, setCategorySummary] = React.useState(null);
   const [fleetSummary, setFleetSummary] = React.useState(null);
 
+  // ⚠️ Un refresco NO puede tragarse una edición a medias.
+  //
+  // `load` resiembra el formulario con lo que hay en el servidor, y esta
+  // página se refresca sola (por defecto cada 60 s). Quien estuviera editando
+  // una baseline veía sus cambios deshacerse solos al cabo de un minuto, sin
+  // nada en pantalla que lo explicara.
+  //
+  // Y no es sólo el formulario: resembrar `policyRow` mueve la versión que
+  // viaja en el `If-Match`. Con el formulario sucio eso convertiría el candado
+  // optimista en un pisotón silencioso a quien hubiera escrito mientras tanto
+  // — exactamente lo que el candado existe para impedir.
+  //
+  // Así que con el formulario sucio se refresca lo de SÓLO LECTURA (la
+  // evidencia) y se deja en paz la política. Refrescar sigue haciendo algo
+  // visible; lo que no hace es decidir por el operador.
+  const dirtyRef = React.useRef(false);
+
   const load = React.useCallback(async () => {
     if (!canManage || !tenantId) return;
+    const conservarEdicion = dirtyRef.current;
     try {
       setLoading(true);
       const [res, catSum, fleet] = await Promise.all([
@@ -130,12 +152,14 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
         getCategorySummary().catch(() => null),
         getComplianceSummary().catch(() => null),
       ]);
-      const env = extractPolicyEnvelope(res);
-      const policy = env.raw ?? {};
-      setPolicyRow(res ?? null);
-      setForm({ security: readSecurityFromPolicy(policy) });
-      // Snapshot of what's on the server, for dirty-tracking.
-      setLoadedSecurity(JSON.stringify(securityFormToPolicy(readSecurityFromPolicy(policy))));
+      if (!conservarEdicion) {
+        const env = extractPolicyEnvelope(res);
+        const policy = env.raw ?? {};
+        setPolicyRow(res ?? null);
+        setForm({ security: readSecurityFromPolicy(policy) });
+        // Snapshot of what's on the server, for dirty-tracking.
+        setLoadedSecurity(JSON.stringify(securityFormToPolicy(readSecurityFromPolicy(policy))));
+      }
       setCategorySummary(Array.isArray(catSum?.items) ? catSum.items : null);
       setFleetSummary(fleet?.summary ?? null);
     } catch (e) {
@@ -160,7 +184,27 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     load();
   }, [load]);
 
-  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(load, "securityBaselinesAutoRefresh");
+  // El Refresh de la página que aloja la pestaña. Embebido, la cabecera de
+  // Security Compliance es la que manda; aquí sólo se obedece.
+  React.useEffect(() => {
+    if (!reloadKey) return;
+    load();
+  }, [reloadKey, load]);
+
+  // Embebido NO se auto-refresca por su cuenta: el anfitrión ya tiene su
+  // cadencia, y dos temporizadores sobre los mismos endpoints es trabajo
+  // doble con dos relojes distintos. El hook se llama igual —no puede ser
+  // condicional— pero sin parámetro de URL que ensuciar y con la cadencia
+  // apagada, así que no arma temporizador.
+  const autoLoad = React.useCallback(() => {
+    if (embedded) return;
+    load();
+  }, [embedded, load]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(
+    autoLoad,
+    embedded ? null : "securityBaselinesAutoRefresh",
+    embedded ? "0" : undefined
+  );
 
   // Dirty tracking (the old Policies page had none — save was always
   // enabled, which made accidental no-op saves that bumped the policy
@@ -170,6 +214,12 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
     [form.security]
   );
   const dirty = loadedSecurity !== null && currentSerialized !== loadedSecurity;
+
+  // En un efecto y no durante el render: escribir en una ref mientras se
+  // renderiza es un efecto lateral y el compilador de React lo marca.
+  React.useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   const handleSave = async () => {
     if (!canManage || !tenantId) return;
@@ -263,16 +313,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false }) {
 
   return (
     <Box sx={{ px: embedded ? 0 : { xs: 2, sm: 0.5 }, py: embedded ? 0 : { xs: 2, sm: 0.5 }, minWidth: 0 }}>
-      {embedded ? (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
-          <RefreshControl
-            refreshSeconds={refreshSeconds}
-            onRefreshSecondsChange={setRefreshSeconds}
-            onRefresh={load}
-            loading={loading}
-          />
-        </Box>
-      ) : (
+      {embedded ? null : (
         <PageHeader
           title="Security Baselines"
           subtitle="The endpoint state you require — and whether the agent may correct drift automatically. Evidence of the current state lives in Security Compliance."

@@ -1034,7 +1034,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         }
         icon={<GppGoodOutlinedIcon />}
         actions={
-          effectiveTab !== "posture" ? undefined : (
           /* ── Qué va en la fila del título ────────────────────────────
              Sólo VERBOS: exportar y refrescar. Los filtros bajan a su
              propia fila (ver más abajo).
@@ -1044,7 +1043,21 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
              el subtítulo, de modo que la cabecera acababa siendo una
              franja de mandos sin jerarquía. Separarlos por naturaleza —
              acciones arriba, filtros debajo — le devuelve al título su
-             línea y agrupa los filtros como lo que son: un conjunto. */
+             línea y agrupa los filtros como lo que son: un conjunto.
+
+             ⚠️ En LAS CUATRO pestañas, no sólo en Fleet status. La fila
+             desaparecía al cambiar de pestaña y volvía al volver, que se
+             lee como una avería: los mandos de la cabecera son de la
+             PÁGINA, y una cabecera que se vacía deja al operador sin
+             saber si perdió el control o la página se rompió.
+
+             A diferencia de los filtros —que sí se ocultan, porque no
+             filtran nada fuera de Fleet status— estos tres siguen
+             significando lo mismo en todas: el informe es el de este
+             módulo, y las otras tres pestañas también leen del servidor.
+             Lo que hay que garantizar es que refrescar ALCANCE lo que se
+             está mirando; de eso se encarga `refreshToken`, que baja a
+             las tres como `reloadKey`. */
           <Stack direction="row" spacing={1} alignItems="center">
             {/* ⚠️ Aquí había "Export CSV" y "Export PDF", que descargaban por
                 `/api/v1/compliance/export.csv|pdf`. El fichero salía y no
@@ -1078,7 +1091,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               loading={loading || refreshing}
             />
           </Stack>
-          )
         }
       />
 
@@ -1244,19 +1256,25 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           }
         >
           {/* onNavigate: inside the tab, "go see the evidence" means
-              switching to Posture, not a page navigation. */}
-          <SecurityBaselines embedded onNavigate={() => setTab("posture")} />
+              switching to Posture, not a page navigation.
+
+              `reloadKey`: el Refresh de la cabecera es el de la página, y
+              tiene que llegar hasta aquí. Embebido, este componente ya NO
+              pinta su propio RefreshControl — había dos, con dos cadencias
+              distintas, una encima de otra. */}
+          <SecurityBaselines embedded reloadKey={refreshToken} onNavigate={() => setTab("posture")} />
         </React.Suspense>
       ) : null}
 
       {effectiveTab === "settings" ? (
-        <ComplianceSettingsPanel embedded onToast={showToast} />
+        <ComplianceSettingsPanel embedded reloadKey={refreshToken} onToast={showToast} />
       ) : null}
 
       {effectiveTab === "catalog" ? (
         <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
           <CatalogBrowser
             active
+            reloadKey={refreshToken}
             sx={{ height: "72vh" }}
             focusCheckId={focusCheckId}
             onClearFocus={() => setFocusCheckId(null)}

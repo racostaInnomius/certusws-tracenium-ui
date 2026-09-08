@@ -211,7 +211,10 @@ function CheckRow({ check, focused = false }) {
 // fetch trigger — pass true for an always-mounted tab. `sx` merges onto
 // the root flex column (the tab passes a height; the dialog fills its
 // DialogContent).
-export function CatalogBrowser({ active = true, sx, focusCheckId = null, onClearFocus }) {
+// `reloadKey` — el Refresh de la página que aloja este navegador. Sin esto el
+// catálogo se leía UNA vez, al hacerse visible, y el botón de la cabecera no
+// llegaba hasta aquí: pulsarlo dejaba exactamente la misma lista en pantalla.
+export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId = null, onClearFocus }) {
   const [loading, setLoading] = React.useState(false);
   const [checks, setChecks] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -250,7 +253,7 @@ export function CatalogBrowser({ active = true, sx, focusCheckId = null, onClear
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, reloadKey]);
 
   const categories = React.useMemo(
     () => Array.from(new Set(checks.map((c) => c.category).filter(Boolean))).sort(),

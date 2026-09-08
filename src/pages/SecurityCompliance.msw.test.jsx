@@ -385,6 +385,49 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     );
   });
 
+  // ⚠️ Lo contrario que los filtros: los MANDOS se quedan en las cuatro.
+  //
+  // Se perdían al cambiar de pestaña y volvían al volver a Fleet status. Los
+  // filtros se ocultan porque fuera de Fleet status no filtran nada; el
+  // informe y el refresco siguen significando lo mismo en todas, y una
+  // cabecera que se vacía se lee como que la página se rompió.
+  it("los mandos de la cabecera siguen ahí en LAS CUATRO pestañas", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    respond("get", `${BASE}/catalog`, { ok: true, checks: [] });
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    const filaTitulo = () =>
+      screen.getByRole("heading", { name: "Security Compliance" }).closest("div")
+        ?.parentElement?.parentElement;
+
+    for (const pestana of [/Baselines/, /Catalog/, /Compliance Settings/, /Fleet status/]) {
+      fireEvent.click(screen.getByRole("tab", { name: pestana }));
+      await waitFor(() => {
+        const fila = filaTitulo();
+        expect(within(fila).getByRole("button", { name: /^Report$/ })).toBeInTheDocument();
+        expect(within(fila).getByRole("button", { name: /^Refresh$/ })).toBeInTheDocument();
+        expect(within(fila).getByRole("combobox", { name: "Auto refresh" })).toBeInTheDocument();
+      });
+    }
+  });
+
+  // Y que ese Refresh ALCANCE lo que se está mirando. El catálogo se leía una
+  // sola vez, al hacerse visible la pestaña: enseñar el botón sin esto sería
+  // reponer el botón que no refresca.
+  it("Refresh en la pestaña Catalog vuelve a pedir el catálogo", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const lecturas = respond("get", `${BASE}/catalog`, { ok: true, checks: [] });
+    mountPage();
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("tab", { name: /Catalog/ }));
+    await waitFor(() => expect(lecturas.length).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Refresh$/ }));
+    await waitFor(() => expect(lecturas.length).toBe(2));
+  });
+
   // ── SOC 2 no es un estándar de configuración ──────────────────────
   // Salió en una demo. Un 94% contra SOC 2 se lee como "estamos listos
   // para la auditoría", y no lo es: SOC 2 lo emite un auditor sobre la
