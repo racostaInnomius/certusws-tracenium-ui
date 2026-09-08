@@ -200,6 +200,76 @@ describe("Reports page", () => {
     expect(await screen.findByText(/Email "Crypto Bill of Materials \(CBOM\)"/i)).toBeInTheDocument();
   });
 
+  // ⭐ Regenerar para mandar produce OTRA fila en el ledger con OTRO SHA-256:
+  // "el informe que miré" y "el que mandé" acaban siendo dos documentos, con
+  // datos distintos si algo se movió entre medias. Desde que las corridas
+  // interactivas se archivan, se manda EL MISMO.
+  it("Email it manda el run archivado, no regenera otro", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", "/api/v1/tenants/7/members", { items: [] });
+    const runCalls = respond("get", `${BASE}/cdp.cbom/run`, { ok: true });
+    // El historial devuelve la corrida recién hecha, archivada y con el mismo
+    // tamaño que el blob que acaba de llegar — así es como la página sabe cuál
+    // de las filas es la suya.
+    respond("get", `${BASE}/runs`, {
+      ok: true, total: 1,
+      runs: [{ id: 42, occurredAt: "2026-09-08T10:00:00.000Z", key: "cdp.cbom", format: "json", trigger: "manual", outcome: "ok", actor: "op@tracenium.test", sha256: "abc", filename: "cbom.json", bytes: 11, downloadable: true }],
+    });
+    const envioDeRun = respond("post", `${BASE}/runs/42/email`, { ok: true, sent: ["op@tracenium.test"], failed: [] });
+    const envioRegenerando = respond("post", `${BASE}/cdp.cbom/email`, { ok: true, sent: [], failed: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(runCalls).toHaveLength(1));
+
+    await userEvent.click(await screen.findByRole("button", { name: /Email it/i }));
+    const correo = await screen.findByRole("dialog");
+    // Sin selector de formato: el fichero ya existe y tiene el suyo.
+    expect(within(correo).queryByLabelText("Format")).toBeNull();
+    await userEvent.type(within(correo).getByLabelText(/external/i), "auditor@example.com");
+    await userEvent.click(within(correo).getByRole("button", { name: /^Send$/i }));
+
+    await waitFor(() => expect(envioDeRun).toHaveLength(1));
+    // ⚠️ Y NO por el camino que regenera.
+    expect(envioRegenerando).toHaveLength(0);
+    // Una sola generación en toda la secuencia.
+    expect(runCalls).toHaveLength(1);
+  });
+
+  // ⚠️ El id del run NO puede venir en una cabecera: la fila se escribe en el
+  // `finish` de la respuesta, después de mandar las cabeceras. Se resuelve
+  // preguntando por la más reciente de ese tipo — y ahí está el riesgo: con
+  // dos personas generando el mismo informe a la vez, la más reciente puede
+  // ser la del otro. El TAMAÑO es lo que lo descarta.
+  it("si la última corrida no cuadra con lo generado, no se manda esa", async () => {
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", "/api/v1/tenants/7/members", { items: [] });
+    respond("get", `${BASE}/cdp.cbom/run`, { ok: true });
+    respond("get", `${BASE}/runs`, {
+      ok: true, total: 1,
+      // Archivada y del mismo tipo, pero de OTRO tamaño: no es la nuestra.
+      runs: [{ id: 99, occurredAt: "2026-09-08T10:00:00.000Z", key: "cdp.cbom", format: "json", trigger: "manual", outcome: "ok", actor: "otra@acme.test", sha256: "zzz", filename: "cbom.json", bytes: 999999, downloadable: true }],
+    });
+    const envioDeRun = respond("post", `${BASE}/runs/99/email`, { ok: true, sent: [], failed: [] });
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
+
+    await userEvent.click(await screen.findByRole("button", { name: /Email it/i }));
+    const correo = await screen.findByRole("dialog");
+    // Se cae al camino que regenera —que es correcto, aunque cueste otra
+    // corrida— en vez de mandar el fichero de otra persona. El selector de
+    // formato volviendo a aparecer es la señal de que ese es el camino.
+    expect(within(correo).getByLabelText("Format")).toBeInTheDocument();
+    expect(envioDeRun).toHaveLength(0);
+  });
+
   it("shows an error snackbar when the catalog fails to load", async () => {
     respond("get", `${BASE}/types`, { error: "TENANT_NOT_RESOLVED" }, { status: 403 });
     respond("get", `${BASE}/runs`, { error: "TENANT_NOT_RESOLVED" }, { status: 403 });

@@ -25,11 +25,21 @@ import {
 } from "@mui/material";
 import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { listTenantMembers } from "../../api/tenants";
-import { emailReport } from "../../api/reports";
+import { emailReport, emailReportRun } from "../../api/reports";
 import { parseRecipients, validateRecipients, MAX_RECIPIENTS } from "../Alerts/notifyHelpers";
 import { BRAND } from "../../theme/brand";
 
-export default function EmailReportDialog({ open, onClose, reportType, onResult, params }) {
+/**
+ * `run` — cuando llega, se manda ESE fichero ya archivado en vez de generar
+ * uno nuevo.
+ *
+ * La diferencia no es de eficiencia: regenerar produce otra fila en el ledger
+ * y otro SHA-256, así que "el informe que miré" y "el que mandé" pasan a ser
+ * dos documentos, con datos distintos si algo se movió entre medias. Con un
+ * run delante tampoco hay formato que elegir — el fichero ya existe y tiene el
+ * suyo.
+ */
+export default function EmailReportDialog({ open, onClose, reportType, onResult, params, run = null }) {
   // ⚠️ El tenant EFECTIVO, no el del token. En una sesión de MSP con un
   // cliente abierto, `auth.tenantId` es el del operador: la lista de
   // miembros salía vacía y no se podía ni enviar ni programar para el
@@ -80,12 +90,17 @@ export default function EmailReportDialog({ open, onClose, reportType, onResult,
     setSending(true);
     setError("");
     try {
-      const result = await emailReport(reportType.key, {
-        format,
-        memberIds: checkedIds,
-        externalEmails: externalCheck.unique,
-        params
-      });
+      const result = run?.id
+        ? await emailReportRun(run.id, {
+            memberIds: checkedIds,
+            externalEmails: externalCheck.unique,
+          })
+        : await emailReport(reportType.key, {
+            format,
+            memberIds: checkedIds,
+            externalEmails: externalCheck.unique,
+            params
+          });
       onResult?.(result);
       onClose();
     } catch (err) {
@@ -100,19 +115,30 @@ export default function EmailReportDialog({ open, onClose, reportType, onResult,
       <DialogTitle>Email "{reportType.label}"</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <TextField
-            select
-            label="Format"
-            size="small"
-            value={format}
-            onChange={(e) => setFormat(e.target.value)}
-          >
-            {(reportType.formats || []).map((f) => (
-              <MenuItem key={f} value={f}>
-                {f.toUpperCase()}
-              </MenuItem>
-            ))}
-          </TextField>
+          {/* Con un run delante no hay formato que elegir: el fichero ya
+              existe. Enseñar un selector inerte invitaría a creer que se
+              puede pedir el mismo informe "en PDF" y que saldría el mismo
+              documento, cuando sería otro con otro hash. */}
+          {run?.id ? (
+            <Typography variant="body2" sx={{ color: BRAND.gray }}>
+              Sending the archived copy: <strong>{run.filename || `${run.format?.toUpperCase?.()} file`}</strong>
+              {run.sha256 ? <> · SHA-256 <code>{String(run.sha256).slice(0, 12)}…</code></> : null}
+            </Typography>
+          ) : (
+            <TextField
+              select
+              label="Format"
+              size="small"
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+            >
+              {(reportType.formats || []).map((f) => (
+                <MenuItem key={f} value={f}>
+                  {f.toUpperCase()}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
 
           <Box>
             <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700 }}>
@@ -175,7 +201,7 @@ export default function EmailReportDialog({ open, onClose, reportType, onResult,
         <Button
           variant="contained"
           onClick={handleSend}
-          disabled={sending || !format || !hasRecipients}
+          disabled={sending || (!run?.id && !format) || !hasRecipients}
         >
           {sending ? "Sending…" : "Send"}
         </Button>

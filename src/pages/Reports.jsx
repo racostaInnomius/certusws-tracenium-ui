@@ -142,6 +142,8 @@ export default function Reports() {
   // `paramsTarget` remembers what to do once the operator confirms.
   const [paramsTarget, setParamsTarget] = React.useState(null); // { row, format, intent: "generate" | "email" }
   const [emailParams, setEmailParams] = React.useState(null);
+  // Run archivado que se va a mandar tal cual, si lo hay. Ver EmailReportDialog.
+  const [emailRun, setEmailRun] = React.useState(null);
 
   /**
    * El flujo de generar, que ahora tiene pasos.
@@ -387,7 +389,32 @@ export default function Reports() {
     setGenError("");
     try {
       const { blob, filename } = await generateReport(row.key, format, params);
-      setGenResult({ blob, filename, bytes: blob?.size ?? 0, format, params: params || null });
+
+      /**
+       * Qué fila del ledger es ésta.
+       *
+       * No puede venir en una cabecera: el run se escribe en el `finish` de la
+       * respuesta, o sea DESPUÉS de mandar las cabeceras. Así que se pregunta
+       * por la más reciente de este tipo y se comprueba que el TAMAÑO coincida
+       * con lo que acaba de llegar — sin esa comprobación, dos personas
+       * generando el mismo informe a la vez podrían mandarse el fichero de la
+       * otra.
+       *
+       * Si no cuadra no se ofrece mandarlo desde aquí, y el historial —donde
+       * cada fila es inequívoca— sigue pudiendo hacerlo.
+       */
+      let runId = null;
+      let archivado = false;
+      try {
+        const res = await getReportRuns({ key: row.key, trigger: "manual", limit: 1 });
+        const ultimo = (res?.runs || [])[0];
+        if (ultimo && Number(ultimo.bytes) === Number(blob?.size)) {
+          runId = ultimo.id;
+          archivado = Boolean(ultimo.downloadable);
+        }
+      } catch { /* el informe ya está; saber su fila es una comodidad */ }
+
+      setGenResult({ blob, filename, bytes: blob?.size ?? 0, format, params: params || null, runId, archivado });
       setGenPhase("done");
       // El catálogo enseña el último run de cada tipo; sin esto la fila sigue
       // diciendo "Never generated" justo después de generarlo.
@@ -1036,9 +1063,16 @@ export default function Reports() {
         onEmail={(r) => {
           const row = genTarget;
           const params = r?.params || null;
+          // Si la corrida quedó archivada y sabemos cuál es, se manda ESE
+          // fichero. Si no, se cae al camino de siempre —que regenera— en vez
+          // de dejar el botón sin hacer nada; y el diálogo lo dice.
+          const run = r?.archivado && r?.runId
+            ? { id: r.runId, filename: r.filename, format: r.format }
+            : null;
           cerrarGeneracion();
           if (!row) return;
           setEmailParams(params);
+          setEmailRun(run);
           setEmailTarget(row);
         }}
         onClose={cerrarGeneracion}
@@ -1070,7 +1104,8 @@ export default function Reports() {
         open={Boolean(emailTarget)}
         reportType={emailTarget}
         params={emailParams}
-        onClose={() => { setEmailTarget(null); setEmailParams(null); }}
+        run={emailRun}
+        onClose={() => { setEmailTarget(null); setEmailParams(null); setEmailRun(null); }}
         onResult={handleEmailResult}
       />
       <ScheduleReportDialog

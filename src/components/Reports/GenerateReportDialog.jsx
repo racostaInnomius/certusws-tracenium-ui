@@ -95,13 +95,16 @@ export default function GenerateReportDialog({
             {result?.bytes ? (
               <Typography variant="caption" sx={{ color: BRAND.gray }}>{formatBytes(result.bytes)}</Typography>
             ) : null}
-            {/* ⚠️ Decirlo aquí, no en la letra pequeña: una corrida
-                interactiva NO se archiva —eso sólo lo hace el barrido de
-                programaciones—, así que estos bytes son la única copia. Quien
-                cierre sin descargar tiene que volver a generar, y eso es otra
-                fila en el ledger con otro hash. */}
+            {/* Archivado o no, se dice — porque cambia lo que puede hacer
+                quien cierre el diálogo. Antes las corridas interactivas no se
+                guardaban en ningún sitio: cerrar sin descargar perdía el
+                fichero y mandarlo obligaba a REGENERAR, o sea otra fila en el
+                ledger con otro hash. Ahora se archivan (las 3 últimas por
+                tipo), así que el historial las devuelve. */}
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1.5 }}>
-              This copy isn&apos;t archived — download it now or it has to be generated again.
+              {result?.archivado
+                ? "Archived — you can download or email this exact copy from History later."
+                : "This copy isn't archived — download it now or it has to be generated again."}
             </Typography>
           </Box>
         ) : (

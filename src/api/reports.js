@@ -85,6 +85,21 @@ export async function downloadReportRun(run) {
   saveBlob(blob, filename || run.filename || `${run.key}.${run.format}`);
 }
 
+/**
+ * Manda por correo un run YA generado, con el fichero archivado.
+ *
+ * ⚠️ NO es `emailReport`. Ése GENERA uno nuevo para mandarlo, y por tanto deja
+ * otra fila en el ledger con otro SHA-256: "el informe que miré" y "el que
+ * mandé" acaban siendo dos documentos distintos, con datos distintos si algo
+ * se movió entre medias. Esto manda el mismo cuyo hash ya está registrado.
+ */
+export async function emailReportRun(runId, { memberIds, externalEmails }) {
+  return httpPostJson(`${BASE}/runs/${encodeURIComponent(runId)}/email`, {
+    memberIds,
+    externalEmails,
+  });
+}
+
 export async function getReportTypes() {
   return httpGetJson(`${BASE}/types`);
 }
