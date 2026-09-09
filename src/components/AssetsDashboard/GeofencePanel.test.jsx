@@ -28,6 +28,8 @@ const sitio = (over = {}) => ({
   observedAccuracyM: 35,
   observedP90DistanceM: 318,
   suggestedRadiusM: 400,
+  suggestionReason: "ok",
+  observedReadings: 44,
   radiusTooSmall: false,
   ...over,
 });
@@ -72,12 +74,45 @@ describe("GeofencePanel", () => {
   it("⚠️ sin lecturas cerca NO propone un número inventado", () => {
     render(
       <GeofencePanel
-        sites={[sitio({ observedAccuracyM: null, observedP90DistanceM: null, suggestedRadiusM: null })]}
+        sites={[sitio({ observedAccuracyM: null, observedP90DistanceM: null,
+                        suggestedRadiusM: null, suggestionReason: "no_readings",
+                        observedReadings: 0 })]}
         events={[]}
         onSave={vi.fn()}
       />
     );
     expect(screen.getByText(/no measured radius to\s+suggest/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ con pocas lecturas dice CUÁNTAS, no 'no hay radio'", () => {
+    // Las tres razones para no aconsejar piden acciones distintas. "Todavía no
+    // hay suficientes" se resuelve esperando; las otras dos no.
+    render(
+      <GeofencePanel
+        sites={[sitio({ suggestedRadiusM: null, suggestionReason: "too_few_readings",
+                        observedReadings: 6 })]}
+        events={[]}
+        onSave={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Only 6 positions reported near this site/i)).toBeInTheDocument();
+    expect(screen.getByText(/appears once there are enough/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ si las lecturas se dispersan kilómetros, lo dice y pide arreglar el sitio", () => {
+    // El caso real: seis lecturas, dos a 4,7 km, y la primera versión aconsejaba
+    // 4.800 m. Un radio así daría una cerca que confirma "dentro" a media ciudad.
+    render(
+      <GeofencePanel
+        sites={[sitio({ suggestedRadiusM: null, suggestionReason: "too_scattered",
+                        observedReadings: 200 })]}
+        events={[]}
+        onSave={vi.fn()}
+      />
+    );
+    const aviso = screen.getByText(/spread over kilometres/i);
+    expect(aviso.textContent).toMatch(/not one site/i);
+    expect(aviso.textContent).toMatch(/Fix the pin or split the site/i);
   });
 
   it("un sitio sin pin no puede ser cerca, y lo dice en vez de fallar al guardar", () => {

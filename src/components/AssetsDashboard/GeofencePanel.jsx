@@ -152,12 +152,31 @@ function Cerca({ site, onSave, saving, error }) {
         </Typography>
       ) : null}
 
+      {/* ⚠️ Tres razones distintas para no aconsejar, y piden acciones
+          distintas del operador. Un mensaje único ("no hay radio sugerido") las
+          taparía las tres.
+
+          `too_scattered` salió de producción: un sitio con seis lecturas, dos
+          de ellas a 4,7 km, hacía que la primera versión aconsejara 4.800 m —
+          media ciudad presentada como un sitio. */}
       {!sinPin && sugerido === null ? (
-        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
-          {/* Sin lecturas no se puede aconsejar, y proponer un número inventado
-              tendría la misma autoridad visual que uno medido. */}
-          No positions have been reported near this site yet, so there is no measured radius to
-          suggest.
+        <Typography
+          sx={{
+            fontSize: TEXT.sm,
+            mt: 1,
+            color:
+              site.suggestionReason === "too_scattered"
+                ? BRAND.alert.warningText
+                : "text.secondary",
+          }}
+        >
+          {site.suggestionReason === "too_scattered"
+            ? `The positions reported near this pin spread over kilometres, so this is not one site — it looks like several places, or the pin is in the wrong spot. Fix the pin or split the site before setting a radius.`
+            : site.suggestionReason === "too_few_readings"
+            ? `Only ${site.observedReadings} position${
+                site.observedReadings === 1 ? "" : "s"
+              } reported near this site so far — too few to measure a radius from. The suggestion appears once there are enough.`
+            : "No positions have been reported near this site yet, so there is no measured radius to suggest."}
         </Typography>
       ) : null}
 
