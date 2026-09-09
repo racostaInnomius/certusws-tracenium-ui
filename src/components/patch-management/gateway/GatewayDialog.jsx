@@ -39,9 +39,13 @@ const DEFAULTS = {
   retentionHours: 24,
   maxConcurrent: 5,
   perVmTimeoutSec: 900,
+  minFreePercent: FLOOR_DEFAULTS.minFreePercent,
+  minFreeGiB: FLOOR_DEFAULTS.minFreeGiB,
 };
 
 const isSha256 = (v) => /^[0-9a-f]{64}$/.test(String(v || "").replace(/[:\s-]/g, "").toLowerCase());
+
+import { FLOOR_DEFAULTS, clampFloor, describeCapacityFloors } from "./capacityFloors";
 
 export default function GatewayDialog({ open, gateway, devices = [], onClose, onSave }) {
   const editing = Boolean(gateway);
@@ -68,6 +72,9 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
             retentionHours: gateway.snapshot?.retentionHours ?? 24,
             maxConcurrent: gateway.snapshot?.maxConcurrent ?? 5,
             perVmTimeoutSec: gateway.snapshot?.perVmTimeoutSec ?? 900,
+            // ?? not ||: 0 is a legitimate value here and means "floor off".
+            minFreePercent: gateway.snapshot?.minFreePercent ?? FLOOR_DEFAULTS.minFreePercent,
+            minFreeGiB: gateway.snapshot?.minFreeGiB ?? FLOOR_DEFAULTS.minFreeGiB,
           }
         : DEFAULTS
     );
@@ -110,6 +117,9 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
           retentionHours: Number(form.retentionHours) || 24,
           maxConcurrent: Number(form.maxConcurrent) || 5,
           perVmTimeoutSec: Number(form.perVmTimeoutSec) || 900,
+          // clampFloor, not `|| default`: `0` is falsy and must survive.
+          minFreePercent: clampFloor("minFreePercent", form.minFreePercent),
+          minFreeGiB: clampFloor("minFreeGiB", form.minFreeGiB),
         },
       });
       onClose?.();
@@ -119,6 +129,11 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
       setSaving(false);
     }
   };
+
+  // Says what the two floors will actually refuse, so the operator checks the
+  // numbers against their own datastore before saving rather than after a patch
+  // window has already been lost to them.
+  const floors = describeCapacityFloors(form);
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="md" fullWidth>
@@ -239,6 +254,34 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
                 onChange={set("perVmTimeoutSec")}
                 fullWidth
               />
+            </Grid>
+
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Minimum datastore free (%)"
+                type="number"
+                value={form.minFreePercent}
+                onChange={set("minFreePercent")}
+                fullWidth
+                inputProps={{ min: 0, max: 50 }}
+                helperText="0 turns this floor off"
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField
+                label="Minimum datastore free (GiB)"
+                type="number"
+                value={form.minFreeGiB}
+                onChange={set("minFreeGiB")}
+                fullWidth
+                inputProps={{ min: 0, max: 4096 }}
+                helperText="0 turns this floor off"
+              />
+            </Grid>
+            <Grid size={12}>
+              <Alert severity={floors.severity} data-testid="capacity-floors-note">
+                {floors.text}
+              </Alert>
             </Grid>
           </Grid>
 

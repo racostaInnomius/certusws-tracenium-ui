@@ -50,7 +50,14 @@ export function snapshotTestSteps(row) {
     if (!correlated) return [correlate, skipped("Create the snapshot"), skipped("Remove the snapshot")];
     return [
       correlate,
-      { label: "Create the snapshot", status: "failed", detail: row.reason || REASON_HINT[row.outcome] || row.outcome },
+      {
+        label: "Create the snapshot",
+        status: "failed",
+        // `reasonDetail` carries the figures the agent measured. Without it the
+        // panel could say "refused for datastore space" and the operator had to
+        // open vCenter to learn whether 2 GiB were missing or 2 TiB.
+        detail: failureDetail(row),
+      },
       skipped("Remove the snapshot"),
     ];
   }
@@ -70,6 +77,23 @@ export function snapshotTestSteps(row) {
   ];
 }
 
+/**
+ * What to show when a snapshot was refused: the measured numbers when the agent
+ * sent them, the code otherwise.
+ *
+ * The two are deliberately separate on the wire — `reason` is a code the control
+ * plane branches on, `reasonDetail` is prose — so the code is the fallback and
+ * never the whole story when figures exist. Agents older than 2026-09-09 send
+ * no detail at all, hence the fallback chain.
+ */
+export function failureDetail(row) {
+  if (row?.reasonDetail) {
+    const code = row.reason ? `${row.reason} — ` : "";
+    return `${code}${row.reasonDetail}`;
+  }
+  return row?.reason || REASON_HINT[row?.outcome] || row?.outcome || "";
+}
+
 export function describeSnapshotTest(row) {
   switch (snapshotTestStage(row)) {
     case "passed":
@@ -82,7 +106,7 @@ export function describeSnapshotTest(row) {
       return {
         label: row.outcome === "not_correlated" ? "Not correlated" : "Failed",
         color: "error",
-        hint: row.reason || REASON_HINT[row.outcome] || "The test did not complete.",
+        hint: failureDetail(row) || REASON_HINT[row.outcome] || "The test did not complete.",
       };
     default:
       return { label: "—", color: "default", hint: "" };

@@ -65,6 +65,22 @@ describe("snapshotTestSteps", () => {
     expect(steps[1].detail).toBe("datastore_too_full");
   });
 
+  it("⭐ shows the measured figures when the agent sent them, not just the code", () => {
+    // The real refusal from MSIG-RADIUS-CA. "datastore_low_free_ratio" alone
+    // sent the operator to vCenter to find out how much was missing.
+    const steps = snapshotTestSteps({
+      ...base,
+      outcome: "rejected",
+      vmMoref: "vm-9398",
+      matchedBy: "uuid_swapped",
+      reason: "datastore_low_free_ratio",
+      reasonDetail: "datastore3: 18.6% free (4.06 TiB of 21.83 TiB), 9.1 TiB promised to thin disks (over-committed)",
+    });
+    expect(steps[1].detail).toContain("datastore_low_free_ratio");
+    expect(steps[1].detail).toContain("4.06 TiB of 21.83 TiB");
+    expect(steps[1].detail).toContain("over-committed");
+  });
+
   it("while removing, the third step is pending and says so", () => {
     const steps = snapshotTestSteps({ ...base, outcome: "created", vmMoref: "vm-1", snapshotMoref: "snapshot-2" });
     expect(steps[2]).toMatchObject({ status: "pending", detail: "Removal queued on the gateway" });
