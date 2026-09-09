@@ -88,6 +88,12 @@ import {
 import { createDeviceJob } from "../api/jobs";
 import FindingsPanel from "../components/patch-management/FindingsPanel";
 import { listFrom } from "../api/shape";
+import { getConnectedDevices } from "../api/overview";
+// El MISMO punto verde que Asset Management. Nació en su tabla y se extrajo a
+// `common/` justo para que no hubiera dos maneras de decir "este equipo
+// responde": si aquí se pintara otra cosa, dos pantallas del mismo portal
+// discreparían sobre el mismo hecho.
+import OnlineDot from "../components/common/OnlineDot";
 
 // ── Remediation catalog. Mirrors the Security Compliance categories —
 //    each compliance check has a matching remediation action here. When
@@ -622,6 +628,24 @@ export default function PatchManagement({ onNavigate }) {
    * El nonce es lo que alcanza a esas pestañas: no tienen `refetch` porque no
    * pasan por `useCachedFetch`, cargan en un efecto propio.
    */
+  /**
+   * Qué equipos están conectados AHORA.
+   *
+   * Sale de `getConnectedDevices()` —sesiones gRPC vivas—, la misma fuente que
+   * usan Asset Management y el Hero de Overview. No de un `last_heartbeat`:
+   * ese lo sobrescriben los barridos y sostiene "online" con el agente muerto.
+   *
+   * Importa en ESTA página más que en ninguna: un parche no se instala en un
+   * equipo que no responde, así que la fila que dice "12 actualizaciones
+   * pendientes" significa una cosa muy distinta según el equipo esté o no
+   * escuchando. Sin esta columna había que irse a otra pantalla a averiguarlo.
+   *
+   * Se recarga con el refresco de la página y cada 30 s, como en Assets, y
+   * salta el tick con la pestaña oculta: un fallo deja los puntos en gris
+   * hasta el siguiente intento, no rompe la tabla.
+   */
+  const [connectedIds, setConnectedIds] = React.useState(() => new Set());
+
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const refreshAll = React.useCallback(() => {
     refetchSummary();
@@ -633,6 +657,27 @@ export default function PatchManagement({ onNavigate }) {
     refreshAll,
     "patchAutoRefresh"
   );
+
+  React.useEffect(() => {
+    let cancelado = false;
+    const cargar = async () => {
+      try {
+        const res = await getConnectedDevices();
+        if (cancelado) return;
+        const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
+        setConnectedIds(new Set(ids.map((id) => String(id))));
+      } catch (e) {
+        if (cancelado) return;
+        console.warn("devices-connected fetch failed:", e?.message || e);
+        setConnectedIds(new Set());
+      }
+    };
+    cargar();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") cargar();
+    }, 30_000);
+    return () => { cancelado = true; clearInterval(id); };
+  }, [refreshNonce]);
 
   const refreshing = Boolean(summaryRefreshing || devicesRefreshing);
 
@@ -874,6 +919,20 @@ export default function PatchManagement({ onNavigate }) {
 
   const deviceColumns = React.useMemo(() => [
     {
+      // Primera columna y rotulada "Online", igual que en Asset Management:
+      // es lo primero que hay que saber de una fila antes de leer qué le
+      // falta. `sortable: false` porque el dato no viene en la fila —sale de
+      // un Set aparte— y la rejilla ordenaría por un campo que no existe.
+      field: "online",
+      headerName: "Online",
+      width: 80,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <OnlineDot online={connectedIds.has(String(params.row.agentId))} />
+      )
+    },
+    {
       field: "hostname",
       headerName: "Hostname",
       flex: 1.2,
@@ -991,7 +1050,11 @@ export default function PatchManagement({ onNavigate }) {
         } catch { return "—"; }
       }
     }
-  ], []);
+  ],
+  // ⚠️ `connectedIds` en las dependencias, o la columna se queda con el Set
+  // vacío del primer render: los puntos no pasarían nunca a verde y parecería
+  // que la flota entera está caída.
+  [connectedIds]);
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
