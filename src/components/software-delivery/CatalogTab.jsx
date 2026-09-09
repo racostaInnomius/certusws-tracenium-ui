@@ -51,6 +51,8 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
+import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
 
 import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
@@ -99,6 +101,17 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
   const [platform, setPlatform] = React.useState("all");
+  // "active" | "archived" | "all". Por defecto ACTIVE, y ese default es la
+  // función entera: un paquete retirado sigue existiendo —no se puede borrar
+  // si algún despliegue lo referencia, y borrarlo dejaría ese historial
+  // apuntando al vacío— pero no tiene por qué seguir estorbando en la lista
+  // de lo que se puede desplegar hoy.
+  //
+  // ⚠️ NO ES UN ESTADO NUEVO. Es `is_active`, que ya existía en la tabla, ya
+  // se editaba en el diálogo del paquete y ya filtraba el endpoint. Lo único
+  // que faltaba era que esta lista lo usara. Si esto se convierte alguna vez
+  // en una columna «archived» aparte, serán dos nombres para un estado.
+  const [lifecycle, setLifecycle] = React.useState("active");
 
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [editorMode, setEditorMode] = React.useState("create");
@@ -133,6 +146,10 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       const params = {};
       if (search.trim()) params.search = search.trim();
       if (platform !== "all") params.platform = platform;
+      // Al servidor, no al cliente: filtrar aquí traería igualmente todos los
+      // retirados por la red y la lista crecería para siempre.
+      if (lifecycle === "active") params.isActive = "true";
+      else if (lifecycle === "archived") params.isActive = "false";
       const res = await listPackages(params);
       setItems(listFrom(res, { keys: ["items"], context: "softwareDelivery.catalog" }));
     } catch (err) {
@@ -140,7 +157,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
     } finally {
       setLoading(false);
     }
-  }, [search, platform, notify]);
+  }, [search, platform, lifecycle, notify]);
 
   React.useEffect(() => {
     load();
@@ -288,6 +305,35 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       notify("error", msg);
     } finally {
       setDeleteSubmitting(false);
+    }
+  };
+
+  /**
+   * Archivar / desarchivar un paquete.
+   *
+   * ⚠️ NO ES BORRAR, Y ESA ES LA GRACIA. Un paquete que algún despliegue
+   * referencia NO se puede borrar —la FK es RESTRICT y el backend lo traduce a
+   * un 409 que ya dice «Mark it inactive instead»— porque borrarlo dejaría ese
+   * historial apuntando al vacío. Archivar lo saca de la lista de lo
+   * desplegable sin tocar el expediente.
+   *
+   * ⚠️ NO ES OPTIMISTA, al revés que el interruptor de self-service de abajo.
+   * Con el filtro en «Active», archivar hace que la fila DESAPAREZCA: pintar
+   * esa desaparición antes de que el servidor confirme, y tener que
+   * resucitarla si falla, es peor que esperar el viaje. Se recarga desde el
+   * servidor porque además la pertenencia al filtro la decide él.
+   */
+  const handleToggleArchived = async (row) => {
+    const next = !row.isActive;
+    try {
+      await updatePackage(row.id, { isActive: next });
+      notify(
+        "success",
+        next ? `${row.name} restored to the catalog` : `${row.name} archived`
+      );
+      await load();
+    } catch (err) {
+      notify("error", err?.body?.message || err?.message || "Failed to update the package");
     }
   };
 
@@ -439,8 +485,12 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
     },
     {
       field: "isActive",
-      headerName: "Active",
-      width: 90,
+      headerName: "Status",
+      width: 100,
+      // ⚠️ «Archived», NO «inactive». El filtro de arriba, este chip y el botón
+      // de la fila son el MISMO estado (`is_active`), así que tienen que
+      // llamarlo igual: con dos nombres, el operador que archiva desde la fila
+      // no encuentra después lo que archivó porque busca «inactive».
       renderCell: (p) =>
         p.row.isActive ? (
           <Chip
@@ -457,7 +507,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
         ) : (
           <Chip
             size="small"
-            label="inactive"
+            label="archived"
             sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.gray }}
           />
         ),
@@ -543,6 +593,25 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
               >
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>
+              {/* Archivar estaba SÓLO como casilla dentro del editor del
+                  paquete: para retirar una versión vieja había que abrir el
+                  diálogo, encontrar el check y guardar. Enterrado donde nadie
+                  lo busca, así que nadie retiraba nada y el catálogo crecía
+                  para siempre. */}
+              <Tooltip title={p.row.isActive ? "Archive package" : "Restore to catalog"}>
+                <IconButton
+                  aria-label={p.row.isActive ? "Archive package" : "Restore to catalog"}
+                  size="small"
+                  onClick={() => handleToggleArchived(p.row)}
+                  sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
+                >
+                  {p.row.isActive ? (
+                    <ArchiveOutlinedIcon fontSize="small" />
+                  ) : (
+                    <UnarchiveOutlinedIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
               <IconButton
                 aria-label="Delete package"
                 size="small"
@@ -603,6 +672,24 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
           <MenuItem value="windows">Windows</MenuItem>
           <MenuItem value="macos">macOS</MenuItem>
           <MenuItem value="linux">Linux</MenuItem>
+        </TextField>
+        {/* ⚠️ UN FILTRO, NO UNA PESTAÑA. La fase 2 de este refactor se llama
+            «one door into the catalog» y la fase 3 retiró la pestaña de AI
+            Intake con ese argumento; ADR-0016 D8 dejó el catálogo global como
+            segmento por lo mismo. Una pestaña «Archived» crearía una pregunta
+            que hoy no existe: «¿Chrome 151 está en Catalog o en Archived?».
+            Un filtro deja un solo sitio donde buscar. */}
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={lifecycle}
+          onChange={(e) => setLifecycle(e.target.value)}
+          sx={{ minWidth: 140 }}
+        >
+          <MenuItem value="active">Active</MenuItem>
+          <MenuItem value="archived">Archived</MenuItem>
+          <MenuItem value="all">All</MenuItem>
         </TextField>
         <Box sx={{ flex: 1 }} />
         <Button
