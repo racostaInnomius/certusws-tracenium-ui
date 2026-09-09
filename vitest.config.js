@@ -32,6 +32,26 @@ export default defineConfig({
     // the higher asyncUtilTimeout.
     testTimeout: 20000,
 
+    // ⚠️ Reintentos SOLO en CI. Es la salida DESPUÉS de agotar la vía de
+    // subir techos, no antes.
+    //
+    // `asyncUtilTimeout` ya se subió tres veces (1000 → 5000 → 8000) y las
+    // tres volvió a fallar. El 2026-09-08 se probó una cuarta, escalada por
+    // entorno (24000 en CI), y MEDIDA salió peor: sin ella la suite daba
+    // 238/238 dos veces seguidas, y con ella 3, 1 y 0 fallos. Tiene sentido:
+    // un `findBy` que no encuentra pasa de rendirse en 8s a insistir 24, la
+    // suite se alarga y empuja a los demás contra su propio techo.
+    //
+    // Lo que hay debajo no es lentitud media —esta suite pasa entera en
+    // local, con 2 y con 4 workers— sino PICOS del runner. El backend tiene
+    // el mismo síndrome en una suite sin jsdom (un hook de 545ms que allí
+    // supera 10s), lo que descarta que sea cosa de esta UI.
+    //
+    // `retry` no tapa un test malo: comprobado que uno roto de verdad sigue
+    // fallando tras los 3 intentos. En local queda en 0 para que un flaky
+    // nuevo se note al escribirlo, no seis meses después.
+    retry: process.env.CI ? 2 : 0,
+
     // Deliberately far below the default (~cpus-1).
     //
     // Every worker boots its own jsdom and re-imports the whole MUI tree,
