@@ -16,15 +16,38 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import { clearApiCache } from "../../api/http";
 import { BRAND } from "../../theme/brand";
 
+/**
+ * Cadencias en MINUTOS, no en segundos.
+ *
+ * Estaban en 30 s / 60 s / 2 min / 5 min, y con quince páginas usando esto
+ * significaba que un portal abierto en una pestaña olvidada golpeaba el
+ * backend dos veces por minuto para siempre. Ninguno de estos datos —
+ * inventario, cumplimiento, parches— cambia a esa velocidad: los recoge un
+ * agente que reporta cada varios minutos, así que refrescar más a menudo que
+ * eso sólo repinta lo mismo.
+ *
+ * ⚠️ "Off" se queda. No es una cadencia —por eso no está en la lista de
+ * minutos— pero es la única forma de parar el goteo, y además hay dos páginas
+ * (Crypto Discovery, y Baselines embebido) que pasan "0" como su defecto: sin
+ * esta entrada arrancarían con un valor que `useAutoRefresh` rechaza.
+ */
 export const REFRESH_OPTIONS = [
-  { value: "0",   label: "Off" },
-  { value: "30",  label: "Every 30s" },
-  { value: "60",  label: "Every 60s" },
-  { value: "120", label: "Every 2 min" },
-  { value: "300", label: "Every 5 min" },
+  { value: "0",    label: "Off" },
+  { value: "60",   label: "Every 1 min" },
+  { value: "300",  label: "Every 5 min" },
+  { value: "600",  label: "Every 10 min" },
+  { value: "1200", label: "Every 20 min" },
 ];
 
-export const DEFAULT_REFRESH_SECONDS = "60";
+/**
+ * 20 minutos.
+ *
+ * ⚠️ Las cadencias viejas que quedaran guardadas en una URL (`?…=30`, `?…=120`)
+ * ya no validan contra `REFRESH_OPTIONS`, así que `useAutoRefresh` las
+ * descarta y cae aquí. Es lo que se quiere: un enlace guardado no puede
+ * reponer un ritmo que se ha retirado a propósito.
+ */
+export const DEFAULT_REFRESH_SECONDS = "1200";
 
 /**
  * Altura común del control y del botón.

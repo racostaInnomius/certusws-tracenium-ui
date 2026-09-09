@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import RefreshControl, { REFRESH_OPTIONS } from "./RefreshControl";
+import RefreshControl, { DEFAULT_REFRESH_SECONDS, REFRESH_OPTIONS } from "./RefreshControl";
 
 afterEach(cleanup);
 
@@ -71,6 +71,34 @@ describe("RefreshControl — presentational", () => {
 
     await user.click(within(listbox).getByRole("option", { name: "Every 5 min" }));
     expect(onChange).toHaveBeenCalledWith("300");
+  });
+
+  // ── Las cadencias (09-sep) ──────────────────────────────────────
+  //
+  // Estaban en 30 s / 60 s / 2 min / 5 min. Con quince páginas usando esto, un
+  // portal abierto en una pestaña olvidada golpeaba el backend dos veces por
+  // minuto para siempre — y ninguno de estos datos cambia a esa velocidad: los
+  // recoge un agente que reporta cada varios minutos.
+  it("las cadencias son 1, 5, 10 y 20 minutos, y el defecto es 20", () => {
+    expect(REFRESH_OPTIONS.filter((o) => o.value !== "0").map((o) => o.value))
+      .toEqual(["60", "300", "600", "1200"]);
+    expect(DEFAULT_REFRESH_SECONDS).toBe("1200");
+  });
+
+  it("⚠️ 'Off' sigue existiendo", () => {
+    // No es una cadencia, pero es la única forma de parar el goteo — y hay dos
+    // páginas (Crypto Discovery, Baselines embebido) que pasan "0" como su
+    // defecto: sin esta entrada arrancarían con un valor que `useAutoRefresh`
+    // rechaza y caerían al defecto general, encendiendo un refresco que esas
+    // páginas apagan a propósito.
+    expect(REFRESH_OPTIONS.some((o) => o.value === "0")).toBe(true);
+  });
+
+  it("una cadencia retirada guardada en la URL cae al defecto", () => {
+    // `?assetsAutoRefresh=30` sigue vivo en enlaces y en pestañas abiertas. Un
+    // enlace guardado no puede reponer un ritmo que se retiró a propósito.
+    expect(REFRESH_OPTIONS.some((o) => o.value === "30")).toBe(false);
+    expect(REFRESH_OPTIONS.some((o) => o.value === "120")).toBe(false);
   });
 
   // ── Orden y altura de la fila (07-sep) ──────────────────────────
