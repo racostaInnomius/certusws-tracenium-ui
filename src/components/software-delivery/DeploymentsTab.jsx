@@ -154,26 +154,35 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
       headerName: "Outcomes",
       flex: 1,
       minWidth: 280,
+      // ⚠️ TEXTO, NO PÍLDORAS. Cuatro chips en una celda compiten entre ellos
+      // y con la píldora de Status de la columna de al lado: la fila acaba
+      // siendo cinco cápsulas de colores donde sólo una es el estado. El
+      // recuento se lee mejor plano, con el color puesto en la palabra.
+      //
+      // ⚠️ Y `height: 100%` NO ES ADORNO. Sin él el contenido se apoya arriba
+      // en las filas altas —la celda de Package son dos líneas y estira la
+      // fila— y los recuentos quedan desalineados respecto al resto.
       renderCell: (p) => {
         const c = p.row.counts || {};
         const groups = [
-          ["ok", (c.success || 0) + (c.already_installed || 0) + (c.reboot_required || 0), BRAND.alert?.successSoft, BRAND.alert?.success],
-          ["pending/running", (c.pending || 0) + (c.running || 0), BRAND.darkSoft, BRAND.gray],
-          ["failed", (c.failed || 0) + (c.rejected || 0) + (c.timed_out || 0), BRAND.alert?.errorSoft, BRAND.alert?.error],
-          ["cancelled", c.cancelled || 0, BRAND.darkSoft, BRAND.gray],
+          ["ok", (c.success || 0) + (c.already_installed || 0) + (c.reboot_required || 0), BRAND.alert?.success],
+          ["pending/running", (c.pending || 0) + (c.running || 0), BRAND.gray],
+          ["failed", (c.failed || 0) + (c.rejected || 0) + (c.timed_out || 0), BRAND.alert?.error],
+          ["cancelled", c.cancelled || 0, BRAND.gray],
         ];
+        const shown = groups.filter(([, n]) => n > 0);
+        if (shown.length === 0) return null;
         return (
-          <Stack direction="row" spacing={0.5}>
-            {groups.map(([label, n, bg, color]) =>
-              n > 0 ? (
-                <Chip
-                  key={label}
-                  size="small"
-                  label={`${label}: ${n}`}
-                  sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: bg, color: color }}
-                />
-              ) : null
-            )}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            sx={{ height: "100%", alignItems: "center" }}
+          >
+            {shown.map(([label, n, color]) => (
+              <Typography key={label} sx={{ fontSize: TEXT.xs, fontWeight: 700, color }}>
+                {label}: {n}
+              </Typography>
+            ))}
           </Stack>
         );
       },

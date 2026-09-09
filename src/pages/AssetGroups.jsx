@@ -637,7 +637,7 @@ function payloadFieldsValid(jobType, payload) {
   }
 }
 
-function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
+export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
   const [jobTypes, setJobTypes] = React.useState([]);
   const [catalogLoading, setCatalogLoading] = React.useState(false);
   const [jobType, setJobType] = React.useState("");
@@ -665,6 +665,34 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
       .finally(() => setCatalogLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // ⚠️ EL CATÁLOGO YA DICE CUÁLES NO SE CONSTRUYEN A MANO, Y ESTO NO LO MIRABA.
+  //
+  // El backend marca `creatable: false` en 10 de los tipos y explica por qué:
+  // «Software Install → dispatched from Software Delivery, which supplies the
+  // package snapshot». Su payload es `{ deploymentId, packageSnapshot }`, que
+  // sólo existe una vez que un despliegue lo ha producido — un formulario
+  // genérico no puede inventarlo. Este diálogo los ofrecía igual y mandaba
+  // `payload: {}`, así que el backend los rechazaba con
+  // `invalid_software_install_payload`: un botón que no podía funcionar nunca.
+  //
+  // Jobs.jsx ya filtraba con esta misma regla (`creatable !== false`); esta
+  // pantalla se quedó atrás. Y entre los no-creables hay tipos con régimen de
+  // aprobación de ADR-0009 —rotación de certificado, distrust de anclas—, así
+  // que ofrecerlos en un formulario genérico es justo lo que sus comentarios
+  // advierten: una puerta privilegiada abierta por otro lado.
+  //
+  // `creatable !== false` y no `=== true`: un backend anterior a la bandera no
+  // manda la clave, y tratar «ausente» como no-creable dejaría el desplegable
+  // vacío contra él.
+  const creatableTypes = React.useMemo(
+    () => jobTypes.filter((t) => t.creatable !== false),
+    [jobTypes]
+  );
+  const notCreatable = React.useMemo(
+    () => jobTypes.filter((t) => t.creatable === false && t.reason),
+    [jobTypes]
+  );
 
   const handleTypeChange = (newType) => {
     setJobType(newType);
@@ -741,12 +769,27 @@ function DispatchJobDialog({ open, group, onClose, onDispatched, notify }) {
             disabled={catalogLoading}
             helperText={catalogLoading ? "Loading job types…" : ""}
           >
-            {jobTypes.map((t) => (
+            {creatableTypes.map((t) => (
               <MenuItem key={t.jobType} value={t.jobType}>
                 {t.label || t.jobType}
               </MenuItem>
             ))}
           </TextField>
+
+          {/* Por qué faltan tipos que sí existen. Sin esto, quitarlos del
+              desplegable sólo cambia «lo ofrece y falla» por «desapareció». */}
+          {notCreatable.length > 0 ? (
+            <Box>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 0.5 }}>
+                Not dispatchable from here:
+              </Typography>
+              {notCreatable.map((t) => (
+                <Typography key={t.jobType} sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                  · <strong>{t.label || t.jobType}</strong> — {t.reason}
+                </Typography>
+              ))}
+            </Box>
+          ) : null}
 
           {jobType === "facts_snapshot" ? (
             <TextField

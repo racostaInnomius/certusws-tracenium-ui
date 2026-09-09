@@ -980,6 +980,90 @@ export async function httpPostBinary(
   }
 }
 
+/**
+ * Igual que httpPostBinary, pero informando del avance de la SUBIDA.
+ *
+ * ⚠️ ES XHR Y NO fetch A PROPÓSITO. `fetch` no expone progreso de subida: no
+ * hay evento, y el cuerpo como ReadableStream con `duplex` no está disponible
+ * en los navegadores que este portal soporta. XHR es la única API del
+ * navegador que emite `upload.onprogress`, así que aquí el código viejo es el
+ * único que puede hacer el trabajo.
+ *
+ * ⚠️ Y REUTILIZA handleResponse CONSTRUYENDO UN Response. La alternativa
+ * —interpretar `xhr.status` aquí— duplicaría el manejo de errores de toda la
+ * capa, incluido el 401 que dispara `emitAuthRequired` y saca al usuario a
+ * login. Una segunda implementación de eso diverge de la primera y el día que
+ * lo haga, un token caducado en una subida de 250 MB acaba en un error
+ * genérico en vez de en la pantalla de sesión expirada.
+ *
+ * `onProgress` recibe una fracción 0..1, o null cuando el navegador no sabe el
+ * total (`lengthComputable` en falso) — null significa «sigue viva pero no sé
+ * cuánto», que es distinto de 0 y la UI debe distinguirlo.
+ */
+export async function httpPostBinaryWithProgress(
+  url,
+  bytes,
+  { timeoutMs = 120_000, contentType = "application/octet-stream", onProgress } = {}
+) {
+  const fullUrl = `${API_BASE}${url}`;
+
+  try {
+    const res = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", fullUrl, true);
+      xhr.withCredentials = true;
+      xhr.timeout = timeoutMs;
+
+      const headers = withTenantHeader({ "Content-Type": contentType });
+      for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+
+      if (typeof onProgress === "function") {
+        xhr.upload.onprogress = (e) => {
+          onProgress(e.lengthComputable && e.total > 0 ? e.loaded / e.total : null);
+        };
+      }
+
+      xhr.onload = () => {
+        // Se rehidrata un Response para que handleResponse —y con él el 401,
+        // el 204 vacío y el parseo de errores— siga siendo el único sitio
+        // donde se interpreta una respuesta.
+        const raw = xhr.getAllResponseHeaders() || "";
+        const responseHeaders = new Headers();
+        for (const line of raw.trim().split(/[\r\n]+/)) {
+          const at = line.indexOf(": ");
+          if (at > 0) {
+            try { responseHeaders.append(line.slice(0, at), line.slice(at + 2)); } catch { /* cabecera prohibida */ }
+          }
+        }
+        // 204/205/304 no admiten cuerpo en el constructor de Response.
+        const noBody = xhr.status === 204 || xhr.status === 205 || xhr.status === 304;
+        resolve(
+          new Response(noBody ? null : xhr.responseText, {
+            status: xhr.status,
+            statusText: xhr.statusText,
+            headers: responseHeaders,
+          })
+        );
+      };
+
+      // Un status 0 no es una respuesta: es que no hubo ninguna. Construir un
+      // Response con él lanzaría, así que estos tres caminos rechazan con la
+      // misma forma que aborta/falla `fetch` y toHumanError ya entiende.
+      xhr.onerror = () => reject(new TypeError("Failed to fetch"));
+      xhr.ontimeout = () => reject(Object.assign(new Error("timeout"), { name: "AbortError" }));
+      xhr.onabort = () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+
+      xhr.send(bytes);
+    });
+
+    const json = await handleResponse(res, url);
+    invalidateAfterMutation(url);
+    return json;
+  } catch (err) {
+    throw toHumanError(err, url);
+  }
+}
+
 export async function httpPutJson(url, body, { timeoutMs, headers } = {}) {
   const timeout = withTimeout(timeoutMs);
 

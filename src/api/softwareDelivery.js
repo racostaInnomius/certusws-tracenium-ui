@@ -10,7 +10,7 @@ import {
   httpPostJson,
   httpPatchJson,
   httpDeleteJson,
-  httpPostBinary,
+  httpPostBinaryWithProgress,
 } from "./http";
 import { buildQuery } from "./query";
 
@@ -76,7 +76,7 @@ export async function cancelDeployment(id) {
 // Upload an installer binary. The bytes are the body (octet-stream); the
 // filename + operator hints ride in the query string. Returns the persisted
 // intake record (verdict + proposal), 201 even when the verdict is `blocked`.
-export async function uploadIntake(file, hints = {}) {
+export async function uploadIntake(file, hints = {}, { onProgress } = {}) {
   const params = {
     filename: hints.filename ?? file?.name ?? "package.bin",
     name: hints.name,
@@ -84,7 +84,16 @@ export async function uploadIntake(file, hints = {}) {
     version: hints.version,
     declaredSha256: hints.declaredSha256,
   };
-  return httpPostBinary(`${BASE}/intake${buildQuery(params)}`, file);
+  // Un MSI de empresa son cientos de MB y la subida tarda minutos. Sin avance
+  // el diálogo parece colgado: el operador no puede distinguir «subiendo» de
+  // «se murió», y la reacción natural es cancelar y reintentar, que empieza
+  // los mismos minutos otra vez.
+  return httpPostBinaryWithProgress(`${BASE}/intake${buildQuery(params)}`, file, {
+    onProgress,
+    // El techo del intake son 300 MiB y el analisis posterior no es
+    // instantaneo: 2 minutos cortaban subidas legitimas por reloj.
+    timeoutMs: 20 * 60 * 1000,
+  });
 }
 
 export async function listIntakes(params = {}) {

@@ -113,6 +113,8 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
   // Subida analizada: la puerta principal.
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  // Fracción 0..1 de la subida, o null cuando el navegador no sabe el total.
+  const [uploadProgress, setUploadProgress] = React.useState(null);
   // Menú de la vía secundaria (URL).
   const [moreAnchor, setMoreAnchor] = React.useState(null);
   // Cola de intakes pendientes de revisión — no son catálogo TODAVÍA, así que
@@ -197,8 +199,11 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
    */
   const handleUpload = async (file, hints) => {
     setUploading(true);
+    // null = «subiendo, sin saber cuánto». Distinto de 0, que afirmaría que
+    // no ha salido nada.
+    setUploadProgress(null);
     try {
-      const res = await uploadIntake(file, hints);
+      const res = await uploadIntake(file, hints, { onProgress: setUploadProgress });
       const verdict = res?.intake?.verification?.verdict ?? res?.intake?.verdict;
       setUploadOpen(false);
       if (verdict === "blocked") {
@@ -221,6 +226,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       notify("error", err?.body?.message || err?.message || "Upload failed");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -734,6 +740,7 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
       <IntakeUploadDialog
         open={uploadOpen}
         submitting={uploading}
+        progress={uploadProgress}
         onClose={() => setUploadOpen(false)}
         onSubmit={handleUpload}
       />

@@ -16,6 +16,7 @@ import {
   Stack,
   Box,
   Typography,
+  LinearProgress,
 } from "@mui/material";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -43,7 +44,7 @@ function emptyHints() {
   return { name: "", vendor: "", version: "", declaredSha256: "" };
 }
 
-export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit }) {
+export default function IntakeUploadDialog({ open, submitting, progress, onClose, onSubmit }) {
   const [file, setFile] = React.useState(null);
   const [hints, setHints] = React.useState(emptyHints);
   const [error, setError] = React.useState(null);
@@ -186,6 +187,39 @@ export default function IntakeUploadDialog({ open, submitting, onClose, onSubmit
               }}
             >
               {error}
+            </Box>
+          ) : null}
+
+          {/* ⚠️ EL AVANCE VA AQUÍ, NO EN EL BOTÓN. Un botón que pone
+              «Uploading…» durante cuatro minutos es indistinguible de uno
+              colgado, y la reacción natural es cancelar y reintentar — que
+              empieza los mismos cuatro minutos otra vez.
+
+              `progress === null` NO es 0: significa que el navegador no sabe
+              el total (lengthComputable en falso). Ahí la barra va
+              indeterminada, que dice «viva, no sé cuánto», en vez de decir
+              «0 %», que es una afirmación falsa. Y al llegar a 1 el mensaje
+              cambia: los bytes ya salieron y lo que queda —firma, cadena,
+              propuesta de la IA— es servidor, no red. */}
+          {submitting ? (
+            <Box>
+              <LinearProgress
+                variant={progress == null ? "indeterminate" : "determinate"}
+                value={progress == null ? undefined : Math.round(progress * 100)}
+                sx={{
+                  height: 6,
+                  borderRadius: 3,
+                  bgcolor: BRAND.tealSoft,
+                  "& .MuiLinearProgress-bar": { bgcolor: BRAND.teal },
+                }}
+              />
+              <Typography sx={{ mt: 0.75, fontSize: TEXT.xs, color: BRAND.gray }}>
+                {progress == null
+                  ? "Uploading…"
+                  : progress >= 1
+                    ? "Upload complete — verifying signature and generating the proposal…"
+                    : `Uploading… ${Math.round(progress * 100)}%`}
+              </Typography>
             </Box>
           ) : null}
         </Stack>
