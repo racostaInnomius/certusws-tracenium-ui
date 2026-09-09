@@ -355,7 +355,10 @@ export default function Alerts({ onNavigate }) {
     const q = searchText.trim().toLowerCase();
     if (!q) return events;
     return events.filter((e) => {
-      const haystack = `${e.summary || ""} ${e.deviceId || ""} ${e.rule?.name || ""}`.toLowerCase();
+      // Por los DOS: se busca por nombre porque es lo que se recuerda, pero
+      // quien pega un id sacado de un log o de una URL tiene que seguir
+      // encontrando su alerta.
+      const haystack = `${e.summary || ""} ${e.hostname || ""} ${e.deviceId || ""} ${e.rule?.name || ""}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [events, searchText]);
@@ -567,16 +570,30 @@ export default function Alerts({ onNavigate }) {
                       <SeverityChip severity={e.severity} />
                     </TableCell>
                     <TableCell>{SOURCE_LABEL[e.source] || e.source}</TableCell>
+                    {/* El NOMBRE del equipo, no su UUID: nadie recuerda
+                        `a3f1…` pero todo el mundo reconoce `MSIG-WSUS`. El id
+                        sigue estando —en el tooltip y en la ficha— porque es
+                        la clave con la que se navega y lo único estable si a
+                        un equipo lo renombran; lo que cambia es cuál de los
+                        dos se lee de un vistazo.
+
+                        Sin hostname se cae al id: el inventario puede no
+                        conocer todavía a ese agente, y un UUID es peor de leer
+                        pero nunca miente. La tipografía monoespaciada se queda
+                        SÓLO para ese caso — un hostname en monoespaciada
+                        parece un identificador y vuelve a costar leerlo. */}
                     <TableCell>
                       <Typography
                         variant="body2"
+                        title={e.hostname && e.deviceId ? e.deviceId : undefined}
                         sx={{
-                          fontFamily: "monospace",
+                          fontFamily: e.hostname ? "inherit" : "monospace",
+                          fontWeight: e.hostname ? 600 : 400,
                           color: e.deviceId ? BRAND.dark : BRAND.gray,
                           fontSize: TEXT.sm
                         }}
                       >
-                        {e.deviceId || "—"}
+                        {e.hostname || e.deviceId || "—"}
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ maxWidth: 360 }}>
@@ -984,7 +1001,11 @@ function EventDetailDrawer({ event, onClose }) {
             Identity
           </Typography>
           <Stack spacing={0.5}>
-            <DetailRow label="Device" value={event.deviceId || "—"} mono />
+            {/* En la ficha caben los dos, y hacen falta los dos: el nombre
+                para saber de qué máquina se habla, el id para pegarlo en una
+                consulta o en un ticket. */}
+            {event.hostname ? <DetailRow label="Device" value={event.hostname} /> : null}
+            <DetailRow label={event.hostname ? "Agent ID" : "Device"} value={event.deviceId || "—"} mono />
             <DetailRow label="Occurred" value={new Date(event.occurredAt).toLocaleString()} />
             {/*
               Dos filas y no una: "Occurred" es cuándo pasó según la
