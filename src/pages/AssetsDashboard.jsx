@@ -108,6 +108,11 @@ import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/Devic
 const FleetLocationMap = React.lazy(() =>
   import("../components/AssetsDashboard/FleetLocationMap")
 );
+// El panel de cercas viaja con el mapa: se pide y se pinta sólo en la vista de
+// mapa, que es donde ya se contesta "dónde están mis equipos".
+const GeofencePanel = React.lazy(() =>
+  import("../components/AssetsDashboard/GeofencePanel")
+);
 import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
 
@@ -408,6 +413,15 @@ export default function AssetsDashboard({
   // into an empty map that claimed "no device is reporting a position yet".
   const [fleetLocationsError, setFleetLocationsError] = React.useState(null);
 
+  // Geocercas (ADR-0017 fase 1). Mismo tratamiento que las posiciones: el
+  // error se guarda APARTE del dato, porque un backend sin desplegar y un
+  // tenant sin cercas no son lo mismo y colapsarlos ya costó una confusión con
+  // el mapa de flota.
+  const [geofences, setGeofences] = React.useState(null);
+  const [geofenceSavingId, setGeofenceSavingId] = React.useState(null);
+  const [geofenceErrors, setGeofenceErrors] = React.useState({});
+  const [geofenceNonce, setGeofenceNonce] = React.useState(0);
+
   const changeDeviceView = React.useCallback((next) => {
     if (!next) return; // ToggleButtonGroup emits null when the active button is re-clicked
     setDeviceView(next);
@@ -446,6 +460,50 @@ export default function AssetsDashboard({
       cancelled = true;
     };
   }, [deviceView, refreshNonce]);
+
+  // Igual que las posiciones: sólo cuando el mapa está a la vista.
+  React.useEffect(() => {
+    if (deviceView !== "map") return;
+    let cancelled = false;
+    import("../api/geofences")
+      .then((m) => m.listGeofences())
+      .then((data) => {
+        if (!cancelled) setGeofences(data);
+      })
+      .catch(() => {
+        // Sin cercas no se puede distinguir "backend viejo" de "tenant sin
+        // sitios" desde aquí, y el panel ya dice qué es una cerca cuando la
+        // lista viene vacía. Se deja en null y no se pinta nada.
+        if (!cancelled) setGeofences(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deviceView, refreshNonce, geofenceNonce]);
+
+  const handleGeofenceSave = React.useCallback(async (siteId, cambios) => {
+    setGeofenceSavingId(siteId);
+    setGeofenceErrors((prev) => ({ ...prev, [siteId]: null }));
+    try {
+      const { saveGeofence } = await import("../api/geofences");
+      const res = await saveGeofence(siteId, cambios);
+      if (res?.ok === false) {
+        // El backend nombra el campo y explica qué falta ("una cerca necesita
+        // pin y radio"). Se muestra tal cual, junto a la cerca, en vez de un
+        // aviso genérico que obligue a adivinar cuál de ellas falló.
+        setGeofenceErrors((prev) => ({ ...prev, [siteId]: res.message || "Could not save." }));
+        return;
+      }
+      setGeofenceNonce((n) => n + 1);
+    } catch (err) {
+      setGeofenceErrors((prev) => ({
+        ...prev,
+        [siteId]: err?.body?.message || err?.message || "Could not save.",
+      }));
+    } finally {
+      setGeofenceSavingId(null);
+    }
+  }, []);
   const [hostsSearchInput, setHostsSearchInput] = React.useState("");
   const [hostsSearch, setHostsSearch] = React.useState("");
   const [hostsPaginationModel, setHostsPaginationModel] = React.useState({
@@ -1770,6 +1828,18 @@ const osVersionItems = React.useMemo(() => {
                       />
                     ) : null}
                   </Stack>
+                ) : null}
+
+                {deviceView === "map" && geofences?.sites ? (
+                  <React.Suspense fallback={null}>
+                    <GeofencePanel
+                      sites={geofences.sites}
+                      events={geofences.events}
+                      onSave={handleGeofenceSave}
+                      savingId={geofenceSavingId}
+                      errorById={geofenceErrors}
+                    />
+                  </React.Suspense>
                 ) : null}
 
                 {deviceView === "map" ? (
