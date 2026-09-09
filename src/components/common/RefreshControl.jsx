@@ -63,6 +63,32 @@ export const DEFAULT_REFRESH_SECONDS = "1200";
  */
 const CONTROL_HEIGHT = 36.5;
 
+/**
+ * Ancho FIJO del botón, para que no crezca al cambiar el rótulo.
+ *
+ * "Refresh" → "Refreshing…" son cinco caracteres más, y el botón se ensanchaba
+ * y volvía a encogerse en cada pulsación. En una fila donde a su derecha está
+ * el desplegable de Auto refresh, ese vaivén empuja al vecino: no es el botón
+ * el que parpadea, es media cabecera.
+ *
+ * Medido en el navegador con el tema real (ver más abajo por qué hacen falta
+ * las dos cosas):
+ *
+ *   icono + "Refresh"        110,94 px   ← reposo
+ *   icono + "Refreshing…"    147,53 px   ← salto de 36,6 px
+ *   sin icono + "Refreshing…" 123,53 px  ← todavía 12,6 px de salto
+ *
+ * O sea que quitar el icono corta dos tercios del salto pero NO lo elimina.
+ * 128 px cubre el estado más ancho con holgura, comprobado además contra
+ * `scrollWidth`: ninguno de los dos rótulos se recorta.
+ *
+ * Es `width` y no `minWidth` a propósito: `minWidth` no impide crecer, que es
+ * justo lo que hay que impedir. Los dos rótulos son constantes de este
+ * fichero, así que el riesgo de que un texto no quepa es el de editarlos aquí
+ * — y ahí está este comentario.
+ */
+const BUTTON_WIDTH = 128;
+
 export default function RefreshControl({
   refreshSeconds,
   onRefreshSecondsChange,
@@ -74,7 +100,10 @@ export default function RefreshControl({
     <>
       <Button
         variant="outlined"
-        startIcon={<RefreshOutlinedIcon />}
+        // Sin icono mientras refresca. Es la mitad barata de mantener el ancho
+        // —ahorra 24 px justo cuando el rótulo crece 36— y de paso el botón
+        // deshabilitado deja de enseñar un icono de "pulsa aquí".
+        startIcon={loading ? null : <RefreshOutlinedIcon />}
         onClick={() => {
           // ⚠️ TIRAR LA CACHÉ ANTES DE RECARGAR, o esto no refresca nada.
           //
@@ -103,6 +132,7 @@ export default function RefreshControl({
         aria-label="Refresh"
         sx={{
           height: CONTROL_HEIGHT,
+          width: BUTTON_WIDTH,
           textTransform: "none",
           fontWeight: 700,
           borderColor: BRAND.teal,

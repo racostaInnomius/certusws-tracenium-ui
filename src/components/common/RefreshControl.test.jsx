@@ -73,6 +73,46 @@ describe("RefreshControl — presentational", () => {
     expect(onChange).toHaveBeenCalledWith("300");
   });
 
+  // ── El botón no cambia de tamaño (09-sep) ───────────────────────
+  //
+  // "Refresh" → "Refreshing…" son cinco caracteres más: el botón se ensanchaba
+  // 36,6 px y volvía a encogerse en cada pulsación, empujando al desplegable
+  // que tiene al lado. No parpadeaba el botón, parpadeaba media cabecera.
+  //
+  // Medido en el navegador con el tema real: quitar el icono corta el salto a
+  // 12,6 px pero NO lo elimina, así que hacen falta las dos cosas.
+  it("⭐ mide lo mismo refrescando que en reposo", () => {
+    const { rerender } = render(
+      <RefreshControl refreshSeconds="1200" onRefreshSecondsChange={() => {}} onRefresh={() => {}} loading={false} />
+    );
+    const reposo = getComputedStyle(screen.getByRole("button", { name: "Refresh" })).width;
+
+    rerender(
+      <RefreshControl refreshSeconds="1200" onRefreshSecondsChange={() => {}} onRefresh={() => {}} loading />
+    );
+    const refrescando = getComputedStyle(screen.getByRole("button", { name: "Refresh" })).width;
+
+    expect(reposo).toBe(refrescando);
+    // Y que sea un ancho de verdad, no dos cadenas vacías empatando: sin esto
+    // el test pasaría en un jsdom que no resolviera la propiedad.
+    expect(reposo).toMatch(/^\d+(\.\d+)?px$/);
+  });
+
+  it("el icono desaparece mientras refresca, y vuelve al terminar", () => {
+    // Es la mitad barata de mantener el ancho —ahorra 24 px justo cuando el
+    // rótulo crece 36— y de paso el botón deshabilitado deja de enseñar un
+    // icono de "pulsa aquí".
+    const { rerender } = render(
+      <RefreshControl refreshSeconds="1200" onRefreshSecondsChange={() => {}} onRefresh={() => {}} loading />
+    );
+    expect(screen.getByRole("button", { name: "Refresh" }).querySelector(".MuiButton-startIcon")).toBeNull();
+
+    rerender(
+      <RefreshControl refreshSeconds="1200" onRefreshSecondsChange={() => {}} onRefresh={() => {}} loading={false} />
+    );
+    expect(screen.getByRole("button", { name: "Refresh" }).querySelector(".MuiButton-startIcon")).not.toBeNull();
+  });
+
   // ── Las cadencias (09-sep) ──────────────────────────────────────
   //
   // Estaban en 30 s / 60 s / 2 min / 5 min. Con quince páginas usando esto, un
