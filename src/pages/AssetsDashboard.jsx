@@ -113,6 +113,12 @@ const FleetLocationMap = React.lazy(() =>
 const GeofencePanel = React.lazy(() =>
   import("../components/AssetsDashboard/GeofencePanel")
 );
+// La búsqueda por fecha (ADR-0018). Vive junto a List/Map porque contesta la
+// tercera pregunta de la misma familia: List = qué equipos hay, Map = dónde
+// están AHORA, Location = dónde estuvieron en una fecha.
+const LocationExplorer = React.lazy(() =>
+  import("../components/AssetsDashboard/LocationExplorer")
+);
 import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
 
@@ -401,11 +407,11 @@ export default function AssetsDashboard({
   // List ⇄ Map. Kept in the URL like the other filters on this page, so a map
   // an operator is looking at can be pasted to a colleague and survives a
   // refresh instead of snapping back to the table.
-  const [deviceView, setDeviceView] = React.useState(() =>
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "map"
-      ? "map"
-      : "list"
-  );
+  const [deviceView, setDeviceView] = React.useState(() => {
+    if (typeof window === "undefined") return "list";
+    const v = new URLSearchParams(window.location.search).get("view");
+    return v === "map" || v === "location" ? v : "list";
+  });
   const [fleetLocations, setFleetLocations] = React.useState(null);
   const [fleetLocationsLoading, setFleetLocationsLoading] = React.useState(false);
   // Kept apart from the data on purpose: a request that FAILED is not the same
@@ -421,6 +427,12 @@ export default function AssetsDashboard({
   // padre, como el resto del detalle: AgentTab es presentacional.
   const [agentTimeline, setAgentTimeline] = React.useState(null);
   const [geofences, setGeofences] = React.useState(null);
+  // ⚠️ El fallo, APARTE del dato. En el mapa daba igual —el panel simplemente
+  // no se pintaba— pero la búsqueda por fecha usa esta lista para su selector
+  // de sitios, y su estado vacío dice "no hay sitios declarados todavía". Con
+  // el error colapsado en null, una petición caída se presentaría como un
+  // tenant sin sitios: una afirmación, no una ausencia.
+  const [geofencesLoadError, setGeofencesLoadError] = React.useState(null);
   const [geofenceSavingId, setGeofenceSavingId] = React.useState(null);
   const [geofenceErrors, setGeofenceErrors] = React.useState({});
   const [geofenceNonce, setGeofenceNonce] = React.useState(0);
@@ -430,15 +442,18 @@ export default function AssetsDashboard({
     setDeviceView(next);
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (next === "map") url.searchParams.set("view", "map");
-    else url.searchParams.delete("view");
+    if (next === "list") url.searchParams.delete("view");
+    else url.searchParams.set("view", next);
     window.history.replaceState({}, "", url);
   }, []);
 
-  // Fetched only when the map is actually shown: the payload is small, but an
-  // operator who never opens the map should not pay for it on every load.
+  // Fetched only when the map or the location search is actually shown: the
+  // payload is small, but an operator who never opens either should not pay for
+  // it on every load. La búsqueda por fecha lo necesita porque es la lista NO
+  // paginada de equipos — `hosts` sólo trae la página que se está viendo, y un
+  // selector alimentado con eso escondería equipos sin decirlo.
   React.useEffect(() => {
-    if (deviceView !== "map") return;
+    if (deviceView !== "map" && deviceView !== "location") return;
     let cancelled = false;
     setFleetLocationsLoading(true);
     setFleetLocationsError(null);
@@ -464,20 +479,25 @@ export default function AssetsDashboard({
     };
   }, [deviceView, refreshNonce]);
 
-  // Igual que las posiciones: sólo cuando el mapa está a la vista.
+  // Igual que las posiciones: sólo cuando el mapa o la búsqueda por fecha están
+  // a la vista. La búsqueda la usa para el selector de sitios.
   React.useEffect(() => {
-    if (deviceView !== "map") return;
+    if (deviceView !== "map" && deviceView !== "location") return;
     let cancelled = false;
     import("../api/geofences")
       .then((m) => m.listGeofences())
       .then((data) => {
-        if (!cancelled) setGeofences(data);
+        if (cancelled) return;
+        setGeofences(data);
+        setGeofencesLoadError(null);
       })
-      .catch(() => {
-        // Sin cercas no se puede distinguir "backend viejo" de "tenant sin
-        // sitios" desde aquí, y el panel ya dice qué es una cerca cuando la
-        // lista viene vacía. Se deja en null y no se pinta nada.
-        if (!cancelled) setGeofences(null);
+      .catch((err) => {
+        // El panel del mapa sigue sin pintarse, como antes. Lo que cambia es
+        // que el fallo se RECUERDA, para que la búsqueda por fecha no lo
+        // presente como "este tenant no tiene sitios".
+        if (cancelled) return;
+        setGeofences(null);
+        setGeofencesLoadError(err?.message || "load failed");
       });
     return () => {
       cancelled = true;
@@ -1701,6 +1721,11 @@ const osVersionItems = React.useMemo(() => {
                       <ToggleButton value="map" sx={{ textTransform: "none", px: 1.5 }}>
                         Map view
                       </ToggleButton>
+                      {/* La tercera pregunta de la familia: el mapa dice dónde
+                          están AHORA, esto dice dónde estuvieron en una fecha. */}
+                      <ToggleButton value="location" sx={{ textTransform: "none", px: 1.5 }}>
+                        Location history
+                      </ToggleButton>
                     </ToggleButtonGroup>
 
                     <TextField
@@ -1882,6 +1907,23 @@ const osVersionItems = React.useMemo(() => {
                         onSelectDevice={handleAgentSelect}
                       />
                     )}
+                  </React.Suspense>
+                ) : deviceView === "location" ? (
+                  <React.Suspense
+                    fallback={
+                      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary", py: 4, textAlign: "center" }}>
+                        Loading…
+                      </Typography>
+                    }
+                  >
+                    <LocationExplorer
+                      devices={fleetLocations?.devices}
+                      devicesLoading={fleetLocationsLoading}
+                      devicesError={fleetLocationsError}
+                      sites={geofences?.sites}
+                      sitesLoading={geofences === null && !geofencesLoadError}
+                      sitesError={geofencesLoadError}
+                    />
                   </React.Suspense>
                 ) : (
                 <HostsTable

@@ -67,8 +67,29 @@ export default function DeviceLocationTimeline({
   retentionDays,
   /** El anillo de lugares, para la ventana en que aún no hay estancias. */
   fallbackPlaces = 0,
+  /**
+   * La fecha pedida cae antes de lo que se guarda.
+   *
+   * ⚠️ Sólo llega cuando alguien BUSCA por fecha. Sin esta rama, preguntar por
+   * el 1 de julio devolvería "no hay ninguna estancia registrada todavía", que
+   * es una afirmación sobre dónde estuvo el equipo sostenida por datos que se
+   * borraron. Caducado y vacío no son lo mismo, y el que busca por fecha es
+   * justo quien no puede distinguirlos por su cuenta.
+   */
+  beyondRetention = false,
+  retentionFloor = null,
 }) {
   const lista = Array.isArray(episodes) ? episodes : [];
+
+  if (beyondRetention) {
+    return (
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText }}>
+        Stays are only kept for {retentionDays} days, so that date is no longer stored — this is
+        not the same as the device having been nowhere.
+        {retentionFloor ? ` Data starts from ${formatDetailDate(retentionFloor)}.` : ""}
+      </Typography>
+    );
+  }
 
   if (lista.length === 0) {
     return (
