@@ -32,6 +32,7 @@ import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import BlockIcon from "@mui/icons-material/Block";
+import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
 import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 
 import {
@@ -43,6 +44,7 @@ import {
   listDevicesWithoutActiveCertificates,
   listExpiringCertificates,
   revokeCertificate,
+  requestCertificateRotation,
 } from "../api/certificates";
 import { listKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
@@ -262,6 +264,12 @@ export default function PKI({ onNavigate } = {}) {
   const [missingSearch, setMissingSearch] = React.useState(initialParamsRef.current.missingSearch);
   const [deviceStatus, setDeviceStatus] = React.useState(initialParamsRef.current.deviceStatus);
   const [revokeReason, setRevokeReason] = React.useState("");
+  // ADR-0015 — la reemisión de identidad. Expediente obligatorio
+  // (motivo + ticket) porque es una acción privilegiada sobre el endpoint
+  // bajo el régimen de ADR-0009, igual que `cdp.cert.install`.
+  const [rotateReason, setRotateReason] = React.useState("");
+  const [rotateTicket, setRotateTicket] = React.useState("");
+  const [rotateBreakGlass, setRotateBreakGlass] = React.useState(false);
   const [devicePagination, setDevicePagination] = React.useState({
     page: initialParamsRef.current.devicePage,
     pageSize: initialParamsRef.current.devicePageSize,
@@ -274,6 +282,7 @@ export default function PKI({ onNavigate } = {}) {
   const [devicesLoading, setDevicesLoading] = React.useState(true);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [revokeLoading, setRevokeLoading] = React.useState(false);
+  const [rotateLoading, setRotateLoading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
 
   const [snackbar, setSnackbar] = React.useState({
@@ -505,6 +514,75 @@ export default function PKI({ onNavigate } = {}) {
     missingSearch, selectedDeviceId, selectedFingerprint,
   ]);
 
+  const handleRotate = React.useCallback(async () => {
+    if (!selectedDeviceId) return;
+    const motivo = String(rotateReason || "").trim();
+    const ticket = String(rotateTicket || "").trim();
+    if (!motivo || !ticket) {
+      showMessage("Reason and ticket reference are both required", "error");
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: "Renew this device's certificate?",
+      body:
+        `${getHostname(selectedDeviceId) || selectedDeviceId} will generate a new key and ` +
+        `request a fresh certificate. Its current one keeps working until the new one is installed, ` +
+        `so the device stays connected.\n\nReason: ${motivo}\nTicket: ${ticket}` +
+        (rotateBreakGlass ? "\n\n⚠️ Break-glass: this skips the approval matrix and is recorded permanently." : ""),
+      confirmText: rotateBreakGlass ? "Renew (break-glass)" : "Renew certificate",
+      danger: rotateBreakGlass,
+    });
+    if (!confirmed) return;
+
+    try {
+      setRotateLoading(true);
+      const out = await requestCertificateRotation(selectedDeviceId, {
+        reason: motivo,
+        ticketRef: ticket,
+        ...(rotateBreakGlass ? { breakGlass: true } : {}),
+      });
+
+      // ⚠️ Los dos desenlaces buenos llegan con 202, así que `ok` es lo
+      // que los separa — no el código HTTP. Un `pending_approval` pintado
+      // de rojo diría "falló" sobre una petición que salió bien y está
+      // esperando a una persona.
+      if (out?.status === "pending_approval") {
+        showMessage(
+          `Waiting for approval — the request expires ${formatDate(out.expiresAt)}`,
+          "info"
+        );
+      } else {
+        showMessage("Renewal dispatched — the device will reissue on its next check-in");
+      }
+
+      setRotateReason("");
+      setRotateTicket("");
+      setRotateBreakGlass(false);
+      await loadDevices();
+    } catch (err) {
+      console.error(err);
+      // Los tres rechazos con nombre propio del backend. Un "Failed to
+      // renew" genérico dejaría al operador sin saber si le falta un rol,
+      // si hay que esperar, o si el expediente estaba incompleto.
+      const code = err?.code || err?.body?.code;
+      if (code === "BREAK_GLASS_REQUIRES_OWNER") {
+        showMessage("Break-glass can only be used by an OWNER of this tenant", "error");
+      } else if (code === "ROTATION_CAP_REACHED") {
+        showMessage(err?.body?.message || "Too many renewals already in flight — wait for them to finish", "error");
+      } else if (err?.status === 400) {
+        showMessage(err?.body?.message || "Reason and ticket reference are required", "error");
+      } else {
+        showMessage("Failed to request renewal", "error");
+      }
+    } finally {
+      setRotateLoading(false);
+    }
+  }, [
+    confirm, getHostname, loadDevices, rotateBreakGlass, rotateReason,
+    rotateTicket, selectedDeviceId, showMessage,
+  ]);
+
   const handleExportCoverageCsv = React.useCallback(() => {
     const csv = toCsv(devices.items);
     downloadTextFile(
@@ -705,6 +783,13 @@ export default function PKI({ onNavigate } = {}) {
   // Aquí no se duplica esa decisión: se pregunta por el rol que resolvió el
   // servidor, y si no cuadra ni se pinta el formulario.
   const mayRevoke = myRole === "ADMIN" || myRole === "OWNER";
+  // Mismo rol que revocar —el backend pide ADMIN/OWNER en la ruta— pero
+  // NO el mismo riesgo, y por eso son dos variables y no una: revocar
+  // corta el equipo al instante, renovar es aditivo (el certificado viejo
+  // sigue sirviendo hasta que el nuevo se instala). Fundirlas invitaría a
+  // tratar la renovación con el mismo miedo, que es justo lo que frena
+  // una rotación de flota.
+  const mayRotate = myRole === "ADMIN" || myRole === "OWNER";
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
@@ -890,6 +975,16 @@ export default function PKI({ onNavigate } = {}) {
               mayRevoke={mayRevoke}
               revokeLoading={revokeLoading}
               onRevoke={handleRevoke}
+              rotateReason={rotateReason}
+              setRotateReason={setRotateReason}
+              rotateTicket={rotateTicket}
+              setRotateTicket={setRotateTicket}
+              rotateBreakGlass={rotateBreakGlass}
+              setRotateBreakGlass={setRotateBreakGlass}
+              rotateLoading={rotateLoading}
+              mayRotate={mayRotate}
+              isOwner={myRole === "OWNER"}
+              onRotate={handleRotate}
               onPickCert={loadCertificateDetail}
               getHostname={getHostname}
             />
@@ -1103,6 +1198,9 @@ function InspectorTab(props) {
     deviceCertColumns, activityColumns,
     detailLoading, revokeReason, setRevokeReason,
     canRevoke, mayRevoke, revokeLoading, onRevoke, onPickCert,
+    rotateReason, setRotateReason, rotateTicket, setRotateTicket,
+    rotateBreakGlass, setRotateBreakGlass, rotateLoading, mayRotate,
+    isOwner, onRotate,
     getHostname,
   } = props;
 
@@ -1211,6 +1309,84 @@ function InspectorTab(props) {
                   <DetailRow label="Agent version" value={selectedCertificate.agent_version} />
                   <DetailRow label="Last seen" value={formatDate(selectedCertificate.last_seen_at)} />
                 </Box>
+              </Box>
+
+              <Divider sx={{ borderColor: BRAND.border }} />
+
+              {/* ── Renovación (ADR-0015) ──────────────────────────────
+                  Va ANTES de Revocación a propósito: son las dos acciones
+                  sobre la identidad del equipo y la mayoría de las veces
+                  la que se quiere es ésta. Poner primero la irreversible
+                  sería invitar a usarla por descarte. */}
+              <Box>
+                <Typography variant="overline" sx={{ color: BRAND.tealText, fontWeight: 800, letterSpacing: 1.2 }}>
+                  Renewal
+                </Typography>
+                {!mayRotate ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                    Asking a device to reissue its identity is a privileged action on the endpoint.
+                    Only an ADMIN or OWNER of this tenant can request it.
+                  </Typography>
+                ) : (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+                      The device generates a new key and requests a fresh certificate. Its current one
+                      keeps working until the new one is installed, so it stays connected.
+                    </Typography>
+                    <TextField
+                      label="Renewal reason"
+                      size="small"
+                      value={rotateReason}
+                      onChange={(e) => setRotateReason(e.target.value)}
+                      placeholder="e.g. migration to the G2 issuing CA"
+                      fullWidth
+                      sx={{ mt: 1 }}
+                    />
+                    <TextField
+                      label="Ticket reference"
+                      size="small"
+                      value={rotateTicket}
+                      onChange={(e) => setRotateTicket(e.target.value)}
+                      placeholder="e.g. ADR-0015-ring-1"
+                      helperText="Both are required and are recorded in the access record."
+                      fullWidth
+                      sx={{ mt: 1 }}
+                    />
+                    {isOwner ? (
+                      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mt: 1 }}>
+                        <input
+                          id="pki-rotate-break-glass"
+                          type="checkbox"
+                          checked={rotateBreakGlass}
+                          onChange={(e) => setRotateBreakGlass(e.target.checked)}
+                          style={{ marginTop: 3 }}
+                        />
+                        <Typography
+                          component="label"
+                          htmlFor="pki-rotate-break-glass"
+                          variant="caption"
+                          color="text.secondary"
+                        >
+                          {/* Sólo se ofrece a un OWNER porque el backend
+                              sólo se lo acepta a un OWNER. Enseñárselo a
+                              un ADMIN sería una casilla que produce un 403. */}
+                          <strong>Break-glass</strong> — skip the approval matrix. Servers need a
+                          second pair of eyes by policy; this bypasses it and is recorded permanently
+                          in the access record.
+                        </Typography>
+                      </Box>
+                    ) : null}
+                    <Button
+                      variant="contained"
+                      startIcon={<AutorenewOutlinedIcon />}
+                      onClick={onRotate}
+                      disabled={rotateLoading || !selectedDeviceId}
+                      sx={{ textTransform: "none", fontWeight: 700, mt: 1.5 }}
+                    >
+                      {rotateLoading ? "Requesting…" : "Renew certificate"}
+                    </Button>
+                  </>
+                )}
               </Box>
 
               <Divider sx={{ borderColor: BRAND.border }} />
