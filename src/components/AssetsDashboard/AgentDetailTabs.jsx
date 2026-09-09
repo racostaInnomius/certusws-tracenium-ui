@@ -40,6 +40,7 @@ import {
   getOsLifecycleHint,
   formatCoordinates,
   getMapPin,
+  buildLocationHistory,
   getLocationHint
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
@@ -48,6 +49,11 @@ import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
 // Own chunk: Leaflet plus its CSS is dead weight on the overwhelming majority
 // of drawer opens, where nobody touches the map.
 const DeviceLocationMap = React.lazy(() => import("./DeviceLocationMap"));
+// Segundo import perezoso, no un segundo Leaflet: Vite deja la librería en un
+// chunk compartido, así que abrir este mapa no vuelve a descargarla si ya se
+// abrió el otro. Importa en este repo — el portal es Free SKU y cada chunk de
+// más es otra oportunidad de que llegue lento.
+const DeviceLocationHistoryMap = React.lazy(() => import("./DeviceLocationHistoryMap"));
 
 export function AgentTab({
   hostname,
@@ -62,7 +68,12 @@ export function AgentTab({
   platformKey
 }) {
   const [mapOpen, setMapOpen] = React.useState(false);
+  const [historyMapOpen, setHistoryMapOpen] = React.useState(false);
+  // Qué posición del historial está resaltada. Vive aquí y no en el mapa porque
+  // la lista y el mapa la comparten: seleccionar en una resalta en el otro.
+  const [selectedPosition, setSelectedPosition] = React.useState(null);
   const mapPin = React.useMemo(() => getMapPin(profile), [profile]);
+  const history = React.useMemo(() => buildLocationHistory(profile), [profile]);
 
   return (
             <>
@@ -128,49 +139,128 @@ export function AgentTab({
                   positions (max 10). Rendered only when the device has
                   actually moved: a single entry says nothing the "Location"
                   field above doesn't already, so showing it would be noise. */}
-              {(profile?.locationHistory?.length ?? 0) > 1 ? (
+              {history.total > 1 ? (
                 <Box sx={{ mt: 2.5 }}>
-                  <Typography
-                    sx={{
-                      fontSize: TEXT.xs,
-                      fontWeight: 800,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "text.secondary",
-                      mb: 1
-                    }}
-                  >
-                    Location history
-                  </Typography>
-                  <Stack spacing={0.75}>
-                    {profile.locationHistory.map((entry) => (
-                      <Stack
-                        key={entry.locationKey}
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        sx={{ flexWrap: "wrap", rowGap: 0.5 }}
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <Typography
+                      sx={{
+                        fontSize: TEXT.xs,
+                        fontWeight: 800,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "text.secondary"
+                      }}
+                    >
+                      Location history
+                    </Typography>
+                    {history.mappable > 0 ? (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => setHistoryMapOpen((v) => !v)}
+                        sx={{ textTransform: "none", fontSize: TEXT.xs, minWidth: 0, py: 0 }}
+                        aria-expanded={historyMapOpen}
                       >
-                        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-                          {/* Same rule as the Location field above: the site an
-                              operator declared, else the bare network range.
-                              The IP-derived city (entry.ipCity) is NOT a
-                              fallback — it says where the traffic exits, and it
-                              put two machines sitting in Mexico City under
-                              "Cleveland Heights" because that is where their
-                              egress lands. */}
-                          {entry.siteName || entry.subnetCidr || "—"}
+                        {historyMapOpen ? "Hide map" : `Map ${history.mappable}`}
+                      </Button>
+                    ) : null}
+                  </Stack>
+
+                  {/* El mapa va ARRIBA de la lista: la selección se hace en la
+                      lista y se mira en el mapa, y tenerlo debajo obligaría a
+                      saltar de un extremo a otro del drawer en cada fila. */}
+                  {historyMapOpen && history.mappable > 0 ? (
+                    <React.Suspense
+                      fallback={
+                        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
+                          Loading map…
                         </Typography>
-                        <Chip
-                          size="small"
-                          label={`${entry.hitCount}\u00d7`}
-                          sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
-                        />
-                        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-                          {formatDetailDate(entry.firstSeenAt)} → {formatDetailDate(entry.lastSeenAt)}
-                        </Typography>
-                      </Stack>
-                    ))}
+                      }
+                    >
+                      <DeviceLocationHistoryMap
+                        entries={history.entries}
+                        selectedId={selectedPosition}
+                        onSelect={setSelectedPosition}
+                      />
+                    </React.Suspense>
+                  ) : null}
+
+                  <Stack spacing={0.75} sx={{ mt: historyMapOpen ? 1.5 : 0 }}>
+                    {history.entries.map((entry) => {
+                      const selected = entry.id === selectedPosition;
+                      return (
+                        <Stack
+                          key={entry.id}
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          // Acoplada al mapa en los dos sentidos: seleccionar
+                          // aqui resalta el pin, y hacer clic en el pin resalta
+                          // la fila. Es lo que resuelve "cual es cual" sin
+                          // numerar diez pines encima del mapa.
+                          onClick={
+                            entry.mappable
+                              ? () => setSelectedPosition(selected ? null : entry.id)
+                              : undefined
+                          }
+                          sx={{
+                            flexWrap: "wrap",
+                            rowGap: 0.5,
+                            px: 0.75,
+                            py: 0.35,
+                            mx: -0.75,
+                            borderRadius: 1,
+                            cursor: entry.mappable ? "pointer" : "default",
+                            bgcolor: selected ? BRAND.tealSoft : "transparent"
+                          }}
+                        >
+                          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+                            {/* El sitio que declaro el operador, luego el rango,
+                                y si no hay ninguno pero SI posicion, la
+                                posicion. Esa ultima rama es la que faltaba: las
+                                filas GPS no tienen CIDR y caian a un guion que
+                                se leia como "no sabemos donde estuvo", cuando
+                                son justo las que traen coordenadas.
+
+                                La ciudad derivada de la IP (entry.ipCity) sigue
+                                SIN ser respaldo: dice donde sale el trafico, y
+                                puso dos equipos de Ciudad de Mexico en
+                                "Cleveland Heights". */}
+                            {entry.label}
+                          </Typography>
+                          {/* De donde salio el nombre del sitio. El rango es
+                              exacto por construccion; la cercania tiene una
+                              medicion en medio, y quien lee tiene derecho a
+                              saber cual esta viendo. */}
+                          {entry.labelKind === "site" && entry.siteMatch === "proximity" ? (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="by proximity"
+                              sx={{ height: 18, fontSize: TEXT.xs, color: "text.secondary" }}
+                            />
+                          ) : null}
+                          <Chip
+                            size="small"
+                            label={`${entry.hitCount}×`}
+                            sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+                          />
+                          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+                            {/* ⚠️ "seen" y no una flecha: hitCount cuenta TICKS,
+                                no visitas, y estos rangos SE SOLAPAN entre
+                                filas. Una flecha entre dos fechas se lee como
+                                una estancia continua; esto es la primera y la
+                                ultima vez que se vio esta posicion. */}
+                            seen {formatDetailDate(entry.firstSeenAt)} – {formatDetailDate(entry.lastSeenAt)}
+                          </Typography>
+                          {entry.detail ? (
+                            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+                              {entry.detail}
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                      );
+                    })}
                   </Stack>
                 </Box>
               ) : null}

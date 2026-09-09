@@ -7,6 +7,21 @@ vi.mock("../AssetManagement/MobileCommandsPanel", () => ({
   default: ({ deviceId }) => <div data-testid="mobile-commands">{deviceId}</div>,
 }));
 
+// El mapa del historial arrastra Leaflet, que en jsdom no pinta nada util. Se
+// sustituye por un doble que expone lo que la pestana le pasa: que reciba las
+// entradas y la seleccion ES el contrato entre lista y mapa, y es lo unico de
+// el que esta pestana puede romper.
+vi.mock("./DeviceLocationHistoryMap", () => ({
+  default: ({ entries, selectedId, onSelect }) => (
+    <div data-testid="history-map" data-selected={selectedId ?? ""}>
+      <span data-testid="history-map-count">{entries.filter((e) => e.mappable).length}</span>
+      <button type="button" onClick={() => onSelect("geo:oficina")}>
+        pick-pin
+      </button>
+    </div>
+  ),
+}));
+
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "./AgentDetailTabs";
 
 afterEach(cleanup);
@@ -92,6 +107,156 @@ describe("AgentTab", () => {
     expect(screen.getByText("Oficina CDMX")).toBeInTheDocument();
     // hit_count is surfaced so "primary site" is distinguishable from "passed through".
     expect(screen.getByText("41×")).toBeInTheDocument();
+  });
+
+  it("⚠️ una posicion GPS sin sitio muestra sus coordenadas, no un guion", () => {
+    // Era el fallo original: las filas que SI traen posicion se pintaban como
+    // un guion, que se lee como "no sabemos donde estuvo".
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "geo:a", lat: 19.319696, lon: -99.242192, accuracyM: 35, hitCount: 25,
+              firstSeenAt: "2026-08-13T13:58:00Z", lastSeenAt: "2026-09-08T15:53:00Z" },
+            { locationKey: "subnet:x", subnetCidr: "192.168.3.0/24", hitCount: 8,
+              firstSeenAt: "2026-09-03T21:16:00Z", lastSeenAt: "2026-09-04T12:23:00Z" },
+          ],
+        }}
+      />
+    );
+    // Las dos filas se identifican por lo que SABEN: una por sus coordenadas y
+    // la otra por su rango. Antes las dos caian al mismo guion.
+    //
+    // Se afirma sobre las etiquetas y no sobre el texto de la pestana: otros
+    // campos vacios pintan "—" legitimamente, y una asercion global sobre el
+    // guion se rompe por razones que no tienen nada que ver con el historial.
+    // La regla del guion vive en buildLocationHistory y alli esta cubierta.
+    expect(screen.getByText("19.3197, -99.2422")).toBeInTheDocument();
+    expect(screen.getByText("192.168.3.0/24")).toBeInTheDocument();
+    expect(screen.getByText("±35 m")).toBeInTheDocument();
+  });
+
+  it("dice cuando el nombre del sitio vino de la cercania y no del rango", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "geo:a", siteName: "Cowork", siteMatch: "proximity", lat: 19.3, lon: -99.2, hitCount: 3 },
+            { locationKey: "subnet:x", siteName: "Cowork", siteMatch: "cidr", subnetCidr: "10.0.0.0/24", hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    // Una sola insignia: la fila resuelta por rango no la lleva.
+    expect(screen.getAllByText("by proximity")).toHaveLength(1);
+  });
+
+  it("⚠️ no dibuja una flecha entre las dos fechas", () => {
+    // hitCount cuenta TICKS, no visitas, y los rangos SE SOLAPAN entre filas.
+    // Una flecha se lee como una estancia continua que nadie ha medido.
+    const { container } = render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "a", subnetCidr: "10.0.0.0/24", hitCount: 2, firstSeenAt: "2026-08-01T00:00:00Z", lastSeenAt: "2026-09-01T00:00:00Z" },
+            { locationKey: "b", subnetCidr: "10.0.1.0/24", hitCount: 1, firstSeenAt: "2026-08-05T00:00:00Z", lastSeenAt: "2026-08-06T00:00:00Z" },
+          ],
+        }}
+      />
+    );
+    expect(container.textContent).not.toContain("\u2192");
+    expect(container.textContent).toContain("seen");
+  });
+
+  it("el mapa del historial no se monta hasta que se pide", async () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "geo:a", lat: 19.3, lon: -99.2, hitCount: 2 },
+            { locationKey: "geo:oficina", lat: 19.4, lon: -99.1, hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    expect(screen.queryByTestId("history-map")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Map 2/ }));
+    expect(await screen.findByTestId("history-map")).toBeInTheDocument();
+  });
+
+  it("⚠️ ofrece mapear solo las posiciones que TIENEN coordenadas", async () => {
+    // El mapa es siempre un subconjunto: subnet y public_ip no tienen ninguna.
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "geo:a", lat: 19.3, lon: -99.2, hitCount: 2 },
+            { locationKey: "subnet:x", subnetCidr: "10.0.0.0/24", hitCount: 5 },
+            { locationKey: "city:us", hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Map 1/ }));
+    expect((await screen.findByTestId("history-map-count")).textContent).toBe("1");
+  });
+
+  it("no ofrece mapa cuando ninguna posicion tiene coordenadas", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "subnet:a", subnetCidr: "10.0.0.0/24", hitCount: 2 },
+            { locationKey: "subnet:b", subnetCidr: "10.0.1.0/24", hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("Location history")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Map / })).not.toBeInTheDocument();
+  });
+
+  it("seleccionar una fila resalta su pin, y el pin resalta la fila", async () => {
+    // El acoplamiento en los dos sentidos es lo que resuelve "cual es cual" sin
+    // numerar diez pines encima del mapa.
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "geo:casa", siteName: "Casa", lat: 19.3, lon: -99.2, hitCount: 9 },
+            { locationKey: "geo:oficina", siteName: "Oficina", lat: 19.4, lon: -99.1, hitCount: 3 },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Map 2/ }));
+    expect((await screen.findByTestId("history-map")).dataset.selected).toBe("");
+
+    // Lista → mapa.
+    fireEvent.click(screen.getByText("Casa"));
+    expect(screen.getByTestId("history-map").dataset.selected).toBe("geo:casa");
+
+    // Mapa → lista (el doble emite geo:oficina).
+    fireEvent.click(screen.getByText("pick-pin"));
+    expect(screen.getByTestId("history-map").dataset.selected).toBe("geo:oficina");
+
+    // Y volver a pulsar la misma fila la deselecciona.
+    fireEvent.click(screen.getByText("Oficina"));
+    expect(screen.getByTestId("history-map").dataset.selected).toBe("");
   });
 
   it("shows coordinates for a mobile GPS fix", () => {

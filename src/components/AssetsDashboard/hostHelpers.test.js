@@ -23,6 +23,7 @@ import {
   formatLocationLabel,
   formatCoordinates,
   getMapPin,
+  buildLocationHistory,
   getPositionFreshness,
   formatPositionSource,
   formatFormFactor,
@@ -308,6 +309,129 @@ describe("formatCoordinates (Phase 2, mobile GPS)", () => {
     expect(
       formatCoordinates({ locationLat: 20.6736, locationLon: -103.3436, locationAccuracyM: null })
     ).toBe("20.67360, -103.34360");
+  });
+});
+
+describe("buildLocationHistory", () => {
+  // ⚠️ La lista pintaba `siteName || subnetCidr || "—"`, y sólo las filas
+  // `subnet` traen CIDR. Las GPS y las `public_ip` no lo tienen POR
+  // CONSTRUCCIÓN, así que caían al guion — justo las que SÍ traen coordenadas.
+  // Un guion se lee como "no sabemos dónde estuvo". Medido: 89% del historial
+  // de un tenant, 69% de otro.
+
+  it("una posición GPS sin sitio muestra sus COORDENADAS, no un guion", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "geo:1", lat: 19.319696, lon: -99.242192, accuracyM: 35 }],
+    });
+    expect(entries[0].label).toBe("19.3197, -99.2422");
+    expect(entries[0].labelKind).toBe("coords");
+    expect(entries[0].mappable).toBe(true);
+  });
+
+  it("el sitio declarado gana a las coordenadas", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "geo:1", siteName: "Oficina CDMX", lat: 19.3, lon: -99.2, accuracyM: 35 }],
+    });
+    expect(entries[0].label).toBe("Oficina CDMX");
+    expect(entries[0].labelKind).toBe("site");
+    // Y las coordenadas siguen ahí, en el detalle y para el mapa.
+    expect(entries[0].detail).toContain("19.3000, -99.2000");
+    expect(entries[0].mappable).toBe(true);
+  });
+
+  it("el rango va después del sitio y antes de las coordenadas", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "subnet:x", subnetCidr: "10.20.30.0/24" }],
+    });
+    expect(entries[0].label).toBe("10.20.30.0/24");
+    expect(entries[0].labelKind).toBe("subnet");
+    expect(entries[0].mappable).toBe(false);
+  });
+
+  it("sin nada de nada, un guion — y eso sí es una ausencia", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "city:US", source: "public_ip" }],
+    });
+    expect(entries[0].label).toBe("—");
+    expect(entries[0].labelKind).toBe("unknown");
+  });
+
+  it("⚠️ la ciudad derivada de la IP NUNCA es el respaldo", () => {
+    // Puso dos equipos de Ciudad de México en "Cleveland Heights", que es por
+    // donde sale su tráfico. Ya se corrigió una vez en el campo Location
+    // principal y sobrevivió aquí porque el nombre no delataba su origen.
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "city:US", ipCity: "Cleveland Heights" }],
+    });
+    expect(entries[0].label).toBe("—");
+    expect(JSON.stringify(entries[0])).not.toContain("Cleveland");
+  });
+
+  it("precisión y método viajan JUNTOS", () => {
+    // ±35 m por Wi-Fi y ±35 m por satélite se leen igual y no merecen la misma
+    // confianza.
+    const { entries } = buildLocationHistory({
+      locationHistory: [{
+        locationKey: "geo:1", siteName: "Sitio", lat: 19.3, lon: -99.2,
+        accuracyM: 35, positionSource: "wifi",
+      }],
+    });
+    expect(entries[0].detail).toContain("±35 m");
+    expect(entries[0].detail).toMatch(/wi-?fi/i);
+  });
+
+  it("conserva cómo se resolvió el sitio", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [
+        { locationKey: "a", siteName: "S", siteMatch: "cidr", subnetCidr: "10.0.0.0/24" },
+        { locationKey: "b", siteName: "S", siteMatch: "proximity", lat: 19.3, lon: -99.2 },
+      ],
+    });
+    expect(entries[0].siteMatch).toBe("cidr");
+    expect(entries[1].siteMatch).toBe("proximity");
+  });
+
+  it("⚠️ declara cuántas se pueden plotear, no sólo cuántas hay", () => {
+    // El mapa es SIEMPRE un subconjunto: subnet y public_ip no tienen
+    // coordenadas. Un mapa con 1 pin de 3 posiciones se lee como el historial
+    // completo si nadie dice lo contrario.
+    const h = buildLocationHistory({
+      locationHistory: [
+        { locationKey: "a", lat: 19.3, lon: -99.2 },
+        { locationKey: "b", subnetCidr: "10.0.0.0/24" },
+        { locationKey: "c", source: "public_ip" },
+      ],
+    });
+    expect(h.total).toBe(3);
+    expect(h.mappable).toBe(1);
+  });
+
+  it("acepta snake_case por si el API cambia de forma", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ location_key: "geo:1", site_name: "S", hit_count: 7, first_seen_at: "x" }],
+    });
+    expect(entries[0].label).toBe("S");
+    expect(entries[0].hitCount).toBe(7);
+  });
+
+  it("una coordenada a medias no es ploteable", () => {
+    const { entries } = buildLocationHistory({
+      locationHistory: [{ locationKey: "a", lat: 19.3, lon: null }],
+    });
+    expect(entries[0].mappable).toBe(false);
+    expect(entries[0].label).toBe("—");
+  });
+
+  it("sin historial devuelve una lista vacía, no explota", () => {
+    expect(buildLocationHistory({}).entries).toEqual([]);
+    expect(buildLocationHistory(null).total).toBe(0);
+    expect(buildLocationHistory({ locationHistory: "nope" }).entries).toEqual([]);
+  });
+
+  it("una fila sin clave sigue teniendo id propio", () => {
+    // Dos filas sin locationKey no pueden colapsar en la lista de React.
+    const { entries } = buildLocationHistory({ locationHistory: [{}, {}] });
+    expect(entries[0].id).not.toBe(entries[1].id);
   });
 });
 

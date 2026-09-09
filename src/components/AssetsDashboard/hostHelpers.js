@@ -487,6 +487,94 @@ export function formatCoordinates(profile) {
 }
 
 /**
+ * El historial de posiciones, listo para pintar y para plotear.
+ *
+ * ⚠️ Por qué existe. La lista pintaba `siteName || subnetCidr || "—"`, y sólo
+ * las filas `subnet` traen CIDR. Las filas GPS y las `public_ip` no lo tienen
+ * POR CONSTRUCCIÓN, así que caían al guion — precisamente las filas que SÍ
+ * traen coordenadas. Un guion se lee como "no sabemos dónde estuvo" cuando lo
+ * que pasaba es que la lista no sabía pintar una posición. Medido: el 89% del
+ * historial de un tenant y el 69% de otro.
+ *
+ * Las coordenadas viajaban en la respuesta del detalle desde el principio; lo
+ * único que faltaba era mirarlas.
+ *
+ * `ipCity` NO entra como respaldo, ni aquí ni en ningún sitio: es la ciudad de
+ * la IP de salida, y pintarla como el lugar de cada posición puso dos equipos
+ * de Ciudad de México en "Cleveland Heights". Ya se corrigió una vez en el
+ * campo Location principal y sobrevivió aquí porque el nombre no delataba de
+ * dónde venía el dato.
+ */
+export function buildLocationHistory(profile) {
+  const filas = Array.isArray(profile?.locationHistory) ? profile.locationHistory : [];
+
+  const entries = filas.map((row, index) => {
+    const lat = toCoordinate(row?.lat);
+    const lon = toCoordinate(row?.lon);
+    const accuracyM = toCoordinate(row?.accuracyM ?? row?.accuracy_m);
+    const mappable = lat !== null && lon !== null;
+
+    const site = row?.siteName || row?.site_name || "";
+    const subnet = row?.subnetCidr || row?.subnet_cidr || "";
+
+    // El sitio declarado manda; luego el rango; y si no hay ninguno pero sí
+    // posición, la posición — que es un dato, no una ausencia.
+    let label = "—";
+    let labelKind = "unknown";
+    if (site) {
+      label = site;
+      labelKind = "site";
+    } else if (subnet) {
+      label = subnet;
+      labelKind = "subnet";
+    } else if (mappable) {
+      label = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      labelKind = "coords";
+    }
+
+    // La precisión y el método SIEMPRE juntos: ±35 m por Wi-Fi y ±35 m por
+    // satélite se leen igual y no merecen la misma confianza.
+    const method = formatPositionSource({
+      locationPositionSource: row?.positionSource ?? row?.position_source,
+    });
+    const detalle = [];
+    if (labelKind !== "coords" && mappable) detalle.push(`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    if (accuracyM !== null && accuracyM > 0) detalle.push(`±${Math.round(accuracyM)} m`);
+    if (method) detalle.push(method);
+
+    return {
+      // location_key es único por equipo, pero una fila sin él no debe
+      // colapsar con otra en la lista de React.
+      id: row?.locationKey || row?.location_key || `fila-${index}`,
+      label,
+      labelKind,
+      // 'cidr' = el rango que declaró el operador; 'proximity' = la lectura cae
+      // dentro del radio del pin que declaró. Las dos se apoyan en algo que
+      // escribió una persona, pero la segunda tiene una medición en medio.
+      siteMatch: row?.siteMatch ?? row?.site_match ?? null,
+      detail: detalle.join(" · "),
+      lat,
+      lon,
+      accuracyM,
+      positionSource: method,
+      hitCount: Number(row?.hitCount ?? row?.hit_count) || 0,
+      firstSeenAt: row?.firstSeenAt ?? row?.first_seen_at ?? null,
+      lastSeenAt: row?.lastSeenAt ?? row?.last_seen_at ?? null,
+      mappable,
+    };
+  });
+
+  return {
+    entries,
+    total: entries.length,
+    // Cuántas se pueden plotear. El mapa SIEMPRE es un subconjunto —las filas
+    // `subnet` y `public_ip` no tienen coordenadas— y callarlo haría que un
+    // mapa con 6 pines de 10 posiciones se leyera como el historial completo.
+    mappable: entries.filter((e) => e.mappable).length,
+  };
+}
+
+/**
  * The pin to plot for this device, or null when there is nothing to plot.
  *
  * Two very different things can supply it, so the source travels with the
