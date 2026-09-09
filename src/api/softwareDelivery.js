@@ -50,6 +50,33 @@ export async function deployPackage(packageId, body) {
   );
 }
 
+// ── Desinstalar software DETECTADO (ADR-0019 F1/F2) ───────────────
+//
+// Un despliegue cuyo objetivo salió del INVENTARIO y no del catálogo: Dropbox
+// en cuatro equipos de T111 nunca fue un paquete propio, así que `deployPackage`
+// no puede alcanzarlo. De ahí una ruta propia y no `/:id/deploy`, que es
+// paramétrica sobre el packageId.
+
+/**
+ * D5 — qué pasaría exactamente, equipo por equipo, ANTES de ejecutar.
+ *
+ * ⚠️ NO ES ADORNO: desinstalar no tiene «deshacer» ni copia. Devuelve tres
+ * listas —accionables, bloqueados con motivo, y los que no la tienen— porque un
+ * objetivo que desaparece en silencio es la forma de creer que apuntaste a 30
+ * cuando apuntaste a 29.
+ *
+ * Es de LECTURA y no pide rol de escritura: mirar qué comando correría es justo
+ * lo que hay que poder hacer antes de pedir permiso para ejecutarlo.
+ */
+export async function previewUninstall(appName, deviceIds) {
+  return httpPostJson(`${BASE}/uninstall/preview`, { appName, deviceIds });
+}
+
+/** Crear el despliegue de desinstalación. Esto sí ejecuta. */
+export async function uninstallDetected(body) {
+  return httpPostJson(`${BASE}/uninstall`, body);
+}
+
 export async function listDeployments(params = {}) {
   return httpGetJson(`${BASE}/deployments${buildQuery(params)}`);
 }

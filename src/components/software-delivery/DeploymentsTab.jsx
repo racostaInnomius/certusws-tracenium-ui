@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 
 import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
@@ -26,11 +27,14 @@ import { listDeployments } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
 
 import DeploymentDetailDrawer from "./DeploymentDetailDrawer";
+import UninstallDetectedDialog from "./UninstallDetectedDialog";
 
 export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen, refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState("all");
+
+  const [uninstallOpen, setUninstallOpen] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerDeployment, setDrawerDeployment] = React.useState(null);
@@ -96,6 +100,28 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
       minWidth: 240,
       renderCell: (p) => {
         const pkg = p.row.packageSnapshot || {};
+
+        // ⚠️ UN DESPLIEGUE DE DESINSTALACIÓN NO TIENE PAQUETE (ADR-0019 F1):
+        // `package_id` es NULL y el snapshot lleva `uninstallIdentity`, que es
+        // el mismo discriminador que usan los CHECK de la base. Su snapshot
+        // trae `platform`/`format` de relleno para encajar en la forma, y NO
+        // trae `arch` — pintarlos daría «windows/undefined/EXE», que además de
+        // feo afirma cosas que nadie recogió. Se enseña lo único que aquí es
+        // verdad: el nombre detectado y con qué identidad se quita.
+        const identity = pkg.uninstallIdentity;
+        if (identity) {
+          return (
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+                {pkg.name}
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                Detected · {identity.productCode || identity.displayNameLike || "—"}
+              </Typography>
+            </Box>
+          );
+        }
+
         return (
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
@@ -218,6 +244,22 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
           <MenuItem value="cancelled">Cancelled</MenuItem>
         </TextField>
         <Box sx={{ flex: 1 }} />
+        {/* ADR-0019 F2 — «un modo de despliegue mas, con su propio objetivo».
+            Vive aqui y no en Asset Management: el inventario es donde se VE el
+            problema, pero la desinstalacion es un despliegue y hereda de SDP la
+            ventana de mantenimiento, el historial por equipo, la cancelacion y
+            el guardia de equipos dados de baja. */}
+        {canManage ? (
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<DeleteSweepOutlinedIcon />}
+            onClick={() => setUninstallOpen(true)}
+            sx={{ textTransform: "none", color: BRAND.gray, borderColor: BRAND.border }}
+          >
+            Uninstall detected software
+          </Button>
+        ) : null}
         <Button
           variant="outlined"
           size="small"
@@ -266,6 +308,15 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
         notify={notify}
         onChanged={load}
         onClose={() => setDrawerOpen(false)}
+      />
+
+      <UninstallDetectedDialog
+        open={uninstallOpen}
+        notify={notify}
+        onClose={() => setUninstallOpen(false)}
+        // Recargar al terminar: el despliegue recien creado tiene que aparecer
+        // en esta misma lista, que es donde se sigue y donde se cancela.
+        onDone={load}
       />
     </SectionPaper>
   );

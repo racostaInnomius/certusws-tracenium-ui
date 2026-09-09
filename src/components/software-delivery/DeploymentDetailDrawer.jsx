@@ -367,8 +367,19 @@ export default function DeploymentDetailDrawer({
               <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
                 Deployment #{deployment.id}
               </Typography>
+              {/* Un despliegue de desinstalación no tiene paquete (ADR-0019
+                  F1): `uninstallIdentity` en el snapshot es el discriminador,
+                  el mismo que usan los CHECK de la base. No trae `arch`, y su
+                  `platform`/`format` son de relleno — pintarlos afirmaría algo
+                  que nadie recogió. */}
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, mt: 0.25 }}>
-                {pkg.name} v{pkg.version} · {pkg.platform}/{pkg.arch}/{(pkg.format || "").toUpperCase()}
+                {pkg.uninstallIdentity
+                  ? `${pkg.name} · uninstall · ${
+                      pkg.uninstallIdentity.productCode ||
+                      pkg.uninstallIdentity.displayNameLike ||
+                      "—"
+                    }`
+                  : `${pkg.name} v${pkg.version} · ${pkg.platform}/${pkg.arch}/${(pkg.format || "").toUpperCase()}`}
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
                 {statusChip(deployment.status)}
