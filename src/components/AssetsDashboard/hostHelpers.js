@@ -838,3 +838,88 @@ export function getLocationHint(profile) {
   }
   return "";
 }
+
+/**
+ * El nombre de un lugar: sitio declarado, luego red, luego la posición.
+ *
+ * ⚠️ Usa `toCoordinate` y NO `Number()`. `Number(null)` es 0 y `Number("")`
+ * también, así que un episodio sin coordenadas se rotularía como
+ * "0.0000, 0.0000" — Null Island, en el golfo de Guinea. Es la cuarta vez que
+ * esta confusión entre "no hay dato" y "el dato es cero" muerde en esta zona
+ * del producto; el guardia ya existía aquí al lado y no se estaba usando.
+ */
+export function placeLabel(ep) {
+  if (ep?.siteName) return ep.siteName;
+  if (ep?.subnetCidr) return ep.subnetCidr;
+  const lat = toCoordinate(ep?.lat);
+  const lon = toCoordinate(ep?.lon);
+  if (lat !== null && lon !== null) return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  return "—";
+}
+
+/**
+ * Cuánto se sabe de la salida, en palabras.
+ *
+ * Tres estados y ninguno es "salió a las X":
+ *   · sigue ahí            → no ha aparecido en otro sitio
+ *   · se fue antes de Y    → apareció en otro sitio a las Y
+ *   · confirmado hasta X   → siempre, porque es lo único medido
+ */
+export function departureText(ep) {
+  if (!ep?.endedAt) return "still there — has not been seen anywhere else since";
+  return `left before ${formatDetailDate(ep.endedAt)}`;
+}
+
+
+/** El día que se está mirando, como ventana [00:00, 24:00) en ISO. */
+export function dayWindow(yyyymmdd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(yyyymmdd || ""))) return null;
+  const desde = new Date(`${yyyymmdd}T00:00:00.000Z`);
+  if (Number.isNaN(desde.getTime())) return null;
+  return {
+    from: desde.toISOString(),
+    to: new Date(desde.getTime() + 86400_000 - 1).toISOString(),
+  };
+}
+
+
+/**
+ * El recorrido de una línea de tiempo, en tramos.
+ *
+ * ⚠️ Esto dibuja el ORDEN de las estancias, no la RUTA. Con episodios ya se
+ * sabe en qué secuencia estuvo el equipo en cada sitio — eso el anillo no lo
+ * daba, y es lo que hacía imposible dibujar nada hasta ahora. Lo que sigue sin
+ * saberse es por dónde fue: entre dos estancias hay un hueco del tamaño de la
+ * cadencia de reporte, y una recta entre ellas es una interpolación.
+ *
+ * Por eso la línea va discontinua y la leyenda lo dice. Dibujarla sólida
+ * afirmaría un trayecto que nadie midió.
+ *
+ * Se parte en TRAMOS: una estancia sin coordenadas (una subred, una IP) corta
+ * el recorrido. Saltársela uniría dos puntos entre los que hubo un tercer lugar
+ * desconocido, que es peor que dejar el hueco a la vista.
+ *
+ * `episodes` llega del más reciente al más antiguo (así lo devuelve el API);
+ * el recorrido se dibuja en orden cronológico.
+ */
+export function buildTrail(episodes) {
+  const lista = Array.isArray(episodes) ? [...episodes].reverse() : [];
+  const tramos = [];
+  let actual = [];
+
+  for (const ep of lista) {
+    const lat = toCoordinate(ep?.lat);
+    const lon = toCoordinate(ep?.lon);
+    if (lat === null || lon === null) {
+      // Hueco: se cierra el tramo en curso.
+      if (actual.length > 1) tramos.push(actual);
+      actual = [];
+      continue;
+    }
+    actual.push({ lat, lon, id: ep.id });
+  }
+  if (actual.length > 1) tramos.push(actual);
+
+  // Un tramo de un solo punto no es un recorrido; se descarta arriba.
+  return tramos;
+}

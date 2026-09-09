@@ -42,6 +42,7 @@ import {
   formatCoordinates,
   getMapPin,
   buildLocationHistory,
+  buildTrail,
   getLocationHint
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
@@ -55,6 +56,9 @@ const DeviceLocationMap = React.lazy(() => import("./DeviceLocationMap"));
 // abrió el otro. Importa en este repo — el portal es Free SKU y cada chunk de
 // más es otra oportunidad de que llegue lento.
 const DeviceLocationHistoryMap = React.lazy(() => import("./DeviceLocationHistoryMap"));
+// La línea de tiempo (ADR-0018 fase 2). No es perezosa: no arrastra Leaflet y
+// es el contenido principal de la sección, no un extra que se despliega.
+import DeviceLocationTimeline from "./DeviceLocationTimeline";
 
 export function AgentTab({
   hostname,
@@ -66,7 +70,9 @@ export function AgentTab({
   connected,
   isMobileDevice,
   commandDeviceId,
-  platformKey
+  platformKey,
+  /** Línea de tiempo del equipo (ADR-0018). La carga el padre, como el resto. */
+  timeline = null
 }) {
   const [mapOpen, setMapOpen] = React.useState(false);
   const [historyMapOpen, setHistoryMapOpen] = React.useState(false);
@@ -75,6 +81,9 @@ export function AgentTab({
   const [selectedPosition, setSelectedPosition] = React.useState(null);
   const mapPin = React.useMemo(() => getMapPin(profile), [profile]);
   const history = React.useMemo(() => buildLocationHistory(profile), [profile]);
+  // El recorrido sale de los EPISODIOS, no del anillo: el orden es lo único que
+  // el anillo no puede dar, y sin él la línea sería un viaje inventado.
+  const trail = React.useMemo(() => buildTrail(timeline?.episodes), [timeline]);
 
   return (
             <>
@@ -167,6 +176,29 @@ export function AgentTab({
                     ) : null}
                   </Stack>
 
+                  {/* ── La línea de tiempo SUSTITUYE a la lista de lugares ──
+                      (ADR-0018 D8). Mientras no haya estancias — la tabla se
+                      escribe desde que la función existe, no hacia atrás — se
+                      sigue mostrando la lista, que es lo único que hay. No es
+                      un duplicado permanente: es una ventana de transición que
+                      se cierra sola, y el propio panel la explica. */}
+                  {timeline?.episodes?.length ? (
+                    <DeviceLocationTimeline
+                      episodes={timeline.episodes}
+                      retentionDays={timeline.retentionDays}
+                    />
+                  ) : null}
+
+                  {timeline && !timeline.episodes?.length ? (
+                    <Box sx={{ mb: 1.5 }}>
+                      <DeviceLocationTimeline
+                        episodes={[]}
+                        retentionDays={timeline.retentionDays}
+                        fallbackPlaces={history.total}
+                      />
+                    </Box>
+                  ) : null}
+
                   {/* ⚠️ Lo que esta lista NO es, dicho una vez y a la vista.
                       Tres cosas que el formato invita a leer mal:
 
@@ -182,11 +214,17 @@ export function AgentTab({
                         primera va del 13-ago al 08-sep y contiene a casi todas
                         las demás. Puesto en columna se lee como una secuencia
                         y no lo es. */}
-                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
-                    Distinct positions, newest first — older ones drop off as new places appear.
-                    Counts are inventory check-ins, not visits, and the date ranges overlap, so
-                    this is not a timeline.
-                  </Typography>
+                  {/* ⚠️ Esta nota describe la LISTA DE LUGARES, no la línea de
+                      tiempo — dice literalmente "esto no es una línea de
+                      tiempo". Si se pinta cuando hay episodios, contradice a lo
+                      que está justo encima. Va atada a lo que explica. */}
+                  {!timeline?.episodes?.length ? (
+                    <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
+                      Distinct positions, newest first — older ones drop off as new places appear.
+                      Counts are inventory check-ins, not visits, and the date ranges overlap, so
+                      this is not a timeline.
+                    </Typography>
+                  ) : null}
 
                   {/* El mapa va ARRIBA de la lista: la selección se hace en la
                       lista y se mira en el mapa, y tenerlo debajo obligaría a
@@ -203,11 +241,15 @@ export function AgentTab({
                         entries={history.entries}
                         selectedId={selectedPosition}
                         onSelect={setSelectedPosition}
+                        trail={trail}
                       />
                     </React.Suspense>
                   ) : null}
 
-                  <Stack spacing={0.75} sx={{ mt: historyMapOpen ? 1.5 : 0 }}>
+                  <Stack
+                    spacing={0.75}
+                    sx={{ mt: historyMapOpen ? 1.5 : 0, display: timeline?.episodes?.length ? "none" : undefined }}
+                  >
                     {history.entries.map((entry) => {
                       const selected = entry.id === selectedPosition;
                       return (

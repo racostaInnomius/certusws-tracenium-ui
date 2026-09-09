@@ -22,7 +22,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Box, Chip, Stack, Typography } from "@mui/material";
-import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Circle, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -92,6 +92,14 @@ export default function DeviceLocationHistoryMap({
   selectedId,
   onSelect,
   height = 300,
+  /**
+   * Tramos del recorrido (ADR-0018 fase 4), en orden cronológico.
+   *
+   * ⚠️ Es el ORDEN de las estancias, no la RUTA. Llega vacío mientras no haya
+   * episodios, que es lo que había hasta ahora — y es la razón por la que este
+   * mapa tenía prohibido dibujar líneas.
+   */
+  trail = [],
 }) {
   const containerRef = useRef(null);
 
@@ -134,6 +142,9 @@ export default function DeviceLocationHistoryMap({
               "reportó desde aquí muchas veces", que además depende de la
               cadencia que tenga configurada el tenant. */}
           {" "}Larger pins were reported more often, not visited more often.
+          {trail.length > 0
+            ? " The dashed line is the order the device was in these places — not the route it took."
+            : ""}
         </Typography>
       </Stack>
 
@@ -163,6 +174,19 @@ export default function DeviceLocationHistoryMap({
                 hits: p.hitCount,
               })}
               eventHandlers={{ click: () => onSelect?.(p.id === selectedId ? null : p.id) }}
+            />
+          ))}
+
+          {/* ⚠️ Discontinua y translúcida a propósito. Une estancias en el
+              orden en que ocurrieron —eso sí se sabe— pero NO el camino entre
+              ellas: entre dos estancias hay un hueco del tamaño de la cadencia
+              de reporte. Una línea sólida afirmaría un trayecto que nadie
+              midió. */}
+          {trail.map((tramo, i) => (
+            <Polyline
+              key={`trail-${i}`}
+              positions={tramo.map((p) => [p.lat, p.lon])}
+              pathOptions={{ color: BRAND.teal, weight: 2, opacity: 0.5, dashArray: "6 6" }}
             />
           ))}
 

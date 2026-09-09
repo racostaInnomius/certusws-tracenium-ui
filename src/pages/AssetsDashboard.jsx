@@ -417,6 +417,9 @@ export default function AssetsDashboard({
   // error se guarda APARTE del dato, porque un backend sin desplegar y un
   // tenant sin cercas no son lo mismo y colapsarlos ya costó una confusión con
   // el mapa de flota.
+  // Línea de tiempo del equipo seleccionado (ADR-0018 fase 2). La carga el
+  // padre, como el resto del detalle: AgentTab es presentacional.
+  const [agentTimeline, setAgentTimeline] = React.useState(null);
   const [geofences, setGeofences] = React.useState(null);
   const [geofenceSavingId, setGeofenceSavingId] = React.useState(null);
   const [geofenceErrors, setGeofenceErrors] = React.useState({});
@@ -1097,6 +1100,22 @@ export default function AssetsDashboard({
     setAgentProfile(normalizeHostDetailPayload(null, selectedAgent));
     setAgentHardware(null);
 
+    setAgentTimeline(null);
+
+    // ⚠️ En su propia promesa y no en el allSettled de abajo: un backend sin la
+    // migración de episodios responde 500, y eso no puede marcar el detalle
+    // entero como "parcial" — el resto de la ficha está perfectamente.
+    import("../api/episodes")
+      .then((m) => m.getDeviceTimeline(agentId))
+      .then((data) => {
+        if (!cancelled) setAgentTimeline(data);
+      })
+      .catch(() => {
+        // Sin línea de tiempo el drawer sigue mostrando la lista de lugares,
+        // que es exactamente la ventana de transición prevista.
+        if (!cancelled) setAgentTimeline(null);
+      });
+
     Promise.allSettled([
       dashboardApi.getHostDetail(agentId),
       getHardwareInventoryDetail({ search: agentId, page: 1, pageSize: 10 }),
@@ -1594,6 +1613,7 @@ const osVersionItems = React.useMemo(() => {
                 loading={agentDetailLoading}
                 error={agentDetailError}
                 profile={agentProfile}
+                timeline={agentTimeline}
                 hardware={agentHardware}
                 softwareRows={agentSoftwareRows}
                 softwareTotal={agentSoftwareTotal}

@@ -27,6 +27,9 @@ vi.mock("react-leaflet", () => ({
   Circle: ({ center, radius }) => (
     <div data-testid="circle" data-pos={center.join(",")} data-radius={radius} />
   ),
+  Polyline: ({ positions, pathOptions }) => (
+    <div data-testid="trail" data-points={positions.length} data-dash={pathOptions?.dashArray || ""} />
+  ),
   useMap: () => ({
     setView: vi.fn(),
     fitBounds: (b) => leaflet.bounds.push(b),
@@ -104,16 +107,60 @@ describe("DeviceLocationHistoryMap", () => {
     ).toBeInTheDocument();
   });
 
+  it("⚠️ sin episodios NO dibuja ninguna línea — es el estado por defecto", () => {
+    // Este mapa tuvo prohibido dibujar recorridos hasta que existieron los
+    // episodios, porque los rangos del anillo se solapan y una línea entre
+    // ellos habría sido un viaje inventado.
+    render(<DeviceLocationHistoryMap entries={[entrada(), entrada({ id: "geo:b" })]} />);
+    expect(screen.queryByTestId("trail")).not.toBeInTheDocument();
+  });
+
+  it("⚠️ con recorrido, la línea es DISCONTINUA y lo explica", () => {
+    // Se sabe el orden; no se sabe la ruta. Una línea sólida afirmaría un
+    // trayecto que nadie midió.
+    render(
+      <DeviceLocationHistoryMap
+        entries={[entrada(), entrada({ id: "geo:b", lat: 19.4068, lon: -99.1672 })]}
+        trail={[[{ lat: 19.3197, lon: -99.2422 }, { lat: 19.4068, lon: -99.1672 }]]}
+      />
+    );
+    const linea = screen.getByTestId("trail");
+    expect(linea.dataset.points).toBe("2");
+    expect(linea.dataset.dash).not.toBe("");
+    expect(
+      screen.getByText(/order the device was in these places — not the route it took/i)
+    ).toBeInTheDocument();
+  });
+
+  it("varios tramos se dibujan por separado, sin unir los huecos", () => {
+    render(
+      <DeviceLocationHistoryMap
+        entries={[entrada()]}
+        trail={[
+          [{ lat: 19.3, lon: -99.2 }, { lat: 19.31, lon: -99.21 }],
+          [{ lat: 19.4, lon: -99.1 }, { lat: 19.41, lon: -99.11 }],
+        ]}
+      />
+    );
+    expect(screen.getAllByTestId("trail")).toHaveLength(2);
+  });
+
   it("cuando están todas, no insinúa que falte algo", () => {
     render(<DeviceLocationHistoryMap entries={[entrada(), entrada({ id: "geo:b" })]} />);
     expect(screen.getByText("2 positions")).toBeInTheDocument();
   });
 
-  it("⚠️ NUNCA dibuja una línea de recorrido", () => {
-    // Es lo primero que pide el ojo y lo que los datos no soportan: los rangos
-    // firstSeen→lastSeen SE SOLAPAN entre filas, así que unir pines
-    // consecutivos dibujaría un viaje que nunca ocurrió, con la autoridad
-    // visual de un GPS de verdad.
+  it("⚠️ del ANILLO no sale ninguna línea, con episodios o sin ellos", () => {
+    // Este test decía "NUNCA dibuja una línea" y contaba llamadas a L.polyline
+    // (la API imperativa). Al añadirse el recorrido de ADR-0018 pasó a usarse el
+    // componente <Polyline> de react-leaflet, así que aquel contador habría
+    // seguido en cero aunque se dibujaran líneas: un guardia verde que ya no
+    // guardaba lo que su nombre prometía.
+    //
+    // Lo que sigue siendo cierto —y es lo que hay que fijar— es que las
+    // posiciones del anillo por sí solas NO producen recorrido: sus rangos se
+    // solapan, y unirlas dibujaría un viaje que nunca ocurrió. El orden sólo lo
+    // dan los episodios, y llegan por `trail`.
     leaflet.polylines = 0;
     render(
       <DeviceLocationHistoryMap
@@ -124,6 +171,7 @@ describe("DeviceLocationHistoryMap", () => {
         ]}
       />
     );
+    expect(screen.queryByTestId("trail")).not.toBeInTheDocument();
     expect(leaflet.polylines).toBe(0);
   });
 

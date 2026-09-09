@@ -283,6 +283,34 @@ describe("AgentTab", () => {
     expect(nota.textContent).toMatch(/not a timeline/i);
   });
 
+  it("⚠️ esa nota DESAPARECE cuando hay línea de tiempo", () => {
+    // Dice literalmente "esto no es una línea de tiempo". Pintarla debajo de
+    // una línea de tiempo contradice lo que el operador está viendo.
+    render(
+      <AgentTab
+        {...base}
+        timeline={{
+          retentionDays: 30,
+          episodes: [
+            { id: "1", siteName: "Oficina", tickCount: 3,
+              firstSeenAt: "2026-09-01T09:00:00Z", lastSeenAt: "2026-09-02T18:00:00Z",
+              endedAt: null },
+          ],
+        }}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "a", subnetCidr: "10.0.0.0/24", hitCount: 25 },
+            { locationKey: "b", subnetCidr: "10.0.1.0/24", hitCount: 2 },
+          ],
+        }}
+      />
+    );
+    expect(screen.queryByText(/so this is not a timeline/i)).not.toBeInTheDocument();
+    // Y lo que se ve es la estancia, no la lista de lugares.
+    expect(screen.getByText(/^confirmed /i)).toBeInTheDocument();
+  });
+
   it("el contador dice que cuenta reportes, no visitas", async () => {
     render(
       <AgentTab

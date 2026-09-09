@@ -28,6 +28,8 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import SiteAttendance from "./SiteAttendance";
+import { dayWindow } from "./hostHelpers";
 
 /** Cuántos equipos, y en qué estado. Cero es un número, no una ausencia. */
 function Recuento({ label, value, color }) {
@@ -40,6 +42,28 @@ function Recuento({ label, value, color }) {
 }
 
 function Cerca({ site, onSave, saving, error }) {
+  // ⚠️ La asistencia se pide SÓLO al abrirla. Es una consulta por sitio y
+  // fecha, y cargarla para cada sitio al pintar el panel gastaría una consulta
+  // por sitio en cada apertura del mapa para algo que casi nadie mira.
+  const [asistenciaAbierta, setAsistenciaAbierta] = React.useState(false);
+  const [fecha, setFecha] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [asistencia, setAsistencia] = React.useState(null);
+  const [cargando, setCargando] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!asistenciaAbierta) return undefined;
+    const ventana = dayWindow(fecha);
+    if (!ventana) return undefined;
+    let cancelado = false;
+    setCargando(true);
+    import("../../api/episodes")
+      .then((m) => m.getSiteAttendance(site.id, ventana))
+      .then((d) => { if (!cancelado) setAsistencia(d); })
+      .catch(() => { if (!cancelado) setAsistencia(null); })
+      .finally(() => { if (!cancelado) setCargando(false); });
+    return () => { cancelado = true; };
+  }, [asistenciaAbierta, fecha, site.id]);
+
   const [radio, setRadio] = React.useState(site.radiusM ?? "");
   React.useEffect(() => setRadio(site.radiusM ?? ""), [site.radiusM]);
 
@@ -129,6 +153,18 @@ function Cerca({ site, onSave, saving, error }) {
         >
           Save radius
         </Button>
+
+        {/* La pregunta que el drawer no puede contestar: va de un SITIO y una
+            fecha, no de un equipo. */}
+        <Button
+          size="small"
+          variant="text"
+          onClick={() => setAsistenciaAbierta((v) => !v)}
+          aria-expanded={asistenciaAbierta}
+          sx={{ textTransform: "none" }}
+        >
+          {asistenciaAbierta ? "Hide who was here" : "Who was here"}
+        </Button>
       </Stack>
 
       {/* ── Lo que hay que decir, por orden de urgencia ─────────────────── */}
@@ -189,6 +225,16 @@ function Cerca({ site, onSave, saving, error }) {
 
       {error ? (
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, mt: 1 }}>{error}</Typography>
+      ) : null}
+
+      {asistenciaAbierta ? (
+        <SiteAttendance
+          siteName={site.siteName}
+          data={asistencia}
+          loading={cargando}
+          date={fecha}
+          onDateChange={setFecha}
+        />
       ) : null}
     </Box>
   );
