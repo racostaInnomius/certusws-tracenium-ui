@@ -77,7 +77,11 @@ function isNoServiceAccessError(status, text = "") {
     status === 403 &&
     (code.includes("NO_SERVICE_ACCESS") ||
       code.includes("SERVICE_ACCESS") ||
-      code.includes("SERVICE_NOT_ALLOWED"))
+      code.includes("SERVICE_NOT_ALLOWED") ||
+      // An MSP operator whose IDP account lacks the admin_msp role. Same
+      // screen: authenticated, not enabled — the backend message says
+      // exactly which role is missing.
+      code.includes("MSP_ROLE_REQUIRED"))
   );
 }
 
@@ -695,7 +699,7 @@ export default function AuthGate({ children }) {
               mb: 0.75,
             }}
           >
-            NO_SERVICE_ACCESS
+            {accessDeniedInfo?.code || "NO_SERVICE_ACCESS"}
           </Typography>
 
           <Typography sx={{ color: NEUTRAL[100], fontSize: TEXT.md, lineHeight: 1.6 }}>
