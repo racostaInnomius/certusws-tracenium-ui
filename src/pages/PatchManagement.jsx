@@ -43,6 +43,7 @@ import SecurityConfigPanel from "../components/patch-management/SecurityConfigPa
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
+import { summarizeBulkInstall, goingOutNow } from "../components/patch-management/bulkInstallOutcome";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -775,22 +776,22 @@ export default function PatchManagement({ onNavigate }) {
         mode: "install",
         dryRun: false
       });
-      const dispatched = Array.isArray(res?.dispatched) ? res.dispatched : [];
-      const skipped = Array.isArray(res?.skipped) ? res.skipped : [];
-
-      if (dispatched.length === 0) {
-        notify("info", `No devices matched the ${bulkDialog.cfg.label.toLowerCase()} filter`);
-      } else {
+      // A patch install now passes the maintenance-window and vCenter-snapshot
+      // gates, so "dispatched" no longer means "on its way". Only follow the
+      // jobs actually going out — a held one has nothing to report until its
+      // gate clears — and let the summary name the rest.
+      const onItsWay = goingOutNow(res?.dispatched);
+      if (onItsWay.length > 0) {
         setActiveJobs((prev) => [
           ...prev,
-          ...dispatched.map((d) => ({
+          ...onItsWay.map((d) => ({
             jobId: d.jobId,
             label: `${bulkDialog.cfg.label} (${d.kbCount}) · ${d.hostname || d.agentId.slice(0, 8)}`
           }))
         ]);
-        const skipMsg = skipped.length > 0 ? ` · ${skipped.length} skipped` : "";
-        notify("success", `Dispatched to ${dispatched.length} device${dispatched.length === 1 ? "" : "s"}${skipMsg}`);
       }
+      const summary = summarizeBulkInstall(res, bulkDialog.cfg.label);
+      notify(summary.severity, summary.message);
       setBulkDialog(null);
     } catch (err) {
       console.error("[patch-mgmt] bulk-install failed", err);
