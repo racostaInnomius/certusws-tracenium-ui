@@ -259,6 +259,49 @@ describe("AgentTab", () => {
     expect(screen.getByTestId("history-map").dataset.selected).toBe("");
   });
 
+  it("⚠️ dice lo que la lista NO es, sin que haya que deducirlo", () => {
+    // Tres lecturas equivocadas que el formato invita a hacer: que estén TODAS
+    // las posiciones que hubo, que los numeros sean visitas, y que las filas
+    // en columna sean una secuencia.
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "a", subnetCidr: "10.0.0.0/24", hitCount: 25 },
+            { locationKey: "b", subnetCidr: "10.0.1.0/24", hitCount: 2 },
+          ],
+        }}
+      />
+    );
+    const nota = screen.getByText(/Distinct positions, newest first/i);
+    expect(nota).toBeInTheDocument();
+    expect(nota.textContent).toMatch(/older ones drop off/i);
+    expect(nota.textContent).toMatch(/check-ins, not visits/i);
+    expect(nota.textContent).toMatch(/date ranges overlap/i);
+    expect(nota.textContent).toMatch(/not a timeline/i);
+  });
+
+  it("el contador dice que cuenta reportes, no visitas", async () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "a", subnetCidr: "10.0.0.0/24", hitCount: 25 },
+            { locationKey: "b", subnetCidr: "10.0.1.0/24", hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    fireEvent.mouseOver(screen.getByText("25×"));
+    expect(
+      await screen.findByText(/25 inventory check-ins — not 25 separate visits/i)
+    ).toBeInTheDocument();
+  });
+
   it("shows coordinates for a mobile GPS fix", () => {
     render(
       <AgentTab

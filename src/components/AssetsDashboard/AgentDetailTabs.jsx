@@ -25,6 +25,7 @@ import {
   TableHead,
   TablePagination,
   TableRow,
+  Tooltip,
   Typography
 } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -135,10 +136,10 @@ export function AgentTab({
                 </Box>
               ) : null}
 
-              {/* Location history — the bounded ring buffer of DISTINCT
-                  positions (max 10). Rendered only when the device has
-                  actually moved: a single entry says nothing the "Location"
-                  field above doesn't already, so showing it would be noise. */}
+              {/* Location history — el anillo acotado de posiciones DISTINTAS
+                  (el tope lo pone el tenant en Asset Management). Se pinta solo
+                  cuando el equipo se ha movido de verdad: una sola entrada no
+                  dice nada que el campo "Location" de arriba no diga ya. */}
               {history.total > 1 ? (
                 <Box sx={{ mt: 2.5 }}>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -165,6 +166,27 @@ export function AgentTab({
                       </Button>
                     ) : null}
                   </Stack>
+
+                  {/* ⚠️ Lo que esta lista NO es, dicho una vez y a la vista.
+                      Tres cosas que el formato invita a leer mal:
+
+                      · Es un anillo acotado. Las posiciones viejas se caen
+                        cuando aparecen nuevas, así que "todo lo que hay" no es
+                        "todo lo que hubo".
+                      · Los números son TICKS de inventario, no visitas. Un
+                        equipo quieto en un sitio acumula cuentas altas sin
+                        haber ido nunca dos veces, y la cadencia varía por
+                        tenant (medido: de 1,2 a 10,8 al día), así que tampoco
+                        se comparan entre flotas.
+                      · Las fechas SE SOLAPAN entre filas. En un equipo real la
+                        primera va del 13-ago al 08-sep y contiene a casi todas
+                        las demás. Puesto en columna se lee como una secuencia
+                        y no lo es. */}
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
+                    Distinct positions, newest first — older ones drop off as new places appear.
+                    Counts are inventory check-ins, not visits, and the date ranges overlap, so
+                    this is not a timeline.
+                  </Typography>
 
                   {/* El mapa va ARRIBA de la lista: la selección se hace en la
                       lista y se mira en el mapa, y tenerlo debajo obligaría a
@@ -240,11 +262,20 @@ export function AgentTab({
                               sx={{ height: 18, fontSize: TEXT.xs, color: "text.secondary" }}
                             />
                           ) : null}
-                          <Chip
-                            size="small"
-                            label={`${entry.hitCount}×`}
-                            sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
-                          />
+                          {/* El "25×" compacto cabe en la fila; lo que
+                              CUENTA no cabe, y sin decirlo se lee como
+                              "25 visitas". */}
+                          <Tooltip
+                            title={`Seen here on ${entry.hitCount} inventory check-in${
+                              entry.hitCount === 1 ? "" : "s"
+                            } — not ${entry.hitCount} separate visits.`}
+                          >
+                            <Chip
+                              size="small"
+                              label={`${entry.hitCount}×`}
+                              sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+                            />
+                          </Tooltip>
                           <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
                             {/* ⚠️ "seen" y no una flecha: hitCount cuenta TICKS,
                                 no visitas, y estos rangos SE SOLAPAN entre

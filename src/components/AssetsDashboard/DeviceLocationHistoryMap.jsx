@@ -128,6 +128,12 @@ export default function DeviceLocationHistoryMap({
           {posiciones.length === total
             ? "Every stored position this device reported."
             : "The rest were derived from the network range, which has no coordinates."}
+          {/* ⚠️ El tamaño del pin sale de hit_count, que cuenta TICKS de
+              inventario. Sin decirlo, un pin grande se lee como "estuvo mucho
+              tiempo" o "vino muchas veces", y no es ninguna de las dos: es
+              "reportó desde aquí muchas veces", que además depende de la
+              cadencia que tenga configurada el tenant. */}
+          {" "}Larger pins were reported more often, not visited more often.
         </Typography>
       </Stack>
 

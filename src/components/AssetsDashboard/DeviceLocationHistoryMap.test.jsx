@@ -94,6 +94,16 @@ describe("DeviceLocationHistoryMap", () => {
     ).toBeInTheDocument();
   });
 
+  it("⚠️ dice que el tamaño del pin es cuántas veces REPORTÓ, no cuántas visitó", () => {
+    // Un pin grande se lee como "estuvo mucho tiempo" o "vino muchas veces", y
+    // no es ninguna de las dos: hit_count cuenta ticks de inventario, y la
+    // cadencia la configura el tenant.
+    render(<DeviceLocationHistoryMap entries={[entrada(), entrada({ id: "geo:b" })]} />);
+    expect(
+      screen.getByText(/Larger pins were reported more often, not visited more often/i)
+    ).toBeInTheDocument();
+  });
+
   it("cuando están todas, no insinúa que falte algo", () => {
     render(<DeviceLocationHistoryMap entries={[entrada(), entrada({ id: "geo:b" })]} />);
     expect(screen.getByText("2 positions")).toBeInTheDocument();
