@@ -1,9 +1,12 @@
 // src/api/locationSites.js
 //
-// CRUD client for the CIDR → site-name map (Phase 1b of device geolocation).
-// The map turns "10.20.30.0/24" into "Oficina CDMX" wherever a device location
-// is shown; with no mappings the UI simply falls back to the raw subnet, so
-// this surface is entirely optional for the operator.
+// CRUD client de los SITIOS del tenant. Un sitio es un LUGAR con N redes, y
+// convierte "10.20.30.0/24" en "Oficina CDMX" allí donde se muestra la
+// ubicación de un equipo; sin sitios la UI cae a la subred cruda, así que esta
+// superficie es del todo opcional para el operador.
+//
+// ⚠️ Un sitio dejó de ser UNA red en 20260909_sites_not_ranges: `ranges` viaja
+// como la lista COMPLETA de redes del sitio y sustituye a las anteriores.
 
 import { httpGetJson, httpPostJson, httpPatchJson, httpDeleteJson } from "./http";
 

@@ -1,13 +1,27 @@
 // src/pages/LocationSites.jsx
 //
-// Phase 1b of device geolocation: the operator-maintained map from a network
-// range to a site name. With no mappings the device drawer falls back to the
-// raw subnet, so this page is entirely optional — it exists to turn
-// "10.20.30.0/24" into "Oficina CDMX".
+// Los SITIOS del tenant: un lugar, con sus redes. Sin sitios el detalle del
+// equipo muestra la subred cruda, asi que esta pagina es opcional — existe para
+// convertir "10.20.30.0/24" en "Oficina CDMX".
 //
-// Matching is by containment and the most specific rule wins, so an operator
-// can map a broad range once and override a slice of it. The list is ordered
-// broad-first to mirror that.
+// El emparejamiento es por contencion y gana la regla mas especifica, asi que
+// un rango amplio puede declararse una vez y afinarse con un trozo suyo.
+//
+// ⚠️ Un sitio es un LUGAR CON N REDES desde 20260909_sites_not_ranges. Antes
+// era una red: cada subred era su propia fila, con el nombre, la ciudad y el
+// pin repetidos. Un sitio con cinco subredes eran cinco filas que habia que
+// mantener en sincronia a mano.
+//
+// Esta pagina tenia una alerta para cuando esas copias divergian, y existia por
+// un caso real: en el tenant 111, una de las cinco reglas de "Mountainside IG"
+// tenia la longitud +97.973760 en vez de -97.973760 —un signo menos que faltaba
+// al capturar—, y como lat 26.17 con longitud positiva cae en la frontera de
+// Myanmar con China, dos equipos de esa VLAN aparecian en Asia en el mapa.
+//
+// Esa alerta ya no esta, y no porque se haya dejado de vigilar: con un solo pin
+// por sitio, el error que detectaba no puede ocurrir. Se quito la comprobacion
+// entera (locationSiteChecks) porque un aviso sobre un estado imposible es peor
+// que ninguno — hace creer que sigue habiendo algo que vigilar.
 
 import * as React from "react";
 import {
@@ -21,12 +35,12 @@ import {
   Stack,
   TextField,
   Typography,
-  Alert,
-  AlertTitle,
+  Chip,
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 
 import { BRAND, TEXT } from "../theme/brand";
@@ -37,7 +51,6 @@ import AsyncState from "../components/common/AsyncState";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { listFrom } from "../api/shape";
-import { findDivergentSites, isRuleDivergent } from "../utils/locationSiteChecks";
 import {
   listLocationSites,
   createLocationSite,
@@ -45,7 +58,10 @@ import {
   deleteLocationSite,
 } from "../api/locationSites";
 
-const EMPTY_DRAFT = { cidr: "", siteName: "", description: "", city: "", lat: "", lon: "" };
+// `ranges` es un arreglo de cadenas en el borrador, con una entrada vacia para
+// que el formulario siempre ofrezca donde escribir la primera. Se limpia al
+// guardar: una fila en blanco no es un rango.
+const EMPTY_DRAFT = { siteName: "", description: "", city: "", lat: "", lon: "", ranges: [""] };
 
 export default function LocationSites({ onNavigate }) {
   const confirm = useConfirm();
@@ -90,7 +106,6 @@ export default function LocationSites({ onNavigate }) {
   function openEdit(row) {
     setEditing(row);
     setDraft({
-      cidr: row.cidr ?? "",
       siteName: row.siteName ?? "",
       description: row.description ?? "",
       city: row.city ?? "",
@@ -98,6 +113,7 @@ export default function LocationSites({ onNavigate }) {
       // flip them from controlled to uncontrolled on edit.
       lat: row.lat ?? "",
       lon: row.lon ?? "",
+      ranges: (row.ranges ?? []).length ? row.ranges.map((r) => r.cidr) : [""],
     });
     setFieldError({ field: null, message: "" });
     setDialogOpen(true);
@@ -106,10 +122,17 @@ export default function LocationSites({ onNavigate }) {
   async function handleSave() {
     setSaving(true);
     setFieldError({ field: null, message: "" });
+    // Las filas en blanco del formulario no son rangos. Se descartan aqui y no
+    // en el backend para que el operador no reciba un "A network range is
+    // required" por un campo que dejo vacio a proposito.
+    const payload = {
+      ...draft,
+      ranges: draft.ranges.map((r) => r.trim()).filter(Boolean),
+    };
     try {
       const res = editing
-        ? await updateLocationSite(editing.id, draft)
-        : await createLocationSite(draft);
+        ? await updateLocationSite(editing.id, payload)
+        : await createLocationSite(payload);
 
       if (res?.ok === false) {
         // Backend rejected it with a structured field error — surface it on
@@ -132,10 +155,13 @@ export default function LocationSites({ onNavigate }) {
 
   async function handleDelete(row) {
     const ok = await confirm({
-      title: "Remove site mapping?",
-      // Say plainly what is and is not lost — deleting a mapping never touches
-      // the recorded positions.
-      body: `Devices on ${row.cidr} will show the raw subnet again. Location history is not affected.`,
+      title: `Remove ${row.siteName}?`,
+      // Decir sin rodeos que se va y que no. Borrar un sitio se lleva TODAS sus
+      // redes (la FK cascadea), y eso hay que decirlo con el numero delante:
+      // "quitar un sitio" suena a una cosa y son cinco reglas.
+      body: `Its ${(row.ranges ?? []).length} network range${
+        (row.ranges ?? []).length === 1 ? "" : "s"
+      } go with it, and devices on them show the raw subnet again. Location history is not affected.`,
       confirmText: "Remove",
       danger: true,
     });
@@ -143,24 +169,18 @@ export default function LocationSites({ onNavigate }) {
 
     try {
       await deleteLocationSite(row.id);
-      setSnack({ severity: "success", message: "Site mapping removed." });
+      setSnack({ severity: "success", message: "Site removed." });
       await load();
     } catch (err) {
       setSnack({ severity: "error", message: err?.body?.message || err?.message || "Could not remove." });
     }
   }
 
-  // ⚠️ Un sitio no puede estar en dos lugares. Ver locationSiteChecks: en el
-  // tenant 111 una de las cinco reglas de "Mountainside IG" tenia la longitud
-  // sin signo, y dos equipos de esa VLAN aparecian en Asia. Nadie ve un signo
-  // que falta en un formulario; se descubrio persiguiendo el sintoma.
-  const conflictos = React.useMemo(() => findDivergentSites(items), [items]);
-
   return (
     <Box>
       <PageHeader
         title="Location sites"
-        subtitle="Map network ranges to site names. Devices on a mapped range show the site instead of the raw subnet."
+        subtitle="A site is a place with one or more networks. Devices on any of them show the site instead of the raw subnet."
         icon={<PlaceOutlinedIcon />}
         back={<BackToSettings onNavigate={onNavigate} />}
         actions={
@@ -177,30 +197,12 @@ export default function LocationSites({ onNavigate }) {
         }
       />
 
-      {conflictos.length > 0 ? (
-        <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>
-          <AlertTitle sx={{ fontWeight: 800 }}>
-            {conflictos.length === 1
-              ? "One site is mapped to two different places"
-              : `${conflictos.length} sites are mapped to two different places`}
-          </AlertTitle>
-          {conflictos.map((c) => (
-            <Typography key={c.siteName} sx={{ fontSize: TEXT.md, mb: 0.5 }}>
-              <strong>{c.siteName}</strong> has rules {c.maxDistanceKm.toLocaleString()} km apart
-              {" — "}
-              {c.farthest.map((r) => r.cidr).join(" vs ")}. One of them is wrong; a device on the
-              wrong range is pinned on the other side of the world.
-            </Typography>
-          ))}
-        </Alert>
-      ) : null}
-
       <SectionPaper variant="panel">
         <AsyncState
           loading={loading}
           error={error}
           isEmpty={items.length === 0}
-          emptyText="No site mappings yet. Devices show their raw subnet until you add one."
+          emptyText="No sites yet. Devices show their raw subnet until you add one."
           onRetry={load}
           minHeight={220}
         >
@@ -215,22 +217,11 @@ export default function LocationSites({ onNavigate }) {
                 alignItems={{ xs: "flex-start", sm: "center" }}
                 sx={{
                   p: 1.25,
-                  // La fila implicada se marca: el aviso de arriba dice QUE
-                  // sitio, y esto dice CUAL regla hay que abrir.
-                  border: isRuleDivergent(row, conflictos)
-                    ? `1px solid ${BRAND.alert.warningText}`
-                    : `1px solid ${BRAND.border}`,
+                  border: `1px solid ${BRAND.border}`,
                   borderRadius: 2,
-                  bgcolor: isRuleDivergent(row, conflictos)
-                    ? BRAND.alert.warningSoft
-                    : BRAND.surface,
+                  bgcolor: BRAND.surface,
                 }}
               >
-                <Typography
-                  sx={{ fontFamily: "monospace", fontSize: TEXT.md, color: BRAND.dark, minWidth: 150 }}
-                >
-                  {row.cidr}
-                </Typography>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, color: BRAND.dark }}>
                     {row.siteName}
@@ -245,6 +236,34 @@ export default function LocationSites({ onNavigate }) {
                       {row.description}
                     </Typography>
                   ) : null}
+                  {/* Las redes del sitio, juntas y a la vista. Antes eran N
+                      filas separadas y el nombre se repetia en todas. */}
+                  <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: "wrap", rowGap: 0.5 }}>
+                    {(row.ranges ?? []).map((r) => (
+                      <Chip
+                        key={r.id ?? r.cidr}
+                        size="small"
+                        label={r.cidr}
+                        sx={{
+                          height: 20,
+                          fontFamily: "monospace",
+                          fontSize: TEXT.xs,
+                          bgcolor: BRAND.tealSoft,
+                          color: BRAND.tealText,
+                        }}
+                      />
+                    ))}
+                    {(row.ranges ?? []).length === 0 ? (
+                      /* Un sitio sin redes es legitimo si tiene pin: etiqueta
+                         por cercania. Sin pin no etiqueta nada, y eso si hay
+                         que decirlo en vez de dejar un hueco. */
+                      <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+                        {row.lat !== null && row.lat !== undefined
+                          ? "No ranges — matched by proximity to its pin."
+                          : "No ranges and no pin — this site cannot match any device yet."}
+                      </Typography>
+                    ) : null}
+                  </Stack>
                 </Box>
                 <Stack direction="row" spacing={0.5}>
                   <IconButton
@@ -272,24 +291,10 @@ export default function LocationSites({ onNavigate }) {
 
       <Dialog open={dialogOpen} onClose={saving ? undefined : () => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
-          {editing ? "Edit site mapping" : "Add site mapping"}
+          {editing ? "Edit site" : "Add site"}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Network range (CIDR)"
-              placeholder="10.20.30.0/24"
-              value={draft.cidr}
-              onChange={(e) => setDraft((d) => ({ ...d, cidr: e.target.value }))}
-              disabled={saving}
-              error={fieldError.field === "cidr"}
-              helperText={
-                fieldError.field === "cidr"
-                  ? fieldError.message
-                  : "A broader range can be overridden by a more specific one — the most specific match wins."
-              }
-              fullWidth
-            />
             <TextField
               label="Site name"
               placeholder="Oficina CDMX"
@@ -345,6 +350,66 @@ export default function LocationSites({ onNavigate }) {
               helperText={fieldError.field === "description" ? fieldError.message : " "}
               fullWidth
             />
+            <Box>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+                Network ranges
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
+                {/* Lo que cambia respecto al modelo viejo, dicho donde importa:
+                    un sitio tiene TODAS sus redes aqui, y el nombre, la ciudad
+                    y el pin se declaran una sola vez para todas. */}
+                One site, all its networks. A broader range can be overridden by a more specific
+                one — the most specific match wins. A site with no ranges still matches by
+                proximity if it has a pin.
+              </Typography>
+              <Stack spacing={1}>
+                {draft.ranges.map((cidr, idx) => (
+                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      label={idx === 0 ? "Network range (CIDR)" : " "}
+                      placeholder="10.20.30.0/24"
+                      value={cidr}
+                      onChange={(e) =>
+                        setDraft((d) => {
+                          const ranges = [...d.ranges];
+                          ranges[idx] = e.target.value;
+                          return { ...d, ranges };
+                        })
+                      }
+                      disabled={saving}
+                      error={fieldError.field === "ranges"}
+                      size="small"
+                      fullWidth
+                    />
+                    <IconButton
+                      aria-label={`Remove range ${idx + 1}`}
+                      size="small"
+                      disabled={saving || draft.ranges.length === 1}
+                      onClick={() =>
+                        setDraft((d) => ({ ...d, ranges: d.ranges.filter((_, i) => i !== idx) }))
+                      }
+                      sx={{ color: BRAND.gray, "&:hover": { color: BRAND.alert.error } }}
+                    >
+                      <CloseOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                ))}
+              </Stack>
+              {fieldError.field === "ranges" ? (
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, mt: 0.5 }}>
+                  {fieldError.message}
+                </Typography>
+              ) : null}
+              <Button
+                size="small"
+                startIcon={<AddOutlinedIcon />}
+                disabled={saving}
+                onClick={() => setDraft((d) => ({ ...d, ranges: [...d.ranges, ""] }))}
+                sx={{ textTransform: "none", mt: 1 }}
+              >
+                Add range
+              </Button>
+            </Box>
             {fieldError.message && !fieldError.field ? (
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.error }}>{fieldError.message}</Typography>
             ) : null}
