@@ -1165,6 +1165,28 @@ export default function Jobs({ onNavigate }) {
     [knownDevices]
   );
 
+  /**
+   * Cómo se llama el equipo de una fila del historial.
+   *
+   * ⚠️ EL `hostname` DE LA PROPIA FILA MANDA, y ese orden es el arreglo. El
+   * mapa sale de `known-devices`, que es la lista de «¿a quién puedo mandarle
+   * un job?» y oculta a propósito los equipos dados de baja — así que un
+   * DECOMMISSIONED con jobs caía al fallback y salía como su UUID mientras
+   * sus compañeros de lote sí tenían nombre. El servidor ahora resuelve el
+   * nombre de cada fila sin ese filtro, porque nombrar no es apuntar.
+   *
+   * El mapa se queda de segundo para un backend anterior a ese cambio, y el
+   * id crudo de último: enseñar el UUID es feo, pero mentir con el nombre de
+   * otro equipo sería peor.
+   */
+  const deviceLabel = React.useCallback(
+    (row) =>
+      String(row?.hostname || "").trim() ||
+      deviceMap.get(String(row?.device_id || ""))?.hostname ||
+      row?.device_id,
+    [deviceMap]
+  );
+
   const selectedDeviceObjs = React.useMemo(
     () => selectedDeviceIds.map((id) => deviceMap.get(id)).filter(Boolean),
     [selectedDeviceIds, deviceMap]
@@ -1325,7 +1347,7 @@ export default function Jobs({ onNavigate }) {
       valueGetter: (_value, row) =>
         row.__isBatch
           ? `${row.__totalCount} devices`
-          : deviceMap.get(String(row.device_id || ""))?.hostname || row.device_id,
+          : deviceLabel(row),
       renderCell: (params) => (
         <Box sx={{ minWidth: 0, py: 0.5 }}>
           <Typography
@@ -2690,7 +2712,7 @@ export default function Jobs({ onNavigate }) {
                         >
                           <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }} noWrap>
-                              {deviceMap.get(String(job.device_id || ""))?.hostname || job.device_id}
+                              {deviceLabel(job)}
                             </Typography>
                             {job.last_error ? (
                               <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.error }} noWrap>
