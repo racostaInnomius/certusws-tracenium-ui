@@ -3,7 +3,7 @@ import { Box, IconButton, Typography, Badge, Tooltip } from "@mui/material";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
-import { getAlertsUnreadCount } from "../api/alerts";
+import { ALERTS_SEEN_EVENT, getAlertsUnreadCount } from "../api/alerts";
 import { performLogout } from "../auth/logout";
 import { useMsp } from "../msp/MspContext";
 
@@ -102,13 +102,20 @@ export default function Topbar({ onMenuClick }) {
       }
     };
 
+    // "Mark all seen" acaba de mover el cursor: volver a contar YA, en vez de
+    // esperar hasta un minuto al siguiente sondeo. Sin esto el botón parecía
+    // no hacer nada aunque el servidor hubiera hecho su trabajo.
+    const onSeen = () => { tick(); };
+
     tick();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener(ALERTS_SEEN_EVENT, onSeen);
 
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener(ALERTS_SEEN_EVENT, onSeen);
     };
   }, [skipPolling]);
 

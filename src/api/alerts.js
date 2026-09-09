@@ -42,7 +42,22 @@ export async function getAlertsUnreadCount() {
   return httpGetJson(`${BASE}/unread-count`);
 }
 
+/**
+ * Avisa de que el cursor de alertas se movió.
+ *
+ * El badge del Topbar vive en otro componente y se entera por un sondeo de
+ * 60 s. Sin esto, pulsar "Mark all seen" no cambiaba nada en pantalla durante
+ * hasta un minuto — que es exactamente como se ve un botón que no funciona.
+ * Mismo patrón que `AUTH_REQUIRED_EVENT`: un CustomEvent en `window`, sin
+ * meter estado global por medio.
+ */
+export const ALERTS_SEEN_EVENT = "tracenium:alerts-seen";
+
 // Moves tenant's last_seen_at to NOW → zeroes the badge.
 export async function markAllAlertsSeen() {
-  return httpPostJson(`${BASE}/mark-all-seen`, {});
+  const res = await httpPostJson(`${BASE}/mark-all-seen`, {});
+  try {
+    window.dispatchEvent(new CustomEvent(ALERTS_SEEN_EVENT));
+  } catch { /* sin window (tests, SSR): el sondeo lo recoge igual */ }
+  return res;
 }

@@ -370,11 +370,27 @@ export default function Alerts({ onNavigate }) {
 
   const activeRuleCount = rules.filter((r) => r.enabled).length;
 
+  /**
+   * ⚠️ Se cuenta por la EDAD (`firstSeenAt`), no por `occurredAt`.
+   *
+   * Las fuentes de estado —anclas de confianza, cripto débil, hoja de ruta
+   * PQC, cumplimiento rancio— no son eventos: el backend las sella con la
+   * hora de la CONSULTA, así que su `occurredAt` es siempre "ahora mismo".
+   * Comparado con el cursor eso da siempre "no leído", y era la mitad de
+   * cliente del motivo por el que "Mark all seen" no apagaba nada.
+   *
+   * `firstSeenAt` viene de `alert_occurrences` y contesta desde cuándo pasa
+   * esto de verdad. Sin fila en el histórico se cae a `occurredAt` y cuenta:
+   * un contador que se calla por no saber es peor que uno que avisa de más.
+   */
   const unreadInWindow = React.useMemo(() => {
     if (!lastSeenAt) return 0;
     const cutoff = Date.parse(lastSeenAt);
     if (!Number.isFinite(cutoff)) return 0;
-    return events.filter((e) => Date.parse(e.occurredAt) > cutoff).length;
+    return events.filter((e) => {
+      const t = Date.parse(e.firstSeenAt ?? e.occurredAt);
+      return Number.isFinite(t) ? t > cutoff : true;
+    }).length;
   }, [events, lastSeenAt]);
 
   return (
