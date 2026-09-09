@@ -42,18 +42,18 @@ export default function UnattendedInstallDialog({ open, row, onClose, notify }) 
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
-      notify?.("success", "Comando copiado");
+      notify?.("success", "Command copied");
     } catch {
       // Portapapeles bloqueado (contexto no seguro o permiso denegado). El
       // comando sigue visible y seleccionable, así que esto es un aviso, no un
       // fallo del que haya que recuperarse.
-      notify?.("error", "No se pudo copiar; selecciona el texto manualmente");
+      notify?.("error", "Could not copy — select the text manually");
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Instalación desatendida</DialogTitle>
+      <DialogTitle>Unattended install</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5}>
           <Typography variant="body2" color="text.secondary">
@@ -83,9 +83,9 @@ export default function UnattendedInstallDialog({ open, row, onClose, notify }) 
               {/* El token NO se inyecta: un comando con la credencial dentro
                   termina en capturas de pantalla y tickets de soporte. */}
               <Alert severity="info">
-                Sustituye <strong>{TOKEN_PLACEHOLDER}</strong> por un token del
-                paso <strong>Enrollment tokens</strong>. Un mismo token puede
-                enrolar varios equipos según su límite de usos.
+                Replace <strong>{TOKEN_PLACEHOLDER}</strong> with a token from
+                the <strong>Enrollment tokens</strong> step. One token can enroll
+                several devices, up to its use limit.
               </Alert>
 
               {note ? (
@@ -96,21 +96,21 @@ export default function UnattendedInstallDialog({ open, row, onClose, notify }) 
             </>
           ) : (
             <Alert severity="warning">
-              No hay comando desatendido conocido para esta combinación de
-              plataforma y formato.
+              No unattended command is known for this platform and format
+              combination.
             </Alert>
           )}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cerrar</Button>
+        <Button onClick={onClose}>Close</Button>
         <Button
           variant="contained"
           startIcon={<ContentCopyOutlinedIcon />}
           onClick={handleCopy}
           disabled={!command}
         >
-          {copied ? "Copiado" : "Copiar"}
+          {copied ? "Copied" : "Copy"}
         </Button>
       </DialogActions>
     </Dialog>

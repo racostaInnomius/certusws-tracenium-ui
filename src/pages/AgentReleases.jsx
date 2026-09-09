@@ -360,10 +360,10 @@ export default function AgentReleases({ embedded = false }) {
           {/* Junto a la descarga a propósito: el comando lleva dentro la
               versión, arquitectura y formato de ESTA fila, así que pegado a su
               binario no puede desincronizarse. */}
-          <Tooltip title="Comando de instalación desatendida">
+          <Tooltip title="Unattended install command">
             <IconButton
               size="small"
-              aria-label={`Instalación desatendida de ${params.row.platform} ${params.row.arch} v${params.row.version}`}
+              aria-label={`Unattended install command for ${params.row.platform} ${params.row.arch} v${params.row.version}`}
               onClick={() => {
                 setCommandRow(params.row);
                 setCommandOpen(true);

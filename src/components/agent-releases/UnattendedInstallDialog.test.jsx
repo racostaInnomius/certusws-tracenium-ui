@@ -39,7 +39,23 @@ describe("UnattendedInstallDialog", () => {
 
   it("avisa en vez de inventar un comando para un formato desconocido", () => {
     render(<UnattendedInstallDialog open row={{ ...win, format: "exe" }} onClose={vi.fn()} />);
-    expect(screen.getByRole("alert").textContent).toMatch(/No hay comando desatendido/);
-    expect(screen.getByRole("button", { name: /copiar/i })).toBeDisabled();
+    expect(screen.getByRole("alert").textContent).toMatch(/No unattended command is known/);
+    expect(screen.getByRole("button", { name: /^copy$/i })).toBeDisabled();
+  });
+
+  // ⚠️ Este diálogo se escribió entero en español y llegó así al portal: el
+  // título, los dos botones, el aviso del token y hasta el `aria-label` del
+  // icono que lo abre. El resto de la app está en inglés, así que se leía como
+  // media pantalla en otro idioma.
+  //
+  // Se afirma sobre el TEXTO RENDERIZADO y no sobre las cadenas del fuente:
+  // los comentarios de este repo sí van en español a propósito, y un guard que
+  // mirase el fichero los marcaría a todos.
+  it("no queda copia en español en la pantalla", () => {
+    render(<UnattendedInstallDialog open row={win} onClose={() => {}} />);
+    const texto = document.body.textContent || "";
+    // Palabras que estaban de verdad en esta pantalla, no un detector de
+    // idioma: si alguna vuelve, vuelve por un copy/paste del original.
+    expect(texto).not.toMatch(/Instalación|Sustituye|Cerrar|Copiar|desatendid/i);
   });
 });

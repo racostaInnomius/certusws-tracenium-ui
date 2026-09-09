@@ -100,8 +100,8 @@ describe("unattendedInstallCommand — lo que NO hace", () => {
 
 describe("unattendedInstallNote", () => {
   it("avisa del orden en macOS y Linux", () => {
-    expect(unattendedInstallNote(mac)).toMatch(/ANTES/);
-    expect(unattendedInstallNote(deb)).toMatch(/ANTES/);
+    expect(unattendedInstallNote(mac)).toMatch(/BEFORE/);
+    expect(unattendedInstallNote(deb)).toMatch(/BEFORE/);
   });
 
   it("explica en Windows que 3010 y 1641 no son fallos", () => {

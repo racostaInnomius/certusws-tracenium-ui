@@ -91,10 +91,10 @@ export function unattendedInstallCommand(row, token = TOKEN_PLACEHOLDER) {
 export function unattendedInstallNote(row) {
   const platform = String(row?.platform || "").toLowerCase();
   if (platform === "macos" || platform === "linux") {
-    return "El fichero de token debe existir ANTES de instalar: el postinstall lo recoge, lo mueve a su ubicación final con los permisos correctos y borra el temporal. Sin él, el instalador de macOS pide el token de forma interactiva y deja de ser desatendido.";
+    return "The token file must exist BEFORE installing: the postinstall step picks it up, moves it to its final location with the right permissions and deletes the temporary one. Without it, the macOS installer asks for the token interactively and stops being unattended.";
   }
   if (platform === "windows") {
-    return "Ejecutar desde un símbolo del sistema elevado, en la carpeta donde esté el .msi. Los códigos 0, 3010 y 1641 son TODOS correctos: 3010 y 1641 sólo indican que hace falta reiniciar.";
+    return "Run from an elevated command prompt, in the folder holding the .msi. Exit codes 0, 3010 and 1641 are ALL success: 3010 and 1641 only mean a reboot is needed.";
   }
   return "";
 }
