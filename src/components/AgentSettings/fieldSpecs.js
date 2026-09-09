@@ -19,6 +19,8 @@ import {
   COMPLIANCE_INTERVAL_MIN,
   INVENTORY_INTERVAL_MAX,
   INVENTORY_INTERVAL_MIN,
+  LOCATION_HISTORY_LIMIT_MAX,
+  LOCATION_HISTORY_LIMIT_MIN,
   PATCH_INTERVAL_MAX,
   PATCH_INTERVAL_MIN,
   UPDATE_INTERVAL_MAX,
@@ -99,7 +101,33 @@ export const FIELD_SPECS = {
       type: "switch",
     },
   ],
-  amp: [INTERVAL_ROW("inventory.intervalSeconds", "Asset collection interval", INVENTORY_INTERVAL_MIN, INVENTORY_INTERVAL_MAX, 60, "6h / 21600 s")],
+  amp: [
+    INTERVAL_ROW("inventory.intervalSeconds", "Asset collection interval", INVENTORY_INTERVAL_MIN, INVENTORY_INTERVAL_MAX, 60, "6h / 21600 s"),
+    {
+      key: "inventory.locationHistoryLimit",
+      label: "Location history kept per device",
+      // ⚠️ Dice las dos cosas que un operador no puede adivinar: que BAJARLO
+      // borra, y que existe un tope temporal que este número no levanta. Sin
+      // la primera, alguien pasa de 20 a 10 "para ordenar" y pierde diez
+      // posiciones por equipo sin vuelta atrás. Sin la segunda, subirlo a 50
+      // parece guardar para siempre.
+      sub: `Distinct positions per device. Blank = backend default (10). Range ${LOCATION_HISTORY_LIMIT_MIN}–${LOCATION_HISTORY_LIMIT_MAX}; 1 keeps only the current position. Lowering this DELETES the extra positions on each device's next check-in. Positions nobody confirms for 90 days expire regardless, except each device's most recent one.`,
+      type: "number",
+      min: LOCATION_HISTORY_LIMIT_MIN,
+      max: LOCATION_HISTORY_LIMIT_MAX,
+      step: 1,
+      unit: "positions",
+      placeholder: "default",
+      validate: (v) => {
+        if (v === "" || v === null || v === undefined) return null;
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < LOCATION_HISTORY_LIMIT_MIN || n > LOCATION_HISTORY_LIMIT_MAX) {
+          return `Whole number between ${LOCATION_HISTORY_LIMIT_MIN} and ${LOCATION_HISTORY_LIMIT_MAX}.`;
+        }
+        return null;
+      },
+    },
+  ],
   scp: [INTERVAL_ROW("compliance.intervalSeconds", "Evaluation interval", COMPLIANCE_INTERVAL_MIN, COMPLIANCE_INTERVAL_MAX, 60, "8h / 28800 s")],
   pmp: [INTERVAL_ROW("patch.intervalSeconds", "Patch scan interval", PATCH_INTERVAL_MIN, PATCH_INTERVAL_MAX, 300, "24h / 86400 s")],
   sdp: [

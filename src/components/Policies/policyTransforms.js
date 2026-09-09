@@ -10,6 +10,19 @@
 
 export const INVENTORY_INTERVAL_MIN = 60;       // 1m   — AMP scans can be tight
 export const INVENTORY_INTERVAL_MAX = 86400;    // 24h
+
+/**
+ * Cuántas posiciones DISTINTAS se guardan por equipo. En blanco = el defecto
+ * del backend (10).
+ *
+ * El mínimo es 1 y no 5 a propósito: "guarda sólo la posición actual" es una
+ * elección de privacidad legítima, y prohibirla obligaría a un tenant que no
+ * quiere rastro a apagar la ubicación entera.
+ *
+ * ⚠️ Bajarlo BORRA, en el siguiente tick de cada equipo y sin vuelta atrás.
+ */
+export const LOCATION_HISTORY_LIMIT_MIN = 1;
+export const LOCATION_HISTORY_LIMIT_MAX = 50;
 export const COMPLIANCE_INTERVAL_MIN = 300;     // 5m
 export const COMPLIANCE_INTERVAL_MAX = 86400;   // 24h
 export const PATCH_INTERVAL_MIN = 300;          // 5m
@@ -471,6 +484,12 @@ export function readFormFromPolicy(policy, catalog = []) {
     inventory: {
       intervalSeconds:
         Number.isFinite(inventoryNum) && inventoryNum > 0 ? inventoryNum : null,
+      // Retención del historial de ubicación. Null = hereda el defecto del
+      // backend; no es lo mismo que un cero, que aquí no es un valor válido.
+      locationHistoryLimit:
+        Number.isInteger(policy?.inventory?.locationHistoryLimit)
+          ? policy.inventory.locationHistoryLimit
+          : null,
     },
     compliance: {
       intervalSeconds:
@@ -642,13 +661,43 @@ export function formToPolicy(form, catalog = []) {
   // Inventory rides the AMP module — emitted when AMP is enabled.
   // AMP is a required plugin so this is effectively always on, but
   // keeping the gate explicit makes the intent legible.
-  maybeAddInterval(
-    "inventory",
-    form?.inventory?.intervalSeconds,
-    INVENTORY_INTERVAL_MIN,
-    INVENTORY_INTERVAL_MAX,
-    pluginsEnabled.includes("amp")
-  );
+  //
+  // ⚠️ NO usa maybeAddInterval. Ese helper hace `policy[key] = { intervalSeconds }`,
+  // es decir SUSTITUYE el bloque entero — así que en cuanto `inventory` tiene
+  // más de un campo, emitirlo por ahí borraría los demás al guardar. El bloque
+  // se compone aquí, con la misma disciplina de omitir lo que el operador no
+  // puso.
+  if (pluginsEnabled.includes("amp")) {
+    const inventario = {};
+
+    const intervalo = Number(form?.inventory?.intervalSeconds);
+    if (
+      Number.isFinite(intervalo) &&
+      intervalo >= INVENTORY_INTERVAL_MIN &&
+      intervalo <= INVENTORY_INTERVAL_MAX
+    ) {
+      inventario.intervalSeconds = intervalo;
+    }
+
+    // El formulario produce CADENAS (es un input de texto), así que convertir
+    // es justo el trabajo de esta capa: "10" tiene que salir como 10, porque el
+    // backend exige `typeof number` y una cadena sería un 400 al guardar.
+    //
+    // ⚠️ Un booleano NO. `Number(true)` es 1, que además cae dentro del rango,
+    // así que un `true` perdido en el formulario se guardaría como "conserva
+    // una sola posición" — y eso borra el historial de toda la flota.
+    const crudo = form?.inventory?.locationHistoryLimit;
+    const tope = typeof crudo === "boolean" ? NaN : Number(crudo);
+    if (
+      Number.isInteger(tope) &&
+      tope >= LOCATION_HISTORY_LIMIT_MIN &&
+      tope <= LOCATION_HISTORY_LIMIT_MAX
+    ) {
+      inventario.locationHistoryLimit = tope;
+    }
+
+    if (Object.keys(inventario).length > 0) policy.inventory = inventario;
+  }
 
   maybeAddInterval(
     "compliance",

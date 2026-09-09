@@ -155,6 +155,74 @@ describe("formToPolicy", () => {
     expect(policy.compliance).toEqual({ intervalSeconds: 600 });
     expect(policy.patch).toBeUndefined();
   });
+  it("⚠️ el tope de historial y el intervalo COEXISTEN en el bloque inventory", () => {
+    // El emisor original hacía `policy.inventory = { intervalSeconds }`, es
+    // decir sustituía el bloque entero. En cuanto inventory tuvo un segundo
+    // campo, emitirlo por ahí lo habría borrado en cada guardado — y el
+    // operador habría visto su tope desaparecer sin ningún error.
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    form.inventory.intervalSeconds = 120;
+    form.inventory.locationHistoryLimit = 25;
+    const policy = formToPolicy(form, catalog);
+    expect(policy.inventory).toEqual({ intervalSeconds: 120, locationHistoryLimit: 25 });
+  });
+
+  it("cada campo del bloque inventory se emite por su cuenta", () => {
+    const soloTope = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    soloTope.inventory.locationHistoryLimit = 3;
+    expect(formToPolicy(soloTope, catalog).inventory).toEqual({ locationHistoryLimit: 3 });
+
+    const soloIntervalo = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    soloIntervalo.inventory.intervalSeconds = 300;
+    expect(formToPolicy(soloIntervalo, catalog).inventory).toEqual({ intervalSeconds: 300 });
+
+    // Sin nada puesto, no se emite el bloque: disciplina de omitir lo vacío.
+    const vacio = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    expect(formToPolicy(vacio, catalog).inventory).toBeUndefined();
+  });
+
+  it("⚠️ un tope fuera de rango o no entero no se manda", () => {
+    // El backend exige un entero en rango; mandarle otra cosa sería un 400 al
+    // guardar en vez de un aviso en el campo.
+    for (const malo of [0, -1, 51, 10.5, "muchos", "", null, true, false, []]) {
+      const form = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+      form.inventory.locationHistoryLimit = malo;
+      expect(
+        formToPolicy(form, catalog).inventory?.locationHistoryLimit,
+        `debería rechazar ${JSON.stringify(malo)}`
+      ).toBeUndefined();
+    }
+  });
+
+  it("una cadena del formulario SÍ se convierte — es el trabajo de esta capa", () => {
+    // Los campos son inputs de texto: lo que llega siempre es una cadena, y el
+    // backend exige `typeof number`. Si esta capa no convirtiera, cada guardado
+    // sería un 400.
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    form.inventory.locationHistoryLimit = "25";
+    expect(formToPolicy(form, catalog).inventory.locationHistoryLimit).toBe(25);
+  });
+
+  it("⚠️ un booleano no se cuela como 1", () => {
+    // Number(true) es 1, que además está dentro del rango: un `true` perdido en
+    // el formulario se guardaría como "conserva una sola posición" y eso borra
+    // el historial de toda la flota en el siguiente tick.
+    const form = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    form.inventory.locationHistoryLimit = true;
+    expect(formToPolicy(form, catalog).inventory?.locationHistoryLimit).toBeUndefined();
+  });
+
+  it("lee el tope guardado para poder mostrarlo", () => {
+    const form = readFormFromPolicy(
+      { plugins: { enabled: ["amp"] }, inventory: { intervalSeconds: 300, locationHistoryLimit: 20 } },
+      catalog
+    );
+    expect(form.inventory.locationHistoryLimit).toBe(20);
+    // Ausente = hereda el defecto del backend, y eso NO es un cero.
+    const sinTope = readFormFromPolicy({ plugins: { enabled: ["amp"] } }, catalog);
+    expect(sinTope.inventory.locationHistoryLimit).toBeNull();
+  });
+
   it("drops out-of-range intervals", () => {
     const form = readFormFromPolicy({ plugins: { enabled: [] } }, catalog);
     form.inventory.intervalSeconds = 5; // < INVENTORY_INTERVAL_MIN (60)
