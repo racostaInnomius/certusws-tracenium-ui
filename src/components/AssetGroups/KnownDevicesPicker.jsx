@@ -275,7 +275,12 @@ export default function KnownDevicesPicker({
             return (
               <Box
                 key={d.deviceId}
-                onClick={() => onToggleDevice(d.deviceId)}
+                // El segundo argumento es la fila entera, y existe porque el
+                // hostname se perdía aquí: el padre recibía sólo el UUID y no
+                // tenía forma de volver a rotularlo sin pedirlo otra vez.
+                // Los cinco llamadores que sólo esperan el id lo ignoran, así
+                // que añadirlo no rompe a nadie.
+                onClick={() => onToggleDevice(d.deviceId, d)}
                 sx={{
                   display: "flex",
                   alignItems: "center",

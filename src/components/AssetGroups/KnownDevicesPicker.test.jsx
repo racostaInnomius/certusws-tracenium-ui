@@ -95,7 +95,17 @@ describe("KnownDevicesPicker", () => {
     );
     await waitFor(() => expect(screen.getByText("host-1")).toBeInTheDocument());
     fireEvent.click(screen.getByText("host-1"));
-    expect(onToggleDevice).toHaveBeenCalledWith("dev-1");
+    // El id sigue siendo el primer argumento — los llamadores que sólo
+    // esperaban eso no cambian.
+    expect(onToggleDevice.mock.calls[0][0]).toBe("dev-1");
+    // Y ahora va también la fila entera. Existe porque el hostname se perdía
+    // aquí: el padre recibía un UUID y no tenía forma de volver a rotularlo,
+    // así que la revisión del despliegue —la última pantalla antes de
+    // disparar— enseñaba «3b397991-f870-…» en vez del nombre del equipo.
+    expect(onToggleDevice.mock.calls[0][1]).toMatchObject({
+      deviceId: "dev-1",
+      hostname: "host-1",
+    });
   });
 
   it("filters out excluded device ids", async () => {

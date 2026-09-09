@@ -36,6 +36,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   CircularProgress,
+  Tooltip,
 } from "@mui/material";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
@@ -101,6 +102,15 @@ export default function DeployWizardDialog({
   // Devices chosen from the picker. A Set because the picker owns toggling and
   // the parent owns the selection — same contract Asset Groups uses.
   const [pickedIds, setPickedIds] = React.useState(() => new Set());
+  // deviceId → hostname, para poder rotular la revisión con el nombre con el
+  // que el operador ubica el equipo en vez de con su UUID.
+  //
+  // ⚠️ SE ACUMULA Y NO SE PODA AL DESELECCIONAR. Un id que sale de la
+  // selección puede volver a entrar, y volver a pedir su hostname para
+  // reconstruir lo que ya sabíamos sería trabajo por nada. La revisión sólo
+  // lee las claves que están en `parsedDeviceIds`, así que sobrar aquí no
+  // enseña de más.
+  const [hostnameById, setHostnameById] = React.useState(() => new Map());
   // "picker" | "paste". Pasting stays available for lists that arrive from a
   // ticket or a CSV, but it is no longer the only way in.
   const [manualMode, setManualMode] = React.useState("picker");
@@ -123,6 +133,7 @@ export default function DeployWizardDialog({
     setGroupId("");
     setDeviceIdsRaw("");
     setPickedIds(new Set());
+    setHostnameById(new Map());
     setManualMode("picker");
     setUnknownPastedIds([]);
     setSubmitting(false);
@@ -176,13 +187,24 @@ export default function DeployWizardDialog({
       setValidatingPaste(true);
       try {
         const res = await listKnownDevices({ page: 1, pageSize: 500 });
+        const rows = listFrom(res, { context: "deployWizardKnownDevices" });
         const known = new Set(
-          listFrom(res, { context: "deployWizardKnownDevices" })
-            .map((d) => String(d?.deviceId || "").trim())
-            .filter(Boolean)
+          rows.map((d) => String(d?.deviceId || "").trim()).filter(Boolean)
         );
         if (!cancelled) {
           setUnknownPastedIds(pastedDeviceIds.filter((id) => !known.has(id)));
+          // Esta respuesta YA trae el hostname de cada equipo, así que la vía
+          // de pegado se rotula gratis: sin esto haría falta una segunda
+          // consulta para traducir exactamente los mismos ids.
+          setHostnameById((prev) => {
+            const next = new Map(prev);
+            for (const d of rows) {
+              const id = String(d?.deviceId || "").trim();
+              const host = String(d?.hostname || "").trim();
+              if (id && host) next.set(id, host);
+            }
+            return next;
+          });
         }
       } catch {
         if (!cancelled) setUnknownPastedIds([]);
@@ -399,14 +421,25 @@ export default function DeployWizardDialog({
                   <KnownDevicesPicker
                     open={open}
                     selectedIds={pickedIds}
-                    onToggleDevice={(deviceId) =>
+                    onToggleDevice={(deviceId, device) => {
+                      // El hostname llega con la fila y se guarda al vuelo:
+                      // pedirlo otra vez en la revision seria una consulta
+                      // para recuperar algo que ya tuvimos en la mano.
+                      if (device?.hostname) {
+                        setHostnameById((prev) => {
+                          if (prev.get(deviceId) === device.hostname) return prev;
+                          const next = new Map(prev);
+                          next.set(deviceId, device.hostname);
+                          return next;
+                        });
+                      }
                       setPickedIds((prev) => {
                         const next = new Set(prev);
                         if (next.has(deviceId)) next.delete(deviceId);
                         else next.add(deviceId);
                         return next;
-                      })
-                    }
+                      });
+                    }}
                     selectedLabel="target(s)"
                     emptyLabel="No devices match this package's platform."
                     // Offering a macOS .pkg to Windows hosts is a guaranteed
@@ -523,19 +556,33 @@ export default function DeployWizardDialog({
                       Device list ({parsedDeviceIds.length})
                     </Typography>
                     <Box sx={{ mt: 0.75, display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {parsedDeviceIds.slice(0, 30).map((id) => (
-                        <Chip
-                          key={id}
-                          size="small"
-                          label={id}
-                          sx={{
-                            fontFamily: "monospace",
-                            fontSize: TEXT.xs,
-                            bgcolor: BRAND.tealSoft,
-                            color: BRAND.tealText,
-                          }}
-                        />
-                      ))}
+                      {/* ⚠️ HOSTNAME, NO UUID. Un `3b397991-f870-…` no le dice
+                          a nadie a qué máquina va a llegar el instalador, y
+                          esta es la última pantalla antes de dispararlo: es
+                          justo donde el operador comprueba que son las que
+                          creía. El id queda en el tooltip, porque a veces es
+                          lo que hay que copiar a un ticket. Cuando no lo
+                          conocemos —una lista pegada de ids que no están en
+                          la flota— se enseña el id: inventar un nombre sería
+                          peor que enseñar el crudo. */}
+                      {parsedDeviceIds.slice(0, 30).map((id) => {
+                        const host = hostnameById.get(id);
+                        return (
+                          <Tooltip key={id} title={host ? id : ""} placement="top">
+                            <Chip
+                              size="small"
+                              label={host || id}
+                              sx={{
+                                fontFamily: host ? "inherit" : "monospace",
+                                fontWeight: host ? 700 : 400,
+                                fontSize: TEXT.xs,
+                                bgcolor: BRAND.tealSoft,
+                                color: BRAND.tealText,
+                              }}
+                            />
+                          </Tooltip>
+                        );
+                      })}
                       {parsedDeviceIds.length > 30 ? (
                         <Chip
                           size="small"

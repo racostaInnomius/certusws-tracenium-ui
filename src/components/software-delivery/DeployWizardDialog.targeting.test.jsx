@@ -136,3 +136,73 @@ describe("pasted device IDs", () => {
     ).toBe(false);
   });
 });
+
+describe("la revisión rotula por hostname, no por UUID", () => {
+  // ⚠️ ES LA ÚLTIMA PANTALLA ANTES DE DISPARAR. Enseñaba
+  // «3b397991-f870-4865-…», que no le dice a nadie a qué máquina va a llegar
+  // el instalador — justo donde el operador comprueba que son las que creía.
+  // El hostname viaja con la fila del picker y se perdía: `onToggleDevice`
+  // sólo devolvía el id.
+
+  /** Elige un equipo en el picker y avanza al paso de revisión. */
+  async function pickAndReview(user, hostname) {
+    await gotoDeviceList(user);
+    await waitFor(() => expect(jobsApi.listKnownDevices).toHaveBeenCalled());
+    await user.click(await screen.findByText(hostname));
+    await user.click(// ⚠️ Exacto: el paginador del picker tiene un «Next page» que /next/i
+    //    también casa, y el test fallaba por ambigüedad, no por el código.
+    screen.getByRole("button", { name: /^next$/i }));
+  }
+
+  it("enseña el hostname del equipo elegido", async () => {
+    const user = userEvent.setup();
+    open(WINDOWS_PKG);
+    await pickAndReview(user, "MSIG-DOMAIN01");
+
+    const review = await screen.findByText(/device list \(1\)/i);
+    const block = review.parentElement;
+    expect(within(block).getByText("MSIG-DOMAIN01")).toBeInTheDocument();
+    // Y el UUID deja de ser la etiqueta.
+    expect(within(block).queryByText("aaaa-1111")).toBeNull();
+  });
+
+  it("enseña el id crudo cuando no conocemos el nombre", async () => {
+    // Una lista pegada con un id que no está en la flota: inventar un nombre
+    // sería peor que enseñar el crudo, y el aviso de «unknown» ya cubre el
+    // resto.
+    const user = userEvent.setup();
+    open(WINDOWS_PKG);
+    await gotoDeviceList(user);
+    await user.click(await screen.findByRole("button", { name: /paste ids/i }));
+    const box = await screen.findByLabelText(/device ids/i);
+    await user.clear(box);
+    await user.type(box, "zzzz-0000");
+    await user.click(// ⚠️ Exacto: el paginador del picker tiene un «Next page» que /next/i
+    //    también casa, y el test fallaba por ambigüedad, no por el código.
+    screen.getByRole("button", { name: /^next$/i }));
+
+    const review = await screen.findByText(/device list \(1\)/i);
+    expect(within(review.parentElement).getByText("zzzz-0000")).toBeInTheDocument();
+  });
+
+  it("traduce también los ids pegados que sí están en la flota", async () => {
+    // La validación del pegado ya pide la lista de equipos, y esa respuesta
+    // trae el hostname: rotularlos no cuesta una consulta extra.
+    const user = userEvent.setup();
+    open(WINDOWS_PKG);
+    await gotoDeviceList(user);
+    await user.click(await screen.findByRole("button", { name: /paste ids/i }));
+    const box = await screen.findByLabelText(/device ids/i);
+    await user.clear(box);
+    await user.type(box, "bbbb-2222");
+    await waitFor(() => expect(jobsApi.listKnownDevices).toHaveBeenCalled());
+    await user.click(// ⚠️ Exacto: el paginador del picker tiene un «Next page» que /next/i
+    //    también casa, y el test fallaba por ambigüedad, no por el código.
+    screen.getByRole("button", { name: /^next$/i }));
+
+    const review = await screen.findByText(/device list \(1\)/i);
+    await waitFor(() =>
+      expect(within(review.parentElement).getByText("MSIG-FILESHARE")).toBeInTheDocument()
+    );
+  });
+});
