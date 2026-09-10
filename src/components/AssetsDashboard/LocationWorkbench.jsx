@@ -172,6 +172,10 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
       {seccion === 2 ? (
         <RecentTransitions
           events={overview?.events ?? null}
+          // ⚠️ El ESTADO por cerca sale de `sites`, no de los eventos: los
+          // eventos son lo que cambió, y lo primero que se quiere ver es lo
+          // que la cerca afirma AHORA.
+          sites={sites}
           loading={cargandoOverview}
           error={overviewError}
         />

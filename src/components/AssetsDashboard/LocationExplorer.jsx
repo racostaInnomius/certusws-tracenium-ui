@@ -28,8 +28,11 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
-import { dayWindow } from "./hostHelpers";
+import { dayWindow, buildTrail, episodesToMapEntries } from "./hostHelpers";
 import DeviceLocationTimeline from "./DeviceLocationTimeline";
+// El mapa es lo que hace legible una lista de estancias: perezoso porque
+// arrastra leaflet, y sólo hace falta cuando hay un equipo elegido.
+const DeviceLocationHistoryMap = React.lazy(() => import("./DeviceLocationHistoryMap"));
 import SiteAttendance from "./SiteAttendance";
 
 /** Hoy en el formato que acepta un <input type="date"> (local, no UTC). */
@@ -90,6 +93,9 @@ export default function LocationExplorer({
   const [asistenciaError, setAsistenciaError] = React.useState(null);
 
   const agentId = equipo?.agentId ?? null;
+  const [estanciaSel, setEstanciaSel] = React.useState(null);
+  const puntos = React.useMemo(
+    () => episodesToMapEntries(linea?.episodes), [linea]);
 
   React.useEffect(() => {
     const ventana = dayWindow(fechaEquipo);
@@ -117,6 +123,8 @@ export default function LocationExplorer({
       cancelado = true;
     };
   }, [agentId, fechaEquipo, refreshNonce]);
+
+  React.useEffect(() => { setEstanciaSel(null); }, [agentId, fechaEquipo]);
 
   React.useEffect(() => {
     const ventana = dayWindow(fechaSitio);
@@ -204,12 +212,27 @@ export default function LocationExplorer({
             ) : lineaCargando ? (
               <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>Loading…</Typography>
             ) : linea ? (
-              <DeviceLocationTimeline
-                episodes={linea.episodes}
-                retentionDays={linea.retentionDays}
-                beyondRetention={linea.beyondRetention}
-                retentionFloor={linea.retentionFloor}
-              />
+              <>
+                {puntos.some((p) => p.mappable) ? (
+                  <Box sx={{ mb: 1.5 }}>
+                    <React.Suspense fallback={null}>
+                      <DeviceLocationHistoryMap
+                        entries={puntos}
+                        selectedId={estanciaSel}
+                        onSelect={setEstanciaSel}
+                        trail={buildTrail(linea.episodes)}
+                        height={260}
+                      />
+                    </React.Suspense>
+                  </Box>
+                ) : null}
+                <DeviceLocationTimeline
+                  episodes={linea.episodes}
+                  retentionDays={linea.retentionDays}
+                  beyondRetention={linea.beyondRetention}
+                  retentionFloor={linea.retentionFloor}
+                />
+              </>
             ) : null}
           </Panel>
         </Grid>

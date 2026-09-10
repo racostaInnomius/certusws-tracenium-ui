@@ -66,23 +66,27 @@ describe("LocationWorkbench", () => {
     expect(listGeofences).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("tab", { name: "Recent transitions" }));
-    await screen.findByText("ETE-3X5P8F4");
+    await screen.findByText(/Where devices stand/i);
     // Cambiar de sección NO vuelve a preguntar: es el mismo dato.
     expect(listGeofences).toHaveBeenCalledTimes(1);
   });
 
-  it("⚠️ la transición real de T1 no se rotula como una salida", async () => {
+  it("⚠️ la transición real de T1 no se presenta como una salida", async () => {
+    // `indeterminate -> outside` no es que el equipo se fuera: es la primera
+    // vez que la cerca lo situó, y venía de no saber. Va contada entre las
+    // primeras confirmaciones, no listada como suceso ni rotulada "left".
     const user = userEvent.setup();
     render(<LocationWorkbench />);
     await screen.findByText("City Towers Black");
     await user.click(screen.getByRole("tab", { name: "Recent transitions" }));
 
-    await screen.findByText("confirmed elsewhere");
-    // Se miran las ETIQUETAS, no el texto de la página: la nota de arriba
-    // contiene la palabra "left" a propósito, explicando qué significa.
+    expect(
+      await screen.findByText(/device was first confirmed away from City Towers Black/i)
+    ).toBeInTheDocument();
     const etiquetas = [...document.querySelectorAll(".MuiChip-label")].map((c) => c.textContent);
-    expect(etiquetas).toContain("confirmed elsewhere");
     expect(etiquetas).not.toContain("left");
+    // Y el estado de la cerca sí está arriba, que es a lo que se viene.
+    expect(screen.getByText("1 inside")).toBeInTheDocument();
   });
 
   it("los equipos sólo se piden al abrir Location history", async () => {

@@ -902,6 +902,31 @@ export function dayWindow(yyyymmdd) {
  * `episodes` llega del más reciente al más antiguo (así lo devuelve el API);
  * el recorrido se dibuja en orden cronológico.
  */
+/**
+ * Estancias -> puntos que el mapa del historial sabe pintar.
+ *
+ * ⚠️ Sólo entran las que TIENEN coordenadas. Una estancia identificada por
+ * subred (el equipo reportó red y no posición) es un lugar real y sale en la
+ * lista, pero ponerla en el mapa exigiría inventarle un punto. `mappable`
+ * separa las dos cosas en vez de perder la estancia o fingir su sitio.
+ */
+export function episodesToMapEntries(episodes) {
+  const lista = Array.isArray(episodes) ? episodes : [];
+  return lista.map((ep) => {
+    const lat = toCoordinate(ep?.lat);
+    const lon = toCoordinate(ep?.lon);
+    return {
+      id: ep.id,
+      lat,
+      lon,
+      accuracyM: Number.isFinite(Number(ep?.accuracyM)) ? Number(ep.accuracyM) : 0,
+      hitCount: Number(ep?.tickCount) || 1,
+      label: placeLabel(ep),
+      mappable: lat !== null && lon !== null,
+    };
+  });
+}
+
 export function buildTrail(episodes) {
   const lista = Array.isArray(episodes) ? [...episodes].reverse() : [];
   const tramos = [];
