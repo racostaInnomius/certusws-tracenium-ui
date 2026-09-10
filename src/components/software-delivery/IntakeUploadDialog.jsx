@@ -31,8 +31,14 @@ const SHA256_RE = /^[0-9a-f]{64}$/i;
  * alternativa era peor: sin esto, un MSI de 260 MiB se sube entero —minutos de
  * espera— para que el servidor lo rechace al final. Si allí se cambia, aquí
  * también; el mensaje nombra el límite para que el desajuste se note.
+ *
+ * ⚠️ Y ES EL LADO QUE SE OLVIDA. Este número rechaza ANTES de subir, así que si
+ * el servidor sube el techo y esto no, el fichero ni sale del navegador: la
+ * prueba falla sin llegar nunca al servidor y parece que el cambio del backend
+ * no funcionó. Segunda subida en dos días (300 → 450 MiB el 9-sep-2026, por el
+ * .pkg de Edge para macOS).
  */
-export const MAX_UPLOAD_BYTES = 314_572_800; // 300 MiB
+export const MAX_UPLOAD_BYTES = 471_859_200; // 450 MiB
 
 export function tooLargeMessage(size, limit = MAX_UPLOAD_BYTES) {
   if (!size || size <= limit) return null;

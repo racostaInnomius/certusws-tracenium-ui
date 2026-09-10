@@ -45,7 +45,7 @@ describe("tooLargeMessage · el techo se comprueba aquí, no tras la espera", ()
   // sube uno y no el otro, esto no lo caza — pero el mensaje nombra el número,
   // así que el desajuste se ve en pantalla en vez de en un 413 opaco.
   it("el techo del cliente es el mismo que el del servidor", () => {
-    expect(MAX_UPLOAD_BYTES).toBe(314_572_800); // 300 MiB, ver intake-upload.ts
+    expect(MAX_UPLOAD_BYTES).toBe(471_859_200); // 450 MiB, ver intake-upload.ts
   });
 });
 
@@ -91,7 +91,7 @@ describe("IntakeUploadDialog · el tamaño se avisa al elegir", () => {
     await userEvent.upload(input, fakeFile("edge.msi", MAX_UPLOAD_BYTES + 1));
 
     // El aviso sale al elegir, antes de tocar el botón.
-    expect(screen.getByText(/the intake limit is 300 MiB/i)).toBeInTheDocument();
+    expect(screen.getByText(/the intake limit is 450 MiB/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /upload & analyze/i }));
     expect(onSubmit).not.toHaveBeenCalled();
@@ -105,6 +105,24 @@ describe("IntakeUploadDialog · el tamaño se avisa al elegir", () => {
 
     const input = document.querySelector('input[type="file"]');
     await userEvent.upload(input, fakeFile("chrome.msi", 165_842_944)); // el MSI real de Chrome
+
+    expect(screen.queryByText(/intake limit/i)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /upload & analyze/i }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("⚠️ y deja pasar el .pkg de Edge, que es el que motivó subir el techo", async () => {
+    // 433 MB decimales = ~413 MiB. El caso concreto, con su tamaño real: un
+    // techo que se quedase justo por debajo pasaría los tests genéricos
+    // —que van en relativo a MAX_UPLOAD_BYTES— mientras sigue rechazando el
+    // fichero por el que se cambió el número.
+    const onSubmit = vi.fn();
+    render(
+      <IntakeUploadDialog open submitting={false} onClose={vi.fn()} onSubmit={onSubmit} />
+    );
+
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, fakeFile("MicrosoftEdge.pkg", 433_000_000));
 
     expect(screen.queryByText(/intake limit/i)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /upload & analyze/i }));
