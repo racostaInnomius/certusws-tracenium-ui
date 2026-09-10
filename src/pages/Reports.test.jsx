@@ -6,7 +6,7 @@
 // format button goes through the authenticated blob path, not a raw
 // link.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -17,6 +17,7 @@ vi.mock("../utils/browserState", async (importOriginal) => {
   return { ...actual, saveBlob: vi.fn() };
 });
 import { saveBlob } from "../utils/browserState";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 // EmailReportDialog (rendered inside Reports, just not visibly "open"
 // until a row's Email button is clicked) calls useAuthContext()
@@ -33,6 +34,12 @@ vi.mock("../auth/AuthContext", () => ({
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 import Reports from "./Reports";
 
+beforeEach(() => {
+  // Lo consulta la pestaña Catalog en TODOS los tests que la montan, así que
+  // se simula una vez aquí en vez de en cada uno.
+  simularCatalogoDePlugins();
+});
+
 afterEach(() => {
   cleanup();
   server.resetHandlers();
@@ -48,9 +55,59 @@ afterEach(() => {
   // afirma "NO se llamó todavía" —que es lo que separa generar de descargar—
   // hereda las llamadas de los anteriores y falla sin culpa propia.
   saveBlob.mockClear();
+  // ⚠️ `useCachedFetch` guarda EN MÓDULO y en localStorage, así que sobrevive
+  // a `cleanup()`: el catálogo de plugins del primer test se servía a todos
+  // los demás, y el que prueba un tenant SIN un plugin recibía los derechos
+  // completos del anterior. Sale verde por la caché, no por el código.
+  clearCachedFetch();
 });
 
 const BASE = "/api/v1/reports";
+
+/**
+ * El catálogo de plugins, que la pestaña Catalog consulta desde que agrupa por
+ * PÁGINA: es lo que distingue "no está construido" de "este tenant no lo tiene
+ * contratado". `entitled` con todo dentro para que ninguna fila salga como no
+ * contratada por accidente — el que prueba ese caso lo sobreescribe.
+ */
+function simularCatalogoDePlugins(entitled = ["amp", "sdp", "scp", "rcp", "pmp", "cdp", "mdm"]) {
+  respond("get", "/api/v1/policies/plugins/catalog", {
+    ok: true,
+    catalog: entitled.map((k) => ({ key: k, required: false })),
+    entitled,
+  });
+}
+
+/**
+ * Abre la fila de una PÁGINA del catálogo.
+ *
+ * Desde que el catálogo se agrupa por página, los informes nacen plegados: la
+ * lista existe para ver de un vistazo qué páginas tienen informe y cuáles no,
+ * y once filas abiertas no caben en pantalla. Un test que quiera un informe
+ * concreto abre su página primero, igual que el operador.
+ */
+async function abrirPagina(nombre) {
+  const { fireEvent } = await import("@testing-library/react");
+  const fila = await screen.findByRole("group", { name: nombre }, { timeout: 4000 });
+  // Idempotente: si ya está abierta no se toca. Volver a pulsar la cerraría, y
+  // un test que abra dos veces la misma página se quedaría sin sus informes
+  // por un motivo que no tiene nada que ver con lo que prueba.
+  const boton = within(fila).getByRole("button", { name: new RegExp(`(Expand|Collapse) ${nombre}`, "i") });
+  if (boton.getAttribute("aria-expanded") !== "true") fireEvent.click(boton);
+  return fila;
+}
+
+/**
+ * Espera a que el catálogo haya cargado.
+ *
+ * Antes se esperaba a ver el nombre de un informe. Desde que el catálogo se
+ * agrupa por página los informes nacen plegados, así que la señal es la FILA
+ * DE LA PÁGINA — que además está ahí aunque esa página no tenga ningún
+ * informe, o sea que sirve también para los casos de catálogo vacío.
+ */
+async function esperarCatalogo() {
+  return screen.findByRole("group", { name: "Security Compliance" }, { timeout: 4000 });
+}
 
 const TYPES = {
   ok: true,
@@ -124,18 +181,22 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    // ⚠️ `getAllByText`: desde que el historial enseña la ETIQUETA del tipo en
-    // vez de la key cruda, el mismo texto sale en el catálogo y en el
-    // historial. Acotar por `role="grid"` no vale — MUI virtualiza las filas
-    // fuera de ese nodo.
-    expect((await screen.findAllByText("Crypto Bill of Materials (CBOM)")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Audit Events")).toBeInTheDocument();
+    // Los informes viven dentro de la fila de SU página, así que se abre la
+    // que toca. Que estén ahí y no en otra es la mitad de lo que prueba que el
+    // agrupado sale del `group` que manda el servidor.
+    const cdp = await abrirPagina("Crypto Discovery");
+    expect(within(cdp).getByText("Crypto Bill of Materials (CBOM)")).toBeInTheDocument();
+
+    const audit = await abrirPagina("Audit");
+    expect(within(audit).getByText("Audit Events")).toBeInTheDocument();
+
     // A type NOT present in the server response must never appear —
     // proves there's no client-side catalog to drift from the backend.
-    // (Era "Fleet Health Report"; ese tipo pasó al fixture cuando el botón de
-    // Overview empezó a entrar por aquí, así que el ejemplo de "ausente" es
-    // ahora otro que el servidor tampoco devuelve.)
     expect(screen.queryByText("CVE Exposure")).not.toBeInTheDocument();
+    // Y su página SÍ sale, marcada como hueco: es justo lo que esta vista
+    // viene a enseñar.
+    const pmp = screen.getByRole("group", { name: "Patch Management" });
+    expect(within(pmp).getByText("Not built yet")).toBeInTheDocument();
   });
 
   it("renders the recent-runs history from the server", async () => {
@@ -158,6 +219,7 @@ describe("Reports page", () => {
     // La FILA del catálogo, por su nombre accesible: es un `role="group"`
     // etiquetado con el informe, así que localizarla no depende de la
     // maquetación ni de que la etiqueta salga también en el historial.
+    await abrirPagina("Crypto Discovery");
     const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
 
@@ -190,6 +252,7 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
+    await abrirPagina("Crypto Discovery");
     const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     expect(within(fila).queryByRole("button", { name: /email/i })).toBeNull();
 
@@ -220,6 +283,7 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
+    await abrirPagina("Crypto Discovery");
     const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
@@ -257,6 +321,7 @@ describe("Reports page", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
+    await abrirPagina("Crypto Discovery");
     const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
@@ -288,6 +353,7 @@ describe("Reports page (types with params)", () => {
     const runCalls = respond("get", `${BASE}/scp.evidence-pack/run`, { ok: true });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
+    await abrirPagina("Security Compliance");
     const fila = await screen.findByRole("group", { name: "Evidence Pack" });
     await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
 
@@ -342,7 +408,7 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, SCHEDULES);
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
 
     // ⚠️ Se afirma la AUSENCIA. Había un "Schedule" por fila del catálogo
     // compitiendo con la acción principal, y llevaba al mismo sitio que la
@@ -368,7 +434,7 @@ describe("Reports — schedules (E3)", () => {
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, { error: "NOT_FOUND" }, { status: 404 });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
-    await screen.findByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/schedules/i);
     expect(await screen.findByTestId("schedules-empty")).toBeTruthy();
   });
@@ -383,7 +449,7 @@ describe("Reports — schedules (E3)", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/schedules/i);
     const vacio = await screen.findByTestId("schedules-empty");
     expect(vacio.textContent).toMatch(/administrators/i);
@@ -402,7 +468,7 @@ describe("Reports — schedules (E3)", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
 
     await abrirPestana(/schedules/i);
     const vacio = await screen.findByTestId("schedules-empty");
@@ -607,7 +673,7 @@ describe("Reports — preselección por URL", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
@@ -632,8 +698,13 @@ describe("Reports — vista previa", () => {
     // no puede calcular. Los que no dan json siguen sin ofrecerlo, porque un
     // PDF no se pinta en pantalla.
     abrirCatalogo();
+    await esperarCatalogo();
 
-    await screen.findAllByText("Fleet Health Report");
+    // Se abren TODAS las páginas con informes: el recuento es sobre el
+    // catálogo entero, y lo que está plegado no está en el DOM.
+    for (const pagina of ["Overview", "Security Compliance", "Crypto Discovery", "Audit"]) {
+      await abrirPagina(pagina);
+    }
     const conJson = TYPES.types.filter((t) => t.formats.includes("json"));
     expect(screen.getAllByRole("button", { name: /^preview$/i })).toHaveLength(conJson.length);
 
@@ -649,6 +720,7 @@ describe("Reports — vista previa", () => {
     });
     abrirCatalogo();
 
+    await abrirPagina("Overview");
     const tarjeta = await screen.findByRole("group", { name: "Fleet Health Report" });
     await userEvent.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
 
@@ -667,6 +739,7 @@ describe("Reports — vista previa", () => {
     });
     abrirCatalogo();
 
+    await abrirPagina("Overview");
     const tarjeta = await screen.findByRole("group", { name: "Fleet Health Report" });
     await userEvent.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
     await screen.findByText("Banco X");
@@ -700,7 +773,7 @@ describe("Reports — U1: cabecera y pestañas", () => {
 
   it("tiene cabecera canónica con refresco", async () => {
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
 
     expect(screen.getByRole("heading", { name: "Reports" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^refresh$/i })).toBeTruthy();
@@ -711,7 +784,7 @@ describe("Reports — U1: cabecera y pestañas", () => {
     // Que sólo se monte una es lo que hace que la página deje de ser un scroll
     // de cuatro tablas — y de paso, que no se pidan datos de lo que no se ve.
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
 
     for (const n of [/catalog/i, /schedules/i, /history/i, /settings/i]) {
       expect(screen.getByRole("tab", { name: n })).toBeTruthy();
@@ -721,7 +794,7 @@ describe("Reports — U1: cabecera y pestañas", () => {
 
   it("la pestaña viaja en la URL, para poder enlazarla y para no perderla al recargar", async () => {
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
 
     await abrirPestana(/history/i);
 
@@ -745,7 +818,7 @@ describe("Reports — U1: cabecera y pestañas", () => {
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     const antes = typeCalls.length;
 
     await userEvent.setup().click(screen.getByRole("button", { name: /^refresh$/i }));
@@ -768,7 +841,7 @@ describe("Reports — U1: el refresco alcanza a Settings", () => {
     respond("get", `${BASE}/grc/deliveries`, { ok: true, deliveries: [] });
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/settings/i);
 
     await waitFor(() => expect(keyCalls.length).toBeGreaterThan(0));
@@ -959,7 +1032,7 @@ describe("Reports — U3: programaciones", () => {
     // Quien entra a gestionar programaciones no tiene por qué adivinar que se
     // crean en otra pestaña.
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/schedules/i);
 
     const user = userEvent.setup();
@@ -975,7 +1048,7 @@ describe("Reports — U3: programaciones", () => {
     // rompe el vínculo con su historial, porque los runs anteriores apuntan a
     // la programación vieja.
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/schedules/i);
 
     const user = userEvent.setup();
@@ -994,7 +1067,7 @@ describe("Reports — U3: programaciones", () => {
     const patchCalls = respond("patch", `${BASE}/schedules/3`, { ok: true, schedule: SCHED });
     const postCalls = respond("post", `${BASE}/schedules`, { ok: true, schedule: SCHED });
     montar();
-    await screen.findAllByText("Evidence Pack");
+    await esperarCatalogo();
     await abrirPestana(/schedules/i);
 
     const user = userEvent.setup();
@@ -1023,16 +1096,19 @@ describe("Reports — U3: catálogo por filas", () => {
   // porque es lo que usan el gate y los entitlements. En la consola nadie ve
   // esas siglas: ve "Security Compliance" en el menú, y ese es el nombre con
   // el que busca su informe. Se afirma el rótulo Y la ausencia de la sigla.
-  it("dice de qué página sale con el nombre del menú, no con la sigla del plugin", async () => {
+  // ⚠️ El `group` del servidor es la SIGLA del plugin —"SCP", "CDP"— porque es
+  // lo que usan el gate y los entitlements. En la consola nadie ve esas
+  // siglas: ve "Security Compliance" en el menú. Antes esto lo decía un chip
+  // en cada informe; desde que el catálogo se agrupa por página lo dice la
+  // fila que los contiene, y el chip se retiró por redundante.
+  it("las filas se llaman como el menú, no como la sigla del plugin", async () => {
     montar();
+    await esperarCatalogo();
 
-    const fila = await screen.findByRole("group", { name: "Evidence Pack" });
-    expect(within(fila).getByText("Security Compliance")).toBeTruthy();
-    expect(within(fila).queryByText("SCP")).toBeNull();
-
-    const cbom = screen.getByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
-    expect(within(cbom).getByText("Crypto Discovery")).toBeTruthy();
-    expect(within(cbom).queryByText("CDP")).toBeNull();
+    expect(screen.getByRole("group", { name: "Security Compliance" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Crypto Discovery" })).toBeTruthy();
+    expect(screen.queryByText("SCP")).toBeNull();
+    expect(screen.queryByText("CDP")).toBeNull();
   });
 
   it("cada fila enseña su ÚLTIMO run, que es lo que se pregunta antes de generar otro", async () => {
@@ -1043,10 +1119,12 @@ describe("Reports — U3: catálogo por filas", () => {
       runs: [{ id: 1, occurredAt: "2026-09-01T06:00:00.000Z", key: "cdp.cbom", format: "json", trigger: "manual", outcome: "ok", actor: "ana@acme.test" }],
     });
 
+    await abrirPagina("Crypto Discovery");
     const fila = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     expect(within(fila).getByText(/2026/)).toBeTruthy();
 
     // Y el que no se ha generado nunca lo dice, en vez de dejar el hueco.
+    await abrirPagina("Audit");
     const otra = screen.getByRole("group", { name: "Audit Events" });
     expect(within(otra).getByText(/never generated/i)).toBeTruthy();
   });
@@ -1055,11 +1133,76 @@ describe("Reports — U3: catálogo por filas", () => {
     // Si no, pulsar un formato abre un diálogo por sorpresa.
     montar();
 
+    await abrirPagina("Security Compliance");
     const fila = await screen.findByRole("group", { name: "Evidence Pack" });
     expect(within(fila).getByText("params")).toBeTruthy();
 
+    await abrirPagina("Audit");
     const sinParams = screen.getByRole("group", { name: "Audit Events" });
     expect(within(sinParams).queryByText("params")).toBeNull();
+  });
+
+  // ── El catálogo por PÁGINA (09-sep) ─────────────────────────────
+  //
+  // Se listaba por informe: seis filas para once páginas con botón "Report",
+  // así que las páginas sin informe propio no salían por ningún lado y no
+  // había forma de ver qué falta por construir.
+  it("⭐ las páginas SIN informe salen, marcadas como hueco", async () => {
+    montar();
+    await esperarCatalogo();
+
+    // El fixture no trae ningún tipo de estas cuatro, y aun así tienen fila.
+    for (const pagina of ["Asset Management", "Software Delivery", "Remote Control", "Jobs"]) {
+      const fila = screen.getByRole("group", { name: pagina });
+      expect(within(fila).getByText("Not built yet"), pagina).toBeInTheDocument();
+    }
+  });
+
+  it("una página sin informe propio dice qué abre su botón hoy", async () => {
+    // Si no, la fila diría "nada" justo cuando el operador acaba de pulsar ese
+    // botón en Asset Management y ha salido un informe de flota.
+    montar();
+    await esperarCatalogo();
+
+    const assets = screen.getByRole("group", { name: "Asset Management" });
+    expect(within(assets).getByText(/global\.fleet-health/)).toBeInTheDocument();
+  });
+
+  it("la fila cuenta cuántos informes tiene esa página", async () => {
+    montar();
+    await esperarCatalogo();
+
+    // La cuenta se deriva del FIXTURE, no se escribe a mano: así el test no
+    // miente si mañana alguien añade un tipo al fixture y se olvida de aquí.
+    const porGrupo = (g) => TYPES.types.filter((t) => t.group === g).length;
+    const singular = (n) => `${n} report${n === 1 ? "" : "s"}`;
+
+    const scp = screen.getByRole("group", { name: "Security Compliance" });
+    expect(within(scp).getByText(singular(porGrupo("SCP")))).toBeInTheDocument();
+    const overview = screen.getByRole("group", { name: "Overview" });
+    expect(within(overview).getByText(singular(porGrupo("Global")))).toBeInTheDocument();
+  });
+
+  it("⚠️ un plugin sin contratar NO se cuenta como hueco de producto", async () => {
+    // El servidor no manda los tipos de un plugin sin derecho, así que sin
+    // esta distinción un tenant sin CDP vería "Crypto Discovery — 0" y leería
+    // una carencia que no existe. Son cosas opuestas y en una fila que dice 0
+    // se leen igual.
+    simularCatalogoDePlugins(["amp", "sdp", "scp", "rcp", "pmp", "mdm"]); // sin cdp
+    respond("get", `${BASE}/types`, { ok: true, types: TYPES.types.filter((t) => t.group !== "CDP") });
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await esperarCatalogo();
+
+    // ⚠️ Se espera al mensaje ANTES de afirmar la ausencia del chip.
+    // `isEntitled` devuelve `true` mientras no sabe —falla abierto a
+    // propósito—, así que justo al montar la fila dice "Not built yet" y sólo
+    // se corrige cuando llegan los derechos. Afirmar sin esperar probaría el
+    // parpadeo, no el resultado.
+    await screen.findByText(/Plugin not enabled/i, {}, { timeout: 4000 });
+    const cdp = screen.getByRole("group", { name: "Crypto Discovery" });
+    expect(within(cdp).queryByText("Not built yet")).toBeNull();
   });
 
   it("un catálogo vacío explica POR QUÉ", async () => {
@@ -1102,6 +1245,7 @@ describe("Reports — U4: vista previa genérica", () => {
     });
     montar();
 
+    await abrirPagina("Crypto Discovery");
     const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     await userEvent.setup().click(within(tarjeta).getByRole("button", { name: /^preview$/i }));
 
@@ -1121,6 +1265,7 @@ describe("Reports — U4: vista previa genérica", () => {
     respond("get", `${BASE}/cdp.cbom/run`, { ok: true, components: [] });
     montar();
 
+    await abrirPagina("Crypto Discovery");
     const tarjeta = await screen.findByRole("group", { name: "Crypto Bill of Materials (CBOM)" });
     const user = userEvent.setup();
     await user.click(within(tarjeta).getByRole("button", { name: /^preview$/i }));

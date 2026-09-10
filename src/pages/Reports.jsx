@@ -48,6 +48,9 @@ import ReportParamsDialog from "../components/Reports/ReportParamsDialog";
 import ScheduleReportDialog from "../components/Reports/ScheduleReportDialog";
 import GrcConnectorPanel from "../components/Reports/GrcConnectorPanel";
 import ReportTypeRow from "../components/Reports/ReportTypeRow";
+import ReportPageRow from "../components/Reports/ReportPageRow";
+import { groupTypesByPage } from "../components/Reports/reportGroups";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import GenerateReportDialog from "../components/Reports/GenerateReportDialog";
 import ScheduleCard from "../components/Reports/ScheduleCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
@@ -337,6 +340,38 @@ export default function Reports() {
 
 
   const typeByKey = React.useMemo(() => Object.fromEntries(rows.map((r) => [r.key, r])), [rows]);
+
+  /**
+   * El catálogo, por PÁGINA del menú.
+   *
+   * Listaba informes: seis filas para once páginas con botón "Report", así que
+   * las cinco páginas sin informe propio no salían por ningún lado. Por
+   * página, la ausencia ocupa su propia fila — y esa lista de ausencias es
+   * hoy la información más útil de esta pestaña.
+   *
+   * `isEntitled` distingue "no está construido" de "este tenant no lo tiene
+   * contratado": el servidor no manda los tipos de un plugin sin derecho, así
+   * que sin esto un tenant sin CDP vería "Crypto Discovery — 0" y leería una
+   * carencia de producto que no existe.
+   */
+  const { isEntitled } = usePluginCatalog();
+  const paginasDelCatalogo = React.useMemo(
+    () => groupTypesByPage(rows).map((f) => ({
+      ...f,
+      sinDerecho: Boolean(f.plugin) && f.types.length === 0 && !isEntitled(f.plugin),
+    })),
+    [rows, isEntitled]
+  );
+  // Qué páginas están desplegadas. Arrancan cerradas: la lista entera cabe de
+  // un vistazo, que es el punto de la vista.
+  const [paginasAbiertas, setPaginasAbiertas] = React.useState(() => new Set());
+  const alternarPagina = React.useCallback((key) => {
+    setPaginasAbiertas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
 
   /**
    * El último run de cada tipo, para enseñarlo en su tarjeta.
@@ -802,8 +837,9 @@ export default function Reports() {
       {activeTab === TAB.catalog ? (
         <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.catalog}`} aria-labelledby={`reports-tab-${TAB.catalog}`}>
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-            Everything this tenant can generate. Each run is recorded in the history with its
-            SHA-256, whoever ran it and the scope it covered.
+            One row per page that offers a &quot;Report&quot; button, with how many reports that
+            page has. Rows marked &quot;Not built yet&quot; are the gaps. Each run is recorded in the
+            history with its SHA-256, whoever ran it and the scope it covered.
           </Typography>
           {loading && rows.length === 0 ? (
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>Loading…</Typography>
@@ -817,23 +853,29 @@ export default function Reports() {
               tenant has enabled and by your role — ask an administrator if you expected one here.
             </Typography>
           ) : (
-            /* Una LISTA, no una rejilla de fichas: seis informes ocupaban
-               pantalla y media y había que hacer scroll para ver un catálogo
-               de seis cosas. Sin encabezados de grupo — con seis informes
-               repartidos en cinco grupos, las cabeceras costaban más alto que
-               las propias filas; de qué página sale lo dice un chip en cada
-               una, con el nombre que esa página tiene en el menú. */
+            /* Una fila por PÁGINA del menú, en su mismo orden. La lista de
+               informes vive dentro de cada una, desplegable: la cuenta dice
+               cuántos hay y quien quiera generar uno abre y lo tiene ahí. */
             <Box sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
-              {rows.map((t) => (
-                <ReportTypeRow
-                  key={t.key}
-                  type={t}
-                  lastRun={lastRunByKey[t.key] || null}
-                  busy={String(runningKey || "").startsWith(`${t.key}:`) || (genTarget?.key === t.key && genPhase === "running")}
-                  canPreview={puedePrevisualizarse(t)}
-                  onGenerate={() => { setGenResult(null); setGenError(""); setGenPhase("choose"); setGenTarget(t); }}
-                  onPreview={() => setPreviewTarget(t)}
-                />
+              {paginasDelCatalogo.map((fila) => (
+                <ReportPageRow
+                  key={fila.page || fila.label}
+                  fila={fila}
+                  abierta={paginasAbiertas.has(fila.page || fila.label)}
+                  onToggle={() => alternarPagina(fila.page || fila.label)}
+                >
+                  {fila.types.map((t) => (
+                    <ReportTypeRow
+                      key={t.key}
+                      type={t}
+                      lastRun={lastRunByKey[t.key] || null}
+                      busy={String(runningKey || "").startsWith(`${t.key}:`) || (genTarget?.key === t.key && genPhase === "running")}
+                      canPreview={puedePrevisualizarse(t)}
+                      onGenerate={() => { setGenResult(null); setGenError(""); setGenPhase("choose"); setGenTarget(t); }}
+                      onPreview={() => setPreviewTarget(t)}
+                    />
+                  ))}
+                </ReportPageRow>
               ))}
             </Box>
           )}

@@ -28,7 +28,6 @@ import { Box, Button, Chip, Stack, Tooltip, Typography } from "@mui/material";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { formatWhen, runStatusColor, runStatusLabel } from "./reportSchedules";
-import { groupLabel } from "./reportGroups";
 import { BRAND, TEXT } from "../../theme/brand";
 
 export default function ReportTypeRow({
@@ -65,16 +64,9 @@ export default function ReportTypeRow({
           <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap>
             {type.label}
           </Typography>
-          {/* De qué página sale, con el nombre que esa página tiene en el
-              menú. Sustituye a los encabezados de grupo: con seis informes
-              repartidos en cinco grupos, cinco cabeceras costaban más alto
-              que las propias filas. */}
-          <Chip
-            size="small"
-            variant="outlined"
-            label={groupLabel(type.group)}
-            sx={{ height: 20, fontSize: TEXT.xs, flexShrink: 0 }}
-          />
+          {/* ⚠️ Aquí había un chip con la página de origen. Se retira porque
+              el catálogo pasa a agruparse POR PÁGINA: la fila que contiene a
+              ésta ya lo dice, y repetirlo en cada informe es ruido. */}
           {/* Avisa de que este tipo va a preguntar por su alcance, en vez de
               sorprender con un diálogo tras pulsar. */}
           {pideParams ? (
