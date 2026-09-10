@@ -187,10 +187,10 @@ export default function DeploymentDetailDrawer({
   const snapshotSummary = React.useMemo(() => summariseSnapshots(snapshots), [snapshots]);
 
   const doRevert = React.useCallback(
-    async (snapshot, deviceId) => {
+    async (snapshot, deviceLabel) => {
       if (
         !window.confirm(
-          `Roll ${deviceId} back to its pre-patch snapshot?\n\n` +
+          `Roll ${deviceLabel} back to its pre-patch snapshot?\n\n` +
             "This DISCARDS everything written to the VM since the snapshot was taken — " +
             "user data, other applications' state, unrelated changes. It cannot be undone."
         )
@@ -224,11 +224,22 @@ export default function DeploymentDetailDrawer({
       headerName: "Device",
       flex: 1,
       minWidth: 220,
-      renderCell: (params) => (
-        <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.dark }}>
-          {params.row.deviceId}
-        </Typography>
-      ),
+      // El hostname es el nombre con el que un operador ubica una máquina; el
+      // UUID no le dice nada, y saber CUÁL falló es justo para lo que se abre
+      // este cajón. El id queda como respaldo para los equipos que ya no se
+      // pueden nombrar ni por el tenant ni por la lápida del ciclo de vida.
+      renderCell: (params) => {
+        const hostname = params.row.hostname;
+        return hostname ? (
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>{hostname}</Typography>
+        ) : (
+          <Tooltip title="Sin nombre resoluble para este equipo">
+            <Typography sx={{ fontFamily: "monospace", fontSize: TEXT.sm, color: BRAND.gray }}>
+              {params.row.deviceId}
+            </Typography>
+          </Tooltip>
+        );
+      },
     },
     {
       field: "outcome",
@@ -254,8 +265,13 @@ export default function DeploymentDetailDrawer({
                 <Tooltip title="Roll this VM back to its pre-patch snapshot">
                   <IconButton
                     size="small"
-                    aria-label={`Roll ${params.row.deviceId} back to its pre-patch snapshot`}
-                    onClick={() => doRevert(snap, params.row.deviceId)}
+                    // ⚠️ Con el hostname cuando lo hay. Este confirm descarta
+                    // TODO lo escrito en la VM desde el snapshot, y un diálogo
+                    // que pregunta por un UUID le pide al operador que apruebe
+                    // algo irreversible sobre una máquina que no puede
+                    // identificar.
+                    aria-label={`Roll ${params.row.hostname || params.row.deviceId} back to its pre-patch snapshot`}
+                    onClick={() => doRevert(snap, params.row.hostname || params.row.deviceId)}
                   >
                     <RestoreOutlinedIcon fontSize="small" />
                   </IconButton>
