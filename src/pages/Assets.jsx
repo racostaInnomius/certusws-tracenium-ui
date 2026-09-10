@@ -11,10 +11,16 @@ import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
 import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import AssetsDashboard from "./AssetsDashboard";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
+// Perezoso como el resto de vistas pesadas: quien nunca abra la pestaña no
+// paga su chunk.
+const LocationExplorer = React.lazy(() =>
+  import("../components/AssetsDashboard/LocationExplorer")
+);
 import WindowsGpos from "./WindowsGpos";
 import AssetGroups from "./AssetGroups";
 
@@ -86,7 +92,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
 
   const navigateToHardwareInventory = React.useCallback((searchTerm = "") => {
     setPendingHardwareSearch(searchTerm);
-    setActiveTab(3);
+    setActiveTab(4); // Hardware Inventory (corrido por Location history)
 
     // Keep the drill-down feeling intentional: when the user clicks a
     // dashboard card such as OS versions, move them to the top of the
@@ -197,11 +203,24 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             sx={TAB_SX}
           />
 
+          {/* Va pegada a Dashboard porque contesta la pregunta contigua: aquel
+              dice qué equipos hay y dónde están AHORA; ésta, dónde estuvieron
+              en una fecha. Y va en ESTA barra —y no como un selector dentro del
+              dashboard— porque una barra de pestañas es donde se busca una
+              función nueva; enterrada a media página el owner no la encontró. */}
+          <Tab
+            icon={<HistoryOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Location history"
+            {...a11yProps(1)}
+            sx={TAB_SX}
+          />
+
           <Tab
             icon={<GroupWorkOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Asset Groups"
-            {...a11yProps(1)}
+            {...a11yProps(2)}
             sx={TAB_SX}
           />
 
@@ -209,7 +228,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             icon={<AppsOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Software Inventory"
-            {...a11yProps(2)}
+            {...a11yProps(3)}
             sx={TAB_SX}
           />
 
@@ -217,7 +236,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             icon={<MemoryOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Hardware Inventory"
-            {...a11yProps(3)}
+            {...a11yProps(4)}
             sx={TAB_SX}
           />
 
@@ -229,7 +248,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             icon={<PolicyOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Windows GPOs"
-            {...a11yProps(4)}
+            {...a11yProps(5)}
             sx={TAB_SX}
           />
         </Tabs>
@@ -246,18 +265,24 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={activeTab} index={1}>
-        <AssetGroups refreshNonce={refreshNonce} />
+        <React.Suspense fallback={null}>
+          <LocationExplorer refreshNonce={refreshNonce} />
+        </React.Suspense>
       </TabPanel>
 
       <TabPanel value={activeTab} index={2}>
-        <SoftwareInventory refreshNonce={refreshNonce} />
+        <AssetGroups refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={3}>
-        <HardwareInventory initialSearch={pendingHardwareSearch} refreshNonce={refreshNonce} />
+        <SoftwareInventory refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={4}>
+        <HardwareInventory initialSearch={pendingHardwareSearch} refreshNonce={refreshNonce} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={5}>
         <WindowsGpos refreshNonce={refreshNonce} />
       </TabPanel>
     </Box>

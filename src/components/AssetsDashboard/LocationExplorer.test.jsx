@@ -14,9 +14,19 @@ import DeviceLocationTimeline from "./DeviceLocationTimeline";
 
 const getDeviceTimeline = vi.fn();
 const getSiteAttendance = vi.fn();
+const getHostLocations = vi.fn();
+const listGeofences = vi.fn();
 vi.mock("../../api/episodes", () => ({
   getDeviceTimeline: (...a) => getDeviceTimeline(...a),
   getSiteAttendance: (...a) => getSiteAttendance(...a),
+}));
+// La vista se carga lo suyo: es una pestaña, no un panel alimentado por el
+// dashboard de equipos.
+vi.mock("../../api/dashboard", () => ({
+  dashboardApi: { getHostLocations: (...a) => getHostLocations(...a) },
+}));
+vi.mock("../../api/geofences", () => ({
+  listGeofences: (...a) => listGeofences(...a),
 }));
 
 const EQUIPOS = [
@@ -31,9 +41,20 @@ const SITIOS = [
 beforeEach(() => {
   getDeviceTimeline.mockReset();
   getSiteAttendance.mockReset();
+  getHostLocations.mockReset();
+  listGeofences.mockReset();
   getDeviceTimeline.mockResolvedValue({ episodes: [], retentionDays: 30, beyondRetention: false });
   getSiteAttendance.mockResolvedValue({ episodes: [], deviceCount: 0, retentionDays: 30, beyondRetention: false });
+  getHostLocations.mockResolvedValue({ devices: EQUIPOS });
+  listGeofences.mockResolvedValue({ sites: SITIOS });
 });
+
+/** Espera a que las dos listas propias de la vista hayan cargado. */
+async function montada() {
+  render(<LocationExplorer />);
+  await waitFor(() => expect(getHostLocations).toHaveBeenCalled());
+  await screen.findByRole("combobox", { name: /device/i });
+}
 afterEach(cleanup);
 
 async function elegirEquipo(nombre) {
@@ -47,15 +68,15 @@ async function elegirEquipo(nombre) {
 }
 
 describe("LocationExplorer", () => {
-  it("no consulta nada hasta que se elige equipo o sitio", () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} />);
+  it("no consulta nada hasta que se elige equipo o sitio", async () => {
+    await montada();
     expect(getDeviceTimeline).not.toHaveBeenCalled();
     expect(getSiteAttendance).not.toHaveBeenCalled();
     expect(screen.getByText(/Select a device to see where it was/i)).toBeInTheDocument();
   });
 
   it("elegir un equipo pide SU día completo, no un rango abierto", async () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} />);
+    await montada();
     await elegirEquipo("ETE-3X5P8F4");
 
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalled());
@@ -68,7 +89,7 @@ describe("LocationExplorer", () => {
   });
 
   it("cambiar la fecha vuelve a preguntar por el nuevo día", async () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} />);
+    await montada();
     await elegirEquipo("ETE-3X5P8F4");
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
 
@@ -79,7 +100,7 @@ describe("LocationExplorer", () => {
 
   it("⚠️ una petición que FALLA no se presenta como un día sin estancias", async () => {
     getDeviceTimeline.mockRejectedValue(new Error("boom"));
-    render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} />);
+    await montada();
     await elegirEquipo("ETE-3X5P8F4");
 
     await waitFor(() => expect(screen.getByText("boom")).toBeInTheDocument());
@@ -87,19 +108,21 @@ describe("LocationExplorer", () => {
     expect(screen.queryByText(/No stay recorded for this device/i)).not.toBeInTheDocument();
   });
 
-  it("⚠️ sin sitios NO se dice que no los haya si la lista no cargó", () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={null} sitesError="500" />);
-    expect(screen.getByText(/site list could not be loaded/i)).toBeInTheDocument();
+  it("⚠️ sin sitios NO se dice que no los haya si la lista no cargó", async () => {
+    listGeofences.mockRejectedValue(new Error("500"));
+    await montada();
+    expect(await screen.findByText(/site list could not be loaded/i)).toBeInTheDocument();
     expect(screen.queryByText(/No sites declared yet/i)).not.toBeInTheDocument();
   });
 
-  it("un tenant sin sitios sí lo dice, y dice qué hacer", () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={[]} />);
-    expect(screen.getByText(/No sites declared yet/i)).toBeInTheDocument();
+  it("un tenant sin sitios sí lo dice, y dice qué hacer", async () => {
+    listGeofences.mockResolvedValue({ sites: [] });
+    await montada();
+    expect(await screen.findByText(/No sites declared yet/i)).toBeInTheDocument();
   });
 
-  it("⚠️ declara que las horas son de confirmación, no de llegada ni salida", () => {
-    render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} />);
+  it("⚠️ declara que las horas son de confirmación, no de llegada ni salida", async () => {
+    await montada();
     const nota = screen.getByText(/not the moment it arrived or left/i);
     expect(nota).toBeInTheDocument();
     // Y que una estancia a caballo de dos días sale en los dos.

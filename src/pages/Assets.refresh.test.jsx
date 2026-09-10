@@ -58,9 +58,10 @@ function mount() {
   return calls;
 }
 
-// Las cinco pestañas por su rótulo, en el orden en que se pintan.
+// Las SEIS pestañas por su rótulo, en el orden en que se pintan.
 const PESTANAS = [
   /dashboard/i,
+  /location history/i,
   /asset groups/i,
   /software/i,
   /hardware/i,
