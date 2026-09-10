@@ -1,7 +1,7 @@
 // src/components/patch-management/bulkInstallOutcome.test.js
 
 import { describe, it, expect } from "vitest";
-import { summarizeBulkInstall, goingOutNow, groupSkipReasons } from "./bulkInstallOutcome";
+import { summarizeBulkInstall, goingOutNow, groupSkipReasons, describeRebootChoice } from "./bulkInstallOutcome";
 
 const dev = (agentId, status) => ({ agentId, hostname: agentId, jobId: `job-${agentId}`, kbCount: 2, status });
 
@@ -68,5 +68,23 @@ describe("groupSkipReasons", () => {
       { reason: "gateway_unhealthy", count: 2 },
       { reason: "no_matching_patches", count: 1 },
     ]);
+  });
+});
+
+describe("describeRebootChoice", () => {
+  it("⭐ the ON branch names the partial case and the nothing-installed case", () => {
+    const t = describeRebootChoice(true);
+    expect(t).toContain("only some patches installed");
+    expect(t).toContain("installed nothing are left alone");
+  });
+
+  it("⭐ the OFF branch is equally explicit — 'stay up' is not automatically the safe choice", () => {
+    const t = describeRebootChoice(false);
+    expect(t).toContain("not applied until the machine restarts");
+    expect(t).toContain("pending reboot");
+  });
+
+  it("the two are never the same text", () => {
+    expect(describeRebootChoice(true)).not.toBe(describeRebootChoice(false));
   });
 });

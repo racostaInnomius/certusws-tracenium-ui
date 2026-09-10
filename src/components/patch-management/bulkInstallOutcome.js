@@ -80,3 +80,16 @@ function plural(n, word) {
 function capitalize(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
+
+/**
+ * What the restart toggle promises, in the operator's terms.
+ *
+ * Both branches have to be equally explicit. "Devices stay up" sounds like the
+ * safe option and is the one that leaves a fleet permanently pending-reboot, so
+ * the off state has to say that out loud rather than saying nothing.
+ */
+export function describeRebootChoice(enabled) {
+  return enabled
+    ? "Each device restarts about a minute after its patch finishes — including devices where only some patches installed, because what did install is not applied until the restart. Devices that installed nothing are left alone."
+    : "Devices stay up. A Windows patch is not applied until the machine restarts, so they will report as pending reboot until someone restarts them.";
+}

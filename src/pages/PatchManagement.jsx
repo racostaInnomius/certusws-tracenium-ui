@@ -14,7 +14,9 @@ import {
   DialogTitle,
   Divider,
   Drawer,
+  FormControlLabel,
   IconButton,
+  Switch,
   Tab,
   Tabs,
   TextField,
@@ -43,7 +45,7 @@ import SecurityConfigPanel from "../components/patch-management/SecurityConfigPa
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
-import { summarizeBulkInstall, goingOutNow } from "../components/patch-management/bulkInstallOutcome";
+import { summarizeBulkInstall, goingOutNow, describeRebootChoice } from "../components/patch-management/bulkInstallOutcome";
 import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -722,6 +724,9 @@ export default function PatchManagement({ onNavigate }) {
   // Two-step flow: click button → fetch plan → show dialog with
   // "X devices will receive Y patches" → confirm → real dispatch.
   const [bulkDialog, setBulkDialog] = React.useState(null); // { action, plan, loading, dispatching }
+  // Restart after patching. Opt-in and reset on every dialog open — a choice
+  // this consequential must be made for THIS run, never inherited from the last.
+  const [bulkReboot, setBulkReboot] = React.useState(false);
 
   const handleRunCategoryAction = React.useCallback(async (action) => {
     const cfg = BULK_ACTION_MAP[action.id];
@@ -752,6 +757,7 @@ export default function PatchManagement({ onNavigate }) {
     }
 
     // bulk-install: dry-run first to show preview, then real dispatch on confirm.
+    setBulkReboot(false); // never inherited from the previous run
     setBulkDialog({ action, cfg, plan: null, loading: true, dispatching: false });
     try {
       const res = await bulkInstall({
@@ -774,7 +780,8 @@ export default function PatchManagement({ onNavigate }) {
       const res = await bulkInstall({
         severity: bulkDialog.cfg.severity,
         mode: "install",
-        dryRun: false
+        dryRun: false,
+        rebootIfRequired: bulkReboot
       });
       // A patch install now passes the maintenance-window and vCenter-snapshot
       // gates, so "dispatched" no longer means "on its way". Only follow the
@@ -798,7 +805,7 @@ export default function PatchManagement({ onNavigate }) {
       notify("error", `Dispatch failed: ${err?.message || "unknown error"}`);
       setBulkDialog((prev) => prev ? { ...prev, dispatching: false } : null);
     }
-  }, [bulkDialog, notify]);
+  }, [bulkDialog, bulkReboot, notify]);
 
   const openDrawer = React.useCallback(async (device) => {
     setDrawerDevice(device);
@@ -1681,6 +1688,26 @@ export default function PatchManagement({ onNavigate }) {
                     Each device will receive a <strong>patch_install</strong> job with its specific
                     KB list. Devices not listed have no matching patches.
                   </Typography>
+
+                  <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={bulkReboot}
+                          onChange={(e) => setBulkReboot(e.target.checked)}
+                          inputProps={{ "aria-label": "Restart devices when the patch requires it" }}
+                        />
+                      }
+                      label={
+                        <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                          Restart when the patch requires it
+                        </Typography>
+                      }
+                    />
+                    <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
+                      {describeRebootChoice(bulkReboot)}
+                    </Typography>
+                  </Box>
                 </>
               ) : (
                 <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
