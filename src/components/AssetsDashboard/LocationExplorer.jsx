@@ -58,58 +58,19 @@ function Panel({ title, hint, children }) {
   );
 }
 
-export default function LocationExplorer({ refreshNonce = 0 }) {
-  // ⚠️ Se carga lo suyo. Es una PESTAÑA de Asset Management, no un panel del
-  // dashboard de equipos: colgar sus listas del estado de aquella página la
-  // ataría a que esa página estuviese montada y a su vista activa.
-  //
-  // Los equipos salen de `hosts/locations`, que es NO paginado por diseño. La
-  // lista paginada de la tabla sólo trae la página visible, y un selector
-  // alimentado con eso escondería equipos sin decirlo.
-  const [devices, setDevices] = React.useState(null);
-  const [devicesError, setDevicesError] = React.useState(null);
-  const [sites, setSites] = React.useState(null);
-  const [sitesError, setSitesError] = React.useState(null);
-
-  React.useEffect(() => {
-    let cancelado = false;
-    import("../../api/dashboard")
-      .then((m) => m.dashboardApi.getHostLocations())
-      .then((r) => {
-        if (cancelado) return;
-        setDevices(Array.isArray(r?.devices) ? r.devices : []);
-        setDevicesError(null);
-      })
-      .catch((e) => {
-        // ⚠️ El fallo, APARTE del dato: una lista vacía diría "no hay equipos".
-        if (cancelado) return;
-        setDevices(null);
-        setDevicesError(e?.message || "load failed");
-      });
-    import("../../api/geofences")
-      .then((m) => m.listGeofences())
-      .then((r) => {
-        if (cancelado) return;
-        setSites(Array.isArray(r?.sites) ? r.sites : []);
-        setSitesError(null);
-      })
-      .catch((e) => {
-        // Mismo motivo: el estado vacío de este selector dice "no hay sitios
-        // declarados todavía", y una petición caída no es un tenant sin sitios.
-        if (cancelado) return;
-        setSites(null);
-        setSitesError(e?.message || "load failed");
-      });
-    return () => {
-      cancelado = true;
-    };
-    // ⚠️ `refreshNonce` en las dependencias: el Refresh de la cabecera tiene que
-    // alcanzar a ESTA pestaña también. Una pestaña que se lo salta enseña datos
-    // viejos con el gesto de haberlos actualizado — ver Assets.refresh.test.
-  }, [refreshNonce]);
-
-  const devicesLoading = devices === null && !devicesError;
-  const sitesLoading = sites === null && !sitesError;
+export default function LocationExplorer({
+  devices,
+  devicesLoading = false,
+  devicesError = null,
+  sites,
+  sitesLoading = false,
+  sitesError = null,
+  refreshNonce = 0,
+}) {
+  // ⚠️ Presentacional a propósito. Las listas las carga el contenedor del tab
+  // (LocationWorkbench) porque `listGeofences` devuelve sitios Y transiciones
+  // en una sola llamada: pedirlas otra vez aquí sería consultar dos veces lo
+  // mismo y abrir la puerta a que las dos secciones del mismo tab discrepen.
   const listaEquipos = Array.isArray(devices) ? devices : [];
   const listaSitios = Array.isArray(sites) ? sites : [];
 

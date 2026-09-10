@@ -240,7 +240,10 @@ function Cerca({ site, onSave, saving, error }) {
   );
 }
 
-export default function GeofencePanel({ sites, events, onSave, savingId, errorById = {} }) {
+// ⚠️ Ya NO pinta las transiciones: viven en su propia sección del mismo tab
+// (RecentTransitions), donde caben con hostname, fecha y el rótulo correcto.
+// Aquí eran diez líneas al pie de la configuración, y el rótulo mentía.
+export default function GeofencePanel({ sites, onSave, savingId, errorById = {} }) {
   const lista = Array.isArray(sites) ? sites : [];
 
   if (lista.length === 0) {
@@ -299,48 +302,6 @@ export default function GeofencePanel({ sites, events, onSave, savingId, errorBy
         ))}
       </Stack>
 
-      {Array.isArray(events) && events.length > 0 ? (
-        <Box sx={{ mt: 2 }}>
-          <Typography
-            sx={{
-              fontSize: TEXT.xs,
-              fontWeight: 800,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "text.secondary",
-              mb: 1,
-            }}
-          >
-            Recent transitions
-          </Typography>
-          <Stack spacing={0.5}>
-            {events.slice(0, 10).map((e) => (
-              <Stack key={e.id} direction="row" spacing={1} alignItems="baseline" sx={{ flexWrap: "wrap" }}>
-                <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-                  {e.siteName}
-                </Typography>
-                <Chip
-                  size="small"
-                  label={e.toState === "inside" ? "entered" : "left"}
-                  sx={{
-                    height: 18,
-                    fontSize: TEXT.xs,
-                    fontWeight: 700,
-                    bgcolor: e.toState === "inside" ? "rgba(46,125,50,.12)" : BRAND.alert.errorSoft,
-                    color: e.toState === "inside" ? ROLE.positive : BRAND.alert.error,
-                  }}
-                />
-                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-                  {/* El método viaja con el evento: "por red" y "por
-                      coordenadas" no merecen la misma confianza. */}
-                  {e.agentId} · by {e.method === "network" ? "network" : "coordinates"}
-                  {e.distanceM !== null && e.distanceM !== undefined ? ` · ${e.distanceM} m` : ""}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-        </Box>
-      ) : null}
     </Box>
   );
 }

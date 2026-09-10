@@ -39,7 +39,7 @@ describe("GeofencePanel", () => {
     // "Geofencing" sugiere vigilancia continua. Esto evalúa cuando el equipo
     // reporta, que en esta flota es una o dos veces al día. Callarlo sería
     // vender otra cosa.
-    render(<GeofencePanel sites={[sitio()]} events={[]} onSave={vi.fn()} />);
+    render(<GeofencePanel sites={[sitio()]} onSave={vi.fn()} />);
     const nota = screen.getByText(/Evaluated when a device checks in, not continuously/i);
     expect(nota).toBeInTheDocument();
     expect(nota.textContent).toMatch(/keeps\s+its last state instead of leaving the fence/i);
@@ -50,7 +50,6 @@ describe("GeofencePanel", () => {
     render(
       <GeofencePanel
         sites={[sitio({ radiusM: 100, suggestedRadiusM: 400, radiusTooSmall: true })]}
-        events={[]}
         onSave={vi.fn()}
       />
     );
@@ -64,7 +63,7 @@ describe("GeofencePanel", () => {
   });
 
   it("⚠️ avisa MIENTRAS se teclea, no sólo después de guardar", () => {
-    render(<GeofencePanel sites={[sitio({ radiusM: 400 })]} events={[]} onSave={vi.fn()} />);
+    render(<GeofencePanel sites={[sitio({ radiusM: 400 })]} onSave={vi.fn()} />);
     expect(screen.queryByText(/smaller than this site's own readings/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Radius/i), { target: { value: "80" } });
@@ -77,7 +76,6 @@ describe("GeofencePanel", () => {
         sites={[sitio({ observedAccuracyM: null, observedP90DistanceM: null,
                         suggestedRadiusM: null, suggestionReason: "no_readings",
                         observedReadings: 0 })]}
-        events={[]}
         onSave={vi.fn()}
       />
     );
@@ -91,7 +89,6 @@ describe("GeofencePanel", () => {
       <GeofencePanel
         sites={[sitio({ suggestedRadiusM: null, suggestionReason: "too_few_readings",
                         observedReadings: 6 })]}
-        events={[]}
         onSave={vi.fn()}
       />
     );
@@ -106,7 +103,6 @@ describe("GeofencePanel", () => {
       <GeofencePanel
         sites={[sitio({ suggestedRadiusM: null, suggestionReason: "too_scattered",
                         observedReadings: 200 })]}
-        events={[]}
         onSave={vi.fn()}
       />
     );
@@ -119,7 +115,6 @@ describe("GeofencePanel", () => {
     render(
       <GeofencePanel
         sites={[sitio({ lat: null, lon: null, geofenceStatus: "off", radiusM: null })]}
-        events={[]}
         onSave={vi.fn()}
       />
     );
@@ -130,18 +125,18 @@ describe("GeofencePanel", () => {
   it("⚠️ muestra 'unclear' aunque sea cero", () => {
     // Es el estado que dice "la medición no alcanza". Esconderlo haría creer
     // que la cerca tiene una opinión sobre todos los equipos.
-    render(<GeofencePanel sites={[sitio({ indeterminate: 0 })]} events={[]} onSave={vi.fn()} />);
+    render(<GeofencePanel sites={[sitio({ indeterminate: 0 })]} onSave={vi.fn()} />);
     expect(screen.getByText("unclear")).toBeInTheDocument();
   });
 
   it("una cerca apagada no enseña recuentos que no está midiendo", () => {
-    render(<GeofencePanel sites={[sitio({ geofenceStatus: "off" })]} events={[]} onSave={vi.fn()} />);
+    render(<GeofencePanel sites={[sitio({ geofenceStatus: "off" })]} onSave={vi.fn()} />);
     expect(screen.queryByText("inside")).not.toBeInTheDocument();
   });
 
   it("encendida pero sin evaluar todavía lo explica", () => {
     render(
-      <GeofencePanel sites={[sitio({ lastEvaluatedAt: null })]} events={[]} onSave={vi.fn()} />
+      <GeofencePanel sites={[sitio({ lastEvaluatedAt: null })]} onSave={vi.fn()} />
     );
     expect(screen.getByText(/no device has reported a position since/i)).toBeInTheDocument();
   });
@@ -151,7 +146,7 @@ describe("GeofencePanel", () => {
     render(
       <GeofencePanel
         sites={[sitio({ geofenceStatus: "off", radiusM: 400 })]}
-        events={[]}
+
         onSave={onSave}
       />
     );
@@ -159,26 +154,8 @@ describe("GeofencePanel", () => {
     expect(onSave).toHaveBeenCalledWith("1", { radiusM: 400, geofenceStatus: "monitoring" });
   });
 
-  it("las transiciones dicen POR QUÉ método se decidieron", () => {
-    // "Por red" y "por coordenadas" no merecen la misma confianza.
-    render(
-      <GeofencePanel
-        sites={[sitio()]}
-        onSave={vi.fn()}
-        events={[
-          { id: "1", agentId: "abc", siteName: "Cowork", toState: "outside", method: "network", distanceM: null },
-          { id: "2", agentId: "def", siteName: "Cowork", toState: "inside", method: "coordinates", distanceM: 42 },
-        ]}
-      />
-    );
-    expect(screen.getByText(/by network/i)).toBeInTheDocument();
-    expect(screen.getByText(/by coordinates · 42 m/i)).toBeInTheDocument();
-    expect(screen.getByText("left")).toBeInTheDocument();
-    expect(screen.getByText("entered")).toBeInTheDocument();
-  });
-
   it("sin sitios explica qué es una cerca en vez de dejar un hueco", () => {
-    render(<GeofencePanel sites={[]} events={[]} onSave={vi.fn()} />);
+    render(<GeofencePanel sites={[]} onSave={vi.fn()} />);
     expect(screen.getByText(/A geofence is a site with a radius/i)).toBeInTheDocument();
   });
 });

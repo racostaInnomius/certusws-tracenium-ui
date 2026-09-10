@@ -14,20 +14,11 @@ import DeviceLocationTimeline from "./DeviceLocationTimeline";
 
 const getDeviceTimeline = vi.fn();
 const getSiteAttendance = vi.fn();
-const getHostLocations = vi.fn();
-const listGeofences = vi.fn();
 vi.mock("../../api/episodes", () => ({
   getDeviceTimeline: (...a) => getDeviceTimeline(...a),
   getSiteAttendance: (...a) => getSiteAttendance(...a),
 }));
-// La vista se carga lo suyo: es una pestaña, no un panel alimentado por el
-// dashboard de equipos.
-vi.mock("../../api/dashboard", () => ({
-  dashboardApi: { getHostLocations: (...a) => getHostLocations(...a) },
-}));
-vi.mock("../../api/geofences", () => ({
-  listGeofences: (...a) => listGeofences(...a),
-}));
+
 
 const EQUIPOS = [
   { agentId: "a-1", hostname: "JPR-MacBookPro" },
@@ -41,18 +32,13 @@ const SITIOS = [
 beforeEach(() => {
   getDeviceTimeline.mockReset();
   getSiteAttendance.mockReset();
-  getHostLocations.mockReset();
-  listGeofences.mockReset();
   getDeviceTimeline.mockResolvedValue({ episodes: [], retentionDays: 30, beyondRetention: false });
   getSiteAttendance.mockResolvedValue({ episodes: [], deviceCount: 0, retentionDays: 30, beyondRetention: false });
-  getHostLocations.mockResolvedValue({ devices: EQUIPOS });
-  listGeofences.mockResolvedValue({ sites: SITIOS });
 });
 
-/** Espera a que las dos listas propias de la vista hayan cargado. */
-async function montada() {
-  render(<LocationExplorer />);
-  await waitFor(() => expect(getHostLocations).toHaveBeenCalled());
+/** Monta la vista con las listas que le pasa el contenedor del tab. */
+async function montada(props = {}) {
+  render(<LocationExplorer devices={EQUIPOS} sites={SITIOS} {...props} />);
   await screen.findByRole("combobox", { name: /device/i });
 }
 afterEach(cleanup);
@@ -109,15 +95,13 @@ describe("LocationExplorer", () => {
   });
 
   it("⚠️ sin sitios NO se dice que no los haya si la lista no cargó", async () => {
-    listGeofences.mockRejectedValue(new Error("500"));
-    await montada();
+    await montada({ sites: null, sitesError: "500" });
     expect(await screen.findByText(/site list could not be loaded/i)).toBeInTheDocument();
     expect(screen.queryByText(/No sites declared yet/i)).not.toBeInTheDocument();
   });
 
   it("un tenant sin sitios sí lo dice, y dice qué hacer", async () => {
-    listGeofences.mockResolvedValue({ sites: [] });
-    await montada();
+    await montada({ sites: [] });
     expect(await screen.findByText(/No sites declared yet/i)).toBeInTheDocument();
   });
 

@@ -58,13 +58,18 @@ function mount() {
   return calls;
 }
 
-// Las SEIS pestañas por su rótulo, en el orden en que se pintan.
+// Las seis pestañas por su rótulo, en el orden en que se pintan: Dashboard
+// primero y el resto alfabético.
+//
+// ⚠️ "Location" es UNA pestaña con tres secciones dentro (Geofences, Location
+// history, Recent transitions). Basta con que la pestaña responda al Refresh:
+// la carga que comparten las tres cuelga de su contenedor.
 const PESTANAS = [
   /dashboard/i,
-  /location history/i,
   /asset groups/i,
-  /software/i,
   /hardware/i,
+  /^location$/i,
+  /software/i,
   /gpo/i,
 ];
 
