@@ -1,6 +1,17 @@
-// src/components/software-delivery/UninstallDetectedDialog.jsx
+// src/components/software-delivery/UninstallFlow.jsx
 //
 // ADR-0019 F2 — desinstalar software que salió del INVENTARIO, no del catálogo.
+//
+// ⚠️ ERA UN DIÁLOGO DETRÁS DE UN BOTÓN EN LA BARRA DE «DEPLOYMENTS», Y EL OWNER
+// NO LO ENCONTRÓ. El código estaba desplegado —la cadena aparecía en el chunk
+// del portal— y aun así la función era inalcanzable: pidió explícitamente
+// «separa Uninstall detected software a su propia tab» y se dejó para más
+// adelante. Una función que el usuario no puede encontrar no está entregada.
+//
+// Ahora es una VISTA, no un diálogo, y vive en su propia pestaña. El paso 1
+// —buscar en el inventario y elegir un nombre— es una vista de pleno derecho:
+// tiene búsqueda, lista de candidatos y recuento por equipo, y estaba apretado
+// dentro de un modal.
 //
 // ⚠️ POR QUÉ NO ES `DeployWizardDialog` CON OTRO MODO. Ese wizard ya tiene un
 // modo `uninstall`, pero exige un paquete del catálogo: lee `pkg.version`,
@@ -23,10 +34,6 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   List,
   ListItem,
@@ -68,7 +75,7 @@ function describeBlocked(plan) {
   return BLOCKED_COPY[plan.reason] || plan.detail || plan.reason || "Bloqueado.";
 }
 
-export default function UninstallDetectedDialog({ open, onClose, onDone, notify }) {
+export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
   const [activeStep, setActiveStep] = React.useState(0);
 
   const [search, setSearch] = React.useState("");
@@ -98,9 +105,11 @@ export default function UninstallDetectedDialog({ open, onClose, onDone, notify 
     setError("");
   }, []);
 
+  // ⚠️ Toda pestaña nueva tiene que responder al Refresh de la cabecera; una
+  // que lo ignora enseña datos viejos con el gesto de actualizarlos.
   React.useEffect(() => {
-    if (open) reset();
-  }, [open, reset]);
+    if (refreshNonce) reset();
+  }, [refreshNonce, reset]);
 
   const chosen = React.useMemo(
     () => candidates.find((c) => c.name === appName) || null,
@@ -205,7 +214,7 @@ export default function UninstallDetectedDialog({ open, onClose, onDone, notify 
       const res = await uninstallDetected({ appName, deviceIds });
       notify?.("success", `Uninstall dispatched for ${appName} to ${deviceIds.length} device(s).`);
       onDone?.(res?.deployment || null);
-      onClose?.();
+      reset();
     } catch (e) {
       console.error(e);
       // El error se queda AQUÍ y el diálogo abierto: el backend rechaza por
@@ -220,13 +229,15 @@ export default function UninstallDetectedDialog({ open, onClose, onDone, notify 
   const actionableCount = preview?.actionable?.length || 0;
 
   return (
-    <Dialog open={open} onClose={submitting ? undefined : onClose} fullWidth maxWidth="md">
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+    <Box>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
         <DeleteSweepOutlinedIcon sx={{ color: BRAND.tealText }} />
-        Uninstall detected software
-      </DialogTitle>
+        <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.dark }}>
+          Uninstall detected software
+        </Typography>
+      </Stack>
 
-      <DialogContent dividers>
+      <Box>
         <Stepper activeStep={activeStep} sx={{ mb: 2.5 }}>
           {STEPS.map((label) => (
             <Step key={label}>
@@ -410,11 +421,11 @@ export default function UninstallDetectedDialog({ open, onClose, onDone, notify 
             {error}
           </Alert>
         ) : null}
-      </DialogContent>
+      </Box>
 
-      <DialogActions>
-        <Button onClick={onClose} disabled={submitting}>
-          Cancel
+      <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 3 }}>
+        <Button onClick={reset} disabled={submitting}>
+          Start over
         </Button>
         {activeStep > 0 ? (
           <Button onClick={() => setActiveStep((s) => s - 1)} disabled={submitting || previewing}>
@@ -441,7 +452,7 @@ export default function UninstallDetectedDialog({ open, onClose, onDone, notify 
             {submitting ? "Dispatching…" : `Uninstall on ${actionableCount} device(s)`}
           </Button>
         ) : null}
-      </DialogActions>
-    </Dialog>
+      </Stack>
+    </Box>
   );
 }

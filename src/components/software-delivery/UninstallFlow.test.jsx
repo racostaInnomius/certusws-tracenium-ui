@@ -1,4 +1,4 @@
-// UninstallDetectedDialog.test.jsx
+// UninstallFlow.test.jsx
 //
 // ADR-0019 F2 — los casos de abajo no son ilustrativos. Desinstalar no tiene
 // «deshacer» ni copia, así que cada uno es una forma conocida de hacer daño:
@@ -9,7 +9,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import UninstallDetectedDialog from "./UninstallDetectedDialog";
+import UninstallFlow from "./UninstallFlow";
 import * as inventoryApi from "../../api/inventoryDashboard";
 import * as sdpApi from "../../api/softwareDelivery";
 
@@ -36,9 +36,7 @@ afterEach(() => cleanup());
 
 function open(props = {}) {
   const notify = vi.fn();
-  render(
-    <UninstallDetectedDialog open onClose={() => {}} onDone={() => {}} notify={notify} {...props} />
-  );
+  render(<UninstallFlow onDone={() => {}} notify={notify} {...props} />);
   return { notify };
 }
 

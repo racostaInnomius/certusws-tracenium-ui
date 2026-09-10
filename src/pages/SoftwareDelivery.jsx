@@ -28,9 +28,11 @@ import { getTenantPolicy } from "../api/policies";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
+import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import CatalogTab from "../components/software-delivery/CatalogTab";
 import DeploymentsTab from "../components/software-delivery/DeploymentsTab";
 import DistributionTab from "../components/software-delivery/DistributionTab";
+import UninstallTab from "../components/software-delivery/UninstallTab";
 import OverviewTab from "../components/software-delivery/OverviewTab";
 
 // Tab order in one place: the Overview tab was inserted at 0, which shifts
@@ -45,6 +47,10 @@ const TAB_INDEX = {
   // un paso del flujo del catálogo y vive en un cajón colgado de él, no como
   // sección propia compitiendo en la barra.
   distribution: 3,
+  // ADR-0019 F2 — pestaña propia porque como boton dentro de Deployments no
+  // se encontraba. Va al final, que es donde sigue el orden alfabetico tras
+  // Overview: Catalog · Deployments · Distribution · Uninstall.
+  uninstall: 4,
 };
 
 const TAB_SX = {
@@ -316,6 +322,12 @@ export default function SoftwareDelivery({ onNavigate }) {
             label="Distribution"
             sx={TAB_SX}
           />
+          <Tab
+            icon={<DeleteSweepOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Uninstall"
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
@@ -351,8 +363,20 @@ export default function SoftwareDelivery({ onNavigate }) {
           autoOpenDeploymentId={autoOpenDeploymentId}
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
-      ) : (
+      ) : activeTab === 3 ? (
         <DistributionTab canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
+      ) : (
+        <UninstallTab
+          canManage={canManage}
+          notify={notify}
+          refreshNonce={refreshNonce}
+          // El despliegue recien creado se sigue en «Deployments», que es donde
+          // vive: se salta alli y se abre, en vez de dejar al operador
+          // buscandolo.
+          onDispatched={(d) => {
+            if (d?.id != null) handleDeployFired(d.id);
+          }}
+        />
       )}
 
       <BrandSnackbar

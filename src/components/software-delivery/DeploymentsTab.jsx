@@ -18,7 +18,6 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 
 import { BRAND, DATAGRID_SX, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
@@ -27,14 +26,11 @@ import { listDeployments } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
 
 import DeploymentDetailDrawer from "./DeploymentDetailDrawer";
-import UninstallDetectedDialog from "./UninstallDetectedDialog";
 
 export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen, refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [statusFilter, setStatusFilter] = React.useState("all");
-
-  const [uninstallOpen, setUninstallOpen] = React.useState(false);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerDeployment, setDrawerDeployment] = React.useState(null);
@@ -244,22 +240,6 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
           <MenuItem value="cancelled">Cancelled</MenuItem>
         </TextField>
         <Box sx={{ flex: 1 }} />
-        {/* ADR-0019 F2 — «un modo de despliegue mas, con su propio objetivo».
-            Vive aqui y no en Asset Management: el inventario es donde se VE el
-            problema, pero la desinstalacion es un despliegue y hereda de SDP la
-            ventana de mantenimiento, el historial por equipo, la cancelacion y
-            el guardia de equipos dados de baja. */}
-        {canManage ? (
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<DeleteSweepOutlinedIcon />}
-            onClick={() => setUninstallOpen(true)}
-            sx={{ textTransform: "none", color: BRAND.gray, borderColor: BRAND.border }}
-          >
-            Uninstall detected software
-          </Button>
-        ) : null}
         <Button
           variant="outlined"
           size="small"
@@ -310,14 +290,6 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
         onClose={() => setDrawerOpen(false)}
       />
 
-      <UninstallDetectedDialog
-        open={uninstallOpen}
-        notify={notify}
-        onClose={() => setUninstallOpen(false)}
-        // Recargar al terminar: el despliegue recien creado tiene que aparecer
-        // en esta misma lista, que es donde se sigue y donde se cancela.
-        onDone={load}
-      />
     </SectionPaper>
   );
 }
