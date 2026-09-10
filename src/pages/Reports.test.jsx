@@ -605,13 +605,16 @@ describe("Reports — borrar una programación pide confirmación", () => {
 
 // ── Llegar con el informe ya elegido (?reportKey=) ──
 //
-// Es por donde entra el botón "Report" de Overview. Antes ese botón abría un
-// diálogo propio que descargaba por `/api/v1/fleet-report`: el fichero salía
-// y no quedaba constancia. `report_runs` es el ledger del que cuelgan la
-// re-entrega y el SHA-256, así que un export que lo esquiva es una copia sin
-// trazabilidad.
+// Es por donde entran los once botones "Report". Aterriza en los informes de
+// ESA página, con su fila ya abierta.
+//
+// ⚠️ Antes confirmaba y generaba de una. Se cambió por dos motivos: una página
+// puede tener DOS informes y su botón sólo apunta a uno —quien pulsaba desde
+// Security Compliance no llegaba a ver que existía el Evidence Pack—, y aquel
+// camino elegía el formato solo, que es justo lo que el rediseño convirtió en
+// una pregunta.
 describe("Reports — preselección por URL", () => {
-  it("pide confirmación y genera POR EL MOTOR, dejando la ejecución registrada", async () => {
+  it("⭐ aterriza en los informes de ESA página, con su fila abierta", async () => {
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
@@ -620,36 +623,64 @@ describe("Reports — preselección por URL", () => {
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
 
-    // No dispara solo: generar arma el PDF entero y deja una fila con el
-    // nombre de quien lo pidió. Un clic en OTRA página no puede provocar eso
-    // sin preguntar.
-    const dialogo = await screen.findByRole("dialog");
-    expect(dialogo.textContent).toMatch(/Fleet Health Report/);
+    // La fila de Overview llega ABIERTA: su informe se ve sin desplegar nada.
+    const overview = await screen.findByRole("group", { name: "Overview" }, { timeout: 4000 });
+    await waitFor(() =>
+      expect(within(overview).getByText("Fleet Health Report")).toBeInTheDocument()
+    );
+
+    // ⚠️ Y NO se genera solo. Generar arma el documento entero y deja una fila
+    // con el nombre de quien lo pidió: un clic en OTRA página no puede
+    // provocar eso sin que nadie lo pida aquí.
     expect(runCalls).toHaveLength(0);
 
-    await userEvent.click(screen.getByRole("button", { name: /generate pdf/i }));
-
-    await waitFor(() => expect(runCalls).toHaveLength(1));
-    expect(runCalls[0].search.format).toBe("pdf");
-    // Y el parámetro se consume: recargar no vuelve a preguntar por un
-    // informe que el operador ya decidió.
+    // Y el parámetro se consume: recargar no vuelve a abrir una página que el
+    // operador puede haber cerrado.
     expect(new URL(window.location.href).searchParams.get("reportKey")).toBeNull();
   });
 
-  it("si se cancela no se genera nada", async () => {
+  it("las demás páginas siguen plegadas", async () => {
+    // Se abre la de origen, no el catálogo entero: la lista sigue cabiendo de
+    // un vistazo, que es para lo que se agrupó por página.
     respond("get", `${BASE}/types`, TYPES);
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
-    const runCalls = respond("get", `${BASE}/global.fleet-health/run`, { ok: true });
     window.history.replaceState({}, "", "/?page=reports&reportKey=global.fleet-health");
 
     render(<ConfirmProvider><Reports /></ConfirmProvider>);
+    await screen.findByRole("group", { name: "Overview" }, { timeout: 4000 });
+    await waitFor(() => expect(screen.getByText("Fleet Health Report")).toBeInTheDocument());
 
-    await screen.findByRole("dialog");
-    await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(screen.queryByText("Evidence Pack")).toBeNull();
+    expect(screen.queryByText("Audit Events")).toBeNull();
+  });
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(runCalls).toHaveLength(0);
+  it("⚠️ el alcance que arrastra el enlace NO se pierde al aterrizar", async () => {
+    // Security Compliance manda el framework seleccionado para que el
+    // documento cubra lo que la pantalla estaba enseñando. `audit.events` no
+    // declara `params`, así que esto viaja como query de la ejecución: si se
+    // perdiera, el informe saldría con el alcance por defecto y nadie lo
+    // notaría hasta leerlo.
+    respond("get", `${BASE}/types`, TYPES);
+    respond("get", `${BASE}/runs`, RUNS);
+    respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });
+    const runCalls = respond("get", `${BASE}/audit.events/run`, { ok: true });
+    window.history.replaceState(
+      {}, "",
+      `/?page=reports&reportKey=audit.events&reportParams=${encodeURIComponent(JSON.stringify({ eventType: "POLICY_ACK" }))}`
+    );
+
+    render(<ConfirmProvider><Reports /></ConfirmProvider>);
+
+    const audit = await screen.findByRole("group", { name: "Audit" }, { timeout: 4000 });
+    await waitFor(() => expect(within(audit).getByText("Audit Events")).toBeInTheDocument());
+
+    const fila = screen.getByRole("group", { name: "Audit Events" });
+    await userEvent.click(within(fila).getByRole("button", { name: /^Generate / }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Generate" }));
+
+    await waitFor(() => expect(runCalls).toHaveLength(1));
+    expect(runCalls[0].search.eventType).toBe("POLICY_ACK");
   });
 
   it("un tipo que no está en el catálogo lo dice, no se queda callado", async () => {

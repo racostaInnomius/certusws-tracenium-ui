@@ -484,18 +484,42 @@ export default function Reports() {
    * lo pidió. Que un clic en otra página produzca eso sin preguntar convierte
    * un enlace en un botón de acción a distancia.
    */
+  /**
+   * Parámetros que arrastra el enlace, para el informe al que apunta.
+   *
+   * Security Compliance manda el framework que está seleccionado, para que el
+   * documento cubra lo que la pantalla estaba enseñando y no el alcance por
+   * defecto. `scp.compliance-evidence` NO declara `params` en el registro, así
+   * que esto no pasa por ningún diálogo: viaja como query de la ejecución. Si
+   * se perdiera al aterrizar, el informe saldría de TODOS los frameworks y
+   * nadie lo notaría hasta leerlo.
+   */
+  const [paramsHeredados, setParamsHeredados] = React.useState(null); // { key, params }
+
   const preselectDoneRef = React.useRef(false);
   React.useEffect(() => {
     if (preselectDoneRef.current) return;
     const wanted = getSearchParam("reportKey", "");
     if (!wanted) return;
-    // Esperar al catálogo: sin él no se sabe si el tipo existe, qué formatos
-    // admite ni cómo se llama en la confirmación.
+    // Esperar al catálogo: sin él no se sabe a qué página pertenece el tipo.
     if (loading || rows.length === 0) return;
 
     preselectDoneRef.current = true;
-    // El parámetro se consume: si se queda en la URL, cada recarga vuelve a
-    // preguntar por un informe que el operador ya decidió.
+
+    /**
+     * ⚠️ SE LEE TODO ANTES DE CONSUMIRLO.
+     *
+     * `updateSearchParams` con "" BORRA el parámetro, y aquí se limpiaba la
+     * URL antes de leer `reportParams` y `reportFormat`: los dos salían
+     * siempre vacíos. O sea que el framework que Security Compliance arrastra
+     * con tanto cuidado —para que el documento cubra lo que la pantalla
+     * enseñaba— no ha llegado NUNCA, y cada informe generado desde ese botón
+     * salió con el alcance por defecto sin que nadie pudiera notarlo salvo
+     * leyéndolo.
+     */
+    const rawParams = getSearchParam("reportParams", "");
+    // Se consume: si se queda en la URL, cada recarga vuelve a abrir una
+    // página que el operador ya puede haber cerrado.
     updateSearchParams({ reportKey: "", reportFormat: "", reportParams: "" });
 
     const row = typeByKey[wanted];
@@ -511,40 +535,32 @@ export default function Reports() {
       return;
     }
 
-    // Parámetros que manda quien enlaza (el framework seleccionado en
-    // Security Compliance, por ejemplo). Si vienen rotos se ignoran: mejor
-    // generar el informe con su alcance por defecto que no generar nada.
-    let linkedParams = null;
+    let linked = null;
     try {
-      const raw = getSearchParam("reportParams", "");
-      if (raw) linkedParams = JSON.parse(raw);
+      if (rawParams) linked = JSON.parse(rawParams);
     } catch {
-      linkedParams = null;
+      // Si vienen rotos se ignoran: mejor generar con el alcance por defecto
+      // que no poder generar.
+      linked = null;
     }
+    if (linked) setParamsHeredados({ key: row.key, params: linked });
 
-    const formats = Array.isArray(row.formats) ? row.formats : [];
-    const wantedFormat = getSearchParam("reportFormat", "");
-    const format = formats.includes(wantedFormat) ? wantedFormat : (formats.includes("pdf") ? "pdf" : formats[0]);
-    if (!format) return;
-
-    (async () => {
-      const ok = await confirm({
-        title: `Generate "${row.label}"?`,
-        body:
-          `It will be built now as ${String(format).toUpperCase()} and downloaded.\n\n` +
-          "The run is recorded in this tenant's report history with your name, the time and the file's SHA-256, so it can be re-sent or verified later.",
-        confirmText: `Generate ${String(format).toUpperCase()}`,
-      });
-      if (!ok) return;
-      // Un tipo con parámetros los pide primero: confirmarlo no es lo mismo
-      // que saber sobre qué periodo o framework se quiere.
-      if (row.params?.length && !linkedParams) {
-        setParamsTarget({ row, format, intent: "run" });
-        return;
-      }
-      handleRun(row.key, format, linkedParams || undefined);
-    })();
-  }, [confirm, handleRun, loading, rows, typeByKey]);
+    /**
+     * Se ATERRIZA en los informes de esa página, con su fila ya abierta.
+     *
+     * ⚠️ Antes esto confirmaba y generaba de una. Dos motivos para cambiarlo:
+     *
+     *   · Una página puede tener DOS informes y su botón sólo puede apuntar a
+     *     uno. Security Compliance tiene "Compliance Evidence" y "Evidence
+     *     Pack", y quien pulsaba desde ahí no llegaba a ver que existía el
+     *     segundo. Aterrizar en la fila abierta enseña los dos y deja elegir.
+     *   · Aquel camino elegía el formato solo (PDF, o el primero) — justo lo
+     *     que el rediseño convirtió en una pregunta. Se había quedado siendo
+     *     la única puerta que generaba sin preguntar nada.
+     */
+    const pagina = groupTypesByPage(rows).find((f) => f.types.some((t) => t.key === row.key));
+    if (pagina) setPaginasAbiertas((prev) => new Set(prev).add(pagina.page || pagina.label));
+  }, [loading, rows, typeByKey]);
 
 
   const handleEmailResult = (result) => {
@@ -1095,7 +1111,10 @@ export default function Reports() {
           if (genTarget.params?.length) {
             setParamsTarget({ row: genTarget, format, intent: "generate" });
           } else {
-            generar(genTarget, format);
+            // El alcance que arrastró el enlace, si es para ESTE informe. Un
+            // tipo con `params` no pasa por aquí: su diálogo los recoge.
+            const heredados = paramsHeredados?.key === genTarget.key ? paramsHeredados.params : undefined;
+            generar(genTarget, format, heredados);
           }
         }}
         onDownload={(r) => {
