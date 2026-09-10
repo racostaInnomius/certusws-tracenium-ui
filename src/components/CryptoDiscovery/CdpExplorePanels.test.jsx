@@ -87,6 +87,23 @@ describe("ExposureFunnel", () => {
     expect(screen.queryByText(/not measured yet/i)).not.toBeInTheDocument();
   });
 
+  it("⭐ las cifras de KEM llevan a Inventory con el filtro kem (antes eran texto sin lista debajo)", () => {
+    const onSelect = vi.fn();
+    render(
+      <ExposureFunnel
+        exposure={{ ...EXPOSURE, kemMeasured: true, kem: { endpoints: 64, probes: 0, hybrid: 20, classicalOnly: 44, unknown: 3, measured: 64 } }}
+        onSelect={onSelect}
+        explain={false}
+      />
+    );
+    fireEvent.click(screen.getByText(/20 negotiate post-quantum key exchange/));
+    expect(onSelect).toHaveBeenLastCalledWith({ kem: "hybrid" });
+    fireEvent.click(screen.getByText(/44 classical only/));
+    expect(onSelect).toHaveBeenLastCalledWith({ kem: "classical" });
+    fireEvent.click(screen.getByText(/3 could not be determined/));
+    expect(onSelect).toHaveBeenLastCalledWith({ kem: "unknown" });
+  });
+
   it("bloqueados sin evaluar dice «not evaluated», no cero", () => {
     render(<ExposureFunnel exposure={{ ...EXPOSURE, devicesBlocked: null }} onSelect={() => {}} explain={false} />);
     expect(screen.getByText(/not evaluated/i)).toBeInTheDocument();

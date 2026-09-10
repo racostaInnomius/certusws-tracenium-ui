@@ -108,4 +108,17 @@ describe("Inventory: una lista, dos agrupaciones", () => {
     expect(screen.queryByRole("tab", { name: /^devices$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /^certificates$/i })).not.toBeInTheDocument();
   });
+
+  it("⭐ kem=hybrid en la URL: la lista lo pide al backend y el control lo enseña", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&kem=hybrid");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ kem: "hybrid" }));
+    expect(await screen.findByText(/Key exchange: Hybrid ML-KEM/)).toBeInTheDocument();
+    expect(screen.getByText(/The exposure block counts services/)).toBeInTheDocument();
+  });
 });

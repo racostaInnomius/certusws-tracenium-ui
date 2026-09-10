@@ -167,6 +167,9 @@ const TAB_SX = {
 
 // ── helpers ──────────────────────────────────────────────────────────
 
+/** Intercambio de claves negociado por el servicio TLS que sirve el certificado. */
+const KEM_LABELS = { hybrid: "Hybrid ML-KEM", classical: "Classical only", unknown: "Not determined" };
+
 const STATUS_META = {
   active: { label: "Active", color: BRAND.alert.success, soft: BRAND.alert.successSoft },
   expiring: { label: "Expiring", color: BRAND.alert.warningText, soft: BRAND.alert.warningSoft },
@@ -662,6 +665,7 @@ function CdpInventoryTab({ refreshNonce }) {
   const hasPrivateKey = filter.hasPrivateKey === true;
   const hasFlags = filter.hasFlags === true;
   const eku = filter.eku ?? "";
+  const kem = ["hybrid", "classical", "unknown"].includes(filter.kem) ? filter.kem : "";
   // Filtros de navegación (fase 1): llegan desde Explore / Stores. No
   // tienen control propio aquí —se eligen en su panel— pero sí chip
   // borrable, para que nunca haya un filtro invisible actuando.
@@ -693,6 +697,7 @@ function CdpInventoryTab({ refreshNonce }) {
     hasPrivateKey: hasPrivateKey || undefined,
     hasFlags: hasFlags || undefined,
     eku: eku || undefined,
+    kem: kem || undefined,
     ...sort,
     ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== ""))
   });
@@ -701,6 +706,7 @@ function CdpInventoryTab({ refreshNonce }) {
     status ? { key: "status", label: `Status: ${STATUS_META[status]?.label ?? status}` } : null,
     flag ? { key: "flag", label: `Flag: ${FLAG_LABELS[flag] ? FLAG_LABELS[flag].split(" — ")[0].split(" (")[0] : flag}` } : null,
     eku ? { key: "eku", label: `Purpose: ${eku}` } : null,
+    kem ? { key: "kem", label: `Key exchange: ${KEM_LABELS[kem]}` } : null,
     issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
     hasPrivateKey ? { key: "hasPrivateKey", label: "With private key" } : null,
     hasFlags ? { key: "hasFlags", label: "Flagged only" } : null,
@@ -773,7 +779,7 @@ function CdpInventoryTab({ refreshNonce }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, navKey, sortKey, refreshNonce]);
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, navKey, sortKey, refreshNonce]);
 
   const certColumns = [
     {
@@ -934,6 +940,15 @@ function CdpInventoryTab({ refreshNonce }) {
             <MenuItem value="smartCardLogon">Smart card logon</MenuItem>
             <MenuItem value="remoteDesktopAuth">Remote Desktop</MenuItem>
           </TextField>
+          {/* El KEM vive en el handshake del servicio que sirve el certificado,
+              no en el certificado: «20 negotiate post-quantum key exchange»
+              del embudo no tenía lista debajo (09-sep). */}
+          <TextField size="small" select label="Key exchange" value={kem} onChange={(e) => setAndReset({ kem: e.target.value })} sx={{ minWidth: 170 }}>
+            <MenuItem value="">Any</MenuItem>
+            <MenuItem value="hybrid">{KEM_LABELS.hybrid}</MenuItem>
+            <MenuItem value="classical">{KEM_LABELS.classical}</MenuItem>
+            <MenuItem value="unknown">{KEM_LABELS.unknown}</MenuItem>
+          </TextField>
           <TextField size="small" label="Issuer" value={issuer} onChange={(e) => setAndReset({ issuer: e.target.value })} sx={{ minWidth: 170 }} />
           <FormControlLabel
             control={<Switch size="small" checked={hasPrivateKey} onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })} />}
@@ -949,6 +964,12 @@ function CdpInventoryTab({ refreshNonce }) {
           />
         </Stack>
 
+        {kem ? (
+          <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            Certificates served by at least one TLS service whose handshake negotiated {KEM_LABELS[kem].toLowerCase()} key exchange.
+            The exposure block counts services, so the two numbers can differ.
+          </Typography>
+        ) : null}
         {activeChips.length > 0 ? (
           <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1, alignItems: "center" }} aria-label="Active filters">
             <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Active</Typography>

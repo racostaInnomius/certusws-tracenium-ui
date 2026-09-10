@@ -32,6 +32,9 @@ export const CDP_URL_KEYS = {
   hasPrivateKey: "pk",
   hasFlags: "flagged",
   eku: "eku",
+  // Intercambio de claves negociado por el servicio que sirve el
+  // certificado: hybrid | classical | unknown (09-sep).
+  kem: "kem",
   includeRoots: "roots",
   // Fase 1: los filtros de navegación. Son los que hacen que un segmento
   // de la distribución, una fila de almacenes o un año de la línea de

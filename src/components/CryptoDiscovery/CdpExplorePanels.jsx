@@ -261,13 +261,19 @@ export function ExposureFunnel({ exposure, onSelect, onOpenOutside, onOpenRoadma
               <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
                 <LinkText onClick={onSelect ? () => onSelect({ source: "listener" }) : null}>{fmt(e.kem?.endpoints)} TLS endpoints</LinkText>
                 {e.kem?.probes ? <> (<LinkText onClick={onSelect ? () => onSelect({ source: "probe" }) : null}>{fmt(e.kem.probes)} remote</LinkText>)</> : ""} ·{" "}
-                <Box component="span" sx={{ color: e.kem?.hybrid ? BRAND.alert.success : BRAND.alert.errorText, fontWeight: 700 }}>
+                {/* Cada cifra lleva a SU lista (09-sep): el filtro `kem` de
+                    Inventory cruza el certificado con el handshake del
+                    servicio que lo sirve. */}
+                <LinkText onClick={onSelect ? () => onSelect({ kem: "hybrid" }) : null} sx={{ color: e.kem?.hybrid ? BRAND.alert.success : BRAND.alert.errorText, fontWeight: 700 }}>
                   {fmt(e.kem?.hybrid)} negotiate post-quantum key exchange
-                </Box>
+                </LinkText>
                 {" · "}
-                <Box component="span" sx={{ color: BRAND.alert.high }}>{fmt(e.kem?.classicalOnly)} classical only</Box>
+                <LinkText onClick={onSelect ? () => onSelect({ kem: "classical" }) : null} sx={{ color: BRAND.alert.high }}>{fmt(e.kem?.classicalOnly)} classical only</LinkText>
                 {e.kem?.unknown ? (
-                  <Box component="span" sx={{ color: TEXT_MUTED }}> · {fmt(e.kem.unknown)} could not be determined</Box>
+                  <>
+                    {" · "}
+                    <LinkText onClick={onSelect ? () => onSelect({ kem: "unknown" }) : null} sx={{ color: TEXT_MUTED }}>{fmt(e.kem.unknown)} could not be determined</LinkText>
+                  </>
                 ) : null}
               </Typography>
               <Explain on={explain}>
