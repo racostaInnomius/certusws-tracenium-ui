@@ -589,6 +589,49 @@ describe("device scope", () => {
     expect(patches[0].body).toEqual({ update: { intervalSeconds: 7200 } });
   });
 
+  // El formulario se DERIVA del catálogo, así que su llegada tardía (caché
+  // fría) obliga a rehacerlo. Cuando eso se hacía relanzando la carga
+  // entera, la respuesta de esa segunda carga pisaba lo que se estuviera
+  // editando: el campo volvía al valor del tenant y Guardar se apagaba solo.
+  //
+  // El equipo sin override es el caso que lo destapa: su GET responde 404 y
+  // un 404 no se cachea, así que la segunda carga sí iba a la red y llegaba
+  // tarde. Aquí el catálogo se suelta a mano para que el orden no dependa de
+  // lo rápido que resuelva el fetch — así se medía en CI (Node 20 lo perdía
+  // siempre, Node 22 lo ganaba) y el fallo parecía un flaky del runner.
+  it("keeps an edit made before the plugin catalog lands", async () => {
+    window.history.replaceState({}, "", "/?agentDevice=dev-1");
+    mockBase();
+    let releaseCatalog;
+    const catalogArrived = new Promise((resolve) => { releaseCatalog = resolve; });
+    server.use(
+      http.get(`${import.meta.env.VITE_API_BASE}/api/v1/policies/plugins/catalog`, async () => {
+        await catalogArrived;
+        return HttpResponse.json({ ok: true, catalog: CATALOG, entitled: ["amp", "scp", "pmp", "sdp"] });
+      })
+    );
+    server.use(http.get(`${import.meta.env.VITE_API_BASE}/api/v1/policies/devices/dev-1/policy`, () => HttpResponse.json({ ok: false, code: "NOT_FOUND" }, { status: 404 })));
+    respond("get", "/api/v1/policies/devices/dev-1/effective-policy", { ok: true, policy: { source: "tenant", policy_version: CURRENT, overriddenPaths: [], policy_json: TENANT_POLICY.policy.policy_json } });
+    respond("get", "/api/v1/policies/devices/dev-1/policy-status", { ok: true, status: STATUS.items[0] });
+    const patches = respond("patch", "/api/v1/policies/devices/dev-1/policy/domains/agent", { ok: true, policyVersion: "1788500000009" });
+    renderPage();
+    expect(await screen.findByText("no override · follows the tenant policy")).toBeInTheDocument();
+
+    // Se edita ANTES de que el catálogo esté.
+    fireEvent.change(screen.getByLabelText("Update probe interval"), { target: { value: "7200" } });
+    releaseCatalog();
+
+    // Ahora llega. Guardar se habilita (invariante 3) SIN perder la edición:
+    // sin esto el botón se queda apagado para siempre y no hay diálogo.
+    const save = await screen.findByRole("button", { name: "Create override · Agent" });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create override" }));
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0].body).toEqual({ update: { intervalSeconds: 7200 } });
+  });
+
   it("resets one section to the tenant with an empty slice for that domain", async () => {
     window.history.replaceState({}, "", "/?agentDevice=dev-2&agentSection=cdp");
     mockBase();

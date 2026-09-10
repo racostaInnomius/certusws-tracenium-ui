@@ -142,6 +142,10 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     return t.charAt(0).toUpperCase() + t.slice(1);
   }, [catalog, entitled]);
   const catalogReady = !catalogLoading && Array.isArray(catalog) && catalog.length > 0;
+  // El catálogo se lee por ref dentro de las cargas para que su llegada NO
+  // sea una dependencia de ellas. Ver el efecto de rederivación más abajo.
+  const catalogRef = React.useRef(catalog);
+  catalogRef.current = catalog;
 
   // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId.
   const tenantId = useEffectiveTenantId();
@@ -181,6 +185,11 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const [loadedAt, setLoadedAt] = React.useState(() => Date.now());
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "success" });
   const showSnack = React.useCallback((message, severity = "success") => setSnackbar({ open: true, message, severity }), []);
+
+  // El documento CRUDO del que se derivó cada formulario, guardado para
+  // poder rederivarlo cuando llegue el catálogo sin volver a pedir nada.
+  const tenantSeedRef = React.useRef(null);
+  const deviceSeedRef = React.useRef(null);
 
   // ── Tenant policy ─────────────────────────────────────────────────────
   const [tenantPolicy, setTenantPolicy] = React.useState(null);
@@ -231,7 +240,8 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
         listAssetGroups().catch(() => ({ items: [] })),
       ]);
       const policy = extractPolicyEnvelope(policyRes).raw ?? {};
-      const form = readFormFromPolicy(policy, catalog);
+      tenantSeedRef.current = policy;
+      const form = readFormFromPolicy(policy, catalogRef.current);
       setTenantPolicy(policyRes ?? null);
       setTenantForm(form);
       setTenantBaseline(form);
@@ -251,12 +261,13 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     } finally {
       setTenantLoading(false);
     }
-    // `catalog` is a dependency ON PURPOSE: the form's toggles are derived
-    // from it and it can land after the first load (cold cache).
-  }, [canManage, tenantId, showSnack, catalog]);
+    // `catalog` NO es dependencia: llegar el catálogo no debe relanzar la
+    // carga (ver el efecto de rederivación). Se lee por ref.
+  }, [canManage, tenantId, showSnack]);
 
   const loadDevice = React.useCallback(async (deviceId) => {
     if (!canManage || !deviceId) {
+      deviceSeedRef.current = null;
       setDevicePolicy(null);
       setEffective(null);
       setDeviceStatus(null);
@@ -286,7 +297,8 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
       // The form shows what the device RUNS (tenant ⊕ patch); the raw editor
       // shows the patch itself (invariant 4).
       const seed = effectiveJson && typeof effectiveJson === "object" ? effectiveJson : {};
-      const form = readFormFromPolicy(seed, catalog);
+      deviceSeedRef.current = seed;
+      const form = readFormFromPolicy(seed, catalogRef.current);
       setDevicePolicy(overrideRes ?? null);
       setDeviceForm(form);
       setDeviceBaseline(form);
@@ -301,7 +313,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
     } finally {
       setDeviceLoading(false);
     }
-  }, [canManage, catalog]);
+  }, [canManage]);
 
   React.useEffect(() => { loadTenant(); }, [loadTenant]);
   React.useEffect(() => { loadDevice(selectedDeviceId); }, [selectedDeviceId, loadDevice]);
@@ -329,6 +341,35 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const dirtyRef = React.useRef(false);
   dirtyRef.current = dirty;
   useUnsavedChanges(dirty);
+
+  // El catálogo puede llegar DESPUÉS de la política (caché fría) y el
+  // formulario se DERIVA de él, así que hay que rehacerlo cuando llega.
+  //
+  // Antes se conseguía metiendo `catalog` en las dependencias de
+  // loadTenant/loadDevice: la llegada del catálogo relanzaba la carga
+  // ENTERA y su respuesta pisaba el formulario. Con un equipo sin override
+  // el GET de la política responde 404 —y un 404 no se cachea—, así que esa
+  // segunda respuesta iba a la red y aterrizaba DESPUÉS de la primera
+  // edición: el campo volvía al valor del tenant, el diff quedaba vacío y
+  // Guardar se apagaba solo, sin decir nada. Es la invariante 5 aplicada al
+  // único refresco que no la respetaba.
+  //
+  // Rederivar aquí no pide nada a la red y respeta la edición en curso.
+  React.useEffect(() => {
+    if (dirtyRef.current) return;
+    if (tenantSeedRef.current) {
+      const form = readFormFromPolicy(tenantSeedRef.current, catalog);
+      setTenantForm(form);
+      setTenantBaseline(form);
+    }
+    if (deviceSeedRef.current) {
+      const form = readFormFromPolicy(deviceSeedRef.current, catalog);
+      setDeviceForm(form);
+      setDeviceBaseline(form);
+    }
+    // `dirtyRef` se lee a propósito (no es dependencia): sólo decide si este
+    // refresco puede tocar el formulario, no cuándo debe correr.
+  }, [catalog]);
   const changes = React.useMemo(() => changesBySection(diff), [diff]);
   const problems = React.useMemo(() => formProblems(form), [form]);
   const sections = React.useMemo(() => buildSections(catalog, form), [catalog, form]);
