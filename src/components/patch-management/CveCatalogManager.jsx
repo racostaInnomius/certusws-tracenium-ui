@@ -37,6 +37,7 @@ import {
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
 import { listFrom } from "../../api/shape";
+import { useMspOptional } from "../../msp/MspContext";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
@@ -85,6 +86,15 @@ function kevStatusText(s) {
 }
 
 export default function CveCatalogManager({ canManage, notify }) {
+  // ⭐ Sincronizar los feeds es una acción de PROVEEDOR, no de tenant.
+  //
+  // Cuando cada cliente tenía su copia del catálogo, «sincroniza el mío» sólo
+  // le afectaba a él. Desde que el catálogo CVE es global —y KEV lo fue
+  // siempre— la misma petición reescribe datos que ve toda la flota: cambió de
+  // radio de acción sin cambiar de aspecto. El backend ya devuelve 403 a un
+  // tenant; esto evita ofrecerle un botón que no puede pulsar.
+  const msp = useMspOptional?.();
+  const esProveedor = msp?.portfolio?.level === "vendor";
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [dialog, setDialog] = React.useState(null); // { mode, entry }
@@ -230,14 +240,15 @@ export default function CveCatalogManager({ canManage, notify }) {
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
-          Known CVEs this tenant tracks, mapped to a product + affected version range. Detection
-          flags installed software whose version falls inside the range.
+          The shared CVE catalog: each entry maps a product to an affected version range, and
+          detection flags installed software whose version falls inside it. Kept current for every
+          tenant by one background feed — a CVE is a fact about a product, not about a customer.
         </Typography>
         <Box sx={{ flex: 1 }} />
         <Button onClick={load} startIcon={<RefreshOutlinedIcon />} sx={{ textTransform: "none", color: BRAND.gray }}>
           Refresh
         </Button>
-        {canManage ? (
+        {esProveedor ? (
           <Button
             onClick={handleSync}
             disabled={syncing || syncStatus?.status === "running"}
@@ -253,7 +264,7 @@ export default function CveCatalogManager({ canManage, notify }) {
             {syncStatus?.status === "running" ? "Syncing…" : "Sync from NVD"}
           </Button>
         ) : null}
-        {canManage ? (
+        {esProveedor ? (
           <Button
             onClick={handleKevSync}
             disabled={kevSyncing || kevStatus?.status === "running"}
