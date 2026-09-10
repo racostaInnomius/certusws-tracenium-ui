@@ -1047,7 +1047,7 @@ function OverviewTab(props) {
                 setDeviceSearch(e.target.value);
                 setDevicePagination((prev) => ({ ...prev, page: 0 }));
               }}
-              placeholder="device id…"
+              placeholder="hostname o device id…"
               InputProps={{
                 startAdornment: <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray, mr: 1 }} />,
               }}
@@ -1160,7 +1160,7 @@ function OverviewTab(props) {
                 setMissingSearch(e.target.value);
                 setMissingPagination((prev) => ({ ...prev, page: 0 }));
               }}
-              placeholder="device id…"
+              placeholder="hostname o device id…"
               InputProps={{
                 startAdornment: <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray, mr: 1 }} />,
               }}
