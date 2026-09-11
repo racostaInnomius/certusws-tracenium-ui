@@ -24,8 +24,8 @@ export default function UninstallTab({ canManage, notify, refreshNonce = 0, onDi
     return (
       <SectionPaper variant="panel" sx={{ p: 3 }}>
         <Alert severity="info">
-          Desinstalar software requiere el permiso de Software Delivery. Pídeselo
-          a un administrador del tenant.
+          Uninstalling software requires the Software Delivery permission. Ask a
+          tenant administrator for it.
         </Alert>
       </SectionPaper>
     );
@@ -35,8 +35,8 @@ export default function UninstallTab({ canManage, notify, refreshNonce = 0, onDi
     <SectionPaper variant="panel" sx={{ p: 3 }}>
       <Box sx={{ mb: 2.5 }}>
         <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
-          Quita software que el inventario encontró en la flota y que no debería
-          estar ahí — aunque nunca se publicara como paquete del catálogo.
+          Remove software that inventory found on the fleet and that should not
+          be there — even if it was never published as a catalog package.
         </Typography>
       </Box>
       <UninstallFlow notify={notify} refreshNonce={refreshNonce} onDone={onDispatched} />

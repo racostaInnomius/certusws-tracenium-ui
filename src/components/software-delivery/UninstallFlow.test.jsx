@@ -106,8 +106,8 @@ describe("lo que NO se va a tocar se enseña", () => {
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     expect(await screen.findByText("T111-ALMACEN")).toBeTruthy();
-    expect(screen.getByText(/dejaría al equipo sin agente/)).toBeTruthy();
-    expect(screen.getByText(/1 equipo\(s\) ya no la tienen/)).toBeTruthy();
+    expect(screen.getByText(/leave the device without an agent/)).toBeTruthy();
+    expect(screen.getByText(/1 device\(s\) no longer have it/)).toBeTruthy();
 
     // Y el botón cuenta 1, no 3: la cifra que el operador lee antes de pulsar
     // es la que de verdad se va a ejecutar.
@@ -207,7 +207,7 @@ describe("la lista de equipos", () => {
     await user.type(screen.getByLabelText("Application name"), "a");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
-    expect(await screen.findByText(/más resultados de los que se pueden listar/)).toBeTruthy();
+    expect(await screen.findByText(/more results than can be listed/)).toBeTruthy();
   });
 });
 
@@ -285,8 +285,8 @@ describe("ADR-0020 D2 — a un grupo, no sólo a equipos sueltos", () => {
     await user.click(screen.getByRole("button", { name: "Preview" }));
 
     expect(await screen.findByText("PANCHO")).toBeTruthy();
-    expect(screen.getByText(/Dados de baja/)).toBeTruthy();
-    expect(screen.getByText(/Grupo «Ventas»/)).toBeTruthy();
+    expect(screen.getByText(/Decommissioned/)).toBeTruthy();
+    expect(screen.getByText(/Group "Ventas"/)).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Uninstall on 1 device(s)" }));
     // Los accionables que se enseñaron, y no el grupo: la vista previa es el

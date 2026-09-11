@@ -68,15 +68,15 @@ const MAX_PAGES = 10;
 // llega uno que no conocemos se enseña crudo: un motivo desconocido escondido
 // tras «no se puede» es peor que uno feo.
 const BLOCKED_COPY = {
-  protected: "Protegido: desinstalarlo dejaría al equipo sin agente.",
-  unsupported_source: "Origen no soportado — F1 sólo cubre el registro de Windows.",
-  no_identity: "No registró ningún comando de desinstalación.",
-  name_not_expressible: "El nombre lleva % o _ y no hay ProductCode con el que identificarlo.",
+  protected: "Protected: uninstalling it would leave the device without an agent.",
+  unsupported_source: "Unsupported source — F1 only covers the Windows registry.",
+  no_identity: "No uninstall command was recorded.",
+  name_not_expressible: "The name contains % or _ and there is no ProductCode to identify it by.",
 };
 
 function describeBlocked(plan) {
   if (!plan || plan.ok) return "";
-  return BLOCKED_COPY[plan.reason] || plan.detail || plan.reason || "Bloqueado.";
+  return BLOCKED_COPY[plan.reason] || plan.detail || plan.reason || "Blocked.";
 }
 
 export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
@@ -191,7 +191,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
       setCandidates([...byName.values()].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (e) {
       console.error(e);
-      setError("No se pudo buscar en el inventario.");
+      setError("Could not search the inventory.");
     } finally {
       setSearching(false);
     }
@@ -233,7 +233,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
       setActiveStep(2);
     } catch (e) {
       console.error(e);
-      setError(e?.body?.message || e?.message || "No se pudo calcular la vista previa.");
+      setError(e?.body?.message || e?.message || "Could not compute the preview.");
     } finally {
       setPreviewing(false);
     }
@@ -263,7 +263,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
       // El error se queda AQUÍ y el diálogo abierto: el backend rechaza por
       // motivos que hay que leer —equipo dado de baja, ProductCodes en
       // conflicto— y un snackbar que se va en 4 s no da tiempo.
-      setError(e?.body?.message || e?.message || "El despliegue fue rechazado.");
+      setError(e?.body?.message || e?.message || "The deployment was rejected.");
     } finally {
       setSubmitting(false);
     }
@@ -292,8 +292,8 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
         {activeStep === 0 ? (
           <Stack spacing={2}>
             <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
-              Busca en el inventario de la flota. Windows únicamente: las demás
-              fuentes se listan pero no se pueden desinstalar todavía.
+              Search the fleet inventory. Windows only: other sources are listed
+              but cannot be uninstalled yet.
             </Typography>
             <Stack direction="row" spacing={1}>
               <TextField
@@ -318,9 +318,9 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
 
             {truncated ? (
               <Alert severity="warning">
-                La búsqueda devolvió más resultados de los que se pueden listar.
-                Afina el término antes de elegir, o estarás apuntando a una parte
-                de la flota creyendo que es toda.
+                The search returned more results than can be listed. Narrow the
+                term before picking one, or you will be targeting part of the
+                fleet while believing it is all of it.
               </Alert>
             ) : null}
 
@@ -341,8 +341,8 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               </Box>
             ) : !searching && search.trim() ? (
               <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-                Sin resultados. El nombre tiene que coincidir con el del
-                inventario, que es el que el equipo registró.
+                No results. The name has to match the one in inventory, which is
+                the one the device reported.
               </Typography>
             ) : null}
           </Stack>
@@ -365,7 +365,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
             </ToggleButtonGroup>
             {targetMode === "devices" ? (
               <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-                {selectedIds.length} de {chosen.devices.length} equipo(s) seleccionado(s).
+                {selectedIds.length} of {chosen.devices.length} device(s) selected.
               </Typography>
             ) : null}
             <Divider />
@@ -380,8 +380,8 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
                   onChange={(e) => setGroupId(e.target.value)}
                   helperText={
                     groups.length === 0
-                      ? "No hay grupos de activos en este tenant."
-                      : "Se mira cada miembro del grupo: los que no la tienen y los dados de baja se listan aparte en la revisión."
+                      ? "No asset groups in this tenant."
+                      : "Every member of the group is checked: those that do not have it and those that are decommissioned are listed separately in the review."
                   }
                 >
                   {groups.map((g) => (
@@ -429,18 +429,18 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
           <Stack spacing={2}>
             {preview.group ? (
               <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-                Grupo «{preview.group.name}» · {preview.group.memberCount} miembro(s) ahora mismo
+                Group "{preview.group.name}" · {preview.group.memberCount} member(s) right now
               </Typography>
             ) : null}
             <Alert severity="warning">
-              <AlertTitle>Esto no se deshace</AlertTitle>
-              No hay copia ni «deshacer». Se ejecutará el comando de abajo en
-              cada equipo listado como accionable.
+              <AlertTitle>This cannot be undone</AlertTitle>
+              There is no backup and no undo. The command below will run on every
+              device listed as actionable.
             </Alert>
 
             <Box>
               <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, mb: 0.5 }}>
-                Se desinstalará en {actionableCount} equipo(s)
+                Will uninstall on {actionableCount} device(s)
               </Typography>
               <Box sx={{ maxHeight: 220, overflow: "auto", border: `1px solid ${BRAND.gray}`, borderRadius: 1 }}>
                 <List dense disablePadding>
@@ -469,7 +469,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
             {preview.blocked.length > 0 ? (
               <Box>
                 <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, mb: 0.5 }}>
-                  No se tocarán {preview.blocked.length} equipo(s)
+                  Will not touch {preview.blocked.length} device(s)
                 </Typography>
                 <List dense disablePadding>
                   {preview.blocked.map((r) => (
@@ -492,7 +492,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
                     rechaza entero si lleva uno solo, y esconderlos sería
                     apuntar a menos equipos de los que el operador cree. */}
                 <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, mb: 0.5 }}>
-                  Dados de baja — no se tocarán {preview.retired.length} equipo(s)
+                  Decommissioned — will not touch {preview.retired.length} device(s)
                 </Typography>
                 <List dense disablePadding>
                   {preview.retired.map((r) => (
@@ -513,14 +513,13 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               <Chip
                 size="small"
                 variant="outlined"
-                label={`${preview.notInstalled.length} equipo(s) ya no la tienen`}
+                label={`${preview.notInstalled.length} device(s) no longer have it`}
               />
             ) : null}
 
             {actionableCount === 0 ? (
               <Alert severity="info">
-                No queda ningún equipo sobre el que actuar. No hay nada que
-                desplegar.
+                No devices left to act on. There is nothing to deploy.
               </Alert>
             ) : null}
           </Stack>
