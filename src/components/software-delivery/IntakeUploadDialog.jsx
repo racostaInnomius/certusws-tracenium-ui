@@ -7,6 +7,8 @@
 
 import * as React from "react";
 import {
+  FormControlLabel,
+  Switch,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -55,6 +57,9 @@ export default function IntakeUploadDialog({ open, submitting, progress, onClose
   const [hints, setHints] = React.useState(emptyHints);
   const [error, setError] = React.useState(null);
   const [hintsOpen, setHintsOpen] = React.useState(false);
+  // ⚠️ Apagado por defecto: es una consulta a un tercero sobre el fichero de un
+  // cliente, y quien sube decide. Ver el texto de ayuda del interruptor.
+  const [scanReputation, setScanReputation] = React.useState(false);
   const inputRef = React.useRef(null);
 
   React.useEffect(() => {
@@ -63,6 +68,7 @@ export default function IntakeUploadDialog({ open, submitting, progress, onClose
     setHints(emptyHints());
     setError(null);
     setHintsOpen(false);
+    setScanReputation(false);
   }, [open]);
 
   const update = (patch) => setHints((p) => ({ ...p, ...patch }));
@@ -87,6 +93,7 @@ export default function IntakeUploadDialog({ open, submitting, progress, onClose
       vendor: hints.vendor.trim() || undefined,
       version: hints.version.trim() || undefined,
       declaredSha256: sha || undefined,
+      scanReputation,
     });
   };
 
@@ -96,9 +103,38 @@ export default function IntakeUploadDialog({ open, submitting, progress, onClose
       <DialogContent dividers>
         <Stack spacing={2}>
           <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
-            The file is verified (signature + threat-intel) before anything else, then AI proposes a
+            The file's hash and code signature are verified before anything else, then AI proposes a
             silent-install configuration for your review. Nothing is distributed until you approve it.
           </Typography>
+
+          {/* ⚠️ APAGADO POR DEFECTO, y es una decisión del owner: es una
+              consulta a un tercero sobre el fichero de un cliente, así que la
+              toma quien sube, subida a subida.
+
+              Consulta por HASH: el fichero no se envía a VirusTotal. Si algún
+              día se añade subirlo, tiene que ser OTRO interruptor — subir
+              publica el binario a los suscriptores de VirusTotal, y eso es un
+              riesgo distinto que no se puede colar bajo este mismo texto. */}
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={scanReputation}
+                onChange={(e) => setScanReputation(e.target.checked)}
+              />
+            }
+            label={
+              <Box>
+                <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                  Check reputation with VirusTotal
+                </Typography>
+                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                  Looks up the file's SHA-256 — the file itself is never uploaded.
+                  An in-house installer VirusTotal has never seen returns no record.
+                </Typography>
+              </Box>
+            }
+          />
 
           <Box>
             <input

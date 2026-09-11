@@ -116,6 +116,9 @@ export async function uploadIntake(file, hints = {}, { onProgress } = {}) {
     vendor: hints.vendor,
     version: hints.version,
     declaredSha256: hints.declaredSha256,
+    // Opt-in por subida (ADR pendiente): sólo viaja cuando el operador lo pide.
+    // El backend trata cualquier otra cosa como apagado.
+    scanReputation: hints.scanReputation ? "true" : undefined,
   };
   // Un MSI de empresa son cientos de MB y la subida tarda minutos. Sin avance
   // el diálogo parece colgado: el operador no puede distinguir «subiendo» de

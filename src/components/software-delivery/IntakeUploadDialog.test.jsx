@@ -129,3 +129,39 @@ describe("IntakeUploadDialog · el tamaño se avisa al elegir", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("el interruptor de VirusTotal", () => {
+  // Decisión del owner: apagado por defecto. Es una consulta a un tercero sobre
+  // el fichero de un cliente, y la toma quien sube.
+  it("⚠️ viene APAGADO y la subida no pide análisis", async () => {
+    const onSubmit = vi.fn();
+    render(<IntakeUploadDialog open submitting={false} onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, fakeFile("app.msi", 1024));
+    await userEvent.click(screen.getByRole("button", { name: /upload & analyze/i }));
+
+    // Y se ve apagado, no sólo se comporta como apagado.
+    expect(screen.getByRole("switch", { name: /virustotal/i })).not.toBeChecked();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][1].scanReputation).toBe(false);
+  });
+
+  it("encendido, la subida lo pide", async () => {
+    const onSubmit = vi.fn();
+    render(<IntakeUploadDialog open submitting={false} onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    const input = document.querySelector('input[type="file"]');
+    await userEvent.upload(input, fakeFile("app.msi", 1024));
+    // MUI 7 expone el Switch como role="switch", no "checkbox".
+    await userEvent.click(screen.getByRole("switch", { name: /virustotal/i }));
+    await userEvent.click(screen.getByRole("button", { name: /upload & analyze/i }));
+
+    expect(onSubmit.mock.calls[0][1].scanReputation).toBe(true);
+  });
+
+  it("dice que NO se sube el fichero, que es lo que decide si alguien lo enciende", async () => {
+    render(<IntakeUploadDialog open submitting={false} onClose={vi.fn()} onSubmit={vi.fn()} />);
+    expect(screen.getByText(/never uploaded/i)).toBeInTheDocument();
+  });
+});
