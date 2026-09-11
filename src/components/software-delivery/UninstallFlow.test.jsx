@@ -12,9 +12,11 @@ import userEvent from "@testing-library/user-event";
 import UninstallFlow from "./UninstallFlow";
 import * as inventoryApi from "../../api/inventoryDashboard";
 import * as sdpApi from "../../api/softwareDelivery";
+import * as groupsApi from "../../api/assetGroups";
 
 vi.mock("../../api/inventoryDashboard");
 vi.mock("../../api/softwareDelivery");
+vi.mock("../../api/assetGroups");
 
 // Dropbox tal y como está en T111: cuatro equipos, dos versiones, y nunca fue
 // un paquete del catálogo — que es justo el hueco que F1 abrió.
@@ -29,6 +31,9 @@ beforeEach(() => {
   inventoryApi.getSoftwareInventoryDetail.mockResolvedValue({
     items: DROPBOX_ROWS,
     total: DROPBOX_ROWS.length,
+  });
+  groupsApi.listAssetGroups.mockResolvedValue({
+    items: [{ id: 7, name: "Ventas", kind: "static", memberCount: 3 }],
   });
 });
 
@@ -229,5 +234,65 @@ describe("cuando el backend rechaza", () => {
 
     expect(await screen.findByText("T111-VENTAS está dado de baja.")).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("ADR-0020 D2 — a un grupo, no sólo a equipos sueltos", () => {
+  async function pickGroup(user) {
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Asset group" }));
+    await user.click(screen.getByRole("combobox", { name: /asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Ventas/ }));
+  }
+
+  it("⚠️ con grupo, la vista previa se pide por el GRUPO, no por la lista de la UI", async () => {
+    // El backend lo resuelve con la misma función que el despliegue. Mandar
+    // los ids que la UI tenga a mano sería una segunda respuesta a «¿a quién?».
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({ actionable: [], blocked: [], notInstalled: [], retired: [] });
+    open();
+    await pickGroup(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() =>
+      expect(sdpApi.previewUninstall).toHaveBeenCalledWith("Dropbox", [], { assetGroupId: 7 })
+    );
+  });
+
+  it("sin grupo elegido no hay vista previa que pedir", async () => {
+    const user = userEvent.setup();
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Asset group" }));
+    expect(screen.getByRole("button", { name: "Preview" }).disabled).toBe(true);
+  });
+
+  it("⚠️ los dados de baja se ENSEÑAN y no se mandan", async () => {
+    // Un grupo estático conserva al miembro retirado. El despliegue rechaza
+    // entero si lleva uno solo; esconderlo sería apuntar a menos de lo que
+    // el operador cree.
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [{ deviceId: "d1", hostname: "T111-VENTAS", plan: { ok: true, preview: "C:\\u.exe /S" } }],
+      blocked: [],
+      notInstalled: [],
+      retired: [{ deviceId: "d9", hostname: "PANCHO", status: "DECOMMISSIONED" }],
+      group: { id: 7, name: "Ventas", kind: "static", memberCount: 2 },
+    });
+    sdpApi.uninstallDetected.mockResolvedValue({ deployment: { id: 40 } });
+    open();
+    await pickGroup(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText("PANCHO")).toBeTruthy();
+    expect(screen.getByText(/Dados de baja/)).toBeTruthy();
+    expect(screen.getByText(/Grupo «Ventas»/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Uninstall on 1 device(s)" }));
+    // Los accionables que se enseñaron, y no el grupo: la vista previa es el
+    // contrato, y un grupo dinámico podría haber cambiado entre mirar y pulsar.
+    await waitFor(() =>
+      expect(sdpApi.uninstallDetected).toHaveBeenCalledWith({ appName: "Dropbox", deviceIds: ["d1"] })
+    );
   });
 });

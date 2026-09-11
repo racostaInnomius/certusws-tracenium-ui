@@ -37,6 +37,7 @@ import {
   Divider,
   List,
   ListItem,
+  MenuItem,
   ListItemButton,
   ListItemText,
   Stack,
@@ -44,12 +45,15 @@ import {
   StepLabel,
   Stepper,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import { getSoftwareInventoryDetail } from "../../api/inventoryDashboard";
 import { previewUninstall, uninstallDetected } from "../../api/softwareDelivery";
+import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
 
 const STEPS = ["Find", "Devices", "Review"];
@@ -89,6 +93,29 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
 
   const [selectedIds, setSelectedIds] = React.useState([]);
 
+  // ADR-0020 D2 — «a uno, varios o un grupo de devices». Los grupos se cargan
+  // una vez: son pocos, y cargarlos al pulsar el selector añadiría una espera
+  // justo en el paso donde el operador decide.
+  const [targetMode, setTargetMode] = React.useState("devices");
+  const [groups, setGroups] = React.useState([]);
+  const [groupId, setGroupId] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+    listAssetGroups()
+      .then((res) => {
+        if (alive) setGroups(listFrom(res, { context: "uninstall.groups" }));
+      })
+      .catch(() => {
+        // Sin grupos el modo «equipos» sigue funcionando entero; el selector
+        // de grupo simplemente dice que no hay.
+        if (alive) setGroups([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const [previewing, setPreviewing] = React.useState(false);
   const [preview, setPreview] = React.useState(null);
   const [submitting, setSubmitting] = React.useState(false);
@@ -101,6 +128,8 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
     setTruncated(false);
     setAppName("");
     setSelectedIds([]);
+    setTargetMode("devices");
+    setGroupId("");
     setPreview(null);
     setError("");
   }, []);
@@ -187,11 +216,19 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
     setPreviewing(true);
     setError("");
     try {
-      const res = await previewUninstall(appName, selectedIds);
+      // Con grupo, lo resuelve el backend con la MISMA función que el
+      // despliegue. Resolverlo aquí con la lista de miembros de la UI sería
+      // una segunda respuesta a «¿a quién?».
+      const res =
+        targetMode === "group"
+          ? await previewUninstall(appName, [], { assetGroupId: Number(groupId) })
+          : await previewUninstall(appName, selectedIds);
       setPreview({
         actionable: Array.isArray(res?.actionable) ? res.actionable : [],
         blocked: Array.isArray(res?.blocked) ? res.blocked : [],
         notInstalled: Array.isArray(res?.notInstalled) ? res.notInstalled : [],
+        retired: Array.isArray(res?.retired) ? res.retired : [],
+        group: res?.group || null,
       });
       setActiveStep(2);
     } catch (e) {
@@ -210,6 +247,12 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
       // que no la tienen no hay que tocarlos. Mandar los 30 y que el backend
       // descarte 4 en silencio dejaría un despliegue con cuatro fallos que no
       // son fallos.
+      //
+      // ⚠️ También con grupo se mandan los ACCIONABLES y no el `assetGroupId`.
+      // La vista previa es el contrato: un grupo dinámico puede cambiar entre
+      // mirar y confirmar, y mandar el grupo lo re-resolvería y ejecutaría sobre
+      // otra población. El precio es que el despliegue queda como «N devices»
+      // en vez de con el nombre del grupo.
       const deviceIds = preview.actionable.map((r) => r.deviceId);
       const res = await uninstallDetected({ appName, deviceIds });
       notify?.("success", `Uninstall dispatched for ${appName} to ${deviceIds.length} device(s).`);
@@ -308,10 +351,48 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
         {activeStep === 1 && chosen ? (
           <Stack spacing={1.5}>
             <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700 }}>{appName}</Typography>
-            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-              {selectedIds.length} de {chosen.devices.length} equipo(s) seleccionado(s).
-            </Typography>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={targetMode}
+              onChange={(_e, v) => {
+                if (v) setTargetMode(v);
+              }}
+              aria-label="Uninstall target"
+            >
+              <ToggleButton value="devices">Devices that have it</ToggleButton>
+              <ToggleButton value="group">Asset group</ToggleButton>
+            </ToggleButtonGroup>
+            {targetMode === "devices" ? (
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+                {selectedIds.length} de {chosen.devices.length} equipo(s) seleccionado(s).
+              </Typography>
+            ) : null}
             <Divider />
+            {targetMode === "group" ? (
+              <Stack spacing={1}>
+                <TextField
+                  select
+                  size="small"
+                  fullWidth
+                  label="Asset group"
+                  value={groupId}
+                  onChange={(e) => setGroupId(e.target.value)}
+                  helperText={
+                    groups.length === 0
+                      ? "No hay grupos de activos en este tenant."
+                      : "Se mira cada miembro del grupo: los que no la tienen y los dados de baja se listan aparte en la revisión."
+                  }
+                >
+                  {groups.map((g) => (
+                    <MenuItem key={g.id} value={String(g.id)}>
+                      {g.name}
+                      {Number.isFinite(g.memberCount) ? ` · ${g.memberCount}` : ""}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
+            ) : (
             <Box sx={{ maxHeight: 340, overflow: "auto" }}>
               <List dense disablePadding>
                 {chosen.devices.map((d) => (
@@ -340,11 +421,17 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
                 ))}
               </List>
             </Box>
+            )}
           </Stack>
         ) : null}
 
         {activeStep === 2 && preview ? (
           <Stack spacing={2}>
+            {preview.group ? (
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+                Grupo «{preview.group.name}» · {preview.group.memberCount} miembro(s) ahora mismo
+              </Typography>
+            ) : null}
             <Alert severity="warning">
               <AlertTitle>Esto no se deshace</AlertTitle>
               No hay copia ni «deshacer». Se ejecutará el comando de abajo en
@@ -399,6 +486,29 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               </Box>
             ) : null}
 
+            {preview.retired.length > 0 ? (
+              <Box>
+                {/* Dados de baja: se ENSEÑAN y no se mandan. El despliegue
+                    rechaza entero si lleva uno solo, y esconderlos sería
+                    apuntar a menos equipos de los que el operador cree. */}
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, mb: 0.5 }}>
+                  Dados de baja — no se tocarán {preview.retired.length} equipo(s)
+                </Typography>
+                <List dense disablePadding>
+                  {preview.retired.map((r) => (
+                    <ListItem key={r.deviceId} divider>
+                      <ListItemText
+                        primary={r.hostname || r.deviceId}
+                        secondary={r.status}
+                        primaryTypographyProps={{ fontSize: TEXT.base }}
+                        secondaryTypographyProps={{ fontSize: TEXT.xs }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            ) : null}
+
             {preview.notInstalled.length > 0 ? (
               <Chip
                 size="small"
@@ -436,7 +546,9 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
           <Button
             variant="contained"
             onClick={goToReview}
-            disabled={selectedIds.length === 0 || previewing}
+            disabled={
+              (targetMode === "group" ? !groupId : selectedIds.length === 0) || previewing
+            }
             startIcon={previewing ? <CircularProgress size={14} /> : null}
           >
             {previewing ? "Checking…" : "Preview"}

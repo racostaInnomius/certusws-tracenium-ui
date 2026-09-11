@@ -68,8 +68,14 @@ export async function deployPackage(packageId, body) {
  * Es de LECTURA y no pide rol de escritura: mirar qué comando correría es justo
  * lo que hay que poder hacer antes de pedir permiso para ejecutarlo.
  */
-export async function previewUninstall(appName, deviceIds) {
-  return httpPostJson(`${BASE}/uninstall/preview`, { appName, deviceIds });
+export async function previewUninstall(appName, deviceIds, { assetGroupId } = {}) {
+  // Con `assetGroupId` el backend resuelve el grupo con la MISMA función que
+  // usa el despliegue, y devuelve además `retired` y `group`.
+  return httpPostJson(`${BASE}/uninstall/preview`, {
+    appName,
+    deviceIds,
+    ...(assetGroupId != null ? { assetGroupId } : {}),
+  });
 }
 
 /** Crear el despliegue de desinstalación. Esto sí ejecuta. */
