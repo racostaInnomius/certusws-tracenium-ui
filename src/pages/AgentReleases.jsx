@@ -18,19 +18,10 @@ import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import { DataGrid } from "@mui/x-data-grid";
 
-import { useAuthContext } from "../auth/AuthContext";
-import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
-import { getMyCapabilities } from "../api/roles";
 import {
   listAgentReleases,
-  createAgentRelease,
-  updateAgentRelease,
-  deleteAgentRelease,
   resolveAgentReleaseDownload,
 } from "../api/agentReleases";
-
-import AgentReleaseDialog from "../components/agent-releases/AgentReleaseDialog";
-import DeleteAgentReleaseDialog from "../components/agent-releases/DeleteAgentReleaseDialog";
 
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
@@ -105,44 +96,17 @@ export default function AgentReleases({ embedded = false }) {
   const theme = useTheme();
   const isMdDown = useMediaQuery(theme.breakpoints.down("md"));
   const isSmDown = useMediaQuery(theme.breakpoints.down("sm"));
-  const { auth } = useAuthContext();
 
-  // ⚠️ NOT `auth?.tenantId` — see useEffectiveTenantId. During vendor/MSP
-  // portfolio navigation the selected tenant lives in the MSP context and
-  // `auth` does not carry it, so this read silently resolved to nothing.
-  const tenantId = useEffectiveTenantId();
-  const isActiveMember = auth?.tenantMember?.isActive === true;
-
-  // ADR-0011 Phase 3: gate on the "agent_releases" capability instead
-  // of a hardcoded role==="ADMIN" check — that old check excluded
-  // OWNER too, breaking the superset convention every other capability
-  // follows. Defaults to disabled while the fetch is in flight
-  // (fail-closed, not a flash of an enabled control).
-  const [myPermissions, setMyPermissions] = React.useState(null);
-
-  React.useEffect(() => {
-    if (!tenantId) return;
-    let alive = true;
-    getMyCapabilities(tenantId)
-      .then((resp) => {
-        if (!alive) return;
-        setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
-      })
-      .catch(() => {
-        if (!alive) return;
-        setMyPermissions(new Set());
-      });
-    return () => {
-      alive = false;
-    };
-  }, [tenantId]);
-
-  const canEditAgentReleases =
-    isActiveMember && Boolean(myPermissions?.has("agent_releases"));
-
+  // Sin editar ni borrar, a propósito y para cualquier rol del tenant.
+  //
+  // El catálogo de instaladores vive en la base de CONTROL: es uno solo y lo
+  // descargan todos los tenants. La columna "Actions" (gateada por la
+  // capacidad `agent_releases`, que OWNER y ADMIN tienen de serie) dejaba a
+  // cualquier dueño de un tenant editar o borrar el paquete que instala el
+  // resto de clientes. Esta página es de consulta: descargar y copiar el
+  // comando desatendido.
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [submitting, setSubmitting] = React.useState(false);
 
   const [commandOpen, setCommandOpen] = React.useState(false);
   const [commandRow, setCommandRow] = React.useState(null);
@@ -152,13 +116,6 @@ export default function AgentReleases({ embedded = false }) {
   const [format, setFormat] = React.useState("all");
   const [channel, setChannel] = React.useState("all");
   const [isActiveFilter, setIsActiveFilter] = React.useState("all");
-
-  const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [dialogMode, setDialogMode] = React.useState("create");
-  const [editingItem, setEditingItem] = React.useState(null);
-
-  const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [deletingItem, setDeletingItem] = React.useState(null);
 
   const [snackbar, setSnackbar] = React.useState({
     open: false,
@@ -204,87 +161,6 @@ export default function AgentReleases({ embedded = false }) {
 
     return { total, active, platforms };
   }, [rows]);
-
-  const openCreateDialog = () => {
-    setDialogMode("create");
-    setEditingItem(null);
-    setDialogOpen(true);
-  };
-
-  const openEditDialog = (row) => {
-    setDialogMode("edit");
-    setEditingItem(row);
-    setDialogOpen(true);
-  };
-
-  const handleSave = async (payload) => {
-    try {
-      setSubmitting(true);
-
-      if (dialogMode === "edit" && editingItem?.id) {
-        await updateAgentRelease(editingItem.id, payload);
-        setSnackbar({
-          open: true,
-          message: "Software package updated successfully",
-          severity: "success",
-        });
-      } else {
-        await createAgentRelease(payload);
-        setSnackbar({
-          open: true,
-          message: "Software package created successfully",
-          severity: "success",
-        });
-      }
-
-      setDialogOpen(false);
-      await loadData();
-    } catch (e) {
-      console.error(e);
-
-      const errorMessage = String(e?.message || "");
-      const message = errorMessage.includes("AGENT_RELEASE_DUPLICATE_VARIANT")
-        ? "A package with the same platform, architecture, format, version and channel already exists"
-        : "Failed to save software package";
-
-      setSnackbar({
-        open: true,
-        message,
-        severity: "error",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!deletingItem?.id) return;
-
-    try {
-      setSubmitting(true);
-      await deleteAgentRelease(deletingItem.id);
-
-      setDeleteOpen(false);
-      setDeletingItem(null);
-
-      setSnackbar({
-        open: true,
-        message: "Software package deleted successfully",
-        severity: "success",
-      });
-
-      await loadData();
-    } catch (e) {
-      console.error(e);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete software package",
-        severity: "error",
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDownload = async (row) => {
     try {
@@ -343,69 +219,48 @@ export default function AgentReleases({ embedded = false }) {
     {
       field: "download",
       headerName: "Download",
-      minWidth: 230,
-      flex: 0.9,
+      minWidth: 140,
+      flex: 0.6,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
-        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center" }}>
-          <Button
-            size="small"
-            startIcon={<DownloadOutlinedIcon />}
-            onClick={() => handleDownload(params.row)}
-            sx={{ textTransform: "none", fontWeight: 700 }}
-          >
-            Download
-          </Button>
-          {/* Junto a la descarga a propósito: el comando lleva dentro la
-              versión, arquitectura y formato de ESTA fila, así que pegado a su
-              binario no puede desincronizarse. */}
-          <Tooltip title="Unattended install command">
-            <IconButton
-              size="small"
-              aria-label={`Unattended install command for ${params.row.platform} ${params.row.arch} v${params.row.version}`}
-              onClick={() => {
-                setCommandRow(params.row);
-                setCommandOpen(true);
-              }}
-              sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}
-            >
-              <TerminalOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
+        <Button
+          size="small"
+          startIcon={<DownloadOutlinedIcon />}
+          onClick={() => handleDownload(params.row)}
+          sx={{ textTransform: "none", fontWeight: 700 }}
+        >
+          Download
+        </Button>
       ),
     },
-    ...(canEditAgentReleases
-      ? [
-          {
-            field: "actions",
-            headerName: "Actions",
-            minWidth: 170,
-            flex: 0.9,
-            sortable: false,
-            filterable: false,
-            renderCell: (params) => (
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button size="small" onClick={() => openEditDialog(params.row)}>
-                  Edit
-                </Button>
-
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() => {
-                    setDeletingItem(params.row);
-                    setDeleteOpen(true);
-                  }}
-                >
-                  Delete
-                </Button>
-              </Box>
-            ),
-          },
-        ]
-      : []),
+    {
+      // Columna propia, en el sitio que dejó "Actions": pegado al botón de
+      // descarga el icono se leía como parte de él. Sigue siendo POR FILA —
+      // el comando lleva dentro la versión, arquitectura y formato de ese
+      // binario, así que no puede desincronizarse de lo que se descarga.
+      field: "unattended",
+      headerName: "Unattended install",
+      minWidth: 140,
+      flex: 0.6,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => (
+        <Tooltip title="Unattended install command">
+          <IconButton
+            size="small"
+            aria-label={`Unattended install command for ${params.row.platform} ${params.row.arch} v${params.row.version}`}
+            onClick={() => {
+              setCommandRow(params.row);
+              setCommandOpen(true);
+            }}
+            sx={{ color: BRAND.gray, "&:hover": { color: BRAND.teal } }}
+          >
+            <TerminalOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      ),
+    },
   ];
 
   const columnVisibilityModel = React.useMemo(() => {
@@ -455,22 +310,6 @@ export default function AgentReleases({ embedded = false }) {
               Manage supported Tracenium Agent packages and downloads
             </Typography>
           </Box>
-
-          {embedded && canEditAgentReleases && (
-            <Button
-              variant="contained"
-              onClick={openCreateDialog}
-              fullWidth={isSmDown}
-              sx={{
-                bgcolor: BRAND.teal,
-                "&:hover": { bgcolor: BRAND.tealHover },
-                minWidth: { xs: "100%", sm: 170 },
-                alignSelf: { xs: "stretch", sm: "center" },
-              }}
-            >
-              + ADD PACKAGE
-            </Button>
-          )}
         </Box>
       )}
       <Box sx={{ mb: 2 }}>
@@ -646,23 +485,6 @@ export default function AgentReleases({ embedded = false }) {
         row={commandRow}
         onClose={() => setCommandOpen(false)}
         notify={(severity, message) => setSnackbar({ open: true, message, severity })}
-      />
-
-      <AgentReleaseDialog
-        open={dialogOpen}
-        mode={dialogMode}
-        item={editingItem}
-        submitting={submitting}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleSave}
-      />
-
-      <DeleteAgentReleaseDialog
-        open={deleteOpen}
-        item={deletingItem}
-        submitting={submitting}
-        onClose={() => setDeleteOpen(false)}
-        onConfirm={handleDelete}
       />
 
       <BrandSnackbar
