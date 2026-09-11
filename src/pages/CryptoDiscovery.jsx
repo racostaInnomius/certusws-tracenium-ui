@@ -79,6 +79,7 @@ import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
 import SectionPaper from "../components/common/SectionPaper";
+import { ReadinessStrip, QuantumSunburst } from "../components/CryptoDiscovery/CdpQuantumExposure";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -456,6 +457,17 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         onOpenOutside={() => onOpenTab?.(TAB.explore)}
         onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
       />
+
+      {/* Preparación post-cuántica + sunburst con anillo base fijo (maqueta
+          aprobada 2026-09-10). Misma fuente de datos que el embudo. */}
+      <ReadinessStrip
+        exposure={exposure}
+        overview={ov}
+        devicesReporting={s.devicesReporting}
+        onDrillDown={onDrillDown}
+        onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
+      />
+      <QuantumSunburst exposure={exposure} overview={ov} refreshNonce={refreshNonce} onDrillDown={onDrillDown} />
 
       {panelsError ? (
         // Después de los KPIs, no antes: los KPIs vienen de otra petición y
