@@ -35,6 +35,11 @@ export const CDP_URL_KEYS = {
   // Intercambio de claves negociado por el servicio que sirve el
   // certificado: hybrid | classical | unknown (09-sep).
   kem: "kem",
+  // Sólo los certificados que llevan una firma ALTERNATIVA post-cuántica
+  // (catalyst, ADR-0015). No se puede llegar a ellos por `family`: un
+  // catalyst es `quantum_broken` a propósito, porque lo que valida hoy es
+  // su mitad clásica. Ésta es su única puerta.
+  catalyst: "catalyst",
   includeRoots: "roots",
   // Fase 1: los filtros de navegación. Son los que hacen que un segmento
   // de la distribución, una fila de almacenes o un año de la línea de
@@ -56,7 +61,7 @@ export const CDP_URL_KEYS = {
   view: "view"
 };
 
-const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots"]);
+const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst"]);
 
 export function readCdpFilter() {
   const p = readSearchParams();

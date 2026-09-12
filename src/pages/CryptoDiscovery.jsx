@@ -80,6 +80,7 @@ import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
 import SectionPaper from "../components/common/SectionPaper";
 import { ReadinessStrip, QuantumSunburst } from "../components/CryptoDiscovery/CdpQuantumExposure";
+import CdpCatalystStrip from "../components/CryptoDiscovery/CdpCatalystStrip";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -450,6 +451,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         ))}
       </Grid>
 
+      {/* Va DESPUÉS de los KPI y antes del embudo: es la única lectura de
+          la portada que habla de lo que ya está migrado, y sólo aparece si
+          hay algo que enseñar. */}
+      <CdpCatalystStrip pqAlt={d.pqAltSignature} onDrillDown={onDrillDown} />
+
       <ExposureFunnel
         exposure={exposure}
         explain={false}
@@ -678,6 +684,7 @@ function CdpInventoryTab({ refreshNonce }) {
   const hasFlags = filter.hasFlags === true;
   const eku = filter.eku ?? "";
   const kem = ["hybrid", "classical", "unknown"].includes(filter.kem) ? filter.kem : "";
+  const catalyst = filter.catalyst === true;
   // Filtros de navegación (fase 1): llegan desde Explore / Stores. No
   // tienen control propio aquí —se eligen en su panel— pero sí chip
   // borrable, para que nunca haya un filtro invisible actuando.
@@ -710,6 +717,12 @@ function CdpInventoryTab({ refreshNonce }) {
     hasFlags: hasFlags || undefined,
     eku: eku || undefined,
     kem: kem || undefined,
+    // ⚠️ El catalyst abre la lente a propósito. La tarjeta de la portada
+    // cuenta TAMBIÉN las anclas —que la cadena de confianza sea híbrida es
+    // media noticia—, y con la lente por defecto (entidad final) la lista
+    // de debajo enseñaría menos filas que el número de arriba. Es el fallo
+    // del 2026-09-06, que ya se pagó una vez.
+    ...(catalyst ? { catalyst: true, certClass: "all", includeRoots: true } : {}),
     ...sort,
     ...Object.fromEntries(Object.entries(nav).filter(([, v]) => v != null && v !== ""))
   });
@@ -719,6 +732,7 @@ function CdpInventoryTab({ refreshNonce }) {
     flag ? { key: "flag", label: `Flag: ${FLAG_LABELS[flag] ? FLAG_LABELS[flag].split(" — ")[0].split(" (")[0] : flag}` } : null,
     eku ? { key: "eku", label: `Purpose: ${eku}` } : null,
     kem ? { key: "kem", label: `Key exchange: ${KEM_LABELS[kem]}` } : null,
+    catalyst ? { key: "catalyst", label: "Post-quantum alternative signature" } : null,
     issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
     hasPrivateKey ? { key: "hasPrivateKey", label: "With private key" } : null,
     hasFlags ? { key: "hasFlags", label: "Flagged only" } : null,
@@ -791,7 +805,7 @@ function CdpInventoryTab({ refreshNonce }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, navKey, sortKey, refreshNonce]);
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, catalyst, navKey, sortKey, refreshNonce]);
 
   const certColumns = [
     {
