@@ -19,6 +19,13 @@ export async function getPatchDevices() {
   return httpGetJson(`${BASE}/devices`);
 }
 
+// Estado de la CAMPAÑA, no del inventario: qué equipo se parcheó, cuál falló,
+// cuál espera ventana o snapshot y cuál no ha vuelto del reinicio. Trae también
+// el denominador real (flota enrolada), que /summary no da.
+export async function getCampaignStatus() {
+  return httpGetJson(`${BASE}/campaign-status`);
+}
+
 export async function getDeviceScanItems(agentId) {
   return httpGetJson(`${BASE}/devices/${encodeURIComponent(agentId)}/items`);
 }

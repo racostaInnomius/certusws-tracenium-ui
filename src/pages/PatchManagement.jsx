@@ -40,6 +40,12 @@ import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
 import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/ConfigurePanel";
 import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
+import {
+  campaignState,
+  snapshotState,
+  campaignStrip,
+  coverageLine,
+} from "../components/patch-management/campaignState";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
@@ -77,6 +83,7 @@ import { getTenantPolicy } from "../api/policies";
 import {
   getPatchSummary,
   getPatchDevices,
+  getCampaignStatus,
   getVulnerabilityExposure,
   getFindings,
   getDeviceScanItems,
@@ -232,6 +239,44 @@ const BULK_ACTION_MAP = {
     label: "Force patch scan"
   }
 };
+
+// El tono que decide campaignState.js, traducido a la paleta. La separación es
+// deliberada: allí se decide QUÉ se dice de un estado, aquí CÓMO se pinta, y
+// así lo primero se puede probar sin montar MUI.
+const CAMPAIGN_TONES = {
+  positive: { bg: ROLE.positiveSoft, fg: ROLE.positive },
+  caution: { bg: ROLE.cautionSoft, fg: ROLE.caution },
+  critical: { bg: ROLE.criticalSoft, fg: ROLE.critical },
+  neutral: { bg: BRAND.cyanSoft, fg: BRAND.dark },
+  muted: { bg: "transparent", fg: BRAND.gray },
+};
+
+function CampaignChip({ label, tone, title }) {
+  const c = CAMPAIGN_TONES[tone] || CAMPAIGN_TONES.muted;
+  const chip = (
+    <Chip
+      size="small"
+      label={label}
+      sx={{
+        height: 22,
+        fontSize: TEXT.xs,
+        fontWeight: 700,
+        bgcolor: c.bg,
+        color: c.fg,
+        border: tone === "muted" ? `1px solid ${BRAND.border}` : "none",
+      }}
+    />
+  );
+  // El tooltip lleva lo accionable —el error del job, el detalle del rechazo—,
+  // que no cabe en un chip pero es justo lo que se va a buscar al verlo.
+  return title ? (
+    <Tooltip title={title} arrow placement="top">
+      <span>{chip}</span>
+    </Tooltip>
+  ) : (
+    chip
+  );
+}
 
 function ActionsList({ actions, pmpEnabled, onRun }) {
   return (
@@ -592,6 +637,23 @@ export default function PatchManagement({ onNavigate }) {
     [devicesRes]
   );
 
+  // Estado de campaña: lo que /summary no sabe. Va aparte y no bloquea la
+  // tabla — si esta carga falla, las columnas quedan en «—» y el resto de la
+  // página sigue sirviendo.
+  const campaignLoader = React.useCallback(async () => {
+    if (!pmpEnabled) return null;
+    return getCampaignStatus();
+  }, [pmpEnabled]);
+  const { data: campaignRes, refetch: refetchCampaign } = useCachedFetch(
+    `patchManagement:campaign:${tenantId || "none"}:${pmpEnabled ? "on" : "off"}`,
+    campaignLoader
+  );
+  const campaignByDevice = React.useMemo(() => {
+    const m = new Map();
+    for (const d of campaignRes?.devices || []) m.set(String(d.deviceId), d);
+    return m;
+  }, [campaignRes]);
+
   // Search over the devices table. The endpoint returns the whole fleet and
   // the grid pages it here, so the search runs in front of the grid. The
   // pagination model is controlled for one reason: typing must land you on
@@ -640,9 +702,10 @@ export default function PatchManagement({ onNavigate }) {
   const refreshAll = React.useCallback(() => {
     refetchSummary();
     refetchDevices();
+    refetchCampaign();
     refetchQueue?.();
     setRefreshNonce((n) => n + 1);
-  }, [refetchSummary, refetchDevices, refetchQueue]);
+  }, [refetchSummary, refetchDevices, refetchCampaign, refetchQueue]);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(
     refreshAll,
     "patchAutoRefresh"
@@ -1030,6 +1093,40 @@ export default function PatchManagement({ onNavigate }) {
         )
     },
     {
+      // Estado de la CAMPAÑA, que no es el del inventario: «12 parches
+      // pendientes» no dice si alguien intentó instalarlos, ni si el intento
+      // falló, ni si el equipo se quedó sin volver del reinicio.
+      field: "campaignState",
+      headerName: "Patch state",
+      flex: 0.9,
+      minWidth: 150,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const c = campaignByDevice.get(String(params.row.agentId));
+        // Sin fila de campaña no se inventa nada: la carga puede haber fallado
+        // o el equipo puede no estar en la flota enrolada.
+        if (!c) return <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>;
+        const s = campaignState(c.state);
+        const when = c.patch?.finishedAt || c.patch?.startedAt || null;
+        const title = c.patch?.lastError || (when ? `Último intento: ${when}` : "");
+        return <CampaignChip label={s.label} tone={s.tone} title={title} />;
+      }
+    },
+    {
+      field: "snapshotState",
+      headerName: "Snapshot",
+      flex: 0.7,
+      minWidth: 120,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const c = campaignByDevice.get(String(params.row.agentId));
+        const s = snapshotState(c?.snapshot ?? null);
+        return <CampaignChip label={s.label} tone={s.tone} title={s.title} />;
+      }
+    },
+    {
       field: "collectedAtUtc",
       headerName: "Last scan",
       flex: 0.9,
@@ -1049,7 +1146,7 @@ export default function PatchManagement({ onNavigate }) {
   // ⚠️ `connectedIds` en las dependencias, o la columna se queda con el Set
   // vacío del primer render: los puntos no pasarían nunca a verde y parecería
   // que la flota entera está caída.
-  [connectedIds]);
+  [connectedIds, campaignByDevice]);
 
   // ── Superficies de la pestaña Patches ────────────────────────────
   // El orden lo pidió el operador y se lee como una pregunta encadenada:
@@ -1057,6 +1154,15 @@ export default function PatchManagement({ onNavigate }) {
   // (Devices). Antes las tarjetas iban debajo de la cola y las pestañas al
   // final de la página, así que el detalle por equipo quedaba lejos de la
   // pestaña que lo explica.
+  // La campaña, resumida. `campaignStrip` deja fuera `never_ran` a propósito:
+  // con 50 de 54 equipos ahí, un chip más entre otros lo haría pasar por un
+  // resultado cuando es justo la ausencia de campaña — va en la frase de abajo.
+  const strip = React.useMemo(() => campaignStrip(campaignRes?.totals), [campaignRes]);
+  const coverage = React.useMemo(
+    () => coverageLine(campaignRes?.fleet, campaignRes?.totals),
+    [campaignRes]
+  );
+
   const fleetTotals = pmpEnabled ? (
     <Box sx={{ mb: 2 }}>
       <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mb: 1 }}>
@@ -1107,6 +1213,37 @@ export default function PatchManagement({ onNavigate }) {
           />
         </Grid>
       </Grid>
+
+      {/* La campaña, debajo del inventario y con su propio rótulo, porque
+          responden a preguntas distintas: arriba «cuánto falta», aquí «qué ha
+          pasado cuando lo intentamos». Sólo aparece cuando el backend contesta;
+          si la carga falla, la página sigue sirviendo sin inventar ceros. */}
+      {/* ⚠️ `coverage.enrolled > 0` y no sólo `campaignRes`: con una respuesta
+          vacía o a medias la tira diría «0 of 0 enrolled devices», que es una
+          afirmación sobre la flota y encima falsa. Sin denominador, no se
+          enseña nada. */}
+      {coverage.enrolled > 0 ? (
+        <Box sx={{ mt: 2.5 }}>
+          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mb: 1 }}>
+            Campaign
+          </Typography>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+            {strip.chips.map((c) => (
+              <CampaignChip key={c.key} label={`${c.label}: ${c.value}`} tone={c.tone} />
+            ))}
+            {/* ⭐ El denominador que faltaba. «2 parcheados» no significa nada
+                sin «de 54 enrolados», y con 50 sin un solo intento la frase es
+                la noticia, no el adorno. */}
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", ml: 0.5 }}>
+              {coverage.withJob} of {coverage.enrolled} enrolled devices have had a patch job
+              {strip.neverRan > 0 ? ` · ${strip.neverRan} never patched` : ""}
+              {coverage.reporting !== coverage.enrolled
+                ? ` · ${coverage.enrolled - coverage.reporting} enrolled but not reporting`
+                : ""}
+            </Typography>
+          </Box>
+        </Box>
+      ) : null}
     </Box>
   ) : null;
 
