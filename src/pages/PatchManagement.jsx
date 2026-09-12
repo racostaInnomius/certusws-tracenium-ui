@@ -35,7 +35,6 @@ import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
-import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
 import ThirdPartyTab from "../components/patch-management/ThirdPartyTab";
 import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTab";
@@ -46,12 +45,8 @@ import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-managemen
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { summarizeBulkInstall, goingOutNow, describeRebootChoice } from "../components/patch-management/bulkInstallOutcome";
-import HttpsOutlinedIcon from "@mui/icons-material/HttpsOutlined";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import FolderSharedOutlinedIcon from "@mui/icons-material/FolderSharedOutlined";
-import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
@@ -130,20 +125,12 @@ const CATEGORIES = [
           "Push non-security cumulative updates to devices that are behind the baseline.",
         impact: "host",
       },
-      {
-        id: "patch.schedule_reboot",
-        name: "Schedule reboot for pending patches",
-        description:
-          "Trigger a controlled reboot window for devices with reboot-pending state.",
-        impact: "downtime",
-      },
-      {
-        id: "patch.update_drivers",
-        name: "Apply driver updates",
-        description:
-          "Install optional driver updates where allowed by tenant policy.",
-        impact: "host",
-      },
+      // ⚠️ Aquí había «Schedule reboot for pending patches» y «Apply driver
+      // updates». Ninguna estuvo cableada nunca: dos filas grises con un botón
+      // que no hacía nada, que es la mejor forma de enseñar al operador a no
+      // leer este catálogo. El reinicio además ya se resuelve donde de verdad
+      // importa —la casilla opcional al instalar, que reinicia sólo si el
+      // parche lo pide—, así que como acción suelta sobraba.
       {
         id: "patch.scan_now",
         name: "Force patch scan",
@@ -1064,6 +1051,155 @@ export default function PatchManagement({ onNavigate }) {
   // que la flota entera está caída.
   [connectedIds]);
 
+  // ── Superficies de la pestaña Patches ────────────────────────────
+  // El orden lo pidió el operador y se lee como una pregunta encadenada:
+  // cuánto hay (tarjetas), qué hago AHORA (Start here) y a quién le pasa
+  // (Devices). Antes las tarjetas iban debajo de la cola y las pestañas al
+  // final de la página, así que el detalle por equipo quedaba lejos de la
+  // pestaña que lo explica.
+  const fleetTotals = pmpEnabled ? (
+    <Box sx={{ mb: 2 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mb: 1 }}>
+        Fleet totals
+      </Typography>
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          <SummaryCard
+            title="Devices reporting"
+            value={kpis.reportedCount}
+            icon={<DevicesOtherOutlinedIcon />}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          <SummaryCard
+            title="Total missing"
+            value={kpis.totalMissing}
+            icon={<PendingActionsOutlinedIcon />}
+            accent={kpis.totalMissing > 0 ? ROLE.caution : ROLE.positive}
+            tint={kpis.totalMissing > 0 ? ROLE.cautionSoft : ROLE.positiveSoft}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          <SummaryCard
+            title="Critical / Important"
+            value={kpis.criticalish}
+            icon={<ReportProblemOutlinedIcon />}
+            accent={kpis.criticalish > 0 ? ROLE.critical : ROLE.positive}
+            tint={kpis.criticalish > 0 ? ROLE.criticalSoft : ROLE.positiveSoft}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          <SummaryCard
+            title="Reboot pending"
+            value={kpis.rebootDevices}
+            icon={<RestartAltOutlinedIcon />}
+            accent={kpis.rebootDevices > 0 ? ROLE.critical : BRAND.dark}
+            tint={kpis.rebootDevices > 0 ? ROLE.criticalSoft : BRAND.darkSoft}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          <SummaryCard
+            title="Healthy"
+            value={kpis.healthy}
+            icon={<CheckCircleOutlineOutlinedIcon />}
+            accent={ROLE.positive}
+            tint={ROLE.positiveSoft}
+          />
+        </Grid>
+      </Grid>
+    </Box>
+  ) : null;
+
+  const startHere = pmpEnabled ? (
+    <Box sx={{ mb: 2 }}>
+      <PriorityQueue
+        exposures={queueData?.exposures}
+        findings={queueData?.findings}
+        // Only a cold start blocks. A refresh with cache in hand keeps the
+        // list on screen and says so quietly.
+        loading={queueLoading}
+        refreshing={queueRefreshing}
+        onOpen={handleOpenFromQueue}
+      />
+    </Box>
+  ) : null;
+
+  const devicesPanel = pmpEnabled ? (
+  <SectionPaper id="patch-devices-panel" variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 1.5,
+        mb: 1.5,
+      }}
+    >
+      <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
+        Devices
+      </Typography>
+      <TextField
+        size="small"
+        placeholder="Search hostname, platform, status…"
+        value={deviceSearch}
+        onChange={(e) => {
+          setDeviceSearch(e.target.value);
+          setDevicePagination((prev) => ({ ...prev, page: 0 }));
+        }}
+        inputProps={{ "aria-label": "Search devices" }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
+            </InputAdornment>
+          ),
+        }}
+        sx={{ flex: "1 1 260px", maxWidth: 420, "& .MuiOutlinedInput-root": { bgcolor: BRAND.surface } }}
+      />
+      <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", ml: "auto" }}>
+        {deviceSearch.trim()
+          ? `${visibleDevices.length} of ${devices.length} devices`
+          : `${devices.length} reporting`}
+      </Typography>
+    </Box>
+    <Box sx={{ width: "100%" }}>
+      <DataGrid
+        autoHeight
+        rows={visibleDevices}
+        columns={deviceColumns}
+        getRowId={(row) => row.agentId}
+        disableRowSelectionOnClick
+        onRowClick={(params) => openDrawer(params.row)}
+        pageSizeOptions={[10, 25, 50]}
+        paginationModel={devicePagination}
+        onPaginationModelChange={setDevicePagination}
+        localeText={
+          deviceSearch.trim()
+            ? { noRowsLabel: `No devices match “${deviceSearch.trim()}”` }
+            : undefined
+        }
+        // Row-level pulse for the device we just arrived to highlight
+        // (see the deep-link effect above) — same treatment Jobs.jsx
+        // gives a just-dispatched job.
+        getRowClassName={(params) =>
+          params.row.agentId === highlightAgentId ? "tracenium-flash-row" : ""
+        }
+        sx={{
+          ...DATAGRID_SX,
+          "& .MuiDataGrid-row": { cursor: "pointer" },
+          "@keyframes traceniumFlash": {
+            "0%, 100%": { backgroundColor: "transparent" },
+            "25%, 75%": { backgroundColor: BRAND.tealSoft }
+          },
+          "& .tracenium-flash-row": {
+            animation: "traceniumFlash 1.2s ease-in-out 2"
+          }
+        }}
+      />
+    </Box>
+  </SectionPaper>
+  ) : null;
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
       <PageHeader
@@ -1146,165 +1282,12 @@ export default function PatchManagement({ onNavigate }) {
         </Alert>
       ) : null}
 
-      {/* Active-state KPIs. Five cards mirror the SCP page's hero so
-          a CISO scanning between pages reads them as one family. The
-          severity card combines critical+important since macOS reports
-          everything as "unknown" today and Windows MSRC severity is
-          coarse-grained — splitting further would render mostly
-          zeros on a real fleet. */}
-      {pmpEnabled ? (
-        <Box sx={{ mb: 2 }}>
-          <PriorityQueue
-            exposures={queueData?.exposures}
-            findings={queueData?.findings}
-            // Only a cold start blocks. A refresh with cache in hand keeps the
-            // list on screen and says so quietly.
-            loading={queueLoading}
-            refreshing={queueRefreshing}
-            onOpen={handleOpenFromQueue}
-          />
-
-          {/* The counters stay, but underneath and smaller. They are context
-              for the queue above — "how big is this fleet, how much is
-              outstanding" — not the answer to what to do next, which is what
-              they were being asked to be when they sat at the top alone. */}
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 3, mb: 1 }}>
-            Fleet totals
-          </Typography>
-          <Grid container spacing={2} alignItems="stretch">
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <SummaryCard
-                title="Devices reporting"
-                value={kpis.reportedCount}
-                icon={<DevicesOtherOutlinedIcon />}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <SummaryCard
-                title="Total missing"
-                value={kpis.totalMissing}
-                icon={<PendingActionsOutlinedIcon />}
-                accent={kpis.totalMissing > 0 ? ROLE.caution : ROLE.positive}
-                tint={kpis.totalMissing > 0 ? ROLE.cautionSoft : ROLE.positiveSoft}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <SummaryCard
-                title="Critical / Important"
-                value={kpis.criticalish}
-                icon={<ReportProblemOutlinedIcon />}
-                accent={kpis.criticalish > 0 ? ROLE.critical : ROLE.positive}
-                tint={kpis.criticalish > 0 ? ROLE.criticalSoft : ROLE.positiveSoft}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <SummaryCard
-                title="Reboot pending"
-                value={kpis.rebootDevices}
-                icon={<RestartAltOutlinedIcon />}
-                accent={kpis.rebootDevices > 0 ? ROLE.critical : BRAND.dark}
-                tint={kpis.rebootDevices > 0 ? ROLE.criticalSoft : BRAND.darkSoft}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
-              <SummaryCard
-                title="Healthy"
-                value={kpis.healthy}
-                icon={<CheckCircleOutlineOutlinedIcon />}
-                accent={ROLE.positive}
-                tint={ROLE.positiveSoft}
-              />
-            </Grid>
-          </Grid>
-        </Box>
-      ) : null}
-
-      {/* Devices table — only when PMP is on. The remediation tabs
-          below stay visible regardless because they're documentation
-          of what PMP can do, not live actions. Once we wire the
-          install path, those tabs become per-device action launchers
-          rather than placeholders. */}
-      {pmpEnabled ? (
-        <SectionPaper id="patch-devices-panel" variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
-          <Box
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 1.5,
-              mb: 1.5,
-            }}
-          >
-            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
-              Devices
-            </Typography>
-            <TextField
-              size="small"
-              placeholder="Search hostname, platform, status…"
-              value={deviceSearch}
-              onChange={(e) => {
-                setDeviceSearch(e.target.value);
-                setDevicePagination((prev) => ({ ...prev, page: 0 }));
-              }}
-              inputProps={{ "aria-label": "Search devices" }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchOutlinedIcon fontSize="small" sx={{ color: BRAND.gray }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ flex: "1 1 260px", maxWidth: 420, "& .MuiOutlinedInput-root": { bgcolor: BRAND.surface } }}
-            />
-            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", ml: "auto" }}>
-              {deviceSearch.trim()
-                ? `${visibleDevices.length} of ${devices.length} devices`
-                : `${devices.length} reporting`}
-            </Typography>
-          </Box>
-          <Box sx={{ width: "100%" }}>
-            <DataGrid
-              autoHeight
-              rows={visibleDevices}
-              columns={deviceColumns}
-              getRowId={(row) => row.agentId}
-              disableRowSelectionOnClick
-              onRowClick={(params) => openDrawer(params.row)}
-              pageSizeOptions={[10, 25, 50]}
-              paginationModel={devicePagination}
-              onPaginationModelChange={setDevicePagination}
-              localeText={
-                deviceSearch.trim()
-                  ? { noRowsLabel: `No devices match “${deviceSearch.trim()}”` }
-                  : undefined
-              }
-              // Row-level pulse for the device we just arrived to highlight
-              // (see the deep-link effect above) — same treatment Jobs.jsx
-              // gives a just-dispatched job.
-              getRowClassName={(params) =>
-                params.row.agentId === highlightAgentId ? "tracenium-flash-row" : ""
-              }
-              sx={{
-                ...DATAGRID_SX,
-                "& .MuiDataGrid-row": { cursor: "pointer" },
-                "@keyframes traceniumFlash": {
-                  "0%, 100%": { backgroundColor: "transparent" },
-                  "25%, 75%": { backgroundColor: BRAND.tealSoft }
-                },
-                "& .tracenium-flash-row": {
-                  animation: "traceniumFlash 1.2s ease-in-out 2"
-                }
-              }}
-            />
-          </Box>
-        </SectionPaper>
-      ) : null}
-
-      {/* Remediation catalog (categories). Kept visible in both
-          states: pre-rollout it's the spec of what PMP will do;
-          post-rollout it's the menu of available actions. The
-          per-action "Run" buttons remain disabled until the job
-          dispatcher path is wired (next milestone). */}
+      {/* Las caras del módulo, arriba del todo — mismo sitio que en Asset
+          Management y Security Compliance, para que moverse entre las tres no
+          exija volver a buscar la navegación. Cada pestaña es dueña de su
+          contenido: las tarjetas de flota, «Start here» y la tabla de equipos
+          viven DENTRO de Patches, no sueltas sobre toda la página, porque no
+          dicen nada sobre third-party ni sobre vulnerabilidades. */}
       <SectionPaper
         variant="panel"
         sx={{ p: 0, bgcolor: BRAND.surface, overflow: "hidden", mb: 2 }}
@@ -1351,6 +1334,9 @@ export default function PatchManagement({ onNavigate }) {
               the v2 surface: real findings + click-to-fix. */}
           {tab === "patches" ? (
             <Box>
+              {fleetTotals}
+              {startHere}
+              {devicesPanel}
               {/* The v1 action catalog still runs the fleet-wide install and
                   scan, so it stays until those have a home in the findings
                   shape — dropping working buttons is not a refactor.
