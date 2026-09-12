@@ -46,7 +46,7 @@ import {
   revokeCertificate,
   requestCertificateRotation,
 } from "../api/certificates";
-import { listKnownDevices } from "../api/jobs";
+import { listAllKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
@@ -462,7 +462,11 @@ export default function PKI({ onNavigate } = {}) {
   React.useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
-    listKnownDevices()
+    // ⚠️ TODAS las páginas, no la primera. `listKnownDevices()` a secas
+    // devuelve 25 equipos y el resto de la página caía al UUID crudo: en
+    // T111 (55 equipos) eso eran 30 filas rotuladas con un identificador
+    // que no dice nada. Mismo fallo que ya se pagó en Jobs.
+    listAllKnownDevices()
       .then((res) => {
         if (cancelled) return;
         const items = listFrom(res, { context: "pki" });

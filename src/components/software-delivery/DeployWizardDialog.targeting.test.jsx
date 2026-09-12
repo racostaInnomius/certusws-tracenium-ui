@@ -39,6 +39,9 @@ const WINDOWS_PKG = {
 beforeEach(() => {
   vi.resetAllMocks();
   groupsApi.listAssetGroups.mockResolvedValue({ items: [] });
+  // El diálogo valida los ids pegados contra el catálogo ENTERO: con una
+  // sola página (tope 100 del backend) un equipo real salía «desconocido».
+  jobsApi.listAllKnownDevices.mockResolvedValue({ items: DEVICES, total: DEVICES.length });
   jobsApi.listKnownDevices.mockResolvedValue({ items: DEVICES, total: DEVICES.length });
 });
 
@@ -195,7 +198,7 @@ describe("la revisión rotula por hostname, no por UUID", () => {
     const box = await screen.findByLabelText(/device ids/i);
     await user.clear(box);
     await user.type(box, "bbbb-2222");
-    await waitFor(() => expect(jobsApi.listKnownDevices).toHaveBeenCalled());
+    await waitFor(() => expect(jobsApi.listAllKnownDevices).toHaveBeenCalled());
     await user.click(// ⚠️ Exacto: el paginador del picker tiene un «Next page» que /next/i
     //    también casa, y el test fallaba por ambigüedad, no por el código.
     screen.getByRole("button", { name: /^next$/i }));

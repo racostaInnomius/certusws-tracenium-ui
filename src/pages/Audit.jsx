@@ -37,7 +37,7 @@ import {
   listAuditEvents
 } from "../api/audit";
 import { getAuditBreakdown } from "../api/overview";
-import { listKnownDevices } from "../api/jobs";
+import { listAllKnownDevices } from "../api/jobs";
 import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
@@ -365,7 +365,9 @@ export default function Audit({ onNavigate }) {
   React.useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
-    listKnownDevices()
+    // Todas las páginas: con la llamada pelada son 25, y a partir de ahí
+    // la auditoría rotula los eventos con el UUID del equipo.
+    listAllKnownDevices()
       .then((res) => {
         if (cancelled) return;
         const items = listFrom(res, { context: "auditEvents" });

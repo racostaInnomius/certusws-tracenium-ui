@@ -72,7 +72,7 @@ import {
   previewAssetGroupCriteria,
   dispatchAssetGroupJob,
 } from "../api/assetGroups";
-import { listKnownDevices, listJobTypes } from "../api/jobs";
+import { listAllKnownDevices, listJobTypes } from "../api/jobs";
 import { formatDate } from "../utils/format";
 import {
   KindChip,
@@ -1382,7 +1382,10 @@ export default function AssetGroups({ refreshNonce = 0 }) {
       // Lightweight lookup cache for decorating existing group members.
       // Device pickers themselves use server-side search/pagination and
       // do not depend on this page-level list.
-      const res = await listKnownDevices({ page: 1, pageSize: 100, includeGroups: true });
+      // Todas las páginas: esto rotula a los miembros del grupo, y con una
+      // sola (tope 100 en el backend) los equipos de más allá salían con
+      // su UUID.
+      const res = await listAllKnownDevices({ includeGroups: true });
       const items = listFrom(res, { context: "assetGroupsList" });
       setDevices(
         items.map((d) => ({

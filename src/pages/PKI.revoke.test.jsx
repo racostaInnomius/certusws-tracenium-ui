@@ -46,6 +46,9 @@ vi.mock("../api/certificates", () => ({
   revokeCertificate: vi.fn(),
 }));
 vi.mock("../api/jobs", () => ({
+  // La página pide TODAS las páginas del catálogo: un doble que sólo
+  // conozca `listKnownDevices` deja la función real en undefined.
+  listAllKnownDevices: vi.fn().mockResolvedValue({ items: [] }),
   listKnownDevices: vi.fn().mockResolvedValue({ items: [] }),
 }));
 vi.mock("../auth/AuthContext", () => ({

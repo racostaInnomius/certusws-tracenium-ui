@@ -41,7 +41,7 @@ import {
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
-import { listKnownDevices } from "../../api/jobs";
+import { listAllKnownDevices } from "../../api/jobs";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import { listFrom } from "../../api/shape";
 
@@ -186,7 +186,12 @@ export default function DeployWizardDialog({
     const t = setTimeout(async () => {
       setValidatingPaste(true);
       try {
-        const res = await listKnownDevices({ page: 1, pageSize: 500 });
+        // ⚠️ `pageSize: 500` era una ilusión: el backend recorta a 100 en
+        // silencio. Con 101 equipos, pegar el id del 101 lo marcaba como
+        // DESCONOCIDO y el despliegue lo rechazaba — un equipo real dado
+        // por inexistente porque la lista contra la que se comprueba
+        // venía truncada.
+        const res = await listAllKnownDevices();
         const rows = listFrom(res, { context: "deployWizardKnownDevices" });
         const known = new Set(
           rows.map((d) => String(d?.deviceId || "").trim()).filter(Boolean)

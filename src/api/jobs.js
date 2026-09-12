@@ -37,13 +37,13 @@ export async function listKnownDevices(params = {}) {
  * ever trips, the caller gets fewer devices and the console says so rather
  * than the page quietly under-reporting the fleet.
  */
-export async function listAllKnownDevices({ pageSize = 100, maxPages = 50 } = {}) {
+export async function listAllKnownDevices({ pageSize = 100, maxPages = 50, includeGroups = false } = {}) {
   const items = [];
   let page = 1;
   let total = null;
 
   for (; page <= maxPages; page += 1) {
-    const response = await listKnownDevices({ page, pageSize });
+    const response = await listKnownDevices({ page, pageSize, includeGroups: includeGroups || undefined });
     const batch = Array.isArray(response?.items) ? response.items : [];
     items.push(...batch);
 

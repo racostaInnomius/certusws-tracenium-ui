@@ -46,7 +46,7 @@ import {
   patchTenantPolicyDomain,
   pushTenantPolicy,
 } from "../api/policies";
-import { listKnownDevices } from "../api/jobs";
+import { listAllKnownDevices } from "../api/jobs";
 import {
   readManagedAppFromPolicy,
   managedAppFormToPolicy,
@@ -165,7 +165,8 @@ export default function DeviceManagement({ onNavigate }) {
           (r) => { setLoadError(null); return r; },
           (err) => { setLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
-        listKnownDevices().catch(() => ({ items: [] })),
+        // Todas las páginas: con la llamada pelada son 25 equipos.
+        listAllKnownDevices().catch(() => ({ items: [] })),
       ]);
       const env = extractPolicyEnvelope(policyRes);
       const policy = env.raw ?? {};
