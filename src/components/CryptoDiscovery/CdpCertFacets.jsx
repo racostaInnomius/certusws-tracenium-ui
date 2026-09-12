@@ -35,11 +35,26 @@ const FACETS = [
 export function facetFilterOf(filter) {
   const f = filter || {};
   const out = { lens: "list" };
-  for (const k of ["search", "status", "flag", "issuer", "eku", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
+  // `kem` faltaba desde que se añadió (09-sep): filtrar por intercambio de
+  // claves acotaba la tabla y dejaba las facetas contando la flota entera.
+  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
     if (f[k] != null && f[k] !== "" && f[k] !== false) out[k] = f[k];
   }
   for (const k of ["hasPrivateKey", "hasFlags", "includeRoots"]) {
     if (f[k] === true) out[k] = true;
+  }
+  // ⚠️ El catalyst arrastra la lente, EXACTAMENTE como en la lista: si no,
+  // la tabla enseña 4 filas y la columna de la izquierda sigue contando el
+  // inventario entero. Visto en campo el 2026-09-11, con «1–4 of 4» al lado
+  // de una faceta que decía 116.
+  //
+  // Esta lista blanca es la trampa: cada filtro nuevo hay que añadirlo aquí
+  // Y en `listParams` de la página, y el que se olvide no falla — miente.
+  // Lo fija el test `CdpCertFacets.filter.test.jsx`.
+  if (f.catalyst === true) {
+    out.catalyst = true;
+    out.certClass = "all";
+    out.includeRoots = true;
   }
   return out;
 }
