@@ -22,7 +22,7 @@ describe("groupLabel", () => {
     // Si el backend añade un plugin y aquí falta su rótulo, ver la sigla es
     // feo pero deja el informe encontrable. Mandarlo a "Other" lo escondería
     // entre los demás y nadie se enteraría de que falta una línea en el mapa.
-    expect(groupLabel("RCP")).toBe("RCP");
+    expect(groupLabel("XYZ")).toBe("XYZ");
   });
 
   it("sin grupo cae en 'Other'", () => {
@@ -31,19 +31,26 @@ describe("groupLabel", () => {
     expect(groupLabel(undefined)).toBe("Other");
   });
 
-  it("cubre los seis grupos que el registro declara hoy", () => {
-    // AMP entra con `amp.asset-executive` (ADR-0021).
+  it("cubre los grupos del registro, incluidos los reservados para los informes que faltan", () => {
+    // AMP entra con `amp.asset-executive` (ADR-0021). SDP, RCP, ASP, MDM y
+    // Alerts están reservados antes que sus informes, igual que en el
+    // `ReportType.group` del backend.
     expect(Object.keys(REPORT_GROUP_LABELS).sort()).toEqual(
-      ["AMP", "Audit", "CDP", "Global", "PMP", "SCP"]
+      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "PMP", "RCP", "SCP", "SDP"]
     );
+  });
+
+  it("un grupo reservado se rotula con el nombre de su página", () => {
+    expect(groupLabel("RCP")).toBe("Remote Control");
+    expect(groupLabel("ASP")).toBe("Assessment Service");
   });
 });
 
 describe("REPORT_PAGES", () => {
-  // ⭐ La razón de ser de la vista: con seis informes para once páginas, una
-  // lista POR INFORME enseña seis filas y esconde las cinco ausencias.
-  it("están las ONCE páginas que tienen botón «Report»", () => {
-    expect(REPORT_PAGES).toHaveLength(11);
+  // ⭐ La razón de ser de la vista: con ocho informes para doce páginas, una
+  // lista POR INFORME enseña ocho filas y esconde las seis ausencias.
+  it("están las DOCE páginas de dominio del menú, en su orden", () => {
+    expect(REPORT_PAGES).toHaveLength(12);
     expect(REPORT_PAGES.map((p) => p.label)).toEqual([
       "Overview",
       "Asset Management",
@@ -52,6 +59,7 @@ describe("REPORT_PAGES", () => {
       "Remote Control",
       "Patch Management",
       "Crypto Discovery",
+      "Assessment Service",
       "MDM / MAM",
       "Alerts",
       "Jobs",
@@ -59,12 +67,15 @@ describe("REPORT_PAGES", () => {
     ]);
   });
 
-  it("una página sin informe propio dice qué abre su botón hoy", () => {
-    // Sin esto, la fila diría "nada" justo cuando el operador acaba de pulsar
-    // ese botón y ha salido algo — y dejaría de creerse la lista.
+  it("⚠️ Assessment Service está: una página del menú fuera de esta lista no aparece ni como ausencia", () => {
+    const asp = REPORT_PAGES.find((p) => p.page === "assessments");
+    expect(asp).toMatchObject({ group: "ASP", plugin: "asp", borrows: null });
+  });
+
+  it("una página que presta un informe no puede tener grupo sin decidir Y además no prestar nada", () => {
+    // Sin grupo y sin préstamo, la fila no tendría nada que decir de sí misma.
     for (const p of REPORT_PAGES) {
       if (!p.group) expect(p.borrows, p.label).toBeTruthy();
-      else expect(p.borrows, p.label).toBeNull();
     }
   });
 
@@ -79,7 +90,7 @@ describe("groupTypesByPage", () => {
   it("⭐ las páginas SIN informe salen igualmente, con la lista vacía", () => {
     const filas = groupTypesByPage([tipo("cdp.cbom", "CDP")]);
 
-    expect(filas).toHaveLength(11);
+    expect(filas).toHaveLength(12);
     // Software Delivery y no Asset Management: ésta tiene informe propio desde
     // ADR-0021, y usarla de ejemplo de "sin informe" dejaría el test pasando
     // mientras dice algo que ya no es cierto.
@@ -118,11 +129,19 @@ describe("groupTypesByPage", () => {
   it("⚠️ un grupo que no case con ninguna página NO se pierde", () => {
     // Perder un informe del catálogo porque nadie actualizó una tabla sería
     // peor que enseñar una fila fea: el operador dejaría de poder generarlo.
-    const filas = groupTypesByPage([tipo("rcp.sessions", "RCP")]);
+    const filas = groupTypesByPage([tipo("xyz.something", "XYZ")]);
 
     const otros = filas.find((f) => f.label === "Other");
     expect(otros).toBeTruthy();
-    expect(otros.types.map((t) => t.key)).toEqual(["rcp.sessions"]);
+    expect(otros.types.map((t) => t.key)).toEqual(["xyz.something"]);
+  });
+
+  it("⭐ el primer informe de un grupo reservado cae en SU página, no en 'Other'", () => {
+    // Es para lo que se reservan las siglas antes de que exista el informe.
+    const filas = groupTypesByPage([tipo("rcp.access-audit", "RCP"), tipo("asp.service-assessment", "ASP")]);
+    expect(filas.find((f) => f.label === "Remote Control").types.map((t) => t.key)).toEqual(["rcp.access-audit"]);
+    expect(filas.find((f) => f.label === "Assessment Service").types.map((t) => t.key)).toEqual(["asp.service-assessment"]);
+    expect(filas.find((f) => f.label === "Other")).toBeUndefined();
   });
 
   it("sin tipos, ninguna fila trae informes", () => {

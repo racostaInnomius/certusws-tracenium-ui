@@ -1239,7 +1239,7 @@ describe("Reports — U3: catálogo por filas", () => {
     // esta distinción un tenant sin CDP vería "Crypto Discovery — 0" y leería
     // una carencia que no existe. Son cosas opuestas y en una fila que dice 0
     // se leen igual.
-    simularCatalogoDePlugins(["amp", "sdp", "scp", "rcp", "pmp", "mdm"]); // sin cdp
+    simularCatalogoDePlugins(["amp", "sdp", "scp", "rcp", "pmp", "mdm", "asp"]); // sin cdp
     respond("get", `${BASE}/types`, { ok: true, types: TYPES.types.filter((t) => t.group !== "CDP") });
     respond("get", `${BASE}/runs`, RUNS);
     respond("get", `${BASE}/schedules`, { ok: true, schedules: [] });

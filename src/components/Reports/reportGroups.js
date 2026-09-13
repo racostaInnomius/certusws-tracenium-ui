@@ -27,6 +27,14 @@ export const REPORT_GROUP_LABELS = {
   CDP: "Crypto Discovery",
   Audit: "Audit",
   Global: "Overview",
+  // Reservados para los informes del plan de cobertura (docs del backend,
+  // REPORTS_CATALOG_GAP_PLAN_2026-09.md). Existen antes que sus informes para
+  // que el primero que llegue caiga en su página y no en "Other".
+  SDP: "Software Delivery",
+  RCP: "Remote Control",
+  ASP: "Assessment Service",
+  MDM: "MDM / MAM",
+  Alerts: "Alerts",
 };
 
 /**
@@ -48,20 +56,25 @@ export function groupLabel(group) {
  *
  * El catálogo se listaba por informe. Eso contesta "¿qué puedo sacar?" pero no
  * la pregunta que de verdad se hace mirándolo hoy: "¿de qué páginas todavía no
- * hay informe?". Con seis informes para once páginas, la lista por informe
- * enseña seis filas y esconde las cinco ausencias.
+ * hay informe?". Con ocho informes para doce páginas, la lista por informe
+ * enseña ocho filas y esconde las seis ausencias.
  *
  * Por página, la ausencia OCUPA UNA FILA. Es la mitad del valor de esta vista.
  *
  * `group` es la sigla con la que el registro del backend agrupa sus tipos
- * (`REPORT_REGISTRY[].group`), o `null` si esa página no tiene ninguno propio.
+ * (`REPORT_REGISTRY[].group`). Una página cuyo informe todavía no existe lleva
+ * YA la sigla que usará: así el primer tipo que el backend publique con ella
+ * cae en su fila. (El informe de Asset Management, con la fila en `null`, fue a
+ * parar a "Other" mientras la fila decía que no tenía informe.) `null` sólo
+ * donde no está decidido que vaya a haber informe propio.
  * `plugin` es la clave de entitlement, para no confundir "no está construido"
  * con "este tenant no lo tiene contratado" — que en una fila que dice 0 se
  * leen igual y significan cosas opuestas.
  *
  * `borrows` es la clave que el botón "Report" de esa página abre HOY mientras
  * no tenga informe propio. No es relleno: es lo que evita que la fila diga
- * "nada" cuando el operador acaba de pulsar ese botón y ha salido algo.
+ * "nada" cuando el operador acaba de pulsar ese botón y ha salido algo. `null`
+ * si la página tiene informe propio o no tiene botón.
  *
  * ⚠️ Esta lista se mantiene A MANO junto a los botones "Report" de las
  * páginas. Un botón nuevo sin su entrada aquí deja la página fuera del
@@ -70,18 +83,20 @@ export function groupLabel(group) {
  */
 export const REPORT_PAGES = [
   { page: "overview",          label: "Overview",            group: "Global", plugin: null,  borrows: null },
-  // Informe propio desde ADR-0021 (`amp.asset-executive`). Antes esta fila
-  // prestaba Fleet Health, y con `group: null` el tipo nuevo habría caído en
-  // "Other" al fondo mientras esta fila seguía diciendo que la página no tenía
-  // informe — registrado, pero en el sitio donde nadie lo busca.
+  // Informe propio desde ADR-0021 (`amp.asset-executive`).
   { page: "assets",            label: "Asset Management",    group: "AMP",    plugin: "amp", borrows: null },
-  { page: "software-delivery", label: "Software Delivery",   group: null,     plugin: "sdp", borrows: "global.fleet-health" },
+  { page: "software-delivery", label: "Software Delivery",   group: "SDP",    plugin: "sdp", borrows: "global.fleet-health" },
   { page: "ad",                label: "Security Compliance", group: "SCP",    plugin: "scp", borrows: null },
-  { page: "remote-control",    label: "Remote Control",      group: null,     plugin: "rcp", borrows: "global.fleet-health" },
+  { page: "remote-control",    label: "Remote Control",      group: "RCP",    plugin: "rcp", borrows: "global.fleet-health" },
   { page: "patch",             label: "Patch Management",    group: "PMP",    plugin: "pmp", borrows: null },
   { page: "cdp",               label: "Crypto Discovery",    group: "CDP",    plugin: "cdp", borrows: null },
-  { page: "device-management", label: "MDM / MAM",           group: null,     plugin: "mdm", borrows: "global.fleet-health" },
-  { page: "alerts",            label: "Alerts",              group: null,     plugin: null,  borrows: "audit.events" },
+  // ADR-0022. Sin botón "Report" todavía, y por eso no estaba en esta lista:
+  // la página existía en el menú y no aparecía ni como ausencia.
+  { page: "assessments",       label: "Assessment Service",  group: "ASP",    plugin: "asp", borrows: null },
+  { page: "device-management", label: "MDM / MAM",           group: "MDM",    plugin: "mdm", borrows: "global.fleet-health" },
+  { page: "alerts",            label: "Alerts",              group: "Alerts", plugin: null,  borrows: "audit.events" },
+  // Sin grupo: está sin decidir si Jobs tendrá informe propio o basta con los
+  // de cada plugin, que ya cuentan sus trabajos.
   { page: "jobs",              label: "Jobs",                group: null,     plugin: null,  borrows: "global.fleet-health" },
   { page: "audit",             label: "Audit",               group: "Audit",  plugin: null,  borrows: null },
 ];
