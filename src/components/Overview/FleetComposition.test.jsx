@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import FleetComposition, { AgentVersionDonut, DonutCard } from "./FleetComposition";
 
 // This project does not run vitest with `globals: true`, so RTL's
@@ -137,41 +137,42 @@ describe("AgentVersionDonut — reconciled against fleetDevices", () => {
   });
 });
 
-describe("FleetComposition — OS platform donut reconciliation", () => {
-  it("reconciles the OS platform total to fleetDevices and shows the gap as pending", () => {
-    const results = {
-      dashboardSummary: fulfilled({
-        fleetDevices: 30,
-        osPlatform: [
-          { os_platform: "Windows", host_count: 20 },
-          { os_platform: "Linux", host_count: 7 }
-        ]
-      }),
-      agentVersions: fulfilled({ total: 0, byVersion: [] })
-    };
+// "FleetComposition — OS platform donut reconciliation" se fue con la dona:
+// el Overview pinta ahora Fleet composition (FleetCompositionDonut), cuyo total
+// sale de /hardware-inventory/summary y no se concilia contra fleetDevices.
 
-    render(<FleetComposition results={results} loading={false} onNavigate={vi.fn()} />);
+describe("FleetComposition (Overview)", () => {
+  it("⭐ la primera dona es Fleet composition, no OS platform", () => {
+    render(
+      <FleetComposition
+        results={{
+          dashboardSummary: fulfilled({ fleetDevices: 20, osPlatform: [{ os_platform: "Windows", host_count: 20 }] }),
+          hardwareSummary: fulfilled({ fleet: { total: 20, composition: { laptop: 12, desktop: 5, server: 3, unknown: 0, virtual: 3 } } }),
+        }}
+      />
+    );
 
-    // 20 + 7 known = 27, fleetDevices = 30 → pending = 3. (Agent
-    // versions donut also reconciles to 30 here — its own byVersion is
-    // empty — so "30" legitimately appears twice.)
-    expect(screen.getAllByText("30").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("enrolled").length).toBeGreaterThan(0);
-    expect(screen.getByText("Pending inventory")).toBeInTheDocument();
-    expect(screen.getByText("+3")).toBeInTheDocument();
+    expect(screen.getByText("Fleet composition")).toBeTruthy();
+    expect(screen.queryByText("OS platform")).toBeNull();
+    expect(screen.getByRole("img", { name: /20 devices: 12 laptops, 5 desktops, 3 servers/ })).toBeTruthy();
   });
 
-  it("does not reconcile (old behavior) when the backend predates fleetDevices", () => {
-    const results = {
-      dashboardSummary: fulfilled({
-        osPlatform: [{ os_platform: "Windows", host_count: 20 }]
-      }),
-      agentVersions: fulfilled({ total: 0, byVersion: [] })
-    };
+  it("un segmento lleva a Asset Management", () => {
+    const onNavigate = vi.fn();
+    render(
+      <FleetComposition
+        onNavigate={onNavigate}
+        results={{ hardwareSummary: fulfilled({ fleet: { total: 2, composition: { laptop: 2 } } }) }}
+      />
+    );
 
-    render(<FleetComposition results={results} loading={false} onNavigate={vi.fn()} />);
+    fireEvent.click(screen.getByText("Laptops 2"));
+    expect(onNavigate).toHaveBeenCalledWith("assets", undefined);
+  });
 
-    expect(screen.getByText("reporting")).toBeInTheDocument();
-    expect(screen.queryByText("Pending inventory")).not.toBeInTheDocument();
+  it("mientras carga no dice 'No devices to classify'", () => {
+    render(<FleetComposition loading results={null} />);
+
+    expect(screen.queryByText("No devices to classify")).toBeNull();
   });
 });

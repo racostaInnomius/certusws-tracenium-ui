@@ -21,7 +21,7 @@
 // otra oportunidad de sacar uno lento (ver CLAUDE.md del repo).
 
 import * as React from "react";
-import { Box, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 
 const SEGMENTS = [
@@ -36,7 +36,9 @@ const RADIUS = 48;
 const STROKE = 22;
 const CIRC = 2 * Math.PI * RADIUS;
 
-export default function FleetCompositionDonut({ composition, total, activeFilter, onSelect }) {
+// `sx` deja que el Overview la vista como sus vecinas de fila (radio 2, sin
+// sombra) sin cambiar cómo se ve en Hardware Inventory.
+export default function FleetCompositionDonut({ composition, total, activeFilter, onSelect, loading = false, sx = null }) {
   const slices = SEGMENTS.map((s) => ({ ...s, value: Number(composition?.[s.key] || 0) })).filter(
     (s) => s.value > 0
   );
@@ -68,6 +70,7 @@ export default function FleetCompositionDonut({ composition, total, activeFilter
         boxShadow: BRAND.shadow,
         display: "flex",
         flexDirection: "column",
+        ...(sx || {}),
       }}
     >
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>
@@ -77,7 +80,13 @@ export default function FleetCompositionDonut({ composition, total, activeFilter
         What the fleet is made of
       </Typography>
 
-      {sum === 0 ? (
+      {/* Mientras carga, esqueleto: sin él la card decía "No devices to
+          classify" durante el primer segundo del Overview. */}
+      {loading && sum === 0 ? (
+        <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Skeleton variant="circular" width={SIZE - 8} height={SIZE - 8} />
+        </Box>
+      ) : sum === 0 ? (
         <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
             No devices to classify

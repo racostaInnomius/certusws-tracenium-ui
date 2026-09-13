@@ -107,7 +107,7 @@ describe("Overview por plan", () => {
   it("⭐ Starter sigue teniendo una página completa: KPIs, Software Delivery, Reports, alertas", async () => {
     renderWith(STARTER);
 
-    expect(await screen.findByRole("region", { name: "Software delivery" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Software delivery" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Reports" })).toBeTruthy();
     expect(screen.getByText("Deployments in progress")).toBeTruthy();
     expect(screen.getByText("Latest alerts")).toBeTruthy();

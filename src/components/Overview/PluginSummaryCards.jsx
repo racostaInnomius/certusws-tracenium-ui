@@ -68,6 +68,9 @@ export function SoftwareDeliveryCard({ results, loading, onNavigate }) {
   const failed = buckets.reduce((s, b) => s + n(b.failed), 0);
   const total = succeeded + failed;
 
+  // "Running" ya no es fila: lo cuenta la KPI "Deployments in progress" de
+  // arriba. Se sigue leyendo para no dar la card por vacía con una campaña
+  // en marcha.
   const running = listLength(getValue(results?.sdpRunning));
   const queued = listLength(getValue(results?.sdpQueued));
 
@@ -76,6 +79,7 @@ export function SoftwareDeliveryCard({ results, loading, onNavigate }) {
       title="Software delivery"
       icon={RocketLaunchOutlinedIcon}
       subtitle="Installs over the last 30 days"
+      inlineSubtitle
       loading={loading}
       failed={tsResult?.status === "rejected"}
       empty={
@@ -91,11 +95,9 @@ export function SoftwareDeliveryCard({ results, loading, onNavigate }) {
           hint: `${succeeded} succeeded of ${total}`,
         },
         { label: "Failed installs", value: failed, tone: toneIf(failed, "critical") },
-        { label: "Deployments running", value: running },
         { label: "Deployments queued", value: queued },
       ]}
-      openLabel="Software Delivery"
-      onOpen={() => onNavigate?.("software-delivery")}
+      onCardClick={() => onNavigate?.("software-delivery")}
     >
       {total > 0 ? <InstallStrip buckets={buckets} /> : null}
     </SummaryStatCard>

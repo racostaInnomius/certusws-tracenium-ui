@@ -62,13 +62,31 @@ export default function SummaryStatCard({
   stats = [],
   openLabel,
   onOpen,
+  // La card entera lleva a la página, sin enlace al pie. Ahorra la fila del
+  // enlace, que es lo que la hacía más alta que sus vecinas.
+  onCardClick,
+  // Subtítulo en la fila del título en vez de debajo: una línea menos.
+  inlineSubtitle = false,
   children,
 }) {
+  const clickable = typeof onCardClick === "function";
   return (
     <Paper
       elevation={0}
-      role="region"
+      role={clickable ? "button" : "region"}
       aria-label={title}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onCardClick : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onCardClick();
+              }
+            }
+          : undefined
+      }
       sx={{
         p: 2,
         borderRadius: 2,
@@ -77,15 +95,24 @@ export default function SummaryStatCard({
         display: "flex",
         flexDirection: "column",
         minWidth: 0,
+        cursor: clickable ? "pointer" : "default",
+        transition: "border-color 120ms ease",
+        "&:hover": clickable ? { borderColor: BRAND.teal } : undefined,
+        "&:focus-visible": clickable ? { outline: `2px solid ${BRAND.teal}`, outlineOffset: 2 } : undefined,
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-        {Icon ? <Icon fontSize="small" sx={{ color: BRAND.teal }} /> : null}
-        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700, flex: 1 }}>
+      <Stack direction="row" spacing={1} alignItems="baseline" sx={{ mb: 1, minWidth: 0 }}>
+        {Icon ? <Icon fontSize="small" sx={{ color: BRAND.teal, alignSelf: "center" }} /> : null}
+        <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700, flexShrink: 0 }}>
           {title}
         </Typography>
+        {inlineSubtitle && subtitle && !loading ? (
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, minWidth: 0 }} noWrap title={subtitle}>
+            {subtitle}
+          </Typography>
+        ) : null}
       </Stack>
-      {subtitle && !loading ? (
+      {subtitle && !inlineSubtitle && !loading ? (
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 0.5 }}>{subtitle}</Typography>
       ) : null}
 

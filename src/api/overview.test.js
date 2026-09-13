@@ -125,15 +125,17 @@ describe("composed reads", () => {
 });
 
 describe("loaders por bloque del Overview", () => {
+  let alertCalls;
   function stubCore() {
     respond("get", "/api/v1/dashboard/summary", { fleetDevices: 4 });
     respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, count: 2 });
     respond("get", "/api/v1/binaries/agent/metadata/all", { ok: true, items: [] });
     respond("get", "/api/v1/dashboard/agent-versions", { ok: true, byVersion: [] });
+    respond("get", "/api/v1/dashboard/hardware-inventory/summary", { fleet: { total: 4, composition: {} } });
     respond("get", "/api/v1/orchestrator/jobs/timeseries", { ok: true, buckets: [] });
     respond("get", "/api/v1/security/audit/timeseries", { ok: true, buckets: [] });
     respond("get", "/api/v1/security/certificates/expiring", { ok: true, count: 0 });
-    respond("get", "/api/v1/alerts/events", { ok: true, items: [{ id: "e1" }] });
+    alertCalls = respond("get", "/api/v1/alerts/events", { ok: true, items: [{ id: "e1" }] });
     respond("get", "/api/v1/alerts/unread-count", { ok: true, count: 2 });
     respond("get", "/api/v1/reports/runs", { ok: true, total: 3, runs: [] });
     respond("get", "/api/v1/reports/schedules", { ok: true, items: [] });
@@ -148,9 +150,11 @@ describe("loaders por bloque del Overview", () => {
     expect(sdp).toHaveLength(0);
     expect(Object.keys(results).sort()).toEqual([
       "agentVersions", "alertEvents", "alertsUnread", "auditTimeseries",
-      "connectedDevices", "dashboardSummary", "expiringCerts", "jobsTimeseries",
-      "latestVersions", "reportRuns", "reportSchedules",
+      "connectedDevices", "dashboardSummary", "expiringCerts", "hardwareSummary",
+      "jobsTimeseries", "latestVersions", "reportRuns", "reportSchedules",
     ]);
+    // Tres alertas, no cinco: la card mide lo mismo que sus vecinas de fila.
+    expect(alertCalls[0].search).toEqual({ limit: "3" });
     for (const [key, slot] of Object.entries(results)) {
       expect(slot.status, `slot ${key}`).toBe("fulfilled");
     }

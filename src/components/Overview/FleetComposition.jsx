@@ -1,8 +1,9 @@
 // src/components/Overview/FleetComposition.jsx
 //
-// Three donuts: OS platform · Agent version · Patch coverage (the third
-// one rendered by PatchCoverageCard.jsx, which reuses `DonutCard` below
-// via the parent's `patchCoverageSlot`).
+// Donuts of the Overview's fleet row: Fleet composition (the shared
+// FleetCompositionDonut from Hardware Inventory — it replaced "OS platform")
+// and Agent version, plus an optional third slot (`patchCoverageSlot`).
+// `DonutCard` below is also reused by PatchCoverageCard.jsx.
 //
 // "Top manufacturers" was in this panel originally but removed — an
 // Overview about operational health shouldn't lead with vendor mix.
@@ -32,7 +33,6 @@
 // query — `fleetDevices` already rides along in the dashboard summary
 // bundle this page already fetches.
 
-import { useMemo } from "react";
 import { Paper, Grid, Typography, Box, Skeleton } from "@mui/material";
 import {
   ResponsiveContainer,
@@ -50,7 +50,7 @@ function getValue(result) {
 }
 
 import { classifyAgentVersions } from "./agentVersions";
-import { platformColor } from "../../utils/platform";
+import FleetCompositionDonut from "../AssetManagement/FleetCompositionDonut";
 
 // Muted, desaturated gray for the "pending" bucket — deliberately
 // distinct from BRAND.gray, which every donut here already uses for its
@@ -355,40 +355,12 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
   const fleetDevices =
     typeof dashboard?.fleetDevices === "number" ? dashboard.fleetDevices : null;
 
-  // OS platform data. Backend shapes vary across versions — try a few
-  // common shapes before giving up.
-  const osRaw =
-    dashboard?.osPlatforms ??
-    dashboard?.osPlatform ??
-    dashboard?.platforms ??
-    null;
-
-  // Memoized so the PieChart gets a stable data reference across parent
-  // re-renders (only recomputes when the raw OS aggregate changes).
-  // Colors come from the canonical per-platform map (utils/platform.js) —
-  // used to be assigned by array position (whichever OS had the most
-  // hosts got whatever color sat first), which meant the same OS could
-  // render a different color depending on that tenant's device counts,
-  // and Windows/Windows Server could land on near-identical shades.
-  const osDataColored = useMemo(() => {
-    return Array.isArray(osRaw)
-      ? osRaw
-          .map((row) => {
-            const name = row.os_platform ?? row.name ?? row.platform ?? "Unknown";
-            return {
-              name,
-              value: Number(row.host_count ?? row.count ?? row.value ?? 0),
-              color: platformColor(name).dot
-            };
-          })
-          .filter((x) => x.value > 0)
-      : [];
-  }, [osRaw]);
-
-  const osPending =
-    fleetDevices != null
-      ? Math.max(fleetDevices - osDataColored.reduce((sum, x) => sum + x.value, 0), 0)
-      : null;
+  // Composición de la flota (laptops / desktops / servers + virtuales), la
+  // misma dona que Hardware Inventory. Sustituye a "OS platform": qué TIPO de
+  // equipos hay dice más en una portada que el reparto por sistema operativo,
+  // que ya enseña el dashboard de Asset Management.
+  const hardware = getValue(results?.hardwareSummary);
+  const fleet = hardware?.fleet;
 
   // Agent version donut is now powered by a dedicated backend aggregate
   // (`/dashboard/agent-versions`), which is the only place this tenant's
@@ -405,7 +377,7 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
     ? agentVersions.byVersion
     : [];
 
-  // Navigation helpers. OS platform + Agent versions are fleet-wide
+  // Navigation helpers. Fleet composition + Agent versions are fleet-wide
   // breakdowns (count every enrolled device, not just the SCP-reporting
   // subset), so clicks land on Asset Management rather than Security
   // Compliance — the previous `ad` destination silently dropped devices
@@ -417,40 +389,30 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
   // parent via `patchCoverageSlot`).
   const navToAssets = (query) => onNavigate?.("assets", query);
 
-  // FleetComposition now renders 3 donuts internally (OS platform,
-  // Agent versions, Patch coverage). At md:4 each inside a md:6 outer
-  // wrapper they're narrow — we accepted that when the user asked to
-  // keep the composition compact. The PatchCoverageDonut is rendered
-  // by the parent via the `patchCoverageSlot` prop so this component
-  // doesn't need to know the patches data shape.
   // Sin tercer donut (el de parches es de SCP y vive en el bloque 2), los dos
   // que quedan reparten la fila en vez de dejar un tercio vacío.
   const cell = patchCoverageSlot ? { xs: 12, sm: 6, md: 4 } : { xs: 12, sm: 6 };
 
   return (
-    <Grid container spacing={2}>
-      <Grid size={cell}>
-        <DonutCard
-          title="OS platform"
-          data={osDataColored}
-          loading={loading}
-          // "reporting", not "devices": this counts host_current_status
-          // rows (full inventory received), a later pipeline stage than
-          // "Agent versions"' totalLabel — a device can check in before
-          // its inventory scan completes, so the two totals can differ.
-          // Once fleetDevices is known the total reconciles to the full
-          // roster (see file header comment) and the label follows.
-          totalLabel={fleetDevices != null ? "enrolled" : "reporting"}
-          fallbackLabel="No platform breakdown available"
-          onCardClick={() => navToAssets()}
-          onSegmentClick={(segment) =>
-            navToAssets({ platform: String(segment.name || "").toLowerCase() })
-          }
-          pendingValue={osPending}
-          pendingLabel="Pending inventory"
-        />
+    // `height: 100%`: la fila del Overview estira sus celdas y esta rejilla
+    // tiene que llenar la suya, o las donas quedan más bajas que la card de
+    // Software delivery de al lado.
+    <Grid container spacing={2} sx={{ height: "100%" }}>
+      <Grid size={cell} sx={{ display: "flex" }}>
+        <Box sx={{ width: "100%" }}>
+          <FleetCompositionDonut
+            composition={fleet?.composition}
+            total={fleet?.total}
+            loading={loading}
+            sx={{ borderRadius: 2, boxShadow: "none", minHeight: 0 }}
+            // Assets no lee filtros por URL todavía: el clic en un segmento
+            // lleva a la página, no a la lista ya filtrada.
+            onSelect={() => navToAssets()}
+          />
+        </Box>
       </Grid>
-      <Grid size={cell}>
+      <Grid size={cell} sx={{ display: "flex" }}>
+        <Box sx={{ width: "100%" }}>
         <AgentVersionDonut
           byVersion={byVersion}
           latestMap={latestMap}
@@ -476,6 +438,7 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
             if (bucket) navToAssets({ versionBucket: bucket });
           }}
         />
+        </Box>
       </Grid>
       {patchCoverageSlot ? (
         <Grid size={cell}>

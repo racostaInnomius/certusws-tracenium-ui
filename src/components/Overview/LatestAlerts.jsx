@@ -83,7 +83,9 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
   // items AND when the tenant simply hasn't enabled any rules (in which
   // case total is 0 too). We can't disambiguate from the response alone,
   // so the copy is neutral: "No alerts yet · open Manage rules".
-  const items = Array.isArray(value?.items) ? value.items.slice(0, 5) : [];
+  // 3: comparte fila con Attention required y Reports, y con 5 era la
+  // única de las tres que estiraba la fila.
+  const items = Array.isArray(value?.items) ? value.items.slice(0, 3) : [];
   const totalInWindow = Number(value?.total ?? items.length);
 
   const navigate = (query) => onNavigate?.("alerts", query);
@@ -92,13 +94,14 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
     <Paper
       elevation={0}
       sx={{
-        p: 4.5,
+        // p: 2 como sus vecinas de fila: con 4.5 el título quedaba más bajo
+        // que "Attention required" y "Reports".
+        p: 2,
         borderRadius: 2,
         border: `1px solid ${BRAND.border}`,
-        // Min-height (not height:100%) because the parent stack now
-        // sizes to content — a forced 100% with no anchor would
-        // collapse. The min keeps the empty-state panel from looking
-        // cramped when there are 0 alerts.
+        // La fila estira sus celdas (alignItems stretch); 100% hace que la
+        // card llene la suya y las tres midan lo mismo.
+        height: "100%",
         minHeight: 200,
         display: "flex",
         flexDirection: "column"

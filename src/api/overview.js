@@ -20,6 +20,7 @@ import { getRemoteControlSummary } from "./remoteControl";
 import { getPatchSummary } from "./patchManagement";
 import { getCdpSummary } from "./cdp";
 import { getReportRuns, listReportSchedules } from "./reports";
+import { getHardwareInventorySummary } from "./inventoryDashboard";
 
 // ---- existing endpoints we already ship -------------------------------
 
@@ -182,15 +183,20 @@ export async function fetchOverviewCore({ sdp = false } = {}) {
     ["connectedDevices", getConnectedDevices()],
     ["latestVersions", getLatestAgentVersions()],
     ["agentVersions", getAgentVersionsSummary()],
+    // `fleet.composition` (laptops/desktops/servers + virtuales) para la dona
+    // de composición — la misma que Hardware Inventory. Capacidad
+    // `assets_view`, que el rol USER también trae.
+    ["hardwareSummary", getHardwareInventorySummary()],
     ["jobsTimeseries", getJobsTimeseries(7)],
     ["auditTimeseries", getAuditTimeseries(7)],
     // Certificados mTLS de los propios agentes (PKI de Tracenium, no CDP).
     // Exige la capacidad `pki`: un USER recibe 403 y la fila de Attention
     // simplemente no aparece.
     ["expiringCerts", getExpiringCertificates(30)],
-    // 5 es a propósito: la franja es un vistazo, la lista está en Alerts. El
+    // 3 y no 5: la card comparte fila con Attention y Reports y tiene que
+    // medir lo mismo que ellas. Es un vistazo; la lista está en Alerts. El
     // feed ya trae `hostname` desde el servidor.
-    ["alertEvents", getAlertEvents({ limit: 5 }).catch(() => ({ items: [] }))],
+    ["alertEvents", getAlertEvents({ limit: 3 }).catch(() => ({ items: [] }))],
     ["alertsUnread", getAlertsUnreadCount().catch(() => ({ count: 0 }))],
     // `limit: 1` da la última corrida y, por `COUNT(*) OVER()`, el total.
     ["reportRuns", getReportRuns({ limit: 1 })],

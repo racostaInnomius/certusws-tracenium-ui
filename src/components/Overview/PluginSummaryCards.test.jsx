@@ -1,7 +1,7 @@
 // src/components/Overview/PluginSummaryCards.test.jsx
 
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   CryptoDiscoveryCard,
   PatchManagementCard,
@@ -48,7 +48,7 @@ describe("cards de plugin del Overview", () => {
     expect(screen.getByText("9")).toBeTruthy();
   });
 
-  it("Software Delivery calcula la tasa de éxito de los 30 días y cuenta lo que está en marcha", () => {
+  it("Software Delivery calcula la tasa de éxito de los 30 días y cuenta lo que queda en cola", () => {
     render(
       <SoftwareDeliveryCard
         results={{
@@ -60,7 +60,32 @@ describe("cards de plugin del Overview", () => {
     );
 
     expect(screen.getByText("95%")).toBeTruthy();
-    expect(screen.getByText("Deployments running").parentElement.parentElement.textContent).toMatch(/2$/);
+    expect(screen.getByText("Deployments queued").parentElement.parentElement.textContent).toMatch(/1$/);
+  });
+
+  it("⭐ Software Delivery sin fila 'running' (la KPI de arriba ya la cuenta) ni enlace al pie: la card entera navega", () => {
+    const onNavigate = vi.fn();
+    render(
+      <SoftwareDeliveryCard
+        onNavigate={onNavigate}
+        results={{
+          sdpTimeseries: ok({ buckets: [{ bucket: "a", succeeded: 3, failed: 0 }] }),
+          sdpRunning: ok({ items: [{}] }),
+          sdpQueued: ok({ items: [] }),
+        }}
+      />
+    );
+
+    expect(screen.queryByText("Deployments running")).toBeNull();
+    expect(screen.queryByText(/Software Delivery →/)).toBeNull();
+    const card = screen.getByRole("button", { name: "Software delivery" });
+    // El subtítulo va en la fila del título, no debajo.
+    expect(screen.getByText("Software delivery").parentElement).toBe(
+      screen.getByText("Installs over the last 30 days").parentElement
+    );
+
+    fireEvent.click(card);
+    expect(onNavigate).toHaveBeenCalledWith("software-delivery");
   });
 
   it("⚠️ Reports sin acceso a programaciones (403) no dice '0 schedules'", () => {

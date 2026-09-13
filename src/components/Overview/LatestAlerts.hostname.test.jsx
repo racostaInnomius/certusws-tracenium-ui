@@ -36,4 +36,19 @@ describe("LatestAlerts — hostname", () => {
     expect(screen.getAllByText(/W11-FINANCE-07/).length).toBeGreaterThan(0);
     expect(screen.queryByText(new RegExp(UUID))).toBeNull();
   });
+
+  it("⭐ enseña 3 alertas, no 5: la card mide lo mismo que Attention y Reports", () => {
+    const items = Array.from({ length: 5 }, (_, i) => ({
+      source: "agent",
+      sourceEventId: `e${i}`,
+      severity: "low",
+      title: `Alert ${i}`,
+      summary: `Alert number ${i}`,
+      occurredAt: "2026-09-11T10:00:00Z",
+    }));
+    render(<LatestAlerts result={{ status: "fulfilled", value: { items, total: 5 } }} />);
+
+    expect(screen.getAllByText(/Alert number \d/)).toHaveLength(3);
+    expect(screen.getByText(/showing 3 of 5/)).toBeTruthy();
+  });
 });
