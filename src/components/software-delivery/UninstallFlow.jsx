@@ -70,6 +70,7 @@ const MAX_PAGES = 10;
 const BLOCKED_COPY = {
   protected: "Protected: uninstalling it would leave the device without an agent.",
   unsupported_source: "Unsupported source — F1 only covers the Windows registry.",
+  per_user_install: "Installed for a single user, not for the device — the agent cannot remove it on that person's behalf.",
   no_identity: "No uninstall command was recorded.",
   name_not_expressible: "The name contains % or _ and there is no ProductCode to identify it by.",
 };
