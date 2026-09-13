@@ -140,3 +140,25 @@ describe("el selector de ventana", () => {
     expect(screen.queryByText(/Couldn't load/i)).toBeNull();
   });
 });
+
+describe("a dónde lleva", () => {
+  it("⭐ en carril admin se rotula 'Admin actions' y lleva a Audit con `auditFrom`, sin carril (admin es el de Audit)", async () => {
+    const onNavigate = vi.fn();
+    render(<AuditTimeseriesChart result={conDatos} lane="admin" onNavigate={onNavigate} />);
+
+    await userEvent.click(screen.getByText(/Admin actions — last 7 days/));
+    const [page, query] = onNavigate.mock.calls[0];
+    expect(page).toBe("audit");
+    expect(query.auditFrom).toMatch(/^\d{4}-\d{2}-\d{2}T00:00$/);
+    expect(query).not.toHaveProperty("auditLane");
+    expect(query).not.toHaveProperty("window");
+  });
+
+  it("con otro carril lo pasa como `auditLane`", async () => {
+    const onNavigate = vi.fn();
+    render(<AuditTimeseriesChart result={conDatos} lane="system" onNavigate={onNavigate} />);
+
+    await userEvent.click(screen.getByText(/Audit events — last 7 days/));
+    expect(onNavigate.mock.calls[0][1].auditLane).toBe("system");
+  });
+});

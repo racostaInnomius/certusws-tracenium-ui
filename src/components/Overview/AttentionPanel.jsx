@@ -91,7 +91,9 @@ export default function AttentionPanel({ results, onNavigate }) {
       label: "agent certificates expiring <30d",
       severity: "error",
       icon: KeyOffOutlinedIcon,
-      navigate: () => onNavigate?.("pki", { tab: "expiring" })
+      // PKI no tiene pestaña "expiring" y su parámetro es `pkiTab`: `tab`
+      // se ignoraba. Su vista de flota ya abre con la ventana de 30 días.
+      navigate: () => onNavigate?.("pki")
     },
     {
       key: "failed_installs",

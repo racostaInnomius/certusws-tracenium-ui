@@ -157,7 +157,7 @@ describe("FleetComposition (Overview)", () => {
     expect(screen.getByRole("img", { name: /20 devices: 12 laptops, 5 desktops, 3 servers/ })).toBeTruthy();
   });
 
-  it("un segmento lleva a Asset Management", () => {
+  it("⭐ un segmento lleva a Hardware Inventory con ESE segmento filtrado", () => {
     const onNavigate = vi.fn();
     render(
       <FleetComposition
@@ -167,7 +167,9 @@ describe("FleetComposition (Overview)", () => {
     );
 
     fireEvent.click(screen.getByText("Laptops 2"));
-    expect(onNavigate).toHaveBeenCalledWith("assets", undefined);
+    // Hardware Inventory pinta la misma dona (mismo endpoint) y filtra la
+    // tabla por el segmento: la cifra pulsada es la que se ve al llegar.
+    expect(onNavigate).toHaveBeenCalledWith("assets", { assetsTab: "hardware", hwFleet: "laptop" });
   });
 
   it("mientras carga no dice 'No devices to classify'", () => {

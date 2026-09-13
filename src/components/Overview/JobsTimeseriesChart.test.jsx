@@ -13,7 +13,7 @@
 // the SVG assertable; everything else comes from the real library.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("recharts", async () => {
   const actual = await vi.importActual("recharts");
@@ -143,5 +143,15 @@ describe("JobsTimeseriesChart · variant", () => {
     cleanup();
     const stacked = renderChart({ variant: "stacked" });
     expect(stacked.getByText(/Jobs by status — last 7 days/)).toBeInTheDocument();
+  });
+});
+
+describe("JobsTimeseriesChart · a dónde lleva", () => {
+  it("⭐ a Jobs con `since` de la ventana (Jobs no lee `window`)", () => {
+    const onNavigate = vi.fn();
+    renderChart({ onNavigate });
+
+    fireEvent.click(screen.getByText(/Jobs by status/));
+    expect(onNavigate).toHaveBeenCalledWith("jobs", { since: "7d" });
   });
 });

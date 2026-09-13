@@ -126,6 +126,7 @@ describe("composed reads", () => {
 
 describe("loaders por bloque del Overview", () => {
   let alertCalls;
+  let auditCalls;
   function stubCore() {
     respond("get", "/api/v1/dashboard/summary", { fleetDevices: 4 });
     respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, count: 2 });
@@ -133,7 +134,7 @@ describe("loaders por bloque del Overview", () => {
     respond("get", "/api/v1/dashboard/agent-versions", { ok: true, byVersion: [] });
     respond("get", "/api/v1/dashboard/hardware-inventory/summary", { fleet: { total: 4, composition: {} } });
     respond("get", "/api/v1/orchestrator/jobs/timeseries", { ok: true, buckets: [] });
-    respond("get", "/api/v1/security/audit/timeseries", { ok: true, buckets: [] });
+    auditCalls = respond("get", "/api/v1/security/audit/timeseries", { ok: true, buckets: [] });
     respond("get", "/api/v1/security/certificates/expiring", { ok: true, count: 0 });
     alertCalls = respond("get", "/api/v1/alerts/events", { ok: true, items: [{ id: "e1" }] });
     respond("get", "/api/v1/alerts/unread-count", { ok: true, count: 2 });
@@ -155,6 +156,8 @@ describe("loaders por bloque del Overview", () => {
     ]);
     // Tres alertas, no cinco: la card mide lo mismo que sus vecinas de fila.
     expect(alertCalls[0].search).toEqual({ limit: "3" });
+    // Carril admin: el que abre la página de Audit al pulsar la gráfica.
+    expect(auditCalls[0].search).toEqual({ window: "7d", lane: "admin" });
     for (const [key, slot] of Object.entries(results)) {
       expect(slot.status, `slot ${key}`).toBe("fulfilled");
     }

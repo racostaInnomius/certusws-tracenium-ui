@@ -736,6 +736,10 @@ export default function Jobs({ onNavigate }) {
     // highlightJobId wins if somehow both are present.
     const highlightAgentId = highlightJobId ? "" : (params.get("highlightAgentId") || "");
     const statusMap = {
+      // "Failed jobs" del Overview cuenta failed + timeout: la misma pareja
+      // que la serie del backend. Es UNA opción del desplegable, no dos.
+      "failed,timeout": "failed,timeout",
+      "timeout,failed": "failed,timeout",
       in_flight: "running",
       pending: "pending",
       running: "running",
@@ -746,7 +750,15 @@ export default function Jobs({ onNavigate }) {
       timeout: "timeout",
       cancelled: "cancelled"
     };
+    // `since=7d`: ventana en días (1-90), mismo formato que el backend. Un
+    // enlace desde una métrica "de los últimos N días" tiene que traer su
+    // ventana o la tabla mezcla fallos de otras semanas.
+    const sinceMatch = /^(\d{1,2})d?$/.exec((params.get("since") || "").trim().toLowerCase());
+    const sinceDays = sinceMatch && Number(sinceMatch[1]) >= 1 && Number(sinceMatch[1]) <= 90
+      ? Number(sinceMatch[1])
+      : null;
     return {
+      sinceDays: (highlightJobId || highlightAgentId) ? null : sinceDays,
       status: (highlightJobId || highlightAgentId) ? "all" : (statusMap[rawStatus] || "all"),
       // Type is validated against the catalogue once it loads (below), not
       // here — the catalogue isn't available on first render. An unknown
@@ -835,6 +847,20 @@ export default function Jobs({ onNavigate }) {
   // story once a tenant grows past the window.
   const [historyTruncated, setHistoryTruncated] = React.useState(false);
 
+  // ── Filtros en servidor ──────────────────────────────────────────────
+  //
+  // Estado y ventana se piden AL SERVIDOR. Antes filtraban en el navegador
+  // sobre las 200 filas más recientes: en T111 la KPI "5 failed jobs · last
+  // 7 days" del Overview llevaba aquí y la tabla enseñaba 1, porque 4 de los
+  // 5 estaban detrás de 549 jobs más nuevos.
+  //
+  // La lista SIN filtrar se sigue cargando: de ella salen el triage, la tasa
+  // de éxito y los fallos por causa, que con la lista filtrada darían 0% de
+  // éxito al elegir "Failed".
+  const [sinceDays, setSinceDays] = React.useState(initialFilters.sinceDays ?? null);
+  const [filteredJobs, setFilteredJobs] = React.useState(null);
+  const [filteredTruncated, setFilteredTruncated] = React.useState(false);
+
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: "",
@@ -842,15 +868,26 @@ export default function Jobs({ onNavigate }) {
   });
   const deferredSearch = React.useDeferredValue(search);
 
+  const serverStatus = statusFilter !== "all" ? statusFilter : undefined;
+  const serverSince = sinceDays ? `${sinceDays}d` : undefined;
+  const serverFiltered = Boolean(serverStatus || serverSince);
+
   const loadTenantJobs = React.useCallback(async () => {
     if (!canManageJobs || !tenantId) return;
 
     try {
       setLoadingJobs(true);
-      const response = await listTenantJobs(tenantId, { limit: 200 });
+      const [response, filtered] = await Promise.all([
+        listTenantJobs(tenantId, { limit: 200 }),
+        serverStatus || serverSince
+          ? listTenantJobs(tenantId, { limit: 200, status: serverStatus, since: serverSince })
+          : Promise.resolve(null),
+      ]);
       const items = Array.isArray(response?.items) ? response.items : [];
       setTenantJobs(items);
       setHistoryTruncated(response?.truncated === true);
+      setFilteredJobs(filtered ? (Array.isArray(filtered.items) ? filtered.items : []) : null);
+      setFilteredTruncated(filtered?.truncated === true);
       setSelectedJobId((current) => {
         if (current && items.some((item) => item.job_id === current)) return current;
         return items[0]?.job_id || "";
@@ -858,6 +895,7 @@ export default function Jobs({ onNavigate }) {
     } catch (e) {
       console.error(e);
       setTenantJobs([]);
+      setFilteredJobs(null);
       setSelectedJobId("");
       setSnackbar({
         open: true,
@@ -867,7 +905,7 @@ export default function Jobs({ onNavigate }) {
     } finally {
       setLoadingJobs(false);
     }
-  }, [canManageJobs, tenantId]);
+  }, [canManageJobs, tenantId, serverStatus, serverSince]);
 
   const loadJobDetail = React.useCallback(async (jobId) => {
     if (!canManageJobs || !jobId) {
@@ -1199,10 +1237,16 @@ export default function Jobs({ onNavigate }) {
   // Derived live from tenantJobs (not a snapshot taken at click time)
   // so the batch detail view keeps reflecting reality as auto-refresh
   // ticks bring in newer per-device statuses.
-  const selectedBatchJobs = React.useMemo(
-    () => (selectedBatchId ? tenantJobs.filter((j) => j.batch_id === selectedBatchId) : []),
-    [tenantJobs, selectedBatchId]
-  );
+  //
+  // Con filtro en servidor el lote puede ser más viejo que la ventana sin
+  // filtrar: entonces sólo se tienen los hijos que casaron (p. ej. el que
+  // falló), que es mejor que un detalle vacío.
+  const selectedBatchJobs = React.useMemo(() => {
+    if (!selectedBatchId) return [];
+    const full = tenantJobs.filter((j) => j.batch_id === selectedBatchId);
+    if (full.length || !filteredJobs) return full;
+    return filteredJobs.filter((j) => j.batch_id === selectedBatchId);
+  }, [tenantJobs, filteredJobs, selectedBatchId]);
 
   // Row click on the Tenant Job History grid: a grouped (multi-device)
   // row selects the batch view; a plain row selects the single-job
@@ -1221,10 +1265,15 @@ export default function Jobs({ onNavigate }) {
   // (e.g. "all connected" resolved to a single device) reads as a
   // normal row — grouping only kicks in once there's actually
   // something to group.
+  // Con filtro en servidor la tabla se construye con lo que devolvió el
+  // servidor ya filtrado; sin él, con la ventana de siempre.
+  const historyJobs = serverFiltered && filteredJobs ? filteredJobs : tenantJobs;
+  const historyIsTruncated = serverFiltered && filteredJobs ? filteredTruncated : historyTruncated;
+
   const groupedRows = React.useMemo(() => {
     const batches = new Map();
     const singles = [];
-    for (const row of tenantJobs) {
+    for (const row of historyJobs) {
       if (!row.batch_id) {
         singles.push(row);
         continue;
@@ -1247,7 +1296,7 @@ export default function Jobs({ onNavigate }) {
       const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
       return tb - ta;
     });
-  }, [tenantJobs]);
+  }, [historyJobs]);
 
   const filteredRows = React.useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -1265,8 +1314,12 @@ export default function Jobs({ onNavigate }) {
     };
 
     return groupedRows.filter((row) => {
+      // El estado ya lo filtró el servidor. Repetirlo aquí escondía lotes:
+      // un lote de jobs en timeout se resume como "failed" y no casaba.
       const matchesStatus =
-        statusFilter === "all" || String(row.status || "").toLowerCase() === statusFilter;
+        serverFiltered ||
+        statusFilter === "all" ||
+        String(row.status || "").toLowerCase() === statusFilter;
       const matchesJobType =
         jobTypeFilter === "all" || String(row.job_type || "").toLowerCase() === jobTypeFilter;
       const matchesSearch =
@@ -1285,7 +1338,7 @@ export default function Jobs({ onNavigate }) {
 
       return matchesStatus && matchesJobType && matchesSearch && matchesStuck;
     });
-  }, [groupedRows, deviceMap, deferredSearch, statusFilter, jobTypeFilter, triageFilter]);
+  }, [groupedRows, deviceMap, deferredSearch, statusFilter, serverFiltered, jobTypeFilter, triageFilter]);
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
@@ -2526,20 +2579,34 @@ export default function Jobs({ onNavigate }) {
                 Showing <strong>{filteredRows.length}</strong> row{filteredRows.length === 1 ? "" : "s"} ·{" "}
                 {/* "loaded", not "total", once the window is truncated —
                     tenantJobs is then the window, not the whole history. */}
-                {tenantJobs.length} job{tenantJobs.length === 1 ? "" : "s"} {historyTruncated ? "loaded" : "total"}
-                {groupedRows.length !== tenantJobs.length ? " (multi-device dispatches grouped)" : ""}
+                {historyJobs.length} job{historyJobs.length === 1 ? "" : "s"} {historyIsTruncated ? "loaded" : "total"}
+                {groupedRows.length !== historyJobs.length ? " (multi-device dispatches grouped)" : ""}
               </Typography>
             </Box>
 
-            {historyTruncated ? (
+            {sinceDays ? (
+              <Box sx={{ mb: 1.5 }}>
+                <Chip
+                  size="small"
+                  label={`Created in the last ${sinceDays} day${sinceDays === 1 ? "" : "s"}`}
+                  onDelete={() => {
+                    setSinceDays(null);
+                    updateSearchParams({ since: "" });
+                  }}
+                  sx={{ fontWeight: 600 }}
+                />
+              </Box>
+            ) : null}
+
+            {historyIsTruncated ? (
               <Alert
                 severity="info"
                 variant="outlined"
                 sx={{ borderRadius: 2, mb: 1.5, py: 0.25, alignItems: "center" }}
               >
-                Showing the most recent {tenantJobs.length} jobs. Older jobs
-                exist beyond this window — filters and search below apply only
-                to what's loaded here.
+                {serverFiltered
+                  ? `Showing the most recent ${historyJobs.length} matching jobs. More match beyond this window.`
+                  : `Showing the most recent ${historyJobs.length} jobs. Older jobs exist beyond this window — status and time filters search the whole history; search and type apply to what's loaded here.`}
               </Alert>
             ) : null}
 
@@ -2572,7 +2639,12 @@ export default function Jobs({ onNavigate }) {
                 label="Status"
                 size="small"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  // La URL ya no manda: sin esto el filtro del enlace volvía
+                  // al recargar o al navegar de vuelta a Jobs.
+                  updateSearchParams({ status: "" });
+                }}
                 fullWidth
               >
                 <MenuItem value="all">All statuses</MenuItem>
@@ -2583,6 +2655,7 @@ export default function Jobs({ onNavigate }) {
                 <MenuItem value="completed">Completed</MenuItem>
                 <MenuItem value="failed">Failed</MenuItem>
                 <MenuItem value="timeout">Timeout</MenuItem>
+                <MenuItem value="failed,timeout">Failed or timed out</MenuItem>
                 <MenuItem value="cancelled">Cancelled</MenuItem>
               </TextField>
               <TextField

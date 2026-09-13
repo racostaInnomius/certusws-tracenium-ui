@@ -130,7 +130,10 @@ export default function HeroKpis({ results, loading, onNavigate, hasSdp = false 
       accent: failedJobs > 0 ? ROLE.critical : ROLE.positive,
       tint: failedJobs > 0 ? ROLE.criticalSoft : ROLE.positiveSoft,
       sparkline: failedJobs > 0 ? failedSpark : null,
-      onClick: () => navigate("jobs", { window: "7d" }),
+      // failed + timeout y 7 días: exactamente lo que suma la cifra (la serie
+      // del backend cuenta las dos). Jobs lo filtra EN SERVIDOR; en el
+      // navegador sólo veía las 200 filas más recientes.
+      onClick: () => navigate("jobs", { status: "failed,timeout", since: "7d" }),
     },
     {
       title: "Unread alerts",

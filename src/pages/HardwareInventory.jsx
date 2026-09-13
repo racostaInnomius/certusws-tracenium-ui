@@ -273,7 +273,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function HardwareInventory({ initialSearch = "", refreshNonce = 0 }) {
+export default function HardwareInventory({ initialSearch = "", initialFleetFilter = "", refreshNonce = 0 }) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -339,7 +339,8 @@ export default function HardwareInventory({ initialSearch = "", refreshNonce = 0
   const [search, setSearch] = React.useState(initialSearch);
 
   // Filtro que aplican las tarjetas de arriba. "all" es la flota entera.
-  const [fleetFilter, setFleetFilter] = React.useState("all");
+  // `initialFleetFilter` llega de un enlace (la dona del Overview).
+  const [fleetFilter, setFleetFilter] = React.useState(initialFleetFilter || "all");
 
   const [paginationModel, setPaginationModel] = React.useState({
     page: 0,

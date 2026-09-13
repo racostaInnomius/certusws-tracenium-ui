@@ -31,6 +31,13 @@ import AssetGroups from "./AssetGroups";
 // find it.
 
 import { BRAND } from "../theme/brand";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
+
+// Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
+// las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
+const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, software: 4, gpos: 5 };
+// Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
+const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -78,7 +85,15 @@ const TAB_SX = {
 };
 
 export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false, onNavigate }) {
-  const [activeTab, setActiveTab] = React.useState(0);
+  // El Overview enlaza su dona de composición a Hardware Inventory, que es
+  // donde vive la misma dona. Se lee UNA vez al montar.
+  const [activeTab, setActiveTab] = React.useState(
+    () => TAB_FROM_URL[getSearchParam("assetsTab", "")] ?? 0
+  );
+  const [initialFleetFilter] = React.useState(() => {
+    const key = getSearchParam("hwFleet", "");
+    return HW_FLEET_KEYS.has(key) ? key : "";
+  });
   // Set right before jumping to the Hardware Inventory tab from a
   // Dashboard "OS versions" row click, so that tab's search box opens
   // pre-filtered to just that OS. Cleared on any DIRECT tab click (see
@@ -90,6 +105,9 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   const handleChange = (_event, newValue) => {
     setActiveTab(newValue);
     setPendingHardwareSearch("");
+    // El enlace ya se consumió: sin esto, recargar devolvía a la pestaña y
+    // al filtro del enlace en vez de a donde el operador se movió.
+    updateSearchParams({ assetsTab: "", hwFleet: "" });
   };
 
   const navigateToHardwareInventory = React.useCallback((searchTerm = "") => {
@@ -265,7 +283,11 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={activeTab} index={2}>
-        <HardwareInventory initialSearch={pendingHardwareSearch} refreshNonce={refreshNonce} />
+        <HardwareInventory
+          initialSearch={pendingHardwareSearch}
+          initialFleetFilter={initialFleetFilter}
+          refreshNonce={refreshNonce}
+        />
       </TabPanel>
 
       <TabPanel value={activeTab} index={3}>

@@ -188,7 +188,8 @@ export async function fetchOverviewCore({ sdp = false } = {}) {
     // `assets_view`, que el rol USER también trae.
     ["hardwareSummary", getHardwareInventorySummary()],
     ["jobsTimeseries", getJobsTimeseries(7)],
-    ["auditTimeseries", getAuditTimeseries(7)],
+    // Carril admin, el que abre la página de Audit (ver Overview.jsx).
+    ["auditTimeseries", getAuditTimeseries(7, "admin")],
     // Certificados mTLS de los propios agentes (PKI de Tracenium, no CDP).
     // Exige la capacidad `pki`: un USER recibe 403 y la fila de Attention
     // simplemente no aparece.

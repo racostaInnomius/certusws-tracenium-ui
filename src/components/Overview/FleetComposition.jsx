@@ -405,9 +405,9 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
             total={fleet?.total}
             loading={loading}
             sx={{ borderRadius: 2, boxShadow: "none", minHeight: 0 }}
-            // Assets no lee filtros por URL todavía: el clic en un segmento
-            // lleva a la página, no a la lista ya filtrada.
-            onSelect={() => navToAssets()}
+            // A Hardware Inventory, donde vive la MISMA dona (mismo endpoint),
+            // con el segmento ya filtrado: la cifra pulsada es la que se ve.
+            onSelect={(key) => onNavigate?.("assets", { assetsTab: "hardware", hwFleet: key })}
           />
         </Box>
       </Grid>
@@ -420,23 +420,11 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           fleetDevices={fleetDevices}
           agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
           onCardClick={() => navToAssets()}
-          onSegmentClick={(segment) => {
-            // Map the visible legend label back to a filter key the
-            // Assets page can consume. "Current" / "One behind" /
-            // "Older" / "Unknown" — mirrors the buckets from
-            // classifyAgentVersions.
-            const label = String(segment.name || "").toLowerCase();
-            const bucket = label.includes("current")
-              ? "current"
-              : label.includes("one behind")
-              ? "one_behind"
-              : label.includes("older")
-              ? "older"
-              : label.includes("unknown")
-              ? "unknown"
-              : null;
-            if (bucket) navToAssets({ versionBucket: bucket });
-          }}
+          // Sin filtro, a propósito. Assets filtra por versión sólo la
+          // página cargada (25 filas de 53) y con otra regla de "one behind":
+          // el Overview decía Older 4 y la lista enseñaba 2. Arriba de
+          // Assets está esta misma dona con las mismas cifras.
+          onSegmentClick={() => navToAssets()}
         />
         </Box>
       </Grid>

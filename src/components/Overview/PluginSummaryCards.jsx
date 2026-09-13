@@ -156,7 +156,8 @@ export function ReportsCard({ results, loading, onNavigate }) {
       }
       stats={stats}
       openLabel="Reports"
-      onOpen={() => onNavigate?.("reports")}
+      // History: es donde están los "Reports generated" que cuenta la card.
+      onOpen={() => onNavigate?.("reports", { reportsTab: "history" })}
     />
   );
 }

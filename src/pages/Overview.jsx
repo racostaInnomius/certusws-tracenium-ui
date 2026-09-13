@@ -96,7 +96,11 @@ function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
   // via window.location so the Sidebar's controlled state picks up the
   // change on next render without us having to plumb a ref through.
-  const params = new URLSearchParams(window.location.search);
+  // Se parte de una URL LIMPIA, no de la actual. La barra lateral sólo cambia
+  // `page` y deja lo demás, así que la URL del Overview arrastraba filtros de
+  // la última página visitada (`status`, `since`, `score-band`…) y este enlace
+  // se los pasaba a la siguiente, que los aplicaba sin que nadie los pidiera.
+  const params = new URLSearchParams();
   params.set("page", page);
   Object.entries(extraQuery).forEach(([key, value]) => {
     if (value == null) params.delete(key);
@@ -305,7 +309,16 @@ export default function Overview({ onNavigate } = {}) {
           </Grid>
           <Grid size={{ xs: 12, md: 6 }}>
             <Suspense fallback={<ChartSlot height={320} />}>
-              <AuditTimeseriesChart result={results?.auditTimeseries} loading={loading} onNavigate={navigateWithQuery} />
+              {/* Carril admin: el mismo que abre la página de Audit. Con los dos
+                  carriles la gráfica llegaba a ~600 eventos/día (el bucle de
+                  política) y el clic aterrizaba en una página que enseñaba 983
+                  en 30 días: dos números para la misma tarjeta. */}
+              <AuditTimeseriesChart
+                result={results?.auditTimeseries}
+                loading={loading}
+                onNavigate={navigateWithQuery}
+                lane="admin"
+              />
             </Suspense>
           </Grid>
         </Grid>

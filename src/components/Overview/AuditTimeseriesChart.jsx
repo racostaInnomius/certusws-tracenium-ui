@@ -40,6 +40,13 @@ function formatDay(isoDate) {
   });
 }
 
+/** Medianoche local del primer día de una ventana de N días, en formato datetime-local. */
+export function startOfWindowLocal(windowDays, now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (Number(windowDays) - 1));
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`;
+}
+
 export default function AuditTimeseriesChart({
   result,
   loading,
@@ -176,7 +183,13 @@ export default function AuditTimeseriesChart({
   // audit filtered by that day) is a Phase 2 refinement; for now the
   // cheap win is just "the chart goes somewhere".
   const interactive = typeof onNavigate === "function";
-  const navigate = () => onNavigate?.("audit", { window: `${windowDays}d` });
+  // Audit no entiende `window`: su ventana es `auditFrom` (datetime-local) y
+  // su carril `auditLane`. Se manda el inicio del primer día de la gráfica.
+  const navigate = () =>
+    onNavigate?.("audit", {
+      auditFrom: startOfWindowLocal(windowDays),
+      ...(lane && lane !== "admin" ? { auditLane: lane } : {}),
+    });
 
   return (
     <Paper
@@ -204,7 +217,7 @@ export default function AuditTimeseriesChart({
           variant="subtitle2"
           sx={{ color: BRAND.dark, fontWeight: 700 }}
         >
-          {byCategory ? "Activity by area" : "Audit events"} — last {windowDays} day{windowDays === 1 ? "" : "s"}
+          {byCategory ? "Activity by area" : lane === "admin" ? "Admin actions" : "Audit events"} — last {windowDays} day{windowDays === 1 ? "" : "s"}
         </Typography>
         <WindowToggle
           value={windowDays}

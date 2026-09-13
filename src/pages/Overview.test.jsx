@@ -8,7 +8,7 @@
 //   · La página de un Starter sigue completa: el bloque 1 se sostiene solo.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const catalog = { entitled: null, loading: false };
 vi.mock("../hooks/usePluginCatalog", () => ({
@@ -156,5 +156,17 @@ describe("Overview por plan", () => {
     expect(fetchOverviewOperations).not.toHaveBeenCalled();
     // Y tampoco se anuncia nada como "no incluido": aún no se sabe.
     expect(screen.queryByRole("note", { name: "Not included in your plan" })).toBeNull();
+  });
+
+  it("⭐ un enlace del Overview no arrastra filtros de la página visitada antes", async () => {
+    // La barra lateral sólo cambia `page`: volver al Overview desde Jobs dejaba
+    // `status=failed` en la URL, y el siguiente clic se lo pasaba a Alerts o a
+    // Security Compliance, que tienen su propio `status`.
+    window.history.replaceState({}, "", "/?page=overview&status=failed&score-band=critical&since=30d");
+    renderWith(STARTER);
+
+    fireEvent.click(await screen.findByText("Unread alerts"));
+
+    expect(window.location.search).toBe("?page=alerts");
   });
 });

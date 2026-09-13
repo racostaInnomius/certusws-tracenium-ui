@@ -175,7 +175,8 @@ export default function JobsTimeseriesChart({
 
   // Whole-card → Jobs page. Matches the AuditTimeseriesChart pattern.
   const interactive = typeof onNavigate === "function";
-  const navigate = () => onNavigate?.("jobs", { window: `${windowDays}d` });
+  // `since`, no `window`: es el parámetro que Jobs lee y filtra en servidor.
+  const navigate = () => onNavigate?.("jobs", { since: `${windowDays}d` });
 
   return (
     <Paper
