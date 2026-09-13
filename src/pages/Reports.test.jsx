@@ -134,6 +134,14 @@ const TYPES = {
       formats: ["json", "csv", "pdf"],
     },
     {
+      key: "amp.asset-executive",
+      label: "Asset Management Executive Report",
+      description: "Monthly estate and record-confidence summary for the CIO.",
+      group: "AMP",
+      formats: ["json", "pdf", "csv"],
+      params: [{ name: "month", label: "Month", kind: "month", required: true }],
+    },
+    {
       key: "scp.evidence-pack",
       label: "Evidence Pack",
       description: "Audit-ready evidence for one framework over a period.",
@@ -733,7 +741,7 @@ describe("Reports — vista previa", () => {
 
     // Se abren TODAS las páginas con informes: el recuento es sobre el
     // catálogo entero, y lo que está plegado no está en el DOM.
-    for (const pagina of ["Overview", "Security Compliance", "Crypto Discovery", "Audit"]) {
+    for (const pagina of ["Overview", "Asset Management", "Security Compliance", "Crypto Discovery", "Audit"]) {
       await abrirPagina(pagina);
     }
     const conJson = TYPES.types.filter((t) => t.formats.includes("json"));
@@ -1182,8 +1190,8 @@ describe("Reports — U3: catálogo por filas", () => {
     montar();
     await esperarCatalogo();
 
-    // El fixture no trae ningún tipo de estas cuatro, y aun así tienen fila.
-    for (const pagina of ["Asset Management", "Software Delivery", "Remote Control", "Jobs"]) {
+    // El fixture no trae ningún tipo de estas tres, y aun así tienen fila.
+    for (const pagina of ["Software Delivery", "Remote Control", "Jobs"]) {
       const fila = screen.getByRole("group", { name: pagina });
       expect(within(fila).getByText("Not built yet"), pagina).toBeInTheDocument();
     }
@@ -1191,12 +1199,24 @@ describe("Reports — U3: catálogo por filas", () => {
 
   it("una página sin informe propio dice qué abre su botón hoy", async () => {
     // Si no, la fila diría "nada" justo cuando el operador acaba de pulsar ese
-    // botón en Asset Management y ha salido un informe de flota.
+    // botón en Software Delivery y ha salido un informe de flota.
+    montar();
+    await esperarCatalogo();
+
+    const sdp = screen.getByRole("group", { name: "Software Delivery" });
+    expect(within(sdp).getByText(/global\.fleet-health/)).toBeInTheDocument();
+  });
+
+  it("⚠️ Asset Management enseña SU informe, no el préstamo de Fleet Health", async () => {
+    // ADR-0021. Con la fila en `group: null` el tipo AMP caía en "Other" al
+    // fondo mientras esta fila seguía diciendo que no tenía informe propio.
     montar();
     await esperarCatalogo();
 
     const assets = screen.getByRole("group", { name: "Asset Management" });
-    expect(within(assets).getByText(/global\.fleet-health/)).toBeInTheDocument();
+    expect(within(assets).queryByText("Not built yet")).toBeNull();
+    expect(within(assets).queryByText(/global\.fleet-health/)).toBeNull();
+    expect(screen.queryByRole("group", { name: "Other" })).toBeNull();
   });
 
   it("la fila cuenta cuántos informes tiene esa página", async () => {

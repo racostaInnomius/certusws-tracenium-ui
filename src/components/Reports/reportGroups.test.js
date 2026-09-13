@@ -31,9 +31,10 @@ describe("groupLabel", () => {
     expect(groupLabel(undefined)).toBe("Other");
   });
 
-  it("cubre los cinco grupos que el registro declara hoy", () => {
+  it("cubre los seis grupos que el registro declara hoy", () => {
+    // AMP entra con `amp.asset-executive` (ADR-0021).
     expect(Object.keys(REPORT_GROUP_LABELS).sort()).toEqual(
-      ["Audit", "CDP", "Global", "PMP", "SCP"]
+      ["AMP", "Audit", "CDP", "Global", "PMP", "SCP"]
     );
   });
 });
@@ -79,8 +80,11 @@ describe("groupTypesByPage", () => {
     const filas = groupTypesByPage([tipo("cdp.cbom", "CDP")]);
 
     expect(filas).toHaveLength(11);
-    const assets = filas.find((f) => f.label === "Asset Management");
-    expect(assets.types).toEqual([]);
+    // Software Delivery y no Asset Management: ésta tiene informe propio desde
+    // ADR-0021, y usarla de ejemplo de "sin informe" dejaría el test pasando
+    // mientras dice algo que ya no es cierto.
+    const sdp = filas.find((f) => f.label === "Software Delivery");
+    expect(sdp.types).toEqual([]);
     const cdp = filas.find((f) => f.label === "Crypto Discovery");
     expect(cdp.types).toHaveLength(1);
   });
@@ -89,6 +93,17 @@ describe("groupTypesByPage", () => {
     const filas = groupTypesByPage([]);
     expect(filas[0].label).toBe("Overview");
     expect(filas[filas.length - 1].label).toBe("Audit");
+  });
+
+  it("⚠️ el informe de activos cae en SU página, no en 'Other'", () => {
+    // Con la fila de Asset Management en `group: null`, `amp.asset-executive`
+    // habría ido a parar a "Other", al fondo, mientras esa fila seguía
+    // diciendo que la página no tenía informe propio.
+    const filas = groupTypesByPage([tipo("amp.asset-executive", "AMP")]);
+    const assets = filas.find((f) => f.label === "Asset Management");
+    expect(assets.types.map((t) => t.key)).toEqual(["amp.asset-executive"]);
+    expect(assets.borrows).toBeNull();
+    expect(filas.find((f) => f.label === "Other")).toBeUndefined();
   });
 
   it("agrupa varios informes bajo la misma página", () => {

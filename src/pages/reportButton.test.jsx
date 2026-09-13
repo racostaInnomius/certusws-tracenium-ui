@@ -112,14 +112,16 @@ describe('Asset Management — el botón "Report"', () => {
     );
   }
 
-  it("lleva a Reports con el mismo informe preseleccionado", async () => {
+  it("lleva a Reports con SU informe preseleccionado, no el de flota", async () => {
     const onNavigate = vi.fn();
     renderAssets(onNavigate);
 
     await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
 
     expect(onNavigate).toHaveBeenCalledWith("reports");
-    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("global.fleet-health");
+    // ADR-0021: la clave tiene que casar con el registro del backend o
+    // Reports dice que el informe no está disponible.
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("amp.asset-executive");
   });
 
   it("comparte el control con Overview, así que va a la misma altura que Refresh", async () => {

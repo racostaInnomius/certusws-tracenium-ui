@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describePeriod, recipientCount, runStatusColor, runStatusLabel, scheduleParamDefs, summarizeParams, triggerLabel, typeHasPeriod,
+  periodOptionsFor, typeCoversMonthRange,
 } from "./reportSchedules";
 
 const PACK = {
@@ -19,6 +20,17 @@ describe("reportSchedules helpers", () => {
     expect(typeHasPeriod(PACK)).toBe(true);
     expect(typeHasPeriod({ key: "cdp.cbom" })).toBe(false);
     expect(scheduleParamDefs(PACK).map((p) => p.name)).toEqual(["framework", "assetGroupId"]);
+  });
+
+  it("⚠️ a single-month type only offers the previous month", () => {
+    // Mirrors the backend's coversMonthRange: amp.asset-executive is rejected
+    // with periodMonths > 1, so the dialog must not offer it.
+    const ASSET = { key: "amp.asset-executive", params: [{ name: "month", kind: "month", required: true }] };
+    expect(typeHasPeriod(ASSET)).toBe(true);
+    expect(typeCoversMonthRange(ASSET)).toBe(false);
+    expect(periodOptionsFor(ASSET).map((o) => o.value)).toEqual([1]);
+    expect(typeCoversMonthRange(PACK)).toBe(true);
+    expect(periodOptionsFor(PACK).map((o) => o.value)).toEqual([1, 3, 6, 12]);
   });
 
   it("describes the period in words", () => {

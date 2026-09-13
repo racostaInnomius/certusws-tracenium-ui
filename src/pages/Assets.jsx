@@ -42,7 +42,9 @@ import { useAuthContext } from "../auth/AuthContext";
 // No hay un tipo "assets" en el catálogo, y no se inventa uno aquí — la clave
 // tiene que existir en `REPORT_REGISTRY` o Reports avisa de que no está
 // disponible en vez de generarlo.
-const FLEET_HEALTH_KEY = "global.fleet-health";
+// El informe PROPIO de la página (ADR-0021). Hasta que existió, este botón
+// prestaba Fleet Health, que mide postura; el de activos mide el patrimonio.
+const ASSET_REPORT_KEY = "amp.asset-executive";
 
 function TabPanel({ children, value, index }) {
   return (
@@ -129,7 +131,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   }, []);
   const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(triggerRefresh, "assetsAutoRefresh");
 
-  // Mismo criterio que Overview: este tipo declara `minRole: ["ADMIN","OWNER"]`
+  // Mismo criterio que Overview: `amp.asset-executive` declara `minRole: ["ADMIN","OWNER"]`
   // en el registro, así que enseñar el botón a un USER sería ofrecerle una
   // puerta que termina en "no disponible". Sólo decide qué se PINTA — quien
   // manda es el gate del backend.
@@ -149,8 +151,8 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
-                reportKey={FLEET_HEALTH_KEY}
-                tooltip="Fleet health report"
+                reportKey={ASSET_REPORT_KEY}
+                tooltip="Asset Management executive report"
               />
             ) : null}
             <RefreshControl

@@ -21,6 +21,7 @@
  * Overview — y es la página desde la que se llega a él.
  */
 export const REPORT_GROUP_LABELS = {
+  AMP: "Asset Management",
   SCP: "Security Compliance",
   PMP: "Patch Management",
   CDP: "Crypto Discovery",
@@ -69,7 +70,11 @@ export function groupLabel(group) {
  */
 export const REPORT_PAGES = [
   { page: "overview",          label: "Overview",            group: "Global", plugin: null,  borrows: null },
-  { page: "assets",            label: "Asset Management",    group: null,     plugin: "amp", borrows: "global.fleet-health" },
+  // Informe propio desde ADR-0021 (`amp.asset-executive`). Antes esta fila
+  // prestaba Fleet Health, y con `group: null` el tipo nuevo habría caído en
+  // "Other" al fondo mientras esta fila seguía diciendo que la página no tenía
+  // informe — registrado, pero en el sitio donde nadie lo busca.
+  { page: "assets",            label: "Asset Management",    group: "AMP",    plugin: "amp", borrows: null },
   { page: "software-delivery", label: "Software Delivery",   group: null,     plugin: "sdp", borrows: "global.fleet-health" },
   { page: "ad",                label: "Security Compliance", group: "SCP",    plugin: "scp", borrows: null },
   { page: "remote-control",    label: "Remote Control",      group: null,     plugin: "rcp", borrows: "global.fleet-health" },

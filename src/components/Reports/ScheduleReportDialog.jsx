@@ -27,7 +27,7 @@ import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
 import { parseRecipients, validateRecipients } from "../Alerts/notifyHelpers";
 import { BRAND, TEXT } from "../../theme/brand";
-import { PERIOD_OPTIONS, scheduleParamDefs, typeHasPeriod } from "./reportSchedules";
+import { periodOptionsFor, scheduleParamDefs, typeCoversMonthRange, typeHasPeriod } from "./reportSchedules";
 
 export default function ScheduleReportDialog({ open, onClose, reportType, schedule = null, onCreated, onUpdated }) {
   // `schedule` presente = edición. El tipo no se cambia editando: sería otra
@@ -40,6 +40,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
   const tenantId = useEffectiveTenantId();
   const paramDefs = React.useMemo(() => scheduleParamDefs(reportType), [reportType]);
   const hasPeriod = typeHasPeriod(reportType);
+  const periodOptions = periodOptionsFor(reportType);
 
   const [format, setFormat] = React.useState("");
   const [periodMonths, setPeriodMonths] = React.useState(1);
@@ -61,7 +62,9 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
     // Editando se parte de lo GUARDADO; creando, de los valores por defecto.
     // Un formulario de edición que arranca vacío no edita: pisa.
     setFormat(schedule?.format || reportType.formats?.[0] || "");
-    setPeriodMonths(schedule?.periodMonths ?? 1);
+    // Un tipo de mes único sólo admite 1: arrancar en otro valor dejaría el
+    // select sin opción seleccionada y el guardado rechazado.
+    setPeriodMonths(typeCoversMonthRange(reportType) ? (schedule?.periodMonths ?? 1) : 1);
     setValues(schedule?.params ? { ...schedule.params } : {});
     setCheckedIds(schedule?.recipientMemberIds ? [...schedule.recipientMemberIds] : []);
     setCheckedTargetIds(schedule?.targetIds ? [...schedule.targetIds] : []);
@@ -165,7 +168,7 @@ export default function ScheduleReportDialog({ open, onClose, reportType, schedu
 
           {hasPeriod ? (
             <TextField select label="Period" size="small" value={periodMonths} onChange={(e) => setPeriodMonths(Number(e.target.value))} inputProps={{ "aria-label": "Period" }} helperText="Closed months, ending in the month before each run.">
-              {PERIOD_OPTIONS.map((o) => (
+              {periodOptions.map((o) => (
                 <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
               ))}
             </TextField>

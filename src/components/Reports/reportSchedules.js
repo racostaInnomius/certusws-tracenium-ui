@@ -21,6 +21,23 @@ export function typeHasPeriod(type) {
   return Boolean((type?.params || []).some((p) => p.kind === "month"));
 }
 
+/**
+ * Whether the type covers a RANGE of months or a single closed month.
+ *
+ * Same rule as the backend's `coversMonthRange` (report-type-period.ts): the
+ * mark is a `from` param. A single-month type (`amp.asset-executive`) is
+ * rejected with `periodMonths > 1`, so offering "Previous 12 months" here
+ * would let the operator pick something the save then refuses.
+ */
+export function typeCoversMonthRange(type) {
+  return (type?.params || []).some((p) => p.kind === "month" && p.name === "from");
+}
+
+/** The period choices that make sense for this type. */
+export function periodOptionsFor(type) {
+  return typeCoversMonthRange(type) ? PERIOD_OPTIONS : PERIOD_OPTIONS.filter((o) => o.value === 1);
+}
+
 /** Non-month params of a type, for the dialog and the summary. */
 export function scheduleParamDefs(type) {
   return (type?.params || []).filter((p) => p.kind !== "month");
