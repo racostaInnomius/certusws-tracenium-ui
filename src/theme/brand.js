@@ -68,8 +68,15 @@ export const BRAND = {
     errorHoverSoft: "#C66460",
     success: "#52B788",
     successSoft: "rgba(82,183,136,0.16)",
+    // Verde para TEXTO sobre successSoft, mismo matiz que `success`. El
+    // `success` normal da 2,2:1 sobre su propio fondo suave (2,5:1 sobre
+    // blanco): sirve de relleno, no de letra. Este da 5,0:1 (AA).
+    successText: "#277350",
     info: "#5A9F9F",
     infoSoft: "rgba(90,159,159,0.12)",
+    // Teal para TEXTO sobre infoSoft. `tealText` (#3E7878) se queda en 4,496:1
+    // sobre ese fondo, justo por debajo de AA; este da 5,0:1.
+    infoText: "#387070",
   },
 
   // Darker, text-legible counterpart to `cyan` (#8FFDFF is an accent

@@ -9,8 +9,8 @@ import { BRAND, ROLE } from "./brand";
 export const ALERT_TONES = {
   error: { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   warning: { fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
-  info: { fg: BRAND.tealText, bg: ROLE.neutralSoft },
-  success: { fg: ROLE.positive, bg: ROLE.positiveSoft },
+  info: { fg: BRAND.alert.infoText, bg: ROLE.neutralSoft },
+  success: { fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
 };
 
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
