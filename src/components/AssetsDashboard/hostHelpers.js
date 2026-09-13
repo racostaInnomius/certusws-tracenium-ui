@@ -196,7 +196,17 @@ export function normalizeHostRow(row = {}) {
   };
 }
 
-export function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
+export function buildHostsQuery({
+  page,
+  pageSize,
+  search,
+  sortBy,
+  sortDir,
+  platform,
+  agentVersions,
+  includeUnknownVersion,
+  assetGroupId,
+}) {
   const params = new URLSearchParams();
   params.set("page", String(page + 1));
   params.set("pageSize", String(pageSize));
@@ -208,6 +218,16 @@ export function buildHostsQuery({ page, pageSize, search, sortBy, sortDir }) {
 
   params.set("sortBy", HOST_SORT_FIELDS.has(sortBy) ? sortBy : "hostname");
   params.set("sortDir", sortDir === "desc" ? "desc" : "asc");
+
+  // Filtros que aplica el SERVIDOR antes de paginar. `agentVersions` se manda
+  // aunque esté vacío: un grupo de versiones sin equipos es "ninguno", no
+  // "todos".
+  if (platform) params.set("platform", platform);
+  if (Array.isArray(agentVersions)) {
+    params.set("agentVersions", agentVersions.join(","));
+    if (includeUnknownVersion) params.set("unknownVersion", "1");
+  }
+  if (assetGroupId) params.set("assetGroupId", String(assetGroupId));
 
   return params.toString();
 }

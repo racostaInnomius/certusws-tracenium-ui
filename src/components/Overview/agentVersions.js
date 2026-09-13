@@ -43,6 +43,27 @@ function oneBehind(current, latest) {
   return false;
 }
 
+/** Highest "latest published" version across the platforms we have metadata for. */
+export function canonicalLatestOf(latestMap) {
+  let canonicalLatest = null;
+  for (const v of Object.values(latestMap || {}).filter(Boolean)) {
+    if (!canonicalLatest || compareVersions(v, canonicalLatest) > 0) canonicalLatest = v;
+  }
+  return canonicalLatest;
+}
+
+/**
+ * The bucket ONE version falls in: "current" | "one_behind" | "older" |
+ * "unknown". The single definition of the rule — the donut counts with it
+ * and the Assets table filters with it, so the two cannot disagree.
+ */
+export function bucketOfAgentVersion(version, canonicalLatest) {
+  if (!version || version === "unknown" || !canonicalLatest) return "unknown";
+  if (compareVersions(version, canonicalLatest) >= 0) return "current";
+  if (oneBehind(version, canonicalLatest)) return "one_behind";
+  return "older";
+}
+
 /**
  * Bucket a set of (agent_version, count) rows against the max latest
  * version we know about. Exported because the AttentionPanel uses the
@@ -50,36 +71,40 @@ function oneBehind(current, latest) {
  * the logic in one place means the two views can't disagree.
  */
 export function classifyAgentVersions(byVersion, latestMap) {
-  const latestValues = Object.values(latestMap || {}).filter(Boolean);
   // Pick the highest latest across all platforms we got metadata for.
   // In practice this is the same string across platforms once a release
   // ships to all of them, but we don't assume.
-  let canonicalLatest = null;
-  for (const v of latestValues) {
-    if (!canonicalLatest || compareVersions(v, canonicalLatest) > 0) {
-      canonicalLatest = v;
-    }
-  }
-
+  const canonicalLatest = canonicalLatestOf(latestMap);
   const buckets = { current: 0, oneBehind: 0, older: 0, unknown: 0 };
+  const key = { current: "current", one_behind: "oneBehind", older: "older", unknown: "unknown" };
 
   if (!Array.isArray(byVersion)) return { buckets, canonicalLatest };
 
   for (const row of byVersion) {
-    const version = row?.version;
     const count = Number(row?.count ?? 0);
     if (!count) continue;
-
-    if (!version || version === "unknown" || !canonicalLatest) {
-      buckets.unknown += count;
-      continue;
-    }
-
-    const cmp = compareVersions(version, canonicalLatest);
-    if (cmp >= 0) buckets.current += count;
-    else if (oneBehind(version, canonicalLatest)) buckets.oneBehind += count;
-    else buckets.older += count;
+    buckets[key[bucketOfAgentVersion(row?.version, canonicalLatest)]] += count;
   }
 
   return { buckets, canonicalLatest };
+}
+
+/**
+ * Which exact versions make up a bucket, for filtering the device list on the
+ * SERVER. Built from the same `/dashboard/agent-versions` rows the donut
+ * counts, so filtering "older" returns the devices the donut called older.
+ *
+ * `versions` may be empty: a bucket with no devices must filter to nothing,
+ * not fall back to the whole fleet.
+ */
+export function versionsInBucket(byVersion, latestMap, bucket) {
+  const canonicalLatest = canonicalLatestOf(latestMap);
+  const versions = [];
+  let includeUnknown = false;
+  for (const row of Array.isArray(byVersion) ? byVersion : []) {
+    if (bucketOfAgentVersion(row?.version, canonicalLatest) !== bucket) continue;
+    if (!row?.version || row.version === "unknown") includeUnknown = true;
+    else versions.push(String(row.version));
+  }
+  return { versions, includeUnknown };
 }

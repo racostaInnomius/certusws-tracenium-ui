@@ -65,6 +65,7 @@ import {
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
 import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
+import { versionsInBucket } from "../components/Overview/agentVersions";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
 import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
@@ -344,12 +345,9 @@ export default function AssetsDashboard({
   // table. Same endpoint the Overview Hero uses.
   const [connectedIds, setConnectedIds] = React.useState(() => new Set());
 
-  // Deep-link filters from the Overview donuts. Read once on mount
-  // (stored in state so the user can dismiss them with the chip X
-  // without the URL fighting back). Clearing the chip only updates
-  // state — the URL param lingers, which is fine because a manual
-  // reload would just re-apply the same filter and the user already
-  // saw the toggle.
+  // Deep-link filters (?platform=, ?versionBucket=, ?groupId=). Read once on
+  // mount and kept in state so the chip X can dismiss them; dismissing also
+  // drops the param, or a reload would bring the filter back.
   const initialFilters = React.useMemo(() => readUrlFilters(), []);
   const [platformFilter, setPlatformFilter] = React.useState(
     initialFilters.platform || ""
@@ -538,20 +536,48 @@ export default function AssetsDashboard({
   // returning an auth/server error. Empty state should only mean "loaded
   // successfully and there is truly no inventory data".
   const loader = React.useCallback(async () => {
+    // Plataforma, versión y grupo se filtran EN EL SERVIDOR, antes de paginar.
+    // En el navegador sólo veían la página cargada: la dona decía "Older 4" y
+    // la tabla filtrada enseñaba 2 (los otros estaban en la página 2).
+    //
+    // La versión llega como grupo ("older"); el servidor quiere versiones
+    // exactas. Se traducen con la misma regla y los mismos datos que la dona
+    // (`versionsInBucket`), así que hace falta tener esos datos ANTES de pedir
+    // la tabla — sólo cuando hay filtro de versión.
+    const versionMetaPromise = Promise.allSettled([getLatestAgentVersions(), getAgentVersionsSummary()]);
+    let versionFilterParams = {};
+    if (versionBucketFilter) {
+      const [latestSettled, versionsSettled] = await versionMetaPromise;
+      const latest = {};
+      if (latestSettled.status === "fulfilled" && Array.isArray(latestSettled.value)) {
+        for (const e of latestSettled.value) {
+          if (e?.ok && e.data?.latestVersion) latest[`${e.platform}:${e.arch}`] = e.data.latestVersion;
+        }
+      }
+      const byVersion =
+        versionsSettled.status === "fulfilled" && Array.isArray(versionsSettled.value?.byVersion)
+          ? versionsSettled.value.byVersion
+          : [];
+      const { versions, includeUnknown } = versionsInBucket(byVersion, latest, versionBucketFilter);
+      versionFilterParams = { agentVersions: versions, includeUnknownVersion: includeUnknown };
+    }
+
     const hostsQuery = buildHostsQuery({
       page: hostsPaginationModel.page,
       pageSize: hostsPaginationModel.pageSize,
       search: hostsSearch,
       sortBy: hostsSortBy,
       sortDir: hostsSortDir,
+      platform: platformFilter || undefined,
+      assetGroupId: groupFilter || undefined,
+      ...versionFilterParams,
     });
 
-    const [sumRes, hostsRes, latestRes, agentVersionsRes] = await Promise.allSettled([
+    const [sumRes, hostsRes] = await Promise.allSettled([
       dashboardApi.getSummary(),
       httpGetJson(`/api/v1/dashboard/hosts?${hostsQuery}`, { cache: "reload" }),
-      getLatestAgentVersions(),
-      getAgentVersionsSummary(),
     ]);
+    const [latestRes, agentVersionsRes] = await versionMetaPromise;
 
     const summaryOk = sumRes.status === "fulfilled";
     const rawHostsPayload = hostsRes.status === "fulfilled" ? hostsRes.value : null;
@@ -606,6 +632,11 @@ export default function AssetsDashboard({
       summary,
       hosts,
       hostsMeta,
+      // El backend nuevo devuelve `filters` con lo que aplicó. Uno anterior
+      // ignora los parámetros y devuelve la página sin filtrar: entonces se
+      // sigue filtrando aquí, como antes, en vez de enseñar la flota entera
+      // bajo el chip.
+      hostsServerFiltered: Boolean(rawHostsPayload && !Array.isArray(rawHostsPayload) && rawHostsPayload.filters),
       latestMap,
       agentVersions,
       loadState: {
@@ -621,9 +652,12 @@ export default function AssetsDashboard({
     hostsSearch,
     hostsSortBy,
     hostsSortDir,
+    platformFilter,
+    versionBucketFilter,
+    groupFilter,
   ]);
 
-  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}`;
+  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}`;
   const { data, loading, refetch } = useCachedFetch(hostsCacheKey, loader);
   // Memoize the destructured slices so identity is stable across
   // renders — `data?.foo ?? []` would create a fresh fallback every
@@ -644,6 +678,19 @@ export default function AssetsDashboard({
     [data, hostsPaginationModel.page, hostsPaginationModel.pageSize, hostsSearch, hostsSortBy, hostsSortDir]
   );
   const latestMap = React.useMemo(() => data?.latestMap ?? {}, [data]);
+  const hostsServerFiltered = Boolean(data?.hostsServerFiltered);
+
+  // Un filtro nuevo o quitado vuelve a la primera página: la tercera página de
+  // la flota entera no existe en un filtro de cuatro equipos. Se salta el
+  // montaje para no pisar la página con la que arranca la tabla.
+  const filtersMountedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!filtersMountedRef.current) {
+      filtersMountedRef.current = true;
+      return;
+    }
+    setHostsPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
+  }, [platformFilter, versionBucketFilter, groupFilter]);
   const agentVersions = data?.agentVersions ?? null;
 
   const loadState = React.useMemo(
@@ -1206,12 +1253,9 @@ export default function AssetsDashboard({
     return values.sort((a, b) => compareVersions(b, a))[0];
   }, [latestMap]);
 
-  // Client-side filter applied over the raw hosts list. Two concerns:
-  //   * platformFilter → match on host.os_platform (normalized).
-  //   * versionBucketFilter → compute bucket per host against
-  //     canonicalLatest, keep matches only.
-  // Filtering is deliberately additive (AND): chips can combine so a
-  // user can deep-link "Windows devices one-behind" in the future.
+  // Plataforma, versión y grupo ya los aplicó el servidor (ver el loader).
+  // Lo de abajo es SÓLO el respaldo para un backend anterior que ignora esos
+  // parámetros: filtra la página cargada, como se hacía antes.
   const filteredHosts = React.useMemo(() => {
     const groupFilterActive = !!groupFilter;
     const hideCompletedDecommissionRows = locallyHiddenDecommissionDeviceIds.size > 0;
@@ -1219,6 +1263,7 @@ export default function AssetsDashboard({
       ? hosts.filter((h) => !locallyHiddenDecommissionDeviceIds.has(String(getHostDeviceId(h))))
       : hosts;
 
+    if (hostsServerFiltered) return baseHosts;
     if (!platformFilter && !versionBucketFilter && !groupFilterActive) return baseHosts;
     // While the member set is still loading, hide rows so the operator
     // doesn't briefly see the unfiltered fleet under an active chip.
@@ -1239,6 +1284,7 @@ export default function AssetsDashboard({
     });
   }, [
     hosts,
+    hostsServerFiltered,
     locallyHiddenDecommissionDeviceIds,
     platformFilter,
     versionBucketFilter,
@@ -1765,7 +1811,10 @@ const osVersionItems = React.useMemo(() => {
                       <Chip
                         size="small"
                         label={`Platform: ${platformFilter}`}
-                        onDelete={() => setPlatformFilter("")}
+                        onDelete={() => {
+                          setPlatformFilter("");
+                          updateSearchParams({ platform: "" });
+                        }}
                         sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
                       />
                     ) : null}
@@ -1773,7 +1822,10 @@ const osVersionItems = React.useMemo(() => {
                       <Chip
                         size="small"
                         label={`Version: ${versionBucketFilter.replace("_", " ")}`}
-                        onDelete={() => setVersionBucketFilter("")}
+                        onDelete={() => {
+                          setVersionBucketFilter("");
+                          updateSearchParams({ versionBucket: "" });
+                        }}
                         sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 600 }}
                       />
                     ) : null}
@@ -1787,7 +1839,10 @@ const osVersionItems = React.useMemo(() => {
                                 groupMembers ? groupMembers.size : 0
                               })`
                         }
-                        onDelete={() => setGroupFilter("")}
+                        onDelete={() => {
+                          setGroupFilter("");
+                          updateSearchParams({ groupId: "" });
+                        }}
                         sx={{
                           bgcolor: BRAND.cyanSoft || BRAND.tealSoft,
                           color: BRAND.tealText,
