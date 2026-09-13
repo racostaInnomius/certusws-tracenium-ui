@@ -16,3 +16,10 @@ export function formatPct(num) {
 
 export const listLength = (value) =>
   Array.isArray(value?.items) ? value.items.length : Array.isArray(value) ? value.length : 0;
+
+/** Medianoche local del primer día de una ventana de N días, en formato datetime-local. */
+export function startOfWindowLocal(windowDays, now = new Date()) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (Number(windowDays) - 1));
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`;
+}

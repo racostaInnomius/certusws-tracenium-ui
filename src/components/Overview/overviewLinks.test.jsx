@@ -15,7 +15,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import HeroKpis from "./HeroKpis";
 import AttentionPanel from "./AttentionPanel";
 import { ReportsCard } from "./PluginSummaryCards";
-import { startOfWindowLocal } from "./AuditTimeseriesChart";
+import { startOfWindowLocal } from "./overviewResults";
 
 afterEach(cleanup);
 

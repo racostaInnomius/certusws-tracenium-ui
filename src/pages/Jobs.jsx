@@ -886,7 +886,13 @@ export default function Jobs({ onNavigate }) {
       const items = Array.isArray(response?.items) ? response.items : [];
       setTenantJobs(items);
       setHistoryTruncated(response?.truncated === true);
-      setFilteredJobs(filtered ? (Array.isArray(filtered.items) ? filtered.items : []) : null);
+      // ⚠️ Un backend anterior a 86414a0 ignora `status`/`since` y devuelve
+      // la ventana SIN filtrar. Se reconoce porque no devuelve `filters`; en
+      // ese caso se descarta y la tabla vuelve a filtrar en el navegador.
+      // Sin esto, desplegar la UI antes que el backend pintaba todos los jobs
+      // bajo el rótulo "Failed or timed out".
+      const serverApplied = Boolean(filtered && filtered.filters);
+      setFilteredJobs(serverApplied ? (Array.isArray(filtered.items) ? filtered.items : []) : null);
       setFilteredTruncated(filtered?.truncated === true);
       setSelectedJobId((current) => {
         if (current && items.some((item) => item.job_id === current)) return current;
@@ -1267,8 +1273,9 @@ export default function Jobs({ onNavigate }) {
   // something to group.
   // Con filtro en servidor la tabla se construye con lo que devolvió el
   // servidor ya filtrado; sin él, con la ventana de siempre.
-  const historyJobs = serverFiltered && filteredJobs ? filteredJobs : tenantJobs;
-  const historyIsTruncated = serverFiltered && filteredJobs ? filteredTruncated : historyTruncated;
+  const serverAppliedFilters = serverFiltered && filteredJobs !== null;
+  const historyJobs = serverAppliedFilters ? filteredJobs : tenantJobs;
+  const historyIsTruncated = serverAppliedFilters ? filteredTruncated : historyTruncated;
 
   const groupedRows = React.useMemo(() => {
     const batches = new Map();
@@ -1316,10 +1323,16 @@ export default function Jobs({ onNavigate }) {
     return groupedRows.filter((row) => {
       // El estado ya lo filtró el servidor. Repetirlo aquí escondía lotes:
       // un lote de jobs en timeout se resume como "failed" y no casaba.
+      // Sin servidor que filtre (backend viejo), se filtra aquí como antes.
+      const rowStatus = String(row.status || "").toLowerCase();
       const matchesStatus =
-        serverFiltered ||
+        serverAppliedFilters ||
         statusFilter === "all" ||
-        String(row.status || "").toLowerCase() === statusFilter;
+        statusFilter.split(",").includes(rowStatus);
+      const matchesSince =
+        serverAppliedFilters ||
+        !sinceDays ||
+        (row.created_at && Date.now() - new Date(row.created_at).getTime() <= sinceDays * 86_400_000);
       const matchesJobType =
         jobTypeFilter === "all" || String(row.job_type || "").toLowerCase() === jobTypeFilter;
       const matchesSearch =
@@ -1336,9 +1349,9 @@ export default function Jobs({ onNavigate }) {
         (["pending", "retrying"].includes(String(row.status || "").toLowerCase()) &&
           !row.sent_at);
 
-      return matchesStatus && matchesJobType && matchesSearch && matchesStuck;
+      return matchesStatus && matchesSince && matchesJobType && matchesSearch && matchesStuck;
     });
-  }, [groupedRows, deviceMap, deferredSearch, statusFilter, serverFiltered, jobTypeFilter, triageFilter]);
+  }, [groupedRows, deviceMap, deferredSearch, statusFilter, sinceDays, serverAppliedFilters, jobTypeFilter, triageFilter]);
 
   const columnVisibilityModel = React.useMemo(() => {
     if (isSmDown) {
@@ -2604,7 +2617,7 @@ export default function Jobs({ onNavigate }) {
                 variant="outlined"
                 sx={{ borderRadius: 2, mb: 1.5, py: 0.25, alignItems: "center" }}
               >
-                {serverFiltered
+                {serverAppliedFilters
                   ? `Showing the most recent ${historyJobs.length} matching jobs. More match beyond this window.`
                   : `Showing the most recent ${historyJobs.length} jobs. Older jobs exist beyond this window — status and time filters search the whole history; search and type apply to what's loaded here.`}
               </Alert>

@@ -50,7 +50,7 @@ const job = (id, status, extra = {}) => ({
 const RECENT = [job("r1", "completed"), job("r2", "completed"), job("r3", "completed")];
 const FAILED = [job("f1", "failed"), job("t1", "timeout")];
 
-function mount(search) {
+function mount(search, { oldBackend = false } = {}) {
   const jobCalls = [];
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
@@ -58,7 +58,15 @@ function mount(search) {
       if (/\/tenants\/[^/]+\/jobs$/.test(url.pathname)) {
         jobCalls.push(Object.fromEntries(url.searchParams));
         const filtered = url.searchParams.has("status") || url.searchParams.has("since");
-        return HttpResponse.json({ ok: true, items: filtered ? FAILED : RECENT, truncated: false });
+        // Backend viejo: ignora los filtros y devuelve siempre la misma ventana
+        // (aquí con los fallos dentro), sin `filters`.
+        if (oldBackend) return HttpResponse.json({ ok: true, items: [...RECENT, ...FAILED], truncated: false });
+        return HttpResponse.json({
+          ok: true,
+          items: filtered ? FAILED : RECENT,
+          truncated: false,
+          ...(filtered ? { filters: { statuses: ["failed", "timeout"], sinceDays: 7 } } : {}),
+        });
       }
       return HttpResponse.json({ ok: true, items: [], jobs: [], devices: [], types: [], total: 0, buckets: [] });
     })
@@ -98,5 +106,12 @@ describe("Jobs — filtros del enlace, en servidor", () => {
 
     await waitFor(() => expect(showing()).toMatch(/Showing 3 rows/));
     expect(calls.every((c) => !("status" in c) && !("since" in c))).toBe(true);
+  });
+
+  it("⚠️ con un backend que aún no filtra (sin `filters`), la tabla filtra en el navegador en vez de enseñarlo todo", async () => {
+    // El backend viejo ignora status/since y devuelve la ventana entera.
+    mount("&status=failed,timeout", { oldBackend: true });
+
+    await waitFor(() => expect(showing()).toMatch(/Showing 2 rows/));
   });
 });

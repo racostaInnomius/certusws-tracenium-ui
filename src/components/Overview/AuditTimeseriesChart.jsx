@@ -26,6 +26,7 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { CHART_CATEGORICAL } from "../../theme/chartPalette";
 import { getAuditTimeseries } from "../../api/overview";
 import WindowToggle from "./WindowToggle";
+import { startOfWindowLocal } from "./overviewResults";
 
 function formatDay(isoDate) {
   // isoDate is "YYYY-MM-DD". Show "Apr 17" style on the X-axis so the
@@ -38,13 +39,6 @@ function formatDay(isoDate) {
     day: "numeric",
     timeZone: "UTC"
   });
-}
-
-/** Medianoche local del primer día de una ventana de N días, en formato datetime-local. */
-export function startOfWindowLocal(windowDays, now = new Date()) {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (Number(windowDays) - 1));
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00`;
 }
 
 export default function AuditTimeseriesChart({
