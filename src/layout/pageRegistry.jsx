@@ -41,6 +41,7 @@ const RemoteControl = React.lazy(() => import("../pages/RemoteControl"));
 const Retention = React.lazy(() => import("../pages/Retention"));
 const SessionSettings = React.lazy(() => import("../pages/SessionSettings"));
 const CryptoDiscovery = React.lazy(() => import("../pages/CryptoDiscovery"));
+const Assessments = React.lazy(() => import("../pages/Assessments"));
 const LocationSites = React.lazy(() => import("../pages/LocationSites"));
 const RolesAdministrator = React.lazy(() => import("../pages/RolesAdministrator"));
 
@@ -127,6 +128,9 @@ export const PAGE_REGISTRY = {
   // devices by the cdp agent plugin. Distinct from PKI (the agent's
   // own mTLS identity certs).
   cdp: (ctx) => <CryptoDiscovery onNavigate={ctx.onNavigate} />,
+  // ADR-0022 — Assessment Service: página propia; nada de esto vive en
+  // Security Compliance, porque el sujeto es el servicio y no el equipo.
+  assessments: (ctx) => <Assessments onNavigate={ctx.onNavigate} />,
 
   "remote-control": (ctx) => <RemoteControl onNavigate={ctx.onNavigate} />,
   alerts: (ctx) => <Alerts onNavigate={ctx.onNavigate} />,

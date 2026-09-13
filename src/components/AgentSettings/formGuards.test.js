@@ -78,7 +78,7 @@ describe("domainSlice", () => {
 
   it("mirrors the backend's domain map for every section this page saves", () => {
     // If this changes, the backend's POLICY_DOMAINS must change with it.
-    expect(Object.keys(DOMAIN_PATHS)).toEqual(["agent", "amp", "scp", "pmp", "sdp", "cdp", "rcp", "ai"]);
+    expect(Object.keys(DOMAIN_PATHS)).toEqual(["agent", "amp", "scp", "pmp", "sdp", "cdp", "rcp", "asp", "ai"]);
     expect(DOMAIN_PATHS.rcp).toContain("features.remoteRequireConsent");
     expect(DOMAIN_PATHS.agent).toContain("features.selfUpdate");
   });

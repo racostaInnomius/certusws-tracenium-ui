@@ -1,0 +1,185 @@
+// src/pages/Assessments.test.jsx
+//
+// ADR-0022 — la página de Assessment Service contra la API simulada (MSW):
+//   · las `detected` van en su bloque, con «Activate», y no cuentan;
+//   · activar abre el selector de DC del dominio y manda primario, secundario
+//     y agenda;
+//   · el detalle ordena los hallazgos por criticidad, explica un not_assessed
+//     por privilegios y enseña la cobertura;
+//   · con la última corrida `missed` el score anterior sigue con su fecha y el
+//     fallo se dice;
+//   · «Run now» sin colector online dice que quedó `missed`;
+//   · nunca aparecen las siglas.
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { server, http, HttpResponse } from "../test/msw/server";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
+import { ConfirmProvider } from "../components/common/ConfirmDialog";
+
+vi.mock("../auth/AuthContext", () => ({
+  useAuthContext: () => ({
+    auth: { tenantId: 111, tenantMember: { role: "ADMIN", isActive: true, tenantId: 111 } },
+    loading: false,
+    refreshAuth: vi.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}));
+
+import Assessments from "./Assessments";
+
+afterEach(() => {
+  cleanup();
+  clearCachedFetch();
+  server.resetHandlers();
+  window.history.replaceState({}, "", "/");
+});
+
+const LIST = {
+  instances: [
+    {
+      id: 7,
+      kind: "ad_domain",
+      externalKey: "mountainside-investment.com",
+      displayName: "mountainside-investment.com",
+      status: "active",
+      collectorDeviceId: "dc1",
+      collectorHostname: "MSIG-TSPDC",
+      schedule: { frequency: "weekly", window: { days: ["sun"], startHour: 2 } },
+      lastRun: { runId: "r2", status: "missed", trigger: "scheduled", startedAt: "2026-09-13T02:00:00Z", errorText: "collector_unavailable: primary dc1 offline" },
+      lastScore: { runId: "r1", score: 58, scoredAt: "2026-09-06T02:05:00Z" },
+      coverage: { assessable: 29, total: 30 },
+      openFindings: 10,
+    },
+  ],
+  detected: [{ id: 9, kind: "ad_domain", externalKey: "lab.local", displayName: "lab.local", status: "detected", lastDetectedAt: "2026-09-13T10:00:00Z" }],
+  license: { activeInstances: 1 },
+};
+
+const DETAIL = {
+  instance: LIST.instances[0],
+  lastScore: LIST.instances[0].lastScore,
+  coverage: { assessable: 29, total: 30 },
+  findings: [
+    { controlId: "ASP-AD-CFG-007", title: "Fine-grained password policies allow passwords shorter than 14 characters", section: "Domain configuration", status: "not_assessed", severity: "medium", requires: "privileged", reason: "requires_privileged_read:0x8007200A", affectedCount: null, remediation: { summary: "Raise it", steps: ["Do it"], risk: "Some" }, references: [] },
+    { controlId: "ASP-AD-ACC-001", title: "Enabled user accounts have a password that never expires", section: "Accounts", status: "fail", severity: "medium", affectedCount: 38, evidence: { count: 38, sample: ["CN=svc,DC=m"] }, remediation: { summary: "Fix", steps: ["Step"], risk: "Risk" }, references: [] },
+    { controlId: "ASP-AD-KRB-001", title: "The krbtgt account password has not been reset in the last 180 days", section: "Kerberos", status: "fail", severity: "critical", affectedCount: null, remediation: { summary: "Reset twice", steps: ["Reset"], risk: "Tickets" }, references: [{ source: "MITRE ATT&CK", id: "T1558.001", title: "Golden Ticket", url: "https://attack.mitre.org/techniques/T1558/001/" }] },
+    { controlId: "ASP-AD-KRB-003", title: "Enabled accounts do not require Kerberos pre-authentication", section: "Kerberos", status: "pass", severity: "high", affectedCount: 0, references: [] },
+  ],
+  history: [
+    { runId: "r0", scoredAt: "2026-08-30T02:05:00Z", score: 51, bySeverity: {} },
+    { runId: "r1", scoredAt: "2026-09-06T02:05:00Z", score: 58, bySeverity: {} },
+  ],
+  runs: [
+    { runId: "r2", status: "missed", trigger: "scheduled", startedAt: "2026-09-13T02:00:00Z", completedAt: "2026-09-13T02:00:00Z", score: null, errorText: "collector_unavailable: primary dc1 offline" },
+    { runId: "r1", status: "complete", trigger: "scheduled", startedAt: "2026-09-06T02:00:00Z", completedAt: "2026-09-06T02:05:00Z", score: 58, summary: { coverage: { assessable: 29, total: 30 } } },
+  ],
+};
+
+function mount(overrides = {}) {
+  const calls = [];
+  server.use(
+    http.get(/.*\/api\/v1\/asp\/instances$/, () => HttpResponse.json(overrides.list ?? LIST)),
+    http.get(/.*\/api\/v1\/asp\/instances\/7$/, () => HttpResponse.json(DETAIL)),
+    http.get(/.*\/api\/v1\/asp\/instances\/9\/collector-candidates$/, () =>
+      HttpResponse.json({ candidates: [
+        { deviceId: "dc-a", domain: "lab.local", hostname: "LAB-DC01", online: true },
+        { deviceId: "dc-b", domain: "lab.local", hostname: "LAB-DC02", online: false },
+      ] })
+    ),
+    http.post(/.*\/api\/v1\/asp\/instances\/9\/activate$/, async ({ request }) => {
+      calls.push({ path: "activate", body: await request.json() });
+      return HttpResponse.json({ instance: { ...LIST.detected[0], status: "active" }, firstRun: { runId: "r9", status: "running" } });
+    }),
+    http.post(/.*\/api\/v1\/asp\/instances\/7\/run$/, () =>
+      HttpResponse.json({ error: "ASP_COLLECTOR_UNAVAILABLE", message: "collector_unavailable: primary dc1 offline", run: { status: "missed" } }, { status: 409 })
+    ),
+    ...(overrides.handlers ?? [])
+  );
+  window.history.replaceState({}, "", "/?page=assessments");
+  render(
+    <ConfirmProvider>
+      <Assessments onNavigate={vi.fn()} />
+    </ConfirmProvider>
+  );
+  return calls;
+}
+
+describe("Assessment Service — lista", () => {
+  it("las detectadas van aparte, con Activate, y la licencia cuenta sólo las activas", async () => {
+    mount();
+    const detected = await screen.findByRole("table", { name: "Detected domains" });
+    expect(within(detected).getByText("lab.local")).toBeTruthy();
+    expect(within(detected).getByRole("button", { name: "Activate" })).toBeTruthy();
+    expect(screen.getByText(/1 active · licensed per active instance/)).toBeTruthy();
+    const instances = screen.getByRole("table", { name: "Service instances" });
+    expect(within(instances).getByText("mountainside-investment.com")).toBeTruthy();
+    expect(within(instances).queryByText("lab.local")).toBeNull();
+  });
+
+  it("⭐ con la última corrida missed, el score anterior sigue en pantalla con su fecha", async () => {
+    mount();
+    const instances = await screen.findByRole("table", { name: "Service instances" });
+    expect(within(instances).getByText("58")).toBeTruthy();
+    expect(within(instances).getByText("Missed")).toBeTruthy();
+    expect(within(instances).getByText("29 of 30 assessable from this collector")).toBeTruthy();
+  });
+
+  it("nunca enseña las siglas", async () => {
+    mount();
+    await screen.findByRole("table", { name: "Service instances" });
+    expect(document.body.textContent).not.toMatch(/\bASP\b/);
+  });
+
+  it("⭐ activar ofrece los DC del dominio y manda primario, secundario y agenda", async () => {
+    const user = userEvent.setup();
+    const calls = mount({ handlers: [http.get(/.*\/api\/v1\/asp\/instances\/9$/, () => HttpResponse.json({ ...DETAIL, instance: { ...LIST.detected[0], status: "active" }, findings: [], history: [], runs: [] }))] });
+    await user.click(await screen.findByRole("button", { name: "Activate" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByLabelText("Primary domain controller"));
+    await user.click(await screen.findByRole("option", { name: "LAB-DC01" }));
+    await user.click(within(dialog).getByLabelText("Secondary domain controller (optional)"));
+    await user.click(await screen.findByRole("option", { name: "LAB-DC02 · offline" }));
+    await user.click(within(dialog).getByRole("button", { name: "Activate" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].body).toEqual({
+      primaryDeviceId: "dc-a",
+      secondaryDeviceId: "dc-b",
+      schedule: { frequency: "weekly", window: { days: ["sun"], startHour: 2 } },
+    });
+  });
+});
+
+describe("Assessment Service — detalle", () => {
+  it("⭐ ordena por criticidad, explica el not_assessed por privilegios y avisa del missed", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    const findings = await screen.findByRole("table", { name: "Findings" });
+    const titles = within(findings).getAllByText(/./, { selector: "p" }).map((n) => n.textContent);
+    const krb = titles.findIndex((t) => t.includes("krbtgt"));
+    const pwd = titles.findIndex((t) => t.includes("never expires"));
+    const fgpp = titles.findIndex((t) => t.includes("Fine-grained"));
+    const pass = titles.findIndex((t) => t.includes("pre-authentication"));
+    expect(krb).toBeLessThan(pwd); // fail crítico antes que fail medio
+    expect(pwd).toBeLessThan(fgpp); // fail antes que not_assessed
+    expect(fgpp).toBeLessThan(pass); // pass al final
+
+    expect(screen.getByText(/The last run .* was/)).toBeTruthy();
+    expect(screen.getByText("Scored", { exact: false })).toBeTruthy();
+
+    // Desplegar el FGPP explica por qué no se evaluó.
+    const fgppRow = within(findings).getByText(/Fine-grained/).closest("tr");
+    await user.click(within(fgppRow).getByRole("button", { name: "Show details" }));
+    expect(await screen.findByText(/machine account cannot read this \(0x8007200A\)/)).toBeTruthy();
+  });
+
+  it("⭐ Run now sin colector online dice que la corrida quedó missed", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await user.click(await screen.findByRole("button", { name: "Run now" }));
+    expect(await screen.findByText(/recorded as missed/)).toBeTruthy();
+  });
+});

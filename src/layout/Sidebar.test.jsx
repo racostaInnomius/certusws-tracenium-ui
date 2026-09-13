@@ -74,6 +74,9 @@ describe("los plugins, en orden de ciclo de vida", () => {
       "Remote Control",
       "Patch Management",
       "Crypto Discovery",
+      // ADR-0022: evalúa el servicio (el dominio de AD) desde los DC que ya
+      // inventaría AMP; va con los plugins, detrás de Crypto Discovery.
+      "Assessment Service",
       "MDM / MAMBeta",
     ]);
   });

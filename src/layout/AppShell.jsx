@@ -121,6 +121,7 @@ const EMPTY_TENANT_GATED_PAGES = new Set([
   "alerts",
   "pki",
   "cdp",
+  "assessments",
   // NOTE: "device-management" is deliberately NOT gated. With an empty
   // fleet it's the natural entry point for enrolling the first mobile
   // device, so blurring it behind the "no information yet" overlay

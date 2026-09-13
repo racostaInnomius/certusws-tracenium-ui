@@ -35,6 +35,7 @@ import InstallDesktopOutlinedIcon from "@mui/icons-material/InstallDesktopOutlin
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import DomainVerificationOutlinedIcon from "@mui/icons-material/DomainVerificationOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
 
 import { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
@@ -712,6 +713,9 @@ export default function Sidebar({
     // Sin «Beta» desde 2026-09-06: inventario, roadmap, conectores y
     // settings desplegados y en uso; la etiqueta ya no describía el estado.
     { label: "Crypto Discovery", key: "cdp", icon: <WorkspacePremiumOutlinedIcon /> },
+    // Assessment Service (ADR-0022) — el servicio, no el equipo: el dominio de
+    // AD evaluado desde un DC elegido. Nunca las siglas en pantalla.
+    { label: "Assessment Service", key: "assessments", icon: <DomainVerificationOutlinedIcon /> },
     // Device Management (MDM/MAM) es un área de producto por derecho
     // propio (aquí aterriza el MDM propio), no un ajuste de configuración.
     //

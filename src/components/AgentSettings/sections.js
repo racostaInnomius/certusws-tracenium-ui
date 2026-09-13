@@ -65,6 +65,16 @@ export const SECTIONS = [
     related: { label: "Open Remote Control", page: "remote-control" },
   },
   {
+    // ADR-0022. Sólo los defectos de servidor: la agenda que se propone al
+    // activar un dominio y el tope de evidencia. Qué DC es colector de qué
+    // dominio se elige en la propia página, al activar la instancia.
+    id: "asp",
+    label: "Assessment Service",
+    plugin: "asp",
+    description: "Default schedule and evidence limit for service assessments. Collectors are chosen per domain when you activate it.",
+    related: { label: "Open Assessment Service", page: "assessments" },
+  },
+  {
     id: "ai",
     label: "AI",
     kind: "core",
@@ -120,6 +130,7 @@ const PATH_RULES = [
   [/^ai(\.|$)/, "ai"],
   [/^sdp(\.|$)/, "sdp"],
   [/^cdp(\.|$)/, "cdp"],
+  [/^asp(\.|$)/, "asp"],
 ];
 
 export function sectionForPath(path) {

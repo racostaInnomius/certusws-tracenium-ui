@@ -10,6 +10,8 @@
 // document; sections.js maps document paths to sections for the diff.
 
 import {
+  ASP_EVIDENCE_LIMIT_MAX,
+  ASP_WEEKDAYS,
   CDP_INTERVAL_MAX,
   CDP_INTERVAL_MIN,
   CDP_KEYSTORE_PATHS_MAX,
@@ -265,6 +267,68 @@ export const FIELD_SPECS = {
         const bad = lines.filter((h) => !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$/.test(h) || h.length > 253);
         if (bad.length > 0) return `Not a hostname — ${bad.slice(0, 3).join(", ")}${bad.length > 3 ? "…" : ""}`;
         return lines.length > 50 ? "At most 50 CA servers." : null;
+      },
+    },
+  ],
+  // ADR-0022 — Assessment Service. Defectos que se proponen al activar un
+  // dominio; cada instancia guarda los suyos. Todo en UTC (el tenant no tiene
+  // zona horaria en el modelo) y la fila lo dice.
+  asp: [
+    {
+      key: "asp.frequency",
+      label: "Default schedule",
+      sub: "Proposed when a domain is activated; each domain keeps its own afterwards. Blank = weekly. Manual = only “Run now”.",
+      type: "select",
+      options: [
+        { value: "", label: "Default (weekly)" },
+        { value: "manual", label: "Manual" },
+        { value: "daily", label: "Daily" },
+        { value: "weekly", label: "Weekly" },
+        { value: "monthly", label: "Monthly" },
+      ],
+    },
+    {
+      key: "asp.days",
+      label: "Days",
+      sub: "Weekly: every listed day. Monthly: the first listed day of each month. Comma-separated: sun, mon, tue, wed, thu, fri, sat.",
+      type: "text",
+      placeholder: "sun",
+      visibleWhen: (form) => ["weekly", "monthly", ""].includes(form?.asp?.frequency ?? ""),
+      validate: (v) => {
+        const tokens = String(v ?? "").toLowerCase().split(/[\s,;]+/).filter(Boolean);
+        const bad = tokens.filter((t) => !ASP_WEEKDAYS.includes(t));
+        return bad.length > 0 ? `Not a day: ${bad.slice(0, 3).join(", ")}. Use sun, mon, tue, wed, thu, fri or sat.` : null;
+      },
+    },
+    {
+      key: "asp.startHour",
+      label: "Start hour (UTC)",
+      sub: "Hour of the day the run starts, 0–23 UTC. Blank = 02:00. A domain controller that is offline at that hour records the run as missed.",
+      type: "number",
+      min: 0,
+      max: 23,
+      step: 1,
+      placeholder: "2",
+      visibleWhen: (form) => form?.asp?.frequency !== "manual",
+      validate: (v) => {
+        if (v === "" || v === null || v === undefined) return null;
+        const n = Number(v);
+        return Number.isInteger(n) && n >= 0 && n <= 23 ? null : "Must be a whole hour between 0 and 23.";
+      },
+    },
+    {
+      key: "asp.evidenceLimit",
+      label: "Evidence per finding",
+      sub: `How many affected objects (distinguished names) each finding keeps as evidence. At most ${ASP_EVIDENCE_LIMIT_MAX}; the count is always complete. No Active Directory object ever leaves the domain controller.`,
+      type: "number",
+      min: 1,
+      max: ASP_EVIDENCE_LIMIT_MAX,
+      step: 10,
+      placeholder: String(ASP_EVIDENCE_LIMIT_MAX),
+      validate: (v) => {
+        if (v === "" || v === null || v === undefined) return null;
+        const n = Number(v);
+        return Number.isInteger(n) && n >= 1 && n <= ASP_EVIDENCE_LIMIT_MAX ? null : `Must be between 1 and ${ASP_EVIDENCE_LIMIT_MAX}.`;
       },
     },
   ],

@@ -7,7 +7,7 @@
 // field — the override is exactly the set of rows that say Override.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, MenuItem, Switch, TextField, Typography } from "@mui/material";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getFormValue, MONO_FONT, sameFormValue, setFormValue, specsFor, switchOn } from "./fieldSpecs";
 
@@ -22,6 +22,25 @@ function Control({ spec, value, onChange, disabled }) {
         disabled={disabled}
         inputProps={{ "aria-label": ariaLabel }}
       />
+    );
+  }
+  if (spec.type === "select") {
+    return (
+      <TextField
+        select
+        size="small"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        slotProps={{ htmlInput: { "aria-label": ariaLabel }, select: { displayEmpty: true } }}
+        sx={{ width: "100%", "& .MuiInputBase-root": { bgcolor: BRAND.surface } }}
+      >
+        {(spec.options || []).map((o) => (
+          <MenuItem key={o.value} value={o.value}>
+            {o.label}
+          </MenuItem>
+        ))}
+      </TextField>
     );
   }
   if (spec.type === "number") {

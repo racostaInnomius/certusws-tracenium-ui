@@ -33,6 +33,7 @@ describe("PAGE_REGISTRY", () => {
       "ad",
       "patch",
       "cdp",
+      "assessments",
       "remote-control",
       "alerts",
       "reports",

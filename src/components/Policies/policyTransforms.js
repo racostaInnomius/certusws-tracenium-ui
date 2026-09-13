@@ -33,6 +33,18 @@ export const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable 
 // CDP: a full certificate-store scan is not cheap (OS stores + every JVM
 // cacerts), and certificates move on a scale of days — sub-15-minute
 // cadence buys nothing. Mirrors the backend validator + agent bounds.
+// ADR-0022 — Assessment Service. Mismo tope que el backend
+// (validateAspPolicyBlock) y que la decisión 3: 200 DN por indicador.
+export const ASP_EVIDENCE_LIMIT_MAX = 200;
+export const ASP_FREQUENCIES = ["manual", "daily", "weekly", "monthly"];
+export const ASP_WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+/** "sun, wed" → ["sun","wed"] en el orden de la semana; lo que no es un día se descarta. */
+export function parseAspDays(text) {
+  const tokens = String(text ?? "").toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  return ASP_WEEKDAYS.filter((d) => tokens.includes(d));
+}
+
 export const CDP_INTERVAL_MIN = 900;            // 15m
 export const CDP_INTERVAL_MAX = 86400;          // 24h
 export const CDP_KEYSTORE_PATHS_MAX = 50;
@@ -598,6 +610,14 @@ export function readFormFromPolicy(policy, catalog = []) {
       // Vacío = apagado (repaso 2026-09-07: dejó de ser un toggle).
       adcsHosts: (policy?.cdp?.adcs?.hosts ?? []).join("\n"),
     },
+    // ADR-0022 — defectos de servidor de Assessment Service. Vacío = los del
+    // backend (semanal, domingo 02:00 UTC, 200 DN).
+    asp: {
+      frequency: ASP_FREQUENCIES.includes(policy?.asp?.schedule?.frequency) ? policy.asp.schedule.frequency : "",
+      days: Array.isArray(policy?.asp?.schedule?.window?.days) ? policy.asp.schedule.window.days.join(", ") : "",
+      startHour: Number.isInteger(policy?.asp?.schedule?.window?.startHour) ? policy.asp.schedule.window.startHour : "",
+      evidenceLimit: Number(policy?.asp?.evidenceLimit) > 0 ? Number(policy.asp.evidenceLimit) : "",
+    },
   };
 }
 
@@ -848,6 +868,28 @@ export function formToPolicy(form, catalog = []) {
     if (adcsHosts.length > 0) cdp.adcs = { enabled: true, hosts: adcsHosts };
 
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
+  }
+
+  // ── Assessment Service (ADR-0022) ───────────────────────────────
+  // Gated on the plugin and omit-when-empty like the rest. `asp.collector`
+  // is never written: the control plane derives it from the active
+  // instances, and a device view that echoes it back would be overwritten.
+  if (pluginsEnabled.includes("asp")) {
+    const asp = {};
+    const frequency = form?.asp?.frequency;
+    const days = parseAspDays(form?.asp?.days);
+    const startHour = Number(form?.asp?.startHour);
+    if (ASP_FREQUENCIES.includes(frequency)) {
+      const schedule = { frequency };
+      const window = {};
+      if (days.length > 0) window.days = days;
+      if (form?.asp?.startHour !== "" && Number.isInteger(startHour) && startHour >= 0 && startHour <= 23) window.startHour = startHour;
+      if (Object.keys(window).length > 0) schedule.window = window;
+      asp.schedule = schedule;
+    }
+    const limit = Number(form?.asp?.evidenceLimit);
+    if (Number.isInteger(limit) && limit >= 1 && limit <= ASP_EVIDENCE_LIMIT_MAX) asp.evidenceLimit = limit;
+    if (Object.keys(asp).length > 0) policy.asp = asp;
   }
 
   // ── Security policy block (Sprint 2 of Policy v2) ───────────────
