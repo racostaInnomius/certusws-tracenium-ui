@@ -64,7 +64,7 @@ const CENTER = { keys: "private keys", services: "services and resources", certs
  * propios más servicios medidos. Debajo se enseñan las dos fracciones,
  * porque mezcla dos unidades a propósito y hay que poder deshacerlo.
  */
-export function ReadinessStrip({ exposure, overview, devicesReporting, onDrillDown, onOpenRoadmap }) {
+export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotDate = null, onDrillDown, onOpenRoadmap }) {
   const own = Number(exposure?.own ?? 0);
   const ownPq = Number(exposure?.ownPostQuantum ?? 0);
   const kemH = Number(exposure?.kem?.hybrid ?? 0);
@@ -98,7 +98,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, onDrillDo
   return (
     <SectionPaper>
       <Stack direction={{ xs: "column", lg: "row" }} spacing={0} sx={{ alignItems: "stretch" }}>
-        <Box sx={{ minWidth: 300, pr: { lg: 3 }, borderRight: { lg: `1px solid ${BRAND.border}` } }}>
+        <Box sx={{ width: { lg: 380 }, flexShrink: 0, pr: { lg: 3 }, borderRight: { lg: `1px solid ${BRAND.border}` } }}>
           <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Post-quantum readiness</Typography>
           <Stack direction="row" spacing={1.25} alignItems="baseline">
             <Typography component="span" sx={{ fontSize: TEXT["5xl"], fontWeight: 800, lineHeight: 1, color: BRAND.dark }} aria-label="Post-quantum readiness">
@@ -111,6 +111,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, onDrillDo
           </Box>
           <Typography sx={{ mt: 0.75, fontSize: TEXT.xs, color: TEXT_MUTED }}>
             {fmt(ownPq)} of {fmt(own)} certificates you own are post-quantum · {fmt(kemH)} of {fmt(measured)} TLS services negotiate hybrid ML-KEM.
+            {snapshotDate ? ` Systems and blocked devices as of the ${snapshotDate} roadmap snapshot.` : ""}
           </Typography>
         </Box>
         {pairs.map((p, i) => (
@@ -126,7 +127,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, onDrillDo
               }
             }}
             sx={{
-              flex: 1, px: { lg: 3 }, pt: { xs: 2, lg: 0 }, cursor: "pointer", borderRadius: 1,
+              flex: "1 1 0", minWidth: 0, px: { lg: 2.5 }, pt: { xs: 2, lg: 0 }, cursor: "pointer", borderRadius: 1,
               borderRight: { lg: i < pairs.length - 1 ? `1px solid ${BRAND.border}` : "none" },
               "&:hover": { bgcolor: BRAND.rowHover }
             }}
@@ -171,7 +172,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
     };
   }, [mode, refreshNonce]);
 
-  const outside = exposure?.outside?.bySource ?? [];
+  const outside = React.useMemo(() => exposure?.outside?.bySource ?? [], [exposure]);
   const sshHostKeys = outside.filter((s) => s.origin === "ssh").reduce((s, x) => s + Number(x.certificates ?? 0), 0);
   const tree = React.useMemo(() => {
     const rows = data[mode];
@@ -236,7 +237,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
             </Box>
           ))}
           <Box sx={{ position: "absolute", left: 280, top: 280, transform: "translate(-50%, -50%)", textAlign: "center", pointerEvents: "none" }}>
-            <Typography sx={{ fontSize: 26, fontWeight: 800, color: BRAND.dark, lineHeight: 1 }}>{layout ? fmt(centerValue) : "…"}</Typography>
+            <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1 }}>{layout ? fmt(centerValue) : "…"}</Typography>
             <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{CENTER[mode]}</Typography>
           </Box>
         </Box>

@@ -119,203 +119,6 @@ const OWNERSHIP_FILL = {
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
-// ── A · Embudo de propiedad ──────────────────────────────────────────
-
-function FunnelStep({ label, value, sub, onSelect, emphasis }) {
-  const clickable = typeof onSelect === "function";
-  return (
-    <Box
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (clickable && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-label={clickable ? `${label}: ${fmt(value)}` : undefined}
-      sx={{
-        flex: 1,
-        minWidth: 150,
-        p: 1.5,
-        border: `1px solid ${emphasis ? BRAND.tealText : BRAND.border}`,
-        borderRadius: 1,
-        bgcolor: emphasis ? BRAND.tealSoft : BRAND.surface,
-        cursor: clickable ? "pointer" : "default",
-        "&:hover": clickable ? { borderColor: BRAND.tealText, bgcolor: BRAND.rowHover } : undefined,
-        "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, outlineOffset: 2 }
-      }}
-    >
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
-        {label}
-      </Typography>
-      <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 700, color: emphasis ? BRAND.tealText : BRAND.dark, fontVariantNumeric: "tabular-nums" }}>
-        {fmt(value)}
-      </Typography>
-      {sub ? <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.75 }}>{sub}</Typography> : null}
-    </Box>
-  );
-}
-
-/** Un tramo de texto que navega: mismo aspecto que un enlace, con teclado. */
-function LinkText({ onClick, children, sx }) {
-  if (!onClick) return <Box component="span" sx={sx}>{children}</Box>;
-  return (
-    <Box
-      component="span"
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      sx={{ cursor: "pointer", textDecoration: "underline dotted", textUnderlineOffset: 3, "&:hover": { color: BRAND.tealText }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}`, borderRadius: 0.5 }, ...sx }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-export function ExposureFunnel({ exposure, onSelect, onOpenOutside, onOpenRoadmap, explain }) {
-  const e = exposure;
-  if (!e) return null;
-  const pct = e.total ? Math.round((e.own / e.total) * 1000) / 10 : 0;
-  const o = e.outside;
-  return (
-    <SectionPaper>
-      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>Your exposure</Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.75 }}>
-          {/* Los pasos cuentan certificados distintos, como la lista; las ocurrencias van aquí. */}
-          {fmt(e.devices)} devices{e.instances != null && e.instances !== e.total ? ` · ${fmt(e.instances)} occurrences on devices` : ""}
-        </Typography>
-      </Stack>
-      <Explain on={explain}>
-        Every certificate on your devices is counted, but only the ones you hold a private key for are yours to
-        migrate. The rest ship with the operating system, a JVM or a browser — their vendors rotate them, not you.
-      </Explain>
-
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
-        <FunnelStep label="Certificates seen" value={e.total} sub={`${fmt(e.vendor)} shipped with OS / JVM`} onSelect={() => onSelect({ includeRoots: true })} />
-        <ChevronRightIcon sx={{ color: BRAND.gray }} />
-        <FunnelStep label="Yours" value={e.own} sub={`${pct}% · private key on device`} onSelect={() => onSelect({ hasPrivateKey: true })} emphasis />
-        <ChevronRightIcon sx={{ color: BRAND.gray }} />
-        <FunnelStep
-          label={`Still valid in ${e.deprecationYear}`}
-          value={e.ownLeafBeyondDeprecation}
-          sub={`${fmt(e.ownLeafBeyondDisallowed)} still valid in ${e.disallowedYear}`}
-          onSelect={() => onSelect({ hasPrivateKey: true, notAfterFrom: `${e.deprecationYear}-01-01` })}
-          emphasis
-        />
-        <ChevronRightIcon sx={{ color: BRAND.gray }} />
-        <FunnelStep
-          label="Devices that can't migrate yet"
-          value={e.devicesBlocked == null ? "—" : e.devicesBlocked}
-          sub={e.devicesBlocked == null ? "not evaluated" : "runtime or OS blocks post-quantum"}
-          // La lista de esos equipos, con lo que los bloquea, está en Roadmap.
-          onSelect={onOpenRoadmap && e.devicesBlocked ? onOpenRoadmap : undefined}
-        />
-      </Stack>
-      <Explain on={explain}>
-        {e.deprecationYear} and {e.disallowedYear} are the years NIST&apos;s draft IR 8547 proposes to deprecate and then disallow RSA and ECDSA
-        signatures. A certificate that expires before then renews on its normal cycle; one that outlives them is the migration.
-      </Explain>
-
-      {o && o.assets > 0 ? (
-        <Box
-          onClick={onOpenOutside}
-          role={onOpenOutside ? "button" : undefined}
-          tabIndex={onOpenOutside ? 0 : undefined}
-          sx={{ mt: 1.5, p: 1.25, borderRadius: 1.5, border: `1px dashed ${BRAND.border}`, cursor: onOpenOutside ? "pointer" : "default", "&:hover": onOpenOutside ? { bgcolor: BRAND.rowHover } : undefined }}
-        >
-          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Outside your devices
-          </Typography>
-          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-            <strong>{fmt(o.certificates)}</strong> certificate(s) in {fmt(o.sources)} source(s) without an agent
-            {o.inUse ? ` · ${fmt(o.inUse)} in use by a service` : ""}
-            {" · "}
-            <Box component="span" sx={{ color: BRAND.alert.high }}>{fmt(o.quantumBroken)} quantum-broken</Box>
-            {" · "}
-            {fmt(o.beyondDisallowed)} still valid in {e.disallowedYear}
-          </Typography>
-          <Explain on={explain}>
-            Key Vault, ACM, Google Cloud, HashiCorp Vault, Kubernetes, AD CS and imported inventories. These are yours
-            too, but they are migrated at the source — the vault&apos;s policy, the CA&apos;s template, the cluster&apos;s
-            issuer — and the roadmap lists each source as one system.
-          </Explain>
-        </Box>
-      ) : null}
-
-      <Stack direction="row" spacing={2} sx={{ mt: 2, flexWrap: "wrap", rowGap: 1 }}>
-        <Box sx={{ flex: 1, minWidth: 260 }}>
-          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Confidentiality today (key exchange)
-          </Typography>
-          {e.kemMeasured ? (
-            <>
-              <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-                <LinkText onClick={onSelect ? () => onSelect({ source: "listener" }) : null}>{fmt(e.kem?.endpoints)} TLS endpoints</LinkText>
-                {e.kem?.probes ? <> (<LinkText onClick={onSelect ? () => onSelect({ source: "probe" }) : null}>{fmt(e.kem.probes)} remote</LinkText>)</> : ""} ·{" "}
-                {/* Cada cifra lleva a SU lista (09-sep): el filtro `kem` de
-                    Inventory cruza el certificado con el handshake del
-                    servicio que lo sirve. */}
-                <LinkText onClick={onSelect ? () => onSelect({ kem: "hybrid" }) : null} sx={{ color: e.kem?.hybrid ? BRAND.alert.success : BRAND.alert.errorText, fontWeight: 700 }}>
-                  {fmt(e.kem?.hybrid)} negotiate post-quantum key exchange
-                </LinkText>
-                {" · "}
-                <LinkText onClick={onSelect ? () => onSelect({ kem: "classical" }) : null} sx={{ color: BRAND.alert.high }}>{fmt(e.kem?.classicalOnly)} classical only</LinkText>
-                {e.kem?.unknown ? (
-                  <>
-                    {" · "}
-                    <LinkText onClick={onSelect ? () => onSelect({ kem: "unknown" }) : null} sx={{ color: TEXT_MUTED }}>{fmt(e.kem.unknown)} could not be determined</LinkText>
-                  </>
-                ) : null}
-              </Typography>
-              <Explain on={explain}>
-                This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
-                classical. It lives in the TLS handshake, not in the certificate. «Could not be determined» is not
-                «no» — the probing agent could not ask, or the server did not answer twice.
-              </Explain>
-            </>
-          ) : (
-            <>
-              <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-                <LinkText onClick={onSelect ? () => onSelect({ source: "listener" }) : null}>{fmt(e.listeners)} TLS services</LinkText> on {fmt(e.listenerDevices)} devices ·{" "}
-                <Box component="span" sx={{ color: TEXT_MUTED }}>post-quantum key exchange not measured yet</Box>
-              </Typography>
-              <Explain on={explain}>
-                This is the half with urgency: traffic recorded today can be decrypted later if the key exchange is
-                classical. It lives in the TLS handshake, not in the certificate. Agents report it once they run a
-                version that probes it; remote services can be added under the policy&apos;s probe targets.
-              </Explain>
-            </>
-          )}
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 260 }}>
-          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textTransform: "uppercase", letterSpacing: ".06em" }}>
-            Broken today, not tomorrow
-          </Typography>
-          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75, mt: 0.5 }}>
-            <Chip size="small" label={`${fmt(e.brokenToday?.weakKey)} weak keys`} onClick={() => onSelect({ flag: "weak_key" })} sx={{ bgcolor: BRAND.alert.highSoft, color: BRAND.alert.high }} />
-            <Chip size="small" label={`${fmt(e.brokenToday?.weakSig)} weak signatures`} onClick={() => onSelect({ flag: "weak_sig" })} sx={{ bgcolor: BRAND.alert.highSoft, color: BRAND.alert.high }} />
-            <Chip size="small" label={`${fmt(e.brokenToday?.expiredWithKey)} expired with key`} onClick={() => onSelect({ status: "expired", hasPrivateKey: true })} sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText }} />
-            <Chip size="small" label={`${fmt(e.brokenToday?.revoked)} revoked`} onClick={() => onSelect({ flag: "revoked" })} sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText }} />
-          </Stack>
-          <Explain on={explain}>
-            None of this waits for a quantum computer. A 512-bit RSA key or an SHA-1 signature is weak with today&apos;s
-            hardware.
-          </Explain>
-        </Box>
-      </Stack>
-    </SectionPaper>
-  );
-}
-
 // ── B · Distribución por clave ───────────────────────────────────────
 
 /**
@@ -606,7 +409,7 @@ export function TimelinePanel({ timeline, onSelect, explain, ownOnly = false }) 
             <RTooltip content={<TimelineTooltip />} cursor={{ fill: BRAND.rowHover }} />
             {refs.map((r) => (
               <ReferenceLine
-                key={r.year}
+                key={`${r.year}:${r.label}`}
                 x={String(r.year)}
                 stroke={BRAND.alert.high}
                 strokeDasharray={r.scope === "borrador" ? "4 4" : undefined}
@@ -627,7 +430,7 @@ export function TimelinePanel({ timeline, onSelect, explain, ownOnly = false }) 
           </Stack>
         ))}
         {refs.map((r) => (
-          <Tooltip key={r.year} title={`${r.label} — ${r.scope}. ${r.source}`} arrow>
+          <Tooltip key={`${r.year}:${r.label}`} title={`${r.label} — ${r.scope}. ${r.source}`} arrow>
             <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.high, cursor: "help", borderBottom: `1px dotted ${BRAND.alert.high}` }}>
               {r.year}: {r.label}
             </Typography>

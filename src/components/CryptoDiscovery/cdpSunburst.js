@@ -66,10 +66,6 @@ export const SHADES = {
 
 const algoLabel = (algorithm, bits) => `${algorithm ?? "unknown"}${bits ? `-${bits}` : ""}`.replace(/^EC-/, "EC P-");
 
-function familyStatus(family) {
-  return family === "pq_safe" || family === "hybrid" ? "ok" : "broken";
-}
-
 function skeleton() {
   const bases = new Map();
   for (const b of BASES) bases.set(b.key, { key: b.key, name: b.label, note: b.note, keep: true, children: new Map() });

@@ -120,13 +120,19 @@ describe("KPI clicables", () => {
         <CryptoDiscovery />
       </ConfirmProvider>
     );
-    (await screen.findByRole("button", { name: /^Open Roadmap$/i }, { timeout: 4000 })).click();
-    await waitFor(() => expect(screen.getByRole("tab", { name: /^roadmap$/i })).toHaveAttribute("aria-selected", "true"));
-    expect(new URLSearchParams(window.location.search).get("cdpTab")).toBe("1");
+    (await screen.findByRole("button", { name: /^Open Trust anchors$/i }, { timeout: 4000 })).click();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /^trust anchors$/i })).toHaveAttribute("aria-selected", "true"));
+    expect(new URLSearchParams(window.location.search).get("cdpTab")).toBe("4");
     // Sin datos de resumen (dashboard vacío en este mock) la tarjeta no
-    // pinta ceros: dice que no hay snapshot.
+    // pinta ceros: dice que no hay anclas.
     screen.getByRole("tab", { name: /^dashboard$/i }).click();
-    expect(await screen.findByText(/No readiness snapshot yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No trust anchors reported yet/i)).toBeInTheDocument();
+    // Repaso UX 2026-09-13: el Dashboard es un preview. Ni embudo, ni
+    // línea de tiempo, ni lista de equipos: viven en Explore e Inventory.
+    expect(screen.queryByText(/Your exposure/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/When certificates expire/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Devices needing attention/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Post-quantum readiness/)).toBeInTheDocument();
   });
 
   it("un KPI REEMPLAZA el filtro anterior: es una vista, no un refinamiento", async () => {

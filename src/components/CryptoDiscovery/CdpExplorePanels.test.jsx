@@ -42,74 +42,6 @@ const EXPOSURE = {
   kemMeasured: false
 };
 
-describe("ExposureFunnel", () => {
-  it("⭐ «Yours» lleva a la lista con clave privada; «still valid in 2030» añade la fecha", () => {
-    const onSelect = vi.fn();
-    render(<ExposureFunnel exposure={EXPOSURE} onSelect={onSelect} explain={false} />);
-    fireEvent.click(screen.getByRole("button", { name: /^Yours: 153$/ }));
-    expect(onSelect).toHaveBeenLastCalledWith({ hasPrivateKey: true });
-    fireEvent.click(screen.getByRole("button", { name: /Still valid in 2030: 69/ }));
-    expect(onSelect).toHaveBeenLastCalledWith({ hasPrivateKey: true, notAfterFrom: "2030-01-01" });
-  });
-
-  it("lo roto HOY se separa de lo cuántico y navega a su flag", () => {
-    const onSelect = vi.fn();
-    render(<ExposureFunnel exposure={EXPOSURE} onSelect={onSelect} explain={false} />);
-    fireEvent.click(screen.getByText(/491 weak keys/));
-    expect(onSelect).toHaveBeenLastCalledWith({ flag: "weak_key" });
-    fireEvent.click(screen.getByText(/7 expired with key/));
-    expect(onSelect).toHaveBeenLastCalledWith({ status: "expired", hasPrivateKey: true });
-  });
-
-  it("⭐ no afirma nada sobre el KEM hasta que se mida", () => {
-    render(<ExposureFunnel exposure={EXPOSURE} onSelect={() => {}} explain={false} />);
-    expect(screen.getByText(/post-quantum key exchange not measured yet/i)).toBeInTheDocument();
-  });
-
-  it("el modo explicar añade las frases y el normal no", () => {
-    const { rerender } = render(<ExposureFunnel exposure={EXPOSURE} onSelect={() => {}} explain={false} />);
-    expect(screen.queryByText(/only the ones you hold a private key for/i)).not.toBeInTheDocument();
-    rerender(<ExposureFunnel exposure={EXPOSURE} onSelect={() => {}} explain />);
-    expect(screen.getByText(/only the ones you hold a private key for/i)).toBeInTheDocument();
-  });
-
-  it("⭐ fase 2: con KEM medido enseña híbridos, clásicos y los que no se supo, por separado", () => {
-    render(
-      <ExposureFunnel
-        exposure={{ ...EXPOSURE, kemMeasured: true, kem: { endpoints: 61, probes: 4, hybrid: 0, classicalOnly: 57, unknown: 4, measured: 57 } }}
-        onSelect={() => {}}
-        explain={false}
-      />
-    );
-    expect(screen.getByText(/0 negotiate post-quantum key exchange/)).toBeInTheDocument();
-    expect(screen.getByText(/57 classical only/)).toBeInTheDocument();
-    expect(screen.getByText(/4 could not be determined/)).toBeInTheDocument();
-    expect(screen.queryByText(/not measured yet/i)).not.toBeInTheDocument();
-  });
-
-  it("⭐ las cifras de KEM llevan a Inventory con el filtro kem (antes eran texto sin lista debajo)", () => {
-    const onSelect = vi.fn();
-    render(
-      <ExposureFunnel
-        exposure={{ ...EXPOSURE, kemMeasured: true, kem: { endpoints: 64, probes: 0, hybrid: 20, classicalOnly: 44, unknown: 3, measured: 64 } }}
-        onSelect={onSelect}
-        explain={false}
-      />
-    );
-    fireEvent.click(screen.getByText(/20 negotiate post-quantum key exchange/));
-    expect(onSelect).toHaveBeenLastCalledWith({ kem: "hybrid" });
-    fireEvent.click(screen.getByText(/44 classical only/));
-    expect(onSelect).toHaveBeenLastCalledWith({ kem: "classical" });
-    fireEvent.click(screen.getByText(/3 could not be determined/));
-    expect(onSelect).toHaveBeenLastCalledWith({ kem: "unknown" });
-  });
-
-  it("bloqueados sin evaluar dice «not evaluated», no cero", () => {
-    render(<ExposureFunnel exposure={{ ...EXPOSURE, devicesBlocked: null }} onSelect={() => {}} explain={false} />);
-    expect(screen.getByText(/not evaluated/i)).toBeInTheDocument();
-  });
-});
-
 describe("KeyDistributionPanel", () => {
   const FACETS = {
     by: ["key_algorithm", "key_size_bits"],
@@ -212,25 +144,3 @@ describe("TimelinePanel", () => {
   });
 });
 
-describe("ExposureFunnel — fuera de los equipos (fase 4)", () => {
-  it("⭐ enseña lo que existe sin agente como bloque aparte y lleva a Explore", () => {
-    const onOpenOutside = vi.fn();
-    const exposure = { ...EXPOSURE, outside: { assets: 230, certificates: 200, sources: 3, quantumBroken: 180, beyondDisallowed: 90, inUse: 12, bySource: [] } };
-    render(<ExposureFunnel exposure={exposure} onSelect={() => {}} onOpenOutside={onOpenOutside} explain={false} />);
-    const block = screen.getByRole("button", { name: /outside your devices/i });
-    expect(block).toHaveTextContent(/200 certificate\(s\) in 3 source\(s\) without an agent/);
-    expect(block).toHaveTextContent(/12 in use by a service/);
-    expect(block).toHaveTextContent(/180 quantum-broken/);
-    fireEvent.click(block);
-    expect(onOpenOutside).toHaveBeenCalled();
-    // Y no se suma a «Yours»: la cifra de equipos sigue siendo la de equipos.
-    expect(screen.getByRole("button", { name: /^Yours: 153$/ })).toBeInTheDocument();
-  });
-
-  it("sin activos fuera (o tabla ausente) no pinta el bloque", () => {
-    render(<ExposureFunnel exposure={{ ...EXPOSURE, outside: null }} onSelect={() => {}} explain={false} />);
-    expect(screen.queryByText(/outside your devices/i)).not.toBeInTheDocument();
-    render(<ExposureFunnel exposure={{ ...EXPOSURE, outside: { assets: 0, certificates: 0, sources: 0 } }} onSelect={() => {}} explain={false} />);
-    expect(screen.queryByText(/outside your devices/i)).not.toBeInTheDocument();
-  });
-});

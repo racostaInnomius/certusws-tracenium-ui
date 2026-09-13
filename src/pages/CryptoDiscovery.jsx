@@ -48,7 +48,6 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import useCdpFilter from "../hooks/useCdpFilter";
 import {
-  ExposureFunnel,
   ExplainToggle,
   KeyDistributionPanel,
   OwnershipScopeToggle,
@@ -96,10 +95,8 @@ import GoToReportButton from "../components/common/GoToReportButton";
 const CBOM_KEY = "cdp.cbom";
 import {
   ActionRequiredPanel,
-  HygienePanel,
   IssuersPanel,
   OverviewCard,
-  TopDevicesPanel,
 } from "../components/CryptoDiscovery/CdpDashboardPanels";
 import CdpSettingsTab from "../components/CryptoDiscovery/CdpSettingsTab";
 import { TrustAnchorsPanel } from "../components/CryptoDiscovery/PqcReadinessPanels";
@@ -274,7 +271,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
   // La línea de tiempo SUSTITUYE al «Expiry horizon» antiguo: misma
   // pregunta (cuándo caduca lo que hay), pero apilada por propiedad y
   // contra los plazos PQC. Dos gráficos para una pregunta era deuda.
-  const [timeline, setTimeline] = React.useState(null);
   // Qué bloque no cargó. Antes un fallo dejaba `null` y el embudo
   // simplemente NO se pintaba: la primera cifra de la página desaparecía
   // sin decir por qué (revisión UI 2026-09-05).
@@ -295,13 +291,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         if (!alive) return;
         setExposure(null);
         failed("exposure funnel", err);
-      });
-    getCdpTimeline({})
-      .then((r) => alive && setTimeline(r ?? null))
-      .catch((err) => {
-        if (!alive) return;
-        setTimeline(null);
-        failed("expiry timeline", err);
       });
     return () => {
       alive = false;
@@ -456,24 +445,24 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           hay algo que enseñar. */}
       <CdpCatalystStrip pqAlt={d.pqAltSignature} onDrillDown={onDrillDown} />
 
-      <ExposureFunnel
-        exposure={exposure}
-        explain={false}
-        onSelect={(f) => onDrillDown?.(f, { replace: true })}
-        onOpenOutside={() => onOpenTab?.(TAB.explore)}
-        onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
-      />
-
-      {/* Preparación post-cuántica + sunburst con anillo base fijo (maqueta
-          aprobada 2026-09-10). Misma fuente de datos que el embudo. */}
+      {/* Repaso UX 2026-09-13: el Dashboard es un PREVIEW del estado, no un
+          informe. Cuatro filas y ninguna cifra dos veces:
+            1. los seis KPI operativos;
+            2. la preparación post-cuántica (sustituye al embudo «Your
+               exposure», cuyas cifras ya estaban en los KPI, en la tira y
+               en las tarjetas);
+            3. el sunburst + lo que hay que hacer hoy;
+            4. una tarjeta por pestaña que no tiene fila propia.
+          La línea de tiempo se fue a Explore (es una distribución), la
+          lista de equipos a Inventory → By device (es una lista). */}
       <ReadinessStrip
         exposure={exposure}
         overview={ov}
         devicesReporting={s.devicesReporting}
+        snapshotDate={ov.roadmap?.snapshotDate ?? null}
         onDrillDown={onDrillDown}
         onOpenRoadmap={() => onOpenTab?.(TAB.roadmap)}
       />
-      <QuantumSunburst exposure={exposure} overview={ov} refreshNonce={refreshNonce} onDrillDown={onDrillDown} />
 
       {panelsError ? (
         // Después de los KPIs, no antes: los KPIs vienen de otra petición y
@@ -486,12 +475,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         </Alert>
       ) : null}
 
-      {/* Row 1 — when does the fleet break (against the deadlines), and what do I do today. */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, lg: 7 }}>
-          <TimelinePanel timeline={timeline} explain={false} onSelect={(f) => onDrillDown?.(f, { replace: true })} />
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <QuantumSunburst exposure={exposure} overview={ov} refreshNonce={refreshNonce} onDrillDown={onDrillDown} />
         </Grid>
-        <Grid size={{ xs: 12, lg: 5 }}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <ActionRequiredPanel
             items={d.urgent}
             onSelect={(row) => onDrillDown?.({ search: row.fingerprint256 })}
@@ -499,31 +487,10 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         </Grid>
       </Grid>
 
-      {/* Row 2 — one card per tab: the numbers, and a click to get there.
-          Issuers moved to Explore (it is a distribution, not a headline).
-          Orphan keys dropped from the row (08-sep): four cards wrapped into
-          two ragged rows, and its numbers are almost always zero — the tab
-          keeps them. Three cards, one row. */}
+      {/* Una tarjeta por pestaña sin fila propia. Roadmap ya no la tiene:
+          sus cifras (sistemas sin ola, equipos bloqueados) están en la tira
+          y abren la pestaña desde allí. */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <OverviewCard
-            title="Roadmap"
-            icon={<RouteOutlinedIcon fontSize="small" />}
-            onOpen={() => onOpenTab?.(TAB.roadmap)}
-            hint={ov.roadmap ? `As of the ${ov.roadmap.snapshotDate} snapshot. The Roadmap tab recomputes live.` : null}
-            empty={panelsLoaded ? "No readiness snapshot yet — open the Roadmap to record one." : "Loading…"}
-            metrics={
-              ov.roadmap
-                ? [
-                    { label: "systems", value: ov.roadmap.systemsTotal },
-                    { label: "with a wave", value: ov.roadmap.systemsPlanned, color: ov.roadmap.systemsPlanned ? BRAND.tealText : undefined },
-                    { label: "valid past 2035", value: ov.roadmap.ownBeyondDisallowed, color: ov.roadmap.ownBeyondDisallowed ? BRAND.alert.high : undefined },
-                    { label: "can't migrate", value: ov.roadmap.devicesBlocked ?? undefined }
-                  ]
-                : []
-            }
-          />
-        </Grid>
         <Grid size={{ xs: 12, md: 4 }}>
           <OverviewCard
             title="Outside your devices"
@@ -559,15 +526,24 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
             }
           />
         </Grid>
-      </Grid>
-
-      {/* Row 3 — what's unhealthy and which devices carry it. */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <HygienePanel flags={d.flags} onSelect={(flag) => onDrillDown?.({ flag })} />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <TopDevicesPanel devices={d.topDevices} onSelect={(row) => onOpenDevices?.(row)} />
+        <Grid size={{ xs: 12, md: 4 }}>
+          <OverviewCard
+            title="Hygiene"
+            icon={<ReportProblemOutlinedIcon fontSize="small" />}
+            onOpen={() => onDrillDown?.({ hasFlags: true }, { replace: true })}
+            hint="Server-side judgments on end-entity certificates: broken today, no quantum computer required. Opens the flagged list; pick a single flag there."
+            empty={panelsLoaded ? "No hygiene issues found." : "Loading…"}
+            metrics={
+              d.flags && Object.values(d.flags).some((n) => Number(n) > 0)
+                ? [
+                    { label: "weak key", value: d.flags.weak_key, color: d.flags.weak_key ? BRAND.alert.error : undefined },
+                    { label: "weak signature", value: d.flags.weak_sig, color: d.flags.weak_sig ? BRAND.alert.high : undefined },
+                    { label: "self-signed leaf", value: d.flags.self_signed_leaf },
+                    { label: "nonstandard root", value: d.flags.nonstandard_root }
+                  ]
+                : []
+            }
+          />
         </Grid>
       </Grid>
     </Stack>
@@ -586,6 +562,10 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
   // Emisores: era un panel del Dashboard; es una distribución (quién
   // firma), así que vive aquí y obedece el mismo ámbito «solo lo mío».
   const [issuers, setIssuers] = React.useState(null);
+  // Línea de tiempo: era del Dashboard; es una distribución (cuándo vence
+  // el parque frente a los plazos), así que vive aquí y obedece el ámbito
+  // «solo lo mío» como el resto (repaso UX 2026-09-13).
+  const [timeline, setTimeline] = React.useState(null);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -595,12 +575,14 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
     Promise.all([
       getCdpFacets({ by: ["key_algorithm", "key_size_bits"], stack: "ownership", ...filter }),
       getCdpStores(filter),
-      getCdpFacets({ by: ["issuer_cn"], limit: 8, ...filter }).catch(() => null)
+      getCdpFacets({ by: ["issuer_cn"], limit: 8, ...filter }).catch(() => null),
+      getCdpTimeline(filter).catch(() => null)
     ])
-      .then(([f, st, iss]) => {
+      .then(([f, st, iss, tl]) => {
         if (!alive) return;
         setFacets(f ?? null);
         setStores(st ?? null);
+        setTimeline(tl ?? null);
         setIssuers(
           iss?.rows
             ? iss.rows.map((r) => ({ issuer: r.keys?.issuer_cn || "Unknown", count: Number(r.certs ?? 0), expiringSoon: 0 }))
@@ -630,6 +612,7 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
         </Alert>
       ) : null}
       <KeyDistributionPanel facets={facets} onSelect={select} explain={explain} />
+      <TimelinePanel timeline={timeline} explain={explain} ownOnly={scope === "own"} onSelect={select} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 8 }}>
           <StoresPanel
