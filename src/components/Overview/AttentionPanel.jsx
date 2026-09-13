@@ -12,7 +12,6 @@
 import { Paper, Stack, Typography, Box } from "@mui/material";
 import CloudOffOutlinedIcon from "@mui/icons-material/CloudOffOutlined";
 import KeyOffOutlinedIcon from "@mui/icons-material/KeyOffOutlined";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import UpdateOutlinedIcon from "@mui/icons-material/UpdateOutlined";
 import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
@@ -27,42 +26,34 @@ function getValue(result) {
 
 export default function AttentionPanel({ results, onNavigate }) {
   const dashboard = getValue(results?.dashboardSummary);
-  const audit = getValue(results?.auditSummary);
-  const compliance = getValue(results?.complianceSummary);
   const expiring = getValue(results?.expiringCerts);
   const latest = getValue(results?.latestVersions);
   const agentVersions = getValue(results?.agentVersions);
+  const sdpTs = getValue(results?.sdpTimeseries);
 
   // ---- derive counts ---------------------------------------------------
 
-  // Offline >24h — derived from dashboard summary if it exposes the
-  // field; otherwise defaults to 0 so we don't invent a number.
-  const offlineCount =
-    dashboard?.offlineOver24h ?? dashboard?.offline24h ?? 0;
+  // Not seen in 7 days. This row used to read `offlineOver24h` /
+  // `offline24h`, which /dashboard/summary has never returned — so it was
+  // always 0 and never appeared. `inactiveAssets7d` is the field the
+  // summary actually serves.
+  const inactiveCount = Number(dashboard?.inactiveAssets7d ?? 0);
 
-  // Certs expiring <30 days
+  // Agent mTLS certificates (Tracenium's own PKI, not CDP) expiring <30d.
+  // Needs the `pki` capability: a USER gets 403 and the row stays out.
   const expiringCount =
     expiring?.count ??
-    (Array.isArray(expiring?.items) ? expiring.items.length : 0);
+    (Array.isArray(expiring?.certificates) ? expiring.certificates.length : 0);
 
-  // Critical+High open findings
-  const findings = compliance?.summary?.openFindings ?? {};
-  const criticalHigh = (findings.critical ?? 0) + (findings.high ?? 0);
+  // Software installs that failed over the last 30 days. Only present when
+  // the plan includes SDP — otherwise the slot is never requested.
+  const failedInstalls = Array.isArray(sdpTs?.buckets)
+    ? sdpTs.buckets.reduce((sum, b) => sum + Number(b?.failed ?? 0), 0)
+    : 0;
 
-  // Failed jobs last 24h — approximate using audit summary's error bucket
-  // (which covers backend-recorded failures). The real "failed jobs"
-  // signal lives in the jobs timeseries but aggregating over 24h there
-  // requires either a dedicated endpoint or client-side slicing; this is
-  // the pragmatic shortcut for the first release.
-  const failed24h = audit?.summary?.error_count ?? 0;
-
-  // Outdated agents — fleet-wide count derived from the dedicated
-  // `/dashboard/agent-versions` aggregate classified against the
-  // highest published version we know about (taken from the binaries
-  // metadata endpoint). "Outdated" here = anything not `current`, which
-  // includes both `oneBehind` and `older`. We keep `unknown` out of the
-  // count — those are devices with no agent_version on disk, which is
-  // likely an older enrollment record rather than a true upgrade lag.
+  // Outdated agents — the agent-version histogram classified against the
+  // highest published version per platform+arch. "Outdated" = not
+  // `current`; `unknown` (no version on record) stays out of the count.
   const latestMap = {};
   if (Array.isArray(latest)) {
     for (const entry of latest) {
@@ -74,52 +65,41 @@ export default function AttentionPanel({ results, onNavigate }) {
   const byVersion = Array.isArray(agentVersions?.byVersion)
     ? agentVersions.byVersion
     : [];
-  const { buckets: versionBuckets } = classifyAgentVersions(
-    byVersion,
-    latestMap
-  );
+  const { buckets: versionBuckets } = classifyAgentVersions(byVersion, latestMap);
   const outdatedCount =
     (versionBuckets.oneBehind ?? 0) + (versionBuckets.older ?? 0);
 
   // ---- ordered list ----------------------------------------------------
+  //
+  // Only what every plan has. Compliance findings moved to block 2 with
+  // their plugin; the "failed events last 24h" row counted audit-log errors
+  // under a `failed_jobs` key — label, key and window disagreed, and the
+  // audit chart below already separates errors.
 
   const alerts = [
     {
-      key: "offline",
-      count: offlineCount,
-      label: "devices offline >24h",
+      key: "inactive",
+      count: inactiveCount,
+      label: "devices not seen in 7 days",
       severity: "warning",
       icon: CloudOffOutlinedIcon,
-      navigate: () => onNavigate?.("assets", { filter: "offline" })
+      navigate: () => onNavigate?.("assets")
     },
     {
       key: "certs",
       count: expiringCount,
-      label: "certificates expiring <30d",
+      label: "agent certificates expiring <30d",
       severity: "error",
       icon: KeyOffOutlinedIcon,
       navigate: () => onNavigate?.("pki", { tab: "expiring" })
     },
     {
-      key: "findings",
-      count: criticalHigh,
-      label: "critical/high compliance findings open",
-      severity: "error",
-      icon: ReportProblemOutlinedIcon,
-      // Page key is "ad", not "security" — that's the route Security
-      // Compliance is registered under (see layout/pageRegistry.jsx).
-      // With the wrong key renderPage fell through to its Overview
-      // fallback, so the click silently kept the user where they were
-      // and read as a dead card.
-      navigate: () => onNavigate?.("ad", { severity: "high" })
-    },
-    {
-      key: "failed_jobs",
-      count: failed24h,
-      label: "failed events last 24h",
+      key: "failed_installs",
+      count: failedInstalls,
+      label: "software installs failed · 30d",
       severity: "warning",
       icon: ErrorOutlineOutlinedIcon,
-      navigate: () => onNavigate?.("audit", { outcome: "error" })
+      navigate: () => onNavigate?.("software-delivery")
     },
     {
       key: "outdated",
@@ -127,7 +107,7 @@ export default function AttentionPanel({ results, onNavigate }) {
       label: "agents behind latest version",
       severity: "info",
       icon: UpdateOutlinedIcon,
-      navigate: () => onNavigate?.("assets", { filter: "outdated" })
+      navigate: () => onNavigate?.("assets")
     }
   ];
 

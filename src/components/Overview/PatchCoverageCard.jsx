@@ -81,13 +81,17 @@ export default function PatchCoverageCard({ result, loading, onNavigate, fleetDe
     <DonutCard
       title={
         <>
-          Patch coverage
+          {/* "OS patch recency", no "Patch coverage": mide cuánto hace del
+              último parche del SO según SCP. Con el nombre viejo se leía
+              como el estado de Patch Management, que es otro plugin y otro
+              dato (su card vive en el bloque 3). */}
+          OS patch recency
           <Typography
             component="span"
             variant="caption"
             sx={{ color: BRAND.gray, ml: 0.75, fontWeight: 500 }}
           >
-            (SCP-enabled)
+            (last OS patch)
           </Typography>
         </>
       }

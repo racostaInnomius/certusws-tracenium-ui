@@ -179,11 +179,20 @@ export default function LatestAlerts({ result, loading, onNavigate, deviceIndex 
         <Stack spacing={1} sx={{ flex: 1 }}>
           {items.map((event, idx) => {
             const style = SEVERITY_STYLE[event.severity] ?? SEVERITY_STYLE.low;
-            const resolvedSummary = replaceDeviceIdWithHostname(event.summary, deviceIndex);
-            const hostLabel = event.deviceId
-              ? (deviceIndex?.get(event.deviceId)
-                 || deviceIndex?.get(String(event.deviceId).toLowerCase()))
-              : null;
+            // El feed ya trae `hostname` desde el servidor. El índice del
+            // cliente se construía con los 5 hosts de /dashboard/hosts, así
+            // que sólo resolvía esos cinco; queda como respaldo.
+            const hostLabel = event.hostname
+              || (event.deviceId
+                ? (deviceIndex?.get(event.deviceId)
+                   || deviceIndex?.get(String(event.deviceId).toLowerCase()))
+                : null);
+            const resolvedSummary = replaceDeviceIdWithHostname(
+              event.summary,
+              hostLabel && event.deviceId
+                ? new Map([[String(event.deviceId).toLowerCase(), hostLabel]])
+                : deviceIndex
+            );
             return (
               <ButtonBase
                 key={`${event.source}:${event.sourceEventId}:${idx}`}

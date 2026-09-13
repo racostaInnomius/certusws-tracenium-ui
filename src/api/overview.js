@@ -15,6 +15,11 @@
 import { httpGetJson, isTemporaryApiError } from "./http";
 import { getAlertEvents, getAlertsUnreadCount } from "./alerts";
 import { getDevicePosture } from "./compliance";
+import { getDeploymentTimeseries, listDeployments } from "./softwareDelivery";
+import { getRemoteControlSummary } from "./remoteControl";
+import { getPatchSummary } from "./patchManagement";
+import { getCdpSummary } from "./cdp";
+import { getReportRuns, listReportSchedules } from "./reports";
 
 // ---- existing endpoints we already ship -------------------------------
 
@@ -22,36 +27,15 @@ export async function getDashboardSummary() {
   return httpGetJson("/api/v1/dashboard/summary");
 }
 
-export async function getHardwareRankings() {
-  return httpGetJson("/api/v1/dashboard/hardware-inventory/rankings");
-}
-
-export async function getAuditSummaryForOverview() {
-  return httpGetJson("/api/v1/security/audit/summary");
-}
-
-export async function getCertificatesSummary() {
-  return httpGetJson("/api/v1/security/certificates/summary");
-}
-
 export async function getExpiringCertificates(days = 30) {
-  return httpGetJson(`/api/v1/security/certificates/expiring?withinDays=${days}`);
+  // `days`, no `withinDays`: es lo que lee el controlador
+  // (certificates.controller.ts). Con el nombre equivocado la ventana se
+  // ignoraba y siempre valía el defecto — hoy 30, así que no se notaba.
+  return httpGetJson(`/api/v1/security/certificates/expiring?days=${days}`);
 }
 
 export async function getConnectedDevices() {
   return httpGetJson("/api/v1/orchestrator/devices-connected");
-}
-
-export async function getRecentEnrollments(limit = 5) {
-  // Reuses the paginated hosts list. Overview only needs the first page
-  // and the backend sorts by collectedAtUtc so lifecycle-hidden devices
-  // are filtered in the same place as the full Asset Management table.
-  const params = new URLSearchParams();
-  params.set("page", "1");
-  params.set("pageSize", String(limit));
-  params.set("sortBy", "collectedAtUtc");
-  params.set("sortDir", "desc");
-  return httpGetJson(`/api/v1/dashboard/hosts?${params.toString()}`);
 }
 
 export async function getAgentVersionsSummary() {
@@ -66,22 +50,11 @@ export async function getPluginCoverageSummary() {
   return httpGetJson("/api/v1/dashboard/plugin-coverage");
 }
 
-export async function getPluginCoverageDevices(plugin) {
-  // Drill-down: which devices are covered vs missing for a given plugin.
-  // Shape: {
-  //   ok, plugin, total, coveredCount, missingCount,
-  //   covered: [{agentId, hostname, platform, lastSeenAt}, ...],
-  //   missing: [{agentId, hostname, platform, lastSeenAt}, ...]
-  // }
-  const safe = encodeURIComponent(String(plugin || "").toLowerCase().trim());
-  return httpGetJson(`/api/v1/dashboard/plugin-coverage/${safe}/devices`);
-}
-
 // ---- new endpoints for the Overview ----------------------------------
 
 // Sprint 2 item 7 — these two used to be byte-identical copies of the
 // helpers in api/compliance.js (same URLs, drifting doc comments).
-// Imported AND re-exported: fetchOverviewBundle below uses them
+// Imported AND re-exported: fetchOverviewSecurity below uses them
 // locally, and Overview components import them from this module.
 import { getComplianceSummary, getFleetComplianceTimeseries } from "./compliance";
 export { getComplianceSummary, getFleetComplianceTimeseries };
@@ -179,75 +152,80 @@ async function getLatestAgentVersionsPerCombo() {
   return Promise.all(calls);
 }
 
-// ---- bundled fetch for the whole Overview in one call tree -----------
+// ---- one loader per Overview block ------------------------------------
+//
+// El Overview se parte en tres bloques, uno por tier (ver
+// components/Overview/overviewPlan.js), y cada uno carga lo SUYO. Antes un
+// bundle único disparaba 16 peticiones a cualquier tenant — incluidas las de
+// SCP a un Starter que no tiene el plugin y recibía "0 findings" en verde.
+//
+// Mismo contrato que el bundle viejo: allSettled, un slot por fuente, y la
+// página decide qué pintar con cada `{ status, value }`. Un endpoint lento o
+// roto deja su card en estado vacío, no la página en blanco.
+//
+// Cada loader recibe qué plugins de SU bloque concede el plan. Un plugin no
+// concedido no se pide: su slot queda ausente, no rechazado, que es lo que la
+// card lee como "no aplica" en vez de "falló".
 
-/**
- * Fan out all the reads the Overview needs, in parallel, with
- * allSettled so one slow/broken endpoint doesn't stall the rest. The
- * component owns the shape decoding and decides what to render on each
- * slot; this helper just returns the raw results keyed by name.
- *
- * Usage:
- *   const { results } = await fetchOverviewBundle();
- *   results.dashboardSummary.status === 'fulfilled' ? results.dashboardSummary.value : null
- */
-export async function fetchOverviewBundle() {
-  const entries = [
+async function settle(entries) {
+  const live = entries.filter(Boolean);
+  const settled = await Promise.allSettled(live.map(([, p]) => p));
+  return Object.fromEntries(live.map(([key], idx) => [key, settled[idx]]));
+}
+
+/** Bloque 1 — todos los planes: AMP + SDP + alertas, jobs, informes, auditoría. */
+export async function fetchOverviewCore({ sdp = false } = {}) {
+  return settle([
     ["dashboardSummary", getDashboardSummary()],
-    ["hardwareRankings", getHardwareRankings()],
-    ["auditSummary", getAuditSummaryForOverview()],
-    ["certsSummary", getCertificatesSummary()],
-    ["expiringCerts", getExpiringCertificates(30)],
-    ["complianceSummary", getComplianceSummary()],
-    ["auditTimeseries", getAuditTimeseries(7)],
-    ["jobsTimeseries", getJobsTimeseries(7)],
-    ["latestVersions", getLatestAgentVersions()],
-    ["recentHosts", getRecentEnrollments(5)],
-    // connectedDevices is the authoritative source for "online now"
-    // in the Hero KPI. /dashboard/summary exposes totals but NOT the
-    // session-based online count, so we call the orchestrator's
-    // derived view (device_sessions.last_heartbeat within threshold).
+    // connectedDevices is the authoritative source for "online now". The
+    // dashboard summary exposes totals but NOT the session-based count.
     ["connectedDevices", getConnectedDevices()],
-    // Agent version histogram — /dashboard/hosts does not expose
-    // agent_version or arch, so we need a dedicated aggregate off
-    // device_enrollments to power the Fleet composition donut and the
-    // AttentionPanel's "agents behind latest" count.
+    ["latestVersions", getLatestAgentVersions()],
     ["agentVersions", getAgentVersionsSummary()],
-    // Top N most recent alerts across all the rules the tenant has
-    // enabled. Drives the "Latest alerts" strip on the Overview.
-    // Limit 5 is deliberate — the strip is a bell-replacement, not the
-    // full feed; operators click through to /alerts for the full view.
+    ["jobsTimeseries", getJobsTimeseries(7)],
+    ["auditTimeseries", getAuditTimeseries(7)],
+    // Certificados mTLS de los propios agentes (PKI de Tracenium, no CDP).
+    // Exige la capacidad `pki`: un USER recibe 403 y la fila de Attention
+    // simplemente no aparece.
+    ["expiringCerts", getExpiringCertificates(30)],
+    // 5 es a propósito: la franja es un vistazo, la lista está en Alerts. El
+    // feed ya trae `hostname` desde el servidor.
     ["alertEvents", getAlertEvents({ limit: 5 }).catch(() => ({ items: [] }))],
-    // Unread count (events since the tenant's last_seen_at cursor) —
-    // backs the "Unread alerts" Hero KPI. Kept as its own tiny call
-    // instead of computing from alertEvents because the backend has a
-    // dedicated handler that already knows how to compare against the
-    // cursor, and it's the same endpoint the Topbar bell polls.
     ["alertsUnread", getAlertsUnreadCount().catch(() => ({ count: 0 }))],
-    // Device posture per host — we only need the `patchSummary` sub-
-    // object on each row, but the endpoint returns it alongside the
-    // rest of the compliance columns. Cheap on small fleets; the
-    // Patch coverage donut aggregates client-side so we don't pay a
-    // second backend hit just for the counts.
-    ["devicePosture", getDevicePosture().catch(() => ({ items: [] }))],
-    // Per-plugin enablement across the fleet. Drives the new Plugin
-    // coverage strip on the Overview — answers "of N total agents,
-    // how many have SCP / PMP / AMP on".
-    ["pluginCoverage", getPluginCoverageSummary().catch(() => ({ total: 0, byPlugin: [] }))],
-    // Fleet-wide compliance trend — drives the Compliance Trend
-    // sparkline card on the Overview. 30-day window: matches the
-    // dashboard "trend" period operators care about for posture, and
-    // stays under the snapshot retention floor (90d).
-    ["fleetComplianceTimeseries",
-     getFleetComplianceTimeseries(30).catch(() => ({ windowDays: 30, buckets: [] }))]
-  ];
+    // `limit: 1` da la última corrida y, por `COUNT(*) OVER()`, el total.
+    ["reportRuns", getReportRuns({ limit: 1 })],
+    ["reportSchedules", listReportSchedules()],
+    sdp && ["sdpTimeseries", getDeploymentTimeseries("30d")],
+    // Dos estados y no "todas las recientes": el listado se corta en `limit`
+    // y una campaña larga en marcha podía quedar fuera de las 100 últimas.
+    sdp && ["sdpRunning", listDeployments({ status: "running", limit: 500 })],
+    sdp && ["sdpQueued", listDeployments({ status: "queued", limit: 500 })],
+  ]);
+}
 
-  const settled = await Promise.allSettled(entries.map(([, p]) => p));
-  const results = Object.fromEntries(
-    entries.map(([key], idx) => [key, settled[idx]])
-  );
+/** Bloque 2 — Professional: SCP + RCP. */
+export async function fetchOverviewSecurity({ scp = false, rcp = false } = {}) {
+  return settle([
+    scp && ["complianceSummary", getComplianceSummary()],
+    // 30 días: el periodo de tendencia que se mira, y por debajo del suelo
+    // de retención de snapshots (90 d).
+    scp && ["fleetComplianceTimeseries",
+      getFleetComplianceTimeseries(30).catch(() => ({ windowDays: 30, buckets: [] }))],
+    // Una fila por equipo con `overallScore` y `patchSummary`: alimenta la
+    // distribución de salud y la antigüedad de parches sin otra petición.
+    scp && ["devicePosture", getDevicePosture().catch(() => ({ items: [] }))],
+    // ⚠️ ADMIN/OWNER + capacidad `remote_control`. Un USER con plan
+    // Professional recibe 403 y las KPIs de RCP no se pintan.
+    rcp && ["rcpSummary", getRemoteControlSummary()],
+  ]);
+}
 
-  return { results };
+/** Bloque 3 — Enterprise: PMP + CDP. */
+export async function fetchOverviewOperations({ pmp = false, cdp = false } = {}) {
+  return settle([
+    pmp && ["patchSummary", getPatchSummary()],
+    cdp && ["cdpSummary", getCdpSummary()],
+  ]);
 }
 
 /**

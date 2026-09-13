@@ -9,32 +9,22 @@ import { describe, expect, it } from "vitest";
 
 import { respond } from "../test/msw/server";
 import {
-  fetchOverviewBundle,
+  fetchOverviewCore,
+  fetchOverviewOperations,
+  fetchOverviewSecurity,
+  getExpiringCertificates,
   getLatestAgentVersions,
-  getPluginCoverageDevices,
-  getRecentEnrollments,
 } from "./overview";
 
 describe("composed reads", () => {
-  it("getRecentEnrollments reuses the hosts list with pagination + sort params", async () => {
-    const calls = respond("get", "/api/v1/dashboard/hosts", { ok: true, items: [] });
+  it("getExpiringCertificates manda `days`, que es lo que lee el controlador", async () => {
+    // Mandaba `withinDays`: el backend lo ignoraba y aplicaba siempre su
+    // defecto de 30, así que cualquier otra ventana se perdía en silencio.
+    const calls = respond("get", "/api/v1/security/certificates/expiring", { ok: true, count: 0 });
 
-    await getRecentEnrollments(5);
+    await getExpiringCertificates(14);
 
-    expect(calls[0].search).toEqual({
-      page: "1",
-      pageSize: "5",
-      sortBy: "collectedAtUtc",
-      sortDir: "desc",
-    });
-  });
-
-  it("getPluginCoverageDevices lowercases, trims and encodes the plugin id", async () => {
-    const calls = respond("get", "/api/v1/dashboard/plugin-coverage/:plugin/devices", { ok: true });
-
-    await getPluginCoverageDevices("  SCP  ");
-
-    expect(calls[0].pathname).toBe("/api/v1/dashboard/plugin-coverage/scp/devices");
+    expect(calls[0].search).toEqual({ days: "14" });
   });
 
   it("getLatestAgentVersions asks the bulk endpoint ONCE and keeps the per-combo shape", async () => {
@@ -134,82 +124,88 @@ describe("composed reads", () => {
   });
 });
 
-describe("fetchOverviewBundle", () => {
-  function stubHappyEndpoints() {
-    respond("get", "/api/v1/dashboard/hardware-inventory/rankings", { ok: true });
-    respond("get", "/api/v1/security/audit/summary", { ok: true });
-    respond("get", "/api/v1/security/certificates/summary", { ok: true });
-    respond("get", "/api/v1/security/certificates/expiring", { ok: true, items: [] });
-    respond("get", "/api/v1/security/compliance/summary", { ok: true });
-    respond("get", "/api/v1/security/audit/timeseries", { ok: true, buckets: [] });
-    respond("get", "/api/v1/orchestrator/jobs/timeseries", { ok: true, buckets: [] });
-    respond("get", "/api/v1/binaries/agent/metadata", { ok: true, version: "1.2.0" });
-    respond("get", "/api/v1/dashboard/hosts", { ok: true, items: [] });
-    respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, items: [] });
+describe("loaders por bloque del Overview", () => {
+  function stubCore() {
+    respond("get", "/api/v1/dashboard/summary", { fleetDevices: 4 });
+    respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, count: 2 });
+    respond("get", "/api/v1/binaries/agent/metadata/all", { ok: true, items: [] });
     respond("get", "/api/v1/dashboard/agent-versions", { ok: true, byVersion: [] });
-    respond("get", "/api/v1/security/compliance/devices", { ok: true, items: [] });
-    respond("get", "/api/v1/dashboard/plugin-coverage", { ok: true, byPlugin: [] });
-    respond("get", "/api/v1/security/compliance/fleet-timeseries", { ok: true, buckets: [] });
-  }
-
-  it("returns one allSettled slot per data source, keyed by name", async () => {
-    stubHappyEndpoints();
-    respond("get", "/api/v1/dashboard/summary", { ok: true, totals: { devices: 4 } });
+    respond("get", "/api/v1/orchestrator/jobs/timeseries", { ok: true, buckets: [] });
+    respond("get", "/api/v1/security/audit/timeseries", { ok: true, buckets: [] });
+    respond("get", "/api/v1/security/certificates/expiring", { ok: true, count: 0 });
     respond("get", "/api/v1/alerts/events", { ok: true, items: [{ id: "e1" }] });
     respond("get", "/api/v1/alerts/unread-count", { ok: true, count: 2 });
+    respond("get", "/api/v1/reports/runs", { ok: true, total: 3, runs: [] });
+    respond("get", "/api/v1/reports/schedules", { ok: true, items: [] });
+  }
 
-    const { results } = await fetchOverviewBundle();
+  it("⭐ bloque 1 sin SDP concedido NO pide nada de Software Delivery", async () => {
+    stubCore();
+    const sdp = respond("get", /\/api\/v1\/software-delivery\/.*/, { ok: true });
 
-    expect(Object.keys(results).sort()).toEqual(
-      [
-        "agentVersions",
-        "alertEvents",
-        "alertsUnread",
-        "auditSummary",
-        "auditTimeseries",
-        "certsSummary",
-        "complianceSummary",
-        "connectedDevices",
-        "dashboardSummary",
-        "devicePosture",
-        "expiringCerts",
-        "fleetComplianceTimeseries",
-        "hardwareRankings",
-        "jobsTimeseries",
-        "latestVersions",
-        "pluginCoverage",
-        "recentHosts",
-      ].sort()
-    );
+    const results = await fetchOverviewCore({ sdp: false });
 
+    expect(sdp).toHaveLength(0);
+    expect(Object.keys(results).sort()).toEqual([
+      "agentVersions", "alertEvents", "alertsUnread", "auditTimeseries",
+      "connectedDevices", "dashboardSummary", "expiringCerts", "jobsTimeseries",
+      "latestVersions", "reportRuns", "reportSchedules",
+    ]);
     for (const [key, slot] of Object.entries(results)) {
       expect(slot.status, `slot ${key}`).toBe("fulfilled");
     }
-    expect(results.dashboardSummary.value).toEqual({ ok: true, totals: { devices: 4 } });
-    expect(results.alertEvents.value).toEqual({ ok: true, items: [{ id: "e1" }] });
   });
 
-  it("shielded slots swallow backend failures into fallbacks; unshielded slots reject", async () => {
-    stubHappyEndpoints();
-    // Unshielded slot fails hard → rejected entry the page must handle.
+  it("bloque 1 con SDP pide la serie de 30 días y las campañas en marcha y en cola", async () => {
+    stubCore();
+    const ts = respond("get", "/api/v1/software-delivery/analytics/timeseries", { ok: true, buckets: [] });
+    const deps = respond("get", "/api/v1/software-delivery/deployments", { ok: true, items: [] });
+
+    const results = await fetchOverviewCore({ sdp: true });
+
+    expect(ts[0].search).toEqual({ window: "30d" });
+    expect(deps.map((c) => c.search.status).sort()).toEqual(["queued", "running"]);
+    expect(results.sdpRunning.status).toBe("fulfilled");
+    expect(results.sdpQueued.status).toBe("fulfilled");
+  });
+
+  it("⭐ bloque 2 sólo pide lo del plugin concedido (RCP sin SCP no toca compliance)", async () => {
+    const compliance = respond("get", /\/api\/v1\/security\/compliance\/.*/, { ok: true });
+    respond("get", "/api/v1/remote-control/summary", { ok: true, summary: { readyNow: 1 } });
+
+    const results = await fetchOverviewSecurity({ scp: false, rcp: true });
+
+    expect(compliance).toHaveLength(0);
+    expect(Object.keys(results)).toEqual(["rcpSummary"]);
+  });
+
+  it("bloque 3 pide PMP y CDP por separado", async () => {
+    const pmp = respond("get", "/api/v1/patch-management/summary", { ok: true, summary: {} });
+    const cdp = respond("get", "/api/v1/cdp/summary", { ok: true, summary: {} });
+
+    const results = await fetchOverviewOperations({ pmp: true, cdp: false });
+
+    expect(pmp).toHaveLength(1);
+    expect(cdp).toHaveLength(0);
+    expect(Object.keys(results)).toEqual(["patchSummary"]);
+  });
+
+  it("los slots blindados caen a su valor de reserva; los demás rechazan", async () => {
+    stubCore();
     respond("get", "/api/v1/dashboard/summary", { message: "boom" }, { status: 500 });
-    // Shielded slots fail → built-in fallback values, still fulfilled.
     respond("get", "/api/v1/alerts/events", { message: "boom" }, { status: 500 });
     respond("get", "/api/v1/alerts/unread-count", { message: "boom" }, { status: 500 });
     respond("get", "/api/v1/security/compliance/devices", { message: "boom" }, { status: 500 });
-    respond("get", "/api/v1/dashboard/plugin-coverage", { message: "boom" }, { status: 500 });
+    respond("get", "/api/v1/security/compliance/summary", { ok: true, summary: {} });
     respond("get", "/api/v1/security/compliance/fleet-timeseries", { message: "boom" }, { status: 500 });
 
-    const { results } = await fetchOverviewBundle();
+    const core = await fetchOverviewCore();
+    const security = await fetchOverviewSecurity({ scp: true });
 
-    expect(results.dashboardSummary.status).toBe("rejected");
-
-    expect(results.alertEvents.status).toBe("fulfilled");
-    expect(results.alertEvents.value).toEqual({ items: [] });
-    expect(results.alertsUnread.status).toBe("fulfilled");
-    expect(results.alertsUnread.value).toEqual({ count: 0 });
-    expect(results.devicePosture.value).toEqual({ items: [] });
-    expect(results.pluginCoverage.value).toEqual({ total: 0, byPlugin: [] });
-    expect(results.fleetComplianceTimeseries.value).toEqual({ windowDays: 30, buckets: [] });
+    expect(core.dashboardSummary.status).toBe("rejected");
+    expect(core.alertEvents.value).toEqual({ items: [] });
+    expect(core.alertsUnread.value).toEqual({ count: 0 });
+    expect(security.devicePosture.value).toEqual({ items: [] });
+    expect(security.fleetComplianceTimeseries.value).toEqual({ windowDays: 30, buckets: [] });
   });
 });

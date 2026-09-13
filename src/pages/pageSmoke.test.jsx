@@ -22,7 +22,7 @@
 //
 // ⚠️ FINDING (documented, NOT fixed here): there is no app-level error
 // boundary (searched src for componentDidCatch / <ErrorBoundary>; the
-// only catch is per-request inside useCachedFetch / fetchOverviewBundle).
+// only catch is per-request inside useCachedFetch / the Overview block loaders).
 // Pages whose render throws on a 500 therefore take the whole tree down.
 // Where that happens below it is captured with `it.fails` so the suite
 // stays green while recording the crash as a known gap — see the

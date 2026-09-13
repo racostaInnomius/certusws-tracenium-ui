@@ -49,7 +49,7 @@ function getValue(result) {
   return result.value ?? null;
 }
 
-import { classifyAgentVersions, compareVersions } from "./agentVersions";
+import { classifyAgentVersions } from "./agentVersions";
 import { platformColor } from "../../utils/platform";
 
 // Muted, desaturated gray for the "pending" bucket — deliberately
@@ -423,9 +423,13 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
   // keep the composition compact. The PatchCoverageDonut is rendered
   // by the parent via the `patchCoverageSlot` prop so this component
   // doesn't need to know the patches data shape.
+  // Sin tercer donut (el de parches es de SCP y vive en el bloque 2), los dos
+  // que quedan reparten la fila en vez de dejar un tercio vacío.
+  const cell = patchCoverageSlot ? { xs: 12, sm: 6, md: 4 } : { xs: 12, sm: 6 };
+
   return (
     <Grid container spacing={2}>
-      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+      <Grid size={cell}>
         <DonutCard
           title="OS platform"
           data={osDataColored}
@@ -446,7 +450,7 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           pendingLabel="Pending inventory"
         />
       </Grid>
-      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+      <Grid size={cell}>
         <AgentVersionDonut
           byVersion={byVersion}
           latestMap={latestMap}
@@ -473,9 +477,11 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           }}
         />
       </Grid>
-      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-        {patchCoverageSlot}
-      </Grid>
+      {patchCoverageSlot ? (
+        <Grid size={cell}>
+          {patchCoverageSlot}
+        </Grid>
+      ) : null}
     </Grid>
   );
 }
