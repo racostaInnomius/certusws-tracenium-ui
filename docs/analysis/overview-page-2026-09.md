@@ -212,6 +212,8 @@ Estado por ítem: `pendiente` · `en curso` · `hecho (commit)` · `desplegado (
 | O4 | Bloque 3: cards de Patch Management y Crypto Discovery | UI | hecho (`16988f4`) | Una petición fallida dice "Couldn't load", no ceros (test). PMP y CDP son opt-in: sin equipos reportando la card lo explica. Exposición a CVEs y PQC fuera por pesadas. |
 | O5 | Línea de plan: qué bloques no incluye y quién puede cambiarlo | UI | hecho (`16988f4`) | Nombra bloque, tier y plugins; nada más. "View plans" sólo OWNER (test con ADMIN). |
 | O6 | Retirar Plugin coverage strip, Recent activity e índice de hostnames | UI | hecho (`16988f4`) | 3 ficheros fuera. `LatestAlerts` usa el `hostname` del feed; volver al índice local tumba su test. Verificado en arnés con datos simulados para los 3 planes a 1440 px y en estrecho: sin desborde ni errores de consola. |
+| O7 | Filas de tres cards a la misma altura; Fleet composition en vez de OS platform | UI | hecho (`088e06f`) | Latest alerts a p: 2 y 3 filas (limit=3); Software delivery con subtítulo en línea, sin "Deployments running" (lo cuenta la KPI) y la card entera como enlace; dona de composición de Hardware Inventory en lugar de OS platform. Medido a 1440 px: 255/255/255 y 308/308/308. Volver a 5 alertas, a la fila running, al enlace al pie o a OS platform tumba su test. |
+
 
 ## 6. Fuera de alcance (anotado, no hecho)
 
