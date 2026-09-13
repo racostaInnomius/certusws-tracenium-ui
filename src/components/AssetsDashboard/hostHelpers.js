@@ -92,7 +92,7 @@ export function formatOperatingMode(value) {
 // Storage-health chip color for the mobile managed panel.
 export function storageHealthColor(value) {
   const v = String(value || "").trim().toLowerCase();
-  if (v === "ok" || v === "healthy") return ROLE.positive;
+  if (v === "ok" || v === "healthy") return BRAND.alert.successText;
   if (v === "low" || v === "warning") return "#B07818";
   if (v === "critical" || v === "full") return ROLE.critical;
   return BRAND.gray;

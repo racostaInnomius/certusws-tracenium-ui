@@ -218,7 +218,7 @@ export default function DeviceDiffSection({ agentId }) {
               <DiffBucket
                 title="Resolved"
                 items={removed.map((f) => `${f.severity ?? "?"} · ${f.checkId} — ${f.title ?? ""}`)}
-                color={ROLE.positive}
+                color={BRAND.alert.successText}
                 icon={<RemoveCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
               />
               <DiffBucket

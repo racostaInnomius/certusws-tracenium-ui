@@ -39,7 +39,7 @@ export function getCoveragePalette(tone) {
   // so the card never turns red/yellow and does not visually alarm the
   // operator unless they read the actual coverage value.
   if (tone === "success") {
-    return { color: ROLE.positive };
+    return { color: BRAND.alert.successText };
   }
   if (tone === "critical") {
     return { color: ROLE.critical };

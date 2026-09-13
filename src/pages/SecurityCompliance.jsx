@@ -1735,7 +1735,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                       </Stack>
                     </TableCell>
                     <TableCell align="right">{f.devicesReporting}</TableCell>
-                    <TableCell align="right" sx={{ color: ROLE.positive, fontWeight: 600 }}>
+                    <TableCell align="right" sx={{ color: BRAND.alert.successText, fontWeight: 600 }}>
                       {f.devicesCompliant}
                     </TableCell>
                     <TableCell align="right" sx={{ color: ROLE.critical, fontWeight: 600 }}>

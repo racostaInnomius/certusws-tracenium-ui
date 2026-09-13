@@ -30,7 +30,7 @@ import {
   getOsLifecycle,
   getLocationHint,
 } from "./hostHelpers";
-import { ROLE } from "../../theme/brand";
+import { BRAND, ROLE } from "../../theme/brand";
 
 describe("compareVersions", () => {
   it("returns the -1/0/1 trichotomy, tolerating non-numeric segments", () => {
@@ -70,8 +70,8 @@ describe("formatOperatingMode", () => {
 
 describe("storageHealthColor", () => {
   it("maps health buckets to theme colors", () => {
-    expect(storageHealthColor("ok")).toBe(ROLE.positive);
-    expect(storageHealthColor("healthy")).toBe(ROLE.positive);
+    expect(storageHealthColor("ok")).toBe(BRAND.alert.successText);
+    expect(storageHealthColor("healthy")).toBe(BRAND.alert.successText);
     expect(storageHealthColor("critical")).toBe(ROLE.critical);
     expect(storageHealthColor("low")).toBe("#B07818");
   });

@@ -78,7 +78,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
               : isStale
               ? BRAND.surfaceMuted
               : "rgba(46,125,50,.12)",
-            color: !isGps ? BRAND.tealText : isStale ? "text.secondary" : ROLE.positive,
+            color: !isGps ? BRAND.tealText : isStale ? "text.secondary" : BRAND.alert.successText,
           }}
         />
         <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>

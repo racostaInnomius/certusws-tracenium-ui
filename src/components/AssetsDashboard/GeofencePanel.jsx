@@ -27,7 +27,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import SiteAttendance from "./SiteAttendance";
 import { dayWindow } from "./hostHelpers";
 
@@ -98,7 +98,7 @@ function Cerca({ site, onSave, saving, error }) {
           </Typography>
           {encendida ? (
             <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-              <Recuento label="inside" value={site.inside} color={ROLE.positive} />
+              <Recuento label="inside" value={site.inside} color={BRAND.alert.successText} />
               <Recuento label="outside" value={site.outside} color={BRAND.alert.error} />
               {/* ⚠️ "Indeterminate" se muestra SIEMPRE, aunque sea cero. Es el
                   estado que dice "la medición no alcanza", y esconderlo haría

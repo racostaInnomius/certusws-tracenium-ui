@@ -47,7 +47,7 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 const STATUS_META = {
   pass: {
     label: "Met",
-    fg: ROLE.positive,
+    fg: BRAND.alert.successText,
     bg: BRAND.alert?.successSoft,
     help: "No device fails any of this control's checks, and at least one passes.",
   },
@@ -313,7 +313,7 @@ function ControlsBody({ controls, agentId }) {
               <TableCell>
                 <StatusChip status={row.status} />
               </TableCell>
-              <TableCell align="right" sx={{ color: row.devicesPassing ? ROLE.positive : BRAND.gray, fontWeight: 700 }}>
+              <TableCell align="right" sx={{ color: row.devicesPassing ? BRAND.alert.successText : BRAND.gray, fontWeight: 700 }}>
                 {row.devicesPassing}
               </TableCell>
               <TableCell align="right" sx={{ color: row.devicesFailing ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>

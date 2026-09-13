@@ -195,7 +195,7 @@ function AgentDetailWorkbench({
                 label={connected ? "Online" : "Offline"}
                 sx={{
                   bgcolor: connected ? ROLE.positiveSoft : BRAND.surfaceMuted,
-                  color: connected ? ROLE.positive : BRAND.gray,
+                  color: connected ? BRAND.alert.successText : BRAND.gray,
                   fontWeight: 800,
                 }}
               />

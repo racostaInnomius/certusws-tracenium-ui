@@ -260,7 +260,7 @@ export default function FleetLocationMap({
         <Chip
           size="small"
           label={`${gpsCount} device-reported`}
-          sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: ROLE.positive }}
+          sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: BRAND.alert.successText }}
         />
         <Chip
           size="small"

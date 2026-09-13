@@ -233,7 +233,7 @@ export default function OverviewStatusBand({
           <Fact
             label="Outcome"
             value={`All ${settled} succeeded`}
-            tone={ROLE.positive}
+            tone={BRAND.alert.successText}
             hint="Every settled per-device install in the sampled deployments landed successfully."
           />
         ) : null}
@@ -267,7 +267,7 @@ export default function OverviewStatusBand({
           <Fact
             label="Sites with a DP"
             value={`${coveredSites}/${totalActiveSites}`}
-            tone={uncoveredSites > 0 ? ROLE.caution : ROLE.positive}
+            tone={uncoveredSites > 0 ? ROLE.caution : BRAND.alert.successText}
             hint="Sites with at least one active distribution point. Uncovered sites download from CDN or origin instead of the LAN."
             onClick={() => onNavigateTab?.("distribution")}
           />

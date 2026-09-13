@@ -36,7 +36,7 @@ function Estancia({ ep, esActual }) {
             <Chip
               size="small"
               label="current"
-              sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: ROLE.positive }}
+              sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: "rgba(46,125,50,.12)", color: BRAND.alert.successText }}
             />
           ) : null}
           {ep.accuracyM ? (

@@ -57,7 +57,7 @@ export function transitionLabel(fromState, toState) {
 }
 
 const TONOS = {
-  positive: { bgcolor: "rgba(46,125,50,.12)", color: ROLE.positive },
+  positive: { bgcolor: "rgba(46,125,50,.12)", color: BRAND.alert.successText },
   alert: { bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error },
   neutral: { bgcolor: BRAND.border, color: "text.secondary" },
 };
@@ -83,7 +83,7 @@ function StateBar({ site }) {
           </Typography>
         ) : (
           <>
-            <Typography sx={{ fontSize: TEXT.sm, color: ROLE.positive, fontWeight: 700 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.successText, fontWeight: 700 }}>
               {dentro} inside
             </Typography>
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, fontWeight: 700 }}>

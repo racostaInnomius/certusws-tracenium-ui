@@ -197,7 +197,7 @@ function DeviceRow({ device, selected, onSelect, reason }) {
             fontWeight: 700,
             fontSize: TEXT.xs,
             bgcolor: ROLE.positiveSoft,
-            color: ROLE.positive,
+            color: BRAND.alert.successText,
             border: `1px solid ${ROLE.positive}33`
           }}
         />

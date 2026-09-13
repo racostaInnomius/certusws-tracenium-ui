@@ -139,7 +139,7 @@ export default function ClientReportDialog({ open, clientId, clientName, onClose
             <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
               <Kpi label="Devices" value={dash(cur.deviceCount)} />
               <Kpi label="Online" value={cur.onlinePct == null ? "—" : `${cur.onlinePct}%`} accent={BRAND.teal} />
-              <Kpi label="Open alerts" value={dash(cur.openAlerts)} accent={cur.openAlerts ? BRAND.alert.warning : BRAND.alert.success} />
+              <Kpi label="Open alerts" value={dash(cur.openAlerts)} accent={cur.openAlerts ? BRAND.alert.warning : BRAND.alert.successText} />
               <Kpi
                 label="Compliance"
                 value={cur.compliancePct == null ? "—" : `${cur.compliancePct}%`}

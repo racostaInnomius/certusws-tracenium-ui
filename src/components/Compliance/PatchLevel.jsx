@@ -64,7 +64,7 @@ export function PatchChip({ patchSummary }) {
 
   const { role, label } = patchRecencyRole(patchSummary.lastInstalledAtUtc);
   const color =
-    role === "positive" ? ROLE.positive : role === "caution" ? ROLE.caution : ROLE.critical;
+    role === "positive" ? BRAND.alert.successText : role === "caution" ? ROLE.caution : ROLE.critical;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
@@ -218,7 +218,7 @@ export function PatchLevelSection({ patchSummary, recentPatches }) {
   const recency = patchRecencyRole(patchSummary.lastInstalledAtUtc);
   const recencyColor =
     recency.role === "positive"
-      ? ROLE.positive
+      ? BRAND.alert.successText
       : recency.role === "caution"
       ? ROLE.caution
       : ROLE.critical;

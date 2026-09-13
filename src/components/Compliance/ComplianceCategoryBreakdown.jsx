@@ -264,7 +264,7 @@ function CategoryRow({ row, baselineBridge }) {
           <PassRateBar rate={row.passRate} />
         </TableCell>
         <TableCell align="right">
-          <Typography sx={{ fontSize: TEXT.md, color: ROLE.positive, fontWeight: 700 }}>{row.passed}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.successText, fontWeight: 700 }}>{row.passed}</Typography>
         </TableCell>
         <TableCell align="right">
           <Typography sx={{ fontSize: TEXT.md, color: row.failed ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>{row.failed}</Typography>

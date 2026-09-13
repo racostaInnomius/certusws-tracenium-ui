@@ -197,7 +197,7 @@ function getStatusChipMeta(status) {
       return {
         label: "Active",
         bgcolor: BRAND.alert.successSoft,
-        color: BRAND.alert.success,
+        color: BRAND.alert.successText,
       };
     case "expired":
       return {
@@ -839,7 +839,7 @@ const filteredRows = React.useMemo(() => {
                   <SummaryCard
                     title="Active"
                     value={summary.active}
-                    accent={BRAND.alert.success}
+                    accent={BRAND.alert.successText}
                     subtitle="Ready for enrollment"
                   />
                 </Grid>
@@ -894,7 +894,7 @@ const filteredRows = React.useMemo(() => {
                   <SummaryCard
                     title="Remaining"
                     value={quotaLoading ? "..." : quotaSummary.remaining}
-                    accent={quotaSummary.remaining >= 0 ? BRAND.alert.success : BRAND.alert.warning}
+                    accent={quotaSummary.remaining >= 0 ? BRAND.alert.successText : BRAND.alert.warning}
                     subtitle="Before subscription limit"
                   />
                 </Grid>

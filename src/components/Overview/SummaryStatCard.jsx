@@ -21,7 +21,7 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 const TONE_COLOR = {
   critical: ROLE.critical,
   caution: ROLE.caution,
-  positive: ROLE.positive,
+  positive: BRAND.alert.successText,
   neutral: BRAND.dark,
 };
 

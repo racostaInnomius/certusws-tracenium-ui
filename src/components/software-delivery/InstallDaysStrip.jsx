@@ -149,7 +149,7 @@ export default function InstallDaysStrip({ buckets }) {
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, fontWeight: 700 }}>
           {total} install{total === 1 ? "" : "s"}
         </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: ROLE.positive }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.successText }}>
           {succeeded} succeeded
         </Typography>
         {failed ? (

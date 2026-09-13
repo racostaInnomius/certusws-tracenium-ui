@@ -1039,7 +1039,7 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
               height: 20,
               fontSize: TEXT.xs,
               bgcolor: ROLE.positiveSoft,
-              color: ROLE.positive,
+              color: BRAND.alert.successText,
               fontWeight: 700,
             }}
           />

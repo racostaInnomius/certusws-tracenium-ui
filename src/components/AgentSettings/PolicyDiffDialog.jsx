@@ -10,7 +10,7 @@ import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typogra
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { formatDiffValue } from "./policyDiff";
 
-const KIND_COLOR = { added: ROLE.positive, removed: ROLE.critical, changed: ROLE.caution };
+const KIND_COLOR = { added: BRAND.alert.successText, removed: ROLE.critical, changed: ROLE.caution };
 const KIND_SIGN = { added: "+", removed: "−", changed: "~" };
 
 export default function PolicyDiffDialog({ open, onClose, entries, onConfirm, title = "Review changes", confirmText = "Save", busy = false, scopeLabel = "", sectionsLabel = "" }) {

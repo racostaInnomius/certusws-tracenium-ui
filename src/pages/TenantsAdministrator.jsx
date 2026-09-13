@@ -147,7 +147,7 @@ function renderStatusChip(row) {
       size="small"
       sx={{
         bgcolor: BRAND.alert.successSoft,
-        color: BRAND.alert.success,
+        color: BRAND.alert.successText,
         fontWeight: 700,
       }}
     />
@@ -1094,7 +1094,7 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
                 <SummaryCard
                   title="Active Members"
                   value={summary.activeMembers}
-                  accent={BRAND.alert.success}
+                  accent={BRAND.alert.successText}
                 />
               </Grid>
             </Grid>

@@ -416,7 +416,7 @@ export default function KnownDevicesPicker({
                         height: 18,
                         fontSize: TEXT.xs,
                         bgcolor: ROLE.positiveSoft,
-                        color: ROLE.positive,
+                        color: BRAND.alert.successText,
                         fontWeight: 700,
                       }}
                     />

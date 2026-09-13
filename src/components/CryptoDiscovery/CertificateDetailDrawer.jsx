@@ -132,7 +132,7 @@ function ChainSummary({ tls }) {
             label={ok ? "chain trusted" : "chain rejected"}
             sx={{
               bgcolor: ok ? BRAND.alert.successSoft : BRAND.alert.errorSoft,
-              color: ok ? BRAND.alert.success : BRAND.alert.error,
+              color: ok ? BRAND.alert.successText : BRAND.alert.error,
               fontWeight: 700,
               fontSize: TEXT.xs,
             }}
@@ -172,7 +172,7 @@ function RevocationChip({ revocation }) {
         label={revoked ? "REVOKED" : "not revoked"}
         sx={{
           bgcolor: revoked ? BRAND.alert.errorSoft : BRAND.alert.successSoft,
-          color: revoked ? BRAND.alert.error : BRAND.alert.success,
+          color: revoked ? BRAND.alert.error : BRAND.alert.successText,
           fontWeight: 700,
           fontSize: TEXT.xs,
         }}
@@ -256,7 +256,7 @@ export default function CertificateDetailDrawer({
             label={family.text}
             sx={{
               bgcolor: family.tone === "good" ? BRAND.alert.successSoft : BRAND.alert.warningSoft,
-              color: family.tone === "good" ? BRAND.alert.success : BRAND.alert.warningText,
+              color: family.tone === "good" ? BRAND.alert.successText : BRAND.alert.warningText,
               fontWeight: 700,
               fontSize: TEXT.xs,
             }}

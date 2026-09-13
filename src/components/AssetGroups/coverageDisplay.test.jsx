@@ -53,7 +53,7 @@ describe("getCoverageTone", () => {
 
 describe("getCoveragePalette", () => {
   it("maps each tone to a role/brand color", () => {
-    expect(getCoveragePalette("success")).toEqual({ color: ROLE.positive });
+    expect(getCoveragePalette("success")).toEqual({ color: BRAND.alert.successText });
     expect(getCoveragePalette("critical")).toEqual({ color: ROLE.critical });
     expect(getCoveragePalette("warning")).toEqual({ color: ROLE.caution });
     expect(getCoveragePalette("info")).toEqual({ color: BRAND.tealText });

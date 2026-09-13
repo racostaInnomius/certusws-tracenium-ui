@@ -585,7 +585,7 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                                     : BRAND.surfaceMuted,
                                 color:
                                   p.status === "online"
-                                    ? ROLE.positive
+                                    ? BRAND.alert.successText
                                     : p.status === "error"
                                     ? ROLE.critical
                                     : "text.secondary",

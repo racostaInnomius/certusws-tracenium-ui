@@ -50,7 +50,7 @@ function Drawer({ item, tenantJson, onEdit, onRemove, onRevoke, busy }) {
         ) : (
           entries.map((e) => (
             <Box component="li" key={e.path} sx={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 1, py: 0.25, color: e.kind === "same" ? BRAND.gray : BRAND.dark }}>
-              <span style={{ fontWeight: 800, color: e.kind === "added" ? ROLE.positive : e.kind === "changed" ? ROLE.caution : BRAND.gray }}>{KIND_SIGN[e.kind]}</span>
+              <span style={{ fontWeight: 800, color: e.kind === "added" ? BRAND.alert.successText : e.kind === "changed" ? ROLE.caution : BRAND.gray }}>{KIND_SIGN[e.kind]}</span>
               <span style={{ wordBreak: "break-all" }}>
                 <strong>{e.path}</strong>{" "}
                 {e.kind === "changed" ? <s style={{ color: BRAND.gray }}>{formatDiffValue(e.before)} (tenant)</s> : null}

@@ -33,7 +33,7 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { getGlobalCatalog, linkGlobalEntry, linkGlobalTitle } from "../../api/softwareDelivery";
 
 /**
@@ -113,7 +113,7 @@ function Variant({ entry, onLink, busy }) {
       ) : null}
       <Box sx={{ flex: 1 }} />
       {linked ? (
-        <Typography sx={{ fontSize: TEXT.sm, color: ROLE.positive, fontWeight: 700 }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.successText, fontWeight: 700 }}>
           In your catalog
         </Typography>
       ) : (
@@ -352,7 +352,7 @@ export default function GlobalCatalogSegment({ notify, onLinked }) {
                   // dos veces en la misma tarjeta — el operador se pregunta si
                   // hablan de cosas distintas. La cabecera resume lo que no se
                   // ve; en cuanto se ve, sobra.
-                  <Typography sx={{ fontSize: TEXT.xs, color: ROLE.positive, fontWeight: 700 }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.successText, fontWeight: 700 }}>
                     In your catalog
                   </Typography>
                 ) : null}
