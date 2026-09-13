@@ -37,7 +37,14 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import { BRAND, TEXT } from "../../theme/brand";
 import { listFrom } from "../../api/shape";
-import { approveIntake, listIntakes, rejectIntake } from "../../api/softwareDelivery";
+import {
+  approveIntake,
+  getIntake,
+  listIntakes,
+  rejectIntake,
+  submitIntakeToVirusTotal,
+} from "../../api/softwareDelivery";
+import { VirusTotalConsentDialog, PendingReputationApproveDialog } from "./VirusTotalDialogs";
 import { intakeToPackageItem } from "./intakeMapping";
 import VerdictBadge from "./VerdictBadge";
 import IntakeVerdictBanner from "./IntakeVerdictBanner";
@@ -78,6 +85,14 @@ export default function IntakeReviewDrawer({ open, onClose, canManage, notify, o
   // Etapa en la que el operador se metió; null = todo.
   const [stageFilter, setStageFilter] = React.useState(null);
 
+  // ADR-0022 — subida del fichero a VirusTotal desde la revisión.
+  const [vtConsentOpen, setVtConsentOpen] = React.useState(false);
+  const [vtSubmitting, setVtSubmitting] = React.useState(false);
+  const [vtError, setVtError] = React.useState(null);
+  // Condición 3: la aprobación que el servidor paró por análisis pendiente, a la
+  // espera de que el operador decida si aprueba sin esperar.
+  const [pendingApprovePayload, setPendingApprovePayload] = React.useState(null);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -108,11 +123,57 @@ export default function IntakeReviewDrawer({ open, onClose, canManage, notify, o
       // mostrando una lista a la que le falta justo lo que acabas de publicar.
       onChanged?.();
     } catch (err) {
+      // ⚠️ El servidor para la aprobación si VirusTotal sigue analizando. No es un
+      // error que enseñar: es una pregunta que hacerle al operador.
+      if (err?.body?.error === "INTAKE_REPUTATION_PENDING") {
+        setPendingApprovePayload(payload ?? {});
+        return;
+      }
       notify?.("error", errorMessage(err, "Approve failed"));
     } finally {
       setReviewSubmitting(false);
     }
   };
+
+  const approveWithoutWaiting = async () => {
+    const payload = pendingApprovePayload ?? {};
+    setPendingApprovePayload(null);
+    await handleApprove({ ...payload, acknowledgePendingReputation: true });
+  };
+
+  const handleVirusTotalConfirm = async (consent) => {
+    if (!reviewIntake) return;
+    setVtSubmitting(true);
+    setVtError(null);
+    try {
+      const res = await submitIntakeToVirusTotal(reviewIntake.id, consent);
+      if (res?.intake) setReviewIntake(res.intake);
+      setVtConsentOpen(false);
+      notify?.("success", "Submitted to VirusTotal — the analysis usually takes a few minutes.");
+      await load();
+    } catch (err) {
+      setVtError(errorMessage(err, "Could not submit the file to VirusTotal"));
+    } finally {
+      setVtSubmitting(false);
+    }
+  };
+
+  // Mientras VirusTotal analiza, se vuelve a pedir el intake: el veredicto llega
+  // minutos después y el operador tiene la revisión abierta esperándolo.
+  const reviewPending = reviewIntake?.verification?.reputation?.verdict === "pending";
+  const reviewId = reviewIntake?.id;
+  React.useEffect(() => {
+    if (!reviewPending || reviewId == null) return undefined;
+    const timer = setInterval(async () => {
+      try {
+        const res = await getIntake(reviewId);
+        if (res?.intake) setReviewIntake(res.intake);
+      } catch {
+        // Un sondeo fallido no cierra nada: el siguiente lo reintenta.
+      }
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [reviewPending, reviewId]);
 
   const handleReject = async (intake) => {
     try {
@@ -317,7 +378,14 @@ export default function IntakeReviewDrawer({ open, onClose, canManage, notify, o
         banner={
           reviewIntake ? (
             <>
-              <IntakeVerdictBanner intake={reviewIntake} />
+              <IntakeVerdictBanner
+                intake={reviewIntake}
+                canManage={canManage}
+                onSubmitToVirusTotal={() => {
+                  setVtError(null);
+                  setVtConsentOpen(true);
+                }}
+              />
               <IntakeProposalBanner intake={reviewIntake} />
             </>
           ) : null
@@ -325,6 +393,22 @@ export default function IntakeReviewDrawer({ open, onClose, canManage, notify, o
         submitting={reviewSubmitting}
         onClose={() => (reviewSubmitting ? null : setReviewIntake(null))}
         onSubmit={handleApprove}
+      />
+
+      <VirusTotalConsentDialog
+        open={vtConsentOpen}
+        filename={reviewIntake?.filename}
+        submitting={vtSubmitting}
+        error={vtError}
+        onClose={() => setVtConsentOpen(false)}
+        onConfirm={handleVirusTotalConfirm}
+      />
+
+      <PendingReputationApproveDialog
+        open={pendingApprovePayload !== null}
+        submitting={reviewSubmitting}
+        onClose={() => setPendingApprovePayload(null)}
+        onConfirm={approveWithoutWaiting}
       />
     </Drawer>
   );

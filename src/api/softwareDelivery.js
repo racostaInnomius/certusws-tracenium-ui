@@ -213,6 +213,16 @@ export async function approveIntake(id, overrides = {}) {
   return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/approve`, overrides);
 }
 
+// ADR-0022 — pedir que el FICHERO se suba a VirusTotal (no sólo su hash).
+// Devuelve 202 con el intake en `pending`: la subida la hace un worker. El cuerpo
+// lleva las DOS confirmaciones del diálogo de consentimiento; sin ellas, 400.
+export async function submitIntakeToVirusTotal(id, { acknowledgeSharing, rightToShare } = {}) {
+  return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/reputation/submit`, {
+    acknowledgeSharing: acknowledgeSharing === true,
+    rightToShare: rightToShare === true,
+  });
+}
+
 export async function rejectIntake(id) {
   return httpPostJson(`${BASE}/intake/${encodeURIComponent(id)}/reject`, {});
 }

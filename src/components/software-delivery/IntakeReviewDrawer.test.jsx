@@ -120,3 +120,73 @@ describe("IntakeReviewDrawer · avisa al catálogo de detrás", () => {
     expect(sdpApi.listIntakes).not.toHaveBeenCalled();
   });
 });
+
+describe("ADR-0022 · subir el fichero a VirusTotal desde la revisión", () => {
+  const REVIEWABLE = {
+    ...PENDING,
+    filename: "InternalApp.msi",
+    facts: { platform: "windows", format: "msi", name: "InternalApp", version: "2.1.0" },
+    proposedConfig: { silentInstallArgs: "/qn /norestart", expectedExitCodes: [0, 3010], detectionRule: null },
+  };
+  const NO_RECORD = { verdict: "unknown", source: "virustotal", detections: null, total: null, permalink: null };
+
+  it("⚠️ consentimiento completo → se pide la subida con las DOS confirmaciones", async () => {
+    const user = userEvent.setup();
+    const intake = { ...REVIEWABLE, verification: { verdict: "warn", reasons: [], reputation: NO_RECORD } };
+    sdpApi.listIntakes.mockResolvedValue({ items: [intake] });
+    sdpApi.submitIntakeToVirusTotal.mockResolvedValue({
+      intake: { ...intake, verification: { ...intake.verification, reputation: { ...NO_RECORD, verdict: "pending", submission: { phase: "queued" } } } },
+    });
+    open();
+
+    await user.click(await screen.findByRole("button", { name: /^review$/i }));
+    await user.click(await screen.findByRole("button", { name: /submit file to virustotal/i }));
+    await user.click(screen.getByRole("checkbox", { name: /shared with virustotal/i }));
+    await user.click(screen.getByRole("checkbox", { name: /right to share/i }));
+    await user.click(screen.getByRole("button", { name: /^submit to virustotal$/i }));
+
+    expect(sdpApi.submitIntakeToVirusTotal).toHaveBeenCalledWith(7, { acknowledgeSharing: true, rightToShare: true });
+    // Y la revisión abierta pasa a enseñar que está en marcha.
+    expect(await screen.findByText(/analysis in progress/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ el servidor para la aprobación por análisis pendiente → se pregunta, y sólo a sabiendas se reintenta", async () => {
+    const user = userEvent.setup();
+    const intake = {
+      ...REVIEWABLE,
+      verification: { verdict: "warn", reasons: [], reputation: { ...NO_RECORD, verdict: "pending", submission: { phase: "analyzing" } } },
+    };
+    sdpApi.listIntakes.mockResolvedValue({ items: [intake] });
+    const pendingErr = Object.assign(new Error("pending"), { body: { error: "INTAKE_REPUTATION_PENDING" } });
+    sdpApi.approveIntake.mockRejectedValueOnce(pendingErr).mockResolvedValueOnce({ ok: true });
+    open();
+
+    await user.click(await screen.findByRole("button", { name: /^review$/i }));
+    await user.click(await screen.findByRole("button", { name: /approve & add to catalog/i }));
+
+    // No es un error que se enseña y ya: es una pregunta.
+    expect(await screen.findByText(/still analyzing this file/i)).toBeInTheDocument();
+    expect(sdpApi.approveIntake).toHaveBeenCalledTimes(1);
+    expect(sdpApi.approveIntake.mock.calls[0][1]).not.toHaveProperty("acknowledgePendingReputation");
+
+    await user.click(screen.getByRole("button", { name: /approve without waiting/i }));
+    await waitFor(() => expect(sdpApi.approveIntake).toHaveBeenCalledTimes(2));
+    expect(sdpApi.approveIntake.mock.calls[1][1].acknowledgePendingReputation).toBe(true);
+  });
+
+  it("esperar NO reintenta", async () => {
+    const user = userEvent.setup();
+    const intake = {
+      ...REVIEWABLE,
+      verification: { verdict: "warn", reasons: [], reputation: { ...NO_RECORD, verdict: "pending", submission: { phase: "analyzing" } } },
+    };
+    sdpApi.listIntakes.mockResolvedValue({ items: [intake] });
+    sdpApi.approveIntake.mockRejectedValueOnce(Object.assign(new Error("pending"), { body: { error: "INTAKE_REPUTATION_PENDING" } }));
+    open();
+
+    await user.click(await screen.findByRole("button", { name: /^review$/i }));
+    await user.click(await screen.findByRole("button", { name: /approve & add to catalog/i }));
+    await user.click(await screen.findByRole("button", { name: /wait for the result/i }));
+    expect(sdpApi.approveIntake).toHaveBeenCalledTimes(1);
+  });
+});
