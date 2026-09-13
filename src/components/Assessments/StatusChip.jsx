@@ -35,20 +35,3 @@ export default function StatusChip({ meta, fallback = "—", help = null }) {
   );
 }
 
-/**
- * Colores explícitos para los avisos de la página. Con el tema actual,
- * `palette.<severity>.light` es un rgba translúcido y el <Alert> estándar de MUI
- * deriva de él un texto al 22 % de opacidad: el aviso de «corrida missed», que es
- * justo lo que el ADR exige que se VEA, salía casi invisible.
- */
-export function bannerSx(severity) {
-  const map = {
-    error: { fg: BRAND.alert.errorText ?? ROLE.critical, bg: ROLE.criticalSoft },
-    warning: { fg: BRAND.alert.warningText ?? ROLE.caution, bg: ROLE.cautionSoft },
-    info: { fg: BRAND.tealText, bg: ROLE.neutralSoft },
-    success: { fg: ROLE.positive, bg: ROLE.positiveSoft },
-  };
-  const t = map[severity] || map.info;
-  return { color: t.fg, bgcolor: t.bg, "& .MuiAlert-icon": { color: t.fg }, "& .MuiAlert-message": { color: t.fg } };
-}
-

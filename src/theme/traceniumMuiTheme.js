@@ -1,6 +1,33 @@
 import { createTheme } from "@mui/material/styles";
 import { BRAND, ROLE } from "./brand";
 
+// Colores del <Alert> por severidad. `palette.<severity>.light` son rgba
+// translúcidos (así los usan como relleno), y el Alert estándar de MUI deriva de
+// ellos el texto — darken(rgba al 22 %, 0.6) sigue al 22 %: el texto de error
+// salía casi invisible. Aquí el texto es opaco y el fondo, el suave de ROLE.
+// No se toca `palette.*.light`: su significado sigue siendo "relleno suave".
+export const ALERT_TONES = {
+  error: { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
+  warning: { fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
+  info: { fg: BRAND.tealText, bg: ROLE.neutralSoft },
+  success: { fg: ROLE.positive, bg: ROLE.positiveSoft },
+};
+
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// standardError, outlinedWarning, … — las claves que MUI resuelve como
+// `${variant}${Color}`. El icono va del mismo color que el texto: `main` en
+// ámbar (#F4D37D) sobre el fondo ámbar suave tampoco se ve.
+const alertStyleOverrides = Object.fromEntries(
+  Object.entries(ALERT_TONES).flatMap(([severity, { fg, bg }]) => {
+    const text = { color: fg, "& .MuiAlert-icon": { color: fg } };
+    return [
+      [`standard${capitalize(severity)}`, { ...text, backgroundColor: bg }],
+      [`outlined${capitalize(severity)}`, text],
+    ];
+  }),
+);
+
 // Central MUI theme for Tracenium.
 // Purpose: remove stock Material UI blue from controls that rely on default
 // `primary` / `info` colors and replace it with Tracenium teal/green tokens.
@@ -56,6 +83,9 @@ const traceniumMuiTheme = createTheme({
     borderRadius: 4,
   },
   components: {
+    MuiAlert: {
+      styleOverrides: alertStyleOverrides,
+    },
     MuiPaper: {
       styleOverrides: {
         rounded: {

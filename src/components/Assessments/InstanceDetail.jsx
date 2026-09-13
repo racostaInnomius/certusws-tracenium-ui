@@ -34,7 +34,7 @@ import { BRAND, TEXT } from "../../theme/brand";
 import { SEVERITY_META } from "../../theme/severity";
 import { formatDate, formatRelative } from "../../utils/format";
 import SectionPaper from "../common/SectionPaper";
-import StatusChip, { bannerSx } from "./StatusChip";
+import StatusChip from "./StatusChip";
 import ExceptionDialog from "./ExceptionDialog";
 import {
   INSTANCE_STATUS,
@@ -99,7 +99,7 @@ function FindingRow({ finding, canEdit, onException }) {
           <Collapse in={open} unmountOnExit>
             <Box sx={{ py: 1.5, px: 1 }}>
               {finding.status === "not_assessed" ? (
-                <Alert severity="info" sx={{ ...bannerSx("info"),  mb: 1 }}>{notAssessedReason(finding.reason)}</Alert>
+                <Alert severity="info" sx={{ mb: 1 }}>{notAssessedReason(finding.reason)}</Alert>
               ) : null}
               {finding.remediation ? (
                 <>
@@ -209,9 +209,9 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
         ) : null}
       </Stack>
 
-      {inst.status === "orphaned" ? <Alert severity="warning" sx={{ ...bannerSx("warning"),  mb: 2 }}>{INSTANCE_STATUS.orphaned.help}</Alert> : null}
+      {inst.status === "orphaned" ? <Alert severity="warning" sx={{ mb: 2 }}>{INSTANCE_STATUS.orphaned.help}</Alert> : null}
       {lastRun && (lastRun.status === "missed" || lastRun.status === "failed" || lastRun.status === "incomplete") ? (
-        <Alert severity={lastRun.status === "incomplete" ? "warning" : "error"} sx={{ ...bannerSx(lastRun.status === "incomplete" ? "warning" : "error"), mb: 2 }}>
+        <Alert severity={lastRun.status === "incomplete" ? "warning" : "error"} sx={{ mb: 2 }}>
           The last run ({formatRelative(lastRun.startedAt)}) was <strong>{RUN_STATUS[lastRun.status].label.toLowerCase()}</strong>
           {lastRun.errorText ? `: ${lastRun.errorText}` : ""}. The score below is from the last complete run.
         </Alert>

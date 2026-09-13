@@ -26,7 +26,6 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { activateAssessmentInstance, listCollectorCandidates } from "../../api/assessments";
-import { bannerSx } from "./StatusChip";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -101,14 +100,14 @@ export default function ActivateDialog({ open, instance, onClose, onActivated })
           leaves it. {isChange ? "" : "Activating adds this domain to your license and schedules the first run."}
         </Typography>
 
-        {loadError ? <Alert severity="error" sx={{ ...bannerSx("error"),  mb: 2 }}>{loadError}</Alert> : null}
+        {loadError ? <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert> : null}
         {candidates === null && !loadError ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
             <CircularProgress size={24} sx={{ color: BRAND.teal }} />
           </Box>
         ) : null}
         {candidates && candidates.length === 0 ? (
-          <Alert severity="warning" sx={{ ...bannerSx("warning"),  mb: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2 }}>
             No domain controller of this domain runs the agent. Install the agent on one to activate the domain.
           </Alert>
         ) : null}
@@ -196,7 +195,7 @@ export default function ActivateDialog({ open, instance, onClose, onActivated })
           </Stack>
         ) : null}
 
-        {saveError ? <Alert severity="error" sx={{ ...bannerSx("error"),  mt: 2 }}>{saveError}</Alert> : null}
+        {saveError ? <Alert severity="error" sx={{ mt: 2 }}>{saveError}</Alert> : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={saving} sx={{ textTransform: "none" }}>

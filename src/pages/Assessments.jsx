@@ -36,7 +36,7 @@ import SectionPaper from "../components/common/SectionPaper";
 import AsyncState from "../components/common/AsyncState";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useConfirm } from "../components/common/ConfirmDialog";
-import StatusChip, { bannerSx } from "../components/Assessments/StatusChip";
+import StatusChip from "../components/Assessments/StatusChip";
 import ActivateDialog from "../components/Assessments/ActivateDialog";
 import InstanceDetail from "../components/Assessments/InstanceDetail";
 import {
@@ -240,7 +240,6 @@ export default function Assessments({ onNavigate }) {
           {upgrade ? (
             <Alert
               severity="info"
-              sx={bannerSx("info")}
               action={onNavigate ? <Button color="inherit" size="small" onClick={() => onNavigate("billing")}>Plans</Button> : null}
             >
               {upgrade}

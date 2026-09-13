@@ -8,7 +8,6 @@ import * as React from "react";
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { removeFindingException, setFindingException } from "../../api/assessments";
-import { bannerSx } from "./StatusChip";
 
 function inDays(days) {
   const d = new Date(Date.now() + days * 86_400_000);
@@ -83,7 +82,7 @@ export default function ExceptionDialog({ open, instanceId, finding, onClose, on
             sx={{ width: 200 }}
           />
         </Stack>
-        {error ? <Alert severity="error" sx={{ ...bannerSx("error"),  mt: 2 }}>{error}</Alert> : null}
+        {error ? <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert> : null}
       </DialogContent>
       <DialogActions>
         {finding?.exception ? (
