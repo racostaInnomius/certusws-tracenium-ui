@@ -52,7 +52,7 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 const META = {
   server: {
     label: "Server",
-    fg: ROLE.caution,
+    fg: BRAND.alert.warningText,
     bg: ROLE.cautionSoft,
     help: "Sessions on servers can require another admin's approval, and nobody is prompted on the device."
   },

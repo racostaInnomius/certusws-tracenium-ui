@@ -394,7 +394,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
             {pushing ? "Pushing…" : "Push now"}
           </Button>
           {dirty ? (
-            <Typography variant="caption" sx={{ color: BRAND.alert.warning, fontWeight: 700 }}>
+            <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
               Unsaved changes
             </Typography>
           ) : null}

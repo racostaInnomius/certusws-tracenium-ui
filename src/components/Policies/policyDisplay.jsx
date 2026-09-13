@@ -89,7 +89,7 @@ export function renderAckChip(status, reasonText) {
       icon={<ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />}
       sx={{
         bgcolor: BRAND.alert.errorSoft,
-        color: BRAND.alert.error,
+        color: BRAND.alert.errorText,
         fontWeight: 700,
         border: `1px solid ${BRAND.alert.error}55`,
         "& .MuiChip-icon": { color: BRAND.alert.error },

@@ -71,8 +71,8 @@ function renderDeltaIcon(diff, color) {
 
 function deltaColor(diff) {
   if (diff == null) return { fg: BRAND.gray, bg: BRAND.darkSoft };
-  if (diff > 1) return { fg: ROLE.positive, bg: ROLE.positiveSoft };
-  if (diff < -1) return { fg: ROLE.critical, bg: ROLE.criticalSoft };
+  if (diff > 1) return { fg: BRAND.alert.successText, bg: ROLE.positiveSoft };
+  if (diff < -1) return { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft };
   return { fg: BRAND.gray, bg: BRAND.darkSoft };
 }
 

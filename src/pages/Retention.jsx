@@ -45,7 +45,7 @@ import {
   updateRetentionPolicy,
   runRetention,
 } from "../api/retention";
-import { BRAND, ROLE, TEXT } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import { formatBytes } from "../utils/format";
 
 // Bind each policy field to:
@@ -325,7 +325,7 @@ export default function Retention({ onNavigate }) {
       />
 
       {error ? (
-        <Typography sx={{ color: ROLE.critical, mb: 2 }}>{error}</Typography>
+        <Typography sx={{ color: BRAND.alert.errorText, mb: 2 }}>{error}</Typography>
       ) : null}
 
       {loading && !stats ? (

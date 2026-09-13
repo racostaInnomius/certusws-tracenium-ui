@@ -205,7 +205,7 @@ export default function FleetHealthPreview({ open, onClose, reportKey, onGenerat
               <Kpi label="Compliance" value={pctText(k.compliancePct)} accent={scoreBandRole(k.compliancePct) ?? BRAND.dark} />
               <Kpi label="Patch compliant" value={pctText(k.patchCompliantPct)} accent={scoreBandRole(k.patchCompliantPct) ?? BRAND.dark} />
               <Kpi label="License usage" value={pctText(k.licenseUtilizationPct)} />
-              <Kpi label="Open alerts" value={dash(k.openAlerts)} accent={k.openAlerts ? BRAND.alert.warning : BRAND.alert.successText} />
+              <Kpi label="Open alerts" value={dash(k.openAlerts)} accent={k.openAlerts ? BRAND.alert.warningText : BRAND.alert.successText} />
             </Stack>
 
             {/* Trend chart */}

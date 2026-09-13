@@ -132,7 +132,7 @@ function ChainSummary({ tls }) {
             label={ok ? "chain trusted" : "chain rejected"}
             sx={{
               bgcolor: ok ? BRAND.alert.successSoft : BRAND.alert.errorSoft,
-              color: ok ? BRAND.alert.successText : BRAND.alert.error,
+              color: ok ? BRAND.alert.successText : BRAND.alert.errorText,
               fontWeight: 700,
               fontSize: TEXT.xs,
             }}
@@ -172,7 +172,7 @@ function RevocationChip({ revocation }) {
         label={revoked ? "REVOKED" : "not revoked"}
         sx={{
           bgcolor: revoked ? BRAND.alert.errorSoft : BRAND.alert.successSoft,
-          color: revoked ? BRAND.alert.error : BRAND.alert.successText,
+          color: revoked ? BRAND.alert.errorText : BRAND.alert.successText,
           fontWeight: 700,
           fontSize: TEXT.xs,
         }}

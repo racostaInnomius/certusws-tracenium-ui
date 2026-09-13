@@ -334,7 +334,7 @@ export default function ConnectTab({
                     off it is always zero, and a permanent "0 refused" would
                     read as reassurance about a question nobody is asking. */}
                 {denied > 0 ? (
-                  <Box component="span" sx={{ color: ROLE.caution, fontWeight: 700 }}>
+                  <Box component="span" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
                     {" · "}
                     {denied} refused by the user
                   </Box>

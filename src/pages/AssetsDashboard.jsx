@@ -1307,7 +1307,7 @@ function osLifecycleBadge(row) {
   if (lc.status === "supported") return null;
 
   const tones = {
-    critical: { bg: "rgba(198,40,40,.12)", fg: ROLE.critical },
+    critical: { bg: "rgba(198,40,40,.12)", fg: BRAND.alert.errorText },
     warning: { bg: "rgba(176,120,24,.14)", fg: BRAND.alert.high },
     muted: { bg: BRAND.surfaceMuted, fg: "text.secondary" },
   };
@@ -1774,7 +1774,7 @@ const osVersionItems = React.useMemo(() => {
                         size="small"
                         label={`Version: ${versionBucketFilter.replace("_", " ")}`}
                         onDelete={() => setVersionBucketFilter("")}
-                        sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 600 }}
+                        sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 600 }}
                       />
                     ) : null}
                     {groupFilter ? (

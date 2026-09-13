@@ -9,8 +9,8 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 
 const TONES = {
   positive: { fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
-  caution: { fg: BRAND.alert.warningText ?? ROLE.caution, bg: ROLE.cautionSoft },
-  critical: { fg: BRAND.alert.errorText ?? ROLE.critical, bg: ROLE.criticalSoft },
+  caution: { fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
+  critical: { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   neutral: { fg: BRAND.alert.infoText, bg: ROLE.neutralSoft },
   muted: { fg: BRAND.dark, bg: BRAND.darkSoft },
 };

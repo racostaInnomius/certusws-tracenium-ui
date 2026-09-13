@@ -22,11 +22,11 @@ import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
 // compliance page key off it too (this was shared module-level state in the
 // old god-component).
 export const STATUS_META = {
-  pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.positive, bg: ROLE.positiveSoft },
-  fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.critical, bg: ROLE.criticalSoft },
+  pass: { label: "Pass", icon: <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
+  fail: { label: "Fail", icon: <ErrorOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   not_applicable: { label: "Not assessed", icon: <BlockOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
   info: { label: "Info", icon: <InfoOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.teal, bg: BRAND.tealSoft },
-  error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: ROLE.caution, bg: ROLE.cautionSoft },
+  error: { label: "Error", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
   unknown: { label: "Unknown", icon: <HelpOutlineOutlinedIcon sx={{ fontSize: ICON.sm }} />, fg: BRAND.gray, bg: BRAND.surfaceMuted },
   // "No data" (transient: enrolled <1 cycle, or fewer than the scoring
   // threshold of applicable rules) — distinct from "Unknown" (evaluator/
@@ -39,9 +39,9 @@ export const STATUS_META = {
 // security_compliance_findings.remediation_status). Colors echo the finding
 // status palette so a critical finding still stands out under "in progress".
 export const REMEDIATION_STATUS_META = {
-  open: { label: "Open", fg: ROLE.critical, bg: ROLE.criticalSoft },
-  in_progress: { label: "In progress", fg: ROLE.caution, bg: ROLE.cautionSoft },
-  remediated: { label: "Remediated", fg: ROLE.positive, bg: ROLE.positiveSoft },
+  open: { label: "Open", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
+  in_progress: { label: "In progress", fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
+  remediated: { label: "Remediated", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
   risk_accepted: { label: "Risk accepted", fg: BRAND.tealText, bg: BRAND.tealSoft },
   wont_fix: { label: "Won't fix", fg: BRAND.gray, bg: BRAND.surfaceMuted },
 };

@@ -20,10 +20,10 @@ function tierLabel(tier) {
 }
 
 const STATUS_CHIP = {
-  active: { label: "Active", bg: ROLE.positiveSoft, fg: ROLE.positive },
+  active: { label: "Active", bg: ROLE.positiveSoft, fg: BRAND.alert.successText },
   included_inactive: { label: "Included · not active", bg: BRAND.darkSoft, fg: BRAND.dark },
   not_in_plan: { label: "Not in plan", bg: BRAND.surfaceMuted, fg: BRAND.gray },
-  active_not_in_plan: { label: "Active · not in plan", bg: ROLE.cautionSoft, fg: ROLE.caution },
+  active_not_in_plan: { label: "Active · not in plan", bg: ROLE.cautionSoft, fg: BRAND.alert.warningText },
 };
 
 export default function PluginsView({ catalog, form, entitled, coverage, onOpenSection, onNavigate, planLabel }) {

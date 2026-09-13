@@ -34,7 +34,7 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import { listSilentEnrollments } from "../../api/devices";
-import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 
 /**
  * Qué significa cada motivo y, sobre todo, A QUIÉN hay que mandarlo.
@@ -46,7 +46,7 @@ import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 const REASONS = {
   never_connected: {
     label: "Never connected",
-    tone: ROLE.critical,
+    tone: BRAND.alert.errorText,
     bg: "rgba(198,40,40,.12)",
     hint:
       "Enrollment reached the API over HTTPS, but the agent has never opened its gRPC connection. " +
@@ -265,7 +265,7 @@ export default function SilentEnrollmentsTable({ onBack }) {
                           <span>{formatAge(r.hoursSinceEnroll)} ago</span>
                         </Tooltip>
                       </TableCell>
-                      <TableCell sx={{ fontSize: TEXT.sm, color: r.lastSeenAt ? "inherit" : ROLE.critical }}>
+                      <TableCell sx={{ fontSize: TEXT.sm, color: r.lastSeenAt ? "inherit" : BRAND.alert.errorText }}>
                         {formatWhen(r.lastSeenAt)}
                       </TableCell>
                     </TableRow>

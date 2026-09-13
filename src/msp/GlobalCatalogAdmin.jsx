@@ -32,7 +32,7 @@ import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
-import { BRAND, ROLE, TEXT } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 import {
   fetchGlobalCatalog,
   fetchPublishablePackages,
@@ -113,7 +113,7 @@ function Variant({ entry, onUnpublish, busy }) {
             size="small"
             disabled={busy || linked > 0}
             onClick={() => onUnpublish(entry)}
-            sx={{ textTransform: "none", color: ROLE.critical }}
+            sx={{ textTransform: "none", color: BRAND.alert.errorText }}
           >
             Unpublish
           </Button>

@@ -1139,7 +1139,7 @@ export default function ScreenShareViewer({ session, device, onClose }) {
           <Typography
             variant="body1"
             sx={{
-              color: state === STATE.ERROR ? ROLE.critical : BRAND.gray,
+              color: state === STATE.ERROR ? BRAND.alert.errorText : BRAND.gray,
               fontWeight: 600
             }}
           >

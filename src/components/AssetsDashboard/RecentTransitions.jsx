@@ -58,7 +58,7 @@ export function transitionLabel(fromState, toState) {
 
 const TONOS = {
   positive: { bgcolor: "rgba(46,125,50,.12)", color: BRAND.alert.successText },
-  alert: { bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error },
+  alert: { bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText },
   neutral: { bgcolor: BRAND.border, color: "text.secondary" },
 };
 
@@ -86,7 +86,7 @@ function StateBar({ site }) {
             <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.successText, fontWeight: 700 }}>
               {dentro} inside
             </Typography>
-            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, fontWeight: 700 }}>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, fontWeight: 700 }}>
               {fuera} outside
             </Typography>
             <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
@@ -179,7 +179,7 @@ export default function RecentTransitions({ events, sites, loading = false, erro
 
   if (error) {
     return (
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
         {/* Un fallo NO es "no ha pasado nada": lo segundo afirmaría que ningún
             equipo se ha movido. */}
         Geofence activity could not be loaded, so this is not showing what happened.

@@ -25,7 +25,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import PolicySectionPanel from "./PolicySectionPanel";
 import { formToPolicy } from "../Policies/policyTransforms";
@@ -175,7 +175,7 @@ export default function ApplyOverrideDialog({ open, onClose, onApply, sections, 
             <Box component="ul" aria-label="Override patch" sx={{ listStyle: "none", m: 0, p: 0, fontFamily: "monospace", fontSize: TEXT.sm }}>
               {diff.map((e) => (
                 <Box component="li" key={e.path} sx={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 1, py: 0.25 }}>
-                  <span style={{ color: e.kind === "removed" ? ROLE.critical : BRAND.alert.successText, fontWeight: 800 }}>{KIND_SIGN[e.kind]}</span>
+                  <span style={{ color: e.kind === "removed" ? BRAND.alert.errorText : BRAND.alert.successText, fontWeight: 800 }}>{KIND_SIGN[e.kind]}</span>
                   <span>
                     <strong>{e.path}</strong>{" "}
                     <span style={{ color: BRAND.gray }}>
@@ -189,7 +189,7 @@ export default function ApplyOverrideDialog({ open, onClose, onApply, sections, 
             </Box>
           )}
           {problems.map((p) => (
-            <Typography key={p.message} sx={{ fontSize: TEXT.sm, color: ROLE.critical, mt: 0.5 }}>{p.message}</Typography>
+            <Typography key={p.message} sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mt: 0.5 }}>{p.message}</Typography>
           ))}
         </Box>
       </DialogContent>

@@ -421,7 +421,7 @@ function UserInactivityDialog({
               <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: "text.secondary", textTransform: "uppercase", letterSpacing: 0.5 }}>
                 Auto sign-out in
               </Typography>
-              <Typography sx={{ fontSize: TEXT["3xl"], lineHeight: 1, fontWeight: 900, color: safeCountdown <= 5 ? BRAND.alert.error : BRAND.tealText }}>
+              <Typography sx={{ fontSize: TEXT["3xl"], lineHeight: 1, fontWeight: 900, color: safeCountdown <= 5 ? BRAND.alert.errorText : BRAND.tealText }}>
                 {safeCountdown}s
               </Typography>
             </Stack>

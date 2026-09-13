@@ -113,9 +113,9 @@ function PlatformChip({ platform }) {
 function InactiveSeverityChip({ inactiveDays }) {
   const days = Number(inactiveDays || 0);
   const palette = days >= 30
-    ? { bg: ROLE.criticalSoft, fg: ROLE.critical, label: "30+ days" }
+    ? { bg: ROLE.criticalSoft, fg: BRAND.alert.errorText, label: "30+ days" }
     : days >= 14
-    ? { bg: ROLE.cautionSoft, fg: ROLE.caution, label: "14+ days" }
+    ? { bg: ROLE.cautionSoft, fg: BRAND.alert.warningText, label: "14+ days" }
     : { bg: BRAND.tealSoft, fg: BRAND.tealText, label: "7+ days" };
 
   return (
@@ -144,7 +144,7 @@ function StatusChip({ status }) {
       sx={{
         height: 22,
         bgcolor: ROLE.cautionSoft,
-        color: ROLE.caution,
+        color: BRAND.alert.warningText,
         fontWeight: 900,
         fontSize: TEXT.xs,
         letterSpacing: 0.2,
@@ -320,7 +320,7 @@ export default function InactiveAssetsTable({
               <Chip
                 size="small"
                 label={`${inactiveDays}+ days`}
-                sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 900 }}
+                sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 900 }}
               />
             </Stack>
             <Typography sx={{ mt: 0.4, fontSize: TEXT.md, color: "text.secondary" }}>

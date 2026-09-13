@@ -68,7 +68,7 @@ function Row({ label, stats, hint, failed }) {
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
           {label}
         </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: ROLE.caution }}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText }}>
           Couldn't load this figure — the request failed
         </Typography>
       </Box>

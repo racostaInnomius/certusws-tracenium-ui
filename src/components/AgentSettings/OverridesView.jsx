@@ -26,13 +26,13 @@ function AppliedChip({ item }) {
   if (item.kind === "batch") {
     const { ok, total } = item.applied;
     const full = ok >= total;
-    return <Chip size="small" label={`${ok} / ${total}`} sx={{ bgcolor: full ? ROLE.positiveSoft : ROLE.cautionSoft, color: full ? ROLE.positive : ROLE.caution, fontWeight: 700 }} />;
+    return <Chip size="small" label={`${ok} / ${total}`} sx={{ bgcolor: full ? ROLE.positiveSoft : ROLE.cautionSoft, color: full ? BRAND.alert.successText : BRAND.alert.warningText, fontWeight: 700 }} />;
   }
   const a = item.applied;
-  if (a.ack !== null && a.ack !== undefined && a.ack !== 0) return <Chip size="small" label="rejected" sx={{ bgcolor: ROLE.criticalSoft, color: ROLE.critical, fontWeight: 700 }} />;
-  if (a.inSync) return <Chip size="small" label="applied" sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 700 }} />;
-  if (!a.connected) return <Chip size="small" label={`pending · offline${a.lastSeen ? ` ${formatRelativeTime(a.lastSeen)}` : ""}`} sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 700 }} />;
-  return <Chip size="small" label="pending" sx={{ bgcolor: ROLE.cautionSoft, color: ROLE.caution, fontWeight: 700 }} />;
+  if (a.ack !== null && a.ack !== undefined && a.ack !== 0) return <Chip size="small" label="rejected" sx={{ bgcolor: ROLE.criticalSoft, color: BRAND.alert.errorText, fontWeight: 700 }} />;
+  if (a.inSync) return <Chip size="small" label="applied" sx={{ bgcolor: ROLE.positiveSoft, color: BRAND.alert.successText, fontWeight: 700 }} />;
+  if (!a.connected) return <Chip size="small" label={`pending · offline${a.lastSeen ? ` ${formatRelativeTime(a.lastSeen)}` : ""}`} sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 700 }} />;
+  return <Chip size="small" label="pending" sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 700 }} />;
 }
 
 function Drawer({ item, tenantJson, onEdit, onRemove, onRevoke, busy }) {
@@ -50,7 +50,7 @@ function Drawer({ item, tenantJson, onEdit, onRemove, onRevoke, busy }) {
         ) : (
           entries.map((e) => (
             <Box component="li" key={e.path} sx={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 1, py: 0.25, color: e.kind === "same" ? BRAND.gray : BRAND.dark }}>
-              <span style={{ fontWeight: 800, color: e.kind === "added" ? BRAND.alert.successText : e.kind === "changed" ? ROLE.caution : BRAND.gray }}>{KIND_SIGN[e.kind]}</span>
+              <span style={{ fontWeight: 800, color: e.kind === "added" ? BRAND.alert.successText : e.kind === "changed" ? BRAND.alert.warningText : BRAND.gray }}>{KIND_SIGN[e.kind]}</span>
               <span style={{ wordBreak: "break-all" }}>
                 <strong>{e.path}</strong>{" "}
                 {e.kind === "changed" ? <s style={{ color: BRAND.gray }}>{formatDiffValue(e.before)} (tenant)</s> : null}

@@ -396,7 +396,7 @@ export default function LocationSites({ onNavigate }) {
                 ))}
               </Stack>
               {fieldError.field === "ranges" ? (
-                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, mt: 0.5 }}>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mt: 0.5 }}>
                   {fieldError.message}
                 </Typography>
               ) : null}
@@ -411,7 +411,7 @@ export default function LocationSites({ onNavigate }) {
               </Button>
             </Box>
             {fieldError.message && !fieldError.field ? (
-              <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.error }}>{fieldError.message}</Typography>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.errorText }}>{fieldError.message}</Typography>
             ) : null}
           </Stack>
         </DialogContent>

@@ -18,7 +18,7 @@
 
 import * as React from "react";
 import { Box, Chip, Paper, Stack, Tooltip, Typography } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 export default function FleetAttentionBand({ attention, loading, activeFilter, onSelect }) {
   // ⚠️ Mientras carga NO se pinta 0. Un cero es una afirmación —"no hay nada
@@ -84,7 +84,7 @@ export default function FleetAttentionBand({ attention, loading, activeFilter, o
             fontSize: TEXT["2xl"],
             fontWeight: 800,
             lineHeight: 1,
-            color: calm ? BRAND.tealText : ROLE.critical,
+            color: calm ? BRAND.tealText : BRAND.alert.errorText,
           }}
         >
           {count}

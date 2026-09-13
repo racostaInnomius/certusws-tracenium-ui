@@ -217,7 +217,7 @@ export function ActionRequiredPanel({ items, onSelect }) {
                         ? BRAND.alert.highSoft
                         : BRAND.alert.warningSoft,
                     color: overdue
-                      ? BRAND.alert.error
+                      ? BRAND.alert.errorText
                       : urgent
                         ? BRAND.alert.high
                         : BRAND.alert.warningText,

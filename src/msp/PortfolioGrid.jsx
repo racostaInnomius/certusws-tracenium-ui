@@ -28,9 +28,9 @@ function MetricChip({ label, value, tone = "neutral" }) {
   const tones = {
     neutral: { bg: BRAND.darkSoft, fg: BRAND.dark },
     teal: { bg: BRAND.tealSoft, fg: BRAND.tealText },
-    good: { bg: BRAND.alert.successSoft, fg: BRAND.alert.success },
-    warn: { bg: BRAND.alert.warningSoft, fg: BRAND.alert.warning },
-    bad: { bg: BRAND.alert.errorSoft, fg: BRAND.alert.error },
+    good: { bg: BRAND.alert.successSoft, fg: BRAND.alert.successText },
+    warn: { bg: BRAND.alert.warningSoft, fg: BRAND.alert.warningText },
+    bad: { bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText },
   };
   const s = tones[tone] || tones.neutral;
   return (

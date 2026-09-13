@@ -142,7 +142,7 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
 
       {seccion === 0 ? (
         overviewError ? (
-          <Box sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+          <Box sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
             Geofences could not be loaded.
           </Box>
         ) : cargandoOverview ? (

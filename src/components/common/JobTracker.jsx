@@ -56,8 +56,8 @@ function bucketStatus(s) {
 
 function statusChip(bucket, rawStatus) {
   const m = {
-    ok:      { label: "Done",     fg: ROLE.positive,  bg: ROLE.positiveSoft },
-    error:   { label: rawStatus || "Failed", fg: ROLE.critical, bg: ROLE.criticalSoft },
+    ok:      { label: "Done",     fg: BRAND.alert.successText,  bg: ROLE.positiveSoft },
+    error:   { label: rawStatus || "Failed", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
     pending: { label: "Pending",  fg: BRAND.gray,     bg: BRAND.surfaceMuted },
     running: { label: "Running",  fg: BRAND.tealText, bg: BRAND.tealSoft }
   };

@@ -7,10 +7,10 @@
 
 import * as React from "react";
 import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { formatDiffValue } from "./policyDiff";
 
-const KIND_COLOR = { added: BRAND.alert.successText, removed: ROLE.critical, changed: ROLE.caution };
+const KIND_COLOR = { added: BRAND.alert.successText, removed: BRAND.alert.errorText, changed: BRAND.alert.warningText };
 const KIND_SIGN = { added: "+", removed: "−", changed: "~" };
 
 export default function PolicyDiffDialog({ open, onClose, entries, onConfirm, title = "Review changes", confirmText = "Save", busy = false, scopeLabel = "", sectionsLabel = "" }) {

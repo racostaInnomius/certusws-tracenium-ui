@@ -1517,6 +1517,7 @@ export default function Jobs({ onNavigate }) {
         // box matches. Falls back to the id for a device the roster lost.
         term: d.hostname,
         dot: d.count >= 3 ? BRAND.alert.error : BRAND.alert.warning,
+        fg: d.count >= 3 ? BRAND.alert.errorText : BRAND.alert.warningText,
       }));
     }
     return groupFailureCauses(tenantJobs).map((c) => ({
@@ -1530,6 +1531,7 @@ export default function Jobs({ onNavigate }) {
       // nothing, so it searches nothing and just clears.
       term: c.cause === "unreported" ? "" : c.cause,
       dot: c.count >= 3 ? BRAND.alert.error : BRAND.alert.warning,
+      fg: c.count >= 3 ? BRAND.alert.errorText : BRAND.alert.warningText,
     }));
   }, [failureLens, tenantJobs, deviceMap]);
 
@@ -2145,7 +2147,7 @@ export default function Jobs({ onNavigate }) {
                     {row.meta}
                   </Typography>
                 ) : null}
-                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: row.dot }}>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: row.fg }}>
                   {row.count}
                 </Typography>
               </Stack>
@@ -2801,7 +2803,7 @@ export default function Jobs({ onNavigate }) {
                               {deviceLabel(job)}
                             </Typography>
                             {job.last_error ? (
-                              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.error }} noWrap>
+                              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText }} noWrap>
                                 {job.last_error}
                               </Typography>
                             ) : null}
@@ -2880,7 +2882,7 @@ export default function Jobs({ onNavigate }) {
                   <>
                     <Divider sx={{ borderColor: BRAND.border }} />
                     <Box>
-                      <Typography variant="overline" sx={{ color: BRAND.alert.error, fontWeight: 800, letterSpacing: 1.2 }}>
+                      <Typography variant="overline" sx={{ color: BRAND.alert.errorText, fontWeight: 800, letterSpacing: 1.2 }}>
                         Last Error
                       </Typography>
                       <Paper
@@ -2890,7 +2892,7 @@ export default function Jobs({ onNavigate }) {
                           p: 1.25,
                           borderColor: `${BRAND.alert.error}55`,
                           bgcolor: BRAND.alert.errorSoft,
-                          color: BRAND.alert.error,
+                          color: BRAND.alert.errorText,
                           fontSize: TEXT.md,
                           fontFamily: "monospace",
                           whiteSpace: "pre-wrap",

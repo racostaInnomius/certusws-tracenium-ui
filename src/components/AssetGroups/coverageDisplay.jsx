@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import { Chip } from "@mui/material";
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND } from "../../theme/brand";
 
 export function formatPercent(value) {
   const n = Number(value);
@@ -42,10 +42,10 @@ export function getCoveragePalette(tone) {
     return { color: BRAND.alert.successText };
   }
   if (tone === "critical") {
-    return { color: ROLE.critical };
+    return { color: BRAND.alert.errorText };
   }
   if (tone === "warning") {
-    return { color: ROLE.caution };
+    return { color: BRAND.alert.warningText };
   }
   return { color: BRAND.tealText };
 }

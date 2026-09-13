@@ -187,10 +187,10 @@ function DecommissionStatusChip({ job, row }) {
             ? BRAND.darkSoft
             : BRAND.alert.warningSoft,
           color: isFailed
-            ? BRAND.alert.error
+            ? BRAND.alert.errorText
             : isCompleted
             ? BRAND.gray
-            : BRAND.alert.warning,
+            : BRAND.alert.warningText,
           border: `1px solid ${
             isFailed
               ? BRAND.alert.error
@@ -514,7 +514,7 @@ export default function HostsTable({
                           sx={{
                             mt: 0.4,
                             fontSize: TEXT.xs,
-                            color: BRAND.alert.error,
+                            color: BRAND.alert.errorText,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",

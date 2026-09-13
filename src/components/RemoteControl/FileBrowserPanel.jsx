@@ -174,9 +174,9 @@ function isInsideRoots(path, roots) {
 
 function StatusChip({ state }) {
   const map = {
-    [STATE.CONNECTING]: { label: "Connecting…", color: ROLE.caution, bg: ROLE.cautionSoft },
-    [STATE.BROWSING]:   { label: "Connected",   color: ROLE.positive, bg: ROLE.positiveSoft },
-    [STATE.ERROR]:      { label: "Error",        color: ROLE.critical, bg: ROLE.criticalSoft },
+    [STATE.CONNECTING]: { label: "Connecting…", color: BRAND.alert.warningText, bg: ROLE.cautionSoft },
+    [STATE.BROWSING]:   { label: "Connected",   color: BRAND.alert.successText, bg: ROLE.positiveSoft },
+    [STATE.ERROR]:      { label: "Error",        color: BRAND.alert.errorText, bg: ROLE.criticalSoft },
     [STATE.ENDED]:      { label: "Ended",        color: BRAND.gray,   bg: BRAND.surfaceMuted }
   };
   const { label, color, bg } = map[state] || map[STATE.ERROR];
@@ -1131,7 +1131,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
           <Typography
             variant="body1"
             sx={{
-              color: state === STATE.ERROR ? ROLE.critical : BRAND.gray,
+              color: state === STATE.ERROR ? BRAND.alert.errorText : BRAND.gray,
               fontWeight: 600
             }}
           >
@@ -1288,7 +1288,7 @@ export default function FileBrowserPanel({ session, device, onClose }) {
               }}
             >
               <LockOutlinedIcon sx={{ fontSize: ICON.md, color: ROLE.caution }} />
-              <Typography variant="caption" sx={{ color: ROLE.caution, fontWeight: 600 }}>
+              <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 600 }}>
                 {pathNotice}
               </Typography>
             </Stack>

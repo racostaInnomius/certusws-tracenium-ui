@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import { Alert, Box, Button, Chip, MenuItem, Switch, TextField, Typography } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 import { getFormValue, MONO_FONT, sameFormValue, setFormValue, specsFor, switchOn } from "./fieldSpecs";
 
 function Control({ spec, value, onChange, disabled }) {
@@ -86,7 +86,7 @@ function Provenance({ scope, overridden, onInherit, disabled }) {
   if (!overridden) return <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>Inherits · Tenant</Typography>;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
-      <Chip size="small" label="Override" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning }} />
+      <Chip size="small" label="Override" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText }} />
       <Button size="small" onClick={onInherit} disabled={disabled} sx={{ textTransform: "none", fontSize: TEXT.xs, minWidth: 0, p: 0, color: BRAND.tealText }}>
         ✕ back to inherit
       </Button>
@@ -123,7 +123,7 @@ export function FieldRow({ spec, form, onChange, scope = "tenant", compareForm =
         </Typography>
         {spec.sub ? <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{spec.sub}</Typography> : null}
         {message ? (
-          <Typography sx={{ fontSize: TEXT.xs, color: isError ? ROLE.critical : ROLE.caution, mt: 0.25, fontWeight: 600 }}>{message}</Typography>
+          <Typography sx={{ fontSize: TEXT.xs, color: isError ? BRAND.alert.errorText : BRAND.alert.warningText, mt: 0.25, fontWeight: 600 }}>{message}</Typography>
         ) : null}
         {showWarnOn ? (
           // A caution, not an error: the switch is valid, it just reaches

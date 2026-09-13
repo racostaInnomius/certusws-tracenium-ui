@@ -37,7 +37,7 @@ import {
 } from "@mui/material";
 
 import { getFrameworkControls } from "../../api/compliance";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 // El veredicto de un control, y por qué cada palabra.
 //
@@ -53,7 +53,7 @@ const STATUS_META = {
   },
   fail: {
     label: "Not met",
-    fg: ROLE.critical,
+    fg: BRAND.alert.errorText,
     bg: BRAND.alert?.errorSoft,
     help: "At least one device fails a check behind this control.",
   },
@@ -316,7 +316,7 @@ function ControlsBody({ controls, agentId }) {
               <TableCell align="right" sx={{ color: row.devicesPassing ? BRAND.alert.successText : BRAND.gray, fontWeight: 700 }}>
                 {row.devicesPassing}
               </TableCell>
-              <TableCell align="right" sx={{ color: row.devicesFailing ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>
+              <TableCell align="right" sx={{ color: row.devicesFailing ? BRAND.alert.errorText : BRAND.gray, fontWeight: 700 }}>
                 {row.devicesFailing}
               </TableCell>
               <TableCell align="right" sx={{ color: BRAND.gray }}>

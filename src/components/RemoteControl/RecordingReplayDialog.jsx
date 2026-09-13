@@ -280,7 +280,7 @@ export default function RecordingReplayDialog({ open, session, onClose }) {
               fontSize: TEXT.xs,
               height: 20,
               bgcolor: driving ? ROLE.cautionSoft : BRAND.surfaceMuted,
-              color: driving ? ROLE.caution : BRAND.gray
+              color: driving ? BRAND.alert.warningText : BRAND.gray
             }}
           />
         ) : null}

@@ -198,8 +198,8 @@ function IMPACT_CHIP({ impact }) {
     none: { label: "No impact", bg: BRAND.tealSoft, fg: BRAND.tealText, border: `${BRAND.teal}55` },
     host: { label: "Host busy", bg: BRAND.cyanSoft, fg: BRAND.dark, border: `${BRAND.cyan}88` },
     access: { label: "Access change", bg: "rgba(199,121,43,0.14)", fg: BRAND.alert.high, border: "rgba(199,121,43,0.4)" },
-    reboot: { label: "May reboot", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
-    downtime: { label: "Downtime", bg: BRAND.alert.errorSoft, fg: BRAND.alert.error, border: `${BRAND.alert.error}55` },
+    reboot: { label: "May reboot", bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText, border: `${BRAND.alert.error}55` },
+    downtime: { label: "Downtime", bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText, border: `${BRAND.alert.error}55` },
   };
   const cfg = map[impact] || { label: impact || "—", bg: BRAND.darkSoft, fg: BRAND.dark, border: BRAND.border };
   return (
@@ -244,9 +244,9 @@ const BULK_ACTION_MAP = {
 // deliberada: allí se decide QUÉ se dice de un estado, aquí CÓMO se pinta, y
 // así lo primero se puede probar sin montar MUI.
 const CAMPAIGN_TONES = {
-  positive: { bg: ROLE.positiveSoft, fg: ROLE.positive },
-  caution: { bg: ROLE.cautionSoft, fg: ROLE.caution },
-  critical: { bg: ROLE.criticalSoft, fg: ROLE.critical },
+  positive: { bg: ROLE.positiveSoft, fg: BRAND.alert.successText },
+  caution: { bg: ROLE.cautionSoft, fg: BRAND.alert.warningText },
+  critical: { bg: ROLE.criticalSoft, fg: BRAND.alert.errorText },
   neutral: { bg: BRAND.cyanSoft, fg: BRAND.dark },
   muted: { bg: "transparent", fg: BRAND.gray },
 };
@@ -1033,11 +1033,11 @@ export default function PatchManagement({ onNavigate }) {
           idle:              { label: L.idle,              fg: BRAND.gray,     bg: BRAND.surfaceMuted },
           inventory_only:    { label: L.inventory_only,    fg: BRAND.dark,     bg: BRAND.darkSoft     },
           scan_pending:      { label: L.scan_pending,      fg: BRAND.tealText, bg: BRAND.tealSoft     },
-          updates_available: { label: L.updates_available, fg: ROLE.caution,   bg: ROLE.cautionSoft   },
+          updates_available: { label: L.updates_available, fg: BRAND.alert.warningText,   bg: ROLE.cautionSoft   },
           installing:        { label: L.installing,        fg: BRAND.tealText, bg: BRAND.tealSoft     },
-          reboot_required:   { label: L.reboot_required,   fg: ROLE.critical,  bg: ROLE.criticalSoft  },
-          healthy:           { label: L.healthy,           fg: ROLE.positive,  bg: ROLE.positiveSoft  },
-          error:             { label: L.error,             fg: ROLE.critical,  bg: ROLE.criticalSoft  },
+          reboot_required:   { label: L.reboot_required,   fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft  },
+          healthy:           { label: L.healthy,           fg: BRAND.alert.successText,  bg: ROLE.positiveSoft  },
+          error:             { label: L.error,             fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft  },
           unknown:           { label: L.unknown,           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
         };
         const m = meta[v] || meta.unknown;
@@ -1075,7 +1075,7 @@ export default function PatchManagement({ onNavigate }) {
       align: "right",
       headerAlign: "right",
       renderCell: (params) => (
-        <Typography sx={{ fontWeight: 700, color: params.row.missingCount > 0 ? ROLE.critical : BRAND.dark }}>
+        <Typography sx={{ fontWeight: 700, color: params.row.missingCount > 0 ? BRAND.alert.errorText : BRAND.dark }}>
           {params.row.missingCount}
         </Typography>
       )
@@ -1087,7 +1087,7 @@ export default function PatchManagement({ onNavigate }) {
       minWidth: 90,
       renderCell: (params) =>
         params.row.rebootRequired ? (
-          <RestartAltOutlinedIcon sx={{ fontSize: ICON.lg, color: ROLE.critical }} />
+          <RestartAltOutlinedIcon sx={{ fontSize: ICON.lg, color: BRAND.alert.errorText }} />
         ) : (
           <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>
         )
@@ -1669,8 +1669,8 @@ export default function PatchManagement({ onNavigate }) {
                     const id = item.hotfixId || `idx-${idx}`;
                     const checked = selectedHotfixes.has(item.hotfixId);
                     const sevMeta = {
-                      critical:  { label: "Critical",  fg: ROLE.critical,  bg: ROLE.criticalSoft },
-                      important: { label: "Important", fg: ROLE.caution,   bg: ROLE.cautionSoft },
+                      critical:  { label: "Critical",  fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft },
+                      important: { label: "Important", fg: BRAND.alert.warningText,   bg: ROLE.cautionSoft },
                       moderate:  { label: "Moderate",  fg: BRAND.tealText, bg: BRAND.tealSoft },
                       low:       { label: "Low",       fg: BRAND.gray,     bg: BRAND.surfaceMuted },
                       unknown:   { label: "Unknown",   fg: BRAND.gray,     bg: BRAND.surfaceMuted }

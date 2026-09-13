@@ -195,7 +195,7 @@ export default function LocationExplorer({
             </Stack>
 
             {devicesError ? (
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
                 {/* Un fallo al cargar la lista no es una flota sin equipos. */}
                 The device list could not be loaded, so this picker is incomplete.
               </Typography>
@@ -206,7 +206,7 @@ export default function LocationExplorer({
                 Select a device to see where it was.
               </Typography>
             ) : lineaError ? (
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
                 {lineaError}
               </Typography>
             ) : lineaCargando ? (
@@ -259,7 +259,7 @@ export default function LocationExplorer({
             </TextField>
 
             {sitesError ? (
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
                 The site list could not be loaded.
               </Typography>
             ) : !sitesLoading && listaSitios.length === 0 ? (
@@ -270,7 +270,7 @@ export default function LocationExplorer({
                 looked up here.
               </Typography>
             ) : asistenciaError ? (
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error }}>
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
                 {asistenciaError}
               </Typography>
             ) : sitioElegido ? (

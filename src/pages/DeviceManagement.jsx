@@ -459,7 +459,7 @@ export default function DeviceManagement({ onNavigate }) {
                 {pushing ? "Pushing…" : "Push now"}
               </Button>
               {dirty ? (
-                <Typography variant="caption" sx={{ color: BRAND.alert.warning, fontWeight: 700 }}>
+                <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}>
                   Unsaved changes
                 </Typography>
               ) : null}
@@ -558,7 +558,7 @@ export default function DeviceManagement({ onNavigate }) {
                   {isDirty ? (
                     <Typography
                       variant="caption"
-                      sx={{ color: BRAND.alert.warning, fontWeight: 700 }}
+                      sx={{ color: BRAND.alert.warningText, fontWeight: 700 }}
                     >
                       Cambios sin guardar
                     </Typography>

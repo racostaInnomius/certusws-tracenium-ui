@@ -203,7 +203,7 @@ function getStatusChipMeta(status) {
       return {
         label: "Expired",
         bgcolor: BRAND.alert.warningSoft,
-        color: BRAND.alert.warning,
+        color: BRAND.alert.warningText,
       };
     case "exhausted":
       return {
@@ -215,7 +215,7 @@ function getStatusChipMeta(status) {
       return {
         label: "Revoked",
         bgcolor: BRAND.alert.errorSoft,
-        color: BRAND.alert.error,
+        color: BRAND.alert.errorText,
       };
     default:
       return {
@@ -848,7 +848,7 @@ const filteredRows = React.useMemo(() => {
                   <SummaryCard
                     title="Expired"
                     value={summary.expired}
-                    accent={BRAND.alert.warning}
+                    accent={BRAND.alert.warningText}
                     subtitle="Past validity window"
                   />
                 </Grid>
@@ -857,7 +857,7 @@ const filteredRows = React.useMemo(() => {
                   <SummaryCard
                     title="Revoked"
                     value={summary.revoked}
-                    accent={BRAND.alert.error}
+                    accent={BRAND.alert.errorText}
                     subtitle="Disabled from use"
                   />
                 </Grid>
@@ -894,7 +894,7 @@ const filteredRows = React.useMemo(() => {
                   <SummaryCard
                     title="Remaining"
                     value={quotaLoading ? "..." : quotaSummary.remaining}
-                    accent={quotaSummary.remaining >= 0 ? BRAND.alert.successText : BRAND.alert.warning}
+                    accent={quotaSummary.remaining >= 0 ? BRAND.alert.successText : BRAND.alert.warningText}
                     subtitle="Before subscription limit"
                   />
                 </Grid>

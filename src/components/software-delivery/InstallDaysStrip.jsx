@@ -153,7 +153,7 @@ export default function InstallDaysStrip({ buckets }) {
           {succeeded} succeeded
         </Typography>
         {failed ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: ROLE.critical }}>{failed} failed</Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>{failed} failed</Typography>
         ) : null}
         <Box sx={{ flex: 1 }} />
         <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>

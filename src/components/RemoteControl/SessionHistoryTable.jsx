@@ -30,9 +30,9 @@ const TYPE_LABEL = {
 };
 
 const STATUS_META = {
-  active:    { label: "Active",    fg: ROLE.positive, bg: ROLE.positiveSoft },
+  active:    { label: "Active",    fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
   completed: { label: "Completed", fg: BRAND.tealText, bg: BRAND.tealSoft },
-  failed:    { label: "Failed",    fg: ROLE.critical, bg: ROLE.criticalSoft },
+  failed:    { label: "Failed",    fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   cancelled: { label: "Cancelled", fg: BRAND.gray,    bg: BRAND.surfaceMuted }
 };
 
@@ -46,10 +46,10 @@ function ConsentCell({ consentRequired, consentOutcome }) {
   }
   const meta =
     consentOutcome === "denied"
-      ? { label: "Denied by user", fg: ROLE.critical, bg: ROLE.criticalSoft }
+      ? { label: "Denied by user", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft }
       : consentOutcome === "timeout"
-      ? { label: "No response", fg: ROLE.caution, bg: ROLE.cautionSoft }
-      : { label: "Approved", fg: ROLE.positive, bg: ROLE.positiveSoft };
+      ? { label: "No response", fg: BRAND.alert.warningText, bg: ROLE.cautionSoft }
+      : { label: "Approved", fg: BRAND.alert.successText, bg: ROLE.positiveSoft };
   return (
     <Chip
       size="small"

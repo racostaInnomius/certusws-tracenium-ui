@@ -45,9 +45,11 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getEventTypeMeta } from "../../constants/auditEventTypes";
 import { formatRelative } from "../../utils/format";
 
+// `color` rellena la barra de la fila; `fg` es la letra del chip. El ámbar y el
+// rojo de relleno no se leen como texto sobre fondo claro.
 const OUTCOME_TONE = {
-  rejected: { label: "Rejected", color: ROLE.caution },
-  error: { label: "Error", color: ROLE.critical },
+  rejected: { label: "Rejected", color: ROLE.caution, fg: BRAND.alert.warningText },
+  error: { label: "Error", color: ROLE.critical, fg: BRAND.alert.errorText },
 };
 
 function Row({ label, meta, count, max, lastAt, tone, onClick, right }) {
@@ -167,7 +169,7 @@ export default function AuditBreakdown({
     return (
       <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
         <Stack alignItems="center" spacing={0.5} sx={{ py: 3 }}>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: ROLE.caution }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: BRAND.alert.warningText }}>
             Couldn't load the activity breakdown
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
@@ -215,7 +217,7 @@ export default function AuditBreakdown({
           <Stack spacing={0.5}>
             {attention.map((a) => {
               const meta = getEventTypeMeta(a.eventType);
-              const tone = OUTCOME_TONE[a.outcome] ?? { label: a.outcome, color: ROLE.critical };
+              const tone = OUTCOME_TONE[a.outcome] ?? { label: a.outcome, color: ROLE.critical, fg: BRAND.alert.errorText };
               return (
                 <Row
                   key={`${a.eventType}:${a.outcome}`}
@@ -234,7 +236,7 @@ export default function AuditBreakdown({
                         height: 20,
                         fontSize: TEXT.xs,
                         fontWeight: 700,
-                        color: tone.color,
+                        color: tone.fg,
                         bgcolor: `${tone.color}1f`,
                         border: `1px solid ${tone.color}55`,
                       }}

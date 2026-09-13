@@ -237,7 +237,7 @@ export default function FindingCard({
                   icon={<EventBusyOutlinedIcon sx={{ fontSize: ICON.xs }} />}
                   sx={{
                     bgcolor: ROLE.cautionSoft,
-                    color: ROLE.caution,
+                    color: BRAND.alert.warningText,
                     fontWeight: 700,
                     height: 22,
                     fontSize: TEXT.xs,
@@ -405,7 +405,7 @@ export default function FindingCard({
                     fontSize: TEXT.xs,
                     fontWeight: 700,
                     bgcolor: ROLE.criticalSoft,
-                    color: ROLE.critical,
+                    color: BRAND.alert.errorText,
                   }}
                 />
               </Tooltip>

@@ -131,7 +131,7 @@ export default function PolicyScopeBar({
           <Chip
             size="small"
             label={`${dirtyCount} unsaved change${dirtyCount === 1 ? "" : "s"}`}
-            sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 800 }}
+            sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 800 }}
           />
         ) : null}
         {versionText ? (

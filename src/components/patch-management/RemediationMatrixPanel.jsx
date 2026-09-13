@@ -81,8 +81,8 @@ const TONE = {
   ok: { bg: BRAND.tealSoft, fg: BRAND.tealText },
   info: { bg: BRAND.surfaceMuted, fg: BRAND.tealText },
   muted: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
-  warn: { bg: ROLE.cautionSoft, fg: ROLE.caution },
-  error: { bg: ROLE.criticalSoft, fg: ROLE.critical },
+  warn: { bg: ROLE.cautionSoft, fg: BRAND.alert.warningText },
+  error: { bg: ROLE.criticalSoft, fg: BRAND.alert.errorText },
 };
 
 export default function RemediationMatrixPanel({ canManage = false, devices = [], notify }) {

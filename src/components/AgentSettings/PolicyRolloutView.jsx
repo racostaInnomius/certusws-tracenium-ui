@@ -54,10 +54,10 @@ const FILTERS = [
 ];
 
 const BUCKET_CHIP = {
-  in_sync: { bg: ROLE.positiveSoft, fg: ROLE.positive },
-  pending: { bg: ROLE.cautionSoft, fg: ROLE.caution },
+  in_sync: { bg: ROLE.positiveSoft, fg: BRAND.alert.successText },
+  pending: { bg: ROLE.cautionSoft, fg: BRAND.alert.warningText },
   offline: { bg: BRAND.darkSoft, fg: BRAND.dark },
-  error: { bg: ROLE.criticalSoft, fg: ROLE.critical },
+  error: { bg: ROLE.criticalSoft, fg: BRAND.alert.errorText },
   excluded: { bg: BRAND.surfaceMuted, fg: BRAND.gray },
 };
 
@@ -222,7 +222,7 @@ export default function PolicyRolloutView({ statusRows, deviceMap, tenantUpdated
                     <YAxis allowDecimals={false} domain={[0, Math.max(convergence.active, 1)]} width={32} tick={X_TICK} />
                     <ChartTooltip formatter={(value) => [`${value} of ${convergence.active}`, "Up to date"]} labelFormatter={(t) => formatDate(new Date(t))} />
                     {convergence.markers.map((m) => (
-                      <ReferenceLine key={m} x={m} stroke={ROLE.caution} strokeDasharray="4 3" label={{ value: "catalog", fill: ROLE.caution, fontSize: TEXT.xs, position: "top" }} />
+                      <ReferenceLine key={m} x={m} stroke={ROLE.caution} strokeDasharray="4 3" label={{ value: "catalog", fill: BRAND.alert.warningText, fontSize: TEXT.xs, position: "top" }} />
                     ))}
                     <Area type="stepAfter" dataKey="inSync" stroke={BRAND.teal} fill={BRAND.teal} fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} dot={false} />
                   </AreaChart>

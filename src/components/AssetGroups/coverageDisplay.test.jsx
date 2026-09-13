@@ -7,7 +7,7 @@ import {
   getCoveragePalette,
   KindChip,
 } from "./coverageDisplay";
-import { ROLE, BRAND } from "../../theme/brand";
+import { BRAND } from "../../theme/brand";
 
 afterEach(cleanup);
 
@@ -54,8 +54,8 @@ describe("getCoverageTone", () => {
 describe("getCoveragePalette", () => {
   it("maps each tone to a role/brand color", () => {
     expect(getCoveragePalette("success")).toEqual({ color: BRAND.alert.successText });
-    expect(getCoveragePalette("critical")).toEqual({ color: ROLE.critical });
-    expect(getCoveragePalette("warning")).toEqual({ color: ROLE.caution });
+    expect(getCoveragePalette("critical")).toEqual({ color: BRAND.alert.errorText });
+    expect(getCoveragePalette("warning")).toEqual({ color: BRAND.alert.warningText });
     expect(getCoveragePalette("info")).toEqual({ color: BRAND.tealText });
     expect(getCoveragePalette("anything-else")).toEqual({ color: BRAND.tealText });
   });

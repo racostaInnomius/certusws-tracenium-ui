@@ -123,7 +123,7 @@ function StatusChip({ status }) {
         size="small"
         sx={{
           bgcolor: BRAND.alert.errorSoft,
-          color: BRAND.alert.error,
+          color: BRAND.alert.errorText,
           fontWeight: 700,
           border: `1px solid ${BRAND.alert.error}55`,
         }}
@@ -1396,7 +1396,7 @@ function InspectorTab(props) {
               <Divider sx={{ borderColor: BRAND.border }} />
 
               <Box>
-                <Typography variant="overline" sx={{ color: BRAND.alert.error, fontWeight: 800, letterSpacing: 1.2 }}>
+                <Typography variant="overline" sx={{ color: BRAND.alert.errorText, fontWeight: 800, letterSpacing: 1.2 }}>
                   Revocation
                 </Typography>
                 {!mayRevoke ? (

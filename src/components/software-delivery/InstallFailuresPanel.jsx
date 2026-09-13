@@ -126,7 +126,7 @@ export default function InstallFailuresPanel({ deployments, failed, settled, onO
               }}
             >
               <Typography
-                sx={{ fontSize: TEXT.xl, fontWeight: 800, color: ROLE.critical, minWidth: 36 }}
+                sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.alert.errorText, minWidth: 36 }}
               >
                 {cause.count}
               </Typography>

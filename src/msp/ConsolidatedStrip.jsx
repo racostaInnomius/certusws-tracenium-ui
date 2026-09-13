@@ -155,7 +155,7 @@ export default function ConsolidatedStrip({ onOpenClient }) {
                   </Typography>
                   {ex.reasons.map((r, i) => (
                     <Chip key={i} label={r} size="small"
-                      sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: TEXT.xs }} />
+                      sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 700, fontSize: TEXT.xs }} />
                   ))}
                 </Box>
               ))}

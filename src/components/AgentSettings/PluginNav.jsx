@@ -49,7 +49,7 @@ function Entry({ item, active, disabled, badge, overridden = false, onSelect }) 
           size="small"
           label={badge}
           aria-label={`${badge} unsaved change${badge === 1 ? "" : "s"} in ${item.label}`}
-          sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning }}
+          sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 800, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText }}
         />
       ) : null}
     </ListItemButton>

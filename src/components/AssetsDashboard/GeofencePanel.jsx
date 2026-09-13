@@ -99,7 +99,7 @@ function Cerca({ site, onSave, saving, error }) {
           {encendida ? (
             <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
               <Recuento label="inside" value={site.inside} color={BRAND.alert.successText} />
-              <Recuento label="outside" value={site.outside} color={BRAND.alert.error} />
+              <Recuento label="outside" value={site.outside} color={BRAND.alert.errorText} />
               {/* ⚠️ "Indeterminate" se muestra SIEMPRE, aunque sea cero. Es el
                   estado que dice "la medición no alcanza", y esconderlo haría
                   creer que la cerca tiene una opinión sobre todos los equipos. */}
@@ -224,7 +224,7 @@ function Cerca({ site, onSave, saving, error }) {
       ) : null}
 
       {error ? (
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.error, mt: 1 }}>{error}</Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText, mt: 1 }}>{error}</Typography>
       ) : null}
 
       {asistenciaAbierta ? (

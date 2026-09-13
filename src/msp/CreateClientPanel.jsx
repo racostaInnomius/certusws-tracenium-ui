@@ -162,7 +162,7 @@ export default function CreateClientPanel({ mspId, mspName, onSwitchToCodes }) {
               <Typography variant="caption" sx={{ color: BRAND.gray }} noWrap>
                 {p.adminEmail || p.adminSubject}
               </Typography>
-              <Chip label="pending" size="small" sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warning, fontWeight: 700, fontSize: TEXT.xs }} />
+              <Chip label="pending" size="small" sx={{ bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 700, fontSize: TEXT.xs }} />
             </Stack>
           ))}
         </Stack>

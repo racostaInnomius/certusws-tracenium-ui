@@ -68,7 +68,7 @@ import {
   getDeviceDetail,
   getDeviceTimeseries,
 } from "../api/compliance";
-import { BRAND, ICON, ROLE, TEXT } from "../theme/brand";
+import { BRAND, ICON, TEXT } from "../theme/brand";
 import {
   ScoreBar,
   StatusChip,
@@ -1461,7 +1461,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                       }
                     }}
                     sx={{
-                      color: ROLE.critical,
+                      color: BRAND.alert.errorText,
                       fontWeight: 700,
                       cursor: "pointer",
                       textDecoration: "underline",
@@ -1738,7 +1738,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                     <TableCell align="right" sx={{ color: BRAND.alert.successText, fontWeight: 600 }}>
                       {f.devicesCompliant}
                     </TableCell>
-                    <TableCell align="right" sx={{ color: ROLE.critical, fontWeight: 600 }}>
+                    <TableCell align="right" sx={{ color: BRAND.alert.errorText, fontWeight: 600 }}>
                       {f.devicesNonCompliant}
                     </TableCell>
                     <TableCell align="right">

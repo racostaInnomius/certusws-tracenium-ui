@@ -72,9 +72,9 @@ const EVENT_LABEL = {
 };
 
 const STATUS_META = {
-  active: { label: "Active", fg: ROLE.positive, bg: ROLE.positiveSoft },
+  active: { label: "Active", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
   completed: { label: "Completed", fg: BRAND.tealText, bg: BRAND.tealSoft },
-  failed: { label: "Failed", fg: ROLE.critical, bg: ROLE.criticalSoft },
+  failed: { label: "Failed", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   cancelled: { label: "Cancelled", fg: BRAND.gray, bg: BRAND.surfaceMuted }
 };
 
@@ -378,7 +378,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
                       sx={{
                         fontWeight: ev.event === "break_glass" ? 700 : 500,
                         color:
-                          ev.event === "break_glass" ? ROLE.critical : BRAND.dark
+                          ev.event === "break_glass" ? BRAND.alert.errorText : BRAND.dark
                       }}
                     >
                       {EVENT_LABEL[ev.event] || ev.event}

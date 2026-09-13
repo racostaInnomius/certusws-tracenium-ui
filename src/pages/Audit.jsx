@@ -150,7 +150,7 @@ function renderOutcomeChip(outcome) {
       <Chip
         label="Rejected"
         size="small"
-        sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
+        sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700, border: `1px solid ${BRAND.alert.error}55` }}
       />
     );
   }

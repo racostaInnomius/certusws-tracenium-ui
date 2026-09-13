@@ -84,7 +84,7 @@ function renderActiveChip(value) {
       size="small"
       sx={{
         bgcolor: BRAND.alert.errorSoft,
-        color: BRAND.alert.error,
+        color: BRAND.alert.errorText,
         fontWeight: 700,
       }}
     />
@@ -330,7 +330,7 @@ export default function AgentReleases({ embedded = false }) {
             <SummaryCard
               title="Active"
               value={summary.active}
-              accent={BRAND.alert.error}
+              accent={BRAND.alert.errorText}
             />
           </Grid>
         </Grid>

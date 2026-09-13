@@ -1035,7 +1035,7 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
                   Discard
                 </Button>
                 {dirty ? (
-                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warning, fontWeight: 700 }}>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText, fontWeight: 700 }}>
                     ● {diff.length} unsaved change{diff.length === 1 ? "" : "s"}
                     {domainsToSave.length > 1 ? ` in ${domainsToSave.length} sections` : ""}
                   </Typography>

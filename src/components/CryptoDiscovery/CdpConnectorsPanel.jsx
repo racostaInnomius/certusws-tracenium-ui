@@ -243,9 +243,9 @@ function RunHistory({ connectorId, nonce }) {
               <Box component="td" sx={{ pr: 1.5 }}>{r.trigger === "scheduled" ? "scheduled" : "manual"}</Box>
               <Box component="td" sx={{ pr: 1.5 }}>
                 {r.status === "ok" ? (
-                  <Chip size="small" label="ok" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.successSoft, color: BRAND.alert.success, fontWeight: 700 }} />
+                  <Chip size="small" label="ok" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.successSoft, color: BRAND.alert.successText, fontWeight: 700 }} />
                 ) : (
-                  <Chip size="small" label="failed" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700 }} />
+                  <Chip size="small" label="failed" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700 }} />
                 )}
               </Box>
               <Box component="td" sx={{ color: r.error ? BRAND.alert.errorText : BRAND.dark }}>
@@ -263,8 +263,8 @@ function RunHistory({ connectorId, nonce }) {
 
 function StatusChip({ c }) {
   if (!c.lastStatus) return <Chip size="small" label="never run" variant="outlined" />;
-  if (c.lastStatus === "ok") return <Chip size="small" label="ok" sx={{ bgcolor: BRAND.alert.successSoft, color: BRAND.alert.success, fontWeight: 700 }} />;
-  return <Chip size="small" label="failed" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error, fontWeight: 700 }} />;
+  if (c.lastStatus === "ok") return <Chip size="small" label="ok" sx={{ bgcolor: BRAND.alert.successSoft, color: BRAND.alert.successText, fontWeight: 700 }} />;
+  return <Chip size="small" label="failed" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700 }} />;
 }
 
 /**

@@ -553,7 +553,7 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                                 <Chip
                                   size="small"
                                   label="Default"
-                                  sx={{ bgcolor: ROLE.positiveSoft, color: ROLE.positive, fontWeight: 800, height: 18 }}
+                                  sx={{ bgcolor: ROLE.positiveSoft, color: BRAND.alert.successText, fontWeight: 800, height: 18 }}
                                 />
                               ) : null}
                               {p.isShared ? (
@@ -587,7 +587,7 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                                   p.status === "online"
                                     ? BRAND.alert.successText
                                     : p.status === "error"
-                                    ? ROLE.critical
+                                    ? BRAND.alert.errorText
                                     : "text.secondary",
                                 fontWeight: 800,
                                 textTransform: "capitalize",

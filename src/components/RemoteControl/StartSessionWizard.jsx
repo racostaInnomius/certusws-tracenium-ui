@@ -185,7 +185,7 @@ function DeviceRow({ device, selected, onSelect, reason }) {
         </Typography>
       </Box>
       {blocked ? (
-        <Typography variant="caption" sx={{ color: ROLE.caution, fontWeight: 600, textAlign: "right" }}>
+        <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 600, textAlign: "right" }}>
           {reason}
         </Typography>
       ) : (

@@ -288,7 +288,7 @@ export default function LicenseBlockedScreen({ state, onResolved, onNavigate }) 
             </Box>
 
             {error ? (
-              <Typography variant="caption" sx={{ color: ROLE.critical }}>
+              <Typography variant="caption" sx={{ color: BRAND.alert.errorText }}>
                 {error}
               </Typography>
             ) : null}

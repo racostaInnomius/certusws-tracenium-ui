@@ -170,9 +170,9 @@ const TAB_SX = {
 const KEM_LABELS = { hybrid: "Hybrid ML-KEM", classical: "Classical only", unknown: "Not determined" };
 
 const STATUS_META = {
-  active: { label: "Active", color: BRAND.alert.success, soft: BRAND.alert.successSoft },
+  active: { label: "Active", color: BRAND.alert.successText, soft: BRAND.alert.successSoft },
   expiring: { label: "Expiring", color: BRAND.alert.warningText, soft: BRAND.alert.warningSoft },
-  expired: { label: "Expired", color: BRAND.alert.error, soft: BRAND.alert.errorSoft },
+  expired: { label: "Expired", color: BRAND.alert.errorText, soft: BRAND.alert.errorSoft },
   unknown: { label: "Unknown", color: TEXT_MUTED, soft: BRAND.surfaceMuted },
 };
 
@@ -519,7 +519,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
               ov.anchors
                 ? [
                     { label: "anchors", value: ov.anchors.total },
-                    { label: "distrusted", value: ov.anchors.distrusted, color: ov.anchors.distrusted ? BRAND.alert.error : undefined },
+                    { label: "distrusted", value: ov.anchors.distrusted, color: ov.anchors.distrusted ? BRAND.alert.errorText : undefined },
                     { label: "on a minority", value: ov.anchors.novel, color: ov.anchors.novel ? BRAND.alert.high : undefined }
                   ]
                 : []
@@ -536,7 +536,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
             metrics={
               d.flags && Object.values(d.flags).some((n) => Number(n) > 0)
                 ? [
-                    { label: "weak key", value: d.flags.weak_key, color: d.flags.weak_key ? BRAND.alert.error : undefined },
+                    { label: "weak key", value: d.flags.weak_key, color: d.flags.weak_key ? BRAND.alert.errorText : undefined },
                     { label: "weak signature", value: d.flags.weak_sig, color: d.flags.weak_sig ? BRAND.alert.high : undefined },
                     { label: "self-signed leaf", value: d.flags.self_signed_leaf },
                     { label: "nonstandard root", value: d.flags.nonstandard_root }
@@ -871,7 +871,7 @@ function CdpInventoryTab({ refreshNonce }) {
       field: "expired",
       headerName: "Expired",
       width: 100,
-      renderCell: (params) => countChip(params.value, BRAND.alert.errorSoft, BRAND.alert.error),
+      renderCell: (params) => countChip(params.value, BRAND.alert.errorSoft, BRAND.alert.errorText),
     },
     { field: "withFlags", headerName: "Flagged", width: 90 },
     {
@@ -1379,7 +1379,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
             {params.row.subjectCN || "(no name)"}
           </Typography>
           {params.row.distrusted && (
-            <Chip size="small" label="Distrusted" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.error }} />
+            <Chip size="small" label="Distrusted" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText }} />
           )}
           {!params.row.actionable && (
             <Chip size="small" variant="outlined" label="Vendor bundle" />
@@ -1443,7 +1443,7 @@ function CdpTrustAnchorsTab({ refreshNonce }) {
       minWidth: 300,
       renderCell: (params) =>
         params.row.distrusted ? (
-          <Typography variant="caption" sx={{ color: BRAND.alert.error }}>
+          <Typography variant="caption" sx={{ color: BRAND.alert.errorText }}>
             {params.row.distrusted}
           </Typography>
         ) : params.row.novelDeviceCount > 0 ? (

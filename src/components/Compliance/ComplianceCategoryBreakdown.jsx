@@ -30,7 +30,7 @@ import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
-import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import { listFrom } from "../../api/shape";
@@ -267,7 +267,7 @@ function CategoryRow({ row, baselineBridge }) {
           <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.successText, fontWeight: 700 }}>{row.passed}</Typography>
         </TableCell>
         <TableCell align="right">
-          <Typography sx={{ fontSize: TEXT.md, color: row.failed ? ROLE.critical : BRAND.gray, fontWeight: 700 }}>{row.failed}</Typography>
+          <Typography sx={{ fontSize: TEXT.md, color: row.failed ? BRAND.alert.errorText : BRAND.gray, fontWeight: 700 }}>{row.failed}</Typography>
         </TableCell>
         <TableCell align="right">
           {row.highSeverityFails ? (

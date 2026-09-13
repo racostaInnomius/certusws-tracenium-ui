@@ -157,7 +157,7 @@ function renderStatusChip(row) {
       size="small"
       sx={{
         bgcolor: BRAND.alert.errorSoft,
-        color: BRAND.alert.error,
+        color: BRAND.alert.errorText,
         fontWeight: 700,
       }}
     />

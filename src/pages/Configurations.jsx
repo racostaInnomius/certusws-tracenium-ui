@@ -159,9 +159,9 @@ function StatChip({ label, count, variant = "teal", loading }) {
     display === "" || display == null ? label : `${label}: ${display}`;
   const styles = {
     teal:    { bg: BRAND.tealSoft,           fg: BRAND.tealText        },
-    success: { bg: BRAND.alert.successSoft,  fg: BRAND.alert.success   },
-    warning: { bg: BRAND.alert.warningSoft,  fg: BRAND.alert.warning   },
-    error:   { bg: BRAND.alert.errorSoft,    fg: BRAND.alert.error     },
+    success: { bg: BRAND.alert.successSoft,  fg: BRAND.alert.successText   },
+    warning: { bg: BRAND.alert.warningSoft,  fg: BRAND.alert.warningText   },
+    error:   { bg: BRAND.alert.errorSoft,    fg: BRAND.alert.errorText     },
     neutral: { bg: BRAND.darkSoft,           fg: BRAND.dark            },
   };
   const s = styles[variant] || styles.teal;
@@ -464,7 +464,7 @@ export default function Configurations({ onNavigate, initialTab }) {
         <>
 
       {error ? (
-        <Typography sx={{ color: BRAND.alert.error, mb: 2 }}>
+        <Typography sx={{ color: BRAND.alert.errorText, mb: 2 }}>
           {error}
         </Typography>
       ) : null}

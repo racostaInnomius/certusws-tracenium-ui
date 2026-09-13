@@ -9,7 +9,7 @@ import * as React from "react";
 import { Box, Chip, Collapse, Grid, IconButton, Paper, Stack, Typography } from "@mui/material";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 export function formatRelativeTime(isoString) {
   if (!isoString) return null;
@@ -64,7 +64,7 @@ export function PatchChip({ patchSummary }) {
 
   const { role, label } = patchRecencyRole(patchSummary.lastInstalledAtUtc);
   const color =
-    role === "positive" ? BRAND.alert.successText : role === "caution" ? ROLE.caution : ROLE.critical;
+    role === "positive" ? BRAND.alert.successText : role === "caution" ? BRAND.alert.warningText : BRAND.alert.errorText;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
@@ -220,8 +220,8 @@ export function PatchLevelSection({ patchSummary, recentPatches }) {
     recency.role === "positive"
       ? BRAND.alert.successText
       : recency.role === "caution"
-      ? ROLE.caution
-      : ROLE.critical;
+      ? BRAND.alert.warningText
+      : BRAND.alert.errorText;
 
   return (
     <Paper

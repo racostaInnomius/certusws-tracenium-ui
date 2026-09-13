@@ -16,11 +16,11 @@
 // numbers reads faster than axes and legends for four values.
 
 import { Box, ButtonBase, Paper, Skeleton, Stack, Typography } from "@mui/material";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 const TONE_COLOR = {
-  critical: ROLE.critical,
-  caution: ROLE.caution,
+  critical: BRAND.alert.errorText,
+  caution: BRAND.alert.warningText,
   positive: BRAND.alert.successText,
   neutral: BRAND.dark,
 };

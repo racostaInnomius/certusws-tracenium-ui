@@ -24,7 +24,7 @@ import * as React from "react";
 import { Box, Stack, Tooltip, Typography } from "@mui/material";
 
 import SectionPaper from "../common/SectionPaper";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, TEXT } from "../../theme/brand";
 
 /** El último día con actividad, o null. Los buckets vienen ordenados por día. */
 export function lastActivityDay(buckets) {
@@ -215,7 +215,7 @@ export default function OverviewStatusBand({
               ? `${catalog.active} · ${catalog.retired} retired`
               : String(catalog.active)
           }
-          tone={catalog.active === 0 ? ROLE.caution : undefined}
+          tone={catalog.active === 0 ? BRAND.alert.warningText : undefined}
           hint="Active packages in the catalog. Retired ones cannot be deployed."
           onClick={() => onNavigateTab?.("catalog")}
         />
@@ -246,7 +246,7 @@ export default function OverviewStatusBand({
           <Fact
             label="Catalog updates"
             value={`${catalogUpdates} available`}
-            tone={ROLE.caution}
+            tone={BRAND.alert.warningText}
             hint="Newer versions of software you already linked from the Tracenium catalog. You decide whether to move."
             onClick={() => onNavigateTab?.("catalog", { globalCatalog: true })}
           />
@@ -256,7 +256,7 @@ export default function OverviewStatusBand({
           <Fact
             label="Awaiting review"
             value={`${pendingIntakes}${intakesCapped ? "+" : ""}`}
-            tone={ROLE.caution}
+            tone={BRAND.alert.warningText}
             hint="Uploads verified and awaiting an approve/reject decision."
             onClick={() => onNavigateTab?.("catalog", { reviewQueue: true })}
           />
@@ -267,7 +267,7 @@ export default function OverviewStatusBand({
           <Fact
             label="Sites with a DP"
             value={`${coveredSites}/${totalActiveSites}`}
-            tone={uncoveredSites > 0 ? ROLE.caution : BRAND.alert.successText}
+            tone={uncoveredSites > 0 ? BRAND.alert.warningText : BRAND.alert.successText}
             hint="Sites with at least one active distribution point. Uncovered sites download from CDN or origin instead of the LAN."
             onClick={() => onNavigateTab?.("distribution")}
           />

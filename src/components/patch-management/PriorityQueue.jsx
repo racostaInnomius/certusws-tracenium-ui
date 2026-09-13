@@ -14,9 +14,9 @@ import { BRAND, TEXT, ICON, ROLE } from "../../theme/brand";
 import { buildWorklist } from "./buildWorklist";
 
 const SEVERITY_TONE = {
-  critical: { fg: ROLE.critical, bg: ROLE.criticalSoft },
+  critical: { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   high: { fg: BRAND.alert.high, bg: "rgba(199,121,43,0.14)" },
-  medium: { fg: ROLE.caution, bg: ROLE.cautionSoft },
+  medium: { fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
   low: { fg: BRAND.tealText, bg: BRAND.tealSoft },
 };
 

@@ -10,10 +10,10 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { BRAND, ROLE } from "../../theme/brand";
 
 const SEVERITY_STYLE = {
-  error: { fg: ROLE.critical, bg: ROLE.criticalSoft },
-  warning: { fg: ROLE.caution, bg: ROLE.cautionSoft },
+  error: { fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
+  warning: { fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
   info: { fg: BRAND.teal, bg: BRAND.tealSoft },
-  success: { fg: ROLE.positive, bg: ROLE.positiveSoft }
+  success: { fg: BRAND.alert.successText, bg: ROLE.positiveSoft }
 };
 
 export default function AlertRow({

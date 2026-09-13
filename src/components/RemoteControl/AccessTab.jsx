@@ -39,9 +39,9 @@ import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { listAccessRequests } from "../../api/remoteControl";
 
 const STATUS_META = {
-  approved: { label: "Approved", fg: ROLE.positive, bg: ROLE.positiveSoft },
-  denied: { label: "Denied", fg: ROLE.critical, bg: ROLE.criticalSoft },
-  pending: { label: "Pending", fg: ROLE.caution, bg: ROLE.cautionSoft },
+  approved: { label: "Approved", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
+  denied: { label: "Denied", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
+  pending: { label: "Pending", fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
   expired: { label: "Expired", fg: BRAND.gray, bg: BRAND.surfaceMuted }
 };
 

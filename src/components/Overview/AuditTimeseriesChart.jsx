@@ -233,7 +233,7 @@ export default function AuditTimeseriesChart({
             justifyContent: "center",
             textAlign: "center",
             px: 2,
-            color: failed ? ROLE.caution : BRAND.gray
+            color: failed ? BRAND.alert.warningText : BRAND.gray
           }}
         >
           <Typography variant="caption" sx={{ fontWeight: failed ? 700 : 400 }}>

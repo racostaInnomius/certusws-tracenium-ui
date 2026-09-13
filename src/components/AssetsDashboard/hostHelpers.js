@@ -7,7 +7,7 @@
 // detail formatters. No React — storageHealthColor returns a theme color, so
 // the only import is the brand palette.
 
-import { BRAND, ROLE } from "../../theme/brand";
+import { BRAND } from "../../theme/brand";
 
 export const ALLOWED_PLATFORMS = new Set(["windows", "macos", "linux", "ios", "android"]);
 export const ALLOWED_VERSION_BUCKETS = new Set([
@@ -93,8 +93,8 @@ export function formatOperatingMode(value) {
 export function storageHealthColor(value) {
   const v = String(value || "").trim().toLowerCase();
   if (v === "ok" || v === "healthy") return BRAND.alert.successText;
-  if (v === "low" || v === "warning") return "#B07818";
-  if (v === "critical" || v === "full") return ROLE.critical;
+  if (v === "low" || v === "warning") return BRAND.alert.warningText;
+  if (v === "critical" || v === "full") return BRAND.alert.errorText;
   return BRAND.gray;
 }
 

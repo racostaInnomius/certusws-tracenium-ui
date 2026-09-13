@@ -90,7 +90,7 @@ const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.Co
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { BRAND, ROLE } from "../theme/brand";
+import { BRAND } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
@@ -236,7 +236,7 @@ export default function Overview({ onNavigate } = {}) {
         icon={<DashboardOutlinedIcon />}
         chips={
           errorMsg ? (
-            <Typography variant="caption" sx={{ color: ROLE.critical }}>
+            <Typography variant="caption" sx={{ color: BRAND.alert.errorText }}>
               {errorMsg}
             </Typography>
           ) : refreshedAt ? (

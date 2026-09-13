@@ -56,9 +56,9 @@ function formatBytes(bytes) {
 // ── Status styling ─────────────────────────────────────────────────────────
 
 const STATUS_META = {
-  started:   { label: "Active",    fg: ROLE.caution,  bg: ROLE.cautionSoft  },
-  completed: { label: "Completed", fg: ROLE.positive, bg: ROLE.positiveSoft },
-  failed:    { label: "Failed",    fg: ROLE.critical, bg: ROLE.criticalSoft },
+  started:   { label: "Active",    fg: BRAND.alert.warningText,  bg: ROLE.cautionSoft  },
+  completed: { label: "Completed", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
+  failed:    { label: "Failed",    fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   cancelled: { label: "Cancelled", fg: BRAND.gray,    bg: BRAND.surfaceMuted }
 };
 
@@ -359,7 +359,7 @@ export default function FileTransfersAuditTable({
                             <Typography
                               variant="caption"
                               sx={{
-                                color: ROLE.critical,
+                                color: BRAND.alert.errorText,
                                 cursor: "help",
                                 lineHeight: 1,
                                 userSelect: "none"
