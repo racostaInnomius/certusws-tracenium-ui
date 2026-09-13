@@ -116,6 +116,36 @@ describe("BrowserInventoryPanel — el maximo es por plataforma", () => {
     expect(await screen.findByText(/on the same platform/i)).toBeTruthy();
   });
 
+  it("⚠️ muestra la referencia del FABRICANTE y de dónde sale, y la flota cuando no la hay", async () => {
+    // Antes la vara era siempre la flota: una flota entera atrasada salía al día.
+    getBrowserInventory.mockResolvedValue({
+      totalDevicesWithBrowser: 4,
+      families: [
+        {
+          ...familiaChrome,
+          platforms: [
+            { platform: "windows", latestVersion: "152.0.7977.82", deviceCount: 2, behindCount: 2, vendorReference: "152.0.7977.83", referenceSource: "google" },
+            { platform: "macos", latestVersion: "152.0.7977.76", deviceCount: 2, behindCount: 0, vendorReference: null, referenceSource: "fleet" },
+          ],
+          behindDevices: [
+            { agentId: "w1", hostname: "ETE-1", platform: "windows", version: "152.0.7977.82", latestForPlatform: "152.0.7977.83", referenceSource: "google" },
+          ],
+        },
+      ],
+    });
+    render(<BrowserInventoryPanel />);
+
+    // Windows se mide contra Google (la del fabricante, no el máximo de la flota).
+    expect(await screen.findByText("152.0.7977.83")).toBeTruthy();
+    expect(screen.getByText("· Google")).toBeTruthy();
+    // macOS no tiene referencia de fabricante: la flota, y rotulada.
+    expect(screen.getByText("152.0.7977.76")).toBeTruthy();
+    expect(screen.getByText("· fleet")).toBeTruthy();
+    // Y la columna ya no promete "fleet-latest".
+    expect(screen.queryByText(/Fleet-latest by platform/i)).toBeNull();
+    expect(screen.getByText("Reference by platform")).toBeTruthy();
+  });
+
   // ───────────────────────────────────────────────────────────────────
   // Las dos columnas nuevas y la salida hacia Software Delivery.
   // ───────────────────────────────────────────────────────────────────

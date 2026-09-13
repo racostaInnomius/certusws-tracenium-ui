@@ -1,10 +1,31 @@
 // src/components/inventory/BrowserInventoryPanel.jsx
 //
 // Fleet browser posture — the #1 client-side attack surface. Per browser family:
-// how many devices run it, the newest version present in the fleet, how many
-// devices are behind that, and the version spread. "Behind" is relative to the
-// fleet-latest (we don't ship a vendor version feed), so it reads honestly as
-// "behind the newest version any of your devices runs".
+// how many devices run it, the reference version per platform, how many devices
+// are behind it, and the version spread.
+//
+// ⚠️ "Behind" used to be relative to the fleet's own newest version, so a whole
+// fleet three releases behind read "up to date". The backend now measures it
+// against the vendor (the oldest version Google still serves; for Edge and
+// Firefox the newest release past a grace period) and falls back to the fleet
+// only when the vendor publishes nothing usable. Every reference shows WHERE it
+// came from, so a fleet proxy is never passed off as vendor currency.
+
+// Who set the bar. A response from an older backend has no referenceSource:
+// that was always the fleet.
+const SOURCE_LABEL = { google: "Google", microsoft: "Microsoft", mozilla: "Mozilla", fleet: "fleet" };
+const SOURCE_HINT = {
+  google: "Oldest version Google still serves on this channel and platform — anything older missed updates.",
+  microsoft: "Newest Microsoft release published at least a week ago.",
+  mozilla: "Newest Mozilla release published at least a week ago (for ESR, the device's own ESR line).",
+  fleet: "Newest version in your fleet — the vendor publishes no usable reference for this browser or release yet.",
+};
+
+function referenceOf(p) {
+  const source = p?.referenceSource && SOURCE_LABEL[p.referenceSource] ? p.referenceSource : "fleet";
+  const version = source === "fleet" ? p?.latestVersion : p?.vendorReference || p?.latestVersion;
+  return { source, version };
+}
 
 import * as React from "react";
 import {
@@ -66,7 +87,9 @@ export default function BrowserInventoryPanel({ notify }) {
           />
         ) : null}
         <Box sx={{ flex: 1 }} />
-        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>“Behind” = older than the newest version <strong>on the same platform</strong></Typography>
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+          “Behind” = older than the vendor&apos;s reference <strong>on the same platform</strong>, or the fleet&apos;s newest where the vendor publishes none
+        </Typography>
       </Box>
 
       {loading ? (
@@ -82,7 +105,7 @@ export default function BrowserInventoryPanel({ notify }) {
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Browser</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Devices</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Fleet-latest by platform</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Reference by platform</TableCell>
                 {/* ⚠️ "Latest packaged" NO es la version del fabricante: es la
                     que tenemos empaquetada en Software Delivery. No existe
                     ningun sync con Google, Microsoft ni Mozilla, asi que la
@@ -114,17 +137,30 @@ export default function BrowserInventoryPanel({ notify }) {
                           como atrasadas Macs que estaban al dia. */}
                       {Array.isArray(f.platforms) && f.platforms.length > 0 ? (
                         <Stack spacing={0.25}>
-                          {f.platforms.map((p) => (
-                            <Typography
-                              key={p.platform}
-                              sx={{ fontSize: TEXT.xs, fontFamily: "monospace", color: BRAND.dark }}
-                            >
-                              <Box component="span" sx={{ color: BRAND.gray, mr: 0.5 }}>
-                                {p.platform}
-                              </Box>
-                              {p.latestVersion || "—"}
-                            </Typography>
-                          ))}
+                          {f.platforms.map((p) => {
+                            const ref = referenceOf(p);
+                            return (
+                              <Tooltip key={p.platform} title={SOURCE_HINT[ref.source]} placement="top-start">
+                                <Typography sx={{ fontSize: TEXT.xs, fontFamily: "monospace", color: BRAND.dark }}>
+                                  <Box component="span" sx={{ color: BRAND.gray, mr: 0.5 }}>
+                                    {p.platform}
+                                  </Box>
+                                  <Box component="span">{ref.version || "—"}</Box>
+                                  <Box
+                                    component="span"
+                                    sx={{
+                                      ml: 0.5,
+                                      fontFamily: "inherit",
+                                      color: ref.source === "fleet" ? BRAND.gray : BRAND.teal,
+                                      fontWeight: ref.source === "fleet" ? 400 : 700,
+                                    }}
+                                  >
+                                    · {SOURCE_LABEL[ref.source]}
+                                  </Box>
+                                </Typography>
+                              </Tooltip>
+                            );
+                          })}
                         </Stack>
                       ) : (
                         <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>
@@ -219,7 +255,7 @@ export default function BrowserInventoryPanel({ notify }) {
                     <TableCell colSpan={6} sx={{ bgcolor: BRAND.surfaceMuted, py: 1 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.75, flexWrap: "wrap" }}>
                         <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark }}>
-                          {f.family}: devices behind their platform&apos;s newest version
+                          {f.family}: devices behind their platform&apos;s reference
                         </Typography>
                         <Box sx={{ flex: 1 }} />
                         {/* ⚠️ Aqui terminaba el callejon: el listado decia QUE
@@ -230,7 +266,7 @@ export default function BrowserInventoryPanel({ notify }) {
                         <CreateDeviceGroupButton
                           deviceIds={f.behindDevices.map((d) => d.agentId)}
                           namePrefix={`${f.family} behind`}
-                          origin={`Browser inventory · ${f.family} behind their platform's newest version`}
+                          origin={`Browser inventory · ${f.family} behind their platform's reference`}
                           notify={notify}
                         />
                       </Box>
@@ -242,6 +278,9 @@ export default function BrowserInventoryPanel({ notify }) {
                             <Box component="span" sx={{ fontFamily: "monospace" }}>{d.version}</Box>
                             <Box component="span" sx={{ color: BRAND.gray }}> → </Box>
                             <Box component="span" sx={{ fontFamily: "monospace" }}>{d.latestForPlatform}</Box>
+                            <Box component="span" sx={{ color: BRAND.gray }}>
+                              {" "}({SOURCE_LABEL[d.referenceSource] || "fleet"})
+                            </Box>
                           </Typography>
                         ))}
                       </Stack>
