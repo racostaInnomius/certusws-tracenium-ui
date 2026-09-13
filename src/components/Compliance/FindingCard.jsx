@@ -464,7 +464,9 @@ export default function FindingCard({
                 title={
                   finding.remediationPlan.artifact === "reg"
                     ? "Download a .reg file with the value this check expects, to import by hand or push through your own tooling."
-                    : "Download a secedit .inf template with the account/security policy value this check expects."
+                    : finding.remediationPlan.artifact === "inf"
+                      ? "Download a secedit .inf template with the account/security policy value this check expects."
+                      : "Download a .cmd script with the auditpol /set command for this audit subcategory."
                 }
                 arrow
               >
@@ -475,7 +477,7 @@ export default function FindingCard({
                   onClick={() => onExportFix(finding, finding.remediationPlan.artifact)}
                   sx={{ textTransform: "none" }}
                 >
-                  {finding.remediationPlan.artifact === "reg" ? "Export .reg" : "Export .inf"}
+                  {`Export .${finding.remediationPlan.artifact}`}
                 </Button>
               </Tooltip>
             ) : null}
