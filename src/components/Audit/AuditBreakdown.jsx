@@ -190,7 +190,9 @@ export default function AuditBreakdown({
             p: 2,
             borderRadius: 2,
             border: `1px solid ${ROLE.criticalSoft}`,
-            bgcolor: `${ROLE.criticalSoft}33`,
+            // Sufijo de opacidad sobre el HEX (0b ≈ 4 %). Sobre criticalSoft, que
+            // ya es un rgba(), daba "rgba(…)33": CSS inválido y la franja sin fondo.
+            bgcolor: `${ROLE.critical}0b`,
           }}
         >
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>

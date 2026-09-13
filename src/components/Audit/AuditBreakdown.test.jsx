@@ -58,6 +58,18 @@ describe("la franja de atención", () => {
     expect(screen.getByText("Error")).toBeTruthy();
   });
 
+  // `${ROLE.criticalSoft}33` daba "rgba(227,125,120,0.22)33": CSS inválido, el
+  // navegador tiraba la declaración y la franja salía sin fondo.
+  it("tiene un fondo rojo tenue de verdad, no una declaración inválida", async () => {
+    render(<AuditBreakdown data={data} lane="all" />);
+    const franja = screen.getByText(/Needs attention/i).closest(".MuiPaper-root");
+    const fondo = getComputedStyle(franja).backgroundColor;
+    const [r, g, b, a] = (fondo.match(/[\d.]+/g) || []).map(Number);
+    expect([r, g, b]).toEqual([227, 125, 120]);
+    expect(a).toBeGreaterThan(0.02);
+    expect(a).toBeLessThan(0.1);
+  });
+
   it("desaparece del todo cuando no hay nada que atender", async () => {
     // Una franja vacía permanente enseña a ignorar la zona donde luego
     // aparecerá algo importante.
