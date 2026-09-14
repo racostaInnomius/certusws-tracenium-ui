@@ -90,22 +90,17 @@ const ComplianceTrendCard = lazy(() => loadCharts().then((m) => ({ default: m.Co
 import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { searchForPage } from "../utils/browserState";
 import { BRAND } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
   // via window.location so the Sidebar's controlled state picks up the
   // change on next render without us having to plumb a ref through.
-  // Se parte de una URL LIMPIA, no de la actual. La barra lateral sólo cambia
-  // `page` y deja lo demás, así que la URL del Overview arrastraba filtros de
-  // la última página visitada (`status`, `since`, `score-band`…) y este enlace
-  // se los pasaba a la siguiente, que los aplicaba sin que nadie los pidiera.
-  const params = new URLSearchParams();
-  params.set("page", page);
-  Object.entries(extraQuery).forEach(([key, value]) => {
-    if (value == null) params.delete(key);
-    else params.set(key, String(value));
-  });
+  // Se parte de una URL LIMPIA (ver searchForPage): sólo `page`, los filtros
+  // del enlace y las preferencias de auto-refresco. Si no, un filtro que
+  // quedara en la URL (`status`, `since`, `score-band`…) viajaba al destino.
+  const search = searchForPage(page, extraQuery);
 
   // Normalize the pathname before rebuilding. Some auth redirects
   // land users on `http://localhost:5173//?page=overview` (two
@@ -115,7 +110,7 @@ function navigateWithQuery(page, extraQuery = {}) {
   // never updates and the click looks broken. Collapsing to a single
   // leading slash fixes that without affecting correctly-rooted URLs.
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
-  const next = `${pathname}?${params.toString()}`;
+  const next = `${pathname}${search}`;
   window.history.pushState({}, "", next);
   // AppShell reads from search params on its next render; the simplest
   // way to force that re-render is dispatching a popstate so any

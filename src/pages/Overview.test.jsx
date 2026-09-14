@@ -167,6 +167,8 @@ describe("Overview por plan", () => {
 
     fireEvent.click(await screen.findByText("Unread alerts"));
 
-    expect(window.location.search).toBe("?page=alerts");
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("page")).toBe("alerts");
+    for (const stale of ["status", "score-band", "since"]) expect(params.has(stale)).toBe(false);
   });
 });

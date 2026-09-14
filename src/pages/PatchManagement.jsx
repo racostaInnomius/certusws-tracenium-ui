@@ -1,5 +1,5 @@
 import * as React from "react";
-import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { getSearchParam, updateSearchParams, searchForPage } from "../utils/browserState";
 import Grid from "@mui/material/Grid";
 import {
   Alert,
@@ -417,11 +417,10 @@ function navigateToPolicies() {
   // Same query-param routing pattern the rest of the app uses (see
   // Overview's navigateWithQuery). A direct anchor would full-reload
   // the SPA, which is jarring for a CTA that's strictly in-app.
-  const params = new URLSearchParams(window.location.search);
-  // The patch schedule lives in Agent Settings (formerly Policies).
-  params.set("page", "agent-settings");
+  // The patch schedule lives in Agent Settings (formerly Policies). Clean
+  // URL (searchForPage): `pmTab` and friends are this page's, not theirs.
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
-  window.history.pushState({}, "", `${pathname}?${params.toString()}`);
+  window.history.pushState({}, "", `${pathname}${searchForPage("agent-settings")}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 

@@ -27,6 +27,32 @@ export function updateSearchParams(updates) {
   window.history.replaceState({}, "", url);
 }
 
+/**
+ * Query string para ABRIR una página: `page` + los parámetros que se le pasan,
+ * y nada de la página anterior.
+ *
+ * ⚠️ Por qué existe. Navegar sólo cambiaba `page` y dejaba el resto de la URL:
+ * los filtros de una página viajaban a la siguiente. Salir de Jobs con
+ * `status=failed` y abrir Security Compliance le pasaba ese `status`, que allí
+ * es otro filtro con el mismo nombre; volver a Assets reaplicaba un
+ * `versionBucket` que el operador ya había olvidado.
+ *
+ * Se conservan las preferencias de auto-refresco (`<pagina>AutoRefresh`): son
+ * de quien navega, no de la vista, y cada página lee sólo la suya.
+ */
+export function searchForPage(page, extras = {}, current = readSearchParams()) {
+  const next = new URLSearchParams();
+  for (const [key, value] of current.entries()) {
+    if (key.endsWith("AutoRefresh")) next.set(key, value);
+  }
+  next.set("page", String(page));
+  for (const [key, value] of Object.entries(extras || {})) {
+    if (value == null || String(value).trim() === "") next.delete(key);
+    else next.set(key, String(value));
+  }
+  return `?${next.toString()}`;
+}
+
 export function downloadTextFile(filename, content, mimeType = "text/plain;charset=utf-8") {
   if (typeof window === "undefined") return;
 

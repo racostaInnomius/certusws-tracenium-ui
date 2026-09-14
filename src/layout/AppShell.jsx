@@ -25,7 +25,7 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Topbar, { TOPBAR_HEIGHT, CHROME_LINE_WIDTH } from "./Topbar";
 import { AUTH_REQUIRED_EVENT, PERMISSION_DENIED_EVENT, TEMPORARY_ERROR_EVENT, clearApiCache, getLoginUrl, httpGetJson, isAuthError, isTemporaryApiError } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
-import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { getSearchParam, searchForPage, updateSearchParams } from "../utils/browserState";
 import { BRAND, ICON, NEUTRAL, ROLE, TEXT } from "../theme/brand";
 import { useAuthContext } from "../auth/AuthContext";
 import { useMsp } from "../msp/MspContext";
@@ -1081,6 +1081,13 @@ export default function AppShell() {
   }, []);
 
   const handleSelect = React.useCallback((key) => {
+    // Cambiar de página desde el menú abre la página LIMPIA: sin esto los
+    // filtros de la anterior quedaban en la URL y la nueva los leía. Pulsar la
+    // página en la que ya se está no toca nada (su estado sigue delante).
+    if (key !== getSearchParam("page", "overview")) {
+      const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+      window.history.replaceState({}, "", `${pathname}${searchForPage(key)}`);
+    }
     setSelectedPage(key);
     setMobileOpen(false); // auto-close drawer when a page is picked on mobile
     setTemporaryWarning(null);

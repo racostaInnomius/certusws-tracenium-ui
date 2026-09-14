@@ -8,6 +8,7 @@ import { performLogout } from "../auth/logout";
 import { useMsp } from "../msp/MspContext";
 
 import { BRAND, TEXT } from "../theme/brand";
+import { searchForPage } from "../utils/browserState";
 
 export const TOPBAR_HEIGHT = 56;
 export const CHROME_LINE_WIDTH = 3;
@@ -25,14 +26,15 @@ const UNREAD_POLL_MS = 60_000;
  * deep-link, or an in-page nav.
  */
 function navigateToPage(page) {
-  const params = new URLSearchParams(window.location.search);
-  params.set("page", page);
+  // URL limpia: la campana abre Alerts sin arrastrar los filtros de la página
+  // en la que se estaba (ver searchForPage).
+  const search = searchForPage(page);
   // Collapse accidental leading `//` in the pathname — the auth
   // redirect sometimes lands users on `http://host//?page=...` and
   // a URL starting with `//` is treated by pushState as
   // protocol-relative (same-origin check rejects it silently).
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
-  window.history.pushState({}, "", `${pathname}?${params.toString()}`);
+  window.history.pushState({}, "", `${pathname}${search}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 

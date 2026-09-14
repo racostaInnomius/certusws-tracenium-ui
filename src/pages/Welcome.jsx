@@ -15,20 +15,14 @@ import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
 import ArrowForwardOutlinedIcon from "@mui/icons-material/ArrowForwardOutlined";
 
 import { BRAND, NEUTRAL, TEXT } from "../theme/brand";
+import { searchForPage } from "../utils/browserState";
 
 function navigateToPageWithParams(page, extraParams = {}) {
   if (typeof window === "undefined") return false;
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("page", page);
-
-  Object.entries(extraParams).forEach(([key, value]) => {
-    const normalized = value == null ? "" : String(value).trim();
-    if (!normalized) url.searchParams.delete(key);
-    else url.searchParams.set(key, normalized);
-  });
-
-  window.history.pushState({}, "", url);
+  // Clean URL (searchForPage): only this link's params reach the page.
+  const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+  window.history.pushState({}, "", `${pathname}${searchForPage(page, extraParams)}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
   return true;
 }

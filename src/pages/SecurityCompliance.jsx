@@ -73,7 +73,7 @@ import {
   ScoreBar,
   StatusChip,
 } from "../components/Compliance/complianceChips";
-import { getSearchParam, updateSearchParams } from "../utils/browserState";
+import { getSearchParam, updateSearchParams, searchForPage } from "../utils/browserState";
 import { parseUrlFilters, filterDevices } from "./complianceFilters";
 
 import { useAuthContext } from "../auth/AuthContext";
@@ -274,17 +274,14 @@ function isRecentlyEnrolled(isoString) {
 
 
 function navigateTo(page, extraQuery = {}) {
-  const params = new URLSearchParams(window.location.search);
-  params.set("page", page);
-  Object.entries(extraQuery).forEach(([k, v]) => {
-    if (v == null) params.delete(k);
-    else params.set(k, String(v));
-  });
+  // Clean URL (searchForPage): this page's own `status`, `score-band` or
+  // `scpTab` must not reach the destination — Jobs reads `status` too.
+  const search = searchForPage(page, extraQuery);
   // Collapse accidental `//` in the pathname so pushState doesn't
   // silently reject the URL as cross-origin (see navigateWithQuery
   // comment in Overview.jsx for the full story).
   const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
-  window.history.pushState({}, "", `${pathname}?${params.toString()}`);
+  window.history.pushState({}, "", `${pathname}${search}`);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
