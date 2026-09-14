@@ -51,10 +51,16 @@ describe("enlaces del Overview", () => {
     expect(onNavigate).toHaveBeenCalledWith("pki");
   });
 
-  it("la ventana de la gráfica de auditoría se traduce al `auditFrom` que Audit sí lee", () => {
-    // 13-sep a las 15:00 → una ventana de 7 días empieza el 7-sep a las 00:00.
-    expect(startOfWindowLocal(7, new Date(2026, 8, 13, 15, 0))).toBe("2026-09-07T00:00");
-    expect(startOfWindowLocal(1, new Date(2026, 8, 13, 15, 0))).toBe("2026-09-13T00:00");
-    expect(startOfWindowLocal(30, new Date(2026, 8, 13, 15, 0))).toBe("2026-08-15T00:00");
+  it("⭐ la ventana de la gráfica de auditoría arranca en el día UTC, como la serie del backend", () => {
+    // Caso de campo: 14-sep 00:12 UTC. La serie de 7 días empieza el 8-sep
+    // 00:00 UTC; Audit interpreta `auditFrom` en hora local, así que se
+    // comprueba el INSTANTE que representa, sea cual sea la zona del equipo.
+    const now = new Date(Date.UTC(2026, 8, 14, 0, 12));
+    const instant = (s) => new Date(s).toISOString();
+
+    expect(instant(startOfWindowLocal(7, now))).toBe("2026-09-08T00:00:00.000Z");
+    expect(instant(startOfWindowLocal(1, now))).toBe("2026-09-14T00:00:00.000Z");
+    expect(instant(startOfWindowLocal(30, now))).toBe("2026-08-16T00:00:00.000Z");
+    expect(startOfWindowLocal(7, now)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 });

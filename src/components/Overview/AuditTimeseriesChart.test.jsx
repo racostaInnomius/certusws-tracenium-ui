@@ -149,7 +149,8 @@ describe("a dónde lleva", () => {
     await userEvent.click(screen.getByText(/Admin actions — last 7 days/));
     const [page, query] = onNavigate.mock.calls[0];
     expect(page).toBe("audit");
-    expect(query.auditFrom).toMatch(/^\d{4}-\d{2}-\d{2}T00:00$/);
+    // datetime-local (inicio del día UTC en hora local; ver startOfWindowLocal).
+    expect(query.auditFrom).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
     expect(query).not.toHaveProperty("auditLane");
     expect(query).not.toHaveProperty("window");
   });
