@@ -22,7 +22,9 @@ const LIVE_CATEGORIES = [
   "firewall",
   "filesystem_hardening",
   "disk_encryption",
-  "antimalware"
+  "antimalware",
+  // 20260914_compliance_browser_stig.sql
+  "browser_hardening"
 ];
 
 describe("categoryMeta", () => {

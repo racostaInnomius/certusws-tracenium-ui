@@ -69,6 +69,11 @@ const CATEGORY_META = {
   antimalware: {
     label: "Antimalware",
     description: "Whether malware protection is installed, enabled, and up to date."
+  },
+  browser_hardening: {
+    label: "Browser hardening",
+    description:
+      "The machine policies Chrome, Edge and Firefox enforce on the device: extension blocklists, Safe Browsing and SmartScreen, password saving, sync, and data sent to the vendor. Only measured where that browser is installed."
   }
 };
 

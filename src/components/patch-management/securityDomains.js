@@ -20,7 +20,7 @@
 export const PATCHING_CATEGORY = "patching";
 
 /** Categories the named slices claim, so "Rest" can be their complement. */
-const CLAIMED = ["crypto", "cryptography", "network_sharing"];
+const CLAIMED = ["crypto", "cryptography", "network_sharing", "browser_hardening"];
 
 export const SECURITY_DOMAINS = [
   {
@@ -46,6 +46,12 @@ export const SECURITY_DOMAINS = [
     label: "Shared folders",
     hint: "Exposed and loosely permissioned shares",
     params: { category: "network_sharing", checkIdContains: "share" },
+  },
+  {
+    key: "browsers",
+    label: "Browsers",
+    hint: "Chrome, Edge and Firefox machine policies from the DISA STIGs",
+    params: { category: "browser_hardening" },
   },
   {
     key: "rest",

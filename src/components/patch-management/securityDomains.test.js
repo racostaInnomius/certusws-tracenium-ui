@@ -37,6 +37,8 @@ const LIVE_CATEGORIES = [
   "integrity",
   "antimalware",
   "cryptography",
+  // 20260914_compliance_browser_stig.sql
+  "browser_hardening",
 ];
 
 /** Categories rendered by a surface other than Security configuration. */
@@ -108,6 +110,13 @@ describe("the narrowing slices", () => {
     for (const d of SECURITY_DOMAINS) {
       expect(domainShows(d.params, PATCHING_CATEGORY), `${d.key} shows patching`).toBe(false);
     }
+  });
+
+  it("browser policies have their own slice and do not double up in Everything else", () => {
+    const browsers = domainParams("browsers");
+    expect(domainShows(browsers, "browser_hardening")).toBe(true);
+    expect(domainShows(browsers, "firewall")).toBe(false);
+    expect(domainShows(domainParams("rest"), "browser_hardening")).toBe(false);
   });
 
   it("falls back to everything for an unknown slice", () => {
