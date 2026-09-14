@@ -76,7 +76,7 @@ describe("los plugins, en orden de ciclo de vida", () => {
       "Crypto Discovery",
       // ADR-0022: evalúa el servicio (el dominio de AD) desde los DC que ya
       // inventaría AMP; va con los plugins, detrás de Crypto Discovery.
-      "Assessment Service",
+      "Assessment SuiteBeta",
       "MDM / MAMBeta",
     ]);
   });
@@ -92,6 +92,10 @@ describe("los plugins, en orden de ciclo de vida", () => {
     const cdp = screen.getByText("Crypto Discovery").closest("div[role='button']");
     expect(within(cdp).queryByText("Beta")).toBeNull();
     expect(screen.getByText("MDM / MAM").closest("div[role='button']").textContent)
+      .toContain("Beta");
+
+    // Assessment Suite (ADR-0022) entra en Beta: una sola corrida real (T111).
+    expect(screen.getByText("Assessment Suite").closest("div[role='button']").textContent)
       .toContain("Beta");
   });
 });

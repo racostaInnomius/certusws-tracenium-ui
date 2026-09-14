@@ -42,7 +42,7 @@ describe("groupLabel", () => {
 
   it("un grupo reservado se rotula con el nombre de su página", () => {
     expect(groupLabel("RCP")).toBe("Remote Control");
-    expect(groupLabel("ASP")).toBe("Assessment Service");
+    expect(groupLabel("ASP")).toBe("Assessment Suite");
   });
 });
 
@@ -59,7 +59,7 @@ describe("REPORT_PAGES", () => {
       "Remote Control",
       "Patch Management",
       "Crypto Discovery",
-      "Assessment Service",
+      "Assessment Suite",
       "MDM / MAM",
       "Alerts",
       "Jobs",
@@ -68,7 +68,7 @@ describe("REPORT_PAGES", () => {
     ]);
   });
 
-  it("⚠️ Assessment Service está: una página del menú fuera de esta lista no aparece ni como ausencia", () => {
+  it("⚠️ Assessment Suite está: una página del menú fuera de esta lista no aparece ni como ausencia", () => {
     const asp = REPORT_PAGES.find((p) => p.page === "assessments");
     expect(asp).toMatchObject({ group: "ASP", plugin: "asp", borrows: null });
   });
@@ -148,7 +148,7 @@ describe("groupTypesByPage", () => {
     // Es para lo que se reservan las siglas antes de que exista el informe.
     const filas = groupTypesByPage([tipo("rcp.access-audit", "RCP"), tipo("asp.service-assessment", "ASP")]);
     expect(filas.find((f) => f.label === "Remote Control").types.map((t) => t.key)).toEqual(["rcp.access-audit"]);
-    expect(filas.find((f) => f.label === "Assessment Service").types.map((t) => t.key)).toEqual(["asp.service-assessment"]);
+    expect(filas.find((f) => f.label === "Assessment Suite").types.map((t) => t.key)).toEqual(["asp.service-assessment"]);
     expect(filas.find((f) => f.label === "Other")).toBeUndefined();
   });
 

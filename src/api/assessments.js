@@ -1,7 +1,7 @@
 // src/api/assessments.js
 //
-// ADR-0022 — Assessment Service (clave interna `asp`). REST en /api/v1/asp.
-// En pantalla nunca se dicen las siglas: «Assessment Service».
+// ADR-0022 — Assessment Suite (clave interna `asp`). REST en /api/v1/asp.
+// En pantalla nunca se dicen las siglas: «Assessment Suite».
 
 import { httpDeleteJson, httpGetJson, httpPostJson, httpPutJson } from "./http";
 

@@ -33,7 +33,7 @@ export const UPDATE_INTERVAL_MAX = 86400;       // 24h  — beyond this disable 
 // CDP: a full certificate-store scan is not cheap (OS stores + every JVM
 // cacerts), and certificates move on a scale of days — sub-15-minute
 // cadence buys nothing. Mirrors the backend validator + agent bounds.
-// ADR-0022 — Assessment Service. Mismo tope que el backend
+// ADR-0022 — Assessment Suite. Mismo tope que el backend
 // (validateAspPolicyBlock) y que la decisión 3: 200 DN por indicador.
 export const ASP_EVIDENCE_LIMIT_MAX = 200;
 export const ASP_FREQUENCIES = ["manual", "daily", "weekly", "monthly"];
@@ -610,7 +610,7 @@ export function readFormFromPolicy(policy, catalog = []) {
       // Vacío = apagado (repaso 2026-09-07: dejó de ser un toggle).
       adcsHosts: (policy?.cdp?.adcs?.hosts ?? []).join("\n"),
     },
-    // ADR-0022 — defectos de servidor de Assessment Service. Vacío = los del
+    // ADR-0022 — defectos de servidor de Assessment Suite. Vacío = los del
     // backend (semanal, domingo 02:00 UTC, 200 DN).
     asp: {
       frequency: ASP_FREQUENCIES.includes(policy?.asp?.schedule?.frequency) ? policy.asp.schedule.frequency : "",
@@ -870,7 +870,7 @@ export function formToPolicy(form, catalog = []) {
     if (Object.keys(cdp).length > 0) policy.cdp = cdp;
   }
 
-  // ── Assessment Service (ADR-0022) ───────────────────────────────
+  // ── Assessment Suite (ADR-0022) ───────────────────────────────
   // Gated on the plugin and omit-when-empty like the rest. `asp.collector`
   // is never written: the control plane derives it from the active
   // instances, and a device view that echoes it back would be overwritten.

@@ -1,6 +1,6 @@
 // src/pages/Assessments.jsx
 //
-// ADR-0022 — Assessment Service (clave interna `asp`; en pantalla, nunca las
+// ADR-0022 — Assessment Suite (clave interna `asp`; en pantalla, nunca las
 // siglas). Página propia: nada de esto aparece en Security Compliance, porque
 // el sujeto es la INSTANCIA DE SERVICIO —un dominio de AD—, no el equipo.
 //
@@ -64,7 +64,7 @@ function readInitialInstance() {
 function upgradeMessage(error) {
   if (error?.status === 402) {
     const tier = error?.body?.tierRequired || error?.body?.tier_required || "enterprise";
-    return `Assessment Service is not included in your plan. It requires the ${tier} tier.`;
+    return `Assessment Suite is not included in your plan. It requires the ${tier} tier.`;
   }
   return null;
 }
@@ -227,7 +227,7 @@ export default function Assessments({ onNavigate }) {
       ) : (
         <>
           <PageHeader
-            title="Assessment Service"
+            title="Assessment Suite"
             subtitle="Security and best-practice assessments of your services, starting with Active Directory — run by a domain controller you choose, with no credentials to hand over."
             icon={<DomainVerificationOutlinedIcon />}
             actions={

@@ -1,6 +1,6 @@
 // src/components/Assessments/assessmentModel.js
 //
-// ADR-0022 — lo que la página de Assessment Service calcula sin red: textos de
+// ADR-0022 — lo que la página de Assessment Suite calcula sin red: textos de
 // estado, cobertura, orden de hallazgos y la lectura de un «Run now» que no
 // pudo arrancar. Puro, para que la página y sus tests lean lo mismo.
 
@@ -47,7 +47,7 @@ export function notAssessedReason(reason) {
   const [head, detail] = [raw.split(":")[0], raw.split(":").slice(1).join(":")];
   switch (head) {
     case "requires_privileged_read":
-      return `The collector's machine account cannot read this (${detail || "no read right"}). It needs privileged credentials, which Assessment Service does not store.`;
+      return `The collector's machine account cannot read this (${detail || "no read right"}). It needs privileged credentials, which Assessment Suite does not store.`;
     case "requires_dc_registry":
       return "This check reads the registry of a domain controller and the collector is not one.";
     case "insufficient_rights":

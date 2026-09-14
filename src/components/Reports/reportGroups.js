@@ -32,7 +32,7 @@ export const REPORT_GROUP_LABELS = {
   // que el primero que llegue caiga en su página y no en "Other".
   SDP: "Software Delivery",
   RCP: "Remote Control",
-  ASP: "Assessment Service",
+  ASP: "Assessment Suite",
   MDM: "MDM / MAM",
   Alerts: "Alerts",
   PKI: "PKI",
@@ -95,7 +95,7 @@ export const REPORT_PAGES = [
   { page: "cdp",               label: "Crypto Discovery",    group: "CDP",    plugin: "cdp", borrows: null },
   // ADR-0022. Sin botón "Report" todavía, y por eso no estaba en esta lista:
   // la página existía en el menú y no aparecía ni como ausencia.
-  { page: "assessments",       label: "Assessment Service",  group: "ASP",    plugin: "asp", borrows: null },
+  { page: "assessments",       label: "Assessment Suite",  group: "ASP",    plugin: "asp", borrows: null },
   { page: "device-management", label: "MDM / MAM",           group: "MDM",    plugin: "mdm", borrows: "global.fleet-health" },
   // Informe propio desde G2 del plan de cobertura (`alerts.activity`).
   { page: "alerts",            label: "Alerts",              group: "Alerts", plugin: null,  borrows: null },

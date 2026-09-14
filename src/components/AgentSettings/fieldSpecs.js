@@ -270,7 +270,7 @@ export const FIELD_SPECS = {
       },
     },
   ],
-  // ADR-0022 — Assessment Service. Defectos que se proponen al activar un
+  // ADR-0022 — Assessment Suite. Defectos que se proponen al activar un
   // dominio; cada instancia guarda los suyos. Todo en UTC (el tenant no tiene
   // zona horaria en el modelo) y la fila lo dice.
   asp: [

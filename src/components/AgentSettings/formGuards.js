@@ -89,7 +89,7 @@ export const DOMAIN_PATHS = {
     "features.remoteRequireConsent",
     "features.remoteRecordScreen",
   ],
-  // ADR-0022 — Assessment Service. `asp.collector` NO se escribe aquí: el
+  // ADR-0022 — Assessment Suite. `asp.collector` NO se escribe aquí: el
   // backend lo deriva de las instancias activas.
   asp: ["asp"],
   ai: ["ai"],

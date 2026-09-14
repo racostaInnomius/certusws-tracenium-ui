@@ -69,10 +69,10 @@ export const SECTIONS = [
     // activar un dominio y el tope de evidencia. Qué DC es colector de qué
     // dominio se elige en la propia página, al activar la instancia.
     id: "asp",
-    label: "Assessment Service",
+    label: "Assessment Suite",
     plugin: "asp",
     description: "Default schedule and evidence limit for service assessments. Collectors are chosen per domain when you activate it.",
-    related: { label: "Open Assessment Service", page: "assessments" },
+    related: { label: "Open Assessment Suite", page: "assessments" },
   },
   {
     id: "ai",

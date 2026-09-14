@@ -1,6 +1,6 @@
 // src/pages/Assessments.test.jsx
 //
-// ADR-0022 — la página de Assessment Service contra la API simulada (MSW):
+// ADR-0022 — la página de Assessment Suite contra la API simulada (MSW):
 //   · las `detected` van en su bloque, con «Activate», y no cuentan;
 //   · activar abre el selector de DC del dominio y manda primario, secundario
 //     y agenda;
@@ -107,7 +107,7 @@ function mount(overrides = {}) {
   return calls;
 }
 
-describe("Assessment Service — lista", () => {
+describe("Assessment Suite — lista", () => {
   it("las detectadas van aparte, con Activate, y la licencia cuenta sólo las activas", async () => {
     mount();
     const detected = await screen.findByRole("table", { name: "Detected domains" });
@@ -152,7 +152,7 @@ describe("Assessment Service — lista", () => {
   });
 });
 
-describe("Assessment Service — detalle", () => {
+describe("Assessment Suite — detalle", () => {
   it("⭐ ordena por criticidad, explica el not_assessed por privilegios y avisa del missed", async () => {
     const user = userEvent.setup();
     mount();
