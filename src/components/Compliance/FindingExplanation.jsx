@@ -89,7 +89,8 @@ export default function FindingExplanation({ findingId }) {
         p: 1.5,
         borderRadius: 1.5,
         border: `1px dashed ${BRAND.teal}`,
-        bgcolor: `${BRAND.tealSoft}55`,
+        // ≈4 %: sufijo sobre el HEX; sobre tealSoft (rgba) era CSS inválido.
+        bgcolor: `${BRAND.teal}0a`,
       }}
       aria-live="polite"
     >

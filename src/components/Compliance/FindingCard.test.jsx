@@ -40,6 +40,23 @@ function renderCard(overrides = {}) {
   );
 }
 
+// `${ROLE.criticalSoft}88` daba "rgba(…)88": CSS inválido, y la tarjeta de un
+// fail reconocido salía en blanco en vez de en rojo suave.
+describe("FindingCard background", () => {
+  const rgba = (el) => (getComputedStyle(el).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+
+  it("an acknowledged fail keeps a soft red tint, lighter than a new fail", () => {
+    const { container: acked } = renderCard({ acknowledgedAt: "2026-09-01T00:00:00Z", acknowledgedBy: "ops" });
+    const [r, g, b, a] = rgba(acked.querySelector(".MuiPaper-root"));
+    expect([r, g, b]).toEqual([227, 125, 120]);
+    cleanup();
+    const { container: open } = renderCard();
+    const [, , , aOpen] = rgba(open.querySelector(".MuiPaper-root"));
+    expect(a).toBeGreaterThan(0.05);
+    expect(a).toBeLessThan(aOpen);
+  });
+});
+
 describe("FindingCard (render smoke)", () => {
   it("renders the title, severity and status without crashing", () => {
     renderCard();

@@ -35,6 +35,17 @@ const payload = {
 };
 
 describe("FindingExplanation", () => {
+  // `${BRAND.tealSoft}55` daba "rgba(…)55": CSS inválido, la caja sin su tinte.
+  it("the explanation box has a faint teal tint", async () => {
+    explainFinding.mockImplementation(async () => payload);
+    const { container } = render(<FindingExplanation findingId={42} />);
+    const box = container.querySelector('[aria-live="polite"]');
+    const [r, g, b, a] = (getComputedStyle(box).backgroundColor.match(/[\d.]+/g) || []).map(Number);
+    expect([r, g, b]).toEqual([90, 159, 159]);
+    expect(a).toBeGreaterThan(0.02);
+    expect(a).toBeLessThan(0.1);
+  });
+
   it("renders the structured explanation", async () => {
     explainFinding.mockImplementation(async () => payload);
     render(<FindingExplanation findingId={42} />);

@@ -146,7 +146,7 @@ export default function FindingCard({
           isAcked && finding.status === "fail"
             ? // Acknowledged fail = soft red (still attention-worthy)
               // but less visually loud than a brand-new fail card.
-              `${ROLE.criticalSoft}88`
+              `${ROLE.critical}1e` // ≈12 %: sufijo sobre el HEX; sobre criticalSoft (rgba) era CSS inválido
             : finding.status === "fail"
             ? ROLE.criticalSoft
             : "transparent",
