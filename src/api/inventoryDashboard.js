@@ -80,3 +80,17 @@ export async function deleteExtensionRule(browser, extensionId) {
     `/api/v1/browser-inventory/extension-rules/${encodeURIComponent(browser)}/${encodeURIComponent(extensionId)}`
   );
 }
+
+// Chrome Enterprise connector (Pub/Sub push). PUT returns the push endpoint URL
+// ONCE — it carries the token; later reads never include it.
+export async function getChromeConnector() {
+  return httpGetJson("/api/v1/browser-telemetry/chrome-connector");
+}
+
+export async function putChromeConnector(pushServiceAccount) {
+  return httpPutJson("/api/v1/browser-telemetry/chrome-connector", { pushServiceAccount });
+}
+
+export async function deleteChromeConnector() {
+  return httpDeleteJson("/api/v1/browser-telemetry/chrome-connector");
+}

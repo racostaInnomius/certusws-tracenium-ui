@@ -32,6 +32,7 @@ import {
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { SEVERITY_ORDER, severityMeta } from "../../theme/severity";
+import { getSearchParam } from "../../utils/browserState";
 import { deleteExtensionRule, getBrowserExtensions, getExtensionRules, putExtensionRule } from "../../api/inventoryDashboard";
 import CreateDeviceGroupButton from "../common/CreateDeviceGroupButton";
 import { BlockAllOthersControls, ExtensionRuleActions, RuleChip } from "./ExtensionRuleControls";
@@ -87,8 +88,14 @@ export default function BrowserExtensionsPanel({ notify, canManageRules = false 
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [level, setLevel] = React.useState(null);
-  const [query, setQuery] = React.useState("");
-  const [expanded, setExpanded] = React.useState(null);
+  // Deep link desde una alerta: `?extension=chrome|<id>` abre esa fila.
+  const linked = React.useMemo(() => {
+    const raw = getSearchParam("extension", "");
+    const bar = raw.indexOf("|");
+    return bar > 0 ? { key: raw, extensionId: raw.slice(bar + 1) } : null;
+  }, []);
+  const [query, setQuery] = React.useState(linked?.extensionId ?? "");
+  const [expanded, setExpanded] = React.useState(linked?.key ?? null);
   const [limit, setLimit] = React.useState(PAGE);
 
   // ⚠️ `notify` llega como función inline desde la página: con ella en las

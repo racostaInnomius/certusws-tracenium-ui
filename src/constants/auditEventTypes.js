@@ -43,6 +43,8 @@ const EVENT_TYPE_CATALOG = {
   POLICY_DEVICE_DELETED:           { label: "Device override removed",         category: "Policies" },
   BROWSER_EXTENSION_RULE_SET:      { label: "Browser extension rule set",      category: "Policies" },
   BROWSER_EXTENSION_RULE_REMOVED:  { label: "Browser extension rule removed",  category: "Policies" },
+  BROWSER_TELEMETRY_CONNECTOR_SET:     { label: "Chrome connector configured", category: "Policies" },
+  BROWSER_TELEMETRY_CONNECTOR_REMOVED: { label: "Chrome connector removed",    category: "Policies" },
   POLICY_DEVICE_PUSHED:            { label: "Device policy pushed",            category: "Policies" },
   // El dominio de seguridad y el de MDM se separaron del bloque de
   // configuración cuando Policies se partió en tres páginas; classifyChange

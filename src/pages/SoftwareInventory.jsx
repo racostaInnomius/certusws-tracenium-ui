@@ -46,6 +46,7 @@ import CompositionBars from "../components/common/CompositionBars";
 import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 import BrowserExtensionsPanel from "../components/inventory/BrowserExtensionsPanel";
+import ChromeConnectorPanel from "../components/inventory/ChromeConnectorPanel";
 import { formatDate } from "../utils/format";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
 import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
@@ -945,6 +946,12 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
         // Block/allow rules are browser security configuration: same
         // capability as Security Baselines (the API enforces it too).
         canManageRules={Boolean(myPermissions?.has("security_compliance"))}
+      />
+
+      {/* Security events Chrome itself reports, via the customer's Pub/Sub. */}
+      <ChromeConnectorPanel
+        notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+        canManage={Boolean(myPermissions?.has("security_compliance"))}
       />
 
       <Box sx={{ mb: 3 }}>

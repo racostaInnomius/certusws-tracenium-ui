@@ -11,6 +11,7 @@
 // composes it on demand from the enabled rules. See
 // /api/v1/alerts/events in alerts.service.ts.
 
+import { searchForPage } from "../utils/browserState";
 import * as React from "react";
 import {
   Box,
@@ -107,7 +108,9 @@ const SOURCE_LABEL = {
   cdp_weak_crypto:    "Certificate hygiene",
   cdp_trust_anchor:   "Trust anchor",
   cdp_pqc_roadmap:    "Post-quantum roadmap",
-  disk_capacity:      "Disk capacity"
+  disk_capacity:      "Disk capacity",
+  browser_extension:  "Browser extension",
+  browser_threat:     "Browser threat"
 };
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"];
@@ -1022,6 +1025,8 @@ function EventDetailDrawer({ event, onClose }) {
           </Stack>
         </Paper>
 
+        <CorrelationSection correlation={event.details?.correlation} />
+
         <Typography
           variant="caption"
           sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 1 }}
@@ -1046,6 +1051,55 @@ function EventDetailDrawer({ event, onClose }) {
         </Box>
       </Box>
     </Box>
+  );
+}
+
+/**
+ * Lo que la alerta ya sabe del contexto: quién, qué grupos, si hay regla y
+ * qué hacer. Sólo aparece si el backend lo resolvió (hoy, las fuentes de
+ * navegador). ⚠️ Los grupos son los ESTÁTICOS; los dinámicos no se resuelven
+ * por evento y se dice.
+ */
+export function CorrelationSection({ correlation }) {
+  if (!correlation || typeof correlation !== "object") return null;
+  const who = [correlation.who?.osUser, correlation.who?.profile].filter(Boolean).join(" · ");
+  const groups = Array.isArray(correlation.groups) ? correlation.groups : [];
+  const action = correlation.action;
+  return (
+    <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, border: `1px solid ${BRAND.border}`, mb: 2 }}>
+      <Typography variant="caption" sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 0.5 }}>
+        Correlation
+      </Typography>
+      <Stack spacing={0.5}>
+        <DetailRow label="Who" value={who || "—"} />
+        <DetailRow
+          label="Groups"
+          value={
+            groups.length > 0
+              ? `${groups.map((g) => g.name).join(", ")}${correlation.dynamicGroupsResolved === false ? " (static groups only)" : ""}`
+              : correlation.dynamicGroupsResolved === false ? "No static group" : "—"
+          }
+        />
+        {correlation.rule ? <DetailRow label="Rule" value={correlation.rule.action === "block" ? "Blocked by rule" : "Allowed by rule"} /> : null}
+        {correlation.allowOnlyMode ? <DetailRow label="Mode" value="Only allowed extensions" /> : null}
+      </Stack>
+      {action?.kind === "block_extension" ? (
+        <Button
+          size="small"
+          variant="outlined"
+          color="error"
+          sx={{ mt: 1 }}
+          onClick={() => {
+            const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
+            const search = searchForPage("assets", { assetsTab: "software", extension: `${action.browser}|${action.extensionId}` });
+            window.history.pushState({}, "", `${pathname}${search}`);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          }}
+        >
+          Review and block {action.name || "extension"}
+        </Button>
+      ) : null}
+    </Paper>
   );
 }
 

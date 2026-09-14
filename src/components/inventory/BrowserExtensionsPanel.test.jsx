@@ -231,3 +231,18 @@ describe("BrowserExtensionsPanel — rules", () => {
     expect(screen.getByText("PC-ANA")).toBeInTheDocument();
   });
 });
+
+describe("BrowserExtensionsPanel — deep link from an alert", () => {
+  it("?extension=chrome|<id> opens that extension filtered and expanded", async () => {
+    window.history.replaceState({}, "", `/?page=assets&assetsTab=software&extension=chrome|${grabber.extensionId}`);
+    try {
+      getBrowserExtensions.mockResolvedValue(DATA);
+      render(<BrowserExtensionsPanel />);
+      expect(await screen.findByText("PC-ANA")).toBeInTheDocument();
+      expect(screen.queryByText("uBlock Origin")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Search extensions")).toHaveValue(grabber.extensionId);
+    } finally {
+      window.history.replaceState({}, "", "/");
+    }
+  });
+});
