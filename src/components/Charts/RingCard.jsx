@@ -15,9 +15,10 @@
 // color canónico de cada plataforma; homologar el layout no puede aplanar eso.
 //
 // ⚠️ Una rebanada `pending` (equipos del roster que la fuente de esta dona aún
-// no tiene) se dibuja en gris neutro, con anillo punteado alrededor y "+N" en
-// la leyenda: el total la incluye, pero no es un dato medido, y no navega
-// porque no existe ese filtro en las páginas de destino.
+// no tiene) se dibuja en gris neutro y con "+N" y ficha rayada en la leyenda:
+// el total la incluye, pero no es un dato medido, y no navega porque no existe
+// ese filtro en las páginas de destino. (Llevó también un anillo punteado
+// alrededor de la dona; se quitó a petición del owner — la leyenda basta.)
 //
 // SVG a mano y no Recharts a propósito: son pocos arcos, y el chunk
 // charts-vendor pesa 394 KB. Con el portal en SKU Free, cada chunk extra es
@@ -71,7 +72,6 @@ export default function RingCard({
   const visible = (slices || []).filter((s) => Number(s.value) > 0);
   const sum = visible.reduce((acc, s) => acc + s.value, 0);
   const arcs = ringArcs(visible);
-  const hasPending = visible.some((s) => s.pending);
   const shownTotal = total ?? sum;
   const cardInteractive = typeof onCardClick === "function";
 
@@ -134,20 +134,6 @@ export default function RingCard({
                 .map((s) => `${s.value} ${String(s.label).toLowerCase()}`)
                 .join(", ")}`}
             >
-              {hasPending ? (
-                // Por FUERA del anillo, para no encogerlo: avisa de que el
-                // total incluye equipos que esta fuente todavía no tiene.
-                <circle
-                  cx={SIZE / 2}
-                  cy={SIZE / 2}
-                  r={RADIUS + STROKE / 2 + 3}
-                  fill="none"
-                  stroke={PENDING_COLOR}
-                  strokeWidth={1.5}
-                  strokeDasharray="4 3"
-                  data-ring="pending-outline"
-                />
-              ) : null}
               {arcs.map((a) => {
                 const onClick = sliceHandler(a);
                 return (
