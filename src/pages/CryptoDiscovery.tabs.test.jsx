@@ -128,13 +128,19 @@ describe("pestañas de Crypto Discovery", () => {
     );
     const settings = await screen.findByRole("tab", { name: /^settings$/i }, { timeout: 4000 });
     settings.click();
-    // El mapa arriba, con los cinco sectores; una sección por sector debajo.
-    await screen.findByText(/^Sources$/);
-    for (const base of ["On-prem devices", "Infra", "Cloud", "External key sources"]) expect(screen.getAllByText(base).length).toBeGreaterThanOrEqual(2);
-    // Windows CA cuelga de On-prem: fila sangrada en el mapa y sección propia debajo.
-    expect(screen.getAllByText(/Windows CA$/).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
+    // Una sección plegable por sector, con las fichas de estado en la
+    // cabecera (no hay mapa aparte: era información duplicada). Windows
+    // CA cuelga de On-prem.
+    for (const base of ["On-prem devices", "Infra", "Cloud", "External key sources"]) expect(await screen.findByRole("heading", { name: base })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Windows CA$/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^vCenter: not connected$/ })).toBeInTheDocument();
+    // Plegadas sin nada fallando; un clic en la cabecera (o en una ficha) abre.
+    expect(screen.getByRole("button", { name: /^Expand Infra$/ })).toHaveAttribute("aria-expanded", "false");
+    screen.getByRole("button", { name: /^vCenter: not connected$/ }).click();
+    expect(await screen.findByRole("button", { name: /^Collapse Infra$/ })).toBeInTheDocument();
+    screen.getByRole("button", { name: /^Expand On-prem devices$/ }).click();
+    screen.getByRole("button", { name: /^Expand Cloud$/ }).click();
     // El gateway de vCenter se registra desde aquí, sin pasar por Patch Management.
     expect(await screen.findByText("vCenter gateway")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /register gateway/i })).toBeInTheDocument();

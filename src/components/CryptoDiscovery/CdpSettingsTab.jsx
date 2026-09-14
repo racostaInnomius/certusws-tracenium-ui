@@ -8,27 +8,32 @@
 // que saber que eso se hacía debajo de una tabla de activos.
 //
 // Repaso 2026-09-14: la pestaña se ordena por los MISMOS sectores que el
-// sunburst del Dashboard (On-prem devices · Windows CA · Infra · Cloud ·
-// External key sources). Arriba, un mapa dice de cada fuente si ya
-// reporta, si está configurada y muda, o si no está conectada; debajo,
-// una sección por sector con lo que se configura ahí. Así «¿por qué ese
-// gajo está vacío?» y «¿dónde lo conecto?» se contestan en el mismo sitio.
+// sunburst del Dashboard (On-prem devices, con Windows CA colgando · Infra
+// · Cloud · External key sources). Cada sección lleva en su cabecera una
+// ficha por fuente —reporta, configurada y muda, falla, no conectada— y
+// se pliega: cerrada, la pestaña se lee como un mapa; abierta, se
+// configura. (Hubo un mapa aparte arriba; el usuario lo vio como
+// información duplicada y lo era.) Se abre sola la sección con algo
+// fallando; «¿por qué ese gajo está vacío?» y «¿dónde lo conecto?» se
+// contestan en el mismo sitio.
 //
 // Regla: aquí se configura, en las otras pestañas se mira. Explore sigue
 // enseñando lo que los conectores traen; desde allí un enlace vuelve aquí.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, Snackbar, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Collapse, IconButton, Snackbar, Stack, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import SectionPaper from "../common/SectionPaper";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
 import CdpPublicDomains from "./CdpPublicDomains";
 import { CbomImportForm } from "./CbomAssetsPanel";
 import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
-import CdpSourcesMap from "./CdpSourcesMap";
+import SourceChips from "./CdpSourceChips";
 import GatewayPanel from "../patch-management/gateway/GatewayPanel";
 import { SECTIONS } from "./cdpSunburst";
-import { CONNECTOR_KINDS_BY_BASE, sectorAnchor } from "./cdpSources";
+import { CONNECTOR_KINDS_BY_BASE, sectorAnchor, sourcesByBase } from "./cdpSources";
 import { getCdpFacets, getCryptoAssetsSummary, listCdpAdcsSources, listCdpConnectors, listCdpDevices, listCdpVcenterSources } from "../../api/cdp";
 import * as infrastructureApi from "../../api/infrastructure";
 import { getTenantPolicy } from "../../api/policies";
@@ -139,22 +144,47 @@ function AdcsReaders({ sources, caHosts }) {
   );
 }
 
-function SectionTitle({ children, sub }) {
-  return (
-    <Box sx={{ mb: 1.5 }}>
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>{children}</Typography>
-      {sub ? <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8 }}>{sub}</Typography> : null}
-    </Box>
-  );
-}
-
-/** Una sección por sector, con el mismo id que usa el mapa para bajar hasta ella. */
-function Sector({ baseKey, sub, children }) {
+/**
+ * Una sección por sector, plegable. La cabecera lleva el nombre, «x of y
+ * reporting» y las fichas de estado; el cuerpo, lo que se configura. El
+ * cuerpo queda montado aunque esté plegado: los paneles cargan lo suyo y
+ * las fichas reflejan su estado sin abrir nada. Windows CA cuelga de
+ * On-prem: misma tarjeta, sangrada y con el padre delante.
+ */
+function Sector({ baseKey, section, sub, open, onToggle, children }) {
   const b = baseOf(baseKey);
+  const label = b?.label ?? baseKey;
+  const headerId = `${sectorAnchor(baseKey)}-header`;
   return (
-    <SectionPaper id={sectorAnchor(baseKey)} sx={{ scrollMarginTop: 16 }}>
-      <SectionTitle sub={sub}>{b?.label ?? baseKey}</SectionTitle>
-      {children}
+    <SectionPaper id={sectorAnchor(baseKey)} sx={{ scrollMarginTop: 16, ...(b?.parent ? { ml: { xs: 1.5, md: 3 } } : {}) }}>
+      <Stack direction="row" spacing={1.5} alignItems="flex-start">
+        <IconButton size="small" aria-expanded={open} aria-controls={`${sectorAnchor(baseKey)}-body`} aria-label={open ? `Collapse ${label}` : `Expand ${label}`} onClick={onToggle} sx={{ mt: -0.25 }}>
+          {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </IconButton>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ flexWrap: "wrap", rowGap: 0.25, cursor: "pointer" }} onClick={onToggle}>
+            <Typography id={headerId} component="h3" sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, m: 0 }}>
+              {b?.parent ? `↳ ${label}` : label}
+            </Typography>
+            {section ? (
+              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
+                {section.reporting} of {section.total} reporting
+              </Typography>
+            ) : null}
+          </Stack>
+          {section ? (
+            <Box sx={{ mt: 0.75 }}>
+              <SourceChips sources={section.sources} onClick={open ? undefined : onToggle} />
+            </Box>
+          ) : null}
+          <Collapse in={open} id={`${sectorAnchor(baseKey)}-body`} role="region" aria-labelledby={headerId}>
+            <Box sx={{ pt: 1.5 }}>
+              {sub ? <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1.5 }}>{sub}</Typography> : null}
+              {children}
+            </Box>
+          </Collapse>
+        </Box>
+      </Stack>
     </SectionPaper>
   );
 }
@@ -182,22 +212,38 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
   const canManageGateway = auth?.tenantMember?.isActive === true && Boolean(src.permissions?.has("crypto_discovery") || src.permissions?.has("patch_management"));
   const [snack, setSnack] = React.useState(null);
   const notify = React.useCallback((severity, message) => setSnack({ severity, message }), []);
-  const mapData = React.useMemo(
-    () => ({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp, gateways, vcenterSources: src.vcenterSources }),
+  const sections = React.useMemo(
+    () => sourcesByBase({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp, gateways, vcenterSources: src.vcenterSources }),
     [src.facets, src.assets, src.connectors, src.adcs, src.cdp, src.vcenterSources, gateways]
   );
+  const sectionOf = (key) => sections.find((b) => b.key === key);
+
+  // Plegado por sección. Al terminar la primera carga se abren solas las
+  // que tengan algo fallando: es lo que hay que mirar. Lo demás, a un clic.
+  const [open, setOpen] = React.useState(() => new Set());
+  const [seeded, setSeeded] = React.useState(false);
+  React.useEffect(() => {
+    if (src.loading || seeded) return;
+    setSeeded(true);
+    setOpen(new Set(sections.filter((b) => b.sources.some((x) => x.state === "failed")).map((b) => b.key)));
+  }, [src.loading, seeded, sections]);
+  const toggle = (key) => () =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const sectorProps = (key) => ({ baseKey: key, section: sectionOf(key), open: open.has(key), onToggle: toggle(key) });
 
   return (
     <Stack spacing={2}>
-      <SectionPaper>
-        <SectionTitle sub="The same sectors as the Dashboard sunburst, inside out. Each source is reporting, configured but silent, failing, or not connected; click one to jump to where it is set up.">
-          Sources
-        </SectionTitle>
-        {src.errors.length > 0 ? <Alert severity="warning" sx={{ mb: 1 }}>Some of this could not be loaded: {src.errors.join(" · ")}</Alert> : null}
-        <CdpSourcesMap data={mapData} loading={src.loading} />
-      </SectionPaper>
+      {src.errors.length > 0 ? <Alert severity="warning">Some of this could not be loaded: {src.errors.join(" · ")}</Alert> : null}
+      <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
+        The same sectors as the Dashboard sunburst, inside out. Each source is reporting, configured but silent, failing, or not connected; open a sector to set it up.
+      </Typography>
 
-      <Sector baseKey="onprem" sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
+      <Sector {...sectorProps("onprem")} sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
         <Button component="a" href="?page=policies" size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}>
           Open Policies → Crypto Discovery
         </Button>
@@ -209,11 +255,11 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         <CbomImportForm onImported={changed} />
       </Sector>
 
-      <Sector baseKey="adcs" sub="Part of On-prem, as its own group: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
+      <Sector {...sectorProps("adcs")} sub="Part of On-prem, as its own group: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
         <AdcsReaders sources={src.adcs} caHosts={caHosts} />
       </Sector>
 
-      <Sector baseKey="infra" sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and vCenter with its ESXi hosts.">
+      <Sector {...sectorProps("infra")} sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and vCenter with its ESXi hosts.">
         <CdpRemoteProbes refreshNonce={refreshNonce} />
         <Divider />
         <CdpConnectorsPanel
@@ -244,7 +290,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         </Typography>
       </Sector>
 
-      <Sector baseKey="cloud" sub="What is exposed on the internet or lives in a cloud provider: your public domains (from Certificate Transparency logs, no credentials), AWS Certificate Manager and Google Cloud.">
+      <Sector {...sectorProps("cloud")} sub="What is exposed on the internet or lives in a cloud provider: your public domains (from Certificate Transparency logs, no credentials), AWS Certificate Manager and Google Cloud.">
         {src.connectors ? <CdpPublicDomains connectors={src.connectors.connectors ?? []} onChanged={changed} /> : null}
         <Divider />
         <CdpConnectorsPanel
@@ -259,7 +305,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         />
       </Sector>
 
-      <Sector baseKey="external" sub="Vaults that hold or issue keys for your systems: Azure Key Vault and HashiCorp Vault PKI. Read-only; the keys stay where they are.">
+      <Sector {...sectorProps("external")} sub="Vaults that hold or issue keys for your systems: Azure Key Vault and HashiCorp Vault PKI. Read-only; the keys stay where they are.">
         <CdpConnectorsPanel
           embedded
           kinds={CONNECTOR_KINDS_BY_BASE.external}
