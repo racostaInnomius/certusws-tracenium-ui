@@ -203,7 +203,10 @@ describe("Assessment Suite — detalle", () => {
     expect(screen.getByText("Fix the 2 critical and high findings")).toBeTruthy();
     // Sólo la proyección que llega al objetivo lo dice.
     expect(screen.getAllByText(/reaches target/)).toHaveLength(1);
-    expect(screen.getByText(/Based on 29 of 30 checks/)).toBeTruthy();
+    // Hallazgos abiertos y cobertura viven en el mismo panel que el gauge.
+    expect(screen.getByText("29 of 30")).toBeTruthy();
+    expect(screen.getByText(/left out of the score, never counted as passing/)).toBeTruthy();
+    expect(screen.getByText("Open findings")).toBeTruthy();
   });
 
   it("⭐ Set target guarda el objetivo de la instancia", async () => {

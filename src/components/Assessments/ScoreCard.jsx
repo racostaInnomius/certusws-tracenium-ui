@@ -8,6 +8,7 @@
 //   · lo que subiría el score arreglando los críticos (y los altos). Lo calcula
 //     el backend con la misma fórmula que la corrida, así que el número que se
 //     promete es el que daría la corrida siguiente;
+//   · hallazgos abiertos y cobertura, en la misma rejilla;
 //   · si la cobertura no es completa, que el score sale de menos indicadores.
 //
 // El objetivo es de la instancia. Sin objetivo propio se usa el umbral On
@@ -20,6 +21,7 @@ import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
 import TrendingFlatRoundedIcon from "@mui/icons-material/TrendingFlatRounded";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { scoreBandLabel, scoreBandTextRole } from "../../theme/scoreBands";
+import { SEVERITY_META } from "../../theme/severity";
 import { formatDate } from "../../utils/format";
 import { setAssessmentTarget } from "../../api/assessments";
 import SectionPaper from "../common/SectionPaper";
@@ -98,7 +100,16 @@ function TargetDialog({ open, instance, bands, onClose, onSaved }) {
   );
 }
 
-export default function ScoreCard({ detail, bands, canEdit, onChanged }) {
+function Tile({ label, children, sx }) {
+  return (
+    <Box sx={{ p: 1.5, borderRadius: 2, border: `1px solid ${BRAND.border}`, bgcolor: BRAND.surfaceMuted, minWidth: 0, ...sx }}>
+      <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase", mb: 0.5 }}>{label}</Typography>
+      {children}
+    </Box>
+  );
+}
+
+export default function ScoreCard({ detail, bands, open, canEdit, onChanged }) {
   const [editing, setEditing] = React.useState(false);
   const inst = detail.instance;
   const score = Number.isFinite(detail.lastScore?.score) ? detail.lastScore.score : null;
@@ -112,7 +123,7 @@ export default function ScoreCard({ detail, bands, canEdit, onChanged }) {
   const deltaColor = !delta || delta.delta === 0 ? TEXT_MUTED : delta.delta > 0 ? BRAND.alert.successText : BRAND.alert.errorText;
 
   return (
-    <SectionPaper>
+    <SectionPaper sx={{ mb: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
         <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase" }}>Score</Typography>
         {canEdit ? (
@@ -122,63 +133,94 @@ export default function ScoreCard({ detail, bands, canEdit, onChanged }) {
         ) : null}
       </Stack>
 
-      <Box sx={{ mt: 1 }}>
-        <ScoreGauge score={score} target={target.value} bands={bands} />
-      </Box>
+      {/* Gauge a la izquierda; a la derecha, las lecturas en una rejilla que
+          ocupa el ancho (antes todo iba centrado en una columna y sobraba medio
+          tablero). En móvil, una columna. */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "minmax(260px, 380px) minmax(0, 1fr)" },
+          gap: { xs: 2, md: 3 },
+          alignItems: "center",
+          mt: 1,
+        }}
+      >
+        <Box>
+          <ScoreGauge score={score} target={target.value} bands={bands} />
+          <Box sx={{ textAlign: "center", mt: 0.5 }}>
+            <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: scoreBandTextRole(score, bands) ?? TEXT_MUTED }}>
+              {scoreBandLabel(score, bands)}
+            </Typography>
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+              {detail.lastScore?.scoredAt ? `Scored ${formatDate(detail.lastScore.scoredAt)}` : "No complete run yet"}
+            </Typography>
+          </Box>
+        </Box>
 
-      <Box sx={{ textAlign: "center", mt: 0.5 }}>
-        <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: scoreBandTextRole(score, bands) ?? TEXT_MUTED }}>
-          {scoreBandLabel(score, bands)}
-        </Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-          {detail.lastScore?.scoredAt ? `Scored ${formatDate(detail.lastScore.scoredAt)}` : "No complete run yet"}
-        </Typography>
-      </Box>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" }, gap: 1.5 }}>
+          <Tile label="vs. previous">
+            {delta ? (
+              <>
+                <Stack direction="row" alignItems="center" gap={0.5} sx={{ color: deltaColor }}>
+                  {DeltaIcon ? <DeltaIcon sx={{ fontSize: ICON.xl }} /> : null}
+                  <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: "inherit", lineHeight: 1.2 }}>
+                    {delta.delta > 0 ? `+${delta.delta}` : delta.delta}
+                  </Typography>
+                </Stack>
+                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>from {delta.previousScore} on {formatDate(delta.previousAt)}</Typography>
+              </>
+            ) : (
+              <>
+                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: TEXT_MUTED, lineHeight: 1.5 }}>First scored run</Typography>
+                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>The next run shows the change</Typography>
+              </>
+            )}
+          </Tile>
 
-      <Stack direction="row" justifyContent="center" gap={2} flexWrap="wrap" sx={{ mt: 1.5 }}>
-        <Box sx={{ textAlign: "center" }}>
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", textTransform: "uppercase", fontWeight: 700 }}>vs. previous</Typography>
-          {delta ? (
-            <Stack direction="row" alignItems="center" justifyContent="center" gap={0.5} sx={{ color: deltaColor }}>
-              {DeltaIcon ? <DeltaIcon sx={{ fontSize: ICON.lg }} /> : null}
-              <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: "inherit" }}>
-                {delta.delta > 0 ? `+${delta.delta}` : delta.delta}
-              </Typography>
+          <Tile label={`Target ${target.value}`}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, lineHeight: 1.5, color: score !== null && score >= target.value ? BRAND.alert.successText : BRAND.dark }}>
+              {targetGapText(score, target.value)}
+            </Typography>
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{target.source === "instance" ? "Set for this domain" : "Tenant On track threshold"}</Typography>
+          </Tile>
+
+          <Tile label="Open findings">
+            <Stack direction="row" gap={1.5} flexWrap="wrap">
+              {["critical", "high", "medium", "low"].map((sev) => (
+                <Box key={sev}>
+                  <Typography sx={{ fontSize: TEXT.xl, fontWeight: 800, color: SEVERITY_META[sev].fg, lineHeight: 1.2 }}>{open?.[sev] ?? 0}</Typography>
+                  <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{SEVERITY_META[sev].label}</Typography>
+                </Box>
+              ))}
             </Stack>
-          ) : (
-            <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>First scored run</Typography>
-          )}
-          {delta ? <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>from {delta.previousScore} on {formatDate(delta.previousAt)}</Typography> : null}
-        </Box>
-        <Box sx={{ textAlign: "center" }}>
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", textTransform: "uppercase", fontWeight: 700 }}>Target {target.value}</Typography>
-          <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: score !== null && score >= target.value ? BRAND.alert.successText : BRAND.dark }}>
-            {targetGapText(score, target.value)}
-          </Typography>
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{target.source === "instance" ? "Set for this domain" : "Tenant On track threshold"}</Typography>
-        </Box>
-      </Stack>
+          </Tile>
 
-      {projections.length > 0 ? (
-        <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
-          <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase", mb: 0.5 }}>What would move it</Typography>
-          {projections.map((p) => (
-            <Stack key={p.severities.join("+")} direction="row" justifyContent="space-between" alignItems="baseline" gap={1}>
-              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>{projectionLabel(p)}</Typography>
-              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, whiteSpace: "nowrap" }}>
-                → {p.score}
-                {p.score >= target.value ? <Box component="span" sx={{ fontWeight: 600, color: BRAND.alert.successText }}> · reaches target</Box> : null}
-              </Typography>
-            </Stack>
-          ))}
-        </Box>
-      ) : null}
+          <Tile label="Coverage">
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, lineHeight: 1.5 }}>
+              {coverage && Number.isFinite(coverage.total) && coverage.total > 0 ? `${coverage.assessable} of ${coverage.total}` : "—"}
+            </Typography>
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+              {partial ? "Unreadable checks are left out of the score, never counted as passing" : "Checks assessable from this collector"}
+            </Typography>
+          </Tile>
 
-      {partial ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 1.5 }}>
-          Based on {coverage.assessable} of {coverage.total} checks. Checks that could not be assessed are left out of the score, not counted as passing.
-        </Typography>
-      ) : null}
+          {projections.length > 0 ? (
+            <Tile label="What would move it" sx={{ gridColumn: "1 / -1" }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, columnGap: 3, rowGap: 0.5 }}>
+                {projections.map((p) => (
+                  <Stack key={p.severities.join("+")} direction="row" justifyContent="space-between" alignItems="baseline" gap={1}>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>{projectionLabel(p)}</Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, whiteSpace: "nowrap" }}>
+                      → {p.score}
+                      {p.score >= target.value ? <Box component="span" sx={{ fontWeight: 600, color: BRAND.alert.successText }}> · reaches target</Box> : null}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Box>
+            </Tile>
+          ) : null}
+        </Box>
+      </Box>
 
       <TargetDialog
         open={editing}

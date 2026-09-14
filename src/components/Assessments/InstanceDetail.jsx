@@ -230,29 +230,7 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
         </Alert>
       ) : null}
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1.4fr) minmax(0, 1fr)" }, gap: 2, mb: 2, alignItems: "start" }}>
-        <ScoreCard detail={detail} bands={bands} canEdit={canEdit} onChanged={onChanged} />
-        <Stack gap={2}>
-        <SectionPaper>
-          <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase" }}>Open findings</Typography>
-          <Stack direction="row" gap={1.5} sx={{ mt: 1 }} flexWrap="wrap">
-            {["critical", "high", "medium", "low"].map((s) => (
-              <Box key={s}>
-                <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: SEVERITY_META[s].fg }}>{open[s]}</Typography>
-                <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{SEVERITY_META[s].label}</Typography>
-              </Box>
-            ))}
-          </Stack>
-        </SectionPaper>
-        <SectionPaper>
-          <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase" }}>Coverage</Typography>
-          <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: BRAND.dark, mt: 1 }}>{coverageText(detail.coverage)}</Typography>
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-            Checks the machine account cannot read are shown as not assessed, never as passing.
-          </Typography>
-        </SectionPaper>
-        </Stack>
-      </Box>
+      <ScoreCard detail={detail} bands={bands} open={open} canEdit={canEdit} onChanged={onChanged} />
 
       {history.length > 1 ? (
         <SectionPaper sx={{ mb: 2 }}>

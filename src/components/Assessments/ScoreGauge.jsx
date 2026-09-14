@@ -7,7 +7,9 @@
 //   · el arco lleno llega hasta el score, con el color de su banda;
 //   · una marca cruza el arco en el objetivo, con su número;
 //   · sin score (ninguna corrida completa) el arco queda vacío y el centro dice
-//     «—», nunca un 0 que parecería una nota.
+//     «—», nunca un 0 que parecería una nota;
+//   · al montar, el arco barre hasta el score y el número cuenta con él; la
+//     marca del objetivo aparece al final. Con reduced-motion, directo.
 //
 // SVG a mano y no Recharts: son tres arcos y una línea, y así la geometría se
 // prueba sin montar un gráfico.
@@ -16,6 +18,7 @@ import * as React from "react";
 import { BRAND, TEXT_MUTED } from "../../theme/brand";
 import { DEFAULT_BANDS, scoreBandRole, scoreBandSoftRole } from "../../theme/scoreBands";
 import { GAUGE, clampScore, gaugeArc, gaugePoint } from "./gaugeGeometry";
+import { canAnimate, useAnimatedNumber } from "../../hooks/useAnimatedNumber";
 
 const STROKE = GAUGE.stroke;
 const R = GAUGE.r;
@@ -24,6 +27,15 @@ const CY = GAUGE.cy;
 
 export default function ScoreGauge({ score, target, bands = DEFAULT_BANDS, size = 400 }) {
   const hasScore = Number.isFinite(score);
+  // El arco barre desde 0 (o desde el score anterior) y el número cuenta con
+  // él. El color es el de la banda FINAL: cambiar de rojo a ámbar a mitad del
+  // barrido parecería un segundo dato.
+  const shown = useAnimatedNumber(hasScore ? clampScore(score) : null);
+  const [targetVisible, setTargetVisible] = React.useState(() => !canAnimate());
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setTargetVisible(true), 0);
+    return () => window.clearTimeout(id);
+  }, []);
   const segments = [
     { from: 0, to: bands.warningMin, color: scoreBandSoftRole(0, bands) },
     { from: bands.warningMin, to: bands.goodMin, color: scoreBandSoftRole(bands.warningMin, bands) },
@@ -45,11 +57,11 @@ export default function ScoreGauge({ score, target, bands = DEFAULT_BANDS, size 
       {segments.map((s) => (
         <path key={s.from} d={gaugeArc(s.from, s.to)} fill="none" stroke={s.color} strokeWidth={STROKE} />
       ))}
-      {hasScore && score > 0 ? (
-        <path data-testid="gauge-value" d={gaugeArc(0, clampScore(score))} fill="none" stroke={scoreBandRole(score, bands)} strokeWidth={STROKE} />
+      {hasScore && shown > 0.05 ? (
+        <path data-testid="gauge-value" d={gaugeArc(0, shown)} fill="none" stroke={scoreBandRole(score, bands)} strokeWidth={STROKE} />
       ) : null}
       {hasTarget ? (
-        <g data-testid="gauge-target">
+        <g data-testid="gauge-target" style={{ opacity: targetVisible ? 1 : 0, transition: "opacity 400ms ease-out 500ms" }}>
           <line x1={tickIn.x} y1={tickIn.y} x2={tickOut.x} y2={tickOut.y} stroke={BRAND.dark} strokeWidth={3} strokeLinecap="round" />
           <text x={labelAt.x} y={labelAt.y} textAnchor={anchor} dominantBaseline="middle" fontSize="11" fontWeight="700" fill={BRAND.dark}>
             Target {target}
@@ -57,7 +69,7 @@ export default function ScoreGauge({ score, target, bands = DEFAULT_BANDS, size 
         </g>
       ) : null}
       <text x={CX} y={CY - 8} textAnchor="middle" fontSize="40" fontWeight="800" fill={BRAND.dark}>
-        {hasScore ? score : "—"}
+        {hasScore ? Math.round(shown) : "—"}
       </text>
       <text x={CX - R} y={CY + 16} textAnchor="middle" fontSize="10" fill={TEXT_MUTED}>0</text>
       <text x={CX + R} y={CY + 16} textAnchor="middle" fontSize="10" fill={TEXT_MUTED}>100</text>
