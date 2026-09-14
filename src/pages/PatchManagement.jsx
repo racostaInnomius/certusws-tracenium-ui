@@ -112,6 +112,16 @@ import OnlineDot from "../components/common/OnlineDot";
  */
 const OTHER_EXCLUDES = "crypto,cryptography,network_sharing";
 
+// Estilo de cada pestaña: el mismo que Assets.jsx y SecurityCompliance.jsx,
+// para que las páginas con pestañas se vean iguales.
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
+
 const CATEGORIES = [
   {
     key: "patches",
@@ -1425,31 +1435,25 @@ export default function PatchManagement({ onNavigate }) {
           contenido: las tarjetas de flota, «Start here» y la tabla de equipos
           viven DENTRO de Patches, no sueltas sobre toda la página, porque no
           dicen nada sobre third-party ni sobre vulnerabilidades. */}
-      <SectionPaper
-        variant="panel"
-        sx={{ p: 0, bgcolor: BRAND.surface, overflow: "hidden", mb: 2 }}
-      >
+      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
         <Tabs
           value={tab}
           onChange={(_e, next) => setTab(next)}
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile
+          // Mismo estilo que Asset Management y Security Compliance: fila limpia
+          // sobre el blanco del panel, 62 px, indicador redondeado. Antes era
+          // una barra tintada de 48 px con la pestaña activa en teal, y al
+          // pasar de una página a otra la navegación cambiaba de aspecto.
           sx={{
-            borderBottom: `1px solid ${BRAND.border}`,
-            bgcolor: BRAND.darkSoft,
-            "& .MuiTab-root": {
-              textTransform: "none",
-              fontWeight: 700,
-              color: BRAND.dark,
-              minHeight: 48,
-              px: 2,
-              outline: "none",
-              "&:focus": { outline: "none" },
-              "&.Mui-focusVisible": { backgroundColor: BRAND.cyanSoft },
+            px: { xs: 1, sm: 2 },
+            minHeight: 62,
+            "& .MuiTabs-indicator": {
+              height: 3,
+              borderRadius: 999,
+              backgroundColor: BRAND.teal,
             },
-            "& .Mui-selected": { color: `${BRAND.teal} !important` },
-            "& .MuiTabs-indicator": { backgroundColor: BRAND.teal, height: 3 },
           }}
         >
           {CATEGORIES.map((c) => (
@@ -1457,95 +1461,99 @@ export default function PatchManagement({ onNavigate }) {
               key={c.key}
               value={c.key}
               label={c.label}
-              icon={c.icon}
+              // Iconos pequeños, como en las otras dos páginas.
+              icon={React.cloneElement(c.icon, { fontSize: "small" })}
               iconPosition="start"
-              sx={{ gap: 0.75 }}
+              sx={TAB_SX}
             />
           ))}
         </Tabs>
+      </SectionPaper>
 
-        <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
-          {/* Patches tab keeps the legacy CategoryPanel — the
-              "documentation-of-actions + Run buttons" surface that
-              wires into bulkInstall / bulkScan. The other tabs are
-              the v2 surface: real findings + click-to-fix. */}
-          {tab === "patches" ? (
-            <Box>
-              {fleetTotals}
-              {startHere}
-              {devicesPanel}
-              {/* The v1 action catalog still runs the fleet-wide install and
-                  scan, so it stays until those have a home in the findings
-                  shape — dropping working buttons is not a refactor.
-                  Underneath it, the same `patching` findings every other
-                  domain now renders: this is where the KEV checks live
-                  (cross.vulnerability.no_kev), and without this they would be
-                  unreachable again the moment Security configuration stopped
-                  claiming them. */}
-              <CategoryPanel
-                category={activeCategory}
-                pmpEnabled={pmpEnabled}
-                onRunAction={handleRunCategoryAction}
-              />
-              <Box sx={{ mt: 3 }}>
-                <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, mb: 0.5 }}>
-                  Findings
-                </Typography>
-                <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
-                  Missing updates and exposed vulnerabilities, including the CISA
-                  KEV checks.
-                </Typography>
-                <FindingsPanel
-                  refreshNonce={refreshNonce}
-                  tabKey="patches"
-                  category={PATCHING_CATEGORY}
-                  openCheckId={pendingCheckId}
-                  onOpened={() => setPendingCheckId(null)}
-                  canManage={canManage}
-                  notify={notify}
-                />
-              </Box>
-            </Box>
-          ) : tab === "third-party" ? (
-            <ThirdPartyTab
-              refreshNonce={refreshNonce}
-              canManage={canManage}
-              notify={notify}
-            />
-          ) : tab === "vulnerabilities" ? (
-            <VulnerabilitiesTab
-              refreshNonce={refreshNonce}
-              canManage={canManage}
-              notify={notify}
-              openCveId={pendingCveId}
-              onOpened={() => setPendingCveId(null)}
-            />
-          ) : tab === "settings" ? (
-            <ConfigurePanel
-              canManage={canManage}
-              devices={devices}
-              section={configSection}
-              onSectionChange={setConfigSection}
-              notify={notify}
-            />
-          ) : tab === "security" ? (
-            <SecurityConfigPanel
-              refreshNonce={refreshNonce}
-              canManage={canManage}
-              openCheckId={pendingCheckId}
-              onOpened={() => setPendingCheckId(null)}
-              domain={securityDomain}
-              onDomainChange={setSecurityDomain}
-              notify={notify}
-            />
-          ) : (
+      {/* El contenido de la pestaña, en su propio panel debajo — el mismo
+          reparto que Security Compliance: la navegación no comparte caja con
+          lo que navega. */}
+      <SectionPaper variant="panel" sx={{ mb: 2 }}>
+        {/* Patches tab keeps the legacy CategoryPanel — the
+            "documentation-of-actions + Run buttons" surface that
+            wires into bulkInstall / bulkScan. The other tabs are
+            the v2 surface: real findings + click-to-fix. */}
+        {tab === "patches" ? (
+          <Box>
+            {fleetTotals}
+            {startHere}
+            {devicesPanel}
+            {/* The v1 action catalog still runs the fleet-wide install and
+                scan, so it stays until those have a home in the findings
+                shape — dropping working buttons is not a refactor.
+                Underneath it, the same `patching` findings every other
+                domain now renders: this is where the KEV checks live
+                (cross.vulnerability.no_kev), and without this they would be
+                unreachable again the moment Security configuration stopped
+                claiming them. */}
             <CategoryPanel
               category={activeCategory}
               pmpEnabled={pmpEnabled}
               onRunAction={handleRunCategoryAction}
             />
-          )}
-        </Box>
+            <Box sx={{ mt: 3 }}>
+              <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, mb: 0.5 }}>
+                Findings
+              </Typography>
+              <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1.5 }}>
+                Missing updates and exposed vulnerabilities, including the CISA
+                KEV checks.
+              </Typography>
+              <FindingsPanel
+                refreshNonce={refreshNonce}
+                tabKey="patches"
+                category={PATCHING_CATEGORY}
+                openCheckId={pendingCheckId}
+                onOpened={() => setPendingCheckId(null)}
+                canManage={canManage}
+                notify={notify}
+              />
+            </Box>
+          </Box>
+        ) : tab === "third-party" ? (
+          <ThirdPartyTab
+            refreshNonce={refreshNonce}
+            canManage={canManage}
+            notify={notify}
+          />
+        ) : tab === "vulnerabilities" ? (
+          <VulnerabilitiesTab
+            refreshNonce={refreshNonce}
+            canManage={canManage}
+            notify={notify}
+            openCveId={pendingCveId}
+            onOpened={() => setPendingCveId(null)}
+          />
+        ) : tab === "settings" ? (
+          <ConfigurePanel
+            canManage={canManage}
+            devices={devices}
+            section={configSection}
+            onSectionChange={setConfigSection}
+            notify={notify}
+          />
+        ) : tab === "security" ? (
+          <SecurityConfigPanel
+            refreshNonce={refreshNonce}
+            canManage={canManage}
+            openCheckId={pendingCheckId}
+            onOpened={() => setPendingCheckId(null)}
+            domain={securityDomain}
+            onDomainChange={setSecurityDomain}
+            notify={notify}
+          />
+        ) : (
+          <CategoryPanel
+            category={activeCategory}
+            pmpEnabled={pmpEnabled}
+            onRunAction={handleRunCategoryAction}
+          />
+        )}
       </SectionPaper>
 
       {/* Per-device drill-down drawer. Opened when the operator clicks
