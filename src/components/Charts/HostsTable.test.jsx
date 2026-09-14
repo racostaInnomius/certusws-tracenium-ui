@@ -7,6 +7,10 @@
 // the page (AssetsDashboard.jsx) can carry the device id over as a
 // `?highlightAgentId=` deep link. Menu contents, not navigation itself:
 // AssetsDashboard.jsx owns building the actual URL/onNavigate call.
+//
+// Delete and the row checkbox only exist with `canDecommission`: the backend
+// gates decommission on the `device_management` capability, and a button a
+// role can see but not use just ends in a 403. Default is hidden.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
@@ -28,9 +32,28 @@ function row(over = {}) {
   };
 }
 
-describe("Delete (unchanged behavior)", () => {
-  it("is disabled until the row is checked", () => {
+describe("without canDecommission", () => {
+  it("renders no Delete button and no row checkbox", () => {
+    render(<HostsTable rows={[row()]} selectedForDecommissionIds={new Set(["agent-1"])} />);
+    expect(screen.queryByRole("button", { name: /^Delete$/ })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("keeps the More actions menu — it is navigation, not decommission", () => {
     render(<HostsTable rows={[row()]} />);
+    expect(screen.getByRole("button", { name: /More actions for this device/i })).toBeEnabled();
+  });
+
+  it("keeps the empty-state row spanning every remaining column", () => {
+    const { container } = render(<HostsTable rows={[]} />);
+    const headerCells = container.querySelectorAll("thead th").length;
+    expect(screen.getByText("No hosts found.").closest("td").getAttribute("colspan")).toBe(String(headerCells));
+  });
+});
+
+describe("Delete (with canDecommission)", () => {
+  it("is disabled until the row is checked", () => {
+    render(<HostsTable rows={[row()]} canDecommission />);
     expect(screen.getByRole("button", { name: /^Delete$/ })).toBeDisabled();
   });
 
@@ -39,12 +62,19 @@ describe("Delete (unchanged behavior)", () => {
     render(
       <HostsTable
         rows={[row()]}
+        canDecommission
         selectedForDecommissionIds={new Set(["agent-1"])}
         onDeleteDevice={onDeleteDevice}
       />
     );
     await userEvent.click(screen.getByRole("button", { name: /^Delete$/ }));
     expect(onDeleteDevice).toHaveBeenCalledWith(expect.objectContaining({ agentId: "agent-1" }));
+  });
+
+  it("keeps the empty-state row spanning every column, checkbox included", () => {
+    const { container } = render(<HostsTable rows={[]} canDecommission />);
+    const headerCells = container.querySelectorAll("thead th").length;
+    expect(screen.getByText("No hosts found.").closest("td").getAttribute("colspan")).toBe(String(headerCells));
   });
 });
 

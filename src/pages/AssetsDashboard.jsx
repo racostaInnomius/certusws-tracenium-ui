@@ -338,6 +338,10 @@ export default function AssetsDashboard({
 
   const capabilitiesLoading = myPermissions === null;
   const canViewAssets = Boolean(myPermissions?.has("assets_view"));
+  // Dar de baja exige `device_management` en el backend
+  // (POST /devices/:id/decommission-jobs). Con sólo `assets_view` —USER— el
+  // botón salía y acababa en 403. Mientras cargan las capacidades, oculto.
+  const canDecommission = Boolean(myPermissions?.has("device_management"));
 
   // Set<agent_id> of devices currently connected (has an active
   // gRPC session in the last heartbeat window). Drives the "Online
@@ -1888,6 +1892,7 @@ const osVersionItems = React.useMemo(() => {
                   rows={filteredHosts}
                   connectedIds={connectedIds}
                   selectedAgentId={selectedAgent?.agent_id || selectedAgent?.agentId}
+                  canDecommission={canDecommission}
                   selectedForDecommissionIds={selectedHostIdsForDecommission}
                   decommissionJobs={deviceDecommissionJobs}
                   decommissionFadingIds={decommissionFadingDeviceIds}

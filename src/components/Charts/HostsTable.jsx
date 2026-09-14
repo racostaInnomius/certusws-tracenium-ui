@@ -212,7 +212,11 @@ function DecommissionStatusChip({ job, row }) {
 // action performed here, so there's nothing about this row's state that
 // should block getting to that page (the destination page is the one
 // that gates what you can do once you're there).
-function RowActions({ row, canDelete, rowLocked, checked, onDeleteDevice, onOpenInPage }) {
+//
+// Without `canDecommission` the Delete half is not rendered at all and the
+// caret stands alone: the backend requires `device_management` to decommission,
+// so a Delete a role cannot use would only end in a 403.
+function RowActions({ row, canDecommission, canDelete, rowLocked, checked, onDeleteDevice, onOpenInPage }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
 
   const tone = canDelete
@@ -227,27 +231,29 @@ function RowActions({ row, canDelete, rowLocked, checked, onDeleteDevice, onOpen
         color="error"
         sx={{ borderRadius: 1.5 }}
       >
-        <Tooltip
-          title={
-            rowLocked
-              ? "Device decommission is in progress. Status is shown on this row."
-              : checked
-              ? "Create a device decommission job."
-              : "Select the checkbox to enable delete."
-          }
-          arrow
-        >
-          <span>
-            <Button
-              disabled={!canDelete}
-              startIcon={<DeleteOutlineRoundedIcon />}
-              onClick={() => onDeleteDevice?.(row)}
-              sx={{ minWidth: 96, textTransform: "none", fontWeight: 800, ...tone }}
-            >
-              Delete
-            </Button>
-          </span>
-        </Tooltip>
+        {canDecommission ? (
+          <Tooltip
+            title={
+              rowLocked
+                ? "Device decommission is in progress. Status is shown on this row."
+                : checked
+                ? "Create a device decommission job."
+                : "Select the checkbox to enable delete."
+            }
+            arrow
+          >
+            <span>
+              <Button
+                disabled={!canDelete}
+                startIcon={<DeleteOutlineRoundedIcon />}
+                onClick={() => onDeleteDevice?.(row)}
+                sx={{ minWidth: 96, textTransform: "none", fontWeight: 800, ...tone }}
+              >
+                Delete
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null}
         <Tooltip title="Go to this device in another page" arrow>
           <Button
             aria-label="More actions for this device"
@@ -302,6 +308,8 @@ export default function HostsTable({
   rows = [],
   connectedIds = new Set(),
   selectedAgentId = "",
+  // Delete + row checkbox. Off unless the caller holds `device_management`.
+  canDecommission = false,
   selectedForDecommissionIds = new Set(),
   decommissionJobs = {},
   decommissionFadingIds = new Set(),
@@ -345,7 +353,7 @@ export default function HostsTable({
         <Table stickyHeader size="small" aria-label="hosts table">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 700, width: 48 }} />
+              {canDecommission ? <TableCell sx={{ fontWeight: 700, width: 48 }} /> : null}
               <TableCell sx={{ fontWeight: 700, width: 60 }}>Online</TableCell>
               <SortableHeadCell
                 field="hostname"
@@ -407,7 +415,7 @@ export default function HostsTable({
               const jobFailed = isJobTerminalFailure(job);
               const rowLocked = lifecycleLocked || jobActive || jobSuccess;
               const checked = selectedForDecommissionIds?.has?.(String(agentId)) === true;
-              const canDelete = checked && !rowLocked;
+              const canDelete = canDecommission && checked && !rowLocked;
               const isFadingAfterCompletion =
                 decommissionFadingIds?.has?.(String(agentId)) === true;
 
@@ -434,30 +442,32 @@ export default function HostsTable({
                     "& > td": { borderBottom: `1px solid ${BRAND.border}` },
                   }}
                 >
-                  <TableCell onClick={(event) => event.stopPropagation()}>
-                    <Tooltip
-                      title={
-                        rowLocked
-                          ? "This device is already in a decommission lifecycle state."
-                          : "Select this row to enable device delete."
-                      }
-                      arrow
-                    >
-                      <span>
-                        <Checkbox
-                          size="small"
-                          checked={checked}
-                          disabled={rowLocked}
-                          onChange={() => onToggleDecommissionSelection?.(r)}
-                          sx={{
-                            p: 0.5,
-                            color: BRAND.gray,
-                            "&.Mui-checked": { color: BRAND.teal },
-                          }}
-                        />
-                      </span>
-                    </Tooltip>
-                  </TableCell>
+                  {canDecommission ? (
+                    <TableCell onClick={(event) => event.stopPropagation()}>
+                      <Tooltip
+                        title={
+                          rowLocked
+                            ? "This device is already in a decommission lifecycle state."
+                            : "Select this row to enable device delete."
+                        }
+                        arrow
+                      >
+                        <span>
+                          <Checkbox
+                            size="small"
+                            checked={checked}
+                            disabled={rowLocked}
+                            onChange={() => onToggleDecommissionSelection?.(r)}
+                            sx={{
+                              p: 0.5,
+                              color: BRAND.gray,
+                              "&.Mui-checked": { color: BRAND.teal },
+                            }}
+                          />
+                        </span>
+                      </Tooltip>
+                    </TableCell>
+                  ) : null}
                   <TableCell>
                     <OnlineDot online={online} />
                   </TableCell>
@@ -561,6 +571,7 @@ export default function HostsTable({
                   <TableCell align="right" onClick={(event) => event.stopPropagation()}>
                     <RowActions
                       row={r}
+                      canDecommission={canDecommission}
                       canDelete={canDelete}
                       rowLocked={rowLocked}
                       checked={checked}
@@ -574,7 +585,7 @@ export default function HostsTable({
 
             {rows.length === 0 && !loading ? (
               <TableRow>
-                <TableCell colSpan={9} sx={{ color: "text.secondary", py: 4 }}>
+                <TableCell colSpan={canDecommission ? 9 : 8} sx={{ color: "text.secondary", py: 4 }}>
                   No hosts found.
                 </TableCell>
               </TableRow>
