@@ -50,7 +50,7 @@ const LEGEND = {
 };
 
 const RINGS = {
-  keys: "Base → the store, keystore, vault or CA holding the key → its algorithm and size.",
+  keys: "Base → the store, keystore, vault, cluster or CA holding or certifying the key → its algorithm and size.",
   services: "Base → the process, target, cluster, account or CA that serves it → the key exchange it negotiated, or the keys it holds.",
   certs: "Base → the source the certificate came from → key algorithm and size."
 };
@@ -181,7 +181,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
     const rows = data[mode];
     if (!rows) return null;
     if (mode === "certs") return buildCertificatesTree(rows, outside, outsideByAlgorithm);
-    if (mode === "keys") return buildKeysTree(rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys });
+    if (mode === "keys") return buildKeysTree(rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys, outsideBySource: outside, outsideByAlgorithm });
     return buildServicesTree(rows);
   }, [data, mode, outside, outsideByAlgorithm, overview, sshHostKeys]);
   const layout = React.useMemo(() => (tree ? layoutSunburst(tree) : null), [tree]);

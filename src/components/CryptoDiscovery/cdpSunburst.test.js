@@ -67,6 +67,20 @@ describe("buildCertificatesTree — fuera de los equipos por algoritmo", () => {
 });
 
 describe("buildKeysTree", () => {
+  it("⭐ la CA aparece en el anillo de almacenes de On-prem (al final, como grupo) con los algoritmos que certificó; vaults y clusters en su base; CT no (no guarda claves)", () => {
+    const tree = buildKeysTree([facet("own_leaf", "store", "RSA", 2048, 146, { store_name: "LocalMachine\\My" })], {
+      sshHostKeys: 13,
+      outsideBySource: [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }, { sourceName: "keyvault:kv-prod", origin: "keyvault", certificates: 120 }, { sourceName: "ct:tracenium.com", origin: "ct", certificates: 8 }, { sourceName: "k8s:prod", origin: "k8s", certificates: 57 }],
+      outsideByAlgorithm: [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 27 }]
+    });
+    const onprem = tree[0];
+    expect(onprem.children.map((c) => [c.name, c.group ?? "agent"])).toEqual([["LocalMachine\\My", "agent"], ["SSH host keys", "agent"], ["CA · MSIG-RADIUS-CA", "adcs"]]);
+    expect(onprem.children[2].children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 27, "broken"]]);
+    expect(tree.find((b) => b.key === "external").children[0].name).toBe("Azure Key Vault");
+    expect(tree.find((b) => b.key === "infra").children[0].name).toBe("Kubernetes");
+    expect(tree.find((b) => b.key === "cloud").children).toEqual([]);
+  });
+
   it("agrupa por almacén sin el SID del usuario y añade huérfanas y SSH sólo si hay", () => {
     const tree = buildKeysTree(
       [facet("own_leaf", "store", "RSA", 2048, 146, { store_name: "LocalMachine\\My" }), facet("own_leaf", "store", "RSA", 2048, 1, { store_name: "CurrentUser\\My (S-1-5-21-1)" })],

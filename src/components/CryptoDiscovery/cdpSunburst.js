@@ -176,6 +176,33 @@ function finish(bases) {
 }
 
 /**
+ * Los activos de fuera de los equipos (exposure.outside): un gajo por
+ * fuente en su base, con desglose por algoritmo cuando el servidor lo da
+ * (`byAlgorithm`, 14-sep) y una sola hoja si no. `skip` = orígenes que no
+ * pintan en esta vista; `leafName` = nombre de la hoja sin desglose.
+ */
+function addOutside(bases, outsideBySource, outsideByAlgorithm, { skip, leafName }) {
+  const detailed = new Set((outsideByAlgorithm ?? []).map((a) => a.sourceName));
+  for (const a of outsideByAlgorithm ?? []) {
+    const origin = a.origin ?? originOfSourceName(a.sourceName);
+    if (skip.has(origin)) continue;
+    const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
+    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
+      source: { note: a.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
+      leaf: { s: st }
+    });
+  }
+  for (const s of outsideBySource ?? []) {
+    const origin = s.origin ?? originOfSourceName(s.sourceName);
+    if (skip.has(origin) || detailed.has(s.sourceName)) continue;
+    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), leafName, leafName, Number(s.certificates ?? 0), {
+      source: { note: s.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
+      leaf: { s: "broken" }
+    });
+  }
+}
+
+/**
  * Vista «Certificates»: facetas by=ownership,source,key_algorithm con
  * stack=key_size_bits (certificados únicos por celda), más los activos de
  * fuera de los equipos (exposure.outside.bySource, sin desglose de
@@ -201,35 +228,23 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
         : { s: statusOfAlgorithm(algo), drill: { source, keyAlgorithm: algo, keySizeBits: bits } }
     });
   }
-  // Fuera de los equipos: con desglose por algoritmo cuando el servidor lo
-  // da (exposure.outside.byAlgorithm, 14-sep); si no, una hoja por origen.
-  const detailed = new Set((outsideByAlgorithm ?? []).map((a) => a.sourceName));
-  for (const a of outsideByAlgorithm ?? []) {
-    const origin = a.origin ?? originOfSourceName(a.sourceName);
-    if (origin === "ssh") continue;
-    const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
-    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
-      source: { note: a.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
-      leaf: { s: st }
-    });
-  }
-  for (const s of outsideBySource ?? []) {
-    const origin = s.origin ?? originOfSourceName(s.sourceName);
-    if (origin === "ssh" || detailed.has(s.sourceName)) continue; // claves, no certificados / ya desglosado
-    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), "certificates", "certificates", Number(s.certificates ?? 0), {
-      source: { note: s.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
-      leaf: { s: "broken" }
-    });
-  }
+  addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: new Set(["ssh"]), leafName: "certificates" });
   return finish(bases);
 }
 
 /**
  * Vista «Keys»: facetas by=source,store_name,key_algorithm con
- * stack=key_size_bits y hasPrivateKey=true, más claves huérfanas y claves
- * de host SSH (activos con origen ssh).
+ * stack=key_size_bits y hasPrivateKey=true, más claves huérfanas, claves de
+ * host SSH (activos con origen ssh) y las fuentes de FUERA que guardan o
+ * certifican claves: la CA de Windows (grupo de On-prem: las claves que
+ * certificó viven en los solicitantes, pero es la CA quien las emitió con
+ * ese algoritmo — pedido del usuario, 14-sep), los vaults, los clusters,
+ * ACM/GCP y los hosts de vCenter. Los dominios públicos (CT) no: ahí solo
+ * hay certificados, ninguna clave.
  */
-export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0 } = {}) {
+const KEYLESS_ORIGINS = new Set(["ssh", "ct"]);
+
+export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outsideBySource = [], outsideByAlgorithm = [] } = {}) {
   const bases = skeleton();
   for (const r of facetRows ?? []) {
     const source = r.keys?.source ?? "store";
@@ -243,6 +258,7 @@ export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0 } = {
   }
   addLeaf(bases, "onprem", "orphan", "Orphan keys", "keys", "keys", Number(orphanKeys), { leaf: { s: "broken" } });
   addLeaf(bases, "onprem", "ssh", "SSH host keys", "keys", "keys", Number(sshHostKeys), { leaf: { s: "broken" } });
+  addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: KEYLESS_ORIGINS, leafName: "keys" });
   return finish(bases);
 }
 
