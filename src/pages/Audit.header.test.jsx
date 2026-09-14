@@ -129,3 +129,16 @@ describe("Audit — el refresco sale a la red", () => {
     expect(await screen.findByLabelText(/auto refresh/i)).toBeTruthy();
   });
 });
+
+describe("Audit — chips rápidos sin eventos", () => {
+  // Deshabilitado (sin eventos de esa categoría) no hay `meta`, y el fallback
+  // `${BRAND.border}55` pegaba el sufijo a un rgba(): borde inválido, descartado.
+  it("un chip deshabilitado conserva un borde válido", async () => {
+    mount();
+    const chip = (await screen.findByText("Policies")).closest(".MuiChip-root");
+    const style = getComputedStyle(chip);
+    // borderColor solo no basta: sin borde, jsdom devuelve currentColor (gris).
+    expect(style.borderStyle).toBe("solid");
+    expect(style.borderWidth).toBe("1px");
+  });
+});

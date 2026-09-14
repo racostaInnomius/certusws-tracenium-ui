@@ -252,3 +252,16 @@ describe("Esc en modo control", () => {
     expect(peers[0].dc.sent.some((m) => m.includes("releaseAll"))).toBe(true);
   });
 });
+
+describe("chip de RTT", () => {
+  // Antes de la primera medida `rttColor` devolvía `ROLE.gray`, que no existe:
+  // color `undefined` y borde "1px solid undefined55".
+  it("sin medida todavía, pinta gris con un borde válido", async () => {
+    await connect();
+    const chip = (await screen.findByText("RTT —")).closest(".MuiChip-root");
+    const style = getComputedStyle(chip);
+    expect(style.color).toBe("rgb(190, 190, 190)");
+    expect(style.borderStyle).toBe("solid");
+    expect(style.borderColor).toMatch(/^rgba\(190, 190, 190, 0\.3/);
+  });
+});

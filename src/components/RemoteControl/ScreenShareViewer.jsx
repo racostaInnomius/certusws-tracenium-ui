@@ -137,7 +137,7 @@ function rttToQuality(rttMs) {
 // M3.S3 — Map RTT to a status color so the footer chip surfaces
 // connection health at a glance.
 function rttColor(rttMs, theme) {
-  if (rttMs == null) return theme.gray;
+  if (rttMs == null) return BRAND.gray; // ROLE no tiene `gray`: daba undefined
   if (rttMs < 100) return theme.positive;
   if (rttMs < 300) return theme.caution;
   return theme.critical;

@@ -1052,7 +1052,8 @@ export default function Audit({ onNavigate }) {
                           ? meta?.color || BRAND.teal
                           : meta?.tint || BRAND.darkSoft,
                         color: isActive ? BRAND.surface : meta?.color || BRAND.gray,
-                        border: `1px solid ${(meta?.color || BRAND.border)}55`,
+                        // El sufijo 55 sólo vale sobre el HEX de meta.color; BRAND.border ya es un rgba().
+                        border: `1px solid ${meta?.color ? `${meta.color}55` : BRAND.border}`,
                         opacity: disabled ? 0.4 : 1,
                         cursor: disabled ? "not-allowed" : "pointer",
                         "&:hover": disabled
