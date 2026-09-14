@@ -71,15 +71,15 @@ function mount(onNavigate = vi.fn()) {
 }
 
 describe("Software Delivery — cabecera", () => {
-  it('el botón "Report" lleva a Reports con el informe preseleccionado', async () => {
+  it('el botón "Report" lleva a Reports con SU informe preseleccionado, no el préstamo de Fleet Health', async () => {
     const onNavigate = vi.fn();
     mount(onNavigate);
 
     await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
 
     expect(onNavigate).toHaveBeenCalledWith("reports");
-    // La clave existe en el catálogo del backend; no se inventa un tipo "sdp".
-    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("global.fleet-health");
+    // La clave existe en el registro del backend (`sdp.delivery`).
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("sdp.delivery");
   });
 
   it("va a la misma altura que el Refresh de al lado", async () => {

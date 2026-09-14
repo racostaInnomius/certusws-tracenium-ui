@@ -91,11 +91,11 @@ describe("groupTypesByPage", () => {
     const filas = groupTypesByPage([tipo("cdp.cbom", "CDP")]);
 
     expect(filas).toHaveLength(12);
-    // Software Delivery y no Asset Management: ésta tiene informe propio desde
-    // ADR-0021, y usarla de ejemplo de "sin informe" dejaría el test pasando
-    // mientras dice algo que ya no es cierto.
-    const sdp = filas.find((f) => f.label === "Software Delivery");
-    expect(sdp.types).toEqual([]);
+    // Jobs: no tiene informe propio ni grupo reservado. Software Delivery y
+    // Asset Management ya tienen el suyo, y usarlas de ejemplo de "sin informe"
+    // dejaría el test pasando mientras dice algo que ya no es cierto.
+    const jobs = filas.find((f) => f.label === "Jobs");
+    expect(jobs.types).toEqual([]);
     const cdp = filas.find((f) => f.label === "Crypto Discovery");
     expect(cdp.types).toHaveLength(1);
   });

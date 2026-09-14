@@ -1199,12 +1199,14 @@ describe("Reports — U3: catálogo por filas", () => {
 
   it("una página sin informe propio dice qué abre su botón hoy", async () => {
     // Si no, la fila diría "nada" justo cuando el operador acaba de pulsar ese
-    // botón en Software Delivery y ha salido un informe de flota.
+    // botón en MDM / MAM y ha salido un informe de flota. (Era Software
+    // Delivery, que ya tiene el suyo: usarla de ejemplo dejaría el test
+    // pasando mientras dice algo que ya no es cierto.)
     montar();
     await esperarCatalogo();
 
-    const sdp = screen.getByRole("group", { name: "Software Delivery" });
-    expect(within(sdp).getByText(/global\.fleet-health/)).toBeInTheDocument();
+    const mdm = screen.getByRole("group", { name: "MDM / MAM" });
+    expect(within(mdm).getByText(/global\.fleet-health/)).toBeInTheDocument();
   });
 
   it("⚠️ Asset Management enseña SU informe, no el préstamo de Fleet Health", async () => {

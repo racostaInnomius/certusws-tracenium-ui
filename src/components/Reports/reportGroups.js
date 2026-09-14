@@ -85,7 +85,8 @@ export const REPORT_PAGES = [
   { page: "overview",          label: "Overview",            group: "Global", plugin: null,  borrows: null },
   // Informe propio desde ADR-0021 (`amp.asset-executive`).
   { page: "assets",            label: "Asset Management",    group: "AMP",    plugin: "amp", borrows: null },
-  { page: "software-delivery", label: "Software Delivery",   group: "SDP",    plugin: "sdp", borrows: "global.fleet-health" },
+  // Informe propio desde G1 del plan de cobertura (`sdp.delivery`).
+  { page: "software-delivery", label: "Software Delivery",   group: "SDP",    plugin: "sdp", borrows: null },
   { page: "ad",                label: "Security Compliance", group: "SCP",    plugin: "scp", borrows: null },
   // Informe propio desde G1 del plan de cobertura (`rcp.access-audit`).
   { page: "remote-control",    label: "Remote Control",      group: "RCP",    plugin: "rcp", borrows: null },

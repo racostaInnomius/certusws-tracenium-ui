@@ -63,11 +63,11 @@ const TAB_SX = {
 
 // ── Page shell ────────────────────────────────────────────────────
 
-// El informe que cubre lo que pasa por esta página: su sección de actividad
-// lleva los despliegues de software del periodo. No hay un tipo "sdp" en el
-// catálogo y no se inventa uno aquí — la clave tiene que existir en
-// `REPORT_REGISTRY` o Reports avisa de que no está disponible.
-const FLEET_HEALTH_KEY = "global.fleet-health";
+// El informe PROPIO de la página: resultados por paquete y plataforma, por qué
+// fallaron, de dónde salieron las descargas y qué entró al catálogo. Hasta que
+// existió, este botón prestaba Fleet Health, que de Software Delivery sólo
+// daba tres contadores. La clave tiene que existir en `REPORT_REGISTRY`.
+const SDP_REPORT_KEY = "sdp.delivery";
 
 export default function SoftwareDelivery({ onNavigate }) {
   const { auth } = useAuthContext();
@@ -233,8 +233,8 @@ export default function SoftwareDelivery({ onNavigate }) {
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
-                reportKey={FLEET_HEALTH_KEY}
-                tooltip="Fleet health report"
+                reportKey={SDP_REPORT_KEY}
+                tooltip="Software delivery report"
               />
             ) : null}
             <RefreshControl
