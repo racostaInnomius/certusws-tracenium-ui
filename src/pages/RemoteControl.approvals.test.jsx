@@ -42,9 +42,17 @@ vi.mock("../api/remoteControl", () => ({
 import { ApprovalQueue } from "./RemoteControl";
 import AccessPolicyMatrix from "../components/common/AccessPolicyMatrix";
 
+// ⚠️ `deviceId` es un UUID y `hostname` va aparte: la forma que manda el backend.
+//
+// Valía `deviceId: "SRV-DC01"` —un nombre en el campo del id— y por eso el test
+// de abajo, "shows the WHOLE record, not just an identifier", pasaba en verde
+// mientras la cola real enseñaba `on 9f1c2d3e-4a5b-…`. El fixture traía resuelto
+// lo que ni el backend enviaba ni la UI pintaba.
+const UUID = "9f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f";
 const pending = {
   requestId: "req-abc-123",
-  deviceId: "SRV-DC01",
+  deviceId: UUID,
+  hostname: "SRV-DC01",
   operatorUserId: "operator@customer.com",
   capability: "rcp.shell",
   reason: "User cannot sign in after the update",
@@ -82,10 +90,28 @@ describe("ApprovalQueue", () => {
     render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
 
     await screen.findByText(/operator@customer\.com/);
-    expect(screen.getByText(/SRV-DC01/)).toBeTruthy();
+    expect(screen.getByText("SRV-DC01")).toBeTruthy();
+    // Y el UUID NO a la vista: es exactamente lo que se estaba enseñando.
+    expect(screen.queryByText(UUID)).toBeNull();
     expect(screen.getByText(/rcp\.shell/)).toBeTruthy();
     expect(screen.getByText(/cannot sign in/)).toBeTruthy();
     expect(screen.getByText(/TCK-4821/)).toBeTruthy();
+  });
+
+  it("⚠️ sin hostname —el equipo nunca mandó inventario— enseña el id", async () => {
+    // Es la única verdad disponible. Un hueco en blanco dejaría aprobando sin
+    // saber a qué, que es peor que leer un UUID.
+    listPendingApprovals.mockResolvedValue({ items: [{ ...pending, hostname: null }] });
+    render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
+    expect(await screen.findByText(UUID)).toBeTruthy();
+  });
+
+  it("el id sigue a mano en el tooltip: dos equipos pueden llamarse igual", async () => {
+    listPendingApprovals.mockResolvedValue({ items: [pending] });
+    render(<ApprovalQueue refreshNonce={0} notify={vi.fn()} />);
+    const nombre = await screen.findByText("SRV-DC01");
+    fireEvent.mouseOver(nombre);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(UUID);
   });
 
   it("approving calls the API with approve=true", async () => {

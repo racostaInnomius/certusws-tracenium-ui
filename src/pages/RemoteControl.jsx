@@ -38,6 +38,7 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography
 } from "@mui/material";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
@@ -194,7 +195,17 @@ export function ApprovalQueue({ refreshNonce, notify }) {
           >
             <Box sx={{ flex: 1, minWidth: 260 }}>
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                {it.operatorUserId} → {it.capability} on {it.deviceId}
+                {it.operatorUserId} → {it.capability} on{" "}
+                {/* ⚠️ El NOMBRE de la máquina. Decía `on 9f1c2d3e-4a5b-…`, y
+                    aprobar es dar root durante una ventana: para saber a QUÉ
+                    había que ir a otra pantalla. El id queda en el tooltip —dos
+                    equipos pueden llamarse igual— y es lo que se enseña cuando
+                    el equipo nunca mandó inventario. */}
+                <Tooltip title={it.hostname ? it.deviceId : ""} placement="top">
+                  <Box component="span" sx={{ fontWeight: 700 }}>
+                    {it.hostname || it.deviceId}
+                  </Box>
+                </Tooltip>
               </Typography>
               <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                 {it.reason} · ticket {it.ticketRef}
