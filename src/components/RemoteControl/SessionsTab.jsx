@@ -24,7 +24,7 @@ import SessionDetailDrawer from "./SessionDetailDrawer";
 import HistoryPager from "./HistoryPager";
 import { RCP_METHODS } from "./rcpMethods";
 import { useRemoteSessions } from "./useRemoteControlData";
-import { BRAND } from "../../theme/brand";
+import { BRAND, TEXT_MUTED } from "../../theme/brand";
 
 const STATUSES = [
   { value: "active", label: "Active" },
@@ -186,7 +186,7 @@ export default function SessionsTab({ onReplay, refreshNonce = 0 }) {
             fontWeight: filters.hasRecording ? 700 : 500,
             borderColor: filters.hasRecording ? BRAND.teal : BRAND.border,
             bgcolor: filters.hasRecording ? BRAND.tealSoft : "transparent",
-            color: filters.hasRecording ? BRAND.tealText : BRAND.textMuted
+            color: filters.hasRecording ? BRAND.tealText : TEXT_MUTED
           }}
         />
       </Stack>

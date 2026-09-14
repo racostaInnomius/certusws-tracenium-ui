@@ -38,7 +38,7 @@ import {
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import PlayCircleOutlineOutlinedIcon from "@mui/icons-material/PlayCircleOutlineOutlined";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getSessionDetail, getSessionFileTransfers } from "../../api/remoteControl";
 import { RCP_METHODS } from "./rcpMethods";
 import { describeCloseReason } from "./closeReasons";
@@ -217,7 +217,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
                 <StatusChip status={shown.status} />
-                <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                   {method?.label || shown.type}
                 </Typography>
               </Stack>
@@ -245,7 +245,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
             {loading && !detail ? <CircularProgress size={20} sx={{ color: BRAND.teal }} /> : null}
 
             {!loading && !record ? (
-              <Typography variant="body2" sx={{ color: BRAND.textMuted }}>
+              <Typography variant="body2" sx={{ color: TEXT_MUTED }}>
                 No record for this session. Reason and ticket became mandatory
                 after this session ran, and historical sessions were deliberately
                 not backfilled.
@@ -278,7 +278,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
             </Field>
             <Field label="Duration">{formatDuration(shown.durationSec)}</Field>
             <Field label="Device id">
-              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+              <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                 {shown.deviceId}
               </Typography>
             </Field>
@@ -286,7 +286,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
                 de las sesiones posteriores al 2026-09-09: "no registrado" y
                 "entró desde aquí" no pueden verse igual. */}
             <Field label="From">
-              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+              <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                 {detail?.operatorIp || "—"}
               </Typography>
             </Field>
@@ -384,7 +384,7 @@ export default function SessionDetailDrawer({ session, onClose, onReplay }) {
                       {EVENT_LABEL[ev.event] || ev.event}
                     </Typography>
                     {ev.actor ? (
-                      <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                      <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                         {ev.actor}
                         {ev.actorIp ? ` · ${ev.actorIp}` : ""}
                       </Typography>

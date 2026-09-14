@@ -22,7 +22,7 @@ import ElectricalServicesOutlinedIcon from "@mui/icons-material/ElectricalServic
 import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import FileCopyOutlinedIcon from "@mui/icons-material/FileCopyOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import { BRAND, ICON } from "../../theme/brand";
+import { BRAND, ICON, TEXT_MUTED } from "../../theme/brand";
 import { RCP_METHODS } from "./rcpMethods";
 
 const METHOD_ICON = {
@@ -68,7 +68,7 @@ export default function NoRemoteControlCard({ fleetTotal = 0 }) {
           <Typography variant="subtitle1" sx={{ color: BRAND.dark, fontWeight: 700 }}>
             {hasDevices ? "No device offers remote control yet" : "No enrolled devices yet"}
           </Typography>
-          <Typography variant="body2" sx={{ color: BRAND.textMuted }}>
+          <Typography variant="body2" sx={{ color: TEXT_MUTED }}>
             {hasDevices
               ? `None of your ${fleetTotal} devices advertises a remote control capability. ` +
                 "Turn on remoteShell, remoteFile or remoteScreen in the agent policy, and the " +

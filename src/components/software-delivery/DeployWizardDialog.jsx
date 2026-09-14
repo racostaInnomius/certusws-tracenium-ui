@@ -39,7 +39,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listAllKnownDevices } from "../../api/jobs";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
@@ -470,7 +470,7 @@ export default function DeployWizardDialog({
                       }
                     />
                     {validatingPaste ? (
-                      <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+                      <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                         Checking these IDs against the fleet…
                       </Typography>
                     ) : null}

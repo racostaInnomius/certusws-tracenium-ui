@@ -36,7 +36,7 @@ import {
   Typography
 } from "@mui/material";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 // The endpoint lives under the /remote-control router because that is where
 // ADR-0009 phase 2 landed first; the matrix it serves was never RCP-specific.
 // Importing it from here rather than duplicating a client for the same URL.
@@ -248,7 +248,7 @@ export default function AccessPolicyMatrix({ prefix, title, description, notify,
                 spacing={1}
                 sx={{ pl: 1, py: 0.5 }}
               >
-                <Typography variant="caption" sx={{ width: 90, color: BRAND.textMuted }}>
+                <Typography variant="caption" sx={{ width: 90, color: TEXT_MUTED }}>
                   {r.deviceClass === "server" ? "Servers" : "Endpoints"}
                 </Typography>
                 <Button

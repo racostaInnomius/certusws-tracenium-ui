@@ -62,7 +62,7 @@ const FLEET_HEALTH_KEY = "global.fleet-health";
 import SectionPaper from "../components/common/SectionPaper";
 import { invalidateCachePrefix } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
-import { BRAND } from "../theme/brand";
+import { BRAND, TEXT_MUTED } from "../theme/brand";
 import {
   startRemoteSession,
   listPendingApprovals,
@@ -196,7 +196,7 @@ export function ApprovalQueue({ refreshNonce, notify }) {
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
                 {it.operatorUserId} → {it.capability} on {it.deviceId}
               </Typography>
-              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+              <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                 {it.reason} · ticket {it.ticketRef}
                 {it.expiresAt
                   ? ` · expires ${new Date(it.expiresAt).toLocaleTimeString()}`

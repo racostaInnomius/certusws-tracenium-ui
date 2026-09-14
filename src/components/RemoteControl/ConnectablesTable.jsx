@@ -48,7 +48,7 @@ import {
   Typography
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import OnlineDot from "../common/OnlineDot";
 import { formatRelative } from "../../utils/format";
 import { RCP_METHODS, blockedReason, canStart, platformLabel } from "./rcpMethods";
@@ -66,7 +66,7 @@ function FilterChip({ label, on, onClick }) {
         fontWeight: on ? 700 : 500,
         borderColor: on ? BRAND.teal : BRAND.border,
         bgcolor: on ? BRAND.tealSoft : "transparent",
-        color: on ? BRAND.tealText : BRAND.textMuted
+        color: on ? BRAND.tealText : TEXT_MUTED
       }}
     />
   );

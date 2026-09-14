@@ -39,7 +39,7 @@ import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import TerminalOutlinedIcon from "@mui/icons-material/TerminalOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { RCP_METHODS, methodFor, blockedReason, platformLabel } from "./rcpMethods";
 import { useConnectableDevices, useMethodCounts } from "./useRemoteControlData";
 
@@ -128,7 +128,7 @@ function MethodCard({ method, count, selected, onSelect }) {
           {method.label}
         </Typography>
       </Stack>
-      <Typography variant="caption" sx={{ color: BRAND.textMuted, display: "block", lineHeight: 1.5 }}>
+      <Typography variant="caption" sx={{ color: TEXT_MUTED, display: "block", lineHeight: 1.5 }}>
         {method.description}
       </Typography>
       <Typography
@@ -440,7 +440,7 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
               <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
                 {method?.label} on {device?.hostname || device?.deviceId}
               </Typography>
-              <Typography variant="caption" sx={{ color: BRAND.textMuted }}>
+              <Typography variant="caption" sx={{ color: TEXT_MUTED }}>
                 {[
                   device?.platform ? platformLabel(device.platform) : null,
                   device?.agentVersion ? `agent ${device.agentVersion}` : null
@@ -450,7 +450,7 @@ export default function StartSessionWizard({ open, onClose, onConfirm }) {
               </Typography>
             </Box>
 
-            <Typography variant="body2" sx={{ mb: 2, color: BRAND.textMuted }}>
+            <Typography variant="body2" sx={{ mb: 2, color: TEXT_MUTED }}>
               Who connects, to which device and why is recorded and stored alongside the
               session.
             </Typography>
