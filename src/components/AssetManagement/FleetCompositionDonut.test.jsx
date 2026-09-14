@@ -39,14 +39,14 @@ describe("FleetCompositionDonut", () => {
     renderDonut();
     expect(screen.getByText("11 virtual")).toBeTruthy();
     // Cuatro arcos, uno por categoría — nunca cinco.
-    expect(document.querySelectorAll("circle")).toHaveLength(4);
+    expect(document.querySelectorAll('circle[data-ring="slice"]')).toHaveLength(4);
   });
 
   it("⚠️ los arcos suman la circunferencia completa", () => {
     // Si no sumaran, la dona tendría un hueco y afirmaría que faltan equipos
     // por clasificar cuando no faltan.
     renderDonut();
-    const usado = Array.from(document.querySelectorAll("circle")).reduce(
+    const usado = Array.from(document.querySelectorAll('circle[data-ring="slice"]')).reduce(
       (acc, c) => acc + Number(String(c.getAttribute("stroke-dasharray")).split(" ")[0]),
       0
     );
@@ -65,7 +65,7 @@ describe("FleetCompositionDonut", () => {
 
   it("una categoría en cero no dibuja un arco invisible", () => {
     renderDonut({ composition: { ...composition, unknown: 0 } });
-    expect(document.querySelectorAll("circle")).toHaveLength(3);
+    expect(document.querySelectorAll('circle[data-ring="slice"]')).toHaveLength(3);
     expect(screen.queryByText(/Unclassified/)).toBeNull();
   });
 

@@ -25,7 +25,7 @@
 // otra oportunidad de sacar uno lento (ver CLAUDE.md del repo).
 
 import * as React from "react";
-import { Box, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
+import { Box, GlobalStyles, Paper, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import {
   PENDING_COLOR,
@@ -35,6 +35,21 @@ import {
   RING_STROKE as STROKE,
   ringArcs,
 } from "./ringGeometry";
+
+// ⭐ La entrada: el anillo se descubre en sentido horario desde arriba, como
+// hacía la dona de Recharts antes de homologar el layout (se perdió con el
+// cambio y se echó en falta). No se animan los arcos uno a uno: una máscara
+// con un único trazo blanco barre la circunferencia y va destapando las
+// rebanadas ya colocadas, así la geometría que prueban los tests no cambia.
+// Recharts usaba 1500 ms "ease"; se conserva.
+const SWEEP_STYLES = {
+  "@keyframes ringCardSweep": {
+    from: { strokeDashoffset: RING_CIRCUMFERENCE },
+    to: { strokeDashoffset: 0 },
+  },
+  ".ring-card-sweep": { animation: "ringCardSweep 1500ms ease both" },
+  "@media (prefers-reduced-motion: reduce)": { ".ring-card-sweep": { animation: "none" } },
+};
 
 function Centered({ children }) {
   return (
@@ -74,6 +89,11 @@ export default function RingCard({
   const arcs = ringArcs(visible);
   const shownTotal = total ?? sum;
   const cardInteractive = typeof onCardClick === "function";
+  // useId trae ":" y en `url(#…)` no todos los navegadores lo aceptan.
+  const maskId = `ring-sweep-${React.useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  // Cambian los datos → se vuelve a barrer, como hacía Recharts. Remontar
+  // sólo el trazo de la máscara basta para reiniciar la animación.
+  const sweepKey = visible.map((v) => `${v.key}:${v.value}`).join("|");
 
   // stopPropagation: pulsar una rebanada no debe disparar también la
   // navegación sin filtro de la card, que perdería el filtro.
@@ -103,6 +123,7 @@ export default function RingCard({
         ...(sx || {}),
       }}
     >
+      <GlobalStyles styles={SWEEP_STYLES} />
       <Typography component="div" sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark }}>
         {title}
       </Typography>
@@ -134,6 +155,25 @@ export default function RingCard({
                 .map((s) => `${s.value} ${String(s.label).toLowerCase()}`)
                 .join(", ")}`}
             >
+              <defs>
+                <mask id={maskId}>
+                  <circle
+                    key={sweepKey}
+                    className="ring-card-sweep"
+                    cx={SIZE / 2}
+                    cy={SIZE / 2}
+                    r={RADIUS}
+                    fill="none"
+                    stroke="#fff"
+                    // Más ancho que el trazo resaltado (STROKE + 4): la
+                    // máscara no puede recortar la rebanada activa.
+                    strokeWidth={STROKE + 10}
+                    strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+                    transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+                  />
+                </mask>
+              </defs>
+              <g mask={`url(#${maskId})`}>
               {arcs.map((a) => {
                 const onClick = sliceHandler(a);
                 return (
@@ -154,6 +194,7 @@ export default function RingCard({
                   </Tooltip>
                 );
               })}
+              </g>
               <text
                 x={SIZE / 2}
                 y={SIZE / 2 + (centerLabel ? 0 : 9)}

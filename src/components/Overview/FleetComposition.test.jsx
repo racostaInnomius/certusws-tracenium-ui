@@ -99,6 +99,14 @@ describe("DonutCard — pending bucket reconciliation", () => {
     expect(onCardClick).not.toHaveBeenCalled();
   });
 
+  it("⭐ enters with the clockwise sweep (a mask over the slices, not per-arc geometry)", () => {
+    const { container } = render(<DonutCard title="Widget" data={data} loading={false} />);
+    const sweep = container.querySelector("mask .ring-card-sweep");
+    expect(sweep).toBeTruthy();
+    const group = container.querySelector('circle[data-ring="slice"]').closest("g[mask]");
+    expect(group.getAttribute("mask")).toBe(`url(#${sweep.closest("mask").id})`);
+  });
+
   it("⚠️ keeps each donut's own colors — the layout is shared, the palette is not", () => {
     const { container } = render(<DonutCard title="Widget" data={data} loading={false} />);
     const strokes = [...container.querySelectorAll('circle[data-ring="slice"]')].map((c) => c.getAttribute("stroke"));
