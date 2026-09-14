@@ -87,7 +87,8 @@ export const REPORT_PAGES = [
   { page: "assets",            label: "Asset Management",    group: "AMP",    plugin: "amp", borrows: null },
   { page: "software-delivery", label: "Software Delivery",   group: "SDP",    plugin: "sdp", borrows: "global.fleet-health" },
   { page: "ad",                label: "Security Compliance", group: "SCP",    plugin: "scp", borrows: null },
-  { page: "remote-control",    label: "Remote Control",      group: "RCP",    plugin: "rcp", borrows: "global.fleet-health" },
+  // Informe propio desde G1 del plan de cobertura (`rcp.access-audit`).
+  { page: "remote-control",    label: "Remote Control",      group: "RCP",    plugin: "rcp", borrows: null },
   { page: "patch",             label: "Patch Management",    group: "PMP",    plugin: "pmp", borrows: null },
   { page: "cdp",               label: "Crypto Discovery",    group: "CDP",    plugin: "cdp", borrows: null },
   // ADR-0022. Sin botón "Report" todavía, y por eso no estaba en esta lista:

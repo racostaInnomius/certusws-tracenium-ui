@@ -58,14 +58,14 @@ function mount(onNavigate = vi.fn()) {
 }
 
 describe("Remote Control — cabecera", () => {
-  it('el botón "Report" lleva a Reports con el informe preseleccionado', async () => {
+  it('el botón "Report" lleva a Reports con SU informe preseleccionado, no el préstamo de Fleet Health', async () => {
     const onNavigate = vi.fn();
     mount(onNavigate);
 
     await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
 
     expect(onNavigate).toHaveBeenCalledWith("reports");
-    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("global.fleet-health");
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("rcp.access-audit");
   });
 
   it("los tres botones de la fila van a la misma altura", async () => {

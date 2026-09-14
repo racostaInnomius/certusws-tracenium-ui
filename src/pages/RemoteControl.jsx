@@ -54,11 +54,11 @@ import GoToReportButton from "../components/common/GoToReportButton";
 import { getMyCapabilities } from "../api/roles";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
-// El informe que cubre lo que pasa por esta página: su sección de actividad
-// cuenta las sesiones de soporte remoto del periodo. No hay un tipo "rcp" en
-// el catálogo y no se inventa uno aquí — la clave tiene que existir en
-// `REPORT_REGISTRY` o Reports avisa de que no está disponible.
-const FLEET_HEALTH_KEY = "global.fleet-health";
+// El informe PROPIO de la página: quién entró a qué equipo, con qué
+// aprobación, con qué consentimiento y qué evidencia quedó. Hasta que existió,
+// este botón prestaba Fleet Health, que de Remote Control sólo cuenta cuántas
+// sesiones hubo. La clave tiene que existir en `REPORT_REGISTRY`.
+const RCP_REPORT_KEY = "rcp.access-audit";
 import SectionPaper from "../components/common/SectionPaper";
 import { invalidateCachePrefix } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
@@ -466,8 +466,8 @@ export default function RemoteControl({ onNavigate }) {
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
-                reportKey={FLEET_HEALTH_KEY}
-                tooltip="Fleet health report"
+                reportKey={RCP_REPORT_KEY}
+                tooltip="Remote access report"
               />
             ) : null}
             <RefreshControl
