@@ -33,16 +33,10 @@
 // query — `fleetDevices` already rides along in the dashboard summary
 // bundle this page already fetches.
 
-import { Paper, Grid, Typography, Box, Skeleton } from "@mui/material";
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Label
-} from "recharts";
-import { BRAND, NEUTRAL, ROLE, TEXT } from "../../theme/brand";
+import { Grid, Box } from "@mui/material";
+import { BRAND, ROLE } from "../../theme/brand";
+import RingCard from "../Charts/RingCard";
+import { PENDING_COLOR } from "../Charts/ringGeometry";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -52,12 +46,8 @@ function getValue(result) {
 import { classifyAgentVersions } from "./agentVersions";
 import FleetCompositionDonut from "../AssetManagement/FleetCompositionDonut";
 
-// Muted, desaturated gray for the "pending" bucket — deliberately
-// distinct from BRAND.gray, which every donut here already uses for its
-// own internal "Unknown" bucket. Reusing BRAND.gray for both would make
-// "we don't know this device's OS" and "this device hasn't reported at
-// all yet" look like the same segment.
-export const PENDING_COLOR = NEUTRAL[300];
+// Re-exportado: vivía aquí, y ahora es de RingCard, que dibuja la rebanada.
+export { PENDING_COLOR };
 
 // Exported as a named export so the Assets page can reuse the exact
 // same donut (classification + coloring + legend) instead of
@@ -105,9 +95,11 @@ export function AgentVersionDonut({
 
   return (
     <DonutCard
-      title={
-        canonicalLatest ? `Agent versions (latest ${canonicalLatest})` : "Agent versions"
-      }
+      title="Agent versions"
+      // La versión publicada va al subtítulo: en el título alargaba la
+      // cabecera hasta partirla en dos líneas en una columna md:4, y
+      // descuadraba la altura frente a Fleet composition.
+      subtitle={canonicalLatest ? `Latest published ${canonicalLatest}` : "Against the latest published build"}
       data={data}
       loading={loading}
       // "checked in", not "devices": this counts rows in the `agent`
@@ -128,6 +120,7 @@ export function AgentVersionDonut({
 
 export function DonutCard({
   title,
+  subtitle = null,
   data,
   loading,
   totalLabel = "items",
@@ -143,203 +136,37 @@ export function DonutCard({
   pendingValue = null,
   pendingLabel = "Pending"
 }) {
-  const knownTotal = data.reduce((sum, x) => sum + x.value, 0);
   const hasPending = pendingValue != null && pendingValue > 0;
-  const total = hasPending ? knownTotal + pendingValue : knownTotal;
-  const chartData = hasPending
-    ? [...data, { name: pendingLabel, value: pendingValue, color: PENDING_COLOR, pending: true }]
-    : data;
-  // The card header + empty body is clickable as a whole (drops the
-  // operator at the target page with no filter). Individual legend
-  // rows are clickable when `onSegmentClick` is wired — those carry a
-  // filter for the segment name.
-  const interactive = typeof onCardClick === "function";
+  // El dibujo es el de Fleet composition (Charts/RingCard): anillo grueso,
+  // cifra grande y leyenda en fichas. Los COLORES siguen siendo los de cada
+  // dona — `data[].color` pasa tal cual.
+  const slices = [
+    ...data.map((d) => ({ key: d.name, label: d.name, value: d.value, color: d.color })),
+    ...(hasPending
+      ? [{ key: "__pending__", label: pendingLabel, value: pendingValue, color: PENDING_COLOR, pending: true }]
+      : []),
+  ];
 
   return (
-    <Paper
-      elevation={0}
-      onClick={interactive ? onCardClick : undefined}
-      sx={{
-        p: 2,
-        borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
-        height: "100%",
-        cursor: interactive ? "pointer" : "default",
-        transition: "border-color 120ms ease, box-shadow 120ms ease",
-        "&:hover": interactive
-          ? {
-              borderColor: BRAND.teal,
-              boxShadow: "0 4px 12px rgba(59,64,77,0.08)"
-            }
-          : undefined
-      }}
-    >
-      <Typography
-        variant="subtitle2"
-        sx={{ color: BRAND.dark, fontWeight: 700, mb: 1.5 }}
-      >
-        {title}
-      </Typography>
-
-      {loading ? (
-        <Skeleton variant="rounded" height={170} />
-      ) : data.length === 0 && !hasPending ? (
-        <Box
-          sx={{
-            height: 170,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: BRAND.gray
-          }}
-        >
-          <Typography variant="caption">{fallbackLabel}</Typography>
-        </Box>
-      ) : (
-        // Stacked layout: donut on top, legend below. Previously the
-        // legend was to the right of the donut — fine at md:6 per
-        // column, broken at md:4 (labels truncated to "m"/"w"). With
-        // the donut centered and legend stacked we get full horizontal
-        // room for readable labels even when the card is narrow.
-        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-          <Box sx={{ position: "relative", width: 120, height: 120 }}>
-            {hasPending && (
-              // Dashed ring flags "this total includes an inferred
-              // pending bucket" — drawn outside the circle (inset: -5)
-              // so it doesn't shrink the chart itself.
-              <Box
-                sx={{
-                  position: "absolute",
-                  inset: -5,
-                  borderRadius: "50%",
-                  border: "2px dashed rgba(154,160,166,0.65)",
-                  pointerEvents: "none"
-                }}
-              />
-            )}
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius="62%"
-                  outerRadius="92%"
-                  paddingAngle={2}
-                >
-                  {chartData.map((d, i) => (
-                    <Cell key={i} fill={d.color} />
-                  ))}
-                  <Label
-                    position="center"
-                    content={() => (
-                      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle">
-                        <tspan x="50%" dy="-2" fontSize="16" fontWeight="800" fill={BRAND.dark}>
-                          {total || "—"}
-                        </tspan>
-                        <tspan x="50%" dy="14" fontSize="10" fill={BRAND.gray}>
-                          {totalLabel}
-                        </tspan>
-                      </text>
-                    )}
-                  />
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </Box>
-
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0.5,
-              width: "100%",
-              overflow: "hidden"
-            }}
-          >
-            {chartData.map((d) => {
-              // Per-segment nav. stopPropagation so clicking the legend
-              // row doesn't also trigger the card-level onClick (which
-              // would lose the filter). Only rows with a handler get
-              // the hover/pointer cue — no-op rows stay static. The
-              // pending row never navigates: there's no "pending"
-              // filter on the drilldown pages.
-              const segClick =
-                !d.pending && typeof onSegmentClick === "function"
-                  ? (e) => {
-                      e.stopPropagation();
-                      onSegmentClick(d);
-                    }
-                  : null;
-
-              return (
-                <Box
-                  key={d.name}
-                  onClick={segClick || undefined}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    minWidth: 0,
-                    px: 0.5,
-                    mx: -0.5,
-                    borderRadius: 1,
-                    cursor: segClick ? "pointer" : "default",
-                    transition: "background-color 120ms ease",
-                    "&:hover": segClick
-                      ? { backgroundColor: BRAND.surfaceMuted }
-                      : undefined
-                  }}
-                >
-                  <Box
-                    sx={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                      ...(d.pending
-                        ? {
-                            background: `repeating-linear-gradient(45deg, ${PENDING_COLOR}, ${PENDING_COLOR} 1.5px, transparent 1.5px, transparent 3px)`,
-                            border: `1px solid ${PENDING_COLOR}`
-                          }
-                        : { bgcolor: d.color })
-                    }}
-                  />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: d.pending ? BRAND.gray : BRAND.dark,
-                      fontStyle: d.pending ? "italic" : "normal",
-                      flex: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontSize: TEXT.sm
-                    }}
-                  >
-                    {d.name}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: BRAND.gray,
-                      fontWeight: 600,
-                      fontSize: TEXT.sm,
-                      fontStyle: d.pending ? "italic" : "normal"
-                    }}
-                  >
-                    {d.pending ? `+${d.value}` : d.value}
-                  </Typography>
-                </Box>
-              );
-            })}
-          </Box>
-        </Box>
-      )}
-    </Paper>
+    <RingCard
+      title={title}
+      subtitle={subtitle}
+      slices={slices}
+      centerLabel={totalLabel}
+      loading={loading}
+      emptyLabel={fallbackLabel}
+      ariaNoun={totalLabel}
+      onCardClick={onCardClick}
+      // La rebanada original, con `name`: es lo que los llamadores ya leen
+      // para decidir el filtro.
+      onSliceClick={
+        typeof onSegmentClick === "function"
+          ? (s) => onSegmentClick(data.find((d) => d.name === s.key) ?? { name: s.key, value: s.value })
+          : null
+      }
+      // Radio 2 y sin sombra, como sus vecinas de fila en Overview y Assets.
+      sx={{ borderRadius: 2, boxShadow: "none" }}
+    />
   );
 }
 

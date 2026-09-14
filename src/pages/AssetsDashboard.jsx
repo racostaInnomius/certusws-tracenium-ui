@@ -1556,6 +1556,7 @@ const osVersionItems = React.useMemo(() => {
                 consistent. */}
             <DonutCard
               title="OS platform"
+              subtitle="Operating systems in the fleet"
               data={osDonutData}
               loading={loading}
               // See FleetComposition.jsx's OS platform DonutCard for why

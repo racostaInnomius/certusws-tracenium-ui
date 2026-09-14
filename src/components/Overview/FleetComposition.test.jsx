@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import FleetComposition, { AgentVersionDonut, DonutCard } from "./FleetComposition";
 
@@ -7,31 +7,8 @@ import FleetComposition, { AgentVersionDonut, DonutCard } from "./FleetCompositi
 // between tests. Explicit teardown keeps screen queries honest.
 afterEach(cleanup);
 
-// recharts' ResponsiveContainer measures its container via
-// ResizeObserver (unimplemented in jsdom) and getBoundingClientRect
-// (jsdom always returns 0x0). Without a stub the chart area stays sized
-// 0x0 and never renders its SVG — including the center total/label —
-// so every donut test below would silently see nothing. Scoped to this
-// file only, restored after.
-let originalGetBoundingClientRect;
-let originalResizeObserver;
-beforeAll(() => {
-  originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
-  originalResizeObserver = global.ResizeObserver;
-  Element.prototype.getBoundingClientRect = () => ({
-    width: 200, height: 200, top: 0, left: 0, bottom: 200, right: 200, x: 0, y: 0, toJSON() {}
-  });
-  global.ResizeObserver = class {
-    constructor(cb) { this.cb = cb; }
-    observe(target) { this.cb([{ target, contentRect: { width: 200, height: 200 } }]); }
-    unobserve() {}
-    disconnect() {}
-  };
-});
-afterAll(() => {
-  Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
-  global.ResizeObserver = originalResizeObserver;
-});
+// Sin stubs de ResizeObserver: las donas ya no son Recharts (Charts/RingCard
+// es SVG a mano), así que no hay contenedor que medir.
 
 const fulfilled = (value) => ({ status: "fulfilled", value });
 
@@ -55,8 +32,8 @@ describe("DonutCard — pending bucket reconciliation", () => {
     // 6 + 2 known + 3 pending = 11
     expect(screen.getByText("11")).toBeInTheDocument();
     expect(screen.getByText("enrolled")).toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
-    expect(screen.getByText("+3")).toBeInTheDocument();
+    // La leyenda es una ficha "etiqueta cifra"; lo pendiente lleva "+".
+    expect(screen.getByText("Not connected +3")).toBeInTheDocument();
   });
 
   it("falls back to the donut's own total when pendingValue is null (no roster to reconcile against)", () => {
@@ -90,7 +67,7 @@ describe("DonutCard — pending bucket reconciliation", () => {
       />
     );
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
+    expect(screen.getByText("Not connected +3")).toBeInTheDocument();
     expect(screen.queryByText("No data yet")).not.toBeInTheDocument();
   });
 
@@ -106,8 +83,26 @@ describe("DonutCard — pending bucket reconciliation", () => {
         onSegmentClick={onSegmentClick}
       />
     );
-    screen.getByText("Not connected").closest("div")?.click();
+    fireEvent.click(screen.getByText("Not connected +3"));
     expect(onSegmentClick).not.toHaveBeenCalled();
+  });
+
+  it("clicking a real segment passes the ORIGINAL datum (callers read `name`)", () => {
+    const onSegmentClick = vi.fn();
+    const onCardClick = vi.fn();
+    render(
+      <DonutCard title="Widget" data={data} loading={false} onSegmentClick={onSegmentClick} onCardClick={onCardClick} />
+    );
+    fireEvent.click(screen.getByText("A 6"));
+    expect(onSegmentClick).toHaveBeenCalledWith(data[0]);
+    // Y no dispara además la navegación sin filtro de la card.
+    expect(onCardClick).not.toHaveBeenCalled();
+  });
+
+  it("⚠️ keeps each donut's own colors — the layout is shared, the palette is not", () => {
+    const { container } = render(<DonutCard title="Widget" data={data} loading={false} />);
+    const strokes = [...container.querySelectorAll('circle[data-ring="slice"]')].map((c) => c.getAttribute("stroke"));
+    expect(strokes).toEqual(["#111", "#222"]);
   });
 });
 
@@ -126,8 +121,7 @@ describe("AgentVersionDonut — reconciled against fleetDevices", () => {
     );
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("enrolled")).toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
-    expect(screen.getByText("+3")).toBeInTheDocument();
+    expect(screen.getByText("Not connected +3")).toBeInTheDocument();
   });
 
   it("keeps the old 'checked in' label and total when fleetDevices is unavailable", () => {
@@ -186,7 +180,7 @@ describe("FleetComposition (Overview)", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("Older"));
+    fireEvent.click(screen.getByText("Older 3"));
     expect(onNavigate).toHaveBeenCalledWith("assets", { versionBucket: "older" });
   });
 

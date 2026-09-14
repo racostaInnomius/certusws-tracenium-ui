@@ -13,7 +13,7 @@
 // The same thresholds drive the `PatchChip` in the device table, so
 // the dashboard reads consistently with the drilldown.
 //
-// Shares its chart/legend chrome with the other two Overview donuts via
+// Shares its chart/legend chrome (Charts/RingCard) with the other Overview donuts via
 // `DonutCard` (FleetComposition.jsx) — that includes the "pending"
 // bucket reconciliation against the enrollment roster (`fleetDevices`,
 // same number the "Devices" KPI card shows). See that file's header
@@ -22,7 +22,6 @@
 // only exists once.
 
 import { useMemo } from "react";
-import { Typography } from "@mui/material";
 import { BRAND, ROLE } from "../../theme/brand";
 import { DonutCard } from "./FleetComposition";
 
@@ -79,22 +78,12 @@ export default function PatchCoverageCard({ result, loading, onNavigate, fleetDe
 
   return (
     <DonutCard
-      title={
-        <>
-          {/* "OS patch recency", no "Patch coverage": mide cuánto hace del
-              último parche del SO según SCP. Con el nombre viejo se leía
-              como el estado de Patch Management, que es otro plugin y otro
-              dato (su card vive en el bloque 3). */}
-          OS patch recency
-          <Typography
-            component="span"
-            variant="caption"
-            sx={{ color: BRAND.gray, ml: 0.75, fontWeight: 500 }}
-          >
-            (last OS patch)
-          </Typography>
-        </>
-      }
+      // "OS patch recency", no "Patch coverage": mide cuánto hace del último
+      // parche del SO según SCP. Con el nombre viejo se leía como el estado
+      // de Patch Management, que es otro plugin y otro dato (su card vive en
+      // el bloque 3).
+      title="OS patch recency"
+      subtitle="Days since the last OS patch"
       data={data}
       loading={loading}
       // "scanned", not "SCP devices": this counts devices with a
