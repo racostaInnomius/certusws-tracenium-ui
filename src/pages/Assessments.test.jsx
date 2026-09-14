@@ -65,6 +65,7 @@ const DETAIL = {
     { controlId: "ASP-AD-CFG-007", title: "Fine-grained password policies allow passwords shorter than 14 characters", section: "Domain configuration", status: "not_assessed", severity: "medium", requires: "privileged", reason: "requires_privileged_read:0x8007200A", affectedCount: null, remediation: { summary: "Raise it", steps: ["Do it"], risk: "Some" }, references: [] },
     { controlId: "ASP-AD-ACC-001", title: "Enabled user accounts have a password that never expires", section: "Accounts", status: "fail", severity: "medium", affectedCount: 38, evidence: { count: 38, sample: ["CN=svc,DC=m"] }, remediation: { summary: "Fix", steps: ["Step"], risk: "Risk" }, references: [] },
     { controlId: "ASP-AD-KRB-001", title: "The krbtgt account password has not been reset in the last 180 days", section: "Kerberos", status: "fail", severity: "critical", affectedCount: null, remediation: { summary: "Reset twice", steps: ["Reset"], risk: "Tickets" }, references: [{ source: "MITRE ATT&CK", id: "T1558.001", title: "Golden Ticket", url: "https://attack.mitre.org/techniques/T1558/001/" }] },
+    { controlId: "ASP-AD-PRV-006", title: "Non-default principals hold replication rights on the domain (DCSync)", section: "Privileged access", status: "not_assessed", severity: "critical", requires: "member", reason: "collector_error:0x80131501", affectedCount: null, evidence: { collectorError: { hresult: "0x80131501", type: "RuntimeException", message: "You cannot call a method on a null-valued expression." } }, references: [] },
     { controlId: "ASP-AD-KRB-003", title: "Enabled accounts do not require Kerberos pre-authentication", section: "Kerberos", status: "pass", severity: "high", affectedCount: 0, references: [] },
   ],
   history: [
@@ -173,6 +174,11 @@ describe("Assessment Service — detalle", () => {
     const fgppRow = within(findings).getByText(/Fine-grained/).closest("tr");
     await user.click(within(fgppRow).getByRole("button", { name: "Show details" }));
     expect(await screen.findByText(/machine account cannot read this \(0x8007200A\)/)).toBeTruthy();
+
+    // Un error del colector enseña el texto: 0x80131501 solo no dice qué falló.
+    const dcsyncRow = within(findings).getByText(/DCSync/).closest("tr");
+    await user.click(within(dcsyncRow).getByRole("button", { name: "Show details" }));
+    expect(await screen.findByText(/RuntimeException: You cannot call a method on a null-valued expression\./)).toBeTruthy();
   });
 
   it("⭐ Run now sin colector online dice que la corrida quedó missed", async () => {

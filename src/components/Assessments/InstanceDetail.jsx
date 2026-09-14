@@ -99,7 +99,15 @@ function FindingRow({ finding, canEdit, onException }) {
           <Collapse in={open} unmountOnExit>
             <Box sx={{ py: 1.5, px: 1 }}>
               {finding.status === "not_assessed" ? (
-                <Alert severity="info" sx={{ mb: 1 }}>{notAssessedReason(finding.reason)}</Alert>
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  {notAssessedReason(finding.reason)}
+                  {finding.evidence?.collectorError?.message ? (
+                    <Box component="code" sx={{ display: "block", mt: 0.5, fontSize: TEXT.xs, wordBreak: "break-word" }}>
+                      {finding.evidence.collectorError.type ? `${finding.evidence.collectorError.type}: ` : ""}
+                      {finding.evidence.collectorError.message}
+                    </Box>
+                  ) : null}
+                </Alert>
               ) : null}
               {finding.remediation ? (
                 <>
