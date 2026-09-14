@@ -37,7 +37,7 @@ export const REMEDIATION = {
   account_locked:
     "The service account is locked in vSphere. Unlock it and wait out the lockout window before retrying.",
   insufficient_privileges:
-    "The service account is missing snapshot privileges. Grant a role containing them on the target folder or datacenter, with propagation enabled.",
+    "The service account is missing privileges for what this gateway is used for. Snapshots need the three VirtualMachine.State.*Snapshot privileges; reading certificates needs System.View. Grant a role containing them on the target folder or datacenter, with propagation enabled.",
   empty_scope:
     "The account cannot see any VM in the configured scope. Check the folder selection and that permissions propagate to child objects.",
   no_credential: "No credential has been sent to this gateway yet.",
@@ -131,4 +131,33 @@ export function credentialPresentation(state) {
     default:
       return { label: "Not configured", color: "default" };
   }
+}
+
+/**
+ * What the gateway is used for and whether the last verification cleared each
+ * use (2026-09-14). Snapshots belong to Patch Management, certificates to
+ * Crypto Discovery; a gateway can serve one, the other or both, and the
+ * privilege rung is judged per use, so this is what each page shows.
+ *
+ * Reports from before uses existed have no `uses`: the snapshot verdict then
+ * falls back to the report's overall result, and certificates stay unknown.
+ */
+export const USE_LABEL = { snapshots: "VM snapshots", certificates: "Certificate reading" };
+
+export function usesPresentation(gateway) {
+  const report = gateway?.lastVerifyReport ?? null;
+  const uses = report?.uses ?? null;
+  const wantedCerts = gateway?.readCertificates === true;
+  const row = (use, wanted, verdict) => {
+    if (!wanted) return { use, label: USE_LABEL[use], status: "off", detail: use === "certificates" ? "Not switched on for this gateway" : "Patch Management not in use" };
+    if (!verdict) return { use, label: USE_LABEL[use], status: "pending", detail: "Not verified yet" };
+    if (verdict.ok) return { use, label: USE_LABEL[use], status: "ok", detail: "Privileges granted" };
+    return { use, label: USE_LABEL[use], status: "failed", detail: `Missing: ${(verdict.missing ?? []).join(", ") || "privileges"}` };
+  };
+  if (!uses) {
+    // Legacy report: the whole ladder was about snapshots.
+    const legacy = report ? { ok: report.ok === true, missing: [] } : null;
+    return [row("snapshots", true, legacy), row("certificates", wantedCerts, null)];
+  }
+  return [row("snapshots", uses.snapshots?.wanted !== false, uses.snapshots), row("certificates", wantedCerts || uses.certificates?.wanted === true, uses.certificates)];
 }

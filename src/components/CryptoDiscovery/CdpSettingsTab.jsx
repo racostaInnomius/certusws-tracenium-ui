@@ -18,7 +18,7 @@
 // enseñando lo que los conectores traen; desde allí un enlace vuelve aquí.
 
 import * as React from "react";
-import { Alert, Box, Button, Chip, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Snackbar, Stack, Typography } from "@mui/material";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import SectionPaper from "../common/SectionPaper";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
@@ -26,10 +26,14 @@ import CdpPublicDomains from "./CdpPublicDomains";
 import { CbomImportForm } from "./CbomAssetsPanel";
 import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
 import CdpSourcesMap from "./CdpSourcesMap";
+import GatewayPanel from "../patch-management/gateway/GatewayPanel";
 import { BASES } from "./cdpSunburst";
 import { CONNECTOR_KINDS_BY_BASE, sectorAnchor } from "./cdpSources";
-import { getCdpFacets, getCryptoAssetsSummary, listCdpAdcsSources, listCdpConnectors } from "../../api/cdp";
+import { getCdpFacets, getCryptoAssetsSummary, listCdpAdcsSources, listCdpConnectors, listCdpDevices, listCdpVcenterSources } from "../../api/cdp";
+import * as infrastructureApi from "../../api/infrastructure";
 import { getTenantPolicy } from "../../api/policies";
+import { getMyCapabilities } from "../../api/roles";
+import { useAuthContext } from "../../auth/AuthContext";
 import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
@@ -41,11 +45,13 @@ const baseOf = (key) => BASES.find((b) => b.key === key);
  * Lo que la pestaña necesita saber de las fuentes, cargado UNA vez y
  * compartido por el mapa y por las secciones: conectores, lectores AD CS,
  * facetas por origen (lo que el agente recoge), resumen de activos de fuera
- * (SSH, CBOM) y el bloque `cdp` de la policy (sondas, CA). Cada carga falla
- * por separado: un endpoint caído deja su parte vacía y se dice.
+ * (SSH, CBOM), el bloque `cdp` de la policy (sondas, CA), lo que vCenter ya
+ * reportó por el gateway, la lista de equipos (para elegir el gateway) y
+ * las capacidades del que mira (para saber si puede registrarlo). Cada
+ * carga falla por separado: un endpoint caído deja su parte vacía y se dice.
  */
 function useCdpSources(refreshNonce, tenantId) {
-  const [state, setState] = React.useState({ loading: true, connectors: null, adcs: null, facets: [], assets: null, cdp: {}, errors: [] });
+  const [state, setState] = React.useState({ loading: true, connectors: null, adcs: null, facets: [], assets: null, cdp: {}, vcenterSources: [], devices: [], permissions: null, errors: [] });
   const [nonce, setNonce] = React.useState(0);
   React.useEffect(() => {
     let alive = true;
@@ -61,10 +67,13 @@ function useCdpSources(refreshNonce, tenantId) {
       soft("AD CS readers", listCdpAdcsSources().then((r) => r?.sources ?? []), []),
       soft("facets", getCdpFacets({ by: ["source"], limit: 50 }).then((r) => r?.rows ?? []), []),
       soft("assets", getCryptoAssetsSummary(), null),
-      soft("policy", tenantId ? getTenantPolicy(tenantId).then((r) => envelopeOf(r).cdp) : Promise.resolve({}), {})
-    ]).then(([connectors, adcs, facets, assets, cdp]) => {
+      soft("policy", tenantId ? getTenantPolicy(tenantId).then((r) => envelopeOf(r).cdp) : Promise.resolve({}), {}),
+      soft("vCenter sources", listCdpVcenterSources().then((r) => r?.sources ?? []), []),
+      soft("devices", listCdpDevices({ pageSize: 500 }).then((r) => r?.items ?? []), []),
+      soft("permissions", tenantId ? getMyCapabilities(tenantId).then((r) => new Set(Array.isArray(r?.permissions) ? r.permissions : [])) : Promise.resolve(null), null)
+    ]).then(([connectors, adcs, facets, assets, cdp, vcenterSources, devices, permissions]) => {
       if (!alive) return;
-      setState({ loading: false, connectors, adcs, facets, assets, cdp, errors });
+      setState({ loading: false, connectors, adcs, facets, assets, cdp, vcenterSources, devices, permissions, errors });
     });
     return () => {
       alive = false;
@@ -154,6 +163,7 @@ const Divider = () => <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.
 
 export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
   const tenantId = useEffectiveTenantId();
+  const { auth } = useAuthContext();
   const src = useCdpSources(refreshNonce, tenantId);
   const caHosts = Array.isArray(src.cdp?.adcs?.hosts) ? src.cdp.adcs.hosts : [];
   const changed = () => {
@@ -161,9 +171,20 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
     src.reload();
   };
   const connectorsState = src.connectors ?? undefined;
+  // El gateway de vCenter se carga y refresca en su propio panel (tras
+  // verificar vuelve a leer solo); el mapa de arriba refleja lo último que
+  // el panel vio.
+  const [gateways, setGateways] = React.useState([]);
+  const onGatewaysLoaded = React.useCallback((list) => setGateways(Array.isArray(list) ? list : []), []);
+  // Registrar el gateway y sellar su credencial es cosa de quien tiene la
+  // capacidad del plugin (el servidor pide patch_management O
+  // crypto_discovery; en esta página la segunda es la que cuenta).
+  const canManageGateway = auth?.tenantMember?.isActive === true && Boolean(src.permissions?.has("crypto_discovery") || src.permissions?.has("patch_management"));
+  const [snack, setSnack] = React.useState(null);
+  const notify = React.useCallback((severity, message) => setSnack({ severity, message }), []);
   const mapData = React.useMemo(
-    () => ({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp }),
-    [src.facets, src.assets, src.connectors, src.adcs, src.cdp]
+    () => ({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp, gateways, vcenterSources: src.vcenterSources }),
+    [src.facets, src.assets, src.connectors, src.adcs, src.cdp, src.vcenterSources, gateways]
   );
 
   return (
@@ -192,7 +213,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         <AdcsReaders sources={src.adcs} caHosts={caHosts} />
       </Sector>
 
-      <Sector baseKey="infra" sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and, when available, vCenter.">
+      <Sector baseKey="infra" sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and vCenter with its ESXi hosts.">
         <CdpRemoteProbes refreshNonce={refreshNonce} />
         <Divider />
         <CdpConnectorsPanel
@@ -206,12 +227,20 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           intro="Refreshed daily. Reads kubernetes.io/tls secrets, cert-manager Certificate objects and which Ingress uses each certificate. A certificate that also lives on a device is matched by fingerprint."
         />
         <Divider />
-        <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>vCenter / ESXi</Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8 }}>
-          Not available yet. The Patch Management gateway already holds a vCenter credential; reading the vCenter machine
-          certificate, the trusted roots it distributes and each ESXi host certificate through it is planned. Meanwhile,
-          add vCenter and each ESXi host as remote probe targets above (<code>host:443</code>): the certificate they serve,
-          and the key exchange they negotiate, show up under Remote probes and in the Infra sector.
+        <GatewayPanel
+          variant="cdp"
+          api={infrastructureApi}
+          canManage={canManageGateway}
+          devices={src.devices}
+          notify={notify}
+          onLoaded={onGatewaysLoaded}
+          onChanged={changed}
+        />
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1 }}>
+          Shared with Patch Management: one registration per vCenter, used for VM snapshots there and for certificates here.
+          The vSphere account needs only <code>System.View</code> to read certificates; “Test connection” reports each use
+          separately. What is read: the certificate vCenter serves on 443 and the one each ESXi host serves on 443, as the
+          Infra sector of the Dashboard.
         </Typography>
       </Sector>
 
@@ -242,6 +271,10 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           intro="Refreshed daily. Each reports its certificates and keys, who uses them and what it will issue next. A certificate that also lives on a device is matched by fingerprint."
         />
       </Sector>
+
+      <Snackbar open={Boolean(snack)} autoHideDuration={6000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity={snack?.severity ?? "info"} onClose={() => setSnack(null)} sx={{ width: "100%" }}>{snack?.message}</Alert>
+      </Snackbar>
     </Stack>
   );
 }

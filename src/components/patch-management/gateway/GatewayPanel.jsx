@@ -3,6 +3,14 @@
 // The "Infrastructure Gateway" tab: register the host that brokers to vCenter,
 // seal its credential, and — crucially — see whether any of it actually works.
 //
+// 2026-09-14: the same gateway is SHARED with Crypto Discovery, which reads the
+// vCenter and ESXi certificates through it. This panel therefore renders in two
+// places with two `variant`s — "pmp" (Patch Management → Configure, snapshots)
+// and "cdp" (Crypto Discovery → Settings → Infra, certificates) — and takes its
+// API as a prop, because each page talks to the mount its own capability can
+// reach (/patch-management/gateways vs /infrastructure/gateways). Same rows,
+// same handlers on the server; only the gate differs.
+//
 // The verification detail is the point. With an end-to-end sealed credential
 // the control plane cannot test it for you, so the gateway self-checks and
 // reports back a rung-by-rung diagnostic. Showing only "failed" would put the
@@ -36,6 +44,7 @@ import {
   IconButton,
   Paper,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -58,13 +67,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 
-import {
-  listGateways,
-  createGateway,
-  updateGateway,
-  deleteGateway,
-  verifyGateway,
-} from "../../../api/patchManagement";
+import * as patchManagementApi from "../../../api/patchManagement";
 import GatewayDialog from "./GatewayDialog";
 import CredentialDialog from "./CredentialDialog";
 import SnapshotTestDialog from "./SnapshotTestDialog";
@@ -73,7 +76,30 @@ import {
   healthPresentation,
   credentialPresentation,
   remediationFor,
+  usesPresentation,
 } from "./verifyReport";
+
+const VARIANT = {
+  pmp: {
+    title: "Infrastructure Gateway",
+    subtitle: "Snapshots virtual machines in vCenter before patching them, so a bad patch can be rolled back.",
+    empty: "No gateway registered. Patching proceeds normally — virtual machines simply get no pre-patch snapshot.",
+    removeConfirm: (gw) => `Remove ${gw.name}? The host will stop acting as a gateway and forget its vCenter credential.${gw.readCertificates ? " Crypto Discovery reads certificates through it and will stop." : ""}`,
+  },
+  cdp: {
+    title: "vCenter gateway",
+    subtitle: "A Tracenium agent that can reach vCenter reads the vCenter machine certificate and each ESXi host certificate with a read-only vSphere account. The credential is sealed in this browser against the gateway's certificate; the control plane never sees it.",
+    empty: "No vCenter gateway registered. Register one on a device that reaches vCenter, seal a read-only credential, then switch on “Reads certificates”.",
+    removeConfirm: (gw) => `Remove ${gw.name}? The host will stop acting as a gateway and forget its vCenter credential. If Patch Management snapshots VMs through it, that stops too.`,
+  },
+};
+
+const USE_STATUS_ICON = {
+  ok: <CheckCircleOutlineIcon color="success" fontSize="small" />,
+  failed: <ErrorOutlineIcon color="error" fontSize="small" />,
+  pending: <RadioButtonUncheckedIcon color="disabled" fontSize="small" />,
+  off: <RemoveCircleOutlineIcon color="disabled" fontSize="small" />,
+};
 
 const STATUS_ICON = {
   ok: <CheckCircleOutlineIcon color="success" fontSize="small" />,
@@ -85,6 +111,7 @@ const STATUS_ICON = {
 
 function VerifyDetail({ gateway }) {
   const rows = toStageRows(gateway.lastVerifyReport);
+  const uses = usesPresentation(gateway);
   return (
     <Box sx={{ p: 2, bgcolor: "action.hover" }}>
       <Typography variant="subtitle2" gutterBottom>
@@ -97,6 +124,19 @@ function VerifyDetail({ gateway }) {
           {remediationFor(gateway.lastVerifyClassify)}
         </Alert>
       )}
+
+      {/* Per use (2026-09-14): the privilege rung is judged for what the
+          gateway is used for, so a read-only account is fine for
+          certificates and only snapshots show as missing. */}
+      <Stack direction="row" spacing={2} sx={{ mb: 1.5, flexWrap: "wrap", rowGap: 0.5 }} aria-label="Gateway uses">
+        {uses.map((u) => (
+          <Stack key={u.use} direction="row" spacing={0.75} alignItems="center">
+            {USE_STATUS_ICON[u.status]}
+            <Typography variant="body2">{u.label}</Typography>
+            <Typography variant="caption" color="text.secondary">{u.detail}</Typography>
+          </Stack>
+        ))}
+      </Stack>
 
       <Stack spacing={0.75}>
         {rows.map((r) => (
@@ -132,7 +172,9 @@ function VerifyDetail({ gateway }) {
   );
 }
 
-export default function GatewayPanel({ canManage = false, devices = [], notify }) {
+export default function GatewayPanel({ canManage = false, devices = [], notify, variant = "pmp", api = patchManagementApi, onLoaded, onChanged }) {
+  const copy = VARIANT[variant] ?? VARIANT.pmp;
+  const { listGateways, createGateway, updateGateway, deleteGateway, verifyGateway } = api;
   const [gateways, setGateways] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -154,13 +196,15 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
       // every successful call as a failure: the gateway was created, its
       // policy was synced, and the operator was told it had been rejected.
       const data = await listGateways();
-      setGateways(data?.gateways ?? []);
+      const list = data?.gateways ?? [];
+      setGateways(list);
+      onLoaded?.(list);
     } catch (err) {
       setError(errorMessage(err, "Could not load gateways."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listGateways, onLoaded]);
 
   React.useEffect(() => {
     load();
@@ -175,10 +219,11 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
     }
     notify?.("success", editing ? "Gateway updated." : "Gateway registered.");
     await load();
+    onChanged?.();
   };
 
   const remove = async (gw) => {
-    if (!window.confirm(`Remove ${gw.name}? The host will stop acting as a gateway and forget its vCenter credential.`)) {
+    if (!window.confirm(copy.removeConfirm(gw))) {
       return;
     }
     try {
@@ -188,6 +233,23 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
     }
     notify?.("success", "Gateway removed.");
     await load();
+    onChanged?.();
+  };
+
+  // Crypto Discovery's use of the gateway. A partial PATCH: the server keeps
+  // everything else, so a snapshot gateway keeps snapshotting.
+  const setReadCertificates = async (gw, on) => {
+    setBusyId(gw.id);
+    try {
+      await updateGateway(gw.id, { readCertificates: on });
+    } catch (err) {
+      return notify?.("error", errorMessage(err, "Could not change certificate reading."));
+    } finally {
+      setBusyId(null);
+    }
+    notify?.("success", on ? "Certificate reading switched on. The gateway reads vCenter and its ESXi hosts on its next Crypto Discovery scan." : "Certificate reading switched off. What it brought stays until its next scan retires it.");
+    await load();
+    onChanged?.();
   };
 
   const test = async (gw) => {
@@ -218,11 +280,8 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="h6">Infrastructure Gateway</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Snapshots virtual machines in vCenter before patching them, so a bad patch
-            can be rolled back.
-          </Typography>
+          <Typography variant="h6">{copy.title}</Typography>
+          <Typography variant="body2" color="text.secondary">{copy.subtitle}</Typography>
         </Box>
         {canManage && (
           <Button
@@ -241,10 +300,7 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {gateways.length === 0 ? (
-        <Alert severity="info">
-          No gateway registered. Patching proceeds normally — virtual machines simply
-          get no pre-patch snapshot.
-        </Alert>
+        <Alert severity="info">{copy.empty}</Alert>
       ) : (
         <Paper variant="outlined">
           <Table size="small">
@@ -255,6 +311,7 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
                 <TableCell>vCenter</TableCell>
                 <TableCell>Credential</TableCell>
                 <TableCell>Health</TableCell>
+                {variant === "cdp" && <TableCell>Reads certificates</TableCell>}
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -292,6 +349,17 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
                           <Chip size="small" label={health.label} color={health.color} />
                         </Tooltip>
                       </TableCell>
+                      {variant === "cdp" && (
+                        <TableCell>
+                          <Switch
+                            size="small"
+                            checked={gw.readCertificates === true}
+                            disabled={!canManage || busyId === gw.id}
+                            onChange={(e) => setReadCertificates(gw, e.target.checked)}
+                            slotProps={{ input: { "aria-label": `Read certificates through ${gw.name}` } }}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell align="right">
                         {canManage && (
                           <Stack direction="row" spacing={0.5} justifyContent="flex-end">
@@ -307,24 +375,26 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
                                 </IconButton>
                               </span>
                             </Tooltip>
-                            <Tooltip
-                              title={
-                                gw.health === "verified"
-                                  ? "Test a snapshot on one VM"
-                                  : "Test a snapshot (verify the gateway first)"
-                              }
-                            >
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  aria-label={`Test a snapshot with ${gw.name}`}
-                                  onClick={() => setSnapshotTestFor(gw)}
-                                  disabled={gw.health !== "verified"}
-                                >
-                                  <PhotoCameraOutlinedIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
+                            {variant === "pmp" && (
+                              <Tooltip
+                                title={
+                                  gw.health === "verified"
+                                    ? "Test a snapshot on one VM"
+                                    : "Test a snapshot (verify the gateway first)"
+                                }
+                              >
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    aria-label={`Test a snapshot with ${gw.name}`}
+                                    onClick={() => setSnapshotTestFor(gw)}
+                                    disabled={gw.health !== "verified"}
+                                  >
+                                    <PhotoCameraOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
                             <Tooltip title="Edit">
                               <IconButton
                                 size="small"
@@ -347,7 +417,7 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ p: 0, borderBottom: open ? undefined : "none" }}>
+                      <TableCell colSpan={variant === "cdp" ? 7 : 6} sx={{ p: 0, borderBottom: open ? undefined : "none" }}>
                         <Collapse in={open} unmountOnExit>
                           <VerifyDetail gateway={gw} />
                         </Collapse>
@@ -371,16 +441,19 @@ export default function GatewayPanel({ canManage = false, devices = [], notify }
       <CredentialDialog
         open={Boolean(credentialFor)}
         gateway={credentialFor}
+        api={api}
         onClose={() => setCredentialFor(null)}
         onDone={load}
         notify={notify}
       />
-      <SnapshotTestDialog
-        open={Boolean(snapshotTestFor)}
-        gateway={snapshotTestFor}
-        onClose={() => setSnapshotTestFor(null)}
-        notify={notify}
-      />
+      {variant === "pmp" && (
+        <SnapshotTestDialog
+          open={Boolean(snapshotTestFor)}
+          gateway={snapshotTestFor}
+          onClose={() => setSnapshotTestFor(null)}
+          notify={notify}
+        />
+      )}
     </Box>
   );
 }

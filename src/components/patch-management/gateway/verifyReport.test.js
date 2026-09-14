@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  usesPresentation,
   toStageRows,
   healthPresentation,
   credentialPresentation,
@@ -131,5 +132,30 @@ describe("remediationFor — every failure names a next step", () => {
 
   it("falls back to something useful for an unrecognised class", () => {
     expect(remediationFor("something_new_from_a_future_agent")).toMatch(/Unexpected/);
+  });
+});
+
+describe("usesPresentation — the gateway's uses, judged separately (2026-09-14)", () => {
+  const report = (uses) => ({ ok: true, stages: [], uses });
+
+  it("⭐ a read-only account: certificates granted, snapshots not in use — no red for something nobody asked for", () => {
+    const rows = usesPresentation({ readCertificates: true, lastVerifyReport: report({ snapshots: { wanted: false, ok: false, missing: ["VirtualMachine.State.CreateSnapshot"] }, certificates: { wanted: true, ok: true, missing: [] } }) });
+    expect(rows).toEqual([
+      { use: "snapshots", label: "VM snapshots", status: "off", detail: "Patch Management not in use" },
+      { use: "certificates", label: "Certificate reading", status: "ok", detail: "Privileges granted" },
+    ]);
+  });
+
+  it("a wanted use with missing privileges names them", () => {
+    const rows = usesPresentation({ readCertificates: true, lastVerifyReport: report({ snapshots: { wanted: true, ok: false, missing: ["VirtualMachine.State.RemoveSnapshot"] }, certificates: { wanted: true, ok: true, missing: [] } }) });
+    expect(rows[0]).toMatchObject({ status: "failed", detail: "Missing: VirtualMachine.State.RemoveSnapshot" });
+  });
+
+  it("a report from before uses existed: snapshots follow the overall verdict, certificates pending or off", () => {
+    expect(usesPresentation({ readCertificates: false, lastVerifyReport: { ok: true, stages: [] } })).toEqual([
+      { use: "snapshots", label: "VM snapshots", status: "ok", detail: "Privileges granted" },
+      { use: "certificates", label: "Certificate reading", status: "off", detail: "Not switched on for this gateway" },
+    ]);
+    expect(usesPresentation({ readCertificates: true, lastVerifyReport: null })[1]).toMatchObject({ status: "pending" });
   });
 });

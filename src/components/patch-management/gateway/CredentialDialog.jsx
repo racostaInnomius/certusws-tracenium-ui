@@ -37,7 +37,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { getGatewayPublicKey, provisionGatewayCredential } from "../../../api/patchManagement";
+import * as patchManagementApi from "../../../api/patchManagement";
 import { sealCredential, formatFingerprint } from "./sealCredential";
 import {
   describeSealTarget,
@@ -47,7 +47,10 @@ import {
 } from "./sealTargetNotice";
 import { TEXT } from "../../../theme/brand";
 
-export default function CredentialDialog({ open, gateway, onClose, onDone, notify }) {
+export default function CredentialDialog({ open, gateway, onClose, onDone, notify, api = patchManagementApi }) {
+  // 2026-09-14: the gateway is shared with Crypto Discovery, which reaches it
+  // through /infrastructure; the caller passes the API its capability can use.
+  const { getGatewayPublicKey, provisionGatewayCredential } = api;
   const [loading, setLoading] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [certInfo, setCertInfo] = React.useState(null);
@@ -100,7 +103,7 @@ export default function CredentialDialog({ open, gateway, onClose, onDone, notif
     return () => {
       cancelled = true;
     };
-  }, [open, gateway]);
+  }, [open, gateway, getGatewayPublicKey]);
 
   const submit = async () => {
     setError("");

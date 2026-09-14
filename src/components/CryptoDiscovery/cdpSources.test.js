@@ -20,12 +20,11 @@ describe("sourcesByBase", () => {
     expect(find(bases, "onprem", "cbom").state).toBe("unconfigured");
     expect(find(bases, "adcs", "adcs").state).toBe("unconfigured");
     expect(find(bases, "infra", "probe").state).toBe("unconfigured");
-    expect(find(bases, "infra", "vcenter").state).toBe("unavailable");
+    expect(find(bases, "infra", "vcenter").state).toBe("unconfigured");
     expect(find(bases, "cloud", "ct").state).toBe("unconfigured");
     expect(find(bases, "external", "keyvault").state).toBe("unconfigured");
-    // Lo no disponible no cuenta en el «x de y».
     const infra = bases.find((b) => b.key === "infra");
-    expect(infra.total).toBe(2);
+    expect(infra.total).toBe(3);
     expect(infra.reporting).toBe(0);
   });
 
@@ -94,5 +93,23 @@ describe("sourcesByBase", () => {
     const all = Object.values(CONNECTOR_KINDS_BY_BASE).flat();
     expect([...all].sort()).toEqual(["acm", "ct", "gcp", "k8s", "keyvault", "vault"]);
     expect(new Set(all).size).toBe(all.length);
+  });
+});
+
+describe("sourcesByBase — vCenter por el gateway de infraestructura", () => {
+  const gw = (over = {}) => ({ id: 7, name: "MSIG-vCenter-Gateway", vcenterUrl: "https://vcenter.corp.example", readCertificates: true, credentialState: "delivered", health: "verified", ...over });
+
+  it("⭐ un gateway que lee y ya reportó es reporting con hosts y vigentes; el mismo gateway sin lectura es «no conectado»", () => {
+    const on = sourcesByBase({ gateways: [gw()], vcenterSources: [{ sourceName: "vcenter:vcenter.corp.example", host: "vcenter.corp.example", hosts: 3, machine: true, assets: 4, assetsValid: 4, lastSeen: "2026-09-14T10:00:00.000Z" }] });
+    expect(find(on, "infra", "vcenter:7")).toMatchObject({ state: "reporting", label: "vCenter · MSIG-vCenter-Gateway", detail: expect.stringMatching(/3 ESXi hosts \+ vCenter · 4 valid certificates/) });
+    expect(on.find((b) => b.key === "infra").reporting).toBe(1);
+    const off = sourcesByBase({ gateways: [gw({ readCertificates: false })] });
+    expect(find(off, "infra", "vcenter:7")).toMatchObject({ state: "unconfigured", detail: expect.stringMatching(/Reads certificates/) });
+  });
+
+  it("lee pero aún nada: configurada, y dice si falta la credencial o si la verificación falló", () => {
+    expect(find(sourcesByBase({ gateways: [gw()] }), "infra", "vcenter:7")).toMatchObject({ state: "configured", detail: expect.stringMatching(/next Crypto Discovery scan/) });
+    expect(find(sourcesByBase({ gateways: [gw({ credentialState: "not_configured" })] }), "infra", "vcenter:7")).toMatchObject({ state: "configured", detail: expect.stringMatching(/No credential/) });
+    expect(find(sourcesByBase({ gateways: [gw({ health: "failed", lastVerifyClassify: "bad_credentials" })] }), "infra", "vcenter:7")).toMatchObject({ state: "failed", detail: expect.stringMatching(/bad_credentials/) });
   });
 });

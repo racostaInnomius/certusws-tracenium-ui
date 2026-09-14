@@ -49,6 +49,7 @@ vi.mock("../api/cdp", async (importOriginal) => {
     listOrphanKeys: vi.fn(async () => ({ ok: true, items: [], total: 0 })),
     listCdpConnectors: vi.fn(async () => ({ ok: true, secretsConfigured: true, connectors: [] })),
     listCdpAdcsSources: vi.fn(async () => ({ ok: true, sources: [] })),
+    listCdpVcenterSources: vi.fn(async () => ({ ok: true, sources: [] })),
     listCdpProbeCandidates: vi.fn(async () => ({ ok: true, candidates: [] })),
     distrustAnchor: vi.fn(),
     destroyEndpointKey: vi.fn()
@@ -73,6 +74,17 @@ vi.mock("../api/policies", async (importOriginal) => {
   };
 });
 vi.mock("../hooks/useEffectiveTenantId", () => ({ useEffectiveTenantId: () => "1" }));
+// El gateway de vCenter compartido (Settings → Infra) y las capacidades del que mira.
+vi.mock("../api/infrastructure", () => ({
+  listGateways: vi.fn(async () => ({ gateways: [] })),
+  createGateway: vi.fn(),
+  updateGateway: vi.fn(),
+  deleteGateway: vi.fn(),
+  verifyGateway: vi.fn(),
+  getGatewayPublicKey: vi.fn(),
+  provisionGatewayCredential: vi.fn()
+}));
+vi.mock("../api/roles", () => ({ getMyCapabilities: vi.fn(async () => ({ ok: true, role: "ADMIN", permissions: ["crypto_discovery"] })) }));
 
 import CryptoDiscovery from "./CryptoDiscovery";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
@@ -120,7 +132,10 @@ describe("pestañas de Crypto Discovery", () => {
     await screen.findByText(/^Sources$/);
     for (const base of ["On-prem devices", "Windows CA", "Infra", "Cloud", "External key sources"]) expect(screen.getAllByText(base).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^vCenter: not available yet$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^vCenter: not connected$/ })).toBeInTheDocument();
+    // El gateway de vCenter se registra desde aquí, sin pasar por Patch Management.
+    expect(await screen.findByText("vCenter gateway")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /register gateway/i })).toBeInTheDocument();
     // Cada tipo de conector en su sector, y CT por su bloque de dominios.
     expect(screen.getByText("Kubernetes clusters")).toBeInTheDocument();
     expect(screen.getByText("AWS Certificate Manager and Google Cloud")).toBeInTheDocument();

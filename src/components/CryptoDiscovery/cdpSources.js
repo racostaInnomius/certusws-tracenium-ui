@@ -13,11 +13,12 @@
 //   failed       — un conector cuya última corrida falló
 //   disabled     — un conector apagado
 //   unconfigured — no hay nada que la haga funcionar todavía
-//   unavailable  — la plataforma aún no la ofrece (vCenter)
+//   unavailable  — la plataforma aún no la ofrece
 //
 // Funciones puras: reciben lo que ya contestan /cdp/facets (by=source),
-// /cdp/assets/summary, /cdp/connectors, /cdp/adcs-sources y el bloque `cdp`
-// de la policy del tenant; no llaman a nada.
+// /cdp/assets/summary, /cdp/connectors, /cdp/adcs-sources,
+// /cdp/vcenter/sources, /infrastructure/gateways y el bloque `cdp` de la
+// policy del tenant; no llaman a nada.
 
 import { BASES, SOURCE_LABEL } from "./cdpSunburst";
 
@@ -60,9 +61,11 @@ function connectorStatus(c) {
  * @param {Array}  input.connectors   /cdp/connectors
  * @param {Array}  input.adcs         /cdp/adcs-sources
  * @param {object} input.cdp          bloque `cdp` de la policy del tenant
+ * @param {Array}  input.gateways     /infrastructure/gateways (el gateway de vCenter)
+ * @param {Array}  input.vcenterSources /cdp/vcenter/sources (lo que ya reportó por el gateway)
  * @returns {Array<{key,label,note,sources:Array,reporting:number,total:number}>}
  */
-export function sourcesByBase({ facets = [], assets = null, connectors = [], adcs = [], cdp = {} } = {}) {
+export function sourcesByBase({ facets = [], assets = null, connectors = [], adcs = [], cdp = {}, gateways = [], vcenterSources = [] } = {}) {
   const byAgentSource = new Map((facets ?? []).map((r) => [String(r.keys?.source ?? ""), r]));
   const assetSources = assets?.sources ?? [];
   const assetsByName = new Map(assetSources.map((s) => [String(s.sourceName), s]));
@@ -133,14 +136,33 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
         push(base, st);
       }
     }
-    if (base === "infra") {
-      push("infra", {
-        key: "vcenter",
-        label: SOURCE_LABEL.vcenter,
-        state: "unavailable",
-        detail: "Not available yet. Meanwhile add vCenter and each ESXi host as remote probe targets (host:443): the certificate they serve lands here under Remote probes."
-      });
+  }
+
+  // ── vCenter por el gateway de infraestructura (2026-09-14) ──
+  //
+  // El gateway es la misma fila que usa Patch Management; aquí importa si
+  // LEE certificados (`readCertificates`), si su credencial llegó, si la
+  // última verificación pasó y si ya reportó (/cdp/vcenter/sources).
+  const reported = new Map((vcenterSources ?? []).map((s) => [String(s.host ?? s.sourceName ?? "").replace(/^vcenter:/, "").toLowerCase(), s]));
+  const gws = Array.isArray(gateways) ? gateways : [];
+  if (gws.length === 0) {
+    push("infra", { key: "vcenter", label: SOURCE_LABEL.vcenter, state: "unconfigured", detail: "Register a vCenter gateway below: a device that reaches vCenter, with a read-only vSphere credential sealed for it." });
+  }
+  for (const gw of gws) {
+    let host = "";
+    try {
+      host = new URL(String(gw.vcenterUrl ?? "")).hostname.toLowerCase();
+    } catch {
+      host = String(gw.vcenterUrl ?? "").toLowerCase();
     }
+    const label = `${SOURCE_LABEL.vcenter} · ${gw.name ?? host}`;
+    const key = `vcenter:${gw.id ?? host}`;
+    const src = reported.get(host);
+    if (gw.readCertificates !== true) push("infra", { key, label, state: "unconfigured", detail: "Registered, but certificate reading is off: switch on “Reads certificates” below." });
+    else if (src) push("infra", { key, label, state: "reporting", detail: `${plural(src.hosts, "ESXi host")}${src.machine ? " + vCenter" : ""} · ${plural(src.assetsValid, "valid certificate")} · last read ${src.lastSeen ? new Date(src.lastSeen).toLocaleString() : "unknown"}` });
+    else if (gw.health === "failed") push("infra", { key, label, state: "failed", detail: `The last verification failed (${gw.lastVerifyClassify || "see the gateway"}).` });
+    else if (gw.credentialState !== "delivered") push("infra", { key, label, state: "configured", detail: gw.credentialState === "sealed_pending" ? "Credential sent; waiting for the gateway to store it." : "No credential stored on the gateway yet: seal one below." });
+    else push("infra", { key, label, state: "configured", detail: "Reads vCenter and its ESXi hosts on the gateway's next Crypto Discovery scan." });
   }
 
   // Lo que hay en activos con un origen que no es de ningún conector ni de

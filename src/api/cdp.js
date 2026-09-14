@@ -258,6 +258,11 @@ export async function runCdpConnector(id, { dryRun = false } = {}) {
 }
 
 /** Lectores AD CS: las CAs que han reportado y su salud de lectura. */
+/** vCenter por el gateway de infraestructura: qué fuentes han reportado. */
+export async function listCdpVcenterSources() {
+  return httpGetJson(`${BASE}/vcenter/sources`);
+}
+
 export async function listCdpAdcsSources() {
   return httpGetJson(`${BASE}/adcs/sources`);
 }
