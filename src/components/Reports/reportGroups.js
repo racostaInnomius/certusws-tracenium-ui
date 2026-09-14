@@ -35,6 +35,7 @@ export const REPORT_GROUP_LABELS = {
   ASP: "Assessment Service",
   MDM: "MDM / MAM",
   Alerts: "Alerts",
+  PKI: "PKI",
 };
 
 /**
@@ -102,6 +103,9 @@ export const REPORT_PAGES = [
   // de cada plugin, que ya cuentan sus trabajos.
   { page: "jobs",              label: "Jobs",                group: null,     plugin: null,  borrows: "global.fleet-health" },
   { page: "audit",             label: "Audit",               group: "Audit",  plugin: null,  borrows: null },
+  // Administración, no dominio: la página cuelga de Settings. Está porque su
+  // informe (`pki.agent-certificates`, G2) caería si no en "Other".
+  { page: "pki",               label: "PKI",                 group: "PKI",    plugin: null,  borrows: null },
 ];
 
 /**

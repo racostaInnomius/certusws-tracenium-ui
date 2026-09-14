@@ -36,7 +36,7 @@ describe("groupLabel", () => {
     // Alerts están reservados antes que sus informes, igual que en el
     // `ReportType.group` del backend.
     expect(Object.keys(REPORT_GROUP_LABELS).sort()).toEqual(
-      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "PMP", "RCP", "SCP", "SDP"]
+      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "PKI", "PMP", "RCP", "SCP", "SDP"]
     );
   });
 
@@ -49,8 +49,8 @@ describe("groupLabel", () => {
 describe("REPORT_PAGES", () => {
   // ⭐ La razón de ser de la vista: con ocho informes para doce páginas, una
   // lista POR INFORME enseña ocho filas y esconde las seis ausencias.
-  it("están las DOCE páginas de dominio del menú, en su orden", () => {
-    expect(REPORT_PAGES).toHaveLength(12);
+  it("están las doce páginas de dominio del menú, en su orden, y PKI de Settings al final", () => {
+    expect(REPORT_PAGES).toHaveLength(13);
     expect(REPORT_PAGES.map((p) => p.label)).toEqual([
       "Overview",
       "Asset Management",
@@ -64,6 +64,7 @@ describe("REPORT_PAGES", () => {
       "Alerts",
       "Jobs",
       "Audit",
+      "PKI",
     ]);
   });
 
@@ -90,7 +91,7 @@ describe("groupTypesByPage", () => {
   it("⭐ las páginas SIN informe salen igualmente, con la lista vacía", () => {
     const filas = groupTypesByPage([tipo("cdp.cbom", "CDP")]);
 
-    expect(filas).toHaveLength(12);
+    expect(filas).toHaveLength(13);
     // Jobs: no tiene informe propio ni grupo reservado. Software Delivery y
     // Asset Management ya tienen el suyo, y usarlas de ejemplo de "sin informe"
     // dejaría el test pasando mientras dice algo que ya no es cierto.
@@ -103,7 +104,14 @@ describe("groupTypesByPage", () => {
   it("respeta el orden del menú", () => {
     const filas = groupTypesByPage([]);
     expect(filas[0].label).toBe("Overview");
-    expect(filas[filas.length - 1].label).toBe("Audit");
+    // PKI cuelga de Settings, no del menú de dominio: va detrás de todo.
+    expect(filas[filas.length - 1].label).toBe("PKI");
+  });
+
+  it("el informe de certificados cae en la fila de PKI, no en 'Other'", () => {
+    const filas = groupTypesByPage([tipo("pki.agent-certificates", "PKI")]);
+    expect(filas.find((f) => f.page === "pki")?.types.map((t) => t.key)).toEqual(["pki.agent-certificates"]);
+    expect(filas.some((f) => f.label === "Other")).toBe(false);
   });
 
   it("⚠️ el informe de activos cae en SU página, no en 'Other'", () => {

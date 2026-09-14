@@ -52,7 +52,6 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
   downloadTextFile,
   getSearchParam,
-  toCsv,
   updateSearchParams,
 } from "../utils/browserState";
 
@@ -61,6 +60,7 @@ import PageHeader from "../components/common/PageHeader";
 import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
+import GoToReportButton from "../components/common/GoToReportButton";
 import { formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
 import { getMyCapabilities } from "../api/roles";
@@ -183,6 +183,9 @@ function DetailRow({ label, value, mono = false }) {
     </Box>
   );
 }
+
+/** El informe del motor que sustituye al CSV de cobertura armado en el navegador. */
+const PKI_REPORT_KEY = "pki.agent-certificates";
 
 export default function PKI({ onNavigate } = {}) {
   const confirm = useConfirm();
@@ -587,15 +590,6 @@ export default function PKI({ onNavigate } = {}) {
     rotateTicket, selectedDeviceId, showMessage,
   ]);
 
-  const handleExportCoverageCsv = React.useCallback(() => {
-    const csv = toCsv(devices.items);
-    downloadTextFile(
-      `pki-device-coverage-${new Date().toISOString()}.csv`,
-      csv || "device_id\n",
-      "text/csv;charset=utf-8"
-    );
-  }, [devices.items]);
-
   const handleExportEvidenceJson = React.useCallback(() => {
     if (!selectedCertificate) return;
     const payload = {
@@ -808,21 +802,18 @@ export default function PKI({ onNavigate } = {}) {
             {/* Auto-refresh was moved to the Overview page (a single,
                 tenant-wide cadence control there keeps the pattern
                 consistent and avoids per-page widgets that nobody finds). */}
-            <Button
-              variant="outlined"
-              startIcon={<DownloadOutlinedIcon />}
-              onClick={handleExportCoverageCsv}
-              disabled={devices.items.length === 0}
-              sx={{
-                textTransform: "none",
-                fontWeight: 700,
-                borderColor: BRAND.teal,
-                color: BRAND.teal,
-                "&:hover": { borderColor: BRAND.tealHover, bgcolor: BRAND.tealSoft },
-              }}
-            >
-              CSV
-            </Button>
+            {/* El CSV de cobertura se armaba AQUÍ con la página visible (25
+                equipos): parecía la flota y era una página. El informe del
+                motor lista la flota entera, dice qué equipos no tienen
+                certificado y cuáles retirados aún lo tienen, y queda en
+                `report_runs`. Pide ADMIN/OWNER, como renovar. */}
+            {mayRotate && (
+              <GoToReportButton
+                onNavigate={onNavigate}
+                reportKey={PKI_REPORT_KEY}
+                tooltip="Agent certificates report"
+              />
+            )}
             <Button
               variant="outlined"
               startIcon={<DownloadOutlinedIcon />}
