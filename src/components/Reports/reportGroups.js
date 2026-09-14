@@ -96,7 +96,8 @@ export const REPORT_PAGES = [
   // la página existía en el menú y no aparecía ni como ausencia.
   { page: "assessments",       label: "Assessment Service",  group: "ASP",    plugin: "asp", borrows: null },
   { page: "device-management", label: "MDM / MAM",           group: "MDM",    plugin: "mdm", borrows: "global.fleet-health" },
-  { page: "alerts",            label: "Alerts",              group: "Alerts", plugin: null,  borrows: "audit.events" },
+  // Informe propio desde G2 del plan de cobertura (`alerts.activity`).
+  { page: "alerts",            label: "Alerts",              group: "Alerts", plugin: null,  borrows: null },
   // Sin grupo: está sin decidir si Jobs tendrá informe propio o basta con los
   // de cada plugin, que ya cuentan sus trabajos.
   { page: "jobs",              label: "Jobs",                group: null,     plugin: null,  borrows: "global.fleet-health" },

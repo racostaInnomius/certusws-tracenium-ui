@@ -54,7 +54,7 @@ function mount(onNavigate = vi.fn()) {
 }
 
 describe("Alerts — cabecera", () => {
-  it('el botón "Report" lleva al rastro de auditoría, en CSV', async () => {
+  it('el botón "Report" lleva a SU informe, no al rastro de auditoría', async () => {
     const onNavigate = vi.fn();
     mount(onNavigate);
 
@@ -62,11 +62,10 @@ describe("Alerts — cabecera", () => {
 
     expect(onNavigate).toHaveBeenCalledWith("reports");
     const params = new URL(window.location.href).searchParams;
-    // Las alertas se derivan de los eventos de auditoría: el informe que da el
-    // material del que salen es ése, y no un tipo "alerts" que no existe.
-    expect(params.get("reportKey")).toBe("audit.events");
-    // `audit.events` sólo tiene formato CSV en el registro.
-    expect(params.get("reportFormat")).toBe("csv");
+    // `alerts.activity` (backend, plan de cobertura N5). El rastro de auditoría
+    // contestaba otra pregunta.
+    expect(params.get("reportKey")).toBe("alerts.activity");
+    expect(params.get("reportFormat")).toBe("pdf");
   });
 
   it("va a la misma altura que los otros dos botones de la fila", async () => {

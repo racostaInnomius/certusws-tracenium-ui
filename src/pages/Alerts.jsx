@@ -40,18 +40,15 @@ import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
-// Las alertas se DERIVAN de los eventos de auditoría (lo dice el subtítulo de
-// la página), así que el informe que da el material del que salen es el rastro
-// de auditoría. No hay tipo "alerts" en el catálogo y no se inventa uno.
+// El informe PROPIO de la página: qué alertó en el mes, cuánto tardó en
+// arreglarse, qué reglas hacen ruido y a quién se avisó. Hasta que existió,
+// este botón abría el rastro de auditoría en CSV — el material del que salen
+// las alertas, pero otra pregunta.
 //
-// Sólo existe en CSV: es un volcado del rastro para analizarlo fuera, no un
-// documento para leer.
-//
-// Sin gate de rol aquí: `audit.events` no declara `minRole`. Lo que sí exige
-// —desde hoy— es la capacidad `audit_log`, la misma que pide la página de
-// Audit, y de eso se encarga el catálogo de Reports: a quien no la tenga, el
-// informe no le aparece.
-const AUDIT_EVENTS_KEY = "audit.events";
+// Sin gate de rol aquí, como antes: el informe exige ADMIN/OWNER y la
+// capacidad `alerts`, y de eso se encarga el catálogo de Reports — a quien no
+// los tenga, el informe no le aparece.
+const ALERTS_REPORT_KEY = "alerts.activity";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
@@ -415,9 +412,8 @@ export default function Alerts({ onNavigate }) {
             </Button>
             <GoToReportButton
               onNavigate={onNavigate}
-              reportKey={AUDIT_EVENTS_KEY}
-              format="csv"
-              tooltip="Audit event trail (CSV)"
+              reportKey={ALERTS_REPORT_KEY}
+              tooltip="Alert activity report"
             />
             <RefreshControl
               refreshSeconds={refreshSeconds}
