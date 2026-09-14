@@ -40,6 +40,7 @@ import {
 import { listFrom } from "../api/shape";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getMyCapabilities } from "../api/roles";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 
 import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
@@ -366,6 +367,11 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
 
   const capabilitiesLoading = myPermissions === null;
   const canViewAssets = Boolean(myPermissions?.has("assets_view"));
+  // Bloquear/permitir extensiones escribe el registro de la flota: es
+  // remediación, y va con PMP como "Fix now". Pista de UI; el cierre real es
+  // el 402 del backend.
+  const { isEntitled } = usePluginCatalog();
+  const pmpEntitled = isEntitled("pmp");
 
   const [summary, setSummary] = React.useState(null);
   const [rankings, setRankings] = React.useState(null);
@@ -943,9 +949,11 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
       {/* Extensions in those browsers, with how much each one can reach. */}
       <BrowserExtensionsPanel
         notify={(severity, message) => setSnackbar({ open: true, severity, message })}
-        // Block/allow rules are browser security configuration: same
-        // capability as Security Baselines (the API enforces it too).
+        // Block/allow rules: Patch Management (it writes the fleet's registry,
+        // like "Fix now") plus the Security Compliance capability. The API
+        // enforces both.
         canManageRules={Boolean(myPermissions?.has("security_compliance"))}
+        rulesEntitled={pmpEntitled}
       />
 
       {/* Security events Chrome itself reports, via the customer's Pub/Sub. */}

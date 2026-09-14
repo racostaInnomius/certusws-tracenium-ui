@@ -84,7 +84,7 @@ function CoverageLine({ coverage }) {
   );
 }
 
-export default function BrowserExtensionsPanel({ notify, canManageRules = false }) {
+export default function BrowserExtensionsPanel({ notify, canManageRules = false, rulesEntitled = true }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [level, setLevel] = React.useState(null);
@@ -208,6 +208,7 @@ export default function BrowserExtensionsPanel({ notify, canManageRules = false 
             <BlockAllOthersControls
               rules={rulesView.rules}
               canManage={canManageRules}
+              entitled={rulesEntitled}
               windowsDevices={rulesView.windowsDevices}
               onSave={saveRule}
               onRemove={removeRule}
@@ -314,6 +315,7 @@ export default function BrowserExtensionsPanel({ notify, canManageRules = false 
                                   extension={e}
                                   rule={rulesByKey.get(key)}
                                   canManage={canManageRules}
+                                  entitled={rulesEntitled}
                                   windowsDevices={rulesView.windowsDevices}
                                   onSave={saveRule}
                                   onRemove={removeRule}

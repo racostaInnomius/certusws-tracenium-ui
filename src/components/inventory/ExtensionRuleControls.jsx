@@ -29,6 +29,11 @@ import { severityMeta } from "../../theme/severity";
 const RULE_BROWSERS = new Set(["chrome", "edge"]);
 const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge" };
 
+// Two different "no": the plan does not include applying rules, or this
+// person lacks the capability. Plan first — no capability fixes a plan.
+const NOT_ENTITLED = "Blocking and allowing extensions requires Patch Management.";
+const NO_CAPABILITY = "Changing rules needs the Security Compliance capability.";
+
 /** "Blocked" / "Allowed" chip for a row that has a rule. */
 export function RuleChip({ rule }) {
   if (!rule) return null;
@@ -98,7 +103,7 @@ export function RuleDialog({ open, title, body, confirmLabel, danger, onCancel, 
  * Block / Allow / Remove for one extension. Firefox and read-only users get a
  * sentence instead of disabled buttons that explain nothing.
  */
-export function ExtensionRuleActions({ extension, rule, canManage, windowsDevices, onSave, onRemove }) {
+export function ExtensionRuleActions({ extension, rule, canManage, entitled = true, windowsDevices, onSave, onRemove }) {
   const [pending, setPending] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -150,7 +155,7 @@ export function ExtensionRuleActions({ extension, rule, canManage, windowsDevice
           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>No rule for this extension.</Typography>
         )}
         <Box sx={{ flex: 1 }} />
-        {canManage ? (
+        {entitled && canManage ? (
           <>
             {rule?.action !== "block" ? (
               <Button size="small" color="error" variant="outlined" onClick={() => setPending("block")}>
@@ -169,7 +174,7 @@ export function ExtensionRuleActions({ extension, rule, canManage, windowsDevice
             ) : null}
           </>
         ) : (
-          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>Changing rules needs the Security Compliance capability.</Typography>
+          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{entitled ? NO_CAPABILITY : NOT_ENTITLED}</Typography>
         )}
       </Box>
       {d ? (
@@ -192,14 +197,21 @@ export function ExtensionRuleActions({ extension, rule, canManage, windowsDevice
  * "Block all other extensions" per browser. The dangerous switch of the
  * feature, so it says how many extensions are allowed before it flips.
  */
-export function BlockAllOthersControls({ rules, canManage, windowsDevices, onSave, onRemove }) {
+export function BlockAllOthersControls({ rules, canManage: canManageRaw, entitled = true, windowsDevices, onSave, onRemove }) {
+  const canManage = canManageRaw && entitled;
   const [pending, setPending] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const list = Array.isArray(rules) ? rules : [];
   const blocked = list.filter((r) => r.action === "block" && r.extensionId !== "*").length;
   const allowed = list.filter((r) => r.action === "allow").length;
 
-  if (list.length === 0 && !canManage) return null;
+  // Sin plan pero con reglas de antes: se enseñan (y se retiran solas en los
+  // equipos); sin reglas y sin poder crearlas, la barra sólo explica por qué.
+  if (list.length === 0 && !canManage) {
+    return entitled ? null : (
+      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1 }}>{NOT_ENTITLED}</Typography>
+    );
+  }
 
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", mb: 1.25, p: 1, borderRadius: 1, bgcolor: BRAND.surfaceMuted }}>

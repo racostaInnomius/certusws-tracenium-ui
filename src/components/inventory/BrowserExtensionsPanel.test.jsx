@@ -194,6 +194,16 @@ describe("BrowserExtensionsPanel — rules", () => {
     expect(screen.getByRole("button", { name: "Block extension" })).toBeInTheDocument();
   });
 
+  it("⚠️ without Patch Management there are no rule buttons even with the capability — the plan is the reason given", async () => {
+    getBrowserExtensions.mockResolvedValue(DATA);
+    render(<BrowserExtensionsPanel canManageRules rulesEntitled={false} />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    expect(screen.queryByRole("button", { name: "Block" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Block all other extensions" })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Blocking and allowing extensions requires Patch Management.").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/needs the Security Compliance capability/)).not.toBeInTheDocument();
+  });
+
   it("without the capability there are no buttons, only why; Firefox says rules are Chrome/Edge", async () => {
     getBrowserExtensions.mockResolvedValue(DATA);
     render(<BrowserExtensionsPanel />);
