@@ -58,9 +58,13 @@ const LIST = {
 };
 
 const DETAIL = {
-  instance: LIST.instances[0],
+  instance: { ...LIST.instances[0], targetScore: null },
   lastScore: LIST.instances[0].lastScore,
   coverage: { assessable: 29, total: 30 },
+  projections: [
+    { severities: ["critical"], fixes: 1, score: 64 },
+    { severities: ["critical", "high"], fixes: 2, score: 88 },
+  ],
   findings: [
     { controlId: "ASP-AD-CFG-007", title: "Fine-grained password policies allow passwords shorter than 14 characters", section: "Domain configuration", status: "not_assessed", severity: "medium", requires: "privileged", reason: "requires_privileged_read:0x8007200A", affectedCount: null, remediation: { summary: "Raise it", steps: ["Do it"], risk: "Some" }, references: [] },
     { controlId: "ASP-AD-ACC-001", title: "Enabled user accounts have a password that never expires", section: "Accounts", status: "fail", severity: "medium", affectedCount: 38, evidence: { count: 38, sample: ["CN=svc,DC=m"] }, remediation: { summary: "Fix", steps: ["Step"], risk: "Risk" }, references: [] },
@@ -82,7 +86,11 @@ function mount(overrides = {}) {
   const calls = [];
   server.use(
     http.get(/.*\/api\/v1\/asp\/instances$/, () => HttpResponse.json(overrides.list ?? LIST)),
-    http.get(/.*\/api\/v1\/asp\/instances\/7$/, () => HttpResponse.json(DETAIL)),
+    http.get(/.*\/api\/v1\/asp\/instances\/7$/, () => HttpResponse.json(overrides.detail ?? DETAIL)),
+    http.put(/.*\/api\/v1\/asp\/instances\/7\/target$/, async ({ request }) => {
+      calls.push({ path: "target", body: await request.json() });
+      return HttpResponse.json({ instance: { ...DETAIL.instance, targetScore: 90 } });
+    }),
     http.get(/.*\/api\/v1\/asp\/instances\/9\/collector-candidates$/, () =>
       HttpResponse.json({ candidates: [
         { deviceId: "dc-a", domain: "lab.local", hostname: "LAB-DC01", online: true },
@@ -179,6 +187,47 @@ describe("Assessment Suite — detalle", () => {
     const dcsyncRow = within(findings).getByText(/DCSync/).closest("tr");
     await user.click(within(dcsyncRow).getByRole("button", { name: "Show details" }));
     expect(await screen.findByText(/RuntimeException: You cannot call a method on a null-valued expression\./)).toBeTruthy();
+  });
+
+  it("⭐ gauge: score, objetivo del tenant, variación, distancia y proyecciones", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    const gauge = await screen.findByRole("img", { name: "Score 58 of 100, target 85" });
+    expect(within(gauge).getByText("Target 85")).toBeTruthy();
+    expect(screen.getByText("Action required")).toBeTruthy();
+    expect(screen.getByText("+7")).toBeTruthy();
+    expect(screen.getByText("27 points to target")).toBeTruthy();
+    expect(screen.getByText("Tenant On track threshold")).toBeTruthy();
+    expect(screen.getByText("Fix the 1 critical finding")).toBeTruthy();
+    expect(screen.getByText("Fix the 2 critical and high findings")).toBeTruthy();
+    // Sólo la proyección que llega al objetivo lo dice.
+    expect(screen.getAllByText(/reaches target/)).toHaveLength(1);
+    expect(screen.getByText(/Based on 29 of 30 checks/)).toBeTruthy();
+  });
+
+  it("⭐ Set target guarda el objetivo de la instancia", async () => {
+    const user = userEvent.setup();
+    const calls = mount();
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await user.click(await screen.findByRole("button", { name: "Set target" }));
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText("Target");
+    expect(input.value).toBe("85");
+    await user.clear(input);
+    await user.type(input, "90");
+    await user.click(within(dialog).getByRole("button", { name: "Save target" }));
+    await waitFor(() => expect(calls.find((c) => c.path === "target")).toBeTruthy());
+    expect(calls.find((c) => c.path === "target").body).toEqual({ targetScore: 90 });
+  });
+
+  it("sin corrida completa el gauge no inventa un 0", async () => {
+    const user = userEvent.setup();
+    mount({ detail: { ...DETAIL, lastScore: null, history: [], projections: [] } });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    expect(await screen.findByRole("img", { name: "No score yet, target 85" })).toBeTruthy();
+    expect(screen.getByText("No complete run yet")).toBeTruthy();
+    expect(screen.queryByText("What would move it")).toBeNull();
   });
 
   it("⭐ Run now sin colector online dice que la corrida quedó missed", async () => {

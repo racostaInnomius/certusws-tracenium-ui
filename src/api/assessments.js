@@ -49,3 +49,8 @@ export async function setFindingException(id, controlId, { reason, expiresAt }) 
 export async function removeFindingException(id, controlId) {
   return httpDeleteJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception`);
 }
+
+/** Score objetivo de la instancia (1-100); `null` vuelve al umbral On track del tenant. */
+export async function setAssessmentTarget(id, targetScore) {
+  return httpPutJson(`${BASE}/instances/${encodeURIComponent(id)}/target`, { targetScore });
+}

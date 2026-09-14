@@ -1,7 +1,7 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { coverageText, describeRunNow, notAssessedReason, openBySeverity, scheduleText, sortFindings } from "./assessmentModel";
+import { coverageText, describeRunNow, effectiveTarget, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
 describe("assessmentModel", () => {
@@ -45,6 +45,34 @@ describe("assessmentModel", () => {
   it("agenda en UTC", () => {
     expect(scheduleText({ frequency: "weekly", window: { days: ["sun"], startHour: 2 } })).toBe("Weekly · sun · 02:00 UTC");
     expect(scheduleText({ frequency: "manual" })).toBe("Manual");
+  });
+});
+
+describe("gauge del score", () => {
+  const bands = { goodMin: 85, warningMin: 60 };
+
+  it("sin objetivo propio, el objetivo es el umbral On track del tenant", () => {
+    expect(effectiveTarget({ targetScore: null }, bands)).toEqual({ value: 85, source: "bands" });
+    expect(effectiveTarget({ targetScore: 90 }, bands)).toEqual({ value: 90, source: "instance" });
+    expect(effectiveTarget({ targetScore: 0 }, { goodMin: 70, warningMin: 50 })).toEqual({ value: 70, source: "bands" });
+  });
+
+  it("la variación es contra la corrida puntuada anterior; con una sola, no hay", () => {
+    expect(scoreDelta([{ score: 51, scoredAt: "2026-09-14" }])).toBeNull();
+    expect(scoreDelta([{ score: 51, scoredAt: "2026-09-07" }, { score: 57, scoredAt: "2026-09-14" }])).toEqual({ delta: 6, previousScore: 51, previousAt: "2026-09-07" });
+  });
+
+  it("la distancia al objetivo se dice en puntos", () => {
+    expect(targetGapText(51, 85)).toBe("34 points to target");
+    expect(targetGapText(84, 85)).toBe("1 point to target");
+    expect(targetGapText(85, 85)).toBe("Target met");
+    expect(targetGapText(90, 85)).toBe("Target met · 5 above");
+    expect(targetGapText(null, 85)).toBe("No score yet");
+  });
+
+  it("las proyecciones se leen como una acción", () => {
+    expect(projectionLabel({ severities: ["critical"], fixes: 1, score: 58 })).toBe("Fix the 1 critical finding");
+    expect(projectionLabel({ severities: ["critical", "high"], fixes: 4, score: 71 })).toBe("Fix the 4 critical and high findings");
   });
 });
 

@@ -113,3 +113,42 @@ export function scheduleText(schedule) {
   if (f === "monthly") return `Monthly · first ${days} · ${hour}`;
   return `Weekly · ${days} · ${hour}`;
 }
+
+// ── Gauge del score ────────────────────────────────────────────────────────
+
+/**
+ * El objetivo que se enseña. Sin objetivo propio de la instancia, el umbral
+ * «On track» de las bandas del tenant: el mismo número que ya colorea los
+ * scores, no uno inventado para la ocasión.
+ */
+export function effectiveTarget(instance, bands) {
+  const own = Number(instance?.targetScore);
+  if (Number.isInteger(own) && own >= 1 && own <= 100) return { value: own, source: "instance" };
+  return { value: bands.goodMin, source: "bands" };
+}
+
+/**
+ * Variación contra la corrida puntuada anterior (history va de antigua a
+ * reciente). `null` con una sola corrida: no hay contra qué comparar.
+ */
+export function scoreDelta(history) {
+  const h = (history || []).filter((x) => Number.isFinite(x?.score));
+  if (h.length < 2) return null;
+  const last = h[h.length - 1];
+  const prev = h[h.length - 2];
+  return { delta: last.score - prev.score, previousScore: prev.score, previousAt: prev.scoredAt };
+}
+
+/** «34 points to target» / «Target met». */
+export function targetGapText(score, target) {
+  if (!Number.isFinite(score)) return "No score yet";
+  const gap = target - score;
+  if (gap <= 0) return gap === 0 ? "Target met" : `Target met · ${-gap} above`;
+  return `${gap} ${gap === 1 ? "point" : "points"} to target`;
+}
+
+/** «Fix the 1 critical finding» / «Fix the 4 critical and high findings». */
+export function projectionLabel(projection) {
+  const sev = projection.severities.length === 1 ? projection.severities[0] : projection.severities.join(" and ");
+  return `Fix the ${projection.fixes} ${sev} ${projection.fixes === 1 ? "finding" : "findings"}`;
+}

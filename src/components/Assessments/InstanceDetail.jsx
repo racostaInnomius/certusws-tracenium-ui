@@ -29,18 +29,21 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowUpRoundedIcon from "@mui/icons-material/KeyboardArrowUpRounded";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
-import { Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
+import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import { BRAND, TEXT } from "../../theme/brand";
 import { SEVERITY_META } from "../../theme/severity";
 import { formatDate, formatRelative } from "../../utils/format";
 import SectionPaper from "../common/SectionPaper";
 import StatusChip from "./StatusChip";
 import ExceptionDialog from "./ExceptionDialog";
+import ScoreCard from "./ScoreCard";
+import { useComplianceBands } from "../../hooks/useComplianceBands";
 import {
   INSTANCE_STATUS,
   RUN_STATUS,
   VERDICT,
   coverageText,
+  effectiveTarget,
   notAssessedReason,
   openBySeverity,
   scheduleText,
@@ -162,8 +165,10 @@ function FindingRow({ finding, canEdit, onException }) {
 
 export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onRunNow, runNowBusy, onChangeCollector, onDeactivate, onDelete, onChanged }) {
   const [exceptionFor, setExceptionFor] = React.useState(null);
+  const bands = useComplianceBands();
   const inst = detail?.instance;
   if (!inst) return null;
+  const target = effectiveTarget(inst, bands);
 
   const findings = sortFindings(detail.findings);
   const open = openBySeverity(detail.findings);
@@ -225,14 +230,9 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
         </Alert>
       ) : null}
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" }, gap: 2, mb: 2 }}>
-        <SectionPaper>
-          <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase" }}>Score</Typography>
-          <Typography sx={{ fontSize: TEXT["4xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1.1 }}>{detail.lastScore?.score ?? "—"}</Typography>
-          <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-            {detail.lastScore?.scoredAt ? `Scored ${formatDate(detail.lastScore.scoredAt)}` : "No complete run yet"}
-          </Typography>
-        </SectionPaper>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1.4fr) minmax(0, 1fr)" }, gap: 2, mb: 2, alignItems: "start" }}>
+        <ScoreCard detail={detail} bands={bands} canEdit={canEdit} onChanged={onChanged} />
+        <Stack gap={2}>
         <SectionPaper>
           <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: "text.secondary", textTransform: "uppercase" }}>Open findings</Typography>
           <Stack direction="row" gap={1.5} sx={{ mt: 1 }} flexWrap="wrap">
@@ -251,6 +251,7 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
             Checks the machine account cannot read are shown as not assessed, never as passing.
           </Typography>
         </SectionPaper>
+        </Stack>
       </Box>
 
       {history.length > 1 ? (
@@ -262,6 +263,7 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
                 <XAxis dataKey="label" tick={{ fontSize: TEXT.xs }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: TEXT.xs }} />
                 <RechartsTooltip />
+                <ReferenceLine y={target.value} stroke={BRAND.dark} strokeDasharray="4 4" label={{ value: `Target ${target.value}`, position: "insideTopRight", fontSize: TEXT.xs, fill: BRAND.dark }} />
                 <Line type="monotone" dataKey="score" stroke={BRAND.teal} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
