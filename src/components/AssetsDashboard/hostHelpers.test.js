@@ -97,6 +97,12 @@ describe("detail formatters", () => {
     expect(formatDetailDate("not-a-date")).toBe("—");
     expect(typeof formatDetailDate("2026-05-01T10:00:00Z")).toBe("string");
   });
+  it("formatDetailDate renders the midnight hour as 00, not 24 (h24 bug)", () => {
+    // Local 00:30, whatever the TZ of the runner.
+    const out = formatDetailDate(new Date(2026, 8, 14, 0, 30).toISOString());
+    expect(out).toContain("00:30");
+    expect(out).not.toContain("24:30");
+  });
   it("formatDetailPercent fixes to one decimal", () => {
     expect(formatDetailPercent(12.345)).toBe("12.3%");
     expect(formatDetailPercent("nope")).toBe("—");

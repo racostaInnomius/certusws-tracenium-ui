@@ -8,6 +8,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 let capabilities = { role: "ADMIN", permissions: ["patch_management"] };
 vi.mock("../api/roles", () => ({
@@ -35,17 +36,18 @@ const DEVICES = [
 
 beforeEach(() => {
   capabilities = { role: "ADMIN", permissions: ["patch_management"] };
+  clearCachedFetch();
 });
 afterEach(() => {
   cleanup();
   server.resetHandlers();
 });
 
-function mount() {
+function mount(devices = DEVICES) {
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
       const url = new URL(request.url);
-      const items = url.pathname.endsWith("/patch-management/devices") ? DEVICES : [];
+      const items = url.pathname.endsWith("/patch-management/devices") ? devices : [];
       return HttpResponse.json({
         ok: true,
         items,
@@ -110,5 +112,15 @@ describe("Patch Management — búsqueda en la tabla de equipos", () => {
 
     expect(await screen.findByText("No devices match “zzz-nothing”")).toBeInTheDocument();
     expect(screen.getByText("0 of 3 devices")).toBeInTheDocument();
+  });
+
+  it("'Last scan' pinta la hora de medianoche como 00, no 24 (bug de hourCycle h24)", async () => {
+    // 00:30 local, sea cual sea la TZ del runner.
+    const collectedAtUtc = new Date(2026, 8, 14, 0, 30).toISOString();
+    mount([{ ...DEVICES[0], collectedAtUtc }]);
+    await waitFor(() => expect(within(grid()).getByText("Msig13")).toBeInTheDocument());
+
+    expect(await within(grid()).findByText(/00:30/)).toBeInTheDocument();
+    expect(within(grid()).queryByText(/24:30/)).not.toBeInTheDocument();
   });
 });

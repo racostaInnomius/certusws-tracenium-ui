@@ -1137,7 +1137,7 @@ export default function PatchManagement({ onNavigate }) {
         try {
           return new Date(v).toLocaleString("en-US", {
             year: "2-digit", month: "short", day: "2-digit",
-            hour: "2-digit", minute: "2-digit", hourCycle: "h24"
+            hour: "2-digit", minute: "2-digit", hourCycle: "h23"
           });
         } catch { return "—"; }
       }
@@ -1575,7 +1575,7 @@ export default function PatchManagement({ onNavigate }) {
                   {drawerDevice.platform || "—"}
                   {drawerDevice.collectedAtUtc ? (
                     <> · last scan {new Date(drawerDevice.collectedAtUtc).toLocaleString("en-US", {
-                      month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h24"
+                      month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
                     })}</>
                   ) : null}
                 </Typography>

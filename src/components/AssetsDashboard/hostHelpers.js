@@ -132,7 +132,7 @@ export function formatDetailDate(value) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hourCycle: "h24",
+    hourCycle: "h23",
   });
 }
 
