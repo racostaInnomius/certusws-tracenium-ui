@@ -14,6 +14,7 @@ import * as React from "react";
 import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import FindingsPanel from "./FindingsPanel";
+import ExtensionControlPanel from "./ExtensionControlPanel";
 import { SECURITY_DOMAINS, DEFAULT_DOMAIN, domainParams } from "./securityDomains";
 
 export default function SecurityConfigPanel({
@@ -77,6 +78,11 @@ export default function SecurityConfigPanel({
           their own tab.
         </Typography>
       ) : null}
+
+      {/* Browsers: besides the STIG findings, the extension control — block,
+          approve, "only approved extensions". It is remediation, so it lives
+          here next to the fixes, not in the inventory. */}
+      {active === "browsers" ? <ExtensionControlPanel notify={notify} canManage={canManage} /> : null}
 
       <FindingsPanel
         // Remount on domain change so the grid never shows one slice's rows

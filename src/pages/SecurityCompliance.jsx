@@ -2117,6 +2117,13 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             closeDrawer();
             navigateTo("patch", { pmTab: "vulnerabilities" });
           }}
+          onOpenExtensionControl={(extension) => {
+            closeDrawer();
+            navigateTo("patch", {
+              pmTab: "browsers",
+              extension: extension ? `${extension.browser}|${extension.extension_id}` : "",
+            });
+          }}
         />
       </Drawer>
 

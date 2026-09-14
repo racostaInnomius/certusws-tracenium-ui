@@ -34,6 +34,9 @@ export const MOVED_TO_SECURITY = {
   smb: "smb",
   shares: "shares",
   other: "rest",
+  // Not a moved tab: the link Security Compliance and Alerts use to open the
+  // browser slice (extension control) directly.
+  browsers: "browsers",
 };
 
 /**

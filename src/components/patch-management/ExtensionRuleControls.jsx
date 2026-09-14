@@ -1,6 +1,12 @@
-// src/components/inventory/ExtensionRuleControls.jsx
+// src/components/patch-management/ExtensionRuleControls.jsx
 //
-// Block / allow rules for browser extensions (Chrome and Edge on Windows).
+// Block / approve rules for browser extensions (Chrome and Edge on Windows).
+//
+// Lives in Patch Management because a rule WRITES the fleet's registry: this is
+// the remediation arm. "Approve" is the product word for an Allow rule, and it
+// means two things at once: the extension stays installable when "block all
+// other extensions" is on, and Security Compliance stops counting its risk
+// (the operator accepted it).
 //
 // ⚠️ A rule is not a one-off job. It lives in the tenant policy, so a device
 // enrolled tomorrow receives it too and removing it retires it everywhere. The
@@ -31,7 +37,7 @@ const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge" };
 
 // Two different "no": the plan does not include applying rules, or this
 // person lacks the capability. Plan first — no capability fixes a plan.
-const NOT_ENTITLED = "Blocking and allowing extensions requires Patch Management.";
+const NOT_ENTITLED = "Blocking and approving extensions requires Patch Management.";
 const NO_CAPABILITY = "Changing rules needs the Security Compliance capability.";
 
 /** "Blocked" / "Allowed" chip for a row that has a rule. */
@@ -42,7 +48,7 @@ export function RuleChip({ rule }) {
   return (
     <Chip
       size="small"
-      label={blocked ? "Blocked by rule" : "Allowed by rule"}
+      label={blocked ? "Blocked" : "Approved"}
       sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: meta.bg, color: meta.fg, ml: 1 }}
     />
   );
@@ -131,15 +137,17 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
       confirm: (reason) => onSave({ browser: extension.browser, extensionId: extension.extensionId, action: "block", name: extension.name, reason }),
     },
     allow: {
-      title: `Allow ${extension.name} in ${browser}?`,
-      body: `It stays installable even when "block all other extensions" is on for ${browser}.`,
-      confirmLabel: "Allow extension",
+      title: `Approve ${extension.name} in ${browser}?`,
+      body: `Approving accepts its risk: Security Compliance stops counting it on every device, and it stays installable when "block all other extensions" is on for ${browser}.`,
+      confirmLabel: "Approve extension",
       danger: false,
       confirm: (reason) => onSave({ browser: extension.browser, extensionId: extension.extensionId, action: "allow", name: extension.name, reason }),
     },
     remove: {
       title: `Remove the rule for ${extension.name}?`,
-      body: `Agents take out the entry they added. An entry a domain GPO put in the same list stays.`,
+      body: rule?.action === "allow"
+        ? `Its risk counts again in Security Compliance. Agents take out the entry they added; an entry a domain GPO put in the same list stays.`
+        : `Agents take out the entry they added. An entry a domain GPO put in the same list stays.`,
       confirmLabel: "Remove rule",
       danger: false,
       confirm: () => onRemove(extension.browser, extension.extensionId),
@@ -164,7 +172,7 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
             ) : null}
             {rule?.action !== "allow" ? (
               <Button size="small" variant="outlined" onClick={() => setPending("allow")}>
-                Allow
+                Approve
               </Button>
             ) : null}
             {rule ? (
@@ -216,7 +224,7 @@ export function BlockAllOthersControls({ rules, canManage: canManageRaw, entitle
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap", mb: 1.25, p: 1, borderRadius: 1, bgcolor: BRAND.surfaceMuted }}>
       <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark }}>
-        Rules: {blocked} blocked · {allowed} allowed
+        Rules: {blocked} blocked · {allowed} approved
       </Typography>
       {["chrome", "edge"].map((browser) => {
         const star = list.find((r) => r.browser === browser && r.extensionId === "*");
@@ -226,7 +234,7 @@ export function BlockAllOthersControls({ rules, canManage: canManageRaw, entitle
             <Typography sx={{ fontSize: TEXT.xs, color: BRAND.dark }}>{BROWSER_LABEL[browser]}:</Typography>
             {star ? (
               <>
-                <Chip size="small" label="Only allowed extensions" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: severityMeta("high").bg, color: severityMeta("high").fg }} />
+                <Chip size="small" label="Only approved extensions" sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: severityMeta("high").bg, color: severityMeta("high").fg }} />
                 <RuleStatusLine rule={star} windowsDevices={windowsDevices} />
                 {canManage ? (
                   <Button size="small" onClick={() => setPending({ browser, action: "remove" })}>
@@ -251,12 +259,12 @@ export function BlockAllOthersControls({ rules, canManage: canManageRaw, entitle
           busy={busy}
           title={
             pending.action === "on"
-              ? `Block every ${BROWSER_LABEL[pending.browser]} extension that is not allowed?`
+              ? `Block every ${BROWSER_LABEL[pending.browser]} extension that is not approved?`
               : `Let ${BROWSER_LABEL[pending.browser]} install any extension again?`
           }
           body={
             pending.action === "on"
-              ? `${BROWSER_LABEL[pending.browser]} disables and removes every extension without an "Allow" rule on all Windows devices. ${pending.allowedHere} extension${pending.allowedHere === 1 ? " is" : "s are"} allowed for ${BROWSER_LABEL[pending.browser]} right now${pending.allowedHere === 0 ? " — allow the ones people need first" : ""}.`
+              ? `${BROWSER_LABEL[pending.browser]} disables and removes every extension that is not approved on all Windows devices. ${pending.allowedHere} extension${pending.allowedHere === 1 ? " is" : "s are"} approved for ${BROWSER_LABEL[pending.browser]} right now${pending.allowedHere === 0 ? " — approve the ones people need first" : ""}.`
               : "Extensions without a rule can be installed again. Blocked ones stay blocked."
           }
           confirmLabel={pending.action === "on" ? "Block all others" : "Turn off"}

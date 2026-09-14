@@ -1080,8 +1080,8 @@ export function CorrelationSection({ correlation }) {
               : correlation.dynamicGroupsResolved === false ? "No static group" : "—"
           }
         />
-        {correlation.rule ? <DetailRow label="Rule" value={correlation.rule.action === "block" ? "Blocked by rule" : "Allowed by rule"} /> : null}
-        {correlation.allowOnlyMode ? <DetailRow label="Mode" value="Only allowed extensions" /> : null}
+        {correlation.rule ? <DetailRow label="Rule" value={correlation.rule.action === "block" ? "Blocked" : "Approved"} /> : null}
+        {correlation.allowOnlyMode ? <DetailRow label="Mode" value="Only approved extensions" /> : null}
       </Stack>
       {action?.kind === "block_extension" ? (
         <Button
@@ -1091,7 +1091,8 @@ export function CorrelationSection({ correlation }) {
           sx={{ mt: 1 }}
           onClick={() => {
             const pathname = window.location.pathname.replace(/^\/+/, "/") || "/";
-            const search = searchForPage("assets", { assetsTab: "software", extension: `${action.browser}|${action.extensionId}` });
+            // Blocking is remediation: Patch Management → Security configuration → Browsers.
+            const search = searchForPage("patch", { pmTab: "browsers", extension: `${action.browser}|${action.extensionId}` });
             window.history.pushState({}, "", `${pathname}${search}`);
             window.dispatchEvent(new PopStateEvent("popstate"));
           }}

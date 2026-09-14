@@ -86,6 +86,11 @@ export default function FindingCard({
   // matched count ({path, value}); the block carries kev_ids[] and the
   // next CISA due date so the chip can NAME the CVEs.
   deviceVulnerability = null,
+  // cross.browser_extensions.* — the device's `browserExtensions` block names
+  // the extensions behind the count, and the chip opens Patch Management →
+  // Browsers, where they are blocked or approved.
+  deviceBrowserExtensions = null,
+  onOpenExtensionControl = null,
   // Sprint 4 — AI explanation. When true (admin + failing finding) the
   // card offers "Explain" and mounts FindingExplanation on demand; the
   // panel owns the request. Off by default so the read-only/USER view
@@ -105,6 +110,13 @@ export default function FindingCard({
     isVulnerabilityCheck && typeof deviceVulnerability?.next_kev_due_date === "string"
       ? deviceVulnerability.next_kev_due_date
       : null;
+  const extensionList = (() => {
+    const id = String(finding.checkId || "");
+    if (!id.startsWith("cross.browser_extensions.") || !deviceBrowserExtensions) return [];
+    const key = id.endsWith("no_critical_risk") ? "critical" : id.endsWith("no_high_risk") ? "high" : id.endsWith("store_only") ? "outside_store" : null;
+    return key && Array.isArray(deviceBrowserExtensions[key]) ? deviceBrowserExtensions[key] : [];
+  })();
+  const isExtensionCheck = String(finding.checkId || "").startsWith("cross.browser_extensions.");
   const borderColor = finding.status === "fail" ? `${ROLE.critical}66` : BRAND.border;
   const [open, setOpen] = React.useState(false);
 
@@ -407,6 +419,30 @@ export default function FindingCard({
                     bgcolor: ROLE.criticalSoft,
                     color: BRAND.alert.errorText,
                   }}
+                />
+              </Tooltip>
+            ) : null}
+            {/* Extension risk: name the extensions and open the control in
+                Patch Management (block / approve). Not a per-device fix. */}
+            {isExtensionCheck && finding.status === "fail" ? (
+              <Tooltip
+                title={
+                  (extensionList.length
+                    ? `${extensionList.map((e) => e.name).join(", ")}. `
+                    : "") +
+                  (deviceBrowserExtensions?.approved_excluded_count
+                    ? `${deviceBrowserExtensions.approved_excluded_count} approved extension(s) not counted. `
+                    : "") +
+                  "Block or approve them in Patch Management → Security configuration → Browsers."
+                }
+                arrow
+              >
+                <Chip
+                  size="small"
+                  label={extensionList.length ? `${extensionList.length} extension${extensionList.length === 1 ? "" : "s"}: ${extensionList.slice(0, 2).map((e) => e.name).join(", ")}${extensionList.length > 2 ? "…" : ""}` : "Review extensions"}
+                  onClick={onOpenExtensionControl ? () => onOpenExtensionControl(extensionList[0] || null) : undefined}
+                  clickable={Boolean(onOpenExtensionControl)}
+                  sx={{ height: 24, fontSize: TEXT.xs, fontWeight: 700, bgcolor: ROLE.criticalSoft, color: BRAND.alert.errorText, maxWidth: 420 }}
                 />
               </Tooltip>
             ) : null}

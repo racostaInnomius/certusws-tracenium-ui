@@ -147,3 +147,12 @@ describe("the four findings tabs that became one surface", () => {
     expect(resolvePmTab("tls", TAB_KEYS, FALLBACKS).tab).toBe(SECURITY_TAB);
   });
 });
+
+describe("browser slice link", () => {
+  it("?pmTab=browsers opens Security configuration on the Browsers slice (Security Compliance and Alerts link here)", () => {
+    const { tab, securityDomain } = resolvePmTab("browsers", TAB_KEYS, FALLBACKS);
+    expect(tab).toBe(SECURITY_TAB);
+    expect(securityDomain).toBe("browsers");
+    expect(pmTabSearchValue(SECURITY_TAB, "maintenance", "patches", "browsers", "all")).toBe("browsers");
+  });
+});

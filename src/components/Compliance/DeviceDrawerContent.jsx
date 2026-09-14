@@ -84,7 +84,9 @@ export default function DeviceDrawerContent({
   // which owns the confirm dialog + POST /remediate + toast.
   onRemediateFinding = null,
   // Sprint 4 — cross.vulnerability.* findings link to PM → Vulnerabilities.
-  onOpenVulnerabilities = null
+  onOpenVulnerabilities = null,
+  // cross.browser_extensions.* findings link to PM → Security configuration → Browsers.
+  onOpenExtensionControl = null
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -594,6 +596,8 @@ export default function DeviceDrawerContent({
                     onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
                     onOpenVulnerabilities={onOpenVulnerabilities}
                     deviceVulnerability={device?.vulnerability ?? null}
+                    deviceBrowserExtensions={device?.browserExtensions ?? null}
+                    onOpenExtensionControl={onOpenExtensionControl}
                     canExplain={canManage}
                     // Sprint 6 — bulk selection. Checkbox hidden for
                     // read-only members (selection only feeds bulk

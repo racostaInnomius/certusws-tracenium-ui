@@ -22,6 +22,12 @@ vi.mock("../msp/mspApi", () => ({
 }));
 vi.mock("../api/roles", () => ({
   listTenantRoles: vi.fn().mockResolvedValue({ items: [] }),
+  getMyCapabilities: vi.fn().mockResolvedValue({ capabilities: [] }),
+}));
+vi.mock("../api/inventoryDashboard", () => ({
+  getChromeConnector: vi.fn().mockResolvedValue({ ok: true, available: true, connector: null }),
+  putChromeConnector: vi.fn(),
+  deleteChromeConnector: vi.fn(),
 }));
 vi.mock("../api/certificates", () => ({
   getCertificateSummary: vi.fn().mockResolvedValue({
@@ -93,5 +99,13 @@ describe("Configurations — tarjeta de PKI", () => {
 
     tarjeta.click();
     await waitFor(() => expect(onNavigate).toHaveBeenCalledWith("pki"));
+  });
+});
+
+describe("Configurations — Integrations", () => {
+  it("hosts the Chrome Enterprise connector (moved out of Asset Management)", async () => {
+    render(<Configurations onNavigate={vi.fn()} />);
+    expect(await screen.findByText("Integrations")).toBeInTheDocument();
+    expect(await screen.findByText("Chrome Enterprise connector")).toBeInTheDocument();
   });
 });

@@ -291,3 +291,30 @@ describe("FindingCard (Sprint 4 — Explain)", () => {
     expect(screen.queryByText("Explain")).toBeNull();
   });
 });
+
+describe("FindingCard — browser extension risk (cross.browser_extensions.*)", () => {
+  const block = {
+    critical: [{ browser: "chrome", extension_id: "a".repeat(32), name: "Coupon Grabber", risk: "critical", install_source: "store", profiles: 1, reasons: [] },
+      { browser: "edge", extension_id: "b".repeat(32), name: "Proxy Tool", risk: "critical", install_source: "store", profiles: 1, reasons: [] },
+      { browser: "edge", extension_id: "c".repeat(32), name: "Third", risk: "critical", install_source: "store", profiles: 1, reasons: [] }],
+    high: [], outside_store: [], approved_excluded_count: 1,
+  };
+  it("names the extensions from the device block and opens the control in Patch Management with the first one", () => {
+    const onOpen = vi.fn();
+    render(
+      <FindingCard
+        finding={{ ...baseFinding, checkId: "cross.browser_extensions.no_critical_risk", title: "No browser extension can read and change everything" }}
+        onAck={noop} onRevoke={noop} onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
+        deviceBrowserExtensions={block}
+        onOpenExtensionControl={onOpen}
+      />
+    );
+    fireEvent.click(screen.getByText("3 extensions: Coupon Grabber, Proxy Tool…"));
+    expect(onOpen).toHaveBeenCalledWith(block.critical[0]);
+  });
+
+  it("a passing extension check or another check shows no chip", () => {
+    renderCard({ checkId: "cross.browser_extensions.store_only", status: "pass" });
+    expect(screen.queryByText(/extensions?:|Review extensions/)).not.toBeInTheDocument();
+  });
+});

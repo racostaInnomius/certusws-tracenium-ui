@@ -41,8 +41,9 @@ describe("CorrelationSection", () => {
     expect(screen.getByText("Finance laptops (static groups only)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review and block Coupons" }));
     const params = new URLSearchParams(window.location.search);
-    expect(params.get("page")).toBe("assets");
-    expect(params.get("assetsTab")).toBe("software");
+    // Bloquear es remediación: Patch Management → Browsers.
+    expect(params.get("page")).toBe("patch");
+    expect(params.get("pmTab")).toBe("browsers");
     expect(params.get("extension")).toBe(`chrome|${ID}`);
     expect(popstate).toHaveBeenCalled();
     window.removeEventListener("popstate", popstate);
@@ -50,7 +51,7 @@ describe("CorrelationSection", () => {
 
   it("ya bloqueada: lo dice y no ofrece el botón; sin correlación no pinta nada", () => {
     const { container } = render(<CorrelationSection correlation={{ who: {}, groups: [], dynamicGroupsResolved: false, rule: { action: "block" }, action: null }} />);
-    expect(screen.getByText("Blocked by rule")).toBeInTheDocument();
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     cleanup();
     const empty = render(<CorrelationSection correlation={undefined} />);

@@ -49,6 +49,8 @@ import JoinPartnerDialog from "../msp/JoinPartnerDialog";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
+import { getMyCapabilities } from "../api/roles";
+import ChromeConnectorPanel from "../components/integrations/ChromeConnectorPanel";
 import { BRAND, TEXT } from "../theme/brand";
 
 // Canonical shell for the three Settings cards. Takes an icon box +
@@ -192,6 +194,19 @@ export default function Configurations({ onNavigate, initialTab }) {
   // portfolio navigation the selected tenant lives in the MSP context and
   // `auth` does not carry it, so this read silently resolved to nothing.
   const tenantId = useEffectiveTenantId();
+  // Integraciones: configurar un conector es configuración de seguridad
+  // (security_compliance), la misma capacidad que exige la API.
+  const [canManageIntegrations, setCanManageIntegrations] = React.useState(false);
+  React.useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((resp) => alive && setCanManageIntegrations(Array.isArray(resp?.permissions) && resp.permissions.includes("security_compliance")))
+      .catch(() => alive && setCanManageIntegrations(false));
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
   // Seeded once from the prop (set by the `agent-settings` / `policies`
   // route aliases) or the URL, then kept in the URL so a reload and the
   // back button both land on the same division.
@@ -701,6 +716,12 @@ export default function Configurations({ onNavigate, initialTab }) {
           </Grid>
         ) : null}
       </Grid>
+
+      {/* Integrations — data sources outside the agent. The Chrome Enterprise
+          connector lived in Software Inventory, but it is neither inventory
+          nor a risk view: it is where the tenant plugs a source in. */}
+      <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base, mt: 3, mb: 1.5 }}>Integrations</Typography>
+      <ChromeConnectorPanel canManage={canManageIntegrations} />
         </>
       )}
 
