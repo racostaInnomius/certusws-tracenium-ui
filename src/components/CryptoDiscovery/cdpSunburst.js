@@ -6,23 +6,25 @@
 // (/cdp/facets, /cdp/exposure, /cdp/roadmap), y el trazado devuelve arcos
 // SVG y etiquetas ya posicionadas.
 //
-// Anillo interior FIJO, como pidió el usuario: sectores base que están
-// siempre, con o sin datos, para que el mapa sea el mismo hoy y cuando se
-// conecten fuentes nuevas. Repaso 14-sep: On-prem se parte en dos, lo que
-// el AGENTE recoge en los equipos y lo que la CA de Windows REPORTA, que
-// son cosas distintas (una es un inventario, la otra un registro de
-// emisión) y el usuario quiere verlas separadas.
+// Anillo interior FIJO, como pidió el usuario: CUATRO sectores base que
+// están siempre, con o sin datos, para que el mapa sea el mismo hoy y
+// cuando se conecten fuentes nuevas:
 //
 //   On-prem devices = el parque con agente (almacenes, keystores,
-//                     listeners, ficheros, NSS, claves SSH, CBOM)
-//   Windows CA      = lo que emitió AD CS, leído por el agente de la CA
+//                     listeners, ficheros, NSS, claves SSH, CBOM) y, DENTRO
+//                     del mismo sector pero como grupo aparte, lo que la CA
+//                     de Windows REPORTA (AD CS): son cosas distintas (un
+//                     inventario frente a un registro de emisión) y el
+//                     usuario quiere verlas separadas, no como quinta base.
 //   Infra           = infraestructura virtual y de red: sondas remotas,
 //                     Kubernetes, vCenter / hipervisores (gateway)
 //   Cloud           = dominios públicos (CT), AWS ACM, Google Cloud
 //   External key sources = Azure Key Vault, HashiCorp Vault
 //
-// La pestaña Settings usa estos MISMOS sectores (cdpSources.js) para decir
-// qué fuente está reportando, cuál está configurada y cuál no.
+// En el anillo 2 los grupos de On-prem van seguidos (agente primero, CA al
+// final) con una separación mayor entre ellos y la CA con su nombre. La
+// pestaña Settings usa las MISMAS secciones (`SECTIONS`, cdpSources.js):
+// las cuatro bases y, colgando de On-prem, Windows CA.
 //
 // Anillo 2 = origen; anillo 3 = algoritmo y tamaño (o KEM negociado en
 // la vista de servicios). Color = estado cuántico, no identidad:
@@ -32,17 +34,23 @@
 
 import { BRAND, NEUTRAL } from "../../theme/brand";
 
-export const BASES = [
-  { key: "onprem", label: "On-prem devices", note: "Collected by the agent on managed endpoints" },
-  { key: "adcs", label: "Windows CA", note: "Issued by AD CS, reported by the agent on the CA server" },
+/** Las secciones de Settings: las cuatro bases y, colgando de On-prem, la CA. */
+export const SECTIONS = [
+  { key: "onprem", label: "On-prem devices", note: "Collected by the agent on managed endpoints, plus what the Windows CA issued" },
+  { key: "adcs", label: "Windows CA", parent: "onprem", note: "Issued by AD CS, reported by the agent on the CA server" },
   { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter" },
   { key: "cloud", label: "Cloud", note: "Public domains, AWS ACM, Google Cloud" },
   { key: "external", label: "External key sources", note: "Azure Key Vault, HashiCorp Vault" }
 ];
 
+/** Los sectores del anillo base del sunburst: solo las cuatro bases. */
+export const BASES = SECTIONS.filter((s) => !s.parent);
+
+/** Grupos del anillo 2 dentro de On-prem, en este orden. */
+export const ONPREM_GROUPS = { agent: 0, adcs: 1 };
+
 const BASE_OF_SOURCE = {
-  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem",
-  adcs: "adcs",
+  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem", adcs: "onprem",
   probe: "infra", k8s: "infra", vcenter: "infra",
   ct: "cloud", acm: "cloud", gcp: "cloud",
   keyvault: "external", vault: "external"
@@ -74,7 +82,7 @@ export function originOfSourceName(sourceName) {
 function outsideSourceLabel(origin, sourceName) {
   if (origin === "adcs") {
     const rest = String(sourceName ?? "").slice("adcs:".length);
-    return rest || SOURCE_LABEL.adcs;
+    return rest ? `CA · ${rest}` : SOURCE_LABEL.adcs;
   }
   return SOURCE_LABEL[origin] ?? origin;
 }
@@ -88,6 +96,47 @@ export const SHADES = {
 };
 
 const algoLabel = (algorithm, bits) => `${algorithm ?? "unknown"}${bits ? `-${bits}` : ""}`.replace(/^EC-/, "EC P-");
+
+// Las mismas reglas por NOMBRE que el backend (crypto-classification.ts):
+// las facetas traen `key_algorithm` sin familia, y sin esto las hojas de los
+// equipos caían en «other» y salían grises, el color reservado a las raíces
+// del fabricante y a los sectores sin fuente (bug visto por el usuario el
+// 14-sep). Híbrido y post-cuántico son «ok» (verde, como dice la leyenda).
+const PQ_SAFE_NAME_RE = /^(ML-DSA|ML-KEM|SLH-DSA|HSS-LMS|XMSS)/i;
+const HYBRID_NAME_RE = /(hybrid|composite|catalyst)/i;
+const QUANTUM_BROKEN_NAME_RE = /^(RSA|EC|ECDSA|DSA|ED25519|ED448|X25519|X448)|WithRSA|ecdsa-with|dsa-with/i;
+
+/** Estado cuántico de un algoritmo por su nombre: broken · ok · other (desconocido). */
+export function statusOfAlgorithm(name) {
+  const n = String(name ?? "").trim();
+  if (!n) return "other";
+  if (HYBRID_NAME_RE.test(n) || PQ_SAFE_NAME_RE.test(n)) return "ok";
+  if (QUANTUM_BROKEN_NAME_RE.test(n)) return "broken";
+  return "other";
+}
+
+/**
+ * Estado de un nodo con hijos, cuando no lo trae puesto: todo roto → broken,
+ * todo bien → ok, de los dos → mixed. Sin hojas clasificadas queda sin
+ * estado y el trazado usa el del padre (gris si nadie sabe).
+ */
+function rollupStatus(children) {
+  let broken = 0;
+  let ok = 0;
+  for (const c of children) {
+    const st = c.s ?? c.status;
+    if (st === "broken") broken += 1;
+    else if (st === "ok") ok += 1;
+    else if (st === "mixed") {
+      broken += 1;
+      ok += 1;
+    }
+  }
+  if (broken && ok) return "mixed";
+  if (broken) return "broken";
+  if (ok) return "ok";
+  return undefined;
+}
 
 function skeleton() {
   const bases = new Map();
@@ -111,8 +160,18 @@ function addLeaf(bases, baseKey, sourceKey, sourceName, leafKey, leafName, value
   leaf.v += value;
 }
 
+const groupRank = (n) => ONPREM_GROUPS[n.group ?? "agent"] ?? 0;
+
 function finish(bases) {
-  const toArray = (m) => Array.from(m.values()).map((n) => (n.children instanceof Map ? { ...n, children: toArray(n.children) } : n));
+  const toArray = (m, depth = 0) =>
+    Array.from(m.values()).map((n) => {
+      if (!(n.children instanceof Map)) return n;
+      let children = toArray(n.children, depth + 1);
+      // En el anillo 2 los grupos van seguidos: agente primero, CA al final.
+      if (depth === 0) children = children.map((c, i) => [c, i]).sort((a, b) => groupRank(a[0]) - groupRank(b[0]) || a[1] - b[1]).map(([c]) => c);
+      const status = n.status ?? rollupStatus(children);
+      return { ...n, children, ...(status ? { status } : {}) };
+    });
   return toArray(bases);
 }
 
@@ -135,7 +194,11 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
     const srcName = isVendor ? "Vendor roots" : SOURCE_LABEL[source] ?? source;
     addLeaf(bases, baseOfSource(source), srcKey, srcName, algoLabel(algo, bits), algoLabel(algo, bits), n, {
       source: isVendor ? { status: "other", note: "Shipped with the OS and the JVM: not yours to migrate" } : {},
-      leaf: { drill: isVendor ? { includeRoots: true, scope: "system-roots", keyAlgorithm: algo, keySizeBits: bits } : { source, keyAlgorithm: algo, keySizeBits: bits } }
+      // Las raíces del fabricante no llevan estado propio: heredan el gris
+      // de su fuente, porque no son del cliente y no las migra él.
+      leaf: isVendor
+        ? { drill: { includeRoots: true, scope: "system-roots", keyAlgorithm: algo, keySizeBits: bits } }
+        : { s: statusOfAlgorithm(algo), drill: { source, keyAlgorithm: algo, keySizeBits: bits } }
     });
   }
   // Fuera de los equipos: con desglose por algoritmo cuando el servidor lo
@@ -146,7 +209,7 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
     if (origin === "ssh") continue;
     const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
     addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
-      source: { note: a.sourceName },
+      source: { note: a.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
       leaf: { s: st }
     });
   }
@@ -154,7 +217,7 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
     const origin = s.origin ?? originOfSourceName(s.sourceName);
     if (origin === "ssh" || detailed.has(s.sourceName)) continue; // claves, no certificados / ya desglosado
     addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), "certificates", "certificates", Number(s.certificates ?? 0), {
-      source: { note: s.sourceName },
+      source: { note: s.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
       leaf: { s: "broken" }
     });
   }
@@ -175,7 +238,7 @@ export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0 } = {
     const bits = r.stack ?? null;
     const n = Number(r.uniqueCerts ?? r.certs ?? 0);
     addLeaf(bases, baseOfSource(source), `${source}:${store}`, String(store).replace(/\s*\(S-1-5-[^)]*\)/, ""), algoLabel(algo, bits), algoLabel(algo, bits), n, {
-      leaf: { drill: { hasPrivateKey: true, source, storeName: r.keys?.store_name ?? undefined, keyAlgorithm: algo, keySizeBits: bits } }
+      leaf: { s: statusOfAlgorithm(algo), drill: { hasPrivateKey: true, source, storeName: r.keys?.store_name ?? undefined, keyAlgorithm: algo, keySizeBits: bits } }
     });
   }
   addLeaf(bases, "onprem", "orphan", "Orphan keys", "keys", "keys", Number(orphanKeys), { leaf: { s: "broken" } });
@@ -206,7 +269,7 @@ export function buildServicesTree(systems) {
       const origin = originOfSourceName(key.slice("source:".length));
       if (origin === "ssh") continue;
       const n = Number(f.uniqueCerts ?? f.certs ?? 0);
-      addLeaf(bases, baseOfSource(origin), `res:${key}`, s.name ?? key, "certs", "issues or holds", n, { leaf: { s: "broken" } });
+      addLeaf(bases, baseOfSource(origin), `res:${key}`, s.name ?? key, "certs", "issues or holds", n, { source: origin === "adcs" ? { group: "adcs" } : {}, leaf: { s: "broken" } });
     }
   }
   for (const b of bases.values()) {
@@ -289,10 +352,14 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
       }
     }
     const empties = nodes.filter((n) => sumNode(n) <= 0).length;
-    const gaps = nodes.length > 1 ? gap * (nodes.length - 1) : 0;
+    // Entre dos grupos distintos del mismo sector (agente | CA) la
+    // separación es mayor: es lo que hace visible la partición sin gastar
+    // un sector base en ella.
+    const gapAfter = (i) => (i < nodes.length - 1 ? (depth === 1 && (nodes[i].group ?? "agent") !== (nodes[i + 1].group ?? "agent") ? gap * 4 : gap) : 0);
+    const gaps = nodes.reduce((t, _n, i) => t + gapAfter(i), 0);
     const usable = a1 - a0 - gaps - empties * placeholder;
     let cursor = a0;
-    for (const n of nodes) {
+    for (const [i, n] of nodes.entries()) {
       const v = sumNode(n);
       const isEmpty = v <= 0;
       const start = cursor;
@@ -312,7 +379,7 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
       });
       label(n.name, v, depth, start, end, st);
       if (!isEmpty && n.children && depth < 2) walk(n.children, depth + 1, start, end, st, [...path, n.key ?? n.name]);
-      cursor = end + gap;
+      cursor = end + gapAfter(i);
     }
   };
   walk(tree, 0, 0, Math.PI * 2, "other", []);

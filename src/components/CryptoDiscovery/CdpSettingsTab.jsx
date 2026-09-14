@@ -27,7 +27,7 @@ import { CbomImportForm } from "./CbomAssetsPanel";
 import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
 import CdpSourcesMap from "./CdpSourcesMap";
 import GatewayPanel from "../patch-management/gateway/GatewayPanel";
-import { BASES } from "./cdpSunburst";
+import { SECTIONS } from "./cdpSunburst";
 import { CONNECTOR_KINDS_BY_BASE, sectorAnchor } from "./cdpSources";
 import { getCdpFacets, getCryptoAssetsSummary, listCdpAdcsSources, listCdpConnectors, listCdpDevices, listCdpVcenterSources } from "../../api/cdp";
 import * as infrastructureApi from "../../api/infrastructure";
@@ -39,7 +39,7 @@ import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
-const baseOf = (key) => BASES.find((b) => b.key === key);
+const baseOf = (key) => SECTIONS.find((b) => b.key === key);
 
 /**
  * Lo que la pestaña necesita saber de las fuentes, cargado UNA vez y
@@ -209,7 +209,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         <CbomImportForm onImported={changed} />
       </Sector>
 
-      <Sector baseKey="adcs" sub="What the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices: one is an inventory, the other is the CA's issuance record.">
+      <Sector baseKey="adcs" sub="Part of On-prem, as its own group: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
         <AdcsReaders sources={src.adcs} caHosts={caHosts} />
       </Sector>
 

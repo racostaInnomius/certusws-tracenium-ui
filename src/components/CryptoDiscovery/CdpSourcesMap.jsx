@@ -63,9 +63,11 @@ export default function CdpSourcesMap({ data, loading = false }) {
   return (
     <Stack spacing={1} aria-busy={loading} sx={{ opacity: loading ? 0.6 : 1, transition: "opacity 200ms ease" }}>
       {bases.map((b) => (
-        <Stack key={b.key} direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.5, md: 2 }} alignItems={{ md: "flex-start" }} sx={{ py: 0.75, borderTop: `1px dashed ${BRAND.border}` }}>
-          <Box sx={{ minWidth: 200, maxWidth: { md: 200 } }}>
-            <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, lineHeight: 1.2 }}>{b.label}</Typography>
+        <Stack key={b.key} direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.5, md: 2 }} alignItems={{ md: "flex-start" }} sx={{ py: 0.75, borderTop: b.parent ? "none" : `1px dashed ${BRAND.border}`, pl: b.parent ? 2.5 : 0 }}>
+          <Box sx={{ minWidth: b.parent ? 180 : 200, maxWidth: { md: b.parent ? 180 : 200 } }}>
+            {/* Una sección que cuelga de otra (Windows CA dentro de On-prem)
+                va sangrada y con el nombre de su padre delante. */}
+            <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, lineHeight: 1.2 }}>{b.parent ? `↳ ${b.label}` : b.label}</Typography>
             <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
               {b.reporting} of {b.total} reporting
             </Typography>

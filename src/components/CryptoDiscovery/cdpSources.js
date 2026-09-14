@@ -20,7 +20,7 @@
 // /cdp/vcenter/sources, /infrastructure/gateways y el bloque `cdp` de la
 // policy del tenant; no llaman a nada.
 
-import { BASES, SOURCE_LABEL } from "./cdpSunburst";
+import { SECTIONS, SOURCE_LABEL } from "./cdpSunburst";
 
 export const CONNECTOR_KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault", k8s: "Kubernetes", ct: "Public domains (CT)" };
 
@@ -69,7 +69,7 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
   const byAgentSource = new Map((facets ?? []).map((r) => [String(r.keys?.source ?? ""), r]));
   const assetSources = assets?.sources ?? [];
   const assetsByName = new Map(assetSources.map((s) => [String(s.sourceName), s]));
-  const bases = new Map(BASES.map((b) => [b.key, { key: b.key, label: b.label, note: b.note, sources: [] }]));
+  const bases = new Map(SECTIONS.map((b) => [b.key, { key: b.key, label: b.label, note: b.note, parent: b.parent ?? null, sources: [] }]));
   const push = (base, s) => bases.get(base).sources.push(s);
 
   // ── On-prem devices: lo que el agente recoge ──

@@ -401,45 +401,13 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           {chartsError.join(" · ")} — the rest of the page is unaffected; use Refresh to retry.
         </Alert>
       ) : null}
-      {/* Los KPI primero: son la lectura de un vistazo; el embudo es la explicación. */}
-      {/* Cinco KPI (14-sep: «Hygiene flags» se fue; la tarjeta Hygiene de
-          abajo dice más). 10 columnas en lg para que quepan en una fila. */}
-      <Grid container spacing={2} columns={{ xs: 12, sm: 12, md: 12, lg: 10 }}>
-        {cards.map((card) => (
-          <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
-            <SummaryCard
-              title={card.title}
-              value={card.value}
-              // Seis tarjetas en una fila de 1.200–1.536 px dejan ~110 px
-              // para el título con icono: se cortaba. Sin icono hasta xl
-              // el título entero cabe; el icono vuelve donde sobra sitio.
-              icon={wideEnoughForIcons ? card.icon : null}
-              accent={card.accent}
-              tint={card.tint}
-              titleHint={card.hint ?? null}
-              // Análisis de madurez 2026-09: los seis KPI eran inertes
-              // aunque SummaryCard soporta onClick desde siempre. Un
-              // número que no lleva a su lista es un adorno.
-              onClick={
-                card.devices
-                  ? () => onOpenDevices?.()
-                  : card.filter
-                    ? () => onDrillDown?.(card.filter, { replace: true })
-                    : undefined
-              }
-              stretch
-            />
-          </Grid>
-        ))}
-      </Grid>
-
       {/* Repaso UX 2026-09-13: el Dashboard es un PREVIEW del estado, no un
           informe. Cuatro filas y ninguna cifra dos veces:
-            1. los seis KPI operativos;
-            2. la preparación post-cuántica (sustituye al embudo «Your
-               exposure», cuyas cifras ya estaban en los KPI, en la tira y
-               en las tarjetas);
-            3. el sunburst + lo que hay que hacer hoy;
+            1. la preparación post-cuántica, compacta (sustituye al embudo
+               «Your exposure», cuyas cifras ya estaban en los KPI, en la
+               tira y en las tarjetas);
+            2. el sunburst + lo que hay que hacer hoy;
+            3. los cinco KPI operativos;
             4. una tarjeta por pestaña que no tiene fila propia.
           La línea de tiempo se fue a Explore (es una distribución), la
           lista de equipos a Inventory → By device (es una lista). */}
@@ -478,6 +446,40 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
       {/* Una tarjeta por pestaña sin fila propia. Roadmap ya no la tiene:
           sus cifras (sistemas sin ola, equipos bloqueados) están en la tira
           y abren la pestaña desde allí. */}
+      {/* Cinco KPI operativos (14-sep: «Hygiene flags» se fue; la tarjeta
+          Hygiene de abajo dice más). 10 columnas en lg para una fila.
+          Debajo del sunburst, no encima: con la tira y los KPI arriba el
+          sunburst quedaba bajo el pliegue y su animación de carga se
+          perdía; el preview post-cuántico es lo primero que se ve. */}
+      <Grid container spacing={2} columns={{ xs: 12, sm: 12, md: 12, lg: 10 }}>
+        {cards.map((card) => (
+          <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
+            <SummaryCard
+              title={card.title}
+              value={card.value}
+              // Seis tarjetas en una fila de 1.200–1.536 px dejan ~110 px
+              // para el título con icono: se cortaba. Sin icono hasta xl
+              // el título entero cabe; el icono vuelve donde sobra sitio.
+              icon={wideEnoughForIcons ? card.icon : null}
+              accent={card.accent}
+              tint={card.tint}
+              titleHint={card.hint ?? null}
+              // Análisis de madurez 2026-09: los seis KPI eran inertes
+              // aunque SummaryCard soporta onClick desde siempre. Un
+              // número que no lleva a su lista es un adorno.
+              onClick={
+                card.devices
+                  ? () => onOpenDevices?.()
+                  : card.filter
+                    ? () => onDrillDown?.(card.filter, { replace: true })
+                    : undefined
+              }
+              stretch
+            />
+          </Grid>
+        ))}
+      </Grid>
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
           <OverviewCard

@@ -130,7 +130,9 @@ describe("pestañas de Crypto Discovery", () => {
     settings.click();
     // El mapa arriba, con los cinco sectores; una sección por sector debajo.
     await screen.findByText(/^Sources$/);
-    for (const base of ["On-prem devices", "Windows CA", "Infra", "Cloud", "External key sources"]) expect(screen.getAllByText(base).length).toBeGreaterThanOrEqual(2);
+    for (const base of ["On-prem devices", "Infra", "Cloud", "External key sources"]) expect(screen.getAllByText(base).length).toBeGreaterThanOrEqual(2);
+    // Windows CA cuelga de On-prem: fila sangrada en el mapa y sección propia debajo.
+    expect(screen.getAllByText(/Windows CA$/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^vCenter: not connected$/ })).toBeInTheDocument();
     // El gateway de vCenter se registra desde aquí, sin pasar por Patch Management.

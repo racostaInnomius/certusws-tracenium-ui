@@ -5,16 +5,17 @@
 // está conectada.
 
 import { describe, expect, it } from "vitest";
-import { BASES } from "./cdpSunburst";
+import { SECTIONS } from "./cdpSunburst";
 import { CONNECTOR_KINDS_BY_BASE, sourcesByBase } from "./cdpSources";
 
 const facet = (source, uniqueCerts, devices) => ({ keys: { source }, certs: uniqueCerts, uniqueCerts, devices });
 const find = (bases, baseKey, key) => bases.find((b) => b.key === baseKey).sources.find((s) => s.key === key);
 
 describe("sourcesByBase", () => {
-  it("⭐ sin nada cargado: los cinco sectores del sunburst, en su orden, y cada fuente con su estado por defecto", () => {
+  it("⭐ sin nada cargado: las cuatro bases del sunburst más Windows CA colgando de On-prem, en su orden, y cada fuente con su estado por defecto", () => {
     const bases = sourcesByBase({});
-    expect(bases.map((b) => b.key)).toEqual(BASES.map((b) => b.key));
+    expect(bases.map((b) => b.key)).toEqual(SECTIONS.map((b) => b.key));
+    expect(bases.find((b) => b.key === "adcs").parent).toBe("onprem");
     // El agente escanea almacenes por defecto: «configurada, nada aún», no «no conectada».
     expect(find(bases, "onprem", "store").state).toBe("configured");
     expect(find(bases, "onprem", "cbom").state).toBe("unconfigured");

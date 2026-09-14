@@ -3,7 +3,7 @@
 // Bloque «Post-quantum readiness» + sunburst del Dashboard de Crypto
 // Discovery (2026-09-10), a partir de la maqueta aprobada por el usuario:
 // una tira de preparación con cuatro pares «vulnerable / total» y un
-// sunburst con anillo base fijo (On-prem devices · Windows CA · Infra · Cloud · External key
+// sunburst con anillo base fijo (On-prem devices · Infra · Cloud · External key
 // sources), agrupable por Keys, Services / Resources y Certificates.
 //
 // Datos: los que ya sirven a las otras pestañas. La tira sale de
@@ -95,23 +95,24 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
     }
   ];
 
+  // Compacta (14-sep): el usuario veía el sunburst por debajo del pliegue y
+  // la animación de carga se perdía. Un renglón por par, la pista en el
+  // tooltip, y en fila desde md en vez de lg.
   return (
-    <SectionPaper>
-      <Stack direction={{ xs: "column", lg: "row" }} spacing={0} sx={{ alignItems: "stretch" }}>
-        <Box sx={{ width: { lg: 380 }, flexShrink: 0, pr: { lg: 3 }, borderRight: { lg: `1px solid ${BRAND.border}` } }}>
-          <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Post-quantum readiness</Typography>
-          <Stack direction="row" spacing={1.25} alignItems="baseline">
-            <Typography component="span" sx={{ fontSize: TEXT["5xl"], fontWeight: 800, lineHeight: 1, color: BRAND.dark }} aria-label="Post-quantum readiness">
+    <SectionPaper sx={{ py: 1.5 }}>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={0} sx={{ alignItems: "stretch" }}>
+        <Box sx={{ width: { md: 300 }, flexShrink: 0, pr: { md: 2.5 }, borderRight: { md: `1px solid ${BRAND.border}` } }}>
+          <Stack direction="row" spacing={1} alignItems="baseline" sx={{ flexWrap: "wrap" }}>
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>Post-quantum readiness</Typography>
+            <Typography component="span" sx={{ fontSize: TEXT["3xl"], fontWeight: 800, lineHeight: 1, color: BRAND.dark }} aria-label="Post-quantum readiness">
               {pct == null ? "—" : `${pct}%`}
             </Typography>
-            <Typography component="span" sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>of your certificates and TLS services are quantum-safe</Typography>
           </Stack>
-          <Box role="progressbar" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100} sx={{ mt: 1, height: 10, borderRadius: 999, bgcolor: all > 0 ? BRAND.alert.error : "#E4E7EC", overflow: "hidden" }}>
+          <Box role="progressbar" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100} sx={{ mt: 0.75, height: 8, borderRadius: 999, bgcolor: all > 0 ? BRAND.alert.error : "#E4E7EC", overflow: "hidden" }}>
             <Box sx={{ height: "100%", width: `${pct ?? 0}%`, bgcolor: BRAND.alert.success }} />
           </Box>
-          <Typography sx={{ mt: 0.75, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+          <Typography sx={{ mt: 0.5, fontSize: TEXT.xs, color: TEXT_MUTED }} title={snapshotDate ? `Systems and blocked devices as of the ${snapshotDate} roadmap snapshot.` : undefined}>
             {fmt(ownPq)} of {fmt(own)} certificates you own are post-quantum · {fmt(kemH)} of {fmt(measured)} TLS services negotiate hybrid ML-KEM.
-            {snapshotDate ? ` Systems and blocked devices as of the ${snapshotDate} roadmap snapshot.` : ""}
           </Typography>
         </Box>
         {pairs.map((p, i) => (
@@ -119,6 +120,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
             key={p.label}
             role="button"
             tabIndex={0}
+            title={p.hint}
             onClick={p.onClick}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -127,17 +129,17 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
               }
             }}
             sx={{
-              flex: "1 1 0", minWidth: 0, px: { lg: 2.5 }, pt: { xs: 2, lg: 0 }, cursor: "pointer", borderRadius: 1,
-              borderRight: { lg: i < pairs.length - 1 ? `1px solid ${BRAND.border}` : "none" },
+              flex: "1 1 0", minWidth: 0, px: { md: 2 }, pt: { xs: 1.25, md: 0 }, cursor: "pointer", borderRadius: 1,
+              display: "flex", flexDirection: "column", justifyContent: "center",
+              borderRight: { md: i < pairs.length - 1 ? `1px solid ${BRAND.border}` : "none" },
               "&:hover": { bgcolor: BRAND.rowHover }
             }}
           >
-            <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{p.label}</Typography>
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, lineHeight: 1.2 }}>{p.label}</Typography>
             <Stack direction="row" spacing={0.75} alignItems="baseline">
-              <Typography component="span" sx={{ fontSize: TEXT["3xl"], fontWeight: 800, color: p.color }}>{fmt(p.value)}</Typography>
-              <Typography component="span" sx={{ fontSize: TEXT.lg, color: TEXT_MUTED }}>/ {fmt(p.total)}</Typography>
+              <Typography component="span" sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: p.color }}>{fmt(p.value)}</Typography>
+              <Typography component="span" sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>/ {fmt(p.total)}</Typography>
             </Stack>
-            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{p.hint}</Typography>
           </Box>
         ))}
       </Stack>
@@ -203,7 +205,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
       }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-        Inside out: On-prem devices, Windows CA, Infra, Cloud or External key sources → the source it came from → its algorithm or key exchange. Click a ring to open that slice in Inventory.
+        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (the Windows CA sits inside On-prem, after what the agents collect) → its algorithm or key exchange. Click a ring to open that slice in Inventory.
       </Typography>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: TEXT_MUTED }}>Group by:</Typography>
