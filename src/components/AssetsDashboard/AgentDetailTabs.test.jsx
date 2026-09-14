@@ -475,4 +475,34 @@ describe("PrintersTab", () => {
     render(<PrintersTab printerRows={[]} printersLoading />);
     expect(screen.getByText("Loading printers…")).toBeInTheDocument();
   });
+
+  // A blind Windows read used to render as "No printers configured" — the
+  // portal stated a fact about the device it had not been able to observe.
+  it("says it could not read printers, with the reason, when a scope is not collected", () => {
+    render(<PrintersTab printerRows={[]} printerScan={{ machineScope: "timeout", userScope: "no_user_hive" }} />);
+    expect(screen.getByText(
+      "Could not read printers (the print spooler query timed out; no user signed in, so per-user network printers were not visible)"
+    )).toBeInTheDocument();
+    expect(screen.queryByText(/No printers configured/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("0 printers detected")).not.toBeInTheDocument();
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+  });
+
+  it("keeps the real empty state when every scope was collected", () => {
+    render(<PrintersTab printerRows={[]} printerScan={{ machineScope: "collected", userScope: "collected" }} />);
+    expect(screen.getByText(/No printers configured/i)).toBeInTheDocument();
+  });
+
+  it("flags a partial read above a non-empty list", () => {
+    render(
+      <PrintersTab
+        printerRows={[{ id: 1, name: "HP-1", isNetwork: false, status: "online" }]}
+        printerScan={{ machineScope: "collected", userScope: "no_user_hive" }}
+      />
+    );
+    expect(screen.getByText("HP-1")).toBeInTheDocument();
+    expect(screen.getByText(
+      "Printer list may be incomplete (no user signed in, so per-user network printers were not visible)"
+    )).toBeInTheDocument();
+  });
 });

@@ -32,10 +32,11 @@ describe("dashboardApi", () => {
     expect(calls[0].pathname).toBe(`${BASE}/hosts/agent%2F01/detail`);
   });
 
-  it("getHostPrinters returns the per-device projection (empty array for pre-1.1.20 agents)", async () => {
-    const calls = respond("get", `${BASE}/hosts/:agentId/printers`, { ok: true, items: [] });
+  it("getHostPrinters asks for the per-device projection together with its read scopes", async () => {
+    const calls = respond("get", `${BASE}/hosts/:agentId/printers`, { items: [], scan: null });
 
-    await expect(dashboardApi.getHostPrinters("agent-1")).resolves.toEqual({ ok: true, items: [] });
+    await expect(dashboardApi.getHostPrinters("agent-1")).resolves.toEqual({ items: [], scan: null });
     expect(calls[0].pathname).toBe(`${BASE}/hosts/agent-1/printers`);
+    expect(calls[0].search).toEqual({ include: "scan" });
   });
 });

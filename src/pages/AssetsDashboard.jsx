@@ -103,6 +103,7 @@ import {
   getDecommissionErrorMessage,
   normalizeHostDetailPayload,
   normalizeHardwareDetailPayload,
+  normalizeHostPrintersResponse,
 } from "../components/AssetsDashboard/hostHelpers";
 import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/DeviceDecommissionConfirmDialog";
 // Own chunk: Leaflet is dead weight for anyone who never opens the map.
@@ -137,6 +138,7 @@ function AgentDetailWorkbench({
   onSoftwarePaginationModelChange,
   printerRows = [],
   printersLoading = false,
+  printerScan = null,
   tab,
   onTabChange,
   onBack,
@@ -289,7 +291,7 @@ function AgentDetailWorkbench({
           ) : null}
 
           {!loading && tab === 3 ? (
-            <PrintersTab printerRows={printerRows} printersLoading={printersLoading} />
+            <PrintersTab printerRows={printerRows} printersLoading={printersLoading} printerScan={printerScan} />
           ) : null}
         </Box>
       </Paper>
@@ -490,6 +492,8 @@ export default function AssetsDashboard({
   // full list).
   const [agentPrinterRows, setAgentPrinterRows] = React.useState([]);
   const [agentPrintersLoading, setAgentPrintersLoading] = React.useState(false);
+  // Read scopes of the last printer collection (Windows) — see PrintersTab.
+  const [agentPrinterScan, setAgentPrinterScan] = React.useState(null);
 
   const [selectedHostIdsForDecommission, setSelectedHostIdsForDecommission] =
     React.useState(() => new Set());
@@ -1202,18 +1206,22 @@ export default function AssetsDashboard({
     const agentId = selectedAgent?.agent_id || selectedAgent?.agentId;
     if (!agentId) {
       setAgentPrinterRows([]);
+      setAgentPrinterScan(null);
       return undefined;
     }
 
     let cancelled = false;
     setAgentPrintersLoading(true);
+    // Never show the previous device's "could not read" on this one.
+    setAgentPrinterScan(null);
 
     dashboardApi
       .getHostPrinters(agentId)
       .then((res) => {
         if (cancelled) return;
-        const rows = Array.isArray(res) ? res : [];
+        const { rows, scan } = normalizeHostPrintersResponse(res);
         setAgentPrinterRows(rows);
+        setAgentPrinterScan(scan);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1628,6 +1636,7 @@ const osVersionItems = React.useMemo(() => {
                 onSoftwarePaginationModelChange={setAgentSoftwarePaginationModel}
                 printerRows={agentPrinterRows}
                 printersLoading={agentPrintersLoading}
+                printerScan={agentPrinterScan}
                 tab={agentDetailTab}
                 onTabChange={(_, nextTab) => setAgentDetailTab(nextTab)}
                 onBack={handleCloseAgentDetail}

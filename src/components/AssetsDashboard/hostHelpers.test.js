@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  describePrinterReadProblem,
+  normalizeHostPrintersResponse,
   compareVersions,
   bucketOfVersion,
   toSafeNumber,
@@ -799,5 +801,47 @@ describe("getOsLifecycle", () => {
   it("una fila sin dato cae a unknown en vez de romperse", () => {
     expect(getOsLifecycle({}).status).toBe("unknown");
     expect(getOsLifecycle(null).status).toBe("unknown");
+  });
+});
+
+describe("describePrinterReadProblem", () => {
+  it("returns null when every declared scope was collected", () => {
+    expect(describePrinterReadProblem({ machineScope: "collected", userScope: "collected" })).toBeNull();
+  });
+
+  it("returns null when no scope was declared (macOS/Linux, older agent, no scan row)", () => {
+    expect(describePrinterReadProblem(null)).toBeNull();
+    expect(describePrinterReadProblem({ machineScope: null, userScope: null })).toBeNull();
+  });
+
+  it("explains a blind read with both reasons", () => {
+    expect(describePrinterReadProblem({ machineScope: "timeout", userScope: "unavailable" }))
+      .toBe("the print spooler query timed out; per-user network printers could not be read");
+  });
+
+  it("explains a partial read (nobody signed in)", () => {
+    expect(describePrinterReadProblem({ machineScope: "collected", userScope: "no_user_hive" }))
+      .toBe("no user signed in, so per-user network printers were not visible");
+  });
+
+  it("shows a value the UI does not know yet instead of hiding it", () => {
+    expect(describePrinterReadProblem({ machineScope: "unknown", userScope: "collected" }))
+      .toBe('machine read status "unknown"');
+  });
+});
+
+describe("normalizeHostPrintersResponse", () => {
+  it("reads { items, scan } from a backend that serves the scopes", () => {
+    const scan = { machineScope: "timeout", userScope: "collected", reportedAtUtc: "t" };
+    expect(normalizeHostPrintersResponse({ items: [{ name: "HP" }], scan })).toEqual({ rows: [{ name: "HP" }], scan });
+  });
+
+  it("still reads the bare array from a backend that predates them", () => {
+    expect(normalizeHostPrintersResponse([{ name: "HP" }])).toEqual({ rows: [{ name: "HP" }], scan: null });
+  });
+
+  it("falls back to an empty list with no scan on anything else", () => {
+    expect(normalizeHostPrintersResponse(null)).toEqual({ rows: [], scan: null });
+    expect(normalizeHostPrintersResponse({ items: [], scan: null })).toEqual({ rows: [], scan: null });
   });
 });

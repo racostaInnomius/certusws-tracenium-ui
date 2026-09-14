@@ -11,6 +11,11 @@ export const dashboardApi = {
   // projection (populated from agent 1.1.20+ FACTS via the new
   // amp.printers field). For older agents the projection has no rows
   // for that device — returns an empty array.
+  //
+  // `include=scan` asks for `{ items, scan }`: scan carries the Windows read
+  // scopes that separate "could not read" from "has no printers". A backend
+  // that predates it ignores the parameter and returns the bare array, so
+  // read the response through normalizeHostPrintersResponse.
   getHostPrinters: (agentId) =>
-    httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/printers`)
+    httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/printers?include=scan`)
 };

@@ -968,3 +968,57 @@ export function buildTrail(episodes) {
   // Un tramo de un solo punto no es un recorrido; se descarta arriba.
   return tramos;
 }
+
+// ── Printer read scopes ──────────────────────────────────────────────
+//
+// The Windows agent reads printers twice — machine queues via the spooler
+// from the service, and per-user network connections from HKEY_USERS — and
+// reports how each read went (`machineScope` / `userScope`). Until this was
+// wired through, a read that could not see anything rendered exactly like a
+// device with no printers.
+//
+// null scopes = the agent declared nothing (macOS/Linux have a single read,
+// or the agent predates the scopes): the list is shown as-is.
+
+const PRINTER_MACHINE_SCOPE_TEXT = {
+  timeout: "the print spooler query timed out",
+  empty_output: "the print spooler returned no output",
+  unavailable: "the print spooler could not be queried",
+};
+
+const PRINTER_USER_SCOPE_TEXT = {
+  no_user_hive: "no user signed in, so per-user network printers were not visible",
+  unavailable: "per-user network printers could not be read",
+};
+
+/**
+ * Why the last printer read was incomplete, as a human reason — or null when
+ * every declared scope was `collected` (or none was declared).
+ */
+export function describePrinterReadProblem(scan) {
+  if (!scan) return null;
+  const parts = [];
+  const { machineScope, userScope } = scan;
+  if (machineScope && machineScope !== "collected") {
+    parts.push(PRINTER_MACHINE_SCOPE_TEXT[machineScope] ?? `machine read status "${machineScope}"`);
+  }
+  if (userScope && userScope !== "collected") {
+    parts.push(PRINTER_USER_SCOPE_TEXT[userScope] ?? `user read status "${userScope}"`);
+  }
+  return parts.length ? parts.join("; ") : null;
+}
+
+/**
+ * `GET /hosts/:agentId/printers?include=scan` → `{ rows, scan }`.
+ *
+ * Accepts both shapes: `{ items, scan }` from a backend that knows the scopes,
+ * and the bare array from one that predates them (it ignores the parameter).
+ * Anything else is an empty list with no scan — never a thrown error.
+ */
+export function normalizeHostPrintersResponse(res) {
+  if (Array.isArray(res)) return { rows: res, scan: null };
+  return {
+    rows: Array.isArray(res?.items) ? res.items : [],
+    scan: res?.scan && typeof res.scan === "object" ? res.scan : null,
+  };
+}

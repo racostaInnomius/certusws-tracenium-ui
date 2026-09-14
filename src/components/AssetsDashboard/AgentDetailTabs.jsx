@@ -43,7 +43,8 @@ import {
   getMapPin,
   buildLocationHistory,
   buildTrail,
-  getLocationHint
+  getLocationHint,
+  describePrinterReadProblem
 } from "./hostHelpers";
 import { DetailField, FieldGrid } from "./detailAtoms";
 import MobileCommandsPanel from "../AssetManagement/MobileCommandsPanel";
@@ -493,7 +494,11 @@ export function SoftwareTab({
   );
 }
 
-export function PrintersTab({ printerRows = [], printersLoading = false }) {
+export function PrintersTab({ printerRows = [], printersLoading = false, printerScan = null }) {
+  // Why the last read was incomplete (Windows machineScope/userScope). With it,
+  // an empty list is "could not read", not "has no printers".
+  const readProblem = describePrinterReadProblem(printerScan);
+  const notRead = Boolean(readProblem) && printerRows.length === 0;
   return (
             <Box>
               <Stack
@@ -523,11 +528,31 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                   ) : null}
                   <Chip
                     size="small"
-                    label={`${printerRows.length} printer${printerRows.length === 1 ? "" : "s"} detected`}
-                    sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }}
+                    label={notRead ? "Not read" : `${printerRows.length} printer${printerRows.length === 1 ? "" : "s"} detected`}
+                    sx={
+                      notRead
+                        ? { bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 800 }
+                        : { bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }
+                    }
                   />
                 </Stack>
               </Stack>
+              {readProblem && printerRows.length > 0 ? (
+                <Typography
+                  role="status"
+                  sx={{
+                    mb: 1.5,
+                    px: 1.5,
+                    py: 1,
+                    borderRadius: 1.5,
+                    fontSize: TEXT.sm,
+                    bgcolor: BRAND.alert.warningSoft,
+                    color: BRAND.alert.warningText,
+                  }}
+                >
+                  {`Printer list may be incomplete (${readProblem})`}
+                </Typography>
+              ) : null}
               <Paper
                 elevation={0}
                 sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}
@@ -601,6 +626,8 @@ export function PrintersTab({ printerRows = [], printersLoading = false }) {
                           <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
                             {printersLoading
                               ? "Loading printers…"
+                              : readProblem
+                              ? `Could not read printers (${readProblem})`
                               : "No printers configured on this device."}
                           </TableCell>
                         </TableRow>
