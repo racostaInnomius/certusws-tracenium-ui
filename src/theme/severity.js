@@ -13,19 +13,23 @@
 //
 // Each entry carries { label, fg, bg } backed by BRAND tokens (no hex here).
 // Consumers: chips use fg+bg; single-accent uses fg.
+//
+// `fg` is a TEXT color: every level must hold WCAG AA (4.5:1) on its own `bg`
+// (tested). The previous values failed it: alert.error gave "Critical" 2.3:1,
+// tealText gave "Low" 4.496:1, and gray gave "Info"/"None" 1.6:1.
 
-import { BRAND } from "./brand";
+import { BRAND, TEXT_MUTED } from "./brand";
 
 export const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0, none: 0 };
 export const SEVERITY_ORDER = ["critical", "high", "medium", "low"];
 
 export const SEVERITY_META = {
-  critical: { label: "Critical", fg: BRAND.alert.error, bg: BRAND.alert.errorSoft },
+  critical: { label: "Critical", fg: BRAND.alert.errorText, bg: BRAND.alert.errorSoft },
   high: { label: "High", fg: BRAND.alert.high, bg: BRAND.alert.highSoft },
   medium: { label: "Medium", fg: BRAND.alert.warningText, bg: BRAND.alert.warningSoft },
-  low: { label: "Low", fg: BRAND.tealText, bg: BRAND.tealSoft },
-  info: { label: "Info", fg: BRAND.gray, bg: BRAND.darkSoft },
-  none: { label: "None", fg: BRAND.gray, bg: BRAND.darkSoft },
+  low: { label: "Low", fg: BRAND.alert.infoText, bg: BRAND.tealSoft },
+  info: { label: "Info", fg: TEXT_MUTED, bg: BRAND.darkSoft },
+  none: { label: "None", fg: TEXT_MUTED, bg: BRAND.darkSoft },
 };
 
 // Common aliases mapped to canonical keys.
