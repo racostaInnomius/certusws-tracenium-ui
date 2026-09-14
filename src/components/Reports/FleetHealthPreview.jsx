@@ -26,7 +26,7 @@
 // de auditoría sí queda: mirar es una acción con actor y momento.
 
 import * as React from "react";
-import { scoreBandRole } from "../../theme/scoreBands";
+import { scoreBandTextRole } from "../../theme/scoreBands";
 import {
   Alert,
   Box,
@@ -202,8 +202,8 @@ export default function FleetHealthPreview({ open, onClose, reportKey, onGenerat
             <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
               <Kpi label="Devices" value={dash(k.devices)} />
               <Kpi label="Online" value={pctText(k.onlinePct)} accent={BRAND.teal} />
-              <Kpi label="Compliance" value={pctText(k.compliancePct)} accent={scoreBandRole(k.compliancePct) ?? BRAND.dark} />
-              <Kpi label="Patch compliant" value={pctText(k.patchCompliantPct)} accent={scoreBandRole(k.patchCompliantPct) ?? BRAND.dark} />
+              <Kpi label="Compliance" value={pctText(k.compliancePct)} accent={scoreBandTextRole(k.compliancePct) ?? BRAND.dark} />
+              <Kpi label="Patch compliant" value={pctText(k.patchCompliantPct)} accent={scoreBandTextRole(k.patchCompliantPct) ?? BRAND.dark} />
               <Kpi label="License usage" value={pctText(k.licenseUtilizationPct)} />
               <Kpi label="Open alerts" value={dash(k.openAlerts)} accent={k.openAlerts ? BRAND.alert.warningText : BRAND.alert.successText} />
             </Stack>

@@ -16,7 +16,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
-import { DEFAULT_BANDS, scoreBandRole } from "../../theme/scoreBands";
+import { DEFAULT_BANDS, scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 
 // Rule-outcome status presentation. Exported because non-chip parts of the
 // compliance page key off it too (this was shared module-level state in the
@@ -182,10 +182,11 @@ export function ScoreBar({ value, labelSuffix = "%", bands = DEFAULT_BANDS }) {
   // item 1) — callers pass `bands` from useComplianceBands(); the
   // default is the same 85/60 scale this used to hardcode.
   const color = scoreBandRole(pct, bands) ?? ROLE.critical;
+  const textColor = scoreBandTextRole(pct, bands) ?? BRAND.alert.errorText;
   return (
     <Box sx={{ minWidth: 110 }}>
       <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5 }}>
-        <Typography variant="body2" sx={{ fontWeight: 700, color }}>
+        <Typography variant="body2" sx={{ fontWeight: 700, color: textColor }}>
           {pct}
         </Typography>
         <Typography variant="caption" sx={{ color: BRAND.gray }}>

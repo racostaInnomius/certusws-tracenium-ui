@@ -6,13 +6,14 @@
 // effective-settings normalization that feeds it.
 
 import { describe, it, expect } from "vitest";
-import { ROLE } from "./brand";
+import { BRAND, ROLE } from "./brand";
 import {
   DEFAULT_BANDS,
   normalizeBands,
   scoreBandKey,
   scoreBandRole,
   scoreBandSoftRole,
+  scoreBandTextRole,
 } from "./scoreBands";
 
 describe("DEFAULT_BANDS", () => {
@@ -70,4 +71,39 @@ describe("normalizeBands", () => {
       normalizeBands({ complianceBandGoodMin: 150, complianceBandWarningMin: 40 })
     ).toEqual({ goodMin: DEFAULT_BANDS.goodMin, warningMin: 40 });
   });
+});
+
+// scoreBandRole es relleno; el texto de una cifra o etiqueta de banda va con
+// scoreBandTextRole, que tiene que leerse sobre blanco y sobre el tinte suave.
+describe("scoreBandTextRole", () => {
+  const rgb = (color) =>
+    color.startsWith("#")
+      ? { c: [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)), a: 1 }
+      : (([r, g, b, a = 1]) => ({ c: [r, g, b], a }))(color.match(/[\d.]+/g).map(Number));
+  const lum = (c) =>
+    c
+      .map((v) => v / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (fg, bg) => {
+    const { c, a } = rgb(bg);
+    const [hi, lo] = [lum(rgb(fg).c), lum(c.map((v) => 255 - a * (255 - v)))].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it("maps bands to the text tokens, null when unscored", () => {
+    expect(scoreBandTextRole(90)).toBe(BRAND.alert.successText);
+    expect(scoreBandTextRole(70)).toBe(BRAND.alert.warningText);
+    expect(scoreBandTextRole(10)).toBe(BRAND.alert.errorText);
+    expect(scoreBandTextRole(null)).toBeNull();
+    expect(scoreBandTextRole(50, { goodMin: 40, warningMin: 20 })).toBe(BRAND.alert.successText);
+  });
+
+  for (const score of [90, 70, 10]) {
+    it(`score ${score}: el texto cumple AA sobre blanco y sobre su tinte`, () => {
+      const fg = scoreBandTextRole(score);
+      expect(ratio(fg, "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(fg, scoreBandSoftRole(score))).toBeGreaterThanOrEqual(4.5);
+    });
+  }
 });

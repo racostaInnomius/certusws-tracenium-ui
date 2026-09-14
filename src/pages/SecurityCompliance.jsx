@@ -119,7 +119,7 @@ import { listAssetGroups } from "../api/assetGroups";
 import { listFrom } from "../api/shape";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
-import { scoreBandRole, scoreBandLabel } from "../theme/scoreBands";
+import { scoreBandTextRole, scoreBandLabel } from "../theme/scoreBands";
 
 // Below this share of the catalog, a framework score is computed on so
 // few controls that reading it as a posture is a mistake. 40% is a
@@ -1360,7 +1360,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         // tooltip on the Compliance card whenever it diverges from the
         // raw score: the delta IS the weight of the vetted exceptions.
         const avgAdjusted = scoped ? null : summary?.avgScoreAdjusted;
-        const complianceAccent = scoreBandRole(avgScore, bands) ?? BRAND.teal;
+        const complianceAccent = scoreBandTextRole(avgScore, bands) ?? BRAND.tealText;
         const criticalHigh = scoped
           ? 0
           : (summary?.openFindings?.critical ?? 0) +

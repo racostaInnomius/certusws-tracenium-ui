@@ -25,12 +25,12 @@ import {
 } from "@mui/material";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
-import { scoreBandRole } from "../../theme/scoreBands";
+import { scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
-import { BRAND, ICON, TEXT } from "../../theme/brand";
+import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import { listFrom } from "../../api/shape";
@@ -53,12 +53,13 @@ function sevChip(s) {
 function PassRateBar({ rate }) {
   const bands = useComplianceBands();
   const color = rateColor(rate, bands);
+  const textColor = scoreBandTextRole(rate, bands) ?? TEXT_MUTED;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 160 }}>
       <Box sx={{ position: "relative", flex: 1, height: 8, borderRadius: 4, bgcolor: BRAND.surfaceMuted, overflow: "hidden" }}>
         <Box sx={{ position: "absolute", inset: 0, width: `${rate == null ? 0 : rate}%`, bgcolor: color, borderRadius: 4 }} />
       </Box>
-      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color, minWidth: 34, textAlign: "right" }}>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: textColor, minWidth: 34, textAlign: "right" }}>
         {rate == null ? "n/a" : `${rate}%`}
       </Typography>
     </Box>

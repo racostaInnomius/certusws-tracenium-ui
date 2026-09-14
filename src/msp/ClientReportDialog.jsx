@@ -5,7 +5,7 @@
 // buttons (PDF / CSV). Opened from a client row in MspAdmin.
 
 import * as React from "react";
-import { scoreBandRole } from "../theme/scoreBands";
+import { scoreBandTextRole } from "../theme/scoreBands";
 import {
   Alert,
   Box,
@@ -143,7 +143,7 @@ export default function ClientReportDialog({ open, clientId, clientName, onClose
               <Kpi
                 label="Compliance"
                 value={cur.compliancePct == null ? "—" : `${cur.compliancePct}%`}
-                accent={scoreBandRole(cur.compliancePct) ?? BRAND.dark}
+                accent={scoreBandTextRole(cur.compliancePct) ?? BRAND.dark}
               />
             </Stack>
 

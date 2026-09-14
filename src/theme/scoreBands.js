@@ -15,7 +15,7 @@
 // backend's SYSTEM_DEFAULTS in tenant-settings-cache.ts — keep in
 // sync). The setting finally does what its help text says.
 
-import { ROLE } from "./brand";
+import { BRAND, ROLE } from "./brand";
 
 // Mirror of backend SYSTEM_DEFAULTS (tenant-settings-cache.ts). Used
 // whenever the effective settings haven't loaded (or the viewer can't
@@ -79,6 +79,19 @@ export function scoreBandRole(score, bands = DEFAULT_BANDS) {
   if (key === "good") return ROLE.positive;
   if (key === "warning") return ROLE.caution;
   if (key === "critical") return ROLE.critical;
+  return null;
+}
+
+/**
+ * TEXT color for a score, null when unscored. `scoreBandRole` is a FILL color
+ * (bars, sparklines): as the color of a number or a label it reads at 2.5:1
+ * (green) or 1.4:1 (amber) on white. Use this one for anything you read.
+ */
+export function scoreBandTextRole(score, bands = DEFAULT_BANDS) {
+  const key = scoreBandKey(score, bands);
+  if (key === "good") return BRAND.alert.successText;
+  if (key === "warning") return BRAND.alert.warningText;
+  if (key === "critical") return BRAND.alert.errorText;
   return null;
 }
 
