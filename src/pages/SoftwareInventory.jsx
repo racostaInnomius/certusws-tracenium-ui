@@ -942,6 +942,9 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
       {/* Extensions in those browsers, with how much each one can reach. */}
       <BrowserExtensionsPanel
         notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+        // Block/allow rules are browser security configuration: same
+        // capability as Security Baselines (the API enforces it too).
+        canManageRules={Boolean(myPermissions?.has("security_compliance"))}
       />
 
       <Box sx={{ mb: 3 }}>

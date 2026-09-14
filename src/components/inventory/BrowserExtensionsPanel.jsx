@@ -32,8 +32,9 @@ import {
 import ExtensionOutlinedIcon from "@mui/icons-material/ExtensionOutlined";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { SEVERITY_ORDER, severityMeta } from "../../theme/severity";
-import { getBrowserExtensions } from "../../api/inventoryDashboard";
+import { deleteExtensionRule, getBrowserExtensions, getExtensionRules, putExtensionRule } from "../../api/inventoryDashboard";
 import CreateDeviceGroupButton from "../common/CreateDeviceGroupButton";
+import { BlockAllOthersControls, ExtensionRuleActions, RuleChip } from "./ExtensionRuleControls";
 
 const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge", firefox: "Firefox" };
 
@@ -82,7 +83,7 @@ function CoverageLine({ coverage }) {
   );
 }
 
-export default function BrowserExtensionsPanel({ notify }) {
+export default function BrowserExtensionsPanel({ notify, canManageRules = false }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [level, setLevel] = React.useState(null);
@@ -112,6 +113,46 @@ export default function BrowserExtensionsPanel({ notify }) {
       cancelled = true;
     };
   }, []);
+
+  // Reglas: se cargan aparte y un fallo no tumba el inventario (se ocultan los controles).
+  const [rulesView, setRulesView] = React.useState(null);
+  const loadRules = React.useCallback(() => {
+    return getExtensionRules()
+      .then((res) => setRulesView(res && Array.isArray(res.rules) ? res : null))
+      .catch(() => setRulesView(null));
+  }, []);
+  React.useEffect(() => {
+    loadRules();
+  }, [loadRules]);
+
+  const rulesByKey = React.useMemo(() => {
+    const map = new Map();
+    for (const r of rulesView?.rules || []) map.set(`${r.browser}|${r.extensionId}`, r);
+    return map;
+  }, [rulesView]);
+
+  const saveRule = async (rule) => {
+    try {
+      await putExtensionRule(rule);
+      notifyRef.current?.("success", "Rule saved. Windows devices apply it on their next check-in.");
+      await loadRules();
+      return true;
+    } catch (err) {
+      notifyRef.current?.("error", err?.body?.message || err?.message || "Failed to save the rule");
+      return false;
+    }
+  };
+  const removeRule = async (browser, extensionId) => {
+    try {
+      await deleteExtensionRule(browser, extensionId);
+      notifyRef.current?.("success", "Rule removed. Devices take their entry out on their next check-in.");
+      await loadRules();
+      return true;
+    } catch (err) {
+      notifyRef.current?.("error", err?.body?.message || err?.message || "Failed to remove the rule");
+      return false;
+    }
+  };
 
   const all = React.useMemo(() => (Array.isArray(data?.extensions) ? data.extensions : []), [data]);
   const filtered = React.useMemo(() => {
@@ -156,6 +197,15 @@ export default function BrowserExtensionsPanel({ notify }) {
         </Box>
       ) : (
         <>
+          {rulesView ? (
+            <BlockAllOthersControls
+              rules={rulesView.rules}
+              canManage={canManageRules}
+              windowsDevices={rulesView.windowsDevices}
+              onSave={saveRule}
+              onRemove={removeRule}
+            />
+          ) : null}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
             <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mr: 0.5 }}>Risk</Typography>
             {SEVERITY_ORDER.map((key) => {
@@ -216,7 +266,10 @@ export default function BrowserExtensionsPanel({ notify }) {
                     <React.Fragment key={key}>
                       <TableRow hover onClick={() => setExpanded(open ? null : key)} sx={{ cursor: "pointer" }} aria-expanded={open}>
                         <TableCell>
-                          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{e.name}</Typography>
+                          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
+                            {e.name}
+                            <RuleChip rule={rulesByKey.get(key)} />
+                          </Typography>
                           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
                             {BROWSER_LABEL[e.browser] || e.browser} ·{" "}
                             <Box component="span" sx={{ fontFamily: "monospace" }}>
@@ -249,6 +302,16 @@ export default function BrowserExtensionsPanel({ notify }) {
                         <TableRow>
                           <TableCell colSpan={5} sx={{ bgcolor: BRAND.surfaceMuted, py: 1.25 }}>
                             <Stack spacing={1}>
+                              {rulesView ? (
+                                <ExtensionRuleActions
+                                  extension={e}
+                                  rule={rulesByKey.get(key)}
+                                  canManage={canManageRules}
+                                  windowsDevices={rulesView.windowsDevices}
+                                  onSave={saveRule}
+                                  onRemove={removeRule}
+                                />
+                              ) : null}
                               <Box>
                                 <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark, mb: 0.25 }}>
                                   What it can do (worst install)

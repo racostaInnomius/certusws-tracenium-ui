@@ -1,4 +1,4 @@
-import { httpGetJson } from "./http";
+import { httpDeleteJson, httpGetJson, httpPutJson } from "./http";
 import { buildQuery } from "./query";
 
 
@@ -63,4 +63,20 @@ export async function getBrowserExtensions() {
 // como evidencia de un hallazgo, que describe cómo se construyó y no lo que es.
 export async function getWindowsGpoInventory() {
   return httpGetJson(`${BASE}/windows-gpos`);
+}
+
+// Block / allow rules for Chrome and Edge extensions. They live in the tenant
+// policy: saving one reaches every Windows device on its next check-in.
+export async function getExtensionRules() {
+  return httpGetJson("/api/v1/browser-inventory/extension-rules");
+}
+
+export async function putExtensionRule(rule) {
+  return httpPutJson("/api/v1/browser-inventory/extension-rules", rule);
+}
+
+export async function deleteExtensionRule(browser, extensionId) {
+  return httpDeleteJson(
+    `/api/v1/browser-inventory/extension-rules/${encodeURIComponent(browser)}/${encodeURIComponent(extensionId)}`
+  );
 }

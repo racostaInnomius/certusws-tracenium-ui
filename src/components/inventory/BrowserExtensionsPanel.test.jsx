@@ -1,12 +1,21 @@
 // src/components/inventory/BrowserExtensionsPanel.test.jsx
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
-vi.mock("../../api/inventoryDashboard", () => ({ getBrowserExtensions: vi.fn() }));
+vi.mock("../../api/inventoryDashboard", () => ({
+  getBrowserExtensions: vi.fn(),
+  getExtensionRules: vi.fn(),
+  putExtensionRule: vi.fn(),
+  deleteExtensionRule: vi.fn(),
+}));
 vi.mock("../../api/assetGroups", () => ({ createAssetGroup: vi.fn() }));
-import { getBrowserExtensions } from "../../api/inventoryDashboard";
+import { deleteExtensionRule, getBrowserExtensions, getExtensionRules, putExtensionRule } from "../../api/inventoryDashboard";
 import BrowserExtensionsPanel from "./BrowserExtensionsPanel";
+
+beforeEach(() => {
+  getExtensionRules.mockResolvedValue({ ok: true, rules: [], windowsDevices: 0 });
+});
 
 afterEach(() => {
   cleanup();
@@ -135,5 +144,90 @@ describe("BrowserExtensionsPanel", () => {
     getBrowserExtensions.mockRejectedValue(new Error("boom"));
     render(<BrowserExtensionsPanel notify={notify} />);
     await waitFor(() => expect(notify).toHaveBeenCalledWith("error", "boom"));
+  });
+});
+
+describe("BrowserExtensionsPanel — rules", () => {
+  const blockRule = { browser: "chrome", extensionId: grabber.extensionId, action: "block", name: "Coupon Grabber", status: { applied: 3, pending: 1, failed: 1 } };
+
+  it("shows the rule on the row and how far it got across Windows devices", async () => {
+    getBrowserExtensions.mockResolvedValue(DATA);
+    getExtensionRules.mockResolvedValue({ ok: true, rules: [blockRule], windowsDevices: 5 });
+    render(<BrowserExtensionsPanel canManageRules />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    expect(screen.getByText("Blocked by rule")).toBeInTheDocument();
+    expect(screen.getByText(/Applied on 3 of 5 Windows devices · 1 pending/)).toBeInTheDocument();
+    expect(screen.getByText(/1 failed/)).toBeInTheDocument();
+    // Already blocked: offers Allow and Remove, not Block again.
+    expect(screen.queryByRole("button", { name: "Block" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove rule" })).toBeInTheDocument();
+  });
+
+  it("blocking asks first, sends the reason, reloads the rules and says when devices get it", async () => {
+    const notify = vi.fn();
+    getBrowserExtensions.mockResolvedValue(DATA);
+    putExtensionRule.mockResolvedValue({ ok: true });
+    render(<BrowserExtensionsPanel canManageRules notify={notify} />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    fireEvent.click(screen.getByRole("button", { name: "Block" }));
+
+    expect(screen.getByText(/disables and removes it on every Windows device/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Reason (kept in the audit log)"), { target: { value: "steals sessions" } });
+    fireEvent.click(screen.getByRole("button", { name: "Block extension" }));
+
+    await waitFor(() =>
+      expect(putExtensionRule).toHaveBeenCalledWith({ browser: "chrome", extensionId: grabber.extensionId, action: "block", name: "Coupon Grabber", reason: "steals sessions" })
+    );
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("success", expect.stringMatching(/next check-in/)));
+    expect(getExtensionRules).toHaveBeenCalledTimes(2);
+  });
+
+  it("a failed save keeps the dialog open and reports the server's message", async () => {
+    const notify = vi.fn();
+    getBrowserExtensions.mockResolvedValue(DATA);
+    putExtensionRule.mockRejectedValue(Object.assign(new Error("x"), { body: { message: "Security Compliance is not included in your plan" } }));
+    render(<BrowserExtensionsPanel canManageRules notify={notify} />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    fireEvent.click(screen.getByRole("button", { name: "Block" }));
+    fireEvent.click(screen.getByRole("button", { name: "Block extension" }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("error", "Security Compliance is not included in your plan"));
+    expect(screen.getByRole("button", { name: "Block extension" })).toBeInTheDocument();
+  });
+
+  it("without the capability there are no buttons, only why; Firefox says rules are Chrome/Edge", async () => {
+    getBrowserExtensions.mockResolvedValue(DATA);
+    render(<BrowserExtensionsPanel />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    expect(screen.queryByRole("button", { name: "Block" })).not.toBeInTheDocument();
+    expect(screen.getByText(/needs the Security Compliance capability/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("uBlock Origin"));
+    expect(screen.getByText("Rules are available for Chrome and Edge on Windows.")).toBeInTheDocument();
+  });
+
+  it("'block all other extensions' warns when nothing is allowed yet, and removing it deletes the * rule", async () => {
+    getBrowserExtensions.mockResolvedValue(DATA);
+    deleteExtensionRule.mockResolvedValue({ ok: true });
+    render(<BrowserExtensionsPanel canManageRules notify={() => {}} />);
+    await screen.findByText("Coupon Grabber");
+    fireEvent.click(screen.getAllByRole("button", { name: "Block all other extensions" })[1]);
+    expect(screen.getByText(/0 extensions are allowed for Edge right now — allow the ones people need first/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    cleanup();
+    getExtensionRules.mockResolvedValue({ ok: true, windowsDevices: 4, rules: [{ browser: "edge", extensionId: "*", action: "block", name: "All other extensions", status: { applied: 4, pending: 0, failed: 0 } }] });
+    render(<BrowserExtensionsPanel canManageRules notify={() => {}} />);
+    await screen.findByText("Only allowed extensions");
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Turn off" }));
+    await waitFor(() => expect(deleteExtensionRule).toHaveBeenCalledWith("edge", "*"));
+  });
+
+  it("if the rules endpoint fails the inventory still renders, without rule controls", async () => {
+    getBrowserExtensions.mockResolvedValue(DATA);
+    getExtensionRules.mockRejectedValue(new Error("403"));
+    render(<BrowserExtensionsPanel canManageRules />);
+    fireEvent.click(await screen.findByText("Coupon Grabber"));
+    expect(screen.queryByText("Policy")).not.toBeInTheDocument();
+    expect(screen.getByText("PC-ANA")).toBeInTheDocument();
   });
 });

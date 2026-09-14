@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import { respond } from "../test/msw/server";
 import {
+  deleteExtensionRule,
   getBrowserExtensions,
+  getExtensionRules,
+  putExtensionRule,
   getHardwareInventoryDetail,
   getHardwareInventoryRankings,
   getHardwareInventorySummary,
@@ -78,6 +81,18 @@ describe("inventory dashboard", () => {
     const calls = respond("get", "/api/v1/browser-inventory/extensions", { ok: true, extensions: [] });
     await getBrowserExtensions();
     expect(calls[0].pathname).toBe("/api/v1/browser-inventory/extensions");
+  });
+
+  it("extension rules: GET, PUT with the rule as body, DELETE with the id encoded in the path", async () => {
+    const get = respond("get", "/api/v1/browser-inventory/extension-rules", { ok: true, rules: [] });
+    const put = respond("put", "/api/v1/browser-inventory/extension-rules", { ok: true });
+    const del = respond("delete", "/api/v1/browser-inventory/extension-rules/edge/*", { ok: true });
+    await getExtensionRules();
+    await putExtensionRule({ browser: "chrome", extensionId: "a".repeat(32), action: "block" });
+    await deleteExtensionRule("edge", "*");
+    expect(get).toHaveLength(1);
+    expect(put[0].body).toEqual({ browser: "chrome", extensionId: "a".repeat(32), action: "block" });
+    expect(del[0].pathname).toBe("/api/v1/browser-inventory/extension-rules/edge/*");
   });
 
   it("getBrowserInventory hits the top-level browser-inventory path", async () => {
