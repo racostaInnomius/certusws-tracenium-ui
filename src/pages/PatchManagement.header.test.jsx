@@ -42,7 +42,7 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount(onNavigate = vi.fn()) {
+function mount(onNavigate = vi.fn(), pmTab = "") {
   const calls = [];
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
@@ -60,7 +60,7 @@ function mount(onNavigate = vi.fn()) {
       });
     })
   );
-  window.history.replaceState({}, "", "/?page=patch");
+  window.history.replaceState({}, "", pmTab ? `/?page=patch&pmTab=${pmTab}` : "/?page=patch");
   render(<ConfirmProvider><PatchManagement onNavigate={onNavigate} /></ConfirmProvider>);
   return calls;
 }
@@ -73,9 +73,17 @@ describe("Patch Management — cabecera", () => {
     await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
 
     expect(onNavigate).toHaveBeenCalledWith("reports");
-    // ⭐ Aquí NO se hereda el informe de flota: el catálogo tiene un tipo
-    // propio, `pmp.cve-exposure`, que es exactamente lo que se administra en
-    // esta pantalla.
+    // ⭐ Aquí NO se hereda el informe de flota. Fuera de Vulnerabilities, el de
+    // operación de parches: el de CVE no contesta lo que enseñan estas pestañas.
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("pmp.patch-operations");
+  });
+
+  it("en la pestaña Vulnerabilities abre el informe de exposición a CVE", async () => {
+    const onNavigate = vi.fn();
+    mount(onNavigate, "vulnerabilities");
+
+    await userEvent.click(await screen.findByRole("button", { name: /^report$/i }));
+
     expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("pmp.cve-exposure");
   });
 

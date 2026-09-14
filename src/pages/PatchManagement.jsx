@@ -69,11 +69,13 @@ import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
-// ⭐ ESTA página sí tiene su propio tipo de informe en el catálogo, a
-// diferencia de Software Delivery o Remote Control: `pmp.cve-exposure` es
-// exposición a CVE, que es exactamente lo que se administra aquí. Por eso no
-// hereda el de flota.
+// ⭐ ESTA página tiene DOS informes propios y el botón abre el de la pestaña:
+// en Vulnerabilities, `pmp.cve-exposure` (exposición a CVE); en el resto,
+// `pmp.patch-operations` (qué falta, qué se instaló, qué falló, qué espera
+// reinicio — G2 del plan de cobertura). Antes abría siempre el de CVE, que no
+// contesta nada de lo que enseñan las pestañas de parcheo.
 const CVE_EXPOSURE_KEY = "pmp.cve-exposure";
+const PATCH_OPERATIONS_KEY = "pmp.patch-operations";
 import JobTracker from "../components/common/JobTracker";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useAuthContext } from "../auth/AuthContext";
@@ -581,9 +583,8 @@ export default function PatchManagement({ onNavigate }) {
   }, [tenantId]);
   const isAdmin = isActiveMember && Boolean(myPermissions?.has("patch_management"));
   // ⚠️ No es `isAdmin`: aquello es la capacidad `patch_management` y esto es el
-  // ROL. `pmp.cve-exposure` declara `minRole: ["ADMIN","OWNER"]`, así que a un
-  // rol de parcheo que no sea administrador le saldría una puerta que termina
-  // en "no disponible".
+  // ROL. El catálogo pide la capacidad; el rol se añadió aquí para no ofrecer a
+  // un rol de parcheo una puerta que terminara en "no disponible".
   const canReport = isActiveMember && ["ADMIN", "OWNER"].includes(String(myRole || ""));
 
   // Tenant policy — the source of truth for "is PMP active". Cached
@@ -1368,8 +1369,8 @@ export default function PatchManagement({ onNavigate }) {
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
-                reportKey={CVE_EXPOSURE_KEY}
-                tooltip="CVE exposure report"
+                reportKey={tab === "vulnerabilities" ? CVE_EXPOSURE_KEY : PATCH_OPERATIONS_KEY}
+                tooltip={tab === "vulnerabilities" ? "CVE exposure report" : "Patch operations report"}
               />
             ) : null}
             <RefreshControl
