@@ -366,6 +366,10 @@ export default function AssetsDashboard({
   const [groupCatalog, setGroupCatalog] = React.useState([]);
   const [groupMembers, setGroupMembers] = React.useState(null); // null = not loaded; Set otherwise
   const [groupMembersLoading, setGroupMembersLoading] = React.useState(false);
+  // Total de miembros que dice el servidor. `groupMembers` es sólo la PÁGINA
+  // devuelta (25 por defecto): el chip decía "(25)" para un grupo de 30 con la
+  // tabla enseñando "30 total" justo debajo.
+  const [groupMembersTotal, setGroupMembersTotal] = React.useState(null);
   const [assetWorkbenchView, setAssetWorkbenchView] = React.useState("devices"); // devices | inactive-assets | silent-enrollments
 
   /**
@@ -1023,16 +1027,20 @@ export default function AssetsDashboard({
   React.useEffect(() => {
     if (!groupFilter) {
       setGroupMembers(null);
+      setGroupMembersTotal(null);
       setGroupMembersLoading(false);
       return undefined;
     }
     let cancelled = false;
     setGroupMembersLoading(true);
-    listAssetGroupMembers(groupFilter)
+    // pageSize 100 (el máximo del endpoint): sólo lo usa el respaldo para un
+    // backend que no filtra por grupo; el total sale de `total`.
+    listAssetGroupMembers(groupFilter, { pageSize: 100 })
       .then((res) => {
         if (cancelled) return;
         const ids = listFrom(res, { context: "groupMemberIds" }).map((m) => String(m.deviceId));
         setGroupMembers(new Set(ids));
+        setGroupMembersTotal(Number.isFinite(Number(res?.total)) ? Number(res.total) : ids.length);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1836,7 +1844,7 @@ const osVersionItems = React.useMemo(() => {
                           groupMembersLoading
                             ? `Group: ${selectedGroup?.name || groupFilter}…`
                             : `Group: ${selectedGroup?.name || groupFilter} (${
-                                groupMembers ? groupMembers.size : 0
+                                groupMembersTotal ?? (groupMembers ? groupMembers.size : 0)
                               })`
                         }
                         onDelete={() => {

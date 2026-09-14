@@ -68,6 +68,15 @@ function mount(search, { oldBackend = false } = {}) {
           ],
         });
       }
+      if (/\/asset-groups\/7\/members$/.test(url.pathname)) {
+        // Página de 25 de un grupo de 30: el chip tiene que decir 30.
+        return HttpResponse.json({
+          items: Array.from({ length: 25 }, (_, i) => ({ deviceId: `m${i}` })),
+          total: 30,
+          page: 1,
+          pageSize: 25,
+        });
+      }
       if (url.pathname.endsWith("/dashboard/hosts")) {
         const q = Object.fromEntries(url.searchParams);
         hostCalls.push(q);
@@ -130,5 +139,12 @@ describe("AssetsDashboard — filtros en servidor", () => {
     // El backend viejo devuelve la página sin filtrar (25 al día): el respaldo
     // filtra esa página y no enseña ninguna fila "older", en vez de 25.
     await waitFor(() => expect(shownLine()).toMatch(/^0 shown/));
+  });
+
+  it("⭐ el chip del grupo dice el TOTAL de miembros, no los de la primera página", async () => {
+    // Validado en el portal: grupo de 30, tabla "30 total" y chip "(25)".
+    mount("&groupId=7");
+
+    expect(await screen.findByText(/^Group: .*\(30\)$/)).toBeTruthy();
   });
 });
