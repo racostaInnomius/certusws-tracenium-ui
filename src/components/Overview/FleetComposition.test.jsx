@@ -172,6 +172,24 @@ describe("FleetComposition (Overview)", () => {
     expect(onNavigate).toHaveBeenCalledWith("assets", { assetsTab: "hardware", hwFleet: "laptop" });
   });
 
+  it("⭐ un grupo de Agent versions lleva a Assets filtrado por ese grupo", () => {
+    // Assets filtra la versión en el servidor con esta misma regla (validado
+    // en el portal: Older 4 → "4 of 4"), así que el segmento vuelve a filtrar.
+    const onNavigate = vi.fn();
+    render(
+      <FleetComposition
+        onNavigate={onNavigate}
+        results={{
+          latestVersions: fulfilled([{ platform: "windows", arch: "x64", ok: true, data: { latestVersion: "1.1.70" } }]),
+          agentVersions: fulfilled({ total: 6, byVersion: [{ version: "1.1.70", count: 3 }, { version: "1.1.63", count: 3 }] }),
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByText("Older"));
+    expect(onNavigate).toHaveBeenCalledWith("assets", { versionBucket: "older" });
+  });
+
   it("mientras carga no dice 'No devices to classify'", () => {
     render(<FleetComposition loading results={null} />);
 

@@ -420,11 +420,24 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           fleetDevices={fleetDevices}
           agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
           onCardClick={() => navToAssets()}
-          // Sin filtro, a propósito. Assets filtra por versión sólo la
-          // página cargada (25 filas de 53) y con otra regla de "one behind":
-          // el Overview decía Older 4 y la lista enseñaba 2. Arriba de
-          // Assets está esta misma dona con las mismas cifras.
-          onSegmentClick={() => navToAssets()}
+          // Filtra por el grupo pulsado. Estuvo sin filtro mientras Assets
+          // filtraba sólo la página cargada (Older 4 → 2 filas); desde
+          // d71f272/0e19984 filtra en el servidor con esta misma regla y
+          // validado en el portal da 4/3/46, lo mismo que esta dona.
+          onSegmentClick={(segment) => {
+            const label = String(segment.name || "").toLowerCase();
+            const bucket = label.includes("current")
+              ? "current"
+              : label.includes("one behind")
+              ? "one_behind"
+              : label.includes("older")
+              ? "older"
+              : label.includes("unknown")
+              ? "unknown"
+              : null;
+            // "Not connected" (pendientes) no es un grupo de versión: a Assets sin filtro.
+            navToAssets(bucket ? { versionBucket: bucket } : undefined);
+          }}
         />
         </Box>
       </Grid>
