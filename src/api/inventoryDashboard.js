@@ -52,6 +52,12 @@ export async function getSoftwareInventoryHostApps(agentId, params = {}) {
 export async function getBrowserInventory() {
   return httpGetJson("/api/v1/browser-inventory");
 }
+
+// Extensions installed in Chrome / Edge / Firefox across the fleet, one row per
+// extension with its permission-based risk and where it is installed.
+export async function getBrowserExtensions() {
+  return httpGetJson("/api/v1/browser-inventory/extensions");
+}
 // GPOs de Windows aplicadas a cada equipo. Es inventario, no cumplimiento:
 // se mostraba dentro del cajón de Security Compliance porque el dato viajaba
 // como evidencia de un hallazgo, que describe cómo se construyó y no lo que es.

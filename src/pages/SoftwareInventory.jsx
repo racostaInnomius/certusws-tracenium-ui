@@ -45,6 +45,7 @@ import { BRAND, ICON, TEXT } from "../theme/brand";
 import CompositionBars from "../components/common/CompositionBars";
 import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
+import BrowserExtensionsPanel from "../components/inventory/BrowserExtensionsPanel";
 import { formatDate } from "../utils/format";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
 import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
@@ -935,6 +936,11 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
       {/* Browser posture — attack-surface lens over the installed-software
           inventory (Chrome / Edge / Firefox / … versions across the fleet). */}
       <BrowserInventoryPanel
+        notify={(severity, message) => setSnackbar({ open: true, severity, message })}
+      />
+
+      {/* Extensions in those browsers, with how much each one can reach. */}
+      <BrowserExtensionsPanel
         notify={(severity, message) => setSnackbar({ open: true, severity, message })}
       />
 

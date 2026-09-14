@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { respond } from "../test/msw/server";
 import {
+  getBrowserExtensions,
   getHardwareInventoryDetail,
   getHardwareInventoryRankings,
   getHardwareInventorySummary,
@@ -71,6 +72,12 @@ describe("inventory dashboard", () => {
     respond("get", `${BASE}/software-inventory/summary`, envelope);
 
     await expect(getSoftwareInventorySummary()).resolves.toEqual(envelope);
+  });
+
+  it("getBrowserExtensions hits the extensions path under browser-inventory", async () => {
+    const calls = respond("get", "/api/v1/browser-inventory/extensions", { ok: true, extensions: [] });
+    await getBrowserExtensions();
+    expect(calls[0].pathname).toBe("/api/v1/browser-inventory/extensions");
   });
 
   it("getBrowserInventory hits the top-level browser-inventory path", async () => {
