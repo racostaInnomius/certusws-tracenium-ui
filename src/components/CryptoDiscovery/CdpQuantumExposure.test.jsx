@@ -61,12 +61,12 @@ describe("ReadinessStrip", () => {
 });
 
 describe("QuantumSunburst", () => {
-  it("⭐ abre en Keys, pide las facetas de claves, y pinta las cuatro bases aunque tres estén vacías", async () => {
+  it("⭐ abre en Keys, pide las facetas de claves, y pinta las cinco bases aunque cuatro estén vacías", async () => {
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
     await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true })));
     expect(await screen.findByText("146")).toBeInTheDocument();
     expect(screen.getByText("private keys")).toBeInTheDocument();
-    for (const base of ["On-prem", "Infra", "Cloud", "External key sources"]) expect(screen.getByText(base)).toBeInTheDocument();
+    for (const base of ["On-prem devices", "Windows CA", "Infra", "Cloud", "External key sources"]) expect(screen.getByText(base)).toBeInTheDocument();
   });
 
   it("«Certificates» pide facetas por propiedad, fuente y algoritmo y suma lo de fuera en el centro; «Services / Resources» pide el roadmap", async () => {

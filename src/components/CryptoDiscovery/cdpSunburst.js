@@ -6,16 +6,23 @@
 // (/cdp/facets, /cdp/exposure, /cdp/roadmap), y el trazado devuelve arcos
 // SVG y etiquetas ya posicionadas.
 //
-// Anillo interior FIJO, como pidió el usuario: cuatro sectores base que
-// están siempre, con o sin datos, para que el mapa sea el mismo hoy y
-// cuando se conecten fuentes nuevas:
+// Anillo interior FIJO, como pidió el usuario: sectores base que están
+// siempre, con o sin datos, para que el mapa sea el mismo hoy y cuando se
+// conecten fuentes nuevas. Repaso 14-sep: On-prem se parte en dos, lo que
+// el AGENTE recoge en los equipos y lo que la CA de Windows REPORTA, que
+// son cosas distintas (una es un inventario, la otra un registro de
+// emisión) y el usuario quiere verlas separadas.
 //
-//   On-prem   = el parque con agente (almacenes, keystores, listeners,
-//               ficheros, NSS, claves SSH) y la CA Windows (AD CS)
-//   Infra     = infraestructura virtual y de red: sondas remotas,
-//               Kubernetes, vCenter / hipervisores (gateway)
-//   Cloud     = dominios públicos (CT), AWS ACM, Google Cloud
+//   On-prem devices = el parque con agente (almacenes, keystores,
+//                     listeners, ficheros, NSS, claves SSH, CBOM)
+//   Windows CA      = lo que emitió AD CS, leído por el agente de la CA
+//   Infra           = infraestructura virtual y de red: sondas remotas,
+//                     Kubernetes, vCenter / hipervisores (gateway)
+//   Cloud           = dominios públicos (CT), AWS ACM, Google Cloud
 //   External key sources = Azure Key Vault, HashiCorp Vault
+//
+// La pestaña Settings usa estos MISMOS sectores (cdpSources.js) para decir
+// qué fuente está reportando, cuál está configurada y cuál no.
 //
 // Anillo 2 = origen; anillo 3 = algoritmo y tamaño (o KEM negociado en
 // la vista de servicios). Color = estado cuántico, no identidad:
@@ -26,14 +33,16 @@
 import { BRAND, NEUTRAL } from "../../theme/brand";
 
 export const BASES = [
-  { key: "onprem", label: "On-prem", note: "Managed endpoints and the Windows CA" },
+  { key: "onprem", label: "On-prem devices", note: "Collected by the agent on managed endpoints" },
+  { key: "adcs", label: "Windows CA", note: "Issued by AD CS, reported by the agent on the CA server" },
   { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter" },
   { key: "cloud", label: "Cloud", note: "Public domains, AWS ACM, Google Cloud" },
   { key: "external", label: "External key sources", note: "Azure Key Vault, HashiCorp Vault" }
 ];
 
 const BASE_OF_SOURCE = {
-  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", adcs: "onprem", ssh: "onprem", cbom: "onprem",
+  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem",
+  adcs: "adcs",
   probe: "infra", k8s: "infra", vcenter: "infra",
   ct: "cloud", acm: "cloud", gcp: "cloud",
   keyvault: "external", vault: "external"
@@ -54,6 +63,20 @@ export function originOfSourceName(sourceName) {
   const s = String(sourceName ?? "");
   const i = s.indexOf(":");
   return i >= 0 ? s.slice(0, i) : s;
+}
+
+/**
+ * Nombre del gajo de origen (anillo 2) para un activo de fuera de los
+ * equipos. Cada CA de Windows es su propio gajo dentro del sector «Windows
+ * CA» —dos CAs no son «AD CS» dos veces—; el resto lleva el nombre del
+ * origen.
+ */
+function outsideSourceLabel(origin, sourceName) {
+  if (origin === "adcs") {
+    const rest = String(sourceName ?? "").slice("adcs:".length);
+    return rest || SOURCE_LABEL.adcs;
+  }
+  return SOURCE_LABEL[origin] ?? origin;
 }
 
 export const SHADES = {
@@ -122,7 +145,7 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
     const origin = a.origin ?? originOfSourceName(a.sourceName);
     if (origin === "ssh") continue;
     const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
-    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, `${SOURCE_LABEL[origin] ?? origin}`, algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
+    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
       source: { note: a.sourceName },
       leaf: { s: st }
     });
@@ -130,7 +153,7 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
   for (const s of outsideBySource ?? []) {
     const origin = s.origin ?? originOfSourceName(s.sourceName);
     if (origin === "ssh" || detailed.has(s.sourceName)) continue; // claves, no certificados / ya desglosado
-    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, `${SOURCE_LABEL[origin] ?? origin}`, "certificates", "certificates", Number(s.certificates ?? 0), {
+    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), "certificates", "certificates", Number(s.certificates ?? 0), {
       source: { note: s.sourceName },
       leaf: { s: "broken" }
     });

@@ -154,14 +154,35 @@ describe("ConnectorForm — Kubernetes", () => {
 });
 
 describe("Dominios públicos (CT)", () => {
-  it("⭐ ya no van en el desplegable de tipos: tienen su bloque, y funciona sin clave de sellado", async () => {
+  it("⭐ ya no van en el desplegable de tipos: tienen su bloque en la pestaña Settings (Cloud)", async () => {
     listCdpConnectors.mockResolvedValue({ ok: true, secretsConfigured: false, connectors: [] });
     render(<CdpConnectorsPanel refreshNonce={0} />);
     await screen.findByText(/CDP_CONNECTOR_SECRETS_KEY/);
-    expect(screen.getByText("Public domains")).toBeInTheDocument();
-    expect(screen.getByLabelText(/add a domain/i)).not.toBeDisabled();
     fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
     expect(screen.queryByRole("option", { name: /public ct logs/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /kubernetes/i })).toBeInTheDocument();
+  });
+
+  it("⭐ por sector: con `kinds` la lista y el alta se limitan a esos tipos, y la lista viene del padre sin pedirla otra vez", async () => {
+    const state = {
+      ok: true, secretsConfigured: true,
+      connectors: [
+        { connectorId: 1, kind: "keyvault", label: "Prod vault", config: CFG, enabled: true, hasSecret: true, lastStatus: "ok", lastRunAt: "2026-09-04T10:00:00Z", lastSummary: { certificates: 12, keys: 3 } },
+        { connectorId: 3, kind: "acm", label: "AWS prod", config: { region: "us-east-1", accessKeyId: "AKIA" }, enabled: true, hasSecret: true, lastStatus: "ok", lastRunAt: "2026-09-04T10:00:00Z", lastSummary: { certificates: 2, keys: 0 } }
+      ]
+    };
+    render(<CdpConnectorsPanel refreshNonce={0} kinds={["acm", "gcp"]} state={state} reload={vi.fn()} title="AWS ACM and Google Cloud" />);
+    expect(await screen.findByText("AWS prod")).toBeInTheDocument();
+    expect(screen.queryByText("Prod vault")).not.toBeInTheDocument();
+    expect(listCdpConnectors).not.toHaveBeenCalled();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /kind/i }));
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["AWS Certificate Manager", "Google Cloud"]);
+  });
+
+  it("con un solo tipo no hay desplegable: el botón ya dice qué se añade", async () => {
+    render(<CdpConnectorsPanel refreshNonce={0} kinds={["k8s"]} state={{ ok: true, secretsConfigured: true, connectors: [] }} />);
+    expect(await screen.findByRole("button", { name: /add kubernetes/i })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /kind/i })).not.toBeInTheDocument();
   });
 
   it("⭐ «History» enseña las ejecuciones, con el fallo del planificador y la buena de la víspera", async () => {

@@ -15,7 +15,7 @@
 // desde fuera del render.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 const MOCK_AUTH = {
   tenantId: "1",
@@ -108,7 +108,7 @@ describe("pestañas de Crypto Discovery", () => {
     expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
   });
 
-  it("⭐ Settings concentra lo configurable: conectores, import de CBOM y enlace a la policy; Explore solo mira", async () => {
+  it("⭐ Settings concentra lo configurable, ordenado por los sectores del sunburst; Explore solo mira", async () => {
     render(
       <ConfirmProvider>
         <CryptoDiscovery />
@@ -116,8 +116,15 @@ describe("pestañas de Crypto Discovery", () => {
     );
     const settings = await screen.findByRole("tab", { name: /^settings$/i }, { timeout: 4000 });
     settings.click();
-    await screen.findByText(/Sources outside your devices/i);
-    expect(screen.getByText(/^Connectors$/)).toBeInTheDocument();
+    // El mapa arriba, con los cinco sectores; una sección por sector debajo.
+    await screen.findByText(/^Sources$/);
+    for (const base of ["On-prem devices", "Windows CA", "Infra", "Cloud", "External key sources"]) expect(screen.getAllByText(base).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^vCenter: not available yet$/ })).toBeInTheDocument();
+    // Cada tipo de conector en su sector, y CT por su bloque de dominios.
+    expect(screen.getByText("Kubernetes clusters")).toBeInTheDocument();
+    expect(screen.getByText("AWS Certificate Manager and Google Cloud")).toBeInTheDocument();
+    expect(screen.getByText("Azure Key Vault and HashiCorp Vault")).toBeInTheDocument();
     expect(screen.getByText("Import a CBOM")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open Policies/i })).toHaveAttribute("href", "?page=policies");
     expect(screen.getByText("Public domains")).toBeInTheDocument();

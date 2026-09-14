@@ -3,7 +3,7 @@
 // Bloque «Post-quantum readiness» + sunburst del Dashboard de Crypto
 // Discovery (2026-09-10), a partir de la maqueta aprobada por el usuario:
 // una tira de preparación con cuatro pares «vulnerable / total» y un
-// sunburst con anillo base fijo (On-prem · Infra · Cloud · External key
+// sunburst con anillo base fijo (On-prem devices · Windows CA · Infra · Cloud · External key
 // sources), agrupable por Keys, Services / Resources y Certificates.
 //
 // Datos: los que ya sirven a las otras pestañas. La tira sale de
@@ -203,7 +203,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
       }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-        Inside out: On-prem, Infra, Cloud or External key sources → the source it came from → its algorithm or key exchange. Click a ring to open that slice in Inventory.
+        Inside out: On-prem devices, Windows CA, Infra, Cloud or External key sources → the source it came from → its algorithm or key exchange. Click a ring to open that slice in Inventory.
       </Typography>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: TEXT_MUTED }}>Group by:</Typography>

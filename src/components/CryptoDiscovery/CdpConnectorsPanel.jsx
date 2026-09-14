@@ -1,9 +1,11 @@
 // src/components/CryptoDiscovery/CdpConnectorsPanel.jsx
 //
-// Fase 4c: conectores sin agente. El primero, Azure Key Vault. Vive
-// dentro de «Outside your devices» (Explore) y no en una pestaña propia:
-// es otra fuente de activos que ningún agente ve, y la pregunta sigue
-// siendo «dónde viven».
+// Fase 4c: conectores sin agente. El primero, Azure Key Vault. Vive en
+// Crypto Discovery → Settings, y desde el 14-sep se instancia UNA vez por
+// sector del sunburst (`kinds`: Kubernetes en Infra, ACM y GCP en Cloud,
+// Key Vault y Vault en External key sources), con la lista de conectores
+// cargada una sola vez por la pestaña y pasada en `state`. Sin `state` se
+// carga solo, como antes.
 //
 // El secreto de la identidad se manda una vez y no vuelve: el servidor
 // lo sella y aquí solo se sabe si «hay secreto». Sin la clave de sellado
@@ -14,17 +16,20 @@ import * as React from "react";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { createCdpConnector, deleteCdpConnector, listCdpConnectorRuns, listCdpConnectors, runCdpConnector, updateCdpConnector } from "../../api/cdp";
-import CdpPublicDomains from "./CdpPublicDomains";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 
 const KIND_LABEL = { keyvault: "Azure Key Vault", acm: "AWS Certificate Manager", gcp: "Google Cloud", vault: "HashiCorp Vault", k8s: "Kubernetes", ct: "Public CT logs (crt.sh)" };
 const SECRETLESS_KINDS = new Set(["ct"]);
+// Los tipos que el formulario ofrece. «Public CT logs» no: los dominios
+// públicos tienen su propio bloque (CdpPublicDomains), siempre visible.
+const FORM_KINDS = ["keyvault", "acm", "gcp", "vault", "k8s"];
 const EMPTY_FORM = { vaultUrl: "", tenantId: "", clientId: "", region: "", accessKeyId: "", projectId: "", hcUrl: "", namespace: "", mounts: "pki", authMethod: "approle", roleId: "", caPem: "", apiServer: "", namespaces: "", readSecrets: true, domains: "", includeSubdomains: true, includeExpired: false };
 
-export function ConnectorForm({ onCreated, secretsConfigured = true }) {
-  const [kind, setKind] = React.useState("keyvault");
+export function ConnectorForm({ onCreated, secretsConfigured = true, kinds = null }) {
+  const offered = FORM_KINDS.filter((k) => !kinds || kinds.includes(k));
+  const [kind, setKind] = React.useState(offered[0] ?? "keyvault");
   // Sin clave de sellado en el servidor solo se pueden crear los tipos
   // sin credencial (CT). El selector de tipo queda siempre activo.
   const disabled = !secretsConfigured && !SECRETLESS_KINDS.has(kind);
@@ -82,15 +87,13 @@ export function ConnectorForm({ onCreated, secretsConfigured = true }) {
   return (
     <Box>
       <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-        <TextField size="small" select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} sx={{ minWidth: 220 }}>
-          <MenuItem value="keyvault">Azure Key Vault</MenuItem>
-          <MenuItem value="acm">AWS Certificate Manager</MenuItem>
-          <MenuItem value="gcp">Google Cloud</MenuItem>
-          <MenuItem value="vault">HashiCorp Vault</MenuItem>
-          <MenuItem value="k8s">Kubernetes</MenuItem>
-          {/* «Public CT logs» ya no se ofrece aquí: los dominios públicos
-              tienen su propio bloque (CdpPublicDomains), siempre visible. */}
-        </TextField>
+        {offered.length > 1 ? (
+          <TextField size="small" select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} sx={{ minWidth: 220 }}>
+            {offered.map((k) => (
+              <MenuItem key={k} value={k}>{KIND_LABEL[k]}</MenuItem>
+            ))}
+          </TextField>
+        ) : null}
         <TextField size="small" label="Label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "acm" ? "AWS production" : kind === "gcp" ? "GCP production" : kind === "vault" ? "Corp PKI" : kind === "k8s" ? "Prod cluster" : kind === "ct" ? "Our domains" : "Production vault"} sx={{ minWidth: 160 }} disabled={disabled} />
         {kind === "ct" ? (
           <>
@@ -294,9 +297,17 @@ function RemoveConnectorDialog({ connector, busy, onClose, onConfirm }) {
   );
 }
 
-/** `embedded`: sin cabecera ni separador propios — la pestaña Settings ya los pone. */
-export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded = false }) {
-  const [state, setState] = React.useState(null);
+const DEFAULT_INTRO =
+  "Refreshed daily. Azure Key Vault, AWS Certificate Manager, Google Cloud, HashiCorp Vault PKI and Kubernetes (TLS secrets and cert-manager). Each reports its certificates and keys, who uses them and, where the source knows it, what it will issue next. A certificate that also lives on a device is matched by fingerprint.";
+
+/**
+ * `embedded`: sin cabecera ni separador propios — la pestaña Settings ya
+ * los pone. `kinds`: solo esos tipos, en la lista y en el formulario.
+ * `state` + `reload`: lista de conectores cargada por el padre (una sola
+ * petición para varios paneles); sin ellos el panel se carga solo.
+ */
+export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded = false, kinds = null, state: externalState, reload: externalReload, title = "Connectors", intro = DEFAULT_INTRO }) {
+  const [ownState, setOwnState] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
   const [runResult, setRunResult] = React.useState(null);
@@ -305,18 +316,24 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
   const [historyOpen, setHistoryOpen] = React.useState(() => new Set());
   const [nonce, setNonce] = React.useState(0);
 
+  const managed = externalState !== undefined;
   React.useEffect(() => {
+    if (managed) return undefined;
     let alive = true;
     setError(null);
     listCdpConnectors()
-      .then((r) => alive && setState(r ?? { connectors: [], secretsConfigured: false }))
+      .then((r) => alive && setOwnState(r ?? { connectors: [], secretsConfigured: false }))
       .catch((e) => alive && setError(e?.message || String(e)));
     return () => {
       alive = false;
     };
-  }, [refreshNonce, nonce]);
+  }, [managed, refreshNonce, nonce]);
 
-  const reload = () => setNonce((n) => n + 1);
+  const state = managed ? externalState : ownState;
+  const reload = () => {
+    setNonce((n) => n + 1);
+    externalReload?.();
+  };
 
   const run = async (c, dryRun) => {
     setBusyId(c.connectorId);
@@ -360,20 +377,13 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
     }
   };
 
-  const connectors = state?.connectors ?? [];
+  const connectors = (state?.connectors ?? []).filter((c) => !kinds || kinds.includes(c.kind));
   const secretsConfigured = state?.secretsConfigured !== false;
 
   return (
     <Box sx={embedded ? undefined : { mt: 2, pt: 1.5, borderTop: `1px dashed ${BRAND.border}` }}>
-      {state ? <CdpPublicDomains connectors={connectors} onChanged={() => { onChanged?.(); reload(); }} /> : null}
-      <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}` }} />
-      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Connectors</Typography>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
-        Refreshed daily. Azure Key Vault, AWS Certificate Manager, Google Cloud, HashiCorp Vault PKI and Kubernetes (TLS
-        secrets and cert-manager); the public domains above are one more connector, listed here too. Each reports its
-        certificates and keys, who uses them and, where the source knows it, what it will issue next. A certificate
-        that also lives on a device is matched by fingerprint.
-      </Typography>
+      <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>{title}</Typography>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>{intro}</Typography>
       {error ? <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert> : null}
       {state && !secretsConfigured ? (
         <Alert severity="warning" sx={{ mb: 1 }}>
@@ -381,7 +391,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
           on the control plane before adding a connector with credentials. Public CT logs need none and work now.
         </Alert>
       ) : null}
-      <ConnectorForm secretsConfigured={secretsConfigured} onCreated={() => { reload(); }} />
+      <ConnectorForm secretsConfigured={secretsConfigured} kinds={kinds} onCreated={() => { reload(); }} />
 
       {connectors.length > 0 ? (
         <Stack spacing={1} sx={{ mt: 1.5 }}>
