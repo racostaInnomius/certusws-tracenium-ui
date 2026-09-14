@@ -15,7 +15,7 @@
 // pestaña; un arco del sunburst abre Inventory con el filtro de ese gajo.
 
 import * as React from "react";
-import { Box, FormControlLabel, Radio, RadioGroup, Stack, Typography } from "@mui/material";
+import { Box, FormControlLabel, GlobalStyles, Radio, RadioGroup, Stack, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCdpFacets, getCdpRoadmap } from "../../api/cdp";
@@ -173,14 +173,15 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
   }, [mode, refreshNonce]);
 
   const outside = React.useMemo(() => exposure?.outside?.bySource ?? [], [exposure]);
+  const outsideByAlgorithm = React.useMemo(() => exposure?.outside?.byAlgorithm ?? [], [exposure]);
   const sshHostKeys = outside.filter((s) => s.origin === "ssh").reduce((s, x) => s + Number(x.certificates ?? 0), 0);
   const tree = React.useMemo(() => {
     const rows = data[mode];
     if (!rows) return null;
-    if (mode === "certs") return buildCertificatesTree(rows, outside);
+    if (mode === "certs") return buildCertificatesTree(rows, outside, outsideByAlgorithm);
     if (mode === "keys") return buildKeysTree(rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys });
     return buildServicesTree(rows);
-  }, [data, mode, outside, overview, sshHostKeys]);
+  }, [data, mode, outside, outsideByAlgorithm, overview, sshHostKeys]);
   const layout = React.useMemo(() => (tree ? layoutSunburst(tree) : null), [tree]);
 
   const centerValue = mode === "certs"
@@ -189,6 +190,17 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
 
   return (
     <SectionPaper>
+      {/* Al cargar (y al cambiar de vista) los anillos crecen desde el
+          centro, de dentro a fuera, y las etiquetas aparecen al final. Se
+          respeta prefers-reduced-motion. */}
+      <GlobalStyles styles={{
+        "@keyframes cdpSunburstIn": { from: { opacity: 0, transform: "scale(0.15)" }, to: { opacity: 1, transform: "scale(1)" } },
+        "@keyframes cdpSunburstLabel": { from: { opacity: 0 }, to: { opacity: 1 } },
+        ".cdp-sunburst-arc": { transformOrigin: "0 0", animation: "cdpSunburstIn 560ms cubic-bezier(.2,.8,.2,1) both", transition: "opacity 120ms ease" },
+        ".cdp-sunburst-arc:hover": { opacity: 0.82 },
+        ".cdp-sunburst-label": { animation: "cdpSunburstLabel 400ms ease-out both" },
+        "@media (prefers-reduced-motion: reduce)": { ".cdp-sunburst-arc, .cdp-sunburst-label": { animation: "none" } }
+      }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
         Inside out: On-prem, Infra, Cloud or External key sources → the source it came from → its algorithm or key exchange. Click a ring to open that slice in Inventory.
@@ -204,10 +216,11 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
       {error ? <Typography sx={{ mt: 1, fontSize: TEXT.sm, color: BRAND.alert.errorText }}>{error}</Typography> : null}
       <Stack direction={{ xs: "column", md: "row" }} spacing={3} alignItems="center" sx={{ mt: 1 }}>
         <Box sx={{ position: "relative", width: 560, height: 560, flexShrink: 0, maxWidth: "100%" }} aria-label={`Sunburst by ${MODES.find((m) => m.key === mode)?.label}`}>
-          <svg width="560" height="560" viewBox="-280 -280 560 560" style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+          <svg key={mode} width="560" height="560" viewBox="-280 -280 560 560" style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
             {(layout?.arcs ?? []).map((a) => (
               <path
                 key={a.id}
+                className="cdp-sunburst-arc"
                 d={a.d}
                 fill={a.fill}
                 stroke="#FFFFFF"
@@ -215,7 +228,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
                 role={a.drill && onDrillDown ? "button" : undefined}
                 tabIndex={a.drill && onDrillDown ? 0 : undefined}
                 aria-label={a.drill ? `${a.name}: ${fmt(a.value)} ${CENTER[mode]}` : undefined}
-                style={{ cursor: a.drill && onDrillDown ? "pointer" : "default" }}
+                style={{ cursor: a.drill && onDrillDown ? "pointer" : "default", animationDelay: `${a.depth * 160}ms` }}
                 onClick={a.drill && onDrillDown ? () => onDrillDown(a.drill, { replace: true }) : undefined}
                 onKeyDown={a.drill && onDrillDown ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onDrillDown(a.drill, { replace: true }); } } : undefined}
               >
@@ -226,7 +239,9 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
           </svg>
           {(layout?.labels ?? []).map((l, i) => (
             <Box
-              key={i}
+              key={`${mode}:${i}`}
+              className="cdp-sunburst-label"
+              style={{ animationDelay: "560ms" }}
               sx={{
                 position: "absolute", left: l.left, top: l.top, transform: `translate(-50%, -50%) rotate(${l.rotate.toFixed(1)}deg)`,
                 color: l.color, fontSize: l.size, fontWeight: l.weight, whiteSpace: l.wrap ? "normal" : "nowrap", width: l.width ?? "auto",

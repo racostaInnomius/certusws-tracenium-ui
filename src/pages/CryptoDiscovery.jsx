@@ -380,15 +380,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
       } end-entity certificates are expired in total.`,
     },
     {
-      title: "Hygiene flags",
-      value: s.withFlags ?? "…",
-      filter: { hasFlags: true },
-      icon: <ReportProblemOutlinedIcon />,
-      accent: BRAND.alert.high,
-      tint: BRAND.alert.highSoft,
-      hint: "Weak signature/key, self-signed leaves and >398-day validity.",
-    },
-    {
       title: "Devices reporting",
       value: s.devicesReporting ?? "…",
       icon: <ComputerOutlinedIcon />,
@@ -411,7 +402,9 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
         </Alert>
       ) : null}
       {/* Los KPI primero: son la lectura de un vistazo; el embudo es la explicación. */}
-      <Grid container spacing={2}>
+      {/* Cinco KPI (14-sep: «Hygiene flags» se fue; la tarjeta Hygiene de
+          abajo dice más). 10 columnas en lg para que quepan en una fila. */}
+      <Grid container spacing={2} columns={{ xs: 12, sm: 12, md: 12, lg: 10 }}>
         {cards.map((card) => (
           <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
             <SummaryCard
@@ -439,11 +432,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           </Grid>
         ))}
       </Grid>
-
-      {/* Va DESPUÉS de los KPI y antes del embudo: es la única lectura de
-          la portada que habla de lo que ya está migrado, y sólo aparece si
-          hay algo que enseñar. */}
-      <CdpCatalystStrip pqAlt={d.pqAltSignature} onDrillDown={onDrillDown} />
 
       {/* Repaso UX 2026-09-13: el Dashboard es un PREVIEW del estado, no un
           informe. Cuatro filas y ninguna cifra dos veces:
@@ -546,6 +534,10 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
           />
         </Grid>
       </Grid>
+
+      {/* Al final (14-sep, pedido del usuario): es la única lectura que
+          habla de lo ya migrado y sólo aparece si hay algo que enseñar. */}
+      <CdpCatalystStrip pqAlt={d.pqAltSignature} onDrillDown={onDrillDown} />
     </Stack>
   );
 }

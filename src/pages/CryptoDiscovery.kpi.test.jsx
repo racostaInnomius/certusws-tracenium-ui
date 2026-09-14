@@ -142,7 +142,9 @@ describe("KPI clicables", () => {
         <CryptoDiscovery />
       </ConfirmProvider>
     );
-    (await screen.findByText("Hygiene flags", {}, { timeout: 4000 })).click();
+    // 14-sep: el KPI «Hygiene flags» se fue; la tarjeta Hygiene abre la
+    // misma lista y sustituye el filtro igual.
+    (await screen.findByRole("button", { name: /^Open Hygiene$/i }, { timeout: 4000 })).click();
     await waitFor(() => {
       const p = new URLSearchParams(window.location.search);
       expect(p.get("flagged")).toBe("1");

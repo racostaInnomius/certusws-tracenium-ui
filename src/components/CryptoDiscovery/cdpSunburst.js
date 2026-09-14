@@ -99,7 +99,7 @@ function finish(bases) {
  * fuera de los equipos (exposure.outside.bySource, sin desglose de
  * algoritmo todavía: entran como una hoja «certificates» por origen).
  */
-export function buildCertificatesTree(facetRows, outsideBySource) {
+export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgorithm = []) {
   const bases = skeleton();
   for (const r of facetRows ?? []) {
     const own = r.keys?.ownership ?? "foreign";
@@ -115,9 +115,21 @@ export function buildCertificatesTree(facetRows, outsideBySource) {
       leaf: { drill: isVendor ? { includeRoots: true, scope: "system-roots", keyAlgorithm: algo, keySizeBits: bits } : { source, keyAlgorithm: algo, keySizeBits: bits } }
     });
   }
+  // Fuera de los equipos: con desglose por algoritmo cuando el servidor lo
+  // da (exposure.outside.byAlgorithm, 14-sep); si no, una hoja por origen.
+  const detailed = new Set((outsideByAlgorithm ?? []).map((a) => a.sourceName));
+  for (const a of outsideByAlgorithm ?? []) {
+    const origin = a.origin ?? originOfSourceName(a.sourceName);
+    if (origin === "ssh") continue;
+    const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
+    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, `${SOURCE_LABEL[origin] ?? origin}`, algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
+      source: { note: a.sourceName },
+      leaf: { s: st }
+    });
+  }
   for (const s of outsideBySource ?? []) {
     const origin = s.origin ?? originOfSourceName(s.sourceName);
-    if (origin === "ssh") continue; // claves, no certificados
+    if (origin === "ssh" || detailed.has(s.sourceName)) continue; // claves, no certificados / ya desglosado
     addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, `${SOURCE_LABEL[origin] ?? origin}`, "certificates", "certificates", Number(s.certificates ?? 0), {
       source: { note: s.sourceName },
       leaf: { s: "broken" }
@@ -205,7 +217,7 @@ const textWidth = (t, size) => String(t).length * size * 0.56;
  * líneas en el anillo base, y ninguna si el gajo es más estrecho que la
  * propia letra. El nombre completo vive en el tooltip del arco.
  */
-export function layoutSunburst(tree, { radii = [62, 132, 198, 264], gap = 0.012, placeholder = 0.48, foldBelow = 0.025 } = {}) {
+export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012, placeholder = 0.38, foldBelow = 0.025 } = {}) {
   const arcs = [];
   const labels = [];
 
@@ -216,7 +228,7 @@ export function layoutSunburst(tree, { radii = [62, 132, 198, 264], gap = 0.012,
     const rm = (radii[depth] + radii[depth + 1]) / 2;
     const arcLen = (end - start) * rm - 6;
     const radial = radii[depth + 1] - radii[depth] - 10;
-    const size = depth === 0 ? 11 : 10;
+    const size = 10;
     let text = depth === 2 && v > 0 ? `${name} · ${v.toLocaleString()}` : name;
     const deg = (mid * 180) / Math.PI;
     if (arcLen < size + 4) return;

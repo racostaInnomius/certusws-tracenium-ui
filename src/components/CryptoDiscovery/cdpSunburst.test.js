@@ -45,6 +45,20 @@ describe("buildCertificatesTree", () => {
   });
 });
 
+describe("buildCertificatesTree — fuera de los equipos por algoritmo", () => {
+  it("⭐ con exposure.outside.byAlgorithm, la CA se abre por algoritmo y el resumen por origen no se duplica", () => {
+    const tree = buildCertificatesTree(
+      [],
+      [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }, { sourceName: "ct:tracenium.com", origin: "ct", certificates: 8 }],
+      [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 27 }]
+    );
+    const adcs = tree[0].children.find((c) => c.name === "AD CS");
+    expect(adcs.children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 27, "broken"]]);
+    const cloud = tree.find((b) => b.key === "cloud");
+    expect(cloud.children[0].children.map((l) => [l.name, l.v])).toEqual([["certificates", 8]]);
+  });
+});
+
 describe("buildKeysTree", () => {
   it("agrupa por almacén sin el SID del usuario y añade huérfanas y SSH sólo si hay", () => {
     const tree = buildKeysTree(
@@ -95,7 +109,7 @@ describe("layoutSunburst", () => {
       // Radial: la rotación es el ángulo del gajo ± 90, nunca la tangente.
       expect(Math.abs(((l.rotate % 180) + 180) % 180 - 90) < 90 || true).toBe(true);
       const width = l.width ?? l.text.length * l.size * 0.56;
-      expect(width).toBeLessThanOrEqual(132 - 62);
+      expect(width).toBeLessThanOrEqual(128 - 58);
     }
   });
 
