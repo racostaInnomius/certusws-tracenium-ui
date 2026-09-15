@@ -2,7 +2,7 @@
 //
 // Curated chart palettes. These are the series colors shared by more than one
 // chart — the per-chart maps that encode domain meaning (e.g. the printer
-// vendor map in PrintersByVendorPie) deliberately stay local to their chart.
+// printer vendor map in utils/printerFleet.js) deliberately stay local to their chart.
 //
 // Why this module exists: the categorical ramps below started as `const
 // BAR_COLORS = [...]` copy-pasted into each chart, and their first entries were

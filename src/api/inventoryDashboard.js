@@ -65,6 +65,12 @@ export async function getWindowsGpoInventory() {
   return httpGetJson(`${BASE}/windows-gpos`);
 }
 
+// Impresoras de la flota agrupadas en colas, con impresoras físicas por
+// dirección y la cobertura de lectura. Pestaña Asset Management → Printers.
+export async function getPrinterFleet() {
+  return httpGetJson(`${BASE}/printers/fleet`);
+}
+
 // Block / allow rules for Chrome and Edge extensions. They live in the tenant
 // policy: saving one reaches every Windows device on its next check-in.
 export async function getExtensionRules() {

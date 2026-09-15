@@ -12,6 +12,7 @@ import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
 import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
 import AssetsDashboard from "./AssetsDashboard";
 
 import SoftwareInventory from "./SoftwareInventory";
@@ -22,6 +23,7 @@ const LocationWorkbench = React.lazy(() =>
   import("../components/AssetsDashboard/LocationWorkbench")
 );
 import WindowsGpos from "./WindowsGpos";
+import Printers from "./Printers";
 import AssetGroups from "./AssetGroups";
 
 // Note: the "Agent Downloads" tab moved to its own top-level page
@@ -35,7 +37,7 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
 // las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
-const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, software: 4, gpos: 5 };
+const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6 };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
@@ -126,7 +128,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   // Refresco de página — subir el nonce es la señal para que las pestañas
   // vuelvan a pedir.
   //
-  // ⚠️ Lo miran LAS CINCO. Antes sólo AssetsDashboard y WindowsGpos: pulsar
+  // ⚠️ Lo miran TODAS. Antes sólo AssetsDashboard y WindowsGpos: pulsar
   // Refresh con Asset Groups, Software o Hardware delante no hacía
   // absolutamente nada, y no se notaba — el botón se comporta igual tanto si
   // recarga como si no. Un refresco que depende de la pestaña que tengas
@@ -250,11 +252,21 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             sx={TAB_SX}
           />
 
+          {/* Las impresoras de la FLOTA agrupadas en colas; las de un equipo
+              siguen en su detalle. */}
+          <Tab
+            icon={<PrintOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Printers"
+            {...a11yProps(4)}
+            sx={TAB_SX}
+          />
+
           <Tab
             icon={<AppsOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Software Inventory"
-            {...a11yProps(4)}
+            {...a11yProps(5)}
             sx={TAB_SX}
           />
 
@@ -262,7 +274,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             icon={<PolicyOutlinedIcon fontSize="small" />}
             iconPosition="start"
             label="Windows GPOs"
-            {...a11yProps(5)}
+            {...a11yProps(6)}
             sx={TAB_SX}
           />
         </Tabs>
@@ -297,10 +309,14 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       </TabPanel>
 
       <TabPanel value={activeTab} index={4}>
-        <SoftwareInventory refreshNonce={refreshNonce} />
+        <Printers refreshNonce={refreshNonce} />
       </TabPanel>
 
       <TabPanel value={activeTab} index={5}>
+        <SoftwareInventory refreshNonce={refreshNonce} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={6}>
         <WindowsGpos refreshNonce={refreshNonce} />
       </TabPanel>
     </Box>
