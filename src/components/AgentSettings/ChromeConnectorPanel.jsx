@@ -1,4 +1,4 @@
-// src/components/integrations/ChromeConnectorPanel.jsx
+// src/components/AgentSettings/ChromeConnectorPanel.jsx
 //
 // Chrome Enterprise connector: the security events Chrome already produces
 // (malware transfers, password reuse, unsafe sites, extension installs) sent

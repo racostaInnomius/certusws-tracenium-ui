@@ -1,4 +1,4 @@
-// src/components/integrations/ChromeConnectorPanel.test.jsx
+// src/components/AgentSettings/ChromeConnectorPanel.test.jsx
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";

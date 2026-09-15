@@ -15,6 +15,8 @@ vi.mock("../../api/adPrinters", () => ({
 }));
 const confirmMock = vi.fn(async () => true);
 vi.mock("../common/ConfirmDialog", () => ({ useConfirm: () => confirmMock }));
+// La sección Security Compliance lleva el conector de Chrome (pide tenant y capacidades); no es lo que se prueba aquí.
+vi.mock("./ChromeConnectorSection", () => ({ default: () => null }));
 
 import * as api from "../../api/adPrinters";
 import AdPrinterCollectorPanel from "./AdPrinterCollectorPanel";

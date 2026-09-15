@@ -13,6 +13,7 @@ import { BRAND, TEXT } from "../../theme/brand";
 import SectionFields from "./SectionFields";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 import AdPrinterCollectorPanel from "./AdPrinterCollectorPanel";
+import ChromeConnectorSection from "./ChromeConnectorSection";
 
 // Plugins con capacidades privilegiadas y, por tanto, con matriz de
 // vistobueno. Es un cambio de permisos: vive aquí, en Agent Settings —solo
@@ -98,6 +99,14 @@ export default function PolicySectionPanel({
           {section.id === "amp" && scope === "tenant" && !readOnly ? (
             <Box sx={{ mt: 2 }}>
               <AdPrinterCollectorPanel />
+            </Box>
+          ) : null}
+          {/* Conector de Chrome Enterprise: fuente de eventos de navegador del
+              tenant entero para Security Compliance y Alerts. Vivía en la raíz
+              de Settings; es configuración de este plugin. Sólo ámbito tenant. */}
+          {section.id === "scp" && scope === "tenant" && !readOnly ? (
+            <Box sx={{ mt: 2 }}>
+              <ChromeConnectorSection />
             </Box>
           ) : null}
           {APPROVAL_MATRIX[section.id] && scope === "tenant" && !readOnly ? (

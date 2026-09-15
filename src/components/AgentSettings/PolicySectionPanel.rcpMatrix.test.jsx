@@ -36,6 +36,7 @@ vi.mock("../../api/remoteControl", () => ({
 // de AD (ADR-0023), que pide datos y un ConfirmProvider. No es lo que se prueba
 // aquí: se sustituye por nada.
 vi.mock("./AdPrinterCollectorPanel", () => ({ default: () => null }));
+vi.mock("./ChromeConnectorSection", () => ({ default: () => null }));
 
 import PolicySectionPanel from "./PolicySectionPanel";
 import AccessTab from "../RemoteControl/AccessTab";
