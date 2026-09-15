@@ -319,7 +319,7 @@ const textWidth = (t, size) => String(t).length * size * 0.56;
  * líneas en el anillo base, y ninguna si el gajo es más estrecho que la
  * propia letra. El nombre completo vive en el tooltip del arco.
  */
-export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012, placeholder = 0.38, foldBelow = 0.025 } = {}) {
+export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012, placeholder = 0.38, foldBelow = 0.025, minArc = { 0: 0.3, 1: 0.14 } } = {}) {
   const arcs = [];
   const labels = [];
 
@@ -374,12 +374,30 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
     const gapAfter = (i) => (i < nodes.length - 1 ? (depth === 1 && (nodes[i].group ?? "agent") !== (nodes[i + 1].group ?? "agent") ? gap * 4 : gap) : 0);
     const gaps = nodes.reduce((t, _n, i) => t + gapAfter(i), 0);
     const usable = a1 - a0 - gaps - empties * placeholder;
+    // Ancho mínimo en los anillos base y de origen (14-sep): con 185
+    // claves en un almacén y 3 en vCenter, Infra era una astilla sin
+    // etiqueta y la mayor parte del círculo un solo gajo. Un gajo pequeño
+    // se queda con lo mínimo legible y el resto se reparte en proporción;
+    // el número real va en la etiqueta y en el tooltip.
+    const widths = nodes.map((n) => (sumNode(n) <= 0 ? placeholder : usable * (sumNode(n) / tot)));
+    const floor = minArc?.[depth] ?? 0;
+    if (floor > 0 && nodes.length > 1) {
+      const small = nodes.map((n, i) => (sumNode(n) > 0 && widths[i] < floor ? i : -1)).filter((i) => i >= 0);
+      const big = nodes.map((n, i) => (sumNode(n) > 0 && widths[i] >= floor ? i : -1)).filter((i) => i >= 0);
+      const reserved = small.length * floor;
+      const bigTot = big.reduce((t, i) => t + sumNode(nodes[i]), 0);
+      if (small.length > 0 && big.length > 0 && reserved < usable * 0.6) {
+        const rest = usable - reserved;
+        for (const i of small) widths[i] = floor;
+        for (const i of big) widths[i] = rest * (sumNode(nodes[i]) / bigTot);
+      }
+    }
     let cursor = a0;
     for (const [i, n] of nodes.entries()) {
       const v = sumNode(n);
       const isEmpty = v <= 0;
       const start = cursor;
-      const end = cursor + (isEmpty ? placeholder : usable * (v / tot));
+      const end = cursor + widths[i];
       const st = isEmpty ? "empty" : n.s ?? n.status ?? parentStatus ?? "other";
       const id = [...path, n.key ?? n.name].join("/");
       arcs.push({

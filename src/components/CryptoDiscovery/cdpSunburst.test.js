@@ -197,3 +197,35 @@ describe("⭐ la CA dentro de On-prem: grupo al final con más separación (pedi
     expect(Number.isFinite(startOf(ring2[2].d))).toBe(true);
   });
 });
+
+describe("⭐ ancho mínimo para los gajos pequeños (vCenter no se veía, 14-sep)", () => {
+  const angle = (a) => {
+    // Del path SVG se sacan el punto de inicio y el de fin del arco exterior.
+    const m = /^M([-\d.]+) ([-\d.]+) A[\d.]+ [\d.]+ 0 \d 1 ([-\d.]+) ([-\d.]+)/.exec(a.d);
+    const at = (x, y) => Math.atan2(Number(x), -Number(y));
+    let w = at(m[3], m[4]) - at(m[1], m[2]);
+    if (w < 0) w += Math.PI * 2;
+    return w;
+  };
+  it("una base con 3 claves frente a 1.000 sigue siendo legible y con etiqueta; las proporciones grandes se conservan", () => {
+    const tree = buildKeysTree([facet("own_leaf", "store", "RSA", 2048, 1000, { store_name: "LocalMachine\\My" })], {
+      outsideBySource: [{ sourceName: "vcenter:vc", origin: "vcenter", certificates: 3 }, { sourceName: "keyvault:kv", origin: "keyvault", certificates: 400 }]
+    });
+    const { arcs, labels } = layoutSunburst(tree);
+    const infra = arcs.find((a) => a.depth === 0 && a.name === "Infra");
+    const onprem = arcs.find((a) => a.depth === 0 && a.name === "On-prem devices");
+    const external = arcs.find((a) => a.depth === 0 && a.name === "External key sources");
+    expect(infra.empty).toBe(false);
+    expect(angle(infra)).toBeGreaterThanOrEqual(0.29);
+    expect(angle(onprem) / angle(external)).toBeCloseTo(1000 / 400, 0);
+    expect(labels.map((l) => l.text)).toContain("Infra");
+    expect(labels.map((l) => l.text)).toContain("vCenter");
+  });
+
+  it("sin nada pequeño no cambia nada", () => {
+    const tree = buildKeysTree([facet("own_leaf", "store", "RSA", 2048, 100)], { outsideBySource: [{ sourceName: "keyvault:kv", origin: "keyvault", certificates: 100 }] });
+    const { arcs } = layoutSunburst(tree);
+    const [a, b] = ["On-prem devices", "External key sources"].map((n) => arcs.find((x) => x.depth === 0 && x.name === n));
+    expect(angle(a)).toBeCloseTo(angle(b), 2);
+  });
+});

@@ -269,6 +269,14 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
           <Box sx={{ height: 1, bgcolor: BRAND.border }} />
           <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Rings</Typography>
           <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>{RINGS[mode]}</Typography>
+          {mode !== "services" ? (
+            // El 9 % de la tira cuenta el intercambio híbrido de los
+            // servicios; una clave o un certificado RSA sigue siendo rojo
+            // aunque el servicio que lo usa negocie ML-KEM (14-sep).
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.75 }}>
+              The hybrid key exchange counted in the readiness figure shows under Services / Resources. A key or certificate stays quantum-broken until it is post-quantum itself, whatever the handshake negotiates.
+            </Typography>
+          ) : null}
           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
             {BASES.map((b) => `${b.label}: ${b.note}`).join(" · ")}. A certificate found in two sources counts in both. Bases without a source stay on the chart so the map does not change when a connector is added in Settings.
           </Typography>

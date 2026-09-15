@@ -92,6 +92,13 @@ describe("QuantumSunburst", () => {
     expect(screen.queryByRole("button", { name: /^Cloud/ })).not.toBeInTheDocument();
   });
 
+  it("en Keys y Certificates se explica dónde está el verde de la tira; en Services no hace falta", async () => {
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
+    expect(await screen.findByText(/hybrid key exchange counted in the readiness figure/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Services / Resources"));
+    await waitFor(() => expect(screen.queryByText(/hybrid key exchange counted in the readiness figure/)).not.toBeInTheDocument());
+  });
+
   it("un fallo al cargar se dice, no se calla", async () => {
     getCdpFacets.mockRejectedValueOnce(new Error("backend caído"));
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
