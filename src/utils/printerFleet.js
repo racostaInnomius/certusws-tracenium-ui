@@ -11,6 +11,10 @@
 
 import { BRAND } from "../theme/brand";
 import { CHART_NEUTRAL, CHART_SERIES_WIDE } from "../theme/chartPalette";
+import { formatRelative } from "./format";
+import { describeRunError } from "../components/AgentSettings/adPrinterCollector";
+
+const AD_SETTINGS = "Settings › Agent Settings › Asset Management";
 
 // Color FIJO por marca: con colores por posición, HP cambiaba de color cada vez
 // que dejaba de ser la marca más grande y la dona parecía otra gráfica. Venía de
@@ -94,25 +98,55 @@ export function coverageNotices(fleet) {
     }
   }
 
+  // ⚠️ ADR-0023 D7: una lista de AD vieja se enseña, pero con fecha y motivo.
+  // Sin el aviso, "published in Active Directory" se lee como el estado de hoy.
+  const ad = fleet.activeDirectory;
+  const adError = ad?.lastAttempt && ad.lastAttempt.status !== "complete" && ad.lastAttempt.status !== "running"
+    ? describeRunError(ad.lastAttempt.error) || (ad.lastAttempt.status === "missed" ? describeRunError("collector_unavailable") : null)
+    : null;
+  if (ad?.state === "stale") {
+    notices.push({
+      key: "ad-stale",
+      severity: "warning",
+      title: `The Active Directory list was last read ${formatRelative(ad.readAt)}.`,
+      body: `${adError ? `The last attempt did not complete: ${adError} ` : ""}Queues published or removed since then are not reflected. The collector is set in ${AD_SETTINGS}.`,
+    });
+  } else if (ad?.state === "never_read") {
+    notices.push({
+      key: "ad-never-read",
+      severity: "info",
+      title: "Printers published in Active Directory have not been read yet.",
+      body: `${adError ? `The last attempt did not complete: ${adError} ` : ""}Print server queues that no device connects to appear here once a read completes.`,
+    });
+  }
+
   const servers = Array.isArray(fleet.printServers) ? fleet.printServers : [];
-  const silent = servers.filter((s) => s.agent === "no_queues").map((s) => s.server);
+  const silent = servers.filter((s) => s.agent === "no_queues");
   if (silent.length > 0) {
+    const names = silent.map((s) => s.server);
+    const allInAd = silent.every((s) => s.inActiveDirectory);
     notices.push({
       key: "server-no-queues",
       severity: "warning",
-      title: `${listNames(silent)} ${plural(silent.length, "is", "are")} enrolled but did not list ${plural(silent.length, "its", "their")} print queues.`,
-      body:
-        "Model, location and address of a shared queue come from the print server itself. They show here once the server reports its queues.",
+      title: `${listNames(names)} ${plural(names.length, "is", "are")} enrolled but did not list ${plural(names.length, "its", "their")} print queues.`,
+      body: allInAd
+        ? "Model, location and address shown for its queues come from what it publishes in Active Directory, which is declared, not measured, until the server reports its own queues."
+        : "Model, location and address of a shared queue come from the print server itself. They show here once the server reports its queues.",
     });
   }
-  const outside = servers.filter((s) => s.agent === "not_in_fleet").map((s) => s.server);
+  // Un servidor fuera de la flota que publica en AD ya aporta modelo, ubicación
+  // y dirección: sólo se avisa de los que se conocen únicamente por sus clientes.
+  const outside = servers.filter((s) => s.agent === "not_in_fleet" && !s.inActiveDirectory).map((s) => s.server);
   if (outside.length > 0) {
     notices.push({
       key: "server-not-enrolled",
       severity: "info",
       title: `${outside.length} print ${plural(outside.length, "server is", "servers are")} not enrolled: ${listNames(outside)}.`,
       body:
-        "Their queues are known only from the devices connected to them. Enrolling the server adds each queue's model, location and address.",
+        "Their queues are known only from the devices connected to them. Enrolling the server adds each queue's model, location and address." +
+        (!ad || ad.state === "not_configured"
+          ? ` Choosing a device to read Active Directory, in ${AD_SETTINGS}, also lists what a Windows print server publishes.`
+          : ""),
     });
   }
   return notices;
@@ -203,4 +237,22 @@ export const SOURCE_LABELS = {
   user_connection: "User connection",
   local_spooler: "Local",
   cups: "CUPS",
+  active_directory: "Active Directory",
 };
+
+/**
+ * De dónde sale la parte de AD, en una línea («21 queues published in Active
+ * Directory · corp.local · read 2h ago by MSIG-WSUS»). null si AD no se lee o
+ * todavía no hay lista: eso lo dicen los avisos, no esta línea.
+ */
+export function adSourceLine(fleet) {
+  const ad = fleet?.activeDirectory;
+  if (!ad || (ad.state !== "current" && ad.state !== "stale")) return null;
+  return [
+    `${ad.queues} ${plural(ad.queues, "queue", "queues")} published in Active Directory`,
+    ad.domain,
+    `read ${formatRelative(ad.readAt)}${ad.readBy ? ` by ${ad.readBy}` : ""}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}

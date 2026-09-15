@@ -23,6 +23,7 @@ import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import {
   SOURCE_LABELS,
+  adSourceLine,
   connectionSlices,
   coverageNotices,
   filterPrinters,
@@ -114,7 +115,20 @@ export default function Printers({ refreshNonce }) {
       flex: 1.1,
       renderCell: (p) => (
         <Box sx={{ py: 0.5, minWidth: 0 }}>
-          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{p.row.name}</Typography>
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{p.row.name}</Typography>
+            {/* ⚠️ ADR-0023 D9: un pool reparte trabajos entre aparatos, y cada
+                dirección cuenta como una impresora. Sin la marca, la misma cola
+                repetida en dos filas parecería un duplicado. */}
+            {p.row.pooled ? (
+              <Chip
+                size="small"
+                label="Pool"
+                title="This queue spreads jobs across several printers; each address counts as one"
+                sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+              />
+            ) : null}
+          </Stack>
           <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
             {p.row.kind === "shared_queue" ? `\\\\${p.row.server}` : p.row.users?.[0]?.hostname || "Local"}
           </Typography>
@@ -213,7 +227,7 @@ export default function Printers({ refreshNonce }) {
                 ? undefined
                 : `From ${summary?.queues ?? 0} print queues${
                     summary?.printersWithoutAddress > 0 ? ` · ${summary.printersWithoutAddress} without a network address` : ""
-                  }`
+                  }${summary?.adOnlyPrinters > 0 ? ` · ${summary.adOnlyPrinters} only in Active Directory` : ""}`
             }
           />
         </Grid>
@@ -235,6 +249,11 @@ export default function Printers({ refreshNonce }) {
           <Kpi label="Print servers" value={cargando ? "…" : summary?.printServers ?? 0} />
         </Grid>
       </Grid>
+
+      {/* ADR-0023: la parte de AD dice de dónde y de cuándo es. */}
+      {adSourceLine(data) ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: -1, mb: 2 }}>{adSourceLine(data)}</Typography>
+      ) : null}
 
       {notices.map((n) => (
         <Alert key={n.key} severity={n.severity} sx={{ mb: 2, borderRadius: 3 }}>

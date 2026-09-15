@@ -106,6 +106,27 @@ describe("Printers tab", () => {
     expect(screen.getByText("from port name")).toBeTruthy();
   });
 
+  it("⭐ ADR-0023: procedencia de AD, impresoras sólo en AD y la marca de pool", async () => {
+    getPrinterFleet.mockResolvedValue({
+      ...fleet,
+      summary: { ...fleet.summary, adQueues: 21, adOnlyPrinters: 12 },
+      activeDirectory: {
+        state: "current", domain: "corp.local", readAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+        readBy: "MSIG-WSUS", queues: 21, lastAttempt: null,
+      },
+      printers: [{
+        ...fleet.printers[0], key: "q:msig-wsus\\pool", name: "Pool Finanzas", pooled: true, users: [],
+        sources: ["active_directory"], addresses: ["10.100.25.20"], hostAddress: "10.100.25.20", addressSource: "declared",
+      }],
+    });
+    render(<Printers />);
+    expect(await screen.findByText("21 queues published in Active Directory · corp.local · read 3h ago by MSIG-WSUS")).toBeTruthy();
+    expect(screen.getByText("From 5 print queues · 1 without a network address · 12 only in Active Directory")).toBeTruthy();
+    expect(await screen.findByText("Pool")).toBeTruthy();
+    expect(screen.getByText("Active Directory")).toBeTruthy();
+    expect(screen.getByText("No connected devices")).toBeTruthy();
+  });
+
   it("mientras carga no afirma ceros", () => {
     getPrinterFleet.mockReturnValue(new Promise(() => {}));
     render(<Printers />);

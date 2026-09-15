@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  adSourceLine,
   connectionSlices,
   coverageNotices,
   filterPrinters,
@@ -73,6 +74,53 @@ describe("coverageNotices", () => {
     };
     expect(coverageNotices(sano)).toEqual([]);
     expect(coverageNotices(null)).toEqual([]);
+  });
+});
+
+describe("ADR-0023 — la parte de Active Directory", () => {
+  const readAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  const AD = { state: "current", domain: "mountainside-investment.com", readAt, readBy: "MSIG-WSUS", queues: 21, lastAttempt: null };
+
+  it("la línea dice cuántas, de qué dominio, cuándo y quién las leyó", () => {
+    expect(adSourceLine({ activeDirectory: AD })).toBe(
+      "21 queues published in Active Directory · mountainside-investment.com · read 2h ago by MSIG-WSUS"
+    );
+    // Sin lista no hay línea: lo dicen los avisos.
+    expect(adSourceLine({ activeDirectory: { ...AD, state: "never_read" } })).toBeNull();
+    expect(adSourceLine({ activeDirectory: { ...AD, state: "not_configured" } })).toBeNull();
+    expect(adSourceLine({ activeDirectory: null })).toBeNull();
+  });
+
+  it("⚠️ una lista vieja se avisa con fecha y con el motivo del último intento", () => {
+    const n = coverageNotices({
+      ...T111,
+      activeDirectory: { ...AD, state: "stale", lastAttempt: { status: "failed", at: readAt, error: "not_domain_joined" } },
+    }).find((x) => x.key === "ad-stale");
+    expect(n.severity).toBe("warning");
+    expect(n.title).toBe("The Active Directory list was last read 2h ago.");
+    expect(n.body).toContain("The collector is not joined to a domain");
+  });
+
+  it("colector elegido sin ninguna lectura completa: se dice, sin inventar cero", () => {
+    const n = coverageNotices({
+      ...T111,
+      activeDirectory: { ...AD, state: "never_read", readAt: null, queues: 0, lastAttempt: { status: "missed", at: readAt, error: null } },
+    }).find((x) => x.key === "ad-never-read");
+    expect(n.body).toContain("No collector device was online.");
+  });
+
+  it("un servidor fuera de la flota que publica en AD no se avisa como 'sólo por sus clientes'", () => {
+    const conAd = {
+      ...T111,
+      activeDirectory: AD,
+      printServers: T111.printServers.map((s) => (s.agent === "not_in_fleet" ? { ...s, inActiveDirectory: true } : s)),
+    };
+    expect(coverageNotices(conAd).map((x) => x.key)).not.toContain("server-not-enrolled");
+  });
+
+  it("sin AD configurado, el aviso del servidor fuera de la flota sugiere leerlo", () => {
+    const n = coverageNotices({ ...T111, activeDirectory: { ...AD, state: "not_configured" } }).find((x) => x.key === "server-not-enrolled");
+    expect(n.body).toContain("Settings › Agent Settings › Asset Management");
   });
 });
 
