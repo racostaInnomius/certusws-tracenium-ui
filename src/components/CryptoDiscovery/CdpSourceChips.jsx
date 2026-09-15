@@ -49,12 +49,12 @@ export function SourceChip({ source, onClick }) {
   );
 }
 
-/** Una fila de fichas, una por fuente de la sección. */
+/** Una fila de fichas, una por fuente de la sección. `onClick(source)`. */
 export default function SourceChips({ sources, onClick }) {
   return (
     <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
       {(sources ?? []).map((s) => (
-        <SourceChip key={s.key} source={s} onClick={onClick} />
+        <SourceChip key={s.key} source={s} onClick={onClick ? () => onClick(s) : undefined} />
       ))}
     </Stack>
   );

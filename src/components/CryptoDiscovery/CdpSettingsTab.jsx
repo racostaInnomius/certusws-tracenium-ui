@@ -151,20 +151,23 @@ function AdcsReaders({ sources, caHosts }) {
  * las fichas reflejan su estado sin abrir nada. Windows CA cuelga de
  * On-prem: misma tarjeta, sangrada y con el padre delante.
  */
-function Sector({ baseKey, section, sub, open, onToggle, children }) {
+function Sector({ baseKey, section, sub, open, onToggle, onChip, nested = false, children }) {
   const b = baseOf(baseKey);
   const label = b?.label ?? baseKey;
   const headerId = `${sectorAnchor(baseKey)}-header`;
+  // Anidada (Windows CA dentro de On-prem): mismo cuerpo, sin tarjeta propia.
+  const Wrapper = nested ? Box : SectionPaper;
+  const wrapperSx = nested ? { mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}`, scrollMarginTop: 16 } : { scrollMarginTop: 16 };
   return (
-    <SectionPaper id={sectorAnchor(baseKey)} sx={{ scrollMarginTop: 16, ...(b?.parent ? { ml: { xs: 1.5, md: 3 } } : {}) }}>
+    <Wrapper id={sectorAnchor(baseKey)} sx={wrapperSx}>
       <Stack direction="row" spacing={1.5} alignItems="flex-start">
         <IconButton size="small" aria-expanded={open} aria-controls={`${sectorAnchor(baseKey)}-body`} aria-label={open ? `Collapse ${label}` : `Expand ${label}`} onClick={onToggle} sx={{ mt: -0.25 }}>
           {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </IconButton>
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ flexWrap: "wrap", rowGap: 0.25, cursor: "pointer" }} onClick={onToggle}>
-            <Typography id={headerId} component="h3" sx={{ fontWeight: 700, fontSize: TEXT.base, color: BRAND.dark, m: 0 }}>
-              {b?.parent ? `↳ ${label}` : label}
+            <Typography id={headerId} component={nested ? "h4" : "h3"} sx={{ fontWeight: 700, fontSize: nested ? TEXT.md : TEXT.base, color: BRAND.dark, m: 0 }}>
+              {label}
             </Typography>
             {section ? (
               <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
@@ -174,7 +177,7 @@ function Sector({ baseKey, section, sub, open, onToggle, children }) {
           </Stack>
           {section ? (
             <Box sx={{ mt: 0.75 }}>
-              <SourceChips sources={section.sources} onClick={open ? undefined : onToggle} />
+              <SourceChips sources={section.sources} onClick={onChip ?? (open ? undefined : () => onToggle())} />
             </Box>
           ) : null}
           <Collapse in={open} id={`${sectorAnchor(baseKey)}-body`} role="region" aria-labelledby={headerId}>
@@ -185,7 +188,7 @@ function Sector({ baseKey, section, sub, open, onToggle, children }) {
           </Collapse>
         </Box>
       </Stack>
-    </SectionPaper>
+    </Wrapper>
   );
 }
 
@@ -235,6 +238,24 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       return next;
     });
   const sectorProps = (key) => ({ baseKey: key, section: sectionOf(key), open: open.has(key), onToggle: toggle(key) });
+  // Windows CA es parte de On-prem: su cabecera lleva también las fichas
+  // de la CA (con «CA ·» delante) y cuenta sus fuentes; el bloque de la CA
+  // va DENTRO de la tarjeta, plegable a su vez. Una ficha de la CA abre
+  // los dos niveles.
+  const onpremHeader = React.useMemo(() => {
+    const a = sections.find((b) => b.key === "onprem");
+    const ca = sections.find((b) => b.key === "adcs");
+    if (!a) return a;
+    const caSources = (ca?.sources ?? []).map((x) => ({ ...x, key: `ca:${x.key}`, label: `CA · ${x.label}`, ca: true }));
+    return { ...a, sources: [...a.sources, ...caSources], reporting: a.reporting + (ca?.reporting ?? 0), total: a.total + (ca?.total ?? 0) };
+  }, [sections]);
+  const openOnprem = (source) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      next.add("onprem");
+      if (source?.ca) next.add("adcs");
+      return next;
+    });
 
   return (
     <Stack spacing={2}>
@@ -243,7 +264,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         The same sectors as the Dashboard sunburst, inside out. Each source is reporting, configured but silent, failing, or not connected; open a sector to set it up.
       </Typography>
 
-      <Sector {...sectorProps("onprem")} sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
+      <Sector {...sectorProps("onprem")} section={onpremHeader} onChip={openOnprem} sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
         <Button component="a" href="?page=policies" size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}>
           Open Policies → Crypto Discovery
         </Button>
@@ -253,10 +274,9 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           Crypto assets found by another scanner, as a CycloneDX file. They join the on-prem inventory under the source name you give.
         </Typography>
         <CbomImportForm onImported={changed} />
-      </Sector>
-
-      <Sector {...sectorProps("adcs")} sub="Part of On-prem, as its own group: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
-        <AdcsReaders sources={src.adcs} caHosts={caHosts} />
+        <Sector {...sectorProps("adcs")} nested sub="Its own group inside On-prem: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
+          <AdcsReaders sources={src.adcs} caHosts={caHosts} />
+        </Sector>
       </Sector>
 
       <Sector {...sectorProps("infra")} sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and vCenter with its ESXi hosts.">

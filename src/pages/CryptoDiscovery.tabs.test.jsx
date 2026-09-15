@@ -132,7 +132,9 @@ describe("pestañas de Crypto Discovery", () => {
     // cabecera (no hay mapa aparte: era información duplicada). Windows
     // CA cuelga de On-prem.
     for (const base of ["On-prem devices", "Infra", "Cloud", "External key sources"]) expect(await screen.findByRole("heading", { name: base })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Windows CA$/ })).toBeInTheDocument();
+    // Windows CA es PARTE de On-prem: su ficha va en la cabecera de On-prem
+    // con «CA ·» delante y su bloque dentro de la tarjeta.
+    expect(screen.getByRole("button", { name: /^CA · AD CS reader: not connected$/ })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /^Azure Key Vault: not connected$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^vCenter: not connected$/ })).toBeInTheDocument();
     // Plegadas sin nada fallando; un clic en la cabecera (o en una ficha) abre.
@@ -141,6 +143,8 @@ describe("pestañas de Crypto Discovery", () => {
     expect(await screen.findByRole("button", { name: /^Collapse Infra$/ })).toBeInTheDocument();
     screen.getByRole("button", { name: /^Expand On-prem devices$/ }).click();
     screen.getByRole("button", { name: /^Expand Cloud$/ }).click();
+    // Abierta On-prem, la CA está dentro como bloque propio (h4), no como tarjeta.
+    expect(await screen.findByRole("heading", { level: 4, name: "Windows CA" })).toBeInTheDocument();
     // El gateway de vCenter se registra desde aquí, sin pasar por Patch Management.
     expect(await screen.findByText("vCenter gateway")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /register gateway/i })).toBeInTheDocument();
