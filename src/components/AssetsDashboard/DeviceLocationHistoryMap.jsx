@@ -22,7 +22,8 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Box, Chip, Stack, Typography } from "@mui/material";
-import { MapContainer, TileLayer, Marker, Circle, Polyline, useMap } from "react-leaflet";
+import { MapContainer, Marker, Circle, Polyline, useMap } from "react-leaflet";
+import OsmTileLayer from "./OsmTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -159,10 +160,7 @@ export default function DeviceLocationHistoryMap({
         }}
       >
         <MapContainer center={[posiciones[0].lat, posiciones[0].lon]} zoom={13} scrollWheelZoom={false} attributionControl>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <OsmTileLayer />
 
           {posiciones.map((p) => (
             <Marker

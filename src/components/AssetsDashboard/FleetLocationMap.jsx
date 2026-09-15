@@ -11,7 +11,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Box, Chip, Divider, Stack, Typography } from "@mui/material";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, useMap } from "react-leaflet";
+import OsmTileLayer from "./OsmTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 // Side-effect import: registers L.markerClusterGroup on the Leaflet namespace.
@@ -295,10 +296,7 @@ export default function FleetLocationMap({
         }}
       >
         <MapContainer center={[pins[0].lat, pins[0].lon]} zoom={11} scrollWheelZoom>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <OsmTileLayer />
           <ClusteredPins pins={pins} onSelect={setClusterSelection} />
           <FitToPins bounds={bounds} />
         </MapContainer>

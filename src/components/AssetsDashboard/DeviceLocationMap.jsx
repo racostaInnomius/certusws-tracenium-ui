@@ -12,7 +12,8 @@
 
 import { useEffect, useRef } from "react";
 import { Box, Chip, Stack, Typography } from "@mui/material";
-import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
+import { MapContainer, Marker, Circle, useMap } from "react-leaflet";
+import OsmTileLayer from "./OsmTileLayer";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -113,10 +114,7 @@ export default function DeviceLocationMap({ pin, height = 260 }) {
         }}
       >
         <MapContainer center={[pin.lat, pin.lon]} zoom={zoom} scrollWheelZoom={false} attributionControl>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <OsmTileLayer />
           <Marker position={[pin.lat, pin.lon]} icon={pinIcon(color, isStale)} />
           {/* The accuracy radius is drawn only when the device gave one: an
               invented circle would overstate how well we know the position. */}
