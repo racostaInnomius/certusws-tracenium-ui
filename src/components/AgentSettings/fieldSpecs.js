@@ -86,7 +86,13 @@ export const FIELD_SPECS = {
     {
       key: "features.selfUpdate",
       label: "Self-update",
-      sub: "When off, the update probe keeps running (to report available versions) but the install path is suppressed. Use to freeze a fleet on a version while staging a rollout.",
+      // ⚠️ Agentes <1.1.74 ignoraban este switch: su gate era
+      // `modules.update || features.selfUpdate` y `modules.update` sale true
+      // por defecto. Sin informe de "versión disponible" — el sondeo no tiene
+      // modo solo-lectura, así que apagado significa que no corre. No hay
+      // pinning por tenant ni rollout escalonado (sólo diseñados en
+      // docs/AGENT_VERSION_CONTROL_PLAN.md del backend): no prometerlos aquí.
+      sub: "When on, the agent checks for a newer version every update probe interval and installs it. When off, that automatic check stops and devices stay on the version they run. An agent update job sent from Jobs still installs. Needs agent 1.1.74 or later; older agents ignore this switch and keep updating.",
       type: "switch",
       defaultOn: true,
     },

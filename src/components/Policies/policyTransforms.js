@@ -735,10 +735,11 @@ export function formToPolicy(form, catalog = []) {
     modules.patch === true
   );
 
-  // Update interval is gated by the update module — but the module
-  // is on by default (modules.update=true at the agent level even
-  // without explicit policy). We emit when the operator set a value;
-  // the agent default (6h) takes over otherwise.
+  // Update interval: emitted whenever the operator set a value; the agent
+  // default (6h) takes over otherwise. Whether the probe runs at all is
+  // `features.selfUpdate` below — agent 1.1.74+ honours it, and a
+  // `modules.update` carried over from an old policy can only switch the
+  // probe off, never back on.
   maybeAddInterval(
     "update",
     form?.update?.intervalSeconds,

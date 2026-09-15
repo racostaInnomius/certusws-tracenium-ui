@@ -20,7 +20,9 @@ function Control({ spec, value, onChange, disabled }) {
         checked={switchOn(spec, value)}
         onChange={(e) => onChange(e.target.checked)}
         disabled={disabled}
-        inputProps={{ "aria-label": ariaLabel }}
+        // ⚠️ `slotProps.input`, no `inputProps`: el Switch de MUI 7 ignora
+        // `inputProps` y los switches salían sin nombre accesible.
+        slotProps={{ input: { "aria-label": ariaLabel } }}
       />
     );
   }

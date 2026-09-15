@@ -267,6 +267,30 @@ describe("saving the tenant policy", () => {
     expect(await screen.findByText("Agent saved")).toBeInTheDocument();
   });
 
+  it("turning Self-update off writes features.selfUpdate=false — the field the agent gates on — and no modules", async () => {
+    // Agent ≤1.1.73 gated on `modules.update || features.selfUpdate`, so this
+    // switch did nothing. 1.1.74+ gates on `features.selfUpdate`; the save
+    // must carry exactly that key, and never a `modules` block.
+    mockBase();
+    const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true, policyVersion: "1788476540000" });
+    renderPage();
+    await settled();
+
+    const toggle = screen.getByLabelText("Self-update");
+    expect(toggle).toBeChecked();
+    fireEvent.click(toggle);
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Agent" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("features.selfUpdate")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0].body).toEqual({ update: { intervalSeconds: 21600 }, features: { selfUpdate: false } });
+    expect(patches[0].body).not.toHaveProperty("modules");
+  });
+
   it("refuses to save while the plugin catalog is empty", async () => {
     mockBase({ catalog: [] });
     const patches = respond("patch", "/api/v1/policies/tenants/t-1/policy/domains/agent", { ok: true });
