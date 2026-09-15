@@ -32,6 +32,11 @@ vi.mock("../../api/remoteControl", () => ({
   listAccessRequests: vi.fn(async () => ({ ok: true, items: [] }))
 }));
 
+// La sección Asset Management lleva además el panel del colector de impresoras
+// de AD (ADR-0023), que pide datos y un ConfirmProvider. No es lo que se prueba
+// aquí: se sustituye por nada.
+vi.mock("./AdPrinterCollectorPanel", () => ({ default: () => null }));
+
 import PolicySectionPanel from "./PolicySectionPanel";
 import AccessTab from "../RemoteControl/AccessTab";
 

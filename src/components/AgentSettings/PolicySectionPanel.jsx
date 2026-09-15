@@ -12,6 +12,7 @@ import OpenInNewOutlinedIcon from "@mui/icons-material/OpenInNewOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import SectionFields from "./SectionFields";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
+import AdPrinterCollectorPanel from "./AdPrinterCollectorPanel";
 
 // Plugins con capacidades privilegiadas y, por tanto, con matriz de
 // vistobueno. Es un cambio de permisos: vive aquí, en Agent Settings —solo
@@ -90,6 +91,15 @@ export default function PolicySectionPanel({
               Solo en ámbito TENANT: la matriz es del tenant entero y no del
               equipo que se esté editando, y enseñarla mientras se edita el
               parche de un equipo diría que es suya. */}
+          {/* ADR-0023 — qué equipo lee las impresoras publicadas en AD. Mismo
+              criterio que la matriz: es UNA elección del tenant, guardada fuera
+              de la política (el backend la deriva al equipo al leer), así que
+              sólo en ámbito tenant y con su propio botón de guardar. */}
+          {section.id === "amp" && scope === "tenant" && !readOnly ? (
+            <Box sx={{ mt: 2 }}>
+              <AdPrinterCollectorPanel />
+            </Box>
+          ) : null}
           {APPROVAL_MATRIX[section.id] && scope === "tenant" && !readOnly ? (
             <Box sx={{ mt: 2 }}>
               <AccessPolicyMatrix prefix={`${section.id}.`} title="Privileged access policy" description={APPROVAL_MATRIX[section.id]} />
