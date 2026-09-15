@@ -60,6 +60,8 @@ export function notAssessedReason(reason) {
       return `The collector reported an error (${detail}).`;
     case "collector_no_result":
       return "The collector returned no result for this check.";
+    case "requires_agent":
+      return `The collector's agent is too old for this check. It runs once the domain controller has agent ${detail || "a newer version"} or later.`;
     default:
       return raw || "Not assessed.";
   }

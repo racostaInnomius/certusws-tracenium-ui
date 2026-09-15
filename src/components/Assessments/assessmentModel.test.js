@@ -13,6 +13,7 @@ describe("assessmentModel", () => {
   it("explica los motivos de not_assessed que escribe el agente", () => {
     expect(notAssessedReason("requires_privileged_read:0x8007200A")).toMatch(/machine account cannot read this \(0x8007200A\)/);
     expect(notAssessedReason("requires_dc_registry")).toMatch(/not one/);
+    expect(notAssessedReason("requires_agent:1.1.73")).toMatch(/agent 1\.1\.73 or later/);
     expect(notAssessedReason("algo_nuevo")).toBe("algo_nuevo");
   });
 
