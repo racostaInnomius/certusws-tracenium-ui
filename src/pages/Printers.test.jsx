@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 const fleet = {
-  summary: { queues: 2, physicalPrinters: 1, queuesWithoutAddress: 1, devicesWithPrinters: 3, printServers: 1, virtualQueues: 4 },
+  summary: { queues: 5, physicalPrinters: 2, printersWithoutAddress: 1, devicesWithPrinters: 3, printServers: 1, virtualQueues: 4, wsdQueues: 3, sessionQueues: 1 },
   byVendor: [{ vendor: "HP", queues: 1 }, { vendor: "Zebra", queues: 1 }],
   byKind: { printServer: 1, localNetwork: 0, localDirect: 1 },
   printServers: [{ server: "msig-wsus", queues: 1, users: 2, agent: "no_queues", agentId: "wsus", machineScope: "empty_output" }],
@@ -60,8 +60,9 @@ describe("Printers tab", () => {
 
     expect(await screen.findByText(/could not be read on 39 of 40 devices/)).toBeTruthy();
     expect(screen.getByText(/msig-wsus is enrolled but did not list its print queues/)).toBeTruthy();
-    expect(screen.getByText("4 virtual (PDF, XPS, OneNote…) not counted")).toBeTruthy();
-    expect(screen.getByText("At least — 1 queue without a known address")).toBeTruthy();
+    // La cifra es la impresora; las colas y lo excluido, el detalle.
+    expect(screen.getByText("From 5 print queues · 1 without a network address")).toBeTruthy();
+    expect(screen.getByText("4 virtual · 3 auto-discovered (WSD) · 1 Remote Desktop")).toBeTruthy();
     expect(screen.getByText("of 54 in the fleet")).toBeTruthy();
 
     expect(await screen.findByText("CasticoPrintroom")).toBeTruthy();
@@ -86,16 +87,23 @@ describe("Printers tab", () => {
     expect(await screen.findByText("CasticoPrintroom")).toBeTruthy();
   });
 
-  it("⚠️ ninguna cola con dirección: las físicas son 'Unknown', no 0", async () => {
+  it("⭐ una impresora dice con qué otros nombres aparece y si la dirección es del nombre del puerto", async () => {
     getPrinterFleet.mockResolvedValue({
       ...fleet,
-      summary: { ...fleet.summary, physicalPrinters: 0, queuesWithoutAddress: 8 },
+      printers: [{
+        ...fleet.printers[1],
+        key: "l:ricoh", name: "RICOH IM C2500 PCL 6", aliases: ["RICOH IM C2500 PCL 6 UPSTAIRS", "RICOH IM C2500 PCL 6  UPSTAIRS", "RICOH C2500 3F"],
+        hostAddress: "10.100.17.91", addresses: ["10.100.17.91"], addressSource: "declared",
+      }],
     });
     render(<Printers />);
-    const kpi = (await screen.findByText("Physical printers")).closest(".MuiPaper-root");
-    expect(within(kpi).getByText("Unknown")).toBeTruthy();
-    expect(within(kpi).queryByText("0")).toBeNull();
-    expect(within(kpi).getByText("None of the 8 queues reports a device address yet")).toBeTruthy();
+    await screen.findByText("10.100.17.91");
+    // Contra el contenido de la celda: el nombre real lleva dos espacios
+    // ("PCL 6  UPSTAIRS", tal cual en T111) y el matcher de texto los colapsa.
+    const cell = [...document.querySelectorAll('[role="gridcell"][data-field="name"]')][0];
+    expect(cell.textContent).toContain("Also as: RICOH IM C2500 PCL 6 UPSTAIRS, RICOH IM C2500 PCL 6  UPSTAIRS +1");
+    expect(screen.getByText("10.100.17.91")).toBeTruthy();
+    expect(screen.getByText("from port name")).toBeTruthy();
   });
 
   it("mientras carga no afirma ceros", () => {

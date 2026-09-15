@@ -26,6 +26,8 @@ import {
   connectionSlices,
   coverageNotices,
   filterPrinters,
+  notCountedParts,
+  notCountedTotal,
   serverSlices,
   vendorSlices,
 } from "../utils/printerFleet";
@@ -41,24 +43,6 @@ function Kpi({ label, value, hint }) {
       {hint ? <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.25 }}>{hint}</Typography> : null}
     </Paper>
   );
-}
-
-// ⚠️ Cero impresoras físicas con colas sin dirección NO es cero: es que no se
-// sabe. Medido en T111 (2026-09-15): 8 colas, todas conexiones de usuario, sin
-// una sola dirección — "0" habría dicho que la empresa no tiene impresoras.
-function physicalValue(summary) {
-  const known = Number(summary?.physicalPrinters ?? 0);
-  const unaddressed = Number(summary?.queuesWithoutAddress ?? 0);
-  return known === 0 && unaddressed > 0 ? "Unknown" : known;
-}
-
-function physicalHint(summary) {
-  const known = Number(summary?.physicalPrinters ?? 0);
-  const unaddressed = Number(summary?.queuesWithoutAddress ?? 0);
-  const colas = `${unaddressed} ${unaddressed === 1 ? "queue" : "queues"}`;
-  if (unaddressed === 0) return "Counted by device address";
-  if (known === 0) return `None of the ${colas} reports a device address yet`;
-  return `At least — ${colas} without a known address`;
 }
 
 function Missing({ children = "Not reported" }) {
@@ -134,6 +118,13 @@ export default function Printers({ refreshNonce }) {
           <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
             {p.row.kind === "shared_queue" ? `\\\\${p.row.server}` : p.row.users?.[0]?.hostname || "Local"}
           </Typography>
+          {/* Los otros nombres con los que aparece: dice POR QUÉ varias colas
+              cuentan como una sola impresora. */}
+          {Array.isArray(p.row.aliases) && p.row.aliases.length > 0 ? (
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }} title={p.row.aliases.join(", ")}>
+              {`Also as: ${p.row.aliases.slice(0, 2).join(", ")}${p.row.aliases.length > 2 ? ` +${p.row.aliases.length - 2}` : ""}`}
+            </Typography>
+          ) : null}
         </Box>
       ),
     },
@@ -158,9 +149,20 @@ export default function Printers({ refreshNonce }) {
       headerName: "Address",
       minWidth: 130,
       flex: 0.5,
+      // ⚠️ `declared` = sacada del NOMBRE del puerto (IP_10.x…), no medida: si
+      // alguien cambió la IP sin renombrar el puerto, es la vieja.
       renderCell: (p) =>
         p.value ? (
-          <Typography sx={{ fontSize: TEXT.md, fontFamily: "monospace" }}>{p.value}</Typography>
+          <Box sx={{ py: 0.5 }}>
+            <Typography sx={{ fontSize: TEXT.md, fontFamily: "monospace" }}>
+              {(p.row.addresses?.length ? p.row.addresses : [p.value]).join(", ")}
+            </Typography>
+            {p.row.addressSource === "declared" ? (
+              <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }} title="Taken from the port name, not measured on the device">
+                from port name
+              </Typography>
+            ) : null}
+          </Box>
         ) : (
           <Missing>Unknown</Missing>
         ),
@@ -200,24 +202,26 @@ export default function Printers({ refreshNonce }) {
     <Box>
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          {/* ⚠️ La cifra es la IMPRESORA, no la cola: una misma impresora se
+              instala con varios nombres en varios equipos. Medido en T111 el
+              2026-09-15: 111 colas que eran 38 impresoras. */}
           <Kpi
-            label="Print queues"
-            value={cargando ? "…" : summary?.queues ?? 0}
+            label="Printers"
+            value={cargando ? "…" : summary?.physicalPrinters ?? 0}
             hint={
-              !cargando && summary?.virtualQueues > 0
-                ? `${summary.virtualQueues} virtual (PDF, XPS, OneNote…) not counted`
-                : undefined
+              cargando
+                ? undefined
+                : `From ${summary?.queues ?? 0} print queues${
+                    summary?.printersWithoutAddress > 0 ? ` · ${summary.printersWithoutAddress} without a network address` : ""
+                  }`
             }
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-          {/* ⚠️ Las físicas salen de la dirección del puerto y SÓLO de ahí:
-              varias colas pueden ser el mismo aparato. Las colas sin dirección
-              se dicen, no se suman como "una impresora más". */}
           <Kpi
-            label="Physical printers"
-            value={cargando ? "…" : physicalValue(summary)}
-            hint={cargando ? undefined : physicalHint(summary)}
+            label="Not counted"
+            value={cargando ? "…" : notCountedTotal(summary)}
+            hint={cargando ? undefined : notCountedParts(summary).join(" · ") || "No virtual or auto-discovered queues"}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -243,11 +247,11 @@ export default function Printers({ refreshNonce }) {
           <Box sx={{ width: "100%" }}>
             <RingCard
               title="By print server"
-              subtitle="Where each queue lives"
+              subtitle="Where each printer is shared from"
               slices={serverSlices(data)}
-              total={summary?.queues ?? null}
-              centerLabel="queues"
-              ariaNoun="queues"
+              total={summary?.physicalPrinters ?? null}
+              centerLabel="printers"
+              ariaNoun="printers"
               activeKey={active("server")}
               onSliceClick={toggle("server")}
               loading={cargando}
@@ -262,9 +266,9 @@ export default function Printers({ refreshNonce }) {
               title="By vendor"
               subtitle="From the model, or the queue name when no model is reported"
               slices={vendorSlices(data)}
-              total={summary?.queues ?? null}
-              centerLabel="queues"
-              ariaNoun="queues"
+              total={summary?.physicalPrinters ?? null}
+              centerLabel="printers"
+              ariaNoun="printers"
               activeKey={active("vendor")}
               onSliceClick={toggle("vendor")}
               loading={cargando}
@@ -279,9 +283,9 @@ export default function Printers({ refreshNonce }) {
               title="By connection"
               subtitle="Shared from a server, network or direct (USB…)"
               slices={connectionSlices(data)}
-              total={summary?.queues ?? null}
-              centerLabel="queues"
-              ariaNoun="queues"
+              total={summary?.physicalPrinters ?? null}
+              centerLabel="printers"
+              ariaNoun="printers"
               activeKey={active("connection")}
               onSliceClick={toggle("connection")}
               loading={cargando}
@@ -295,7 +299,7 @@ export default function Printers({ refreshNonce }) {
       <Paper elevation={0} sx={{ p: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            Print queues
+            Printers
           </Typography>
           {/* Una tabla filtrada que no lo dice miente sobre el tamaño del parque. */}
           {filter ? (

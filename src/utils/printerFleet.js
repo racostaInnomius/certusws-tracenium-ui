@@ -120,22 +120,46 @@ export function coverageNotices(fleet) {
 
 const LOCAL_KEY = "__local__";
 
-/** Colas por servidor; las locales en una rebanada propia para que sumen el total. */
+/**
+ * Impresoras por servidor; las no compartidas en una rebanada propia para que
+ * sumen el total. Se cuentan IMPRESORAS (deduplicadas), no colas: la dona dice
+ * lo mismo que la cifra grande.
+ */
 export function serverSlices(fleet, max = 5) {
-  const servers = Array.isArray(fleet?.printServers) ? fleet.printServers : [];
+  const printers = Array.isArray(fleet?.printers) ? fleet.printers : [];
+  const byServer = new Map();
+  let local = 0;
+  for (const p of printers) {
+    if (p.kind === "shared_queue" && p.server) byServer.set(p.server, (byServer.get(p.server) ?? 0) + 1);
+    else local += 1;
+  }
+  const servers = [...byServer.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   const top = servers.slice(0, max);
-  const rest = servers.slice(max).reduce((sum, s) => sum + Number(s.queues || 0), 0);
-  const local = Number(fleet?.byKind?.localNetwork || 0) + Number(fleet?.byKind?.localDirect || 0);
+  const rest = servers.slice(max).reduce((sum, [, n]) => sum + n, 0);
   return [
-    ...top.map((s, i) => ({
-      key: s.server,
-      label: s.server,
-      value: Number(s.queues || 0),
+    ...top.map(([server, n], i) => ({
+      key: server,
+      label: server,
+      value: n,
       color: CHART_SERIES_WIDE[i % CHART_SERIES_WIDE.length],
     })),
     ...(rest > 0 ? [{ key: "__other__", label: "Other servers", value: rest, color: CHART_NEUTRAL.other }] : []),
     ...(local > 0 ? [{ key: LOCAL_KEY, label: "Not shared", value: local, color: BRAND.dark }] : []),
   ];
+}
+
+/** Colas que no cuentan como impresora: virtuales, WSD y redirigidas por RDP. */
+export function notCountedTotal(summary) {
+  return ["virtualQueues", "wsdQueues", "sessionQueues"].reduce((n, k) => n + Number(summary?.[k] || 0), 0);
+}
+
+/** Lo que NO cuenta como impresora, dicho con su motivo. */
+export function notCountedParts(summary) {
+  const parts = [];
+  if (Number(summary?.virtualQueues) > 0) parts.push(`${summary.virtualQueues} virtual`);
+  if (Number(summary?.wsdQueues) > 0) parts.push(`${summary.wsdQueues} auto-discovered (WSD)`);
+  if (Number(summary?.sessionQueues) > 0) parts.push(`${summary.sessionQueues} Remote Desktop`);
+  return parts;
 }
 
 export function vendorSlices(fleet) {

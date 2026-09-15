@@ -9,13 +9,15 @@ import {
   connectionSlices,
   coverageNotices,
   filterPrinters,
+  notCountedParts,
+  notCountedTotal,
   serverSlices,
   vendorColor,
   vendorSlices,
 } from "./printerFleet";
 
 const T111 = {
-  summary: { queues: 8, physicalPrinters: 0, queuesWithoutAddress: 8, devicesWithPrinters: 14, printServers: 2, virtualQueues: 0 },
+  summary: { queues: 8, physicalPrinters: 4, printersWithoutAddress: 2, devicesWithPrinters: 14, printServers: 2, virtualQueues: 96, wsdQueues: 28, sessionQueues: 6 },
   byVendor: [{ vendor: "Other", queues: 6 }, { vendor: "Zebra", queues: 2 }],
   byKind: { printServer: 8, localNetwork: 0, localDirect: 0 },
   printServers: [
@@ -75,14 +77,26 @@ describe("coverageNotices", () => {
 });
 
 describe("slices", () => {
-  it("por servidor: top N, el resto agrupado y las no compartidas aparte", () => {
-    const fleet = { ...T111, byKind: { printServer: 8, localNetwork: 1, localDirect: 1 } };
-    expect(serverSlices(fleet, 2).map((s) => [s.label, s.value])).toEqual([
+  it("por servidor cuenta IMPRESORAS: top N, el resto agrupado y las no compartidas aparte", () => {
+    const printers = [
+      ...Array.from({ length: 6 }, (_, i) => ({ key: `w${i}`, kind: "shared_queue", server: "msig-wsus" })),
+      { key: "c", kind: "shared_queue", server: "castico-pv" },
+      { key: "d", kind: "shared_queue", server: "desktop-m8gj0v5" },
+      { key: "l1", kind: "local", server: null },
+      { key: "l2", kind: "local", server: null },
+    ];
+    expect(serverSlices({ printers }, 2).map((s) => [s.label, s.value])).toEqual([
       ["msig-wsus", 6],
       ["castico-pv", 1],
       ["Other servers", 1],
       ["Not shared", 2],
     ]);
+  });
+
+  it("lo que no cuenta, con su motivo", () => {
+    expect(notCountedTotal(T111.summary)).toBe(130);
+    expect(notCountedParts(T111.summary)).toEqual(["96 virtual", "28 auto-discovered (WSD)", "6 Remote Desktop"]);
+    expect(notCountedParts({})).toEqual([]);
   });
 
   it("⚠️ la marca conserva su color aunque cambie de puesto", () => {
