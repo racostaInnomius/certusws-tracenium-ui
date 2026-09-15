@@ -52,6 +52,11 @@ import {
   hasCriticalCounts,
   DEVICE_CARD_FILTERS,
 } from "../components/patch-management/deviceCardFilter";
+import {
+  describeGateOutcome,
+  describeBlockedError,
+  pendingKbIds,
+} from "../components/patch-management/patchGateOutcome";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
@@ -777,6 +782,13 @@ export default function PatchManagement({ onNavigate }) {
   const [drawerItems, setDrawerItems] = React.useState([]);
   const [drawerLoading, setDrawerLoading] = React.useState(false);
   const [selectedHotfixes, setSelectedHotfixes] = React.useState(() => new Set());
+  // Confirmación de instalar desde el panel lateral: { kbArticleIds, label }.
+  // Existe porque este botón llegaba al equipo sin preguntar nada — ni reinicio,
+  // ni aviso de ventana o snapshot — y así salieron dos KBs a MSIG-DOMAIN a las
+  // 10:03 de un martes (15-sep). El reinicio se elige en CADA envío: nunca se
+  // hereda del anterior, igual que en el diálogo de flota.
+  const [installConfirm, setInstallConfirm] = React.useState(null);
+  const [drawerReboot, setDrawerReboot] = React.useState(false);
   const [dispatching, setDispatching] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
 
@@ -953,6 +965,18 @@ export default function PatchManagement({ onNavigate }) {
         payload
       });
       const jobId = res?.job?.jobId || res?.jobId;
+      // Un patch_install pasa ahora por ventana y snapshot en el backend
+      // (09f7527). Si queda retenido se DICE, y no se mete en el seguidor de
+      // jobs activos: estaría consultándolo durante horas hasta que abra la
+      // ventana, pintando «en curso» algo que está esperando.
+      if (jobType === "patch_install") {
+        const outcome = describeGateOutcome(res);
+        notify(outcome.severity, `${label}: ${outcome.message}`);
+        if (outcome.held) {
+          closeDrawer();
+          return;
+        }
+      }
       if (jobId) {
         // Push the job into the active tracker. The tracker polls
         // getJob until terminal status, so the operator sees the
@@ -970,29 +994,46 @@ export default function PatchManagement({ onNavigate }) {
       closeDrawer();
     } catch (err) {
       console.error(`[patch-mgmt] ${jobType} dispatch failed`, err);
-      notify("error", `${label} failed: ${err?.message || "unknown error"}`);
+      // La puerta bloqueó el envío (fail-closed): decir por qué, no «failed».
+      const blocked = describeBlockedError(err);
+      notify("error", blocked ? `${label}: ${blocked}` : `${label} failed: ${err?.message || "unknown error"}`);
     } finally {
       setDispatching(false);
     }
   }, [drawerDevice, dispatching, notify, closeDrawer]);
 
+  const openInstallConfirm = React.useCallback((kbArticleIds, label) => {
+    if (!kbArticleIds.length) return;
+    setDrawerReboot(false);
+    setInstallConfirm({ kbArticleIds, label });
+  }, []);
+
   const handleInstallSelected = React.useCallback(() => {
-    if (selectedHotfixes.size === 0) return;
     const kbArticleIds = Array.from(selectedHotfixes);
-    dispatchJob(
-      "patch_install",
-      { mode: "install", kbArticleIds },
+    openInstallConfirm(
+      kbArticleIds,
       `Install ${kbArticleIds.length} patch${kbArticleIds.length === 1 ? "" : "es"}`
     );
-  }, [selectedHotfixes, dispatchJob]);
+  }, [selectedHotfixes, openInstallConfirm]);
 
+  // ⚠️ La lista EXPLÍCITA de lo pendiente, nunca `[]`: una lista vacía significa
+  // «instala TODO lo que encuentre» en el agente, y el backend la rechaza con
+  // 400 desde el 08-sep — este botón llevaba desde entonces fallando siempre.
+  const allPendingKbIds = React.useMemo(() => pendingKbIds(drawerItems), [drawerItems]);
   const handleInstallAll = React.useCallback(() => {
+    openInstallConfirm(allPendingKbIds, "Install all missing patches");
+  }, [allPendingKbIds, openInstallConfirm]);
+
+  const confirmInstall = React.useCallback(() => {
+    if (!installConfirm) return;
+    const { kbArticleIds, label } = installConfirm;
+    setInstallConfirm(null);
     dispatchJob(
       "patch_install",
-      { mode: "install", kbArticleIds: [] },
-      "Install all missing patches"
+      { mode: "install", kbArticleIds, rebootIfRequired: drawerReboot },
+      label
     );
-  }, [dispatchJob]);
+  }, [installConfirm, drawerReboot, dispatchJob]);
 
   const handleRunScan = React.useCallback(() => {
     dispatchJob("patch_scan", {}, "Patch scan");
@@ -1662,7 +1703,7 @@ export default function PatchManagement({ onNavigate }) {
                 size="small"
                 startIcon={<DownloadOutlinedIcon />}
                 onClick={handleInstallAll}
-                disabled={dispatching || drawerItems.length === 0}
+                disabled={dispatching || allPendingKbIds.length === 0}
                 sx={{
                   textTransform: "none",
                   borderColor: BRAND.teal,
@@ -1916,6 +1957,57 @@ export default function PatchManagement({ onNavigate }) {
             sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
           >
             Dispatch
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmación de instalar desde el panel lateral. Dice lo que va a pasar
+          ANTES — ventana y snapshot incluidos — en vez de mandar el parche sin
+          preguntar, que es como salió MSIG-DOMAIN el 15-sep. */}
+      <Dialog open={Boolean(installConfirm)} onClose={() => setInstallConfirm(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+          {installConfirm?.label}
+          {drawerDevice ? ` on ${drawerDevice.hostname || drawerDevice.agentId.slice(0, 12)}` : ""}
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+            {installConfirm?.kbArticleIds?.join(", ")}
+          </Typography>
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
+            The install respects the tenant&apos;s maintenance windows: outside a window it waits until
+            the next one opens. If the device is a VM behind an Infrastructure Gateway, a snapshot is
+            taken first.
+          </Typography>
+          <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={drawerReboot}
+                  onChange={(e) => setDrawerReboot(e.target.checked)}
+                  inputProps={{ "aria-label": "Restart the device when the patch requires it" }}
+                />
+              }
+              label={
+                <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                  Restart when the patch requires it
+                </Typography>
+              }
+            />
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
+              {describeRebootChoice(drawerReboot)}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInstallConfirm(null)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={confirmInstall}
+            sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+          >
+            Install
           </Button>
         </DialogActions>
       </Dialog>

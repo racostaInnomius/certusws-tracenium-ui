@@ -82,6 +82,11 @@ import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolv
 import { deriveTriage, groupFailingDevices, groupFailureCauses } from "../utils/jobInsights";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
+import {
+  describeGateOutcome,
+  describeBlockedError,
+  summarizeGatedBatch,
+} from "../components/patch-management/patchGateOutcome";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -1756,30 +1761,41 @@ export default function Jobs({ onNavigate }) {
         });
         newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
 
+        // Un patch_install ya no sale «queued» sin más: la puerta puede
+        // retenerlo (ventana/snapshot) o bloquearlo. Si la respuesta lo dice,
+        // se enseña eso; si no (otros tipos), el mensaje de siempre.
+        const gated = summarizeGatedBatch(response);
         setSnackbar({
           open: true,
-          message: `Tenant job queued for ${response?.created?.count ?? connectedDeviceIds.length} devices`,
-          severity: "success",
+          message: gated?.message ?? `Tenant job queued for ${response?.created?.count ?? connectedDeviceIds.length} devices`,
+          severity: gated?.severity ?? "success",
         });
       } else if (targetMode === "group") {
         if (groupTargetMode === "entire") {
           const response = await dispatchAssetGroupJob(selectedGroupId, payload);
           newRowId = response?.batchId ? `batch:${response.batchId}` : "";
+          const gated = summarizeGatedBatch(response);
           setSnackbar({
             open: true,
-            message: `Dispatched ${response?.count ?? 0} job(s) to "${
-              response?.groupName || selectedGroupObj?.name || selectedGroupId
-            }"`,
-            severity: "success",
+            message: gated
+              ? `${gated.message} — "${response?.groupName || selectedGroupObj?.name || selectedGroupId}"`
+              : `Dispatched ${response?.count ?? 0} job(s) to "${
+                  response?.groupName || selectedGroupObj?.name || selectedGroupId
+                }"`,
+            severity: gated?.severity ?? "success",
           });
         } else if (groupDeviceIds.length === 1) {
           const response = await createDeviceJob(groupDeviceIds[0], payload);
           newRowId = response?.jobId || "";
           setSelectedJobId(response?.jobId || "");
+          // Con `gate` (patch_install): retenido o en cola, dicho tal cual.
+          const outcome = response?.gate ? describeGateOutcome(response) : null;
           setSnackbar({
             open: true,
-            message: `Job queued successfully (${response?.jobId || "created"})`,
-            severity: "success",
+            message: outcome
+              ? `Patch install: ${outcome.message} (${response?.jobId || "created"})`
+              : `Job queued successfully (${response?.jobId || "created"})`,
+            severity: outcome?.severity ?? "success",
           });
         } else {
           const response = await createTenantJobs(tenantId, {
@@ -1787,22 +1803,26 @@ export default function Jobs({ onNavigate }) {
             ...payload,
           });
           newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
+          const gated = summarizeGatedBatch(response);
           setSnackbar({
             open: true,
-            message: `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
-            severity: "success",
+            message: gated?.message ?? `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
+            severity: gated?.severity ?? "success",
           });
         }
       } else if (selectedDeviceIds.length === 1) {
         const response = await createDeviceJob(selectedDeviceIds[0], payload);
         newRowId = response?.jobId || "";
         setSelectedJobId(response?.jobId || "");
+        const outcome = response?.gate ? describeGateOutcome(response) : null;
         setSnackbar({
           open: true,
-          message: selectedDeviceObjs[0]?.connected
-            ? `Job queued successfully (${response?.jobId || "created"})`
-            : `Job queued offline for ${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${response?.jobId || "created"})`,
-          severity: "success",
+          message: outcome
+            ? `Patch install: ${outcome.message} (${response?.jobId || "created"})`
+            : selectedDeviceObjs[0]?.connected
+              ? `Job queued successfully (${response?.jobId || "created"})`
+              : `Job queued offline for ${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${response?.jobId || "created"})`,
+          severity: outcome?.severity ?? "success",
         });
       } else {
         const response = await createTenantJobs(tenantId, {
@@ -1810,10 +1830,11 @@ export default function Jobs({ onNavigate }) {
           ...payload,
         });
         newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
+        const gated = summarizeGatedBatch(response);
         setSnackbar({
           open: true,
-          message: `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
-          severity: "success",
+          message: gated?.message ?? `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
+          severity: gated?.severity ?? "success",
         });
       }
 
@@ -1821,9 +1842,11 @@ export default function Jobs({ onNavigate }) {
       flashAndScrollToRow(newRowId);
     } catch (e) {
       console.error(e);
+      // La puerta de parches puede bloquear el envío (409, fail-closed): decir
+      // el motivo en vez de un «Failed» genérico que invita a reintentar.
       setSnackbar({
         open: true,
-        message: "Failed to create job",
+        message: describeBlockedError(e) || "Failed to create job",
         severity: "error",
       });
     } finally {
