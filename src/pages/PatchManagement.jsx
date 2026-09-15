@@ -46,6 +46,12 @@ import {
   campaignStrip,
   coverageLine,
 } from "../components/patch-management/campaignState";
+import {
+  applyDeviceCardFilter,
+  toggleCardFilter,
+  hasCriticalCounts,
+  DEVICE_CARD_FILTERS,
+} from "../components/patch-management/deviceCardFilter";
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
@@ -673,10 +679,29 @@ export default function PatchManagement({ onNavigate }) {
     page: 0,
     pageSize: hadIncomingHighlight ? 50 : 10,
   }));
+  // Filtro por tarjeta de «Fleet totals». Va DELANTE de la búsqueda: la tarjeta
+  // acota el conjunto y el texto busca dentro de él. Pulsar la activa lo apaga.
+  const [cardFilter, setCardFilter] = React.useState(null);
+  const criticalFilterable = React.useMemo(() => hasCriticalCounts(devices), [devices]);
   const visibleDevices = React.useMemo(
-    () => filterPatchDevices(devices, deviceSearch),
-    [devices, deviceSearch]
+    () => filterPatchDevices(applyDeviceCardFilter(devices, cardFilter), deviceSearch),
+    [devices, cardFilter, deviceSearch]
   );
+  const handleCardFilter = React.useCallback((key) => {
+    const next = toggleCardFilter(cardFilter, key);
+    setCardFilter(next);
+    setDevicePagination((prev) => ({ ...prev, page: 0 }));
+    // Al activar, llevar a la tabla: las tarjetas quedan arriba y el resultado
+    // del filtro, varias pantallas más abajo en un portátil. Fuera del
+    // actualizador de estado: ahí React puede ejecutarlo dos veces.
+    if (next) {
+      document.getElementById("patch-devices-panel")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  }, [cardFilter]);
+  const clearCardFilter = React.useCallback(() => {
+    setCardFilter(null);
+    setDevicePagination((prev) => ({ ...prev, page: 0 }));
+  }, []);
 
   /**
    * Refrescar TODO lo que la página enseña, no sólo lo que carga la página.
@@ -1119,7 +1144,7 @@ export default function PatchManagement({ onNavigate }) {
         if (!c) return <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>;
         const s = campaignState(c.state);
         const when = c.patch?.finishedAt || c.patch?.startedAt || null;
-        const title = c.patch?.lastError || (when ? `Último intento: ${when}` : "");
+        const title = c.patch?.lastError || (when ? `Last attempt: ${when}` : "");
         return <CampaignChip label={s.label} tone={s.tone} title={title} />;
       }
     },
@@ -1132,7 +1157,9 @@ export default function PatchManagement({ onNavigate }) {
       filterable: false,
       renderCell: (params) => {
         const c = campaignByDevice.get(String(params.row.agentId));
-        const s = snapshotState(c?.snapshot ?? null);
+        // `snapshotApplies` distingue el PC (N/A) de la VM que aún no ha tenido
+        // snapshot (None yet). Sin fila de campaña, `undefined` → «—».
+        const s = snapshotState(c?.snapshot ?? null, c?.snapshotApplies);
         return <CampaignChip label={s.label} tone={s.tone} title={s.title} />;
       }
     },
@@ -1180,10 +1207,13 @@ export default function PatchManagement({ onNavigate }) {
       </Typography>
       <Grid container spacing={2} alignItems="stretch">
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
+          {/* «Devices reporting» no es un filtro, es volver a la flota entera:
+              limpia el filtro activo y no se marca como seleccionada. */}
           <SummaryCard
             title="Devices reporting"
             value={kpis.reportedCount}
             icon={<DevicesOtherOutlinedIcon />}
+            onClick={clearCardFilter}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
@@ -1193,6 +1223,8 @@ export default function PatchManagement({ onNavigate }) {
             icon={<PendingActionsOutlinedIcon />}
             accent={kpis.totalMissing > 0 ? ROLE.caution : ROLE.positive}
             tint={kpis.totalMissing > 0 ? ROLE.cautionSoft : ROLE.positiveSoft}
+            onClick={() => handleCardFilter("missing")}
+            selected={cardFilter === "missing"}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
@@ -1202,6 +1234,10 @@ export default function PatchManagement({ onNavigate }) {
             icon={<ReportProblemOutlinedIcon />}
             accent={kpis.criticalish > 0 ? ROLE.critical : ROLE.positive}
             tint={kpis.criticalish > 0 ? ROLE.criticalSoft : ROLE.positiveSoft}
+            // Sólo pulsable si el backend trae `criticalCount` por equipo: sin
+            // él, filtrar vaciaría la tabla bajo una tarjeta que dice «21».
+            onClick={criticalFilterable ? () => handleCardFilter("critical") : null}
+            selected={criticalFilterable ? cardFilter === "critical" : undefined}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
@@ -1211,6 +1247,8 @@ export default function PatchManagement({ onNavigate }) {
             icon={<RestartAltOutlinedIcon />}
             accent={kpis.rebootDevices > 0 ? ROLE.critical : BRAND.dark}
             tint={kpis.rebootDevices > 0 ? ROLE.criticalSoft : BRAND.darkSoft}
+            onClick={() => handleCardFilter("reboot")}
+            selected={cardFilter === "reboot"}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2.4 }}>
@@ -1220,6 +1258,8 @@ export default function PatchManagement({ onNavigate }) {
             icon={<CheckCircleOutlineOutlinedIcon />}
             accent={ROLE.positive}
             tint={ROLE.positiveSoft}
+            onClick={() => handleCardFilter("healthy")}
+            selected={cardFilter === "healthy"}
           />
         </Grid>
       </Grid>
@@ -1285,6 +1325,16 @@ export default function PatchManagement({ onNavigate }) {
       <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>
         Devices
       </Typography>
+      {/* El filtro activo, a la vista y con su aspa: una tabla recortada sin
+          decir por qué se lee como una flota que ha perdido equipos. */}
+      {cardFilter ? (
+        <Chip
+          size="small"
+          label={DEVICE_CARD_FILTERS[cardFilter]?.label || cardFilter}
+          onDelete={clearCardFilter}
+          sx={{ fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.dark }}
+        />
+      ) : null}
       <TextField
         size="small"
         placeholder="Search hostname, platform, status…"
@@ -1304,7 +1354,7 @@ export default function PatchManagement({ onNavigate }) {
         sx={{ flex: "1 1 260px", maxWidth: 420, "& .MuiOutlinedInput-root": { bgcolor: BRAND.surface } }}
       />
       <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", ml: "auto" }}>
-        {deviceSearch.trim()
+        {deviceSearch.trim() || cardFilter
           ? `${visibleDevices.length} of ${devices.length} devices`
           : `${devices.length} reporting`}
       </Typography>
@@ -1323,7 +1373,9 @@ export default function PatchManagement({ onNavigate }) {
         localeText={
           deviceSearch.trim()
             ? { noRowsLabel: `No devices match “${deviceSearch.trim()}”` }
-            : undefined
+            : cardFilter
+              ? { noRowsLabel: `No devices: ${DEVICE_CARD_FILTERS[cardFilter]?.label || cardFilter}` }
+              : undefined
         }
         // Row-level pulse for the device we just arrived to highlight
         // (see the deep-link effect above) — same treatment Jobs.jsx

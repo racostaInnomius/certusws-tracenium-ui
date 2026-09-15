@@ -18,10 +18,19 @@ describe("campaignState", () => {
 });
 
 describe("snapshotState", () => {
-  it("⚠️ sin snapshot no es un fallo: es que ese equipo no pasa por gateway", () => {
-    const s = snapshotState(null);
-    expect(s.label).toBe("—");
-    expect(s.title).toMatch(/no aplica/i);
+  it("⭐ sin snapshot, tres casos distintos: N/A, None yet y «no se sabe»", () => {
+    // Un PC no pasa por gateway: N/A, no una carencia.
+    expect(snapshotState(null, false)).toMatchObject({ label: "N/A", tone: "muted" });
+    expect(snapshotState(null, false).title).toMatch(/Not a VM behind an Infrastructure Gateway/);
+    // Una VM con gateway que aún no ha tenido parche con puerta.
+    expect(snapshotState(null, true)).toMatchObject({ label: "None yet", tone: "muted" });
+    // El backend no lo dice (o no se pudo calcular): no se inventa ni N/A.
+    expect(snapshotState(null, null).label).toBe("—");
+    expect(snapshotState(null).label).toBe("—");
+  });
+
+  it("si hay snapshot manda el snapshot, diga lo que diga `applies`", () => {
+    expect(snapshotState({ outcome: "created", onDatastore: true }, false).label).toBe("Held");
   });
 
   it("un rechazo lleva el detalle, que es lo accionable", () => {

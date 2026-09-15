@@ -32,36 +32,61 @@ export function campaignState(state) {
 /**
  * Qué decir del snapshot de un equipo.
  *
- * `null` no es «no hay snapshot», es «este equipo no pasa por gateway»: sin
- * vCenter detrás no hay nada que fotografiar, y marcarlo como carencia sería
- * inventar un problema.
+ * `applies` sale de `snapshotApplies` del backend, calculado con la misma regla
+ * que la puerta del parche (VM + un gateway que no sea él mismo). Tres casos
+ * sin snapshot que NO son lo mismo:
+ *
+ *   applies === false → «N/A»: un PC, un portátil, el propio gateway. No hay
+ *                       nada que fotografiar; marcarlo como carencia sería
+ *                       inventar un problema.
+ *   applies === true  → «None yet»: le corresponde y todavía no se ha tomado
+ *                       ninguno (no ha habido un parche con puerta).
+ *   otro (null/undef) → «—»: no se sabe, o el backend no lo dice todavía.
+ *
+ * Si hay snapshot, manda el snapshot, diga lo que diga `applies`.
  */
-export function snapshotState(snapshot) {
-  if (!snapshot) return { label: "—", tone: "muted", title: "Sin gateway: no aplica" };
+export function snapshotState(snapshot, applies) {
+  if (!snapshot) {
+    if (applies === false) {
+      return {
+        label: "N/A",
+        tone: "muted",
+        title: "Not a VM behind an Infrastructure Gateway — no pre-patch snapshot is taken",
+      };
+    }
+    if (applies === true) {
+      return {
+        label: "None yet",
+        tone: "muted",
+        title: "Eligible for a pre-patch snapshot; none taken yet",
+      };
+    }
+    return { label: "—", tone: "muted", title: "" };
+  }
   if (snapshot.outcome === "rejected") {
     return {
       label: "Rejected",
       tone: "critical",
       // El detalle es lo que convierte «rechazado» en algo accionable: qué
       // datastore, cuánto libre, contra qué umbral.
-      title: snapshot.reasonDetail || snapshot.reason || "El gateway rechazó el snapshot",
+      title: snapshot.reasonDetail || snapshot.reason || "The gateway rejected the snapshot",
     };
   }
   if (snapshot.outcome === "failed") {
     return { label: "Failed", tone: "critical", title: snapshot.reasonDetail || snapshot.reason || "" };
   }
   if (snapshot.outcome === "pending") {
-    return { label: "In progress", tone: "neutral", title: "Snapshot solicitado" };
+    return { label: "In progress", tone: "neutral", title: "Snapshot requested" };
   }
   if (snapshot.onDatastore) {
     return {
       label: "Held",
       tone: "caution",
-      title: `Sigue en el datastore${snapshot.takenAt ? ` desde ${snapshot.takenAt}` : ""}`,
+      title: `Still on the datastore${snapshot.takenAt ? ` since ${snapshot.takenAt}` : ""}`,
     };
   }
   if (snapshot.removedAt) {
-    return { label: "Removed", tone: "positive", title: `Retirado el ${snapshot.removedAt}` };
+    return { label: "Removed", tone: "positive", title: `Removed on ${snapshot.removedAt}` };
   }
   return { label: snapshot.outcome || "—", tone: "muted", title: "" };
 }

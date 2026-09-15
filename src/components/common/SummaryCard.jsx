@@ -18,6 +18,10 @@
 //   - `onClick`: turns the card into a button-like surface with the
 //     brand hover (border teal + soft shadow). Used by Overview's Hero
 //     KPIs for drilldown navigation.
+//   - `selected`: ONLY pass it when the card is a toggle (e.g. Patch
+//     Management's cards filtering the Devices table). Then the card gets
+//     `role="button"` + `aria-pressed`, keyboard activation, and a teal
+//     border while on. Left undefined, nothing changes for existing callers.
 //
 // Visual contract matches LAYOUT.card: borderRadius 2, BRAND.border,
 // no shadow in resting state.
@@ -36,9 +40,12 @@ export default function SummaryCard({
   titleHint = null,
   stretch = false,
   onClick = null,
+  selected = undefined,
   sx = null,
 }) {
   const clickable = typeof onClick === "function";
+  // Toggle semantics only when the caller opted in by passing `selected`.
+  const isToggle = clickable && typeof selected === "boolean";
 
   const titleNode = titleHint ? (
     <Tooltip title={titleHint} arrow placement="top">
@@ -58,10 +65,25 @@ export default function SummaryCard({
     <Paper
       elevation={0}
       onClick={clickable ? onClick : undefined}
+      {...(isToggle
+        ? {
+            role: "button",
+            tabIndex: 0,
+            "aria-pressed": selected,
+            onKeyDown: (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick(e);
+              }
+            },
+          }
+        : {})}
       sx={{
         p: 2,
         borderRadius: 2,
-        border: `1px solid ${BRAND.border}`,
+        border: `1px solid ${isToggle && selected ? BRAND.teal : BRAND.border}`,
+        // A second, inset ring so "on" reads as a state, not just a hover.
+        boxShadow: isToggle && selected ? `inset 0 0 0 1px ${BRAND.teal}` : undefined,
         display: "flex",
         alignItems: "center",
         gap: 1.5,

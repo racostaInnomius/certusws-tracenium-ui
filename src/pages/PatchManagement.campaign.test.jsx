@@ -5,7 +5,7 @@
 // que el backend no dijo.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
@@ -29,9 +29,9 @@ import PatchManagement from "./PatchManagement";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 const DEVICES = [
-  { agentId: "a-1", hostname: "MSIG-WSUS", platform: "windows", overallStatus: "healthy", missingCount: 0, rebootRequired: false, collectedAtUtc: "2026-09-12T00:00:00Z" },
-  { agentId: "a-2", hostname: "MSIG-TSPDC", platform: "windows", overallStatus: "updates_available", missingCount: 5, rebootRequired: false, collectedAtUtc: "2026-09-12T00:00:00Z" },
-  { agentId: "a-3", hostname: "SRVOC-MAIN", platform: "linux", overallStatus: "idle", missingCount: 0, rebootRequired: false, collectedAtUtc: "2026-09-12T00:00:00Z" },
+  { agentId: "a-1", hostname: "MSIG-WSUS", platform: "windows", overallStatus: "healthy", missingCount: 0, criticalCount: 0, rebootRequired: false, collectedAtUtc: "2026-09-12T00:00:00Z" },
+  { agentId: "a-2", hostname: "MSIG-TSPDC", platform: "windows", overallStatus: "updates_available", missingCount: 5, criticalCount: 2, rebootRequired: false, collectedAtUtc: "2026-09-12T00:00:00Z" },
+  { agentId: "a-3", hostname: "DESKTOP-PC01", platform: "windows", overallStatus: "reboot_required", missingCount: 1, criticalCount: 0, rebootRequired: true, collectedAtUtc: "2026-09-12T00:00:00Z" },
 ];
 
 const CAMPAIGN = {
@@ -41,16 +41,18 @@ const CAMPAIGN = {
     {
       deviceId: "a-1",
       state: "patched",
+      snapshotApplies: true,
       patch: { jobId: "j1", status: "completed", startedAt: "2026-09-11T05:00:00Z", finishedAt: "2026-09-11T05:11:00Z", lastError: null, rebootRequested: false, returnedFromReboot: null },
       snapshot: { id: 9, outcome: "cleaned", onDatastore: false, moref: "snapshot-14168", reason: null, reasonDetail: null, takenAt: "2026-09-11T05:00:00Z", removedAt: "2026-09-11T05:12:00Z" },
     },
     {
       deviceId: "a-2",
       state: "failed",
+      snapshotApplies: true,
       patch: { jobId: "j2", status: "failed", startedAt: "2026-09-08T13:00:00Z", finishedAt: "2026-09-08T14:00:00Z", lastError: "patch_install failed; installer 0x80d02002", rebootRequested: true, returnedFromReboot: null },
       snapshot: { id: 10, outcome: "rejected", onDatastore: false, moref: null, reason: "insufficient_capacity", reasonDetail: "4.06 TB libres de 21.83 TB (18%), umbral 20%", takenAt: null, removedAt: null },
     },
-    { deviceId: "a-3", state: "never_ran", patch: null, snapshot: null },
+    { deviceId: "a-3", state: "never_ran", snapshotApplies: false, patch: null, snapshot: null },
   ],
   totals: {
     byState: { never_ran: 50, awaiting_window: 0, awaiting_snapshot: 0, in_flight: 0, patched: 2, awaiting_reboot: 1, failed: 1, timed_out: 0, cancelled: 0, unknown: 0 },
@@ -124,8 +126,9 @@ describe("Patch Management — estado de campaña", () => {
     expect(within(grid()).getByText("Removed")).toBeInTheDocument();
     expect(within(grid()).getByText("Failed")).toBeInTheDocument();
     expect(within(grid()).getByText("Rejected")).toBeInTheDocument();
-    // El que no pasa por gateway no sale marcado como carencia.
+    // El PC no pasa por gateway: N/A, no una carencia.
     expect(within(grid()).getByText("Never patched")).toBeInTheDocument();
+    expect(within(grid()).getByText("N/A")).toBeInTheDocument();
   });
 
   it("⚠️ sin respuesta de campaña la página sigue, sin inventar ceros", async () => {
@@ -134,5 +137,51 @@ describe("Patch Management — estado de campaña", () => {
     mount({ campaign: { ok: true, devices: [], fleet: { enrolled: 0, reporting: 0 }, totals: {} } });
     await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
     expect(screen.queryByText(/enrolled devices have had a patch job/i)).toBeNull();
+  });
+});
+
+describe("Patch Management — las tarjetas filtran la tabla de equipos", () => {
+  const rowNames = () => within(grid()).queryAllByText(/^(MSIG-WSUS|MSIG-TSPDC|DESKTOP-PC01)$/).map((n) => n.textContent);
+
+  it("⭐ «Reboot pending» deja sólo los equipos con reinicio pendiente, y lo dice", async () => {
+    mount();
+    await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
+
+    // Se guarda la TARJETA antes de pulsar: al filtrar aparece también el chip
+    // «Reboot pending», que MUI pinta como botón con el mismo nombre.
+    const card = screen.getByRole("button", { name: /Reboot pending/i });
+    fireEvent.click(card);
+
+    await waitFor(() => expect(rowNames()).toEqual(["DESKTOP-PC01"]));
+    // El filtro activo, a la vista: una tabla recortada sin explicación parece
+    // una flota que ha perdido equipos.
+    expect(screen.getByText("1 of 3 devices")).toBeInTheDocument();
+    expect(card).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("⚠️ «Critical / Important» filtra EQUIPOS y el rótulo lo aclara", async () => {
+    mount();
+    await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Critical \/ Important/i }));
+
+    await waitFor(() => expect(rowNames()).toEqual(["MSIG-TSPDC"]));
+    expect(screen.getByText("Devices with critical / important patches")).toBeInTheDocument();
+  });
+
+  it("pulsar la tarjeta activa, «Devices reporting» o el aspa del chip devuelven la flota entera", async () => {
+    mount();
+    await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
+
+    const healthy = screen.getByRole("button", { name: /Healthy/i });
+    fireEvent.click(healthy);
+    await waitFor(() => expect(rowNames()).toEqual(["MSIG-WSUS"]));
+    fireEvent.click(healthy);
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
+
+    fireEvent.click(screen.getByRole("button", { name: /Total missing/i }));
+    await waitFor(() => expect(rowNames()).toHaveLength(2));
+    fireEvent.click(screen.getByText("Devices reporting"));
+    await waitFor(() => expect(rowNames()).toHaveLength(3));
   });
 });
