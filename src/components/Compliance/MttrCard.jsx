@@ -17,6 +17,12 @@
 // footnote rather than swallowed — they are the fingerprint of a
 // flapping check, which is worth seeing.
 //
+// 2026-09-15 — what 2026-09-01 called "closed as 'pass'" was a check that
+// STOPPED being green, not one that became green. The backend now counts
+// a failing row replaced by a passing one, timed from the first failure of
+// the episode (certusws-tracenium modules/compliance/remediation-time.ts).
+// The copy below already described that; the number now matches it.
+//
 // Place in the SCP page right under the framework table — operators
 // who land on the page wanting "are we trending better?" see this
 // before they scroll to per-device drill-down.
