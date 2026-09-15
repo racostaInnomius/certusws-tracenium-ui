@@ -20,6 +20,14 @@
 //
 // «Certificado nuevo nunca activado». Es la firma exacta de un equipo que
 // rotó y no volvió. Va arriba y en rojo, antes que cualquier otra cosa.
+//
+// ── La otra mitad: el intercambio de claves ──────────────────────────
+//
+// La identidad híbrida protege QUIÉN es el equipo; ML-KEM protege el SECRETO
+// DE SESIÓN contra «recoge ahora, descifra después». Son migraciones
+// distintas y el grupo lo eligen los dos extremos (Windows negocia con
+// SChannel), así que se enseña lo que el servidor VIO en la última conexión,
+// no lo que debería pasar. No decide la rotación.
 
 import * as React from "react";
 import {
@@ -94,6 +102,34 @@ const TONE = {
   neutral: { fg: BRAND.dark, bg: BRAND.darkSoft }
 };
 
+/** Lo que el servidor vio en la última conexión del equipo. */
+export function keyExchangeMeta(kex, rules = {}) {
+  const days = rules.keyExchangeMaxAgeDays ?? 7;
+  if (!kex) {
+    return {
+      label: "Not observed",
+      tone: "neutral",
+      hint: `No connection observed in the last ${days} days.`
+    };
+  }
+  const when = kex.observedAt ? ` Observed ${formatDate(kex.observedAt)}.` : "";
+  if (kex.postQuantum) {
+    return {
+      label: kex.group,
+      tone: "ok",
+      hint: `Post-quantum hybrid key exchange: the session secret resists harvest-now, decrypt-later.${when}`
+    };
+  }
+  if (kex.group === "unknown") {
+    return { label: "Unknown", tone: "neutral", hint: `The server could not read the negotiated group.${when}` };
+  }
+  return {
+    label: kex.group,
+    tone: "warning",
+    hint: `Classical key exchange: the session secret is not protected against a future quantum computer.${when}`
+  };
+}
+
 /** El orden de la tabla: primero lo que quema, después lo accionable. */
 const PRIORITY = [
   "pending_unactivated",
@@ -154,6 +190,8 @@ export default function IdentityRotationPanel({ onOpenDevice, loadStatus = getCe
   const waiting = (by.windows_needs_agent_fix ?? 0) + (by.agent_too_old ?? 0) + (by.needs_approval ?? 0);
   const unreachable = (by.offline ?? 0) + (by.no_active_cert ?? 0);
   const alarms = devices.filter((d) => d.readiness === "pending_unactivated");
+  const kexBy = data?.summary?.byKeyExchange ?? {};
+  const kexObserved = (kexBy.post_quantum ?? 0) + (kexBy.classical ?? 0) + (kexBy.unknown ?? 0);
 
   const columns = [
     {
@@ -192,6 +230,17 @@ export default function IdentityRotationPanel({ onOpenDevice, loadStatus = getCe
       sortComparator: (a, b) => priorityOf(a) - priorityOf(b),
       renderCell: (p) => {
         const m = readinessMeta(p.value, rules);
+        const t = TONE[m.tone] ?? TONE.neutral;
+        return <Pill label={m.label} fg={t.fg} bg={t.bg} hint={m.hint} />;
+      }
+    },
+    {
+      field: "keyExchange",
+      headerName: "Key exchange",
+      width: 170,
+      sortComparator: (a, b) => Number(Boolean(b?.postQuantum)) - Number(Boolean(a?.postQuantum)),
+      renderCell: (p) => {
+        const m = keyExchangeMeta(p.value, rules);
         const t = TONE[m.tone] ?? TONE.neutral;
         return <Pill label={m.label} fg={t.fg} bg={t.bg} hint={m.hint} />;
       }
@@ -265,7 +314,8 @@ export default function IdentityRotationPanel({ onOpenDevice, loadStatus = getCe
         </Alert>
       ) : null}
 
-      <Grid container spacing={2}>
+      {/* Cinco tarjetas: rejilla de 15 columnas en escritorio, 3 cada una. */}
+      <Grid container spacing={2} columns={{ xs: 12, md: 15 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
           <SummaryCard title="Hybrid identities" value={data ? `${hybrid} / ${total}` : "—"} stretch />
         </Grid>
@@ -285,6 +335,14 @@ export default function IdentityRotationPanel({ onOpenDevice, loadStatus = getCe
             title="Can't be reached"
             value={data ? String(unreachable) : "—"}
             titleHint="Offline, or without an active certificate."
+            stretch
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <SummaryCard
+            title="Post-quantum key exchange"
+            value={data ? `${kexBy.post_quantum ?? 0} / ${kexObserved}` : "—"}
+            titleHint={`Devices whose last connection negotiated a hybrid ML-KEM key exchange, out of those observed in the last ${rules.keyExchangeMaxAgeDays ?? 7} days.`}
             stretch
           />
         </Grid>

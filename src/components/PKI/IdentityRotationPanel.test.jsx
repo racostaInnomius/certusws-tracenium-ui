@@ -9,11 +9,11 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import IdentityRotationPanel, { readinessMeta } from "./IdentityRotationPanel";
+import IdentityRotationPanel, { keyExchangeMeta, readinessMeta } from "./IdentityRotationPanel";
 
 afterEach(() => cleanup());
 
-const RULES = { minAgent: "1.1.70", minAgentWindows: "1.1.74", offlineHours: 24, pendingAlarmMinutes: 15 };
+const RULES = { minAgent: "1.1.70", minAgentWindows: "1.1.74", offlineHours: 24, pendingAlarmMinutes: 15, keyExchangeMaxAgeDays: 7 };
 
 const fila = (over) => ({
   deviceId: "d",
@@ -28,6 +28,7 @@ const fila = (over) => ({
   pendingIssuedAt: null,
   lastRotation: null,
   readiness: "ready",
+  keyExchange: null,
   ...over
 });
 
@@ -37,13 +38,32 @@ const ESTADO_T1 = {
   summary: {
     total: 4,
     byState: { hybrid: 1, g2_classic: 0, legacy_issuer: 3, no_active_cert: 0 },
-    byReadiness: { done: 1, ready: 1, windows_needs_agent_fix: 1, offline: 1 }
+    byReadiness: { done: 1, ready: 1, windows_needs_agent_fix: 1, offline: 1 },
+    byKeyExchange: { post_quantum: 1, classical: 2, unknown: 0, not_observed: 1 }
   },
   devices: [
-    fila({ deviceId: "done", hostname: "W11-JPR-LAB02", platform: "windows", state: "hybrid", readiness: "done" }),
-    fila({ deviceId: "win", hostname: "ETE-3X5P8F4", platform: "windows", readiness: "windows_needs_agent_fix" }),
+    fila({
+      deviceId: "done",
+      hostname: "W11-JPR-LAB02",
+      platform: "windows",
+      state: "hybrid",
+      readiness: "done",
+      keyExchange: { group: "X25519", postQuantum: false, observedAt: "2026-09-15T11:00:00Z" }
+    }),
+    fila({
+      deviceId: "win",
+      hostname: "ETE-3X5P8F4",
+      platform: "windows",
+      readiness: "windows_needs_agent_fix",
+      keyExchange: { group: "X25519", postQuantum: false, observedAt: "2026-09-15T11:00:00Z" }
+    }),
     fila({ deviceId: "off", hostname: "MarisolCorona", platform: "windows", readiness: "offline" }),
-    fila({ deviceId: "mac", hostname: "MacBook-Air-de-Diego", readiness: "ready" })
+    fila({
+      deviceId: "mac",
+      hostname: "MacBook-Air-de-Diego",
+      readiness: "ready",
+      keyExchange: { group: "X25519MLKEM768", postQuantum: true, observedAt: "2026-09-15T11:00:00Z" }
+    })
   ]
 };
 
@@ -123,6 +143,33 @@ describe("IdentityRotationPanel", () => {
       montar(ESTADO_T1);
       await screen.findByText("MacBook-Air-de-Diego");
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("intercambio de claves (ML-KEM)", () => {
+    it("⭐ la tarjeta cuenta post-cuánticos sobre OBSERVADOS, no sobre el total", async () => {
+      montar(ESTADO_T1);
+      // 1 post-cuántico de 3 observados; el equipo sin observar no entra en el denominador.
+      expect(await screen.findByText("1 / 3")).toBeInTheDocument();
+      expect(screen.getByText("Post-quantum key exchange")).toBeInTheDocument();
+    });
+
+    it("⭐ la fila dice el grupo que vio el servidor", async () => {
+      montar(ESTADO_T1);
+      await screen.findByText("MacBook-Air-de-Diego");
+      const fila = (h) => screen.getAllByRole("row").find((r) => r.textContent.includes(h));
+      expect(fila("MacBook-Air-de-Diego")).toHaveTextContent("X25519MLKEM768");
+      expect(fila("ETE-3X5P8F4")).toHaveTextContent("X25519");
+      expect(fila("MarisolCorona")).toHaveTextContent("Not observed");
+    });
+
+    it("clásico en ámbar con el porqué; sin observación no se pinta como clásico", () => {
+      expect(keyExchangeMeta({ group: "X25519", postQuantum: false }, RULES)).toMatchObject({ tone: "warning" });
+      expect(keyExchangeMeta({ group: "X25519", postQuantum: false }, RULES).hint).toMatch(/not protected/i);
+      expect(keyExchangeMeta({ group: "X25519MLKEM768", postQuantum: true }, RULES)).toMatchObject({ tone: "ok" });
+      expect(keyExchangeMeta(null, RULES)).toMatchObject({ label: "Not observed", tone: "neutral" });
+      expect(keyExchangeMeta(null, RULES).hint).toMatch(/7 days/);
+      expect(keyExchangeMeta({ group: "unknown", postQuantum: false }, RULES)).toMatchObject({ label: "Unknown", tone: "neutral" });
     });
   });
 
