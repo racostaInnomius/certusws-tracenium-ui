@@ -55,6 +55,19 @@ export async function revokeCertificate(fingerprint, body = {}) {
  * El segundo NO es un fallo: es el gate haciendo su trabajo. Tratarlo
  * como error enseñaría un rojo por una petición que salió bien.
  */
+/**
+ * El estado de la rotación de identidades equipo por equipo, y si es seguro
+ * rotar cada uno ahora (ADR-0015). La regla vive en el backend
+ * (`rotation-status.service.ts`); aquí sólo se pinta.
+ *
+ * ⚠️ `no-store`: `httpGetJson` cachea los GET 60 s, y este panel se usa para
+ * decidir el siguiente anillo mientras el anterior está en vuelo. Un estado de
+ * hace un minuto puede enseñar «listo» a un equipo que ya tiene rotación.
+ */
+export async function getCertificateRotationStatus() {
+  return httpGetJson(`/api/v1/devices/cert/rotation-status`, { cache: "no-store" });
+}
+
 export async function requestCertificateRotation(deviceId, body = {}) {
   return httpPostJson(`/api/v1/devices/${encodeURIComponent(deviceId)}/cert/rotate`, body);
 }

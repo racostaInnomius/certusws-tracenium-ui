@@ -61,6 +61,7 @@ import BackToSettings from "../components/common/BackToSettings";
 import SectionPaper from "../components/common/SectionPaper";
 import SummaryCard from "../components/common/SummaryCard";
 import GoToReportButton from "../components/common/GoToReportButton";
+import IdentityRotationPanel from "../components/PKI/IdentityRotationPanel";
 import { formatDate } from "../utils/format";
 import { listFrom } from "../api/shape";
 import { getMyCapabilities } from "../api/roles";
@@ -767,8 +768,6 @@ export default function PKI({ onNavigate } = {}) {
     );
   }
 
-  const overviewSelected = tab === "overview";
-  const inspectorSelected = tab === "inspector";
   const certStatus = String(selectedCertificate?.status || "").toLowerCase();
   const canRevoke =
     selectedCertificate &&
@@ -788,6 +787,14 @@ export default function PKI({ onNavigate } = {}) {
   // tratar la renovación con el mismo miedo, que es justo lo que frena
   // una rotación de flota.
   const mayRotate = myRole === "ADMIN" || myRole === "OWNER";
+
+  // La pestaña de rotación sólo existe para quien puede rotar. Si la URL la
+  // pide y el rol no alcanza, se cae a la vista general en vez de dejar Tabs
+  // con un valor que no corresponde a ninguna pestaña.
+  const effectiveTab = tab === "rotation" && !mayRotate ? "overview" : tab;
+  const overviewSelected = effectiveTab === "overview";
+  const inspectorSelected = effectiveTab === "inspector";
+  const rotationSelected = effectiveTab === "rotation";
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 }, minWidth: 0 }}>
@@ -905,7 +912,7 @@ export default function PKI({ onNavigate } = {}) {
         sx={{ p: 0, overflow: "hidden", mb: 2 }}
       >
         <Tabs
-          value={tab}
+          value={effectiveTab}
           onChange={(_e, next) => setTab(next)}
           sx={{
             borderBottom: `1px solid ${BRAND.border}`,
@@ -925,6 +932,11 @@ export default function PKI({ onNavigate } = {}) {
         >
           <Tab value="overview" label="Fleet overview" icon={<AssessmentOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
           <Tab value="inspector" label="Certificate inspector" icon={<BadgeOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
+          {/* ADR-0015: quién ya tiene identidad híbrida y a quién se puede rotar
+              ahora. Sólo para quien puede rotar — el endpoint pide ADMIN/OWNER. */}
+          {mayRotate ? (
+            <Tab value="rotation" label="Identity rotation" icon={<AutorenewOutlinedIcon />} iconPosition="start" sx={{ gap: 0.75 }} />
+          ) : null}
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -953,6 +965,11 @@ export default function PKI({ onNavigate } = {}) {
               onJumpToInspector={handleJumpToInspector}
               isSmDown={isSmDown}
             />
+          ) : null}
+          {rotationSelected ? (
+            // «Open» lleva al inspector del equipo, donde ya vive el formulario
+            // de rotación: el panel decide A QUIÉN, el inspector hace la rotación.
+            <IdentityRotationPanel onOpenDevice={(deviceId) => handleJumpToInspector(deviceId)} />
           ) : null}
           {inspectorSelected ? (
             <InspectorTab
