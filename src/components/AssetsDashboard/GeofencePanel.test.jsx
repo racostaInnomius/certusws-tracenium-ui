@@ -8,6 +8,15 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+
+// Leaflet no corre en jsdom; el mapa se prueba en GeofenceSitesMap.test.jsx.
+// Aquí sólo importa QUÉ sitios le llegan.
+vi.mock("./GeofenceSitesMap", () => ({
+  default: ({ sites }) => (
+    <div data-testid="sites-map" data-count={sites.length} />
+  ),
+}));
+
 import GeofencePanel from "./GeofencePanel";
 
 afterEach(cleanup);
@@ -157,5 +166,22 @@ describe("GeofencePanel", () => {
   it("sin sitios explica qué es una cerca en vez de dejar un hueco", () => {
     render(<GeofencePanel sites={[]} onSave={vi.fn()} />);
     expect(screen.getByText(/A geofence is a site with a radius/i)).toBeInTheDocument();
+  });
+
+  it("enseña el mapa de los sitios y dice cuántos quedan fuera por no tener pin", async () => {
+    render(
+      <GeofencePanel
+        sites={[sitio(), sitio({ id: "2", siteName: "HQ", lat: null, lon: null })]}
+        onSave={vi.fn()}
+      />
+    );
+    expect(await screen.findByTestId("sites-map")).toBeInTheDocument();
+    expect(screen.getByText("1 site without a map pin not shown")).toBeInTheDocument();
+  });
+
+  it("sin ningún pin no hay mapa vacío: lo explica cada tarjeta", () => {
+    render(<GeofencePanel sites={[sitio({ lat: null, lon: null })]} onSave={vi.fn()} />);
+    expect(screen.queryByTestId("sites-map")).not.toBeInTheDocument();
+    expect(screen.getByText(/has no map pin/i)).toBeInTheDocument();
   });
 });

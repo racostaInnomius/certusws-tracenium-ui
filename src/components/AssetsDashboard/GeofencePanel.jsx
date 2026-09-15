@@ -30,6 +30,29 @@ import {
 import { BRAND, TEXT } from "../../theme/brand";
 import SiteAttendance from "./SiteAttendance";
 import { dayWindow } from "./hostHelpers";
+import { sitiosConPin } from "./geofenceMap";
+
+// Leaflet en su propio chunk, como el resto de mapas de Asset Management.
+const GeofenceSitesMap = React.lazy(() => import("./GeofenceSitesMap"));
+
+/** Una muestra de la leyenda: el mismo pin y el mismo trazo que el mapa. */
+function Muestra({ label, color, hollow }) {
+  return (
+    <Stack direction="row" spacing={0.75} alignItems="center">
+      <Box
+        component="span"
+        sx={{
+          width: 12,
+          height: 12,
+          borderRadius: "50%",
+          bgcolor: hollow ? BRAND.surface : color,
+          border: `2px ${hollow ? "dashed" : "solid"} ${color}`,
+        }}
+      />
+      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{label}</Typography>
+    </Stack>
+  );
+}
 
 /** Cuántos equipos, y en qué estado. Cero es un número, no una ausencia. */
 function Recuento({ label, value, color }) {
@@ -79,8 +102,10 @@ function Cerca({ site, onSave, saving, error }) {
 
   return (
     <Box
+      id={`geofence-site-${site.id}`}
       sx={{
         p: 1.5,
+        scrollMarginTop: 16,
         border: `1px solid ${BRAND.border}`,
         borderRadius: 2,
         bgcolor: BRAND.surface,
@@ -258,6 +283,12 @@ export default function GeofencePanel({ sites, onSave, savingId, errorById = {} 
   }
 
   const activas = lista.filter((s) => s.geofenceStatus === "monitoring").length;
+  const sinPin = lista.length - sitiosConPin(lista).length;
+
+  // Un clic en el pin lleva a la tarjeta donde se configura ese sitio.
+  const irASitio = (id) => {
+    document.getElementById(`geofence-site-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <Box sx={{ mb: 2 }}>
@@ -289,6 +320,30 @@ export default function GeofencePanel({ sites, onSave, savingId, errorById = {} 
         its last state instead of leaving the fence. Two consecutive readings are needed before a
         change is recorded.
       </Typography>
+
+      {sinPin < lista.length ? (
+        <Box sx={{ mb: 1.5 }}>
+          <React.Suspense
+            fallback={<Box sx={{ height: 300, borderRadius: 2, bgcolor: BRAND.surfaceMuted }} />}
+          >
+            <GeofenceSitesMap sites={lista} onSelect={irASitio} />
+          </React.Suspense>
+          <Stack direction="row" spacing={2} sx={{ mt: 0.75, flexWrap: "wrap", rowGap: 0.5 }}>
+            <Muestra label="Monitoring" color={BRAND.teal} />
+            <Muestra label="Off" color={BRAND.dark} hollow />
+            {/* ⚠️ Sin radio guardado no hay círculo: el sugerido es un consejo,
+                no un área vigilada. */}
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+              Circles show the saved radius · click a pin to jump to its settings
+            </Typography>
+            {sinPin > 0 ? (
+              <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+                {sinPin} site{sinPin === 1 ? "" : "s"} without a map pin not shown
+              </Typography>
+            ) : null}
+          </Stack>
+        </Box>
+      ) : null}
 
       <Stack spacing={1}>
         {lista.map((s) => (
