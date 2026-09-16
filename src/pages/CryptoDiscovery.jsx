@@ -107,6 +107,7 @@ import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
 import CdpCertFacets from "../components/CryptoDiscovery/CdpCertFacets";
 import CbomAssetsPanel from "../components/CryptoDiscovery/CbomAssetsPanel";
 import { BRAND, DATAGRID_SX, ICON, TEXT, TEXT_MUTED } from "../theme/brand";
+import { pqKemChip } from "../components/CryptoDiscovery/osTlsFixStates";
 import {
   getCdpSummary,
   getCdpDashboard,
@@ -876,16 +877,14 @@ function CdpInventoryTab({ refreshNonce }) {
       headerName: "ML-KEM",
       width: 120,
       description: "Whether the system TLS stack negotiated hybrid ML-KEM key exchange on a loopback handshake run by the agent",
-      valueGetter: (value) => (value?.supported === true ? "yes" : value?.supported === false ? "no" : value ? "not measured" : ""),
+      valueGetter: (value) => pqKemChip(value).label,
       renderCell: (params) => {
         const v = params.row.pqKem;
         if (!v) return <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}><Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>—</Typography></Box>;
-        const label = v.supported === true ? "Hybrid OK" : v.supported === false ? "No hybrid" : "Not measured";
-        const bg = v.supported === true ? BRAND.alert.successSoft : v.supported === false ? BRAND.alert.errorSoft : "transparent";
-        const color = v.supported === true ? BRAND.alert.successText : v.supported === false ? BRAND.alert.errorText : TEXT_MUTED;
+        const c = pqKemChip(v);
         return (
           <Tooltip title={v.detail || v.method || ""} arrow>
-            <Chip size="small" label={label} variant={v.supported == null ? "outlined" : "filled"} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: bg, color, fontWeight: 700 }} />
+            <Chip size="small" label={c.label} variant={c.outlined ? "outlined" : "filled"} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: c.bg, color: c.color, fontWeight: 700 }} />
           </Tooltip>
         );
       },

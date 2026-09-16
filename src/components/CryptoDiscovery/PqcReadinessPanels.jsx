@@ -22,6 +22,7 @@
 import * as React from "react";
 import { Box, Chip, LinearProgress, Stack, Tooltip, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
+import { OS_TLS_FIX_STATE } from "./osTlsFixStates";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 function PanelTitle({ children, hint }) {
@@ -143,35 +144,35 @@ const RUNTIME_LABEL = {
 const RUNTIME_HINT = {
   jvm: "ML-KEM and ML-DSA arrived in that JDK; older JVMs cannot negotiate post-quantum TLS.",
   openssl: "OpenSSL gained X25519MLKEM768 in 3.5; anything linked against an older one stays classical.",
-  "os-tls": "Everything that uses the system stack — on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a software inventory. Clearing the threshold is not the same as having it on: Windows ships the ML-KEM groups disabled until policy enables them."
+  "os-tls": "Everything that uses the system stack — on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a software inventory. Windows builds that have the ML-KEM groups but keep them turned off are not listed here: they can migrate, and appear under «Devices that can migrate — need a fix»."
 };
 
 /**
+ * Una fila por causa, con su recuento de equipos, que se despliega a sus
+ * equipos (chips que llevan a Inventory). Lo comparten «no pueden migrar» y
+ * «pueden migrar con un ajuste» (ADR-0024): la forma de leerlo es la misma,
+ * cambia lo que significa.
+ *
  * Repaso UI 2026-09-06: la lista de equipos (uno por fila, chips por
  * causa) no cabía en una pantalla y no decía lo que importa: CUÁNTOS y
- * POR QUÉ. Ahora se agrupa por causa —una barra por bloqueo con su
- * recuento de equipos— y cada causa se despliega a sus equipos, que
- * llevan a Inventory. La cifra total sigue siendo la del embudo.
+ * POR QUÉ.
  */
-export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
-  const agility = pqc?.agility;
-  const blockers = Array.isArray(agility?.blockers) ? agility.blockers : [];
+function CauseGroups({ items, labelOf, hintOf, chipHintOf, barColor, onSelectDevice, causeOrder = null }) {
   const [open, setOpen] = React.useState(() => new Set());
 
-  // Una fila por causa (runtime), con sus equipos deduplicados.
   const groups = React.useMemo(() => {
     const m = new Map();
-    for (const b of blockers) {
-      const key = b.runtime || "other";
-      if (!m.has(key)) m.set(key, { runtime: key, devices: new Map(), versions: new Set() });
+    for (const it of items) {
+      const key = it.cause || "other";
+      if (!m.has(key)) m.set(key, { cause: key, devices: new Map(), versions: new Set() });
       const g = m.get(key);
-      if (!g.devices.has(b.agentId)) g.devices.set(b.agentId, { agentId: b.agentId, host: b.host || b.agentId, versions: [] });
-      g.devices.get(b.agentId).versions.push(b.version);
-      if (b.version) g.versions.add(String(b.version));
+      if (!g.devices.has(it.agentId)) g.devices.set(it.agentId, { agentId: it.agentId, host: it.host || it.agentId, versions: [], item: it });
+      g.devices.get(it.agentId).versions.push(it.version);
+      if (it.version) g.versions.add(String(it.version));
     }
-    return [...m.values()].sort((a, b) => b.devices.size - a.devices.size);
-  }, [blockers]);
-  const totalDevices = new Set(blockers.map((b) => b.agentId)).size;
+    const rank = (c) => (causeOrder ? causeOrder.indexOf(c) : -1);
+    return [...m.values()].sort((a, b) => (causeOrder ? rank(a.cause) - rank(b.cause) : b.devices.size - a.devices.size));
+  }, [items, causeOrder]);
   const max = Math.max(1, ...groups.map((g) => g.devices.size));
   const toggle = (key) =>
     setOpen((prev) => {
@@ -182,74 +183,135 @@ export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
     });
 
   return (
+    <Stack spacing={1.25}>
+      {groups.map((g) => {
+        const label = labelOf(g.cause);
+        const isOpen = open.has(g.cause);
+        const versions = [...g.versions].slice(0, 6);
+        return (
+          <Box key={g.cause}>
+            <Box
+              role="button"
+              tabIndex={0}
+              aria-expanded={isOpen}
+              aria-label={`${label}: ${g.devices.size} device(s)`}
+              onClick={() => toggle(g.cause)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggle(g.cause);
+                }
+              }}
+              sx={{ cursor: "pointer", borderRadius: 0.5, px: 0.5, mx: -0.5, "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}` } }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
+                <Tooltip title={hintOf(g.cause) || ""} arrow>
+                  <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: "help" }}>
+                    {label}
+                    {versions.length ? <Box component="span" sx={{ color: TEXT_MUTED, fontWeight: 400 }}> · seen: {versions.join(", ")}{g.versions.size > 6 ? "…" : ""}</Box> : null}
+                  </Typography>
+                </Tooltip>
+                <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, whiteSpace: "nowrap" }}>
+                  {g.devices.size} device{g.devices.size === 1 ? "" : "s"}
+                </Typography>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={(g.devices.size / max) * 100}
+                sx={{ mt: 0.5, height: 6, borderRadius: 3, bgcolor: BRAND.surfaceMuted, "& .MuiLinearProgress-bar": { borderRadius: 3, bgcolor: barColor } }}
+              />
+            </Box>
+            {isOpen ? (
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.5 }}>
+                {[...g.devices.values()].map((d) => (
+                  <Tooltip key={d.agentId} title={chipHintOf(g.cause, d)} arrow>
+                    <Chip
+                      size="small"
+                      label={d.host}
+                      onClick={onSelectDevice ? () => onSelectDevice(d) : undefined}
+                      sx={{ height: 22, fontSize: TEXT.xs }}
+                    />
+                  </Tooltip>
+                ))}
+              </Stack>
+            ) : null}
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
+export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
+  const agility = pqc?.agility;
+  const items = React.useMemo(
+    () => (Array.isArray(agility?.blockers) ? agility.blockers : []).map((b) => ({ ...b, cause: b.runtime })),
+    [agility]
+  );
+  const totalDevices = new Set(items.map((b) => b.agentId)).size;
+
+  return (
     <SectionPaper sx={{ p: 2 }}>
       <PanelTitle hint="Devices running a runtime with no post-quantum support. These are not a scheduling problem — they cannot migrate at all until the runtime is upgraded.">
         Devices that cannot migrate yet{totalDevices ? ` (${totalDevices})` : ""}
       </PanelTitle>
 
-      {groups.length === 0 ? (
+      {items.length === 0 ? (
         <Empty>
           Nothing we know how to judge is blocking migration. That is not the same as
           &ldquo;ready&rdquo;.
         </Empty>
       ) : (
-        <Stack spacing={1.25}>
-          {groups.map((g) => {
-            const label = (RUNTIME_LABEL[g.runtime] || ((_a) => g.runtime))(agility);
-            const isOpen = open.has(g.runtime);
-            const versions = [...g.versions].slice(0, 6);
-            return (
-              <Box key={g.runtime}>
-                <Box
-                  role="button"
-                  tabIndex={0}
-                  aria-expanded={isOpen}
-                  aria-label={`${label}: ${g.devices.size} device(s)`}
-                  onClick={() => toggle(g.runtime)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      toggle(g.runtime);
-                    }
-                  }}
-                  sx={{ cursor: "pointer", borderRadius: 0.5, px: 0.5, mx: -0.5, "&:hover": { bgcolor: BRAND.rowHover }, "&:focus-visible": { outline: `2px solid ${BRAND.tealText}` } }}
-                >
-                  <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
-                    <Tooltip title={RUNTIME_HINT[g.runtime] || ""} arrow>
-                      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600, cursor: "help" }}>
-                        {label}
-                        {versions.length ? <Box component="span" sx={{ color: TEXT_MUTED, fontWeight: 400 }}> · seen: {versions.join(", ")}{g.versions.size > 6 ? "…" : ""}</Box> : null}
-                      </Typography>
-                    </Tooltip>
-                    <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, whiteSpace: "nowrap" }}>
-                      {g.devices.size} device{g.devices.size === 1 ? "" : "s"}
-                    </Typography>
-                  </Stack>
-                  <LinearProgress
-                    variant="determinate"
-                    value={(g.devices.size / max) * 100}
-                    sx={{ mt: 0.5, height: 6, borderRadius: 3, bgcolor: BRAND.surfaceMuted, "& .MuiLinearProgress-bar": { borderRadius: 3, bgcolor: BRAND.alert.high } }}
-                  />
-                </Box>
-                {isOpen ? (
-                  <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.5 }}>
-                    {[...g.devices.values()].map((d) => (
-                      <Tooltip key={d.agentId} title={`${g.runtime} ${d.versions.filter(Boolean).join(", ")} — open in Inventory`} arrow>
-                        <Chip
-                          size="small"
-                          label={d.host}
-                          onClick={onSelectDevice ? () => onSelectDevice(d) : undefined}
-                          sx={{ height: 22, fontSize: TEXT.xs }}
-                        />
-                      </Tooltip>
-                    ))}
-                  </Stack>
-                ) : null}
-              </Box>
-            );
-          })}
-        </Stack>
+        <CauseGroups
+          items={items}
+          labelOf={(cause) => (RUNTIME_LABEL[cause] || (() => cause))(agility)}
+          hintOf={(cause) => RUNTIME_HINT[cause]}
+          chipHintOf={(cause, d) => `${cause} ${d.versions.filter(Boolean).join(", ")} — open in Inventory`}
+          barColor={BRAND.alert.high}
+          onSelectDevice={onSelectDevice}
+        />
       )}
+    </SectionPaper>
+  );
+}
+
+// ── 4b. Can migrate — need a fix (ADR-0024) ──────────────────────────
+
+const FIX_ORDER = Object.keys(OS_TLS_FIX_STATE);
+
+/**
+ * ADR-0024 — el complemento de «cannot migrate yet»: equipos cuya pila TLS
+ * del sistema SÍ puede negociar intercambio de claves post-cuántico y aún
+ * no lo hace. No son un bloqueo; en rojo no. Sólo lectura: el panel dice
+ * cuántos y por qué, y lleva a Inventory.
+ *
+ * Sin `agility.fixable` (backend anterior) o vacío, no se pinta: un «nada
+ * que arreglar» aquí se leería como «todo listo», y un equipo sin medir no
+ * está en esta lista.
+ */
+export function OsTlsFixablePanel({ pqc, onSelectDevice }) {
+  const fixable = pqc?.agility?.fixable;
+  const items = React.useMemo(
+    () => (Array.isArray(fixable) ? fixable : []).filter((f) => OS_TLS_FIX_STATE[f.state]).map((f) => ({ ...f, cause: f.state })),
+    [fixable]
+  );
+  if (items.length === 0) return null;
+  const totalDevices = new Set(items.map((f) => f.agentId)).size;
+
+  return (
+    <SectionPaper sx={{ p: 2 }}>
+      <PanelTitle hint="The operating system's own TLS stack supports post-quantum (ML-KEM) key exchange but does not use it yet. Not a blocker: each one is a configuration change, a group policy or an OS update away.">
+        Devices that can migrate — need a fix ({totalDevices})
+      </PanelTitle>
+      <CauseGroups
+        items={items}
+        causeOrder={FIX_ORDER}
+        labelOf={(cause) => OS_TLS_FIX_STATE[cause].label}
+        hintOf={(cause) => OS_TLS_FIX_STATE[cause].hint}
+        chipHintOf={(_cause, d) => `${d.item?.reason || ""} — open in Inventory`}
+        barColor={BRAND.teal}
+        onSelectDevice={onSelectDevice}
+      />
     </SectionPaper>
   );
 }

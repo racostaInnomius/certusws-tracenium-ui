@@ -57,6 +57,7 @@ vi.mock("../api/policies", async (importOriginal) => {
 vi.mock("../hooks/useEffectiveTenantId", () => ({ useEffectiveTenantId: () => "1" }));
 
 import CryptoDiscovery from "./CryptoDiscovery";
+import { pqKemChip } from "../components/CryptoDiscovery/osTlsFixStates";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 beforeEach(() => {
@@ -129,5 +130,25 @@ describe("Inventory: una lista, dos agrupaciones", () => {
     expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ kem: "hybrid" }));
     expect(await screen.findByText(/Key exchange: Hybrid ML-KEM/)).toBeInTheDocument();
     expect(screen.getByText(/The exposure block counts services/)).toBeInTheDocument();
+  });
+});
+
+
+// ADR-0024 F2: la columna ML-KEM usa el MISMO estado que el roadmap. Un
+// Windows con el grupo apagado no es «No hybrid» en rojo: está a un ajuste.
+describe("pqKemChip — columna ML-KEM de Inventory (ADR-0024)", () => {
+  it("⭐ cada estado con su etiqueta; rojo sólo para lo que no puede", () => {
+    const m = (state, supported = false) => pqKemChip({ supported, state, group: "X25519MLKEM768" });
+    expect(m("ready", true).label).toBe("Hybrid OK");
+    expect(m("needs_fix").label).toBe("Off — can enable");
+    expect(m("policy_managed").label).toBe("Off — set by GPO");
+    expect(m("needs_os_update").label).toBe("Needs OS update");
+    expect(m("cannot_migrate").label).toBe("No hybrid");
+    expect(m("needs_fix").color).not.toBe(m("cannot_migrate").color);
+  });
+
+  it("un backend sin `state` sigue diciendo lo medido, y sin medición no hay veredicto", () => {
+    expect(pqKemChip({ supported: false, group: "X25519MLKEM768" }).label).toBe("No hybrid");
+    expect(pqKemChip({ supported: null, group: "X25519MLKEM768" })).toMatchObject({ label: "Not measured", outlined: true });
   });
 });

@@ -75,6 +75,9 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
   const systemsTotal = overview?.roadmap?.systemsTotal ?? null;
   const systemsPlanned = overview?.roadmap?.systemsPlanned ?? 0;
   const blocked = exposure?.devicesBlocked ?? overview?.roadmap?.devicesBlocked ?? null;
+  // ADR-0024: los que PUEDEN migrar con un ajuste. null (backend anterior o
+  // sin evaluar) no se pinta como cero.
+  const fixable = exposure?.devicesFixable ?? null;
 
   const pairs = [
     {
@@ -91,7 +94,10 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
     },
     {
       label: "Devices that cannot migrate yet", value: blocked, total: devicesReporting ?? null, color: blocked > 0 ? BRAND.alert.warningText : BRAND.dark,
-      hint: "Runtime or OS without post-quantum primitives.", onClick: () => onOpenRoadmap?.()
+      hint: "Runtime or OS without post-quantum primitives.", onClick: () => onOpenRoadmap?.(),
+      // Debajo, sin quinta columna: el complemento del mismo par.
+      sub: fixable > 0 ? `+ ${fmt(fixable)} can migrate with a fix` : null,
+      subHint: "The OS TLS stack supports post-quantum key exchange but has it turned off, is governed by a group policy, or needs an update."
     }
   ];
 
@@ -140,6 +146,11 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
               <Typography component="span" sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: p.color }}>{fmt(p.value)}</Typography>
               <Typography component="span" sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>/ {fmt(p.total)}</Typography>
             </Stack>
+            {p.sub ? (
+              <Typography title={p.subHint} sx={{ fontSize: TEXT.xs, color: BRAND.tealText, fontWeight: 600, lineHeight: 1.2 }}>
+                {p.sub}
+              </Typography>
+            ) : null}
           </Box>
         ))}
       </Stack>

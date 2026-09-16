@@ -30,6 +30,21 @@ afterEach(() => {
 });
 
 describe("ReadinessStrip", () => {
+  it("⭐ ADR-0024: bajo «cannot migrate yet» dice cuántos más pueden migrar con un ajuste, y no lo suma al bloqueo", () => {
+    render(<ReadinessStrip exposure={{ ...EXPOSURE, devicesFixable: 29 }} overview={OVERVIEW} devicesReporting={54} />);
+    expect(screen.getByText("+ 29 can migrate with a fix")).toBeInTheDocument();
+    // El par sigue siendo 20 bloqueados / 54.
+    expect(screen.getByText("Devices that cannot migrate yet").parentElement).toHaveTextContent("20/ 54");
+  });
+
+  it("sin el dato (backend anterior) o a cero no se pinta: null no es «ninguno»", () => {
+    render(<ReadinessStrip exposure={EXPOSURE} overview={OVERVIEW} devicesReporting={54} />);
+    expect(screen.queryByText(/can migrate with a fix/)).not.toBeInTheDocument();
+    cleanup();
+    render(<ReadinessStrip exposure={{ ...EXPOSURE, devicesFixable: 0 }} overview={OVERVIEW} devicesReporting={54} />);
+    expect(screen.queryByText(/can migrate with a fix/)).not.toBeInTheDocument();
+  });
+
   it("⭐ el porcentaje sale de propios post-cuánticos + servicios híbridos sobre propios + servicios medidos, y lo dice", () => {
     render(<ReadinessStrip exposure={EXPOSURE} overview={OVERVIEW} devicesReporting={54} />);
     // (0 + 20) / (151 + 64) = 9 %

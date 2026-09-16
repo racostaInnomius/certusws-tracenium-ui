@@ -56,7 +56,7 @@ import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessH
 // 2026-09-04.
 // «Trust anchors to replace» vive en la pestaña Trust anchors desde el
 // repaso UI 2026-09-06: una lista de anclas es cosa de esa pestaña.
-import { AgilityBlockersPanel, CnsaPanel } from "./PqcReadinessPanels";
+import { AgilityBlockersPanel, CnsaPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -636,6 +636,11 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
           <AgilityBlockersPanel
             pqc={pqc}
             // Un equipo bloqueado → sus certificados en Inventory (vista por equipo).
+            onSelectDevice={onDrillDown ? (d) => onDrillDown({ view: "devices", search: d.host || d.agentId }) : undefined}
+          />
+          {/* ADR-0024: su complemento — pueden migrar, pero les falta un ajuste. */}
+          <OsTlsFixablePanel
+            pqc={pqc}
             onSelectDevice={onDrillDown ? (d) => onDrillDown({ view: "devices", search: d.host || d.agentId }) : undefined}
           />
           <CnsaPanel pqc={pqc} onSelect={onDrillDown ? (f) => onDrillDown({ ...f, hasPrivateKey: true }) : undefined} />
