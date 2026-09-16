@@ -47,6 +47,7 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import StaffSubscriptions from "../components/Billing/StaffSubscriptions";
 import { formatDate } from "../utils/format";
+import { tenantDeleteErrorMessage } from "../utils/tenantDeleteError";
 
 // Fase 2 — SummaryCard aligned with the Tokens page version. Same
 // shell tokens; `accent` is the semantic color of the big number.
@@ -747,10 +748,7 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
       await reloadTenants();
     } catch (e) {
       console.error(e);
-      const errorMessage = String(e?.message || "");
-      const friendlyMessage = errorMessage.includes("TENANT_HAS_ACTIVE_MEMBERS")
-        ? "Tenant has active members and cannot be deleted. Remove its members first."
-        : "Failed to delete tenant";
+      const friendlyMessage = tenantDeleteErrorMessage(e);
 
       // Shown inline in the dialog (stays visible until the user acts) in
       // addition to the toast (which auto-hides after 4.5s and is easy to
