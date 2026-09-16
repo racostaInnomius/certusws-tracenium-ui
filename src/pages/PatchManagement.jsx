@@ -42,6 +42,7 @@ import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/
 import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
 import {
   campaignState,
+  describePatchError,
   snapshotState,
   campaignStrip,
   coverageLine,
@@ -1185,7 +1186,7 @@ export default function PatchManagement({ onNavigate }) {
         if (!c) return <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>;
         const s = campaignState(c.state);
         const when = c.patch?.finishedAt || c.patch?.startedAt || null;
-        const title = c.patch?.lastError || (when ? `Last attempt: ${when}` : "");
+        const title = describePatchError(c.patch?.lastError) || (when ? `Last attempt: ${when}` : "");
         return <CampaignChip label={s.label} tone={s.tone} title={title} />;
       }
     },

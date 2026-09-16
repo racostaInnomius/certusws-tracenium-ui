@@ -30,6 +30,30 @@ export function campaignState(state) {
 }
 
 /**
+ * El `lastError` del job de parche, legible para el operador.
+ *
+ * ⚠️ Las puertas del backend escriben CÓDIGOS en `last_error`, no frases: sin
+ * esto el chip «Waiting for window» enseñaba `held:maintenance_window_closed`
+ * en el tooltip. Sólo se traducen los códigos de las puertas (ventana +
+ * snapshot); cualquier otro texto —el mensaje real del agente, p. ej.— pasa
+ * tal cual, porque reescribirlo escondería el diagnóstico.
+ */
+export const PATCH_ERROR_TEXT = {
+  "held:maintenance_window_closed":
+    "Held back at delivery: the maintenance window had closed. It goes out when the next window opens.",
+  maintenance_window_closed_after_snapshot:
+    "Not installed: the maintenance window closed after the pre-patch snapshot was taken. Dispatch again to patch with a fresh snapshot in the next window.",
+  "deferred:window_check_unavailable": "Maintenance windows could not be read — delivery will be retried.",
+  snapshot_no_response:
+    "Not installed: the Infrastructure Gateway did not answer the pre-patch snapshot request in time.",
+};
+
+export function describePatchError(lastError) {
+  if (!lastError) return null;
+  return PATCH_ERROR_TEXT[lastError] || lastError;
+}
+
+/**
  * Qué decir del snapshot de un equipo.
  *
  * `applies` sale de `snapshotApplies` del backend, calculado con la misma regla

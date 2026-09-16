@@ -1,7 +1,7 @@
 // src/components/patch-management/campaignState.test.js
 
 import { describe, it, expect } from "vitest";
-import { campaignState, snapshotState, campaignStrip, coverageLine } from "./campaignState";
+import { campaignState, snapshotState, campaignStrip, coverageLine, describePatchError } from "./campaignState";
 
 describe("campaignState", () => {
   it("⭐ «esperando ventana» y «esperando snapshot» no se colapsan", () => {
@@ -77,5 +77,30 @@ describe("coverageLine", () => {
   it("cuenta los equipos que han recibido algún parche, sobre los enrolados", () => {
     const c = coverageLine({ enrolled: 54, reporting: 53 }, { byState: { never_ran: 50 } });
     expect(c).toEqual({ enrolled: 54, withJob: 4, reporting: 53 });
+  });
+});
+
+describe("describePatchError", () => {
+  it("🔴 el PC retenido al entregar no enseña el código crudo", () => {
+    // El backend (6e282df) devuelve a awaiting_window un patch_install que iba a
+    // salir con la ventana cerrada y deja este código en last_error.
+    const text = describePatchError("held:maintenance_window_closed");
+    expect(text).not.toMatch(/held:|_/);
+    expect(text).toMatch(/next window opens/);
+  });
+
+  it("los demás códigos de las puertas también se leen", () => {
+    for (const code of ["maintenance_window_closed_after_snapshot", "deferred:window_check_unavailable", "snapshot_no_response"]) {
+      expect(describePatchError(code)).not.toBe(code);
+    }
+  });
+
+  it("⚠️ un error del agente pasa TAL CUAL: reescribirlo escondería el diagnóstico", () => {
+    expect(describePatchError("WUA install failed: 0x80240022")).toBe("WUA install failed: 0x80240022");
+  });
+
+  it("sin error, null", () => {
+    expect(describePatchError(null)).toBeNull();
+    expect(describePatchError("")).toBeNull();
   });
 });

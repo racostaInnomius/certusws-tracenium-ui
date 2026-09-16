@@ -131,6 +131,30 @@ describe("Patch Management — estado de campaña", () => {
     expect(within(grid()).getByText("N/A")).toBeInTheDocument();
   });
 
+  it("🔴 el PC retenido al entregar explica la espera en el tooltip, sin el código crudo", async () => {
+    // El backend devuelve a awaiting_window un patch_install que iba a salir con
+    // la ventana cerrada (PC encendido a las 08:00) y deja un CÓDIGO en last_error.
+    const held = {
+      ...CAMPAIGN,
+      devices: CAMPAIGN.devices.map((d) =>
+        d.deviceId === "a-3"
+          ? {
+              ...d,
+              state: "awaiting_window",
+              patch: { jobId: "j3", status: "awaiting_window", startedAt: null, finishedAt: null, lastError: "held:maintenance_window_closed", rebootRequested: false, returnedFromReboot: null },
+            }
+          : d
+      ),
+    };
+    mount({ campaign: held });
+    await waitFor(() => expect(within(grid()).getByText("Waiting for window")).toBeInTheDocument());
+
+    fireEvent.mouseOver(within(grid()).getByText("Waiting for window"));
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/maintenance window had closed/i);
+    expect(tip).not.toHaveTextContent("held:maintenance_window_closed");
+  });
+
   it("⚠️ sin respuesta de campaña la página sigue, sin inventar ceros", async () => {
     // Una respuesta vacía diría «0 of 0 enrolled devices»: una afirmación sobre
     // la flota, y encima falsa.
