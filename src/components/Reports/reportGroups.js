@@ -93,8 +93,8 @@ export const REPORT_PAGES = [
   { page: "remote-control",    label: "Remote Control",      group: "RCP",    plugin: "rcp", borrows: null },
   { page: "patch",             label: "Patch Management",    group: "PMP",    plugin: "pmp", borrows: null },
   { page: "cdp",               label: "Crypto Discovery",    group: "CDP",    plugin: "cdp", borrows: null },
-  // ADR-0022. Sin botón "Report" todavía, y por eso no estaba en esta lista:
-  // la página existía en el menú y no aparecía ni como ausencia.
+  // ADR-0022. No estaba en esta lista y la página no aparecía ni como ausencia.
+  // Informe propio desde G3 del plan de cobertura (`asp.assessment`).
   { page: "assessments",       label: "Assessment Suite",  group: "ASP",    plugin: "asp", borrows: null },
   { page: "device-management", label: "MDM / MAM",           group: "MDM",    plugin: "mdm", borrows: "global.fleet-health" },
   // Informe propio desde G2 del plan de cobertura (`alerts.activity`).

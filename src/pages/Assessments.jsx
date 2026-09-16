@@ -32,6 +32,7 @@ import { useAuthContext } from "../auth/AuthContext";
 import { BRAND, LAYOUT, TEXT } from "../theme/brand";
 import { formatDate, formatRelative } from "../utils/format";
 import PageHeader from "../components/common/PageHeader";
+import GoToReportButton from "../components/common/GoToReportButton";
 import SectionPaper from "../components/common/SectionPaper";
 import AsyncState from "../components/common/AsyncState";
 import BrandSnackbar from "../components/common/BrandSnackbar";
@@ -68,6 +69,9 @@ function upgradeMessage(error) {
   }
   return null;
 }
+
+/** El informe del motor de esta página (G3/N4). Pide ADMIN/OWNER, como activar. */
+const ASP_REPORT_KEY = "asp.assessment";
 
 export default function Assessments({ onNavigate }) {
   const { auth } = useAuthContext();
@@ -231,9 +235,14 @@ export default function Assessments({ onNavigate }) {
             subtitle="Security and best-practice assessments of your services, starting with Active Directory — run by a domain controller you choose, with no credentials to hand over."
             icon={<DomainVerificationOutlinedIcon />}
             actions={
-              <Button variant="outlined" startIcon={<RefreshRoundedIcon />} onClick={refresh} disabled={loading} sx={{ textTransform: "none", color: BRAND.tealText, borderColor: BRAND.borderStrong }}>
-                Refresh
-              </Button>
+              <>
+                {canEdit && !upgrade ? (
+                  <GoToReportButton onNavigate={onNavigate} reportKey={ASP_REPORT_KEY} tooltip="Assessment Suite report" />
+                ) : null}
+                <Button variant="outlined" startIcon={<RefreshRoundedIcon />} onClick={refresh} disabled={loading} sx={{ textTransform: "none", color: BRAND.tealText, borderColor: BRAND.borderStrong }}>
+                  Refresh
+                </Button>
+              </>
             }
           />
 
