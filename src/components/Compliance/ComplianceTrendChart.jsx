@@ -59,6 +59,19 @@ function shortLabel(iso) {
 // junto a las de cada benchmark.
 const FAMILY_SERIES_LABEL = { cis: "CIS Benchmarks (all)", disa_stig: "DISA STIG (all)" };
 
+// Las series de familia ("CIS Benchmarks (all)") van primero y con el
+// primer color: son la línea que un cliente lee; los benchmarks sueltos
+// van detrás, por etiqueta, para que el orden no dependa de en qué orden
+// los devolvió el backend ese día.
+export function orderSeries(keys) {
+  return [...keys].sort((a, b) => {
+    const fa = String(a).startsWith("family:");
+    const fb = String(b).startsWith("family:");
+    if (fa !== fb) return fa ? -1 : 1;
+    return prettyFramework(a).localeCompare(prettyFramework(b));
+  });
+}
+
 function prettyFramework(key) {
   const raw = String(key);
   if (raw.startsWith("family:")) {
@@ -197,7 +210,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
             <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: TEXT.xs, fill: BRAND.gray }} axisLine={false} tickLine={false} width={30} />
             <Tooltip contentStyle={{ fontSize: TEXT.sm, borderRadius: 8, border: `1px solid ${BRAND.border}` }} />
             <Legend wrapperStyle={{ fontSize: TEXT.xs }} />
-            {fw.frameworks.map((f, i) => (
+            {orderSeries(fw.frameworks).map((f, i) => (
               <Line
                 key={f}
                 type="monotone"

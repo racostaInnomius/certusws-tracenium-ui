@@ -9,7 +9,7 @@ vi.mock("../../api/compliance", () => ({
   getFrameworkComplianceTimeseries: vi.fn(),
 }));
 import { getFleetComplianceTimeseries, getFrameworkComplianceTimeseries } from "../../api/compliance";
-import ComplianceTrendChart from "./ComplianceTrendChart";
+import ComplianceTrendChart, { orderSeries } from "./ComplianceTrendChart";
 
 afterEach(() => {
   cleanup();
@@ -73,6 +73,19 @@ describe("ComplianceTrendChart", () => {
     await waitFor(() => expect(getFrameworkComplianceTimeseries).toHaveBeenCalledWith(30));
     // No per-framework empty state shown → the series rendered.
     expect(screen.queryByText(/No per-framework data yet/i)).not.toBeInTheDocument();
+  });
+
+  it("orders the series: family lines first, then benchmarks by label, whatever order the backend sent", () => {
+    // Recharts no pinta la leyenda en jsdom (ancho 0), así que se fija la
+    // función que decide el orden, que es lo que importa.
+    expect(orderSeries(["nist_csf_2.0", "cis_windows_11_v3.0", "family:cis", "cis_windows_10_v5.0.0", "family:disa_stig"])).toEqual([
+      "family:cis",
+      "family:disa_stig",
+      "cis_windows_10_v5.0.0",
+      "cis_windows_11_v3.0",
+      "nist_csf_2.0",
+    ]);
+    expect(orderSeries([])).toEqual([]);
   });
 
   it("shows a per-framework empty state before any data is recorded", async () => {
