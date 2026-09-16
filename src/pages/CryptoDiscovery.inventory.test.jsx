@@ -21,7 +21,10 @@ vi.mock("../auth/AuthContext", () => ({
 
 const listCdpCertificates = vi.fn(async () => ({ items: [], total: 0 }));
 const listCdpDevices = vi.fn(async () => ({
-  items: [{ agentId: "a1", host: "srv-01", platform: "windows", certCount: 3, withPrivateKey: 1, expired: 1, expiring: 0, withFlags: 3, lastSeen: "2026-09-04T00:00:00Z" }],
+  items: [
+    { agentId: "a1", host: "srv-01", platform: "windows", certCount: 3, withPrivateKey: 1, expired: 1, expiring: 0, withFlags: 3, lastSeen: "2026-09-04T00:00:00Z", osBuild: "26200", ubr: 6725, displayVersion: "25H2", pqKem: { supported: false, group: "X25519MLKEM768", method: "loopback_schannel", detail: "refused" } },
+    { agentId: "a2", host: "srv-02", platform: "windows", certCount: 1, withPrivateKey: 0, expired: 0, expiring: 0, withFlags: 0, lastSeen: "2026-09-04T00:00:00Z" }
+  ],
   total: 1
 }));
 
@@ -79,6 +82,12 @@ describe("Inventory: una lista, dos agrupaciones", () => {
     // no «Certs» (todo el equipo).
     await screen.findByText("srv-01");
     expect(screen.getByText("Matching")).toBeInTheDocument();
+    // 15-sep: build con revision (UBR) y DisplayVersion, y el ML-KEM MEDIDO
+    // por el agente; un equipo sin medicion enseña «—», no un veredicto.
+    expect(screen.getByText("OS build")).toBeInTheDocument();
+    expect(screen.getByText("26200.6725 · 25H2")).toBeInTheDocument();
+    expect(screen.getByText("No hybrid")).toBeInTheDocument();
+    expect(screen.queryByText("Hybrid OK")).not.toBeInTheDocument();
     // El export es de certificados: en la vista por equipo no se ofrece.
     expect(screen.queryByRole("button", { name: /export csv/i })).not.toBeInTheDocument();
   });

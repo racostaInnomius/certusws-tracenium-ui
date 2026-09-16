@@ -167,6 +167,7 @@ const TAB_SX = {
 // ── helpers ──────────────────────────────────────────────────────────
 
 /** Intercambio de claves negociado por el servicio TLS que sirve el certificado. */
+const MONO = "ui-monospace, Menlo, monospace";
 const KEM_LABELS = { hybrid: "Hybrid ML-KEM", classical: "Classical only", unknown: "Not determined" };
 
 const STATUS_META = {
@@ -853,6 +854,42 @@ function CdpInventoryTab({ refreshNonce }) {
       valueGetter: (value, row) => value || row.agentId,
     },
     { field: "platform", headerName: "Platform", width: 110 },
+    {
+      // Lo que el agente lee del registro (15-sep): build con revision y
+      // DisplayVersion. Antes solo habia «10.0.26200», que no dice si el
+      // parche con los grupos ML-KEM esta instalado.
+      field: "osBuild",
+      headerName: "OS build",
+      width: 150,
+      description: "Windows build with its update revision (UBR) and DisplayVersion, as read by the agent",
+      valueGetter: (value, row) => (value ? `${value}${row.ubr != null ? `.${row.ubr}` : ""}${row.displayVersion ? ` · ${row.displayVersion}` : ""}` : ""),
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+          {params.value ? <Typography sx={{ fontFamily: MONO, fontSize: TEXT.xs }}>{params.value}</Typography> : <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>—</Typography>}
+        </Box>
+      ),
+    },
+    {
+      // Medido por el agente en un handshake de bucle local contra la pila
+      // TLS del sistema, no deducido del build.
+      field: "pqKem",
+      headerName: "ML-KEM",
+      width: 120,
+      description: "Whether the system TLS stack negotiated hybrid ML-KEM key exchange on a loopback handshake run by the agent",
+      valueGetter: (value) => (value?.supported === true ? "yes" : value?.supported === false ? "no" : value ? "not measured" : ""),
+      renderCell: (params) => {
+        const v = params.row.pqKem;
+        if (!v) return <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}><Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>—</Typography></Box>;
+        const label = v.supported === true ? "Hybrid OK" : v.supported === false ? "No hybrid" : "Not measured";
+        const bg = v.supported === true ? BRAND.alert.successSoft : v.supported === false ? BRAND.alert.errorSoft : "transparent";
+        const color = v.supported === true ? BRAND.alert.successText : v.supported === false ? BRAND.alert.errorText : TEXT_MUTED;
+        return (
+          <Tooltip title={v.detail || v.method || ""} arrow>
+            <Chip size="small" label={label} variant={v.supported == null ? "outlined" : "filled"} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: bg, color, fontWeight: 700 }} />
+          </Tooltip>
+        );
+      },
+    },
     { field: "certCount", headerName: "Matching", width: 100, description: "Certificates on this device that match the current filters" },
     { field: "withPrivateKey", headerName: "With key", width: 100 },
     {
