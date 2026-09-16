@@ -25,12 +25,11 @@ import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
-// No hay tipo "jobs" en el catálogo de informes, y no se inventa uno: la clave
-// tiene que existir en `REPORT_REGISTRY` o Reports avisa de que no está
-// disponible. El informe de flota es el que cuenta los trabajos del periodo
-// (`activity.jobsRun`, con su total y sus fallos), que es exactamente el
-// resumen que esta página no da fuera de la ventana que tienes delante.
-const FLEET_HEALTH_KEY = "global.fleet-health";
+// Informe propio desde el 16-sep (N9, decisión del owner): `ops.job-execution`
+// cuenta el mes entero — por tipo, quién lanzó cada job, por qué no terminaron,
+// lo repetido y lo abierto — que es lo que esta página no da fuera de la
+// ventana que tienes delante. Antes prestaba el informe de flota.
+const JOB_EXECUTION_KEY = "ops.job-execution";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -618,10 +617,6 @@ export default function Jobs({ onNavigate }) {
   // today's existing error handling on those actions; splitting that out
   // into its own finer-grained gate is Phase 4, not this pass.
   const [myPermissions, setMyPermissions] = React.useState(null);
-  // El mismo endpoint devuelve el rol EFECTIVO que resuelve el servidor, y el
-  // botón de informe lo necesita: `auth.role` no es el rol sobre el cliente
-  // activo en una sesión de cartera MSP.
-  const [myRole, setMyRole] = React.useState(null);
 
   React.useEffect(() => {
     if (!tenantId) return;
@@ -630,7 +625,6 @@ export default function Jobs({ onNavigate }) {
       .then((resp) => {
         if (!alive) return;
         setMyPermissions(new Set(Array.isArray(resp?.permissions) ? resp.permissions : []));
-        setMyRole(resp?.role ?? null);
       })
       .catch(() => {
         if (!alive) return;
@@ -643,10 +637,10 @@ export default function Jobs({ onNavigate }) {
 
   const capabilitiesLoading = isActiveMember && myPermissions === null;
   const canManageJobs = isActiveMember && Boolean(myPermissions?.has("jobs"));
-  // ⚠️ No es `canManageJobs`: aquello es la capacidad `jobs` —que esta página
-  // concede a cualquier miembro con ella, a propósito— y esto es el ROL.
-  // `global.fleet-health` declara `minRole: ["ADMIN","OWNER"]`.
-  const canReport = isActiveMember && ["ADMIN", "OWNER"].includes(String(myRole || ""));
+  // El informe pide lo mismo que esta página: la capacidad `jobs`, sin rol
+  // (`ops.job-execution` no declara minRole; el historial lo lee cualquier
+  // miembro con ella). Antes pedía ADMIN/OWNER porque prestaba el de flota.
+  const canReport = canManageJobs;
 
   // Jobs metadata (known devices + job types): a parameterless on-mount fetch,
   // routed through useCachedFetch for stale-while-revalidate + dedup +
@@ -1961,8 +1955,8 @@ export default function Jobs({ onNavigate }) {
             {canReport ? (
               <GoToReportButton
                 onNavigate={onNavigate}
-                reportKey={FLEET_HEALTH_KEY}
-                tooltip="Fleet health report"
+                reportKey={JOB_EXECUTION_KEY}
+                tooltip="Job execution report"
               />
             ) : null}
             <RefreshControl

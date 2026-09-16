@@ -68,7 +68,7 @@ describe("Jobs — cabecera", () => {
     // No hay tipo "jobs" en el catálogo. El informe de flota cuenta los
     // trabajos del periodo con sus fallos, que es el resumen que esta página
     // no da fuera de la ventana que tienes delante.
-    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("global.fleet-health");
+    expect(new URL(window.location.href).searchParams.get("reportKey")).toBe("ops.job-execution");
   });
 
   it("va a la misma altura que el Refresh de al lado", async () => {
@@ -79,15 +79,18 @@ describe("Jobs — cabecera", () => {
     expect(refresh.className).not.toMatch(/sizeSmall/);
   });
 
-  it("a un miembro con la capacidad `jobs` pero sin ADMIN/OWNER no se le ofrece", async () => {
-    // ⚠️ Esta página es visible para cualquier miembro con la capacidad
-    // `jobs`, a propósito (ADR-0011 fase 3). El informe, en cambio, pide ROL:
-    // son dos ejes distintos y aquí se cruzan de verdad.
+  it("un miembro con la capacidad `jobs` sin ser ADMIN/OWNER SÍ lo ve: el informe pide lo mismo que la página", async () => {
     capabilities = { role: "Operator", permissions: ["jobs"] };
-
     mount();
+    expect(await screen.findByRole("button", { name: /^report$/i })).toBeTruthy();
+  });
 
-    expect(await screen.findByRole("button", { name: /^refresh$/i })).toBeTruthy();
+  it("⚠️ sin la capacidad `jobs` no se ofrece", async () => {
+    capabilities = { role: "ADMIN", permissions: ["assets_view"] };
+    mount();
+    // Sin la capacidad la página no enseña su cabecera de acciones completa;
+    // basta con que, resueltas las capacidades, no haya botón de informe.
+    await new Promise((r) => setTimeout(r, 100));
     expect(screen.queryByRole("button", { name: /^report$/i })).toBeNull();
   });
 });

@@ -36,6 +36,7 @@ export const REPORT_GROUP_LABELS = {
   MDM: "MDM / MAM",
   Alerts: "Alerts",
   PKI: "PKI",
+  Jobs: "Jobs",
   MSP: "Managed service (MSP)",
 };
 
@@ -100,9 +101,8 @@ export const REPORT_PAGES = [
   { page: "device-management", label: "MDM / MAM",           group: "MDM",    plugin: "mdm", borrows: "global.fleet-health" },
   // Informe propio desde G2 del plan de cobertura (`alerts.activity`).
   { page: "alerts",            label: "Alerts",              group: "Alerts", plugin: null,  borrows: null },
-  // Sin grupo: está sin decidir si Jobs tendrá informe propio o basta con los
-  // de cada plugin, que ya cuentan sus trabajos.
-  { page: "jobs",              label: "Jobs",                group: null,     plugin: null,  borrows: "global.fleet-health" },
+  // Informe propio desde el 16-sep (N9, decisión del owner): `ops.job-execution`.
+  { page: "jobs",              label: "Jobs",                group: "Jobs",   plugin: null,  borrows: null },
   { page: "audit",             label: "Audit",               group: "Audit",  plugin: null,  borrows: null },
   // Administración, no dominio: la página cuelga de Settings. Está porque su
   // informe (`pki.agent-certificates`, G2) caería si no en "Other".

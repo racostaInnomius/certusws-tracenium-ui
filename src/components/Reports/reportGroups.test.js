@@ -36,7 +36,7 @@ describe("groupLabel", () => {
     // Alerts están reservados antes que sus informes, igual que en el
     // `ReportType.group` del backend.
     expect(Object.keys(REPORT_GROUP_LABELS).sort()).toEqual(
-      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "MSP", "PKI", "PMP", "RCP", "SCP", "SDP"]
+      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "Jobs", "MDM", "MSP", "PKI", "PMP", "RCP", "SCP", "SDP"]
     );
   });
 
@@ -92,11 +92,11 @@ describe("groupTypesByPage", () => {
     const filas = groupTypesByPage([tipo("cdp.cbom", "CDP")]);
 
     expect(filas).toHaveLength(13);
-    // Jobs: no tiene informe propio ni grupo reservado. Software Delivery y
-    // Asset Management ya tienen el suyo, y usarlas de ejemplo de "sin informe"
-    // dejaría el test pasando mientras dice algo que ya no es cierto.
-    const jobs = filas.find((f) => f.label === "Jobs");
-    expect(jobs.types).toEqual([]);
+    // MDM / MAM: sin informe propio (presta el de flota). Jobs, Software
+    // Delivery y Asset Management ya tienen el suyo, y usarlas de ejemplo de
+    // "sin informe" dejaría el test pasando mientras dice algo que ya no es cierto.
+    const mdm = filas.find((f) => f.label === "MDM / MAM");
+    expect(mdm.types).toEqual([]);
     const cdp = filas.find((f) => f.label === "Crypto Discovery");
     expect(cdp.types).toHaveLength(1);
   });
