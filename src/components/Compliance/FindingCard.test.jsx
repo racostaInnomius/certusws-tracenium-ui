@@ -211,6 +211,19 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     expect(screen.queryByText(/Domain-joined device/)).toBeNull();
   });
 
+  it("una directiva de usuario avisa de que sólo cubre a los perfiles con sesión", () => {
+    const plan = { auto: true, guard: null, artifact: "reg", gpoManaged: true, userScope: true };
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: plan }, { onRemediate: vi.fn() });
+    expect(screen.getByText(/User policy: the fix applies to the user profiles signed in/)).toBeInTheDocument();
+    cleanup();
+    renderWith({ status: "fail", agentRemediable: true, remediationPlan: { ...plan, userScope: false } }, { onRemediate: vi.fn() });
+    expect(screen.queryByText(/User policy:/)).toBeNull();
+    cleanup();
+    // En pass no hay nada que aplicar, luego nada que avisar.
+    renderWith({ status: "pass", agentRemediable: true, remediationPlan: plan }, { onRemediate: vi.fn() });
+    expect(screen.queryByText(/User policy:/)).toBeNull();
+  });
+
   it("clicking Fix now hands the finding to the handler", () => {
     const onRemediate = vi.fn();
     renderWith({ status: "fail", agentRemediable: true }, { onRemediate });

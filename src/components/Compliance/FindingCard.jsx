@@ -584,6 +584,14 @@ export default function FindingCard({
               Domain-joined device: this key lives under Group Policy. The fix holds until a GPO that manages the same key refreshes it; to make it stick, apply it as a GPO.
             </Typography>
           ) : null}
+          {/* Directiva de USUARIO: el agente escribe en los perfiles con sesión
+              en ese momento. Quien entre después no la tiene; la GPO de usuario
+              sí cubre a todos. Se dice antes de pulsar, no después. */}
+          {finding.status === "fail" && finding.remediationPlan?.userScope ? (
+            <Typography variant="caption" sx={{ display: "block", mt: 0.5, color: BRAND.gray }}>
+              User policy: the fix applies to the user profiles signed in on the device when it runs. Users who sign in later are not covered; a User Configuration GPO covers everyone.
+            </Typography>
+          ) : null}
           {explainOpen && finding.id ? <FindingExplanation findingId={finding.id} /> : null}
         </Box>
         <Button
