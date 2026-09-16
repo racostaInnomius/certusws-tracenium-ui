@@ -166,6 +166,12 @@ describe("lastPatchJobCell", () => {
     });
   });
 
+  it("🔴 verificando tras un escaneo FALLIDO lo dice: el «0 missing» de al lado no es un éxito", () => {
+    const c = lastPatchJobCell({ state: "verifying", patch: patch({ verifiedAt: null, latestScanFailed: true }) });
+    expect(c.label).toBe("Verifying");
+    expect(c.title).toMatch(/latest scan failed/);
+  });
+
   it("⚠️ un fallo lleva su fecha: el «Timed out» del 14-ago no es de hoy", () => {
     expect(
       lastPatchJobCell({ state: "timed_out", patch: patch({ status: "timeout", finishedAt: "2026-08-14T15:39:00Z" }) }).label

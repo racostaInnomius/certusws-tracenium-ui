@@ -113,7 +113,11 @@ export function lastPatchJobCell(campaign) {
       return {
         label: "Verifying",
         tone: "neutral",
-        title: `${installedPart}${when ? ` on ${when}` : ""} — waiting for a scan to confirm it`,
+        // Un escaneo fallido llega con 0 pendientes: sin decirlo, «Verifying»
+        // junto a «0 missing» parecería un éxito a punto de confirmarse.
+        title: p.latestScanFailed
+          ? `${installedPart}${when ? ` on ${when}` : ""} — the latest scan failed, so it cannot confirm it yet; another scan is requested automatically`
+          : `${installedPart}${when ? ` on ${when}` : ""} — waiting for a scan to confirm it`,
       };
     case "awaiting_reboot":
       return {
