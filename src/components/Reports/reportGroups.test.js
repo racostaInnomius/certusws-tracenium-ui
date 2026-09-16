@@ -36,7 +36,7 @@ describe("groupLabel", () => {
     // Alerts están reservados antes que sus informes, igual que en el
     // `ReportType.group` del backend.
     expect(Object.keys(REPORT_GROUP_LABELS).sort()).toEqual(
-      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "PKI", "PMP", "RCP", "SCP", "SDP"]
+      ["AMP", "ASP", "Alerts", "Audit", "CDP", "Global", "MDM", "MSP", "PKI", "PMP", "RCP", "SCP", "SDP"]
     );
   });
 
@@ -106,6 +106,15 @@ describe("groupTypesByPage", () => {
     expect(filas[0].label).toBe("Overview");
     // PKI cuelga de Settings, no del menú de dominio: va detrás de todo.
     expect(filas[filas.length - 1].label).toBe("PKI");
+  });
+
+  it("⚠️ la fila del MSP sólo existe cuando trae su informe: a un tenant sin MSP no se le pinta una ausencia falsa", () => {
+    expect(groupTypesByPage([]).some((f) => f.group === "MSP")).toBe(false);
+    const filas = groupTypesByPage([tipo("msp.client-report", "MSP")]);
+    const msp = filas.find((f) => f.group === "MSP");
+    expect(msp?.label).toBe("Managed service (MSP)");
+    expect(msp?.types.map((t) => t.key)).toEqual(["msp.client-report"]);
+    expect(filas.some((f) => f.label === "Other")).toBe(false);
   });
 
   it("el informe de certificados cae en la fila de PKI, no en 'Other'", () => {

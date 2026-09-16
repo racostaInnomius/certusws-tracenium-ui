@@ -36,6 +36,7 @@ export const REPORT_GROUP_LABELS = {
   MDM: "MDM / MAM",
   Alerts: "Alerts",
   PKI: "PKI",
+  MSP: "Managed service (MSP)",
 };
 
 /**
@@ -109,6 +110,18 @@ export const REPORT_PAGES = [
 ];
 
 /**
+ * Filas que NO son una página del menú y sólo salen cuando traen informes.
+ *
+ * El informe que un MSP hace de su cliente (`msp.client-report`, C2) sólo se
+ * ofrece a los operadores del MSP dentro del cliente. Una fila fija diría "sin
+ * informe" a todos los demás tenants —que no tienen MSP y nunca lo tendrán—,
+ * justo la ausencia falsa que esta vista existe para no pintar.
+ */
+export const REPORT_EXTRA_ROWS = [
+  { page: null, label: "Managed service (MSP)", group: "MSP", plugin: null, borrows: null },
+];
+
+/**
  * Reparte los tipos que manda el servidor entre las páginas de arriba.
  *
  * Un tipo cuyo `group` no case con ninguna página NO se tira: cae en una fila
@@ -127,8 +140,12 @@ export function groupTypesByPage(types = []) {
     ...p,
     types: p.group ? porGrupo.get(p.group) ?? [] : [],
   }));
+  for (const extra of REPORT_EXTRA_ROWS) {
+    const ts = porGrupo.get(extra.group) ?? [];
+    if (ts.length) filas.push({ ...extra, types: ts });
+  }
 
-  const usados = new Set(REPORT_PAGES.map((p) => p.group).filter(Boolean));
+  const usados = new Set([...REPORT_PAGES, ...REPORT_EXTRA_ROWS].map((p) => p.group).filter(Boolean));
   const huerfanos = [...porGrupo.entries()]
     .filter(([g]) => g && !usados.has(g))
     .flatMap(([, ts]) => ts);

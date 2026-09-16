@@ -201,6 +201,12 @@ export default function ClientReportDialog({ open, clientId, clientName, onClose
                 </Button>
               </Stack>
             </Stack>
+            {/* La descarga de aquí no queda archivada ni se puede programar. El
+                mismo informe, por meses, vive en Reports dentro del cliente
+                (`msp.client-report`): sin esta línea nadie lo encontraría. */}
+            <Typography variant="body2" sx={{ color: BRAND.gray, mt: 2 }}>
+              To schedule this report monthly or keep a signed copy, open the client and go to Reports → Managed service (MSP).
+            </Typography>
           </>
         )}
       </DialogContent>
