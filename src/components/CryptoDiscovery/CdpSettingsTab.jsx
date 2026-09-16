@@ -98,8 +98,11 @@ function useCdpSources(refreshNonce, tenantId) {
  */
 function AdcsReaders({ sources, caHosts }) {
   const health = (s) => {
-    const cf = s.columnsFound || {};
-    if (!cf.requestId || !cf.rawCertificate) return { label: "header not recognized", color: BRAND.alert.errorText, soft: BRAND.alert.errorSoft, hint: "certutil's CSV header did not match by name or by position: the agent log has the header it received." };
+    // `columnsFound` null = la ultima lectura no trajo filas (nada nuevo
+    // desde el ultimo RequestID): la cabecera no se juzga. Solo un objeto
+    // con las columnas clave a false es una cabecera no reconocida.
+    const cf = s.columnsFound && typeof s.columnsFound === "object" ? s.columnsFound : null;
+    if (cf && (!cf.requestId || !cf.rawCertificate)) return { label: "header not recognized", color: BRAND.alert.errorText, soft: BRAND.alert.errorSoft, hint: "certutil's CSV header did not match by name or by position: the agent log has the header it received." };
     if (s.parseFailures > 0) return { label: `${fmt(s.parseFailures)} row(s) unreadable`, color: BRAND.alert.high, soft: BRAND.alert.highSoft, hint: "Rows whose certificate could not be decoded (denied/pending requests don't count)." };
     if (s.truncated) return { label: "catching up", color: BRAND.alert.warningText, soft: BRAND.alert.warningSoft, hint: "The last read hit the per-scan cap; the next scans continue from the last RequestID." };
     return { label: "healthy", color: BRAND.alert.successText, soft: BRAND.alert.successSoft, hint: "Header recognized, every row decoded, nothing left behind." };

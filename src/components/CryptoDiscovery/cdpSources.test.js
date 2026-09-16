@@ -48,6 +48,10 @@ describe("sourcesByBase", () => {
     });
     const ca = reporting.find((b) => b.key === "adcs");
     expect(ca.sources.map((s) => [s.label, s.state])).toEqual([["MSIG-RADIUS-CA", "reporting"], ["CA02", "failed"]]);
+    // Sin cabecera juzgada (lectura vacia, columnsFound null) la CA que ya
+    // leyo emisiones sigue reporting: era el falso «header not recognized» de T111.
+    const idle = sourcesByBase({ adcs: [{ sourceName: "adcs:X", caName: "X", assets: 51, assetsValid: 51, lastSeen: "2026-09-16T03:09:06Z", columnsFound: null }] });
+    expect(find(idle, "adcs", "adcs:X").state).toBe("reporting");
     // No se cuela en On-prem devices.
     expect(reporting[0].sources.some((s) => /adcs/i.test(s.key))).toBe(false);
   });

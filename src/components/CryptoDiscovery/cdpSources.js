@@ -93,8 +93,10 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
   const caHosts = Array.isArray(cdp?.adcs?.hosts) ? cdp.adcs.hosts : Array.isArray(cdp?.adcsHosts) ? cdp.adcsHosts : [];
   if ((adcs ?? []).length > 0) {
     for (const s of adcs) {
-      const cf = s.columnsFound || {};
-      const broken = !cf.requestId || !cf.rawCertificate;
+      // Sin cabecera juzgada (lectura incremental vacia) no hay veredicto:
+      // una CA con emisiones leidas y nada nuevo esta sana, no rota.
+      const cf = s.columnsFound && typeof s.columnsFound === "object" ? s.columnsFound : null;
+      const broken = cf ? !cf.requestId || !cf.rawCertificate : false;
       push("adcs", {
         key: `adcs:${s.caName}`,
         label: s.caName,
