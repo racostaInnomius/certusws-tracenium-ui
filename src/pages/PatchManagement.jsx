@@ -41,8 +41,7 @@ import VulnerabilitiesTab from "../components/patch-management/VulnerabilitiesTa
 import ConfigurePanel, { CONFIG_SECTIONS } from "../components/patch-management/ConfigurePanel";
 import { resolvePmTab, pmTabSearchValue } from "../components/patch-management/resolvePmTab";
 import {
-  campaignState,
-  describePatchError,
+  lastPatchJobCell,
   snapshotState,
   campaignStrip,
   coverageLine,
@@ -1170,24 +1169,30 @@ export default function PatchManagement({ onNavigate }) {
         )
     },
     {
-      // Estado de la CAMPAÑA, que no es el del inventario: «12 parches
-      // pendientes» no dice si alguien intentó instalarlos, ni si el intento
-      // falló, ni si el equipo se quedó sin volver del reinicio.
+      // El ÚLTIMO ENVÍO de Tracenium, contrastado con el escaneo posterior. No
+      // dice si el equipo está al día —eso es Status/Missing/Reboot, del
+      // inventario—: antes se llamaba «Patch state» y decía «Patched» en filas
+      // con 11 parches pendientes. Ver lastPatchJobCell.
       field: "campaignState",
-      headerName: "Patch state",
-      flex: 0.9,
-      minWidth: 150,
+      headerName: "Last patch job",
+      flex: 1.1,
+      minWidth: 190,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
-        const c = campaignByDevice.get(String(params.row.agentId));
-        // Sin fila de campaña no se inventa nada: la carga puede haber fallado
-        // o el equipo puede no estar en la flota enrolada.
-        if (!c) return <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>;
-        const s = campaignState(c.state);
-        const when = c.patch?.finishedAt || c.patch?.startedAt || null;
-        const title = describePatchError(c.patch?.lastError) || (when ? `Last attempt: ${when}` : "");
-        return <CampaignChip label={s.label} tone={s.tone} title={title} />;
+        const cell = lastPatchJobCell(campaignByDevice.get(String(params.row.agentId)));
+        if (cell.empty) {
+          // Sin job no hay estado que pintar: un guion, y el porqué en el tooltip.
+          const dash = <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>;
+          return cell.title ? (
+            <Tooltip title={cell.title} arrow placement="top">
+              <span>{dash}</span>
+            </Tooltip>
+          ) : (
+            dash
+          );
+        }
+        return <CampaignChip label={cell.label} tone={cell.tone} title={cell.title} />;
       }
     },
     {
@@ -1328,7 +1333,7 @@ export default function PatchManagement({ onNavigate }) {
                 la noticia, no el adorno. */}
             <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", ml: 0.5 }}>
               {coverage.withJob} of {coverage.enrolled} enrolled devices have had a patch job
-              {strip.neverRan > 0 ? ` · ${strip.neverRan} never patched` : ""}
+              {strip.neverRan > 0 ? ` · ${strip.neverRan} without a Tracenium patch job` : ""}
               {coverage.reporting !== coverage.enrolled
                 ? ` · ${coverage.enrolled - coverage.reporting} enrolled but not reporting`
                 : ""}

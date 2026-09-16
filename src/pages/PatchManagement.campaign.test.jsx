@@ -40,9 +40,9 @@ const CAMPAIGN = {
   devices: [
     {
       deviceId: "a-1",
-      state: "patched",
+      state: "installed",
       snapshotApplies: true,
-      patch: { jobId: "j1", status: "completed", startedAt: "2026-09-11T05:00:00Z", finishedAt: "2026-09-11T05:11:00Z", lastError: null, rebootRequested: false, returnedFromReboot: null },
+      patch: { jobId: "j1", status: "completed", startedAt: "2026-09-11T12:00:00Z", finishedAt: "2026-09-11T12:11:00Z", lastError: null, rebootRequested: false, rebootRequired: false, returnedFromReboot: null, requestedCount: 1, installedCount: 1, stillMissing: [], othersPending: 0, verifiedAt: "2026-09-11T05:12:00Z" },
       snapshot: { id: 9, outcome: "cleaned", onDatastore: false, moref: "snapshot-14168", reason: null, reasonDetail: null, takenAt: "2026-09-11T05:00:00Z", removedAt: "2026-09-11T05:12:00Z" },
     },
     {
@@ -55,7 +55,7 @@ const CAMPAIGN = {
     { deviceId: "a-3", state: "never_ran", snapshotApplies: false, patch: null, snapshot: null },
   ],
   totals: {
-    byState: { never_ran: 50, awaiting_window: 0, awaiting_snapshot: 0, in_flight: 0, patched: 2, awaiting_reboot: 1, failed: 1, timed_out: 0, cancelled: 0, unknown: 0 },
+    byState: { never_ran: 50, awaiting_window: 0, awaiting_snapshot: 0, in_flight: 0, verifying: 0, installed: 2, not_applied: 0, awaiting_reboot: 1, failed: 1, timed_out: 0, cancelled: 0, unknown: 0 },
     snapshots: { held: 0, removed: 1, rejected: 1, failed: 0, pending: 0, other: 0 },
   },
 };
@@ -106,7 +106,9 @@ describe("Patch Management — estado de campaña", () => {
     expect(
       await screen.findByText(/4 of 54 enrolled devices have had a patch job/i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/50 never patched/i)).toBeInTheDocument();
+    // «Never patched» parecía una acusación: sólo significa que TRACENIUM no le
+    // mandó nada, y el equipo puede estar al día por otra vía.
+    expect(screen.getByText(/50 without a Tracenium patch job/i)).toBeInTheDocument();
     expect(screen.getByText(/1 enrolled but not reporting/i)).toBeInTheDocument();
   });
 
@@ -114,20 +116,22 @@ describe("Patch Management — estado de campaña", () => {
     mount();
     await screen.findByText(/4 of 54 enrolled/i);
     expect(screen.getByText("Failed: 1")).toBeInTheDocument();
-    expect(screen.getByText("Awaiting reboot: 1")).toBeInTheDocument();
-    expect(screen.getByText("Patched: 2")).toBeInTheDocument();
-    expect(screen.queryByText(/Never patched: /)).toBeNull();
+    expect(screen.getByText("Restart needed: 1")).toBeInTheDocument();
+    expect(screen.getByText("Installed: 2")).toBeInTheDocument();
+    expect(screen.queryByText(/No Tracenium job: /)).toBeNull();
   });
 
   it("cada equipo enseña su estado y su snapshot", async () => {
     mount();
     await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
-    expect(within(grid()).getByText("Patched")).toBeInTheDocument();
+    expect(within(grid()).getByText("Installed · Sep 11")).toBeInTheDocument();
     expect(within(grid()).getByText("Removed")).toBeInTheDocument();
-    expect(within(grid()).getByText("Failed")).toBeInTheDocument();
+    expect(within(grid()).getByText("Failed · Sep 8")).toBeInTheDocument();
     expect(within(grid()).getByText("Rejected")).toBeInTheDocument();
-    // El PC no pasa por gateway: N/A, no una carencia.
-    expect(within(grid()).getByText("Never patched")).toBeInTheDocument();
+    // El PC no pasa por gateway: N/A, no una carencia. Y sin job de Tracenium,
+    // un guion: no es un estado, es su ausencia.
+    expect(within(grid()).queryByText(/never patched/i)).toBeNull();
+    expect(within(grid()).getByRole("columnheader", { name: "Last patch job" })).toBeInTheDocument();
     expect(within(grid()).getByText("N/A")).toBeInTheDocument();
   });
 
@@ -153,6 +157,27 @@ describe("Patch Management — estado de campaña", () => {
     const tip = await screen.findByRole("tooltip");
     expect(tip).toHaveTextContent(/maintenance window had closed/i);
     expect(tip).not.toHaveTextContent("held:maintenance_window_closed");
+  });
+
+  it("🔴 T1: instalado lo que se mandó con OTROS pendientes lo dice en la fila, no «Patched» a secas", async () => {
+    const mixed = {
+      ...CAMPAIGN,
+      devices: CAMPAIGN.devices.map((d) =>
+        d.deviceId === "a-2"
+          ? {
+              ...d,
+              state: "awaiting_reboot",
+              snapshot: null,
+              patch: { ...CAMPAIGN.devices[0].patch, jobId: "j2", rebootRequired: true, installedCount: 11, finishedAt: "2026-09-16T15:03:00Z", verifiedAt: null },
+            }
+          : d.deviceId === "a-1"
+            ? { ...d, patch: { ...d.patch, othersPending: 2 } }
+            : d
+      ),
+    };
+    mount({ campaign: mixed });
+    await waitFor(() => expect(within(grid()).getByText("Installed · 2 others pending")).toBeInTheDocument());
+    expect(within(grid()).getByText("Restart needed · since Sep 16")).toBeInTheDocument();
   });
 
   it("⚠️ sin respuesta de campaña la página sigue, sin inventar ceros", async () => {

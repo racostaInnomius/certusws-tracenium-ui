@@ -1,7 +1,7 @@
 // src/components/patch-management/campaignState.test.js
 
 import { describe, it, expect } from "vitest";
-import { campaignState, snapshotState, campaignStrip, coverageLine, describePatchError } from "./campaignState";
+import { campaignState, snapshotState, campaignStrip, coverageLine, describePatchError, lastPatchJobCell } from "./campaignState";
 
 describe("campaignState", () => {
   it("⭐ «esperando ventana» y «esperando snapshot» no se colapsan", () => {
@@ -54,16 +54,19 @@ describe("snapshotState", () => {
 describe("campaignStrip", () => {
   it("sólo enseña lo que existe, y lo accionable primero", () => {
     const { chips } = campaignStrip({
-      byState: { patched: 2, failed: 1, never_ran: 50, awaiting_window: 0, timed_out: 1 },
+      byState: { installed: 2, failed: 1, never_ran: 50, awaiting_window: 0, timed_out: 1, not_applied: 1 },
     });
-    expect(chips.map((c) => c.key)).toEqual(["failed", "timed_out", "patched"]);
+    // «Not applied» primero: es la contradicción que exige mirar.
+    expect(chips.map((c) => c.key)).toEqual(["not_applied", "failed", "timed_out", "installed"]);
     expect(chips[0].value).toBe(1);
+    // Un backend anterior a 67d27fd todavía manda `patched`: se lee como instalado.
+    expect(campaignStrip({ byState: { patched: 2 } }).chips[0].label).toBe("Installed");
   });
 
   it("⚠️ «nunca parcheado» sale aparte, no como un chip más", () => {
     // Con 50 de 54 ahí, mezclarlo entre los demás lo haría pasar por un
     // resultado de la campaña cuando es justo su ausencia.
-    const { chips, neverRan } = campaignStrip({ byState: { never_ran: 50, patched: 2 } });
+    const { chips, neverRan } = campaignStrip({ byState: { never_ran: 50, installed: 2 } });
     expect(neverRan).toBe(50);
     expect(chips.map((c) => c.key)).not.toContain("never_ran");
   });
@@ -102,5 +105,83 @@ describe("describePatchError", () => {
   it("sin error, null", () => {
     expect(describePatchError(null)).toBeNull();
     expect(describePatchError("")).toBeNull();
+  });
+});
+
+describe("lastPatchJobCell", () => {
+  const patch = (over = {}) => ({
+    jobId: "j",
+    status: "completed",
+    startedAt: "2026-09-16T15:02:50Z",
+    finishedAt: "2026-09-16T15:03:38Z",
+    lastError: null,
+    rebootRequested: false,
+    rebootRequired: false,
+    returnedFromReboot: null,
+    requestedCount: 1,
+    installedCount: 1,
+    stillMissing: [],
+    othersPending: 0,
+    verifiedAt: "2026-09-16T21:03:37Z",
+    ...over,
+  });
+
+  it("⭐ sin job de Tracenium es un guion con el porqué, no «Never patched»", () => {
+    const c = lastPatchJobCell({ state: "never_ran", patch: null });
+    expect(c).toMatchObject({ label: "—", empty: true });
+    expect(c.title).toMatch(/managed elsewhere/);
+  });
+
+  it("🔴 JPR-MacBookPro: instalado lo mandado y quedan OTROS → lo dice el rótulo", () => {
+    const c = lastPatchJobCell({ state: "installed", patch: patch({ othersPending: 2 }) });
+    expect(c.label).toBe("Installed · 2 others pending");
+    expect(c.title).toMatch(/not part of this job/);
+  });
+
+  it("instalado y nada más pendiente: con fecha", () => {
+    expect(lastPatchJobCell({ state: "installed", patch: patch() }).label).toBe("Installed · Sep 16");
+  });
+
+  it("🔴 lo mandado sigue pendiente tras el escaneo → Not applied, cuántos y cuáles", () => {
+    const c = lastPatchJobCell({
+      state: "not_applied",
+      patch: patch({ requestedCount: 2, stillMissing: ["KB2"], installedCount: 2 }),
+    });
+    expect(c).toMatchObject({ label: "Not applied · 1 of 2", tone: "critical" });
+    expect(c.title).toMatch(/still lists: KB2/);
+  });
+
+  it("MarisolCorona: reinicio pendiente, desde cuándo", () => {
+    const c = lastPatchJobCell({
+      state: "awaiting_reboot",
+      patch: patch({ rebootRequired: true, finishedAt: "2026-09-10T15:48:00Z", verifiedAt: null }),
+    });
+    expect(c).toMatchObject({ label: "Restart needed · since Sep 10", tone: "caution" });
+  });
+
+  it("completado sin escaneo posterior: Verifying, no un verde", () => {
+    expect(lastPatchJobCell({ state: "verifying", patch: patch({ verifiedAt: null }) })).toMatchObject({
+      label: "Verifying",
+      tone: "neutral",
+    });
+  });
+
+  it("⚠️ un fallo lleva su fecha: el «Timed out» del 14-ago no es de hoy", () => {
+    expect(
+      lastPatchJobCell({ state: "timed_out", patch: patch({ status: "timeout", finishedAt: "2026-08-14T15:39:00Z" }) }).label
+    ).toBe("Timed out · Aug 14");
+  });
+
+  it("retenido al entregar: el motivo legible en el tooltip", () => {
+    const c = lastPatchJobCell({
+      state: "awaiting_window",
+      patch: patch({ status: "awaiting_window", finishedAt: null, lastError: "held:maintenance_window_closed" }),
+    });
+    expect(c.label).toBe("Waiting for window");
+    expect(c.title).toMatch(/maintenance window had closed/);
+  });
+
+  it("sin fila de campaña, un guion sin tooltip", () => {
+    expect(lastPatchJobCell(undefined)).toMatchObject({ label: "—", empty: true, title: "" });
   });
 });
