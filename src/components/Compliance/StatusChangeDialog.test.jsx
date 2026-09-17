@@ -19,16 +19,15 @@ describe("StatusChangeDialog", () => {
     expect(onConfirm).toHaveBeenCalledWith({ note: null });
   });
 
-  it("terminal transition (risk_accepted): Confirm is disabled until a note is entered", () => {
+  it("a note is optional and sent trimmed (accepting risk is an exception request, not this dialog)", () => {
     const onConfirm = vi.fn();
-    render(<StatusChangeDialog open targetStatus="risk_accepted" onConfirm={onConfirm} onCancel={() => {}} />);
+    render(<StatusChangeDialog open targetStatus="remediated" onConfirm={onConfirm} onCancel={() => {}} />);
     const confirm = screen.getByRole("button", { name: /confirm/i });
-    expect(confirm).toBeDisabled(); // note required
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "  Mitigated via ACL  " } });
     expect(confirm).toBeEnabled();
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "  Patched via GPO  " } });
     fireEvent.click(confirm);
-    expect(onConfirm).toHaveBeenCalledWith({ note: "Mitigated via ACL" }); // trimmed
+    expect(onConfirm).toHaveBeenCalledWith({ note: "Patched via GPO" });
   });
 
   it("Cancel calls onCancel", () => {

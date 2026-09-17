@@ -1,39 +1,37 @@
 import { describe, it, expect } from "vitest";
 import {
   REMEDIATION_TRANSITIONS,
-  TERMINAL_TRANSITIONS_REQUIRING_NOTE,
-  ackUntilIso,
+  dateInputValue,
+  expiryIsoFromDateInput,
   shortRelativeTime,
   shortDate,
 } from "./complianceHelpers";
 
 describe("REMEDIATION_TRANSITIONS", () => {
-  it("open can move to every non-open state", () => {
-    expect(REMEDIATION_TRANSITIONS.open).toEqual(["in_progress", "remediated", "risk_accepted", "wont_fix"]);
+  it("open moves directly only to in_progress or remediated: exceptions are requested (P1-7)", () => {
+    expect(REMEDIATION_TRANSITIONS.open).toEqual(["in_progress", "remediated"]);
+    expect(REMEDIATION_TRANSITIONS.in_progress).not.toContain("risk_accepted");
+    expect(REMEDIATION_TRANSITIONS.in_progress).not.toContain("wont_fix");
   });
-  it("terminal states can only reopen", () => {
+  it("an exception or a remediation can only reopen", () => {
     expect(REMEDIATION_TRANSITIONS.remediated).toEqual(["open"]);
+    expect(REMEDIATION_TRANSITIONS.risk_accepted).toEqual(["open"]);
     expect(REMEDIATION_TRANSITIONS.wont_fix).toEqual(["open"]);
   });
 });
 
-describe("TERMINAL_TRANSITIONS_REQUIRING_NOTE", () => {
-  it("flags risk_accepted and wont_fix", () => {
-    expect(TERMINAL_TRANSITIONS_REQUIRING_NOTE.has("risk_accepted")).toBe(true);
-    expect(TERMINAL_TRANSITIONS_REQUIRING_NOTE.has("wont_fix")).toBe(true);
-    expect(TERMINAL_TRANSITIONS_REQUIRING_NOTE.has("remediated")).toBe(false);
+describe("exception expiry date input", () => {
+  it("dateInputValue is YYYY-MM-DD N days out", () => {
+    expect(dateInputValue(1, new Date(2026, 8, 17, 10, 0))).toBe("2026-09-18");
+    expect(dateInputValue(365, new Date(2026, 8, 17, 10, 0))).toBe("2027-09-17");
   });
-});
-
-describe("ackUntilIso", () => {
-  it("returns null for indefinite (null days)", () => {
-    expect(ackUntilIso(null)).toBeNull();
-  });
-  it("returns an ISO instant ~N days out", () => {
-    const iso = ackUntilIso(30);
-    const deltaDays = (Date.parse(iso) - Date.now()) / 86_400_000;
-    expect(deltaDays).toBeGreaterThan(29.9);
-    expect(deltaDays).toBeLessThan(30.1);
+  it("expiryIsoFromDateInput sends the START of the chosen local day, inside the 365-day window", () => {
+    const now = new Date(2026, 8, 17, 0, 1);
+    const iso = expiryIsoFromDateInput(dateInputValue(365, now));
+    expect(new Date(iso).getTime()).toBeLessThanOrEqual(now.getTime() + 365 * 86_400_000);
+    expect(new Date(iso)).toEqual(new Date(2027, 8, 17, 0, 0, 0));
+    expect(expiryIsoFromDateInput("17/09/2027")).toBeNull();
+    expect(expiryIsoFromDateInput("")).toBeNull();
   });
 });
 

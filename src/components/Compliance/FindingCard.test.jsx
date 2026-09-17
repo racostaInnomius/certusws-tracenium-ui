@@ -31,7 +31,7 @@ function renderCard(overrides = {}) {
   return render(
     <FindingCard
       finding={{ ...baseFinding, ...overrides }}
-      onAck={noop}
+      onRequestException={noop}
       onRevoke={noop}
       onChangeStatus={noop}
       onShowHistory={noop}
@@ -85,7 +85,7 @@ describe("FindingCard (render smoke)", () => {
     render(
       <FindingCard
         finding={baseFinding}
-        onAck={noop}
+        onRequestException={noop}
         onRevoke={noop}
         onChangeStatus={noop}
         onShowHistory={noop}
@@ -102,7 +102,7 @@ describe("FindingCard (readOnly / RBAC)", () => {
     return render(
       <FindingCard
         finding={{ ...baseFinding, ...overrides }}
-        onAck={noop}
+        onRequestException={noop}
         onRevoke={noop}
         onChangeStatus={noop}
         onShowHistory={noop}
@@ -112,9 +112,9 @@ describe("FindingCard (readOnly / RBAC)", () => {
     );
   }
 
-  it("hides Acknowledge and Change status for read-only members", () => {
+  it("hides Request exception and Change status for read-only members", () => {
     renderReadOnly();
-    expect(screen.queryByText(/Acknowledge/)).toBeNull();
+    expect(screen.queryByText(/Request exception/)).toBeNull();
     expect(screen.queryByText("Change status")).toBeNull();
   });
 
@@ -130,8 +130,36 @@ describe("FindingCard (readOnly / RBAC)", () => {
 
   it("still renders mutations when readOnly is false (default)", () => {
     renderCard();
-    expect(screen.getByText(/Acknowledge/)).toBeInTheDocument();
+    expect(screen.getByText("Request exception")).toBeInTheDocument();
     expect(screen.getByText("History")).toBeInTheDocument();
+  });
+
+});
+
+describe("FindingCard (P1-7 — exceptions are requested)", () => {
+  it("Request exception calls back with the finding; a passing check offers none", () => {
+    const onRequestException = vi.fn();
+    const { unmount } = render(
+      <FindingCard finding={baseFinding} onRequestException={onRequestException} onRevoke={noop} onChangeStatus={noop} onShowHistory={noop} pendingAction={null} />
+    );
+    fireEvent.click(screen.getByText("Request exception"));
+    expect(onRequestException).toHaveBeenCalledWith(expect.objectContaining({ id: "f-1" }));
+    unmount();
+    renderCard({ status: "pass" });
+    expect(screen.queryByText(/Request exception/)).toBeNull();
+  });
+
+  it("Change status no longer offers accept risk or won't fix", () => {
+    renderCard();
+    fireEvent.click(screen.getByText("Change status"));
+    expect(screen.queryByText(/Mark risk accepted/i)).toBeNull();
+    expect(screen.queryByText(/Mark won.t fix/i)).toBeNull();
+    expect(screen.getByText(/Mark remediated/i)).toBeInTheDocument();
+  });
+
+  it("an expired exception offers a new request", () => {
+    renderCard({ acknowledgementExpired: true, acknowledgedUntil: "2026-08-01T00:00:00Z" });
+    expect(screen.getByText("Request new exception")).toBeInTheDocument();
   });
 });
 
@@ -140,7 +168,7 @@ describe("FindingCard (Sprint 4 — one-click fix)", () => {
     return render(
       <FindingCard
         finding={{ ...baseFinding, ...overrides }}
-        onAck={noop}
+        onRequestException={noop}
         onRevoke={noop}
         onChangeStatus={noop}
         onShowHistory={noop}
@@ -244,7 +272,7 @@ describe("FindingCard (Sprint 4 — CVE/KEV cross checks)", () => {
     return render(
       <FindingCard
         finding={kevFinding}
-        onAck={noop}
+        onRequestException={noop}
         onRevoke={noop}
         onChangeStatus={noop}
         onShowHistory={noop}
@@ -272,13 +300,13 @@ describe("FindingCard (Sprint 4 — CVE/KEV cross checks)", () => {
 
   it("does not render the chip on non-vulnerability checks or passing ones", () => {
     render(
-      <FindingCard finding={{ ...baseFinding, status: "fail" }} onAck={noop} onRevoke={noop}
+      <FindingCard finding={{ ...baseFinding, status: "fail" }} onRequestException={noop} onRevoke={noop}
         onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
         deviceVulnerability={{ kev_ids: ["CVE-X"] }} onOpenVulnerabilities={vi.fn()} />
     );
     expect(screen.queryByText(/KEV/)).toBeNull();
     render(
-      <FindingCard finding={{ ...kevFinding, status: "pass" }} onAck={noop} onRevoke={noop}
+      <FindingCard finding={{ ...kevFinding, status: "pass" }} onRequestException={noop} onRevoke={noop}
         onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
         deviceVulnerability={{ kev_ids: ["CVE-X"] }} onOpenVulnerabilities={vi.fn()} />
     );
@@ -289,7 +317,7 @@ describe("FindingCard (Sprint 4 — CVE/KEV cross checks)", () => {
 describe("FindingCard (Sprint 4 — Explain)", () => {
   it("offers Explain only with canExplain on a failing finding with an id", () => {
     render(
-      <FindingCard finding={{ ...baseFinding, status: "fail" }} onAck={noop} onRevoke={noop}
+      <FindingCard finding={{ ...baseFinding, status: "fail" }} onRequestException={noop} onRevoke={noop}
         onChangeStatus={noop} onShowHistory={noop} pendingAction={null} canExplain />
     );
     expect(screen.getByText("Explain")).toBeInTheDocument();
@@ -298,7 +326,7 @@ describe("FindingCard (Sprint 4 — Explain)", () => {
     renderCard({ status: "fail" });
     expect(screen.queryByText("Explain")).toBeNull();
     render(
-      <FindingCard finding={{ ...baseFinding, status: "pass" }} onAck={noop} onRevoke={noop}
+      <FindingCard finding={{ ...baseFinding, status: "pass" }} onRequestException={noop} onRevoke={noop}
         onChangeStatus={noop} onShowHistory={noop} pendingAction={null} canExplain />
     );
     expect(screen.queryByText("Explain")).toBeNull();
@@ -317,7 +345,7 @@ describe("FindingCard — browser extension risk (cross.browser_extensions.*)", 
     render(
       <FindingCard
         finding={{ ...baseFinding, checkId: "cross.browser_extensions.no_critical_risk", title: "No browser extension can read and change everything" }}
-        onAck={noop} onRevoke={noop} onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
+        onRequestException={noop} onRevoke={noop} onChangeStatus={noop} onShowHistory={noop} pendingAction={null}
         deviceBrowserExtensions={block}
         onOpenExtensionControl={onOpen}
       />

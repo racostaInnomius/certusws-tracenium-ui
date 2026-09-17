@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { API_BASE, respond } from "../test/msw/server";
 import {
-  acknowledgeFinding,
+  approveExceptionRequest,
   buildFindingsCsvUrl,
   buildFindingsPdfUrl,
   bulkFindingOp,
@@ -27,6 +27,9 @@ import {
   getCategoryDevices,
   getFrameworks,
   getTimeToCloseSummary,
+  listExceptionRequests,
+  rejectExceptionRequest,
+  requestFindingException,
   revokeFindingAcknowledgement,
   updateComplianceSettings,
   updateFindingRemediationStatus,
@@ -131,29 +134,30 @@ describe("read endpoints", () => {
 });
 
 describe("finding lifecycle", () => {
-  it("acknowledgeFinding POSTs { note: null } when no note is given", async () => {
-    const calls = respond("post", `${BASE}/findings/:id/acknowledge`, { ok: true });
+  it("requestFindingException POSTs the request, and omits expiresAt when not chosen", async () => {
+    const calls = respond("post", `${BASE}/findings/:id/exception-requests`, { ok: true, request: {} });
 
-    await acknowledgeFinding("f-1");
-    await acknowledgeFinding("f-1", { note: "seen it" });
+    await requestFindingException("f-1", { kind: "risk_accepted", justification: "Legacy ERP until Q4 migration", riskOwner: "admin@certusitm.com" });
+    await requestFindingException("f-1", { kind: "wont_fix", justification: "Kiosk has no local disk", riskOwner: "owner@certusitm.com", expiresAt: "2027-01-01T00:00:00.000Z" });
 
-    expect(calls[0].body).toEqual({ note: null });
-    expect(calls[1].body).toEqual({ note: "seen it" });
+    expect(calls[0].pathname).toBe(`${BASE}/findings/f-1/exception-requests`);
+    expect(calls[0].body).toEqual({ kind: "risk_accepted", justification: "Legacy ERP until Q4 migration", riskOwner: "admin@certusitm.com" });
+    expect(calls[1].body.expiresAt).toBe("2027-01-01T00:00:00.000Z");
   });
 
-  it("acknowledgeFinding sends acknowledgedUntil only when provided", async () => {
-    const calls = respond("post", `${BASE}/findings/:id/acknowledge`, { ok: true });
+  it("exception requests: list by status, approve and reject by id", async () => {
+    const list = respond("get", `${BASE}/exception-requests`, { ok: true, items: [], viewer: { canDecide: true } });
+    const approve = respond("post", `${BASE}/exception-requests/:id/approve`, { ok: true });
+    const reject = respond("post", `${BASE}/exception-requests/:id/reject`, { ok: true });
 
-    await acknowledgeFinding("f-1"); // omitted -> key absent
-    await acknowledgeFinding("f-1", { acknowledgedUntil: "2026-09-30T00:00:00.000Z" });
-    await acknowledgeFinding("f-1", { acknowledgedUntil: null }); // explicit indefinite
+    await listExceptionRequests({ status: "pending" });
+    await approveExceptionRequest(7);
+    await rejectExceptionRequest(8, { note: "patch it" });
 
-    expect("acknowledgedUntil" in calls[0].body).toBe(false);
-    expect(calls[1].body).toEqual({
-      note: null,
-      acknowledgedUntil: "2026-09-30T00:00:00.000Z"
-    });
-    expect(calls[2].body).toEqual({ note: null, acknowledgedUntil: null });
+    expect(list[0].search).toEqual({ status: "pending" });
+    expect(approve[0].pathname).toBe(`${BASE}/exception-requests/7/approve`);
+    expect(approve[0].body).toEqual({ note: null });
+    expect(reject[0].body).toEqual({ note: "patch it" });
   });
 
   it("revokeFindingAcknowledgement hits the /acknowledge/revoke sub-path", async () => {
@@ -219,29 +223,29 @@ describe("finding lifecycle", () => {
     // so match by RegExp — path-to-regexp would read `:bulk` as a param.
     const calls = respond("post", /\/security\/compliance\/findings:bulk$/, { ok: true, summary: {} });
 
-    await bulkFindingOp({ op: "change_status", findingIds: ["f-1", "f-2"], newStatus: "risk_accepted" });
+    await bulkFindingOp({ op: "change_status", findingIds: ["f-1", "f-2"], newStatus: "remediated" });
 
     expect(calls[0].pathname).toBe(`${BASE}/findings:bulk`);
     expect(calls[0].body).toEqual({
       op: "change_status",
       findingIds: ["f-1", "f-2"],
-      newStatus: "risk_accepted",
+      newStatus: "remediated",
       note: null,
     });
   });
 
-  it("bulkFindingOp forwards acknowledgedUntil for a bulk acknowledge", async () => {
+  it("bulkFindingOp request_exception sends the request fields, not a status", async () => {
     const calls = respond("post", /\/security\/compliance\/findings:bulk$/, { ok: true, summary: {} });
 
-    await bulkFindingOp({ op: "acknowledge", findingIds: ["f-1"] }); // key absent
-    await bulkFindingOp({
-      op: "acknowledge",
-      findingIds: ["f-1"],
-      acknowledgedUntil: "2026-09-30T00:00:00.000Z",
-    });
+    await bulkFindingOp({ op: "request_exception", findingIds: ["f-1"], kind: "acknowledged", justification: "Being replaced next month", riskOwner: "admin@certusitm.com" });
 
-    expect("acknowledgedUntil" in calls[0].body).toBe(false);
-    expect(calls[1].body.acknowledgedUntil).toBe("2026-09-30T00:00:00.000Z");
+    expect(calls[0].body).toEqual({
+      op: "request_exception",
+      findingIds: ["f-1"],
+      kind: "acknowledged",
+      justification: "Being replaced next month",
+      riskOwner: "admin@certusitm.com",
+    });
   });
 });
 

@@ -9,12 +9,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 const api = {
-  acknowledgeFinding: vi.fn(),
+  requestFindingException: vi.fn(),
   revokeFindingAcknowledgement: vi.fn(),
   updateFindingRemediationStatus: vi.fn(),
 };
 vi.mock("../../api/compliance", () => ({
-  acknowledgeFinding: (...a) => api.acknowledgeFinding(...a),
+  requestFindingException: (...a) => api.requestFindingException(...a),
   revokeFindingAcknowledgement: (...a) => api.revokeFindingAcknowledgement(...a),
   updateFindingRemediationStatus: (...a) => api.updateFindingRemediationStatus(...a),
 }));
@@ -33,13 +33,18 @@ function setup() {
 beforeEach(() => Object.values(api).forEach((f) => f.mockReset()));
 
 describe("useFindingLifecycle", () => {
-  it("ack: success → success toast + refetch, pending cleared", async () => {
-    api.acknowledgeFinding.mockResolvedValue({ ok: true });
+  it("exception request: opens the dialog, submit sends the request and says it awaits approval", async () => {
+    api.requestFindingException.mockResolvedValue({ ok: true });
     const { result, onToast, onRequestRefetch } = setup();
-    await act(() => result.current.handleAck(finding, "2026-09-01T00:00:00Z"));
-    expect(api.acknowledgeFinding).toHaveBeenCalledWith(7, { acknowledgedUntil: "2026-09-01T00:00:00Z" });
-    expect(onToast).toHaveBeenCalledWith(expect.objectContaining({ severity: "success" }));
-    expect(onToast.mock.calls[0][0].message).toMatch(/acknowledged until/);
+    act(() => result.current.handleRequestException(finding));
+    expect(result.current.exceptionDialog).toEqual({ finding });
+    expect(api.requestFindingException).not.toHaveBeenCalled();
+
+    await act(() => result.current.submitExceptionRequest({ kind: "risk_accepted", justification: "Legacy ERP until the Q4 migration", riskOwner: "admin@certusitm.com", expiresAt: "2027-01-01T00:00:00.000Z" }));
+    expect(api.requestFindingException).toHaveBeenCalledWith(7, { kind: "risk_accepted", justification: "Legacy ERP until the Q4 migration", riskOwner: "admin@certusitm.com", expiresAt: "2027-01-01T00:00:00.000Z" });
+    expect(result.current.exceptionDialog).toBeNull();
+    expect(onToast.mock.calls[0][0]).toMatchObject({ severity: "success" });
+    expect(onToast.mock.calls[0][0].message).toMatch(/Accept risk requested.*approves/);
     expect(onRequestRefetch).toHaveBeenCalledTimes(1);
     expect(result.current.pendingAction).toBeNull();
   });
@@ -53,9 +58,10 @@ describe("useFindingLifecycle", () => {
   });
 
   it("thrown error → error toast, pending cleared", async () => {
-    api.acknowledgeFinding.mockRejectedValue(new Error("network down"));
+    api.requestFindingException.mockRejectedValue(new Error("network down"));
     const { result, onToast } = setup();
-    await act(() => result.current.handleAck(finding));
+    act(() => result.current.handleRequestException(finding));
+    await act(() => result.current.submitExceptionRequest({ kind: "risk_accepted", justification: "Legacy ERP until the Q4 migration", riskOwner: "admin@certusitm.com", expiresAt: "2027-01-01T00:00:00.000Z" }));
     expect(onToast).toHaveBeenCalledWith({ severity: "error", message: "network down" });
     expect(result.current.pendingAction).toBeNull();
   });
@@ -63,12 +69,12 @@ describe("useFindingLifecycle", () => {
   it("change status opens the dialog; confirm sends status+note and closes it", async () => {
     api.updateFindingRemediationStatus.mockResolvedValue({ ok: true });
     const { result, onToast } = setup();
-    act(() => result.current.handleChangeStatus(finding, "risk_accepted"));
-    expect(result.current.statusDialog).toEqual({ finding, targetStatus: "risk_accepted" });
+    act(() => result.current.handleChangeStatus(finding, "remediated"));
+    expect(result.current.statusDialog).toEqual({ finding, targetStatus: "remediated" });
     expect(api.updateFindingRemediationStatus).not.toHaveBeenCalled();
 
-    await act(() => result.current.confirmStatusChange({ note: "CISO approved" }));
-    expect(api.updateFindingRemediationStatus).toHaveBeenCalledWith(7, { status: "risk_accepted", note: "CISO approved" });
+    await act(() => result.current.confirmStatusChange({ note: "patched via GPO" }));
+    expect(api.updateFindingRemediationStatus).toHaveBeenCalledWith(7, { status: "remediated", note: "patched via GPO" });
     expect(result.current.statusDialog).toBeNull();
     expect(onToast.mock.calls[0][0].message).toMatch(/Status set to/);
   });

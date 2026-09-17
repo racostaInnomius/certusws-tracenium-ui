@@ -116,6 +116,12 @@ const EVENT_TYPE_CATALOG = {
   SECURITY_DRIFT_REMEDIATION_FAILED:    { label: "Remediation failed",             category: "Security" },
   SECURITY_DRIFT_REMEDIATION_REBOOTING: { label: "Remediation: reboot pending",    category: "Security" },
   SECURITY_POLICY_UNENFORCEABLE:        { label: "Policy not enforceable",         category: "Security" },
+  // P1-7 — excepciones de cumplimiento con aprobación.
+  COMPLIANCE_EXCEPTION_REQUESTED:       { label: "Compliance exception requested", category: "Security" },
+  COMPLIANCE_EXCEPTION_APPROVED:        { label: "Compliance exception approved",  category: "Security" },
+  COMPLIANCE_EXCEPTION_REJECTED:        { label: "Compliance exception rejected",  category: "Security" },
+  COMPLIANCE_EXCEPTION_CANCELLED:       { label: "Compliance exception cancelled", category: "Security" },
+  COMPLIANCE_EXCEPTION_DECISION_DENIED: { label: "Exception decision refused",     category: "Security" },
 
   // ── Facturación, derechos e informes ─────────────────────────────
   TRIAL_EXTENDED:         { label: "Trial extended",               category: "Billing" },

@@ -102,6 +102,8 @@ import GoToReportButton from "../components/common/GoToReportButton";
 // pasando por el motor queda su fila en `report_runs`.
 const COMPLIANCE_EVIDENCE_KEY = "scp.compliance-evidence";
 import SectionPaper from "../components/common/SectionPaper";
+import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
 import { PatchChip, formatRelativeTime } from "../components/Compliance/PatchLevel";
@@ -314,7 +316,7 @@ const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
 // ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
 // `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
 // volvería a "posture". Añadir un <Tab> sin tocar esto lo deja muerto.
-const SCP_TABS = ["posture", "baselines", "catalog", "settings"];
+const SCP_TABS = ["posture", "baselines", "exceptions", "catalog", "settings"];
 
 /**
  * Estilo de pestaña, el mismo que Asset Management (`Assets.jsx`).
@@ -397,7 +399,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // tiene: un `?scpTab=settings` guardado por un ADMIN no puede dejar a un
   // USER mirando una pantalla vacía.
   const effectiveTab =
-    (tab === "baselines" || tab === "settings") && !canManage ? "posture" : tab;
+    (tab === "baselines" || tab === "settings" || tab === "exceptions") && !canManage ? "posture" : tab;
 
   // ── Fase C — baseline modes on the Posture tab ─────────────────────
   //
@@ -1241,6 +1243,17 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               sx={TAB_SX}
             />
           ) : null}
+          {/* P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
+              deciden aquí. Sólo quien gestiona compliance las ve. */}
+          {canManage ? (
+            <Tab
+              value="exceptions"
+              label="Exceptions"
+              icon={<GppMaybeOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              sx={TAB_SX}
+            />
+          ) : null}
           <Tab
             value="catalog"
             label="Catalog"
@@ -1290,6 +1303,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               distintas, una encima de otra. */}
           <SecurityBaselines embedded reloadKey={refreshToken} onNavigate={() => setTab("posture")} />
         </React.Suspense>
+      ) : null}
+
+      {effectiveTab === "exceptions" ? (
+        <ExceptionRequestsPanel reloadKey={refreshToken} onToast={showToast} />
       ) : null}
 
       {effectiveTab === "settings" ? (

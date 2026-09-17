@@ -28,9 +28,8 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   StatusChip,
@@ -39,7 +38,7 @@ import {
   RemediationStatusChip,
   REMEDIATION_STATUS_META
 } from "./complianceChips";
-import { ACK_EXPIRY_PRESETS, ackUntilIso } from "./complianceHelpers";
+import ExceptionRequestDialog from "./ExceptionRequestDialog";
 import FindingCard from "./FindingCard";
 import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
@@ -203,7 +202,10 @@ export default function DeviceDrawerContent({
     setStatusDialog,
     historyDialog,
     setHistoryDialog,
-    handleAck,
+    exceptionDialog,
+    setExceptionDialog,
+    handleRequestException,
+    submitExceptionRequest,
     handleRevoke,
     handleChangeStatus,
     confirmStatusChange,
@@ -219,7 +221,10 @@ export default function DeviceDrawerContent({
     bulkMenuAnchor,
     setBulkMenuAnchor,
     bulkPending,
-    handleBulkAck,
+    bulkExceptionOpen,
+    setBulkExceptionOpen,
+    handleBulkRequestException,
+    confirmBulkException,
     handleBulkRevoke,
     handleBulkChangeStatus,
     confirmBulkStatusChange,
@@ -501,8 +506,8 @@ export default function DeviceDrawerContent({
             />
           ) : null}
 
-          {/* Bulk action menu — same transitions as the per-finding
-              menu, plus "Acknowledge / Revoke ack" at the top. */}
+          {/* Bulk action menu — the per-finding actions for the selection:
+              request an exception (P1-7), revoke acks, direct status changes. */}
           <Menu
             anchorEl={bulkMenuAnchor}
             open={Boolean(bulkMenuAnchor)}
@@ -510,32 +515,18 @@ export default function DeviceDrawerContent({
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            {/* Expiring exceptions — acknowledge with an optional
-                expiry. Presets keep the menu keyboard-simple; the
-                "indefinitely" row preserves the old behaviour. */}
-            {ACK_EXPIRY_PRESETS.map((preset) => (
-              <MenuItem
-                key={preset.label}
-                onClick={() => handleBulkAck(ackUntilIso(preset.days))}
-              >
-                {preset.days == null ? (
-                  <VisibilityOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
-                ) : (
-                  <ScheduleOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
-                )}
-                <Typography variant="body2">
-                  Acknowledge selected {preset.label}
-                </Typography>
-              </MenuItem>
-            ))}
+            <MenuItem onClick={handleBulkRequestException}>
+              <GppMaybeOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
+              <Typography variant="body2">Request exception for selected…</Typography>
+            </MenuItem>
             <MenuItem onClick={handleBulkRevoke}>
               <VisibilityOffOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
               <Typography variant="body2">Revoke acknowledgement</Typography>
             </MenuItem>
-            {/* All transitions surfaced. The backend rejects
-                invalid ones per-item; the toast summary tells the
-                operator how many took. */}
-            {["in_progress", "remediated", "risk_accepted", "wont_fix", "open"].map((next) => (
+            {/* Direct transitions only: accepting risk or won't fix is an
+                exception request. The backend rejects invalid ones
+                per-item; the toast summary tells how many took. */}
+            {["in_progress", "remediated", "open"].map((next) => (
               <MenuItem key={next} onClick={() => handleBulkChangeStatus(next)}>
                 <RemediationStatusChip status={next} />
                 <Typography variant="body2" sx={{ ml: 1 }}>
@@ -585,7 +576,7 @@ export default function DeviceDrawerContent({
                   <FindingCard
                     key={f.id ?? f.checkId}
                     finding={f}
-                    onAck={handleAck}
+                    onRequestException={handleRequestException}
                     onRevoke={handleRevoke}
                     onChangeStatus={handleChangeStatus}
                     onShowHistory={(finding) => setHistoryDialog({ finding })}
@@ -630,6 +621,24 @@ export default function DeviceDrawerContent({
         onConfirm={confirmStatusChange}
         onCancel={() => setStatusDialog(null)}
       />
+      {/* Mounted only while open: the dialog loads the tenant's members
+          (risk owner) and needs the auth context to know the tenant. */}
+      {exceptionDialog ? (
+        <ExceptionRequestDialog
+          open
+          findingTitle={exceptionDialog.finding?.title ?? null}
+          onSubmit={submitExceptionRequest}
+          onCancel={() => setExceptionDialog(null)}
+        />
+      ) : null}
+      {bulkExceptionOpen ? (
+        <ExceptionRequestDialog
+          open
+          count={selectedIds.size}
+          onSubmit={confirmBulkException}
+          onCancel={() => setBulkExceptionOpen(false)}
+        />
+      ) : null}
       <FindingHistoryDialog
         open={Boolean(historyDialog)}
         finding={historyDialog?.finding ?? null}

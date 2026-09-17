@@ -121,22 +121,34 @@ export async function getFrameworkComplianceTimeseries(windowDays = 30) {
 //     finding; we want the calling component to refresh state, not
 //     surface a generic "request failed".
 
-// POST /findings/:id/acknowledge — mark a finding as "seen".
-// Optional `note` is recorded in the audit timeline.
-// Optional `acknowledgedUntil` (ISO string) makes the exception expire:
-// once past, the finding re-surfaces as un-acknowledged. Omit the key
-// to leave an existing expiry untouched; pass `null` for an indefinite
-// ack. The backend 400s on a past/invalid date.
-export async function acknowledgeFinding(
-  findingId,
-  { note, acknowledgedUntil } = {}
-) {
-  const body = { note: note ?? null };
-  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
-  return httpPostJson(
-    `${BASE}/findings/${encodeURIComponent(findingId)}/acknowledge`,
-    body
-  );
+// ── Excepciones con aprobación (P1-7) ──────────────────────────────
+// Reconocer un hallazgo, aceptar su riesgo o marcarlo "won't fix" se PIDE:
+// { kind: "acknowledged" | "risk_accepted" | "wont_fix", justification (20+
+// caracteres), riskOwner (email de un miembro activo), expiresAt (ISO, como
+// mucho 12 meses; omitido = 12 meses) }. Lo aprueba un OWNER/ADMIN distinto
+// de quien lo pidió; mientras está pendiente el hallazgo no cambia.
+export async function requestFindingException(findingId, { kind, justification, riskOwner, expiresAt } = {}) {
+  const body = { kind, justification, riskOwner };
+  if (expiresAt) body.expiresAt = expiresAt;
+  return httpPostJson(`${BASE}/findings/${encodeURIComponent(findingId)}/exception-requests`, body);
+}
+
+// GET /exception-requests?status=&findingId= → { items, viewer: { canDecide } }
+export async function listExceptionRequests({ status, findingId } = {}) {
+  return httpGetJson(`${BASE}/exception-requests${buildQuery({ status, findingId })}`);
+}
+
+export async function approveExceptionRequest(requestId, { note } = {}) {
+  return httpPostJson(`${BASE}/exception-requests/${encodeURIComponent(requestId)}/approve`, { note: note ?? null });
+}
+
+// Rechazar exige motivo (el backend responde 400 REJECTION_NOTE_REQUIRED).
+export async function rejectExceptionRequest(requestId, { note } = {}) {
+  return httpPostJson(`${BASE}/exception-requests/${encodeURIComponent(requestId)}/reject`, { note: note ?? null });
+}
+
+export async function cancelExceptionRequest(requestId, { note } = {}) {
+  return httpPostJson(`${BASE}/exception-requests/${encodeURIComponent(requestId)}/cancel`, { note: note ?? null });
 }
 
 // POST /findings/:id/acknowledge/revoke — un-ack a previously
@@ -273,20 +285,18 @@ export async function updateComplianceSettings(patch) {
 }
 
 // ── Sprint 5 — bulk finding lifecycle op ───────────────────────────
-// op: "acknowledge" | "revoke_acknowledgement" | "change_status".
-// For change_status, supply { newStatus, findingIds, note? }. Server
-// caps the batch at 200 findings; partial failures come back as
-// per-item results in `summary.results[]`.
-export async function bulkFindingOp({
-  op,
-  findingIds,
-  newStatus,
-  note,
-  acknowledgedUntil
-} = {}) {
-  const body = { op, findingIds, newStatus, note: note ?? null };
-  // Only relevant to op=acknowledge; omit the key otherwise so we
-  // don't send noise. `null` = indefinite ack, ISO string = expiry.
-  if (acknowledgedUntil !== undefined) body.acknowledgedUntil = acknowledgedUntil;
+// op: "request_exception" | "revoke_acknowledgement" | "change_status".
+// change_status: { newStatus, note? } (risk_accepted / wont_fix NO: son
+// excepciones y se piden). request_exception: { kind, justification,
+// riskOwner, expiresAt? } — una solicitud por hallazgo. Tope de 200; los
+// fallos parciales vuelven por ítem en `summary.results[]`.
+export async function bulkFindingOp({ op, findingIds, newStatus, note, kind, justification, riskOwner, expiresAt } = {}) {
+  const body = { op, findingIds };
+  if (op === "request_exception") {
+    Object.assign(body, { kind, justification, riskOwner });
+    if (expiresAt) body.expiresAt = expiresAt;
+  } else {
+    Object.assign(body, { newStatus, note: note ?? null });
+  }
   return httpPostJson(`${BASE}/findings:bulk`, body);
 }

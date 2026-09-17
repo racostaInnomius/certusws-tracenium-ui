@@ -1,8 +1,8 @@
 // src/components/Compliance/FindingCard.jsx
 //
 // A single compliance-finding card: severity/framework/status chips, an
-// expandable evidence body, and the acknowledge / remediation-status / history
-// actions. Extracted from the SecurityCompliance god-component. Pure props +
+// expandable evidence body, and the exception-request / revoke / remediation-
+// status / history actions. Extracted from the SecurityCompliance god-component. Pure props +
 // local menu state, no data fetching — the parent owns the mutations and
 // passes them as callbacks.
 
@@ -28,6 +28,7 @@ import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import FindingExplanation from "./FindingExplanation";
 import EvidenceView from "./EvidenceView";
@@ -41,15 +42,14 @@ import {
 } from "./complianceChips";
 import {
   REMEDIATION_TRANSITIONS,
-  ACK_EXPIRY_PRESETS,
-  ackUntilIso,
   shortRelativeTime,
   shortDate,
 } from "./complianceHelpers";
 
 export default function FindingCard({
   finding,
-  onAck,
+  // P1-7 — opens the exception request dialog (the host owns it).
+  onRequestException,
   onRevoke,
   onChangeStatus,
   onShowHistory,
@@ -124,10 +124,6 @@ export default function FindingCard({
   // anchor element belongs to a button rendered inside this card.
   const [statusMenuAnchor, setStatusMenuAnchor] = React.useState(null);
   const statusMenuOpen = Boolean(statusMenuAnchor);
-
-  // Acknowledge-with-expiry menu (expiring exceptions).
-  const [ackMenuAnchor, setAckMenuAnchor] = React.useState(null);
-  const ackMenuOpen = Boolean(ackMenuAnchor);
 
   const isAcked = Boolean(finding.acknowledgedAt);
   // An ack whose expiry lapsed: the backend masks acknowledgedAt to
@@ -239,7 +235,7 @@ export default function FindingCard({
             ) : null}
             {ackExpired ? (
               <Tooltip
-                title={`This exception expired ${ackUntil ? shortDate(ackUntil) : ""} and the finding is open again. Re-acknowledge to silence it.`}
+                title={`This exception expired ${ackUntil ? shortDate(ackUntil) : ""} and the finding is open again. Request a new exception to silence it.`}
                 arrow
                 placement="top"
               >
@@ -301,7 +297,7 @@ export default function FindingCard({
             spacing={0.5}
             sx={{ mt: 1, flexWrap: "wrap", gap: 0.5 }}
           >
-            {readOnly ? null : isAcked ? (
+            {!readOnly && isAcked ? (
               <Button
                 size="small"
                 variant="outlined"
@@ -312,47 +308,23 @@ export default function FindingCard({
               >
                 Revoke ack
               </Button>
-            ) : (
-              <>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<VisibilityOutlinedIcon sx={{ fontSize: ICON.sm }} />}
-                  endIcon={<ExpandMoreOutlinedIcon sx={{ fontSize: ICON.sm }} />}
-                  onClick={(e) => setAckMenuAnchor(e.currentTarget)}
-                  disabled={isPending}
-                  sx={{ textTransform: "none" }}
-                >
-                  {ackExpired ? "Re-acknowledge" : "Acknowledge"}
-                </Button>
-                <Menu
-                  anchorEl={ackMenuAnchor}
-                  open={ackMenuOpen}
-                  onClose={() => setAckMenuAnchor(null)}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                  transformOrigin={{ vertical: "top", horizontal: "left" }}
-                >
-                  {ACK_EXPIRY_PRESETS.map((preset) => (
-                    <MenuItem
-                      key={preset.label}
-                      onClick={() => {
-                        setAckMenuAnchor(null);
-                        onAck(finding, ackUntilIso(preset.days));
-                      }}
-                    >
-                      {preset.days == null ? (
-                        <VisibilityOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
-                      ) : (
-                        <ScheduleOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
-                      )}
-                      <Typography variant="body2">
-                        Acknowledge {preset.label}
-                      </Typography>
-                    </MenuItem>
-                  ))}
-                </Menu>
-              </>
-            )}
+            ) : null}
+            {/* P1-7 — acknowledge / accept risk / won't fix are requested,
+                with a justification, a risk owner and an expiry, and
+                approved by another owner or admin. Only for a failing
+                check: a passing one needs no exception. */}
+            {!readOnly && finding.status === "fail" && onRequestException ? (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<GppMaybeOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                onClick={() => onRequestException(finding)}
+                disabled={isPending}
+                sx={{ textTransform: "none" }}
+              >
+                {ackExpired ? "Request new exception" : "Request exception"}
+              </Button>
+            ) : null}
             {!readOnly && nextTransitions.length > 0 ? (
               <>
                 <Button

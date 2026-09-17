@@ -9,12 +9,12 @@
 
 import * as React from "react";
 import {
-  acknowledgeFinding,
+  requestFindingException,
   revokeFindingAcknowledgement,
   updateFindingRemediationStatus,
 } from "../../api/compliance";
 import { REMEDIATION_STATUS_META } from "./complianceChips";
-import { shortDate } from "./complianceHelpers";
+import { EXCEPTION_KIND_META } from "./complianceHelpers";
 
 export function useFindingLifecycle({ onToast, onRequestRefetch }) {
   // pendingAction tracks which finding has a mutation in-flight so
@@ -28,6 +28,8 @@ export function useFindingLifecycle({ onToast, onRequestRefetch }) {
   const [statusDialog, setStatusDialog] = React.useState(null);
   // historyDialog: { finding } when open.
   const [historyDialog, setHistoryDialog] = React.useState(null);
+  // exceptionDialog: { finding } when open (P1-7 — exceptions are requested).
+  const [exceptionDialog, setExceptionDialog] = React.useState(null);
 
   /**
    * Wraps any lifecycle API call with the standard shape:
@@ -64,12 +66,17 @@ export function useFindingLifecycle({ onToast, onRequestRefetch }) {
     }
   }
 
-  function handleAck(finding, acknowledgedUntil = null) {
-    const untilLabel = acknowledgedUntil ? ` until ${shortDate(acknowledgedUntil)}` : "";
-    return runMutation(
+  function handleRequestException(finding) {
+    setExceptionDialog({ finding });
+  }
+  async function submitExceptionRequest(payload) {
+    if (!exceptionDialog) return;
+    const { finding } = exceptionDialog;
+    setExceptionDialog(null);
+    await runMutation(
       finding,
-      () => acknowledgeFinding(finding.id, { acknowledgedUntil }),
-      `Finding acknowledged${untilLabel}.`
+      () => requestFindingException(finding.id, payload),
+      `${EXCEPTION_KIND_META[payload.kind]?.label ?? "Exception"} requested. It applies once another owner or admin approves it.`
     );
   }
   function handleRevoke(finding) {
@@ -81,8 +88,7 @@ export function useFindingLifecycle({ onToast, onRequestRefetch }) {
   }
   function handleChangeStatus(finding, next) {
     // Open the confirmation dialog. Actual API call happens in
-    // confirmStatusChange after the operator types a note (and we
-    // validate that terminal transitions HAVE a note).
+    // confirmStatusChange with the operator's optional note.
     setStatusDialog({ finding, targetStatus: next });
   }
   async function confirmStatusChange({ note }) {
@@ -102,7 +108,10 @@ export function useFindingLifecycle({ onToast, onRequestRefetch }) {
     setStatusDialog,
     historyDialog,
     setHistoryDialog,
-    handleAck,
+    exceptionDialog,
+    setExceptionDialog,
+    handleRequestException,
+    submitExceptionRequest,
     handleRevoke,
     handleChangeStatus,
     confirmStatusChange,

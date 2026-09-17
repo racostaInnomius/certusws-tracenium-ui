@@ -8,7 +8,7 @@ vi.mock("../../api/compliance", () => ({
   getDeviceFleetRanking: vi.fn().mockResolvedValue({ ok: true, ranking: null }),
   getDeviceFindingsDiff: vi.fn().mockResolvedValue({ ok: true, diff: { referenceSnapshotAt: null } }),
   getFindingHistory: vi.fn().mockResolvedValue({ ok: true, events: [] }),
-  acknowledgeFinding: vi.fn().mockResolvedValue({ ok: true }),
+  requestFindingException: vi.fn().mockResolvedValue({ ok: true }),
   revokeFindingAcknowledgement: vi.fn().mockResolvedValue({ ok: true }),
   updateFindingRemediationStatus: vi.fn().mockResolvedValue({ ok: true }),
   bulkFindingOp: vi.fn().mockResolvedValue({ ok: true, summary: { ok: 1, failed: 0, total: 1 } }),
@@ -131,6 +131,10 @@ describe("DeviceDrawerContent", () => {
     await waitFor(() =>
       expect(screen.getByText(/Revoke acknowledgement/i)).toBeInTheDocument()
     );
+    // P1-7 — accepting risk / won't fix are requested, not bulk-applied.
+    expect(screen.getByText(/Request exception for selected/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Mark risk accepted/i)).toBeNull();
+    expect(screen.queryByText(/Mark won.t fix/i)).toBeNull();
   });
 });
 

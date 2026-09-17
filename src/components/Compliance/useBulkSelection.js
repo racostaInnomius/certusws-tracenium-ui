@@ -9,7 +9,6 @@
 import * as React from "react";
 import { bulkFindingOp } from "../../api/compliance";
 import { REMEDIATION_STATUS_META } from "./complianceChips";
-import { shortDate } from "./complianceHelpers";
 
 export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch }) {
   // Set (not array) so toggle is O(1); the bulk toolbar reads size to
@@ -20,6 +19,8 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
   // Anchor for the bulk action menu.
   const [bulkMenuAnchor, setBulkMenuAnchor] = React.useState(null);
   const [bulkPending, setBulkPending] = React.useState(false);
+  // P1-7 — the exception request dialog for the selection.
+  const [bulkExceptionOpen, setBulkExceptionOpen] = React.useState(false);
 
   React.useEffect(() => {
     // Different device => clear selection so an "Acknowledge all 5
@@ -78,10 +79,13 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
     }
   }
 
-  function handleBulkAck(acknowledgedUntil = null) {
+  function handleBulkRequestException() {
     setBulkMenuAnchor(null);
-    const untilLabel = acknowledgedUntil ? ` until ${shortDate(acknowledgedUntil)}` : "";
-    return runBulk({ op: "acknowledge", acknowledgedUntil }, `Acknowledged${untilLabel}`);
+    setBulkExceptionOpen(true);
+  }
+  async function confirmBulkException(payload) {
+    setBulkExceptionOpen(false);
+    await runBulk({ op: "request_exception", ...payload }, "Exception requested");
   }
   function handleBulkRevoke() {
     setBulkMenuAnchor(null);
@@ -89,8 +93,8 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
   }
   function handleBulkChangeStatus(next) {
     setBulkMenuAnchor(null);
-    // Same confirmation pattern as the single-finding flow: terminal
-    // states require a note. The bulk dialog reuses StatusChangeDialog.
+    // Same confirmation pattern as the single-finding flow. The bulk
+    // dialog reuses StatusChangeDialog.
     setBulkStatusDialog({ targetStatus: next });
   }
   async function confirmBulkStatusChange({ note }) {
@@ -113,7 +117,10 @@ export function useBulkSelection({ findings, resetKey, onToast, onRequestRefetch
     bulkMenuAnchor,
     setBulkMenuAnchor,
     bulkPending,
-    handleBulkAck,
+    bulkExceptionOpen,
+    setBulkExceptionOpen,
+    handleBulkRequestException,
+    confirmBulkException,
     handleBulkRevoke,
     handleBulkChangeStatus,
     confirmBulkStatusChange,

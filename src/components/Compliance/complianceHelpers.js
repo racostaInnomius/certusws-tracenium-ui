@@ -6,34 +6,45 @@
 // single home and can be unit tested in isolation.
 
 // Client-side mirror of the backend transition matrix
-// (finding-lifecycle.service ALLOWED_TRANSITIONS) — drives the action menu so
-// the operator only sees valid next states. The backend re-validates on 409,
-// so drift here is a cosmetic UX issue, never a correctness one.
+// (finding-lifecycle.service ALLOWED_TRANSITIONS) for what an operator can do
+// DIRECTLY. risk_accepted / wont_fix are not here since P1-7: they are
+// exceptions, requested and approved (ExceptionRequestDialog), and the backend
+// answers 409 EXCEPTION_REQUEST_REQUIRED to a direct change. Leaving an
+// exception (→ open) is still direct: it only tightens posture.
 export const REMEDIATION_TRANSITIONS = {
-  open: ["in_progress", "remediated", "risk_accepted", "wont_fix"],
-  in_progress: ["remediated", "risk_accepted", "wont_fix", "open"],
+  open: ["in_progress", "remediated"],
+  in_progress: ["remediated", "open"],
   remediated: ["open"],
   risk_accepted: ["open"],
   wont_fix: ["open"],
 };
 
-// Terminal transitions that should require an operator note (audit quality —
-// risk-acceptance without a stated reason is what auditors flag).
-export const TERMINAL_TRANSITIONS_REQUIRING_NOTE = new Set(["risk_accepted", "wont_fix"]);
+// Kinds of exception, in the order the request dialog offers them.
+export const EXCEPTION_KIND_META = {
+  acknowledged: { label: "Acknowledge", description: "Known and being handled; keep it out of the way until the expiry." },
+  risk_accepted: { label: "Accept risk", description: "The risk is understood and accepted; no fix planned before the expiry." },
+  wont_fix: { label: "Won't fix", description: "This control does not apply here or will not be implemented." },
+};
 
-// Acknowledge-until presets for time-boxed exceptions. `days: null` = an
-// indefinite ack (explicitly clears any prior expiry).
-export const ACK_EXPIRY_PRESETS = [
-  { label: "for 30 days", days: 30 },
-  { label: "for 60 days", days: 60 },
-  { label: "for 90 days", days: 90 },
-  { label: "indefinitely", days: null },
-];
+export const EXCEPTION_MAX_DAYS = 365;
+export const EXCEPTION_MIN_JUSTIFICATION = 20;
 
-/** ISO instant `days` from now, or null for an indefinite ack. */
-export function ackUntilIso(days) {
-  if (days == null) return null;
-  return new Date(Date.now() + days * 86_400_000).toISOString();
+/** YYYY-MM-DD for a date input, `days` from `now` (local calendar). */
+export function dateInputValue(days, now = new Date()) {
+  const d = new Date(now.getTime() + days * 86_400_000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Start of the chosen day in local time, as ISO — what the request sends.
+ * Start, not end: "today + 365" at 00:00 is always inside the backend's
+ * 365-day window, whatever the time of day the request is made.
+ */
+export function expiryIsoFromDateInput(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0).toISOString();
 }
 
 /**

@@ -39,6 +39,18 @@ function humanizeEventType(t) {
       return "Remediation status changed";
     case "evidence_refreshed":
       return "Evidence refreshed";
+    case "exception_requested":
+      return "Exception requested";
+    case "exception_approved":
+      return "Exception approved";
+    case "exception_rejected":
+      return "Exception rejected";
+    case "exception_cancelled":
+      return "Exception request cancelled";
+    case "exception_expired":
+      return "Exception expired";
+    case "exception_revoked":
+      return "Exception revoked";
     default:
       return t;
   }
