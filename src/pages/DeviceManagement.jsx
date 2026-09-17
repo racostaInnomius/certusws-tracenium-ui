@@ -56,6 +56,7 @@ import { DetailRow, shortHash } from "../components/Policies/policyDisplay";
 import ManagedAppSection from "../components/Policies/ManagedAppSection";
 import MdmPlatformSection from "../components/Policies/MdmPlatformSection";
 import useMdmCatalog from "../hooks/useMdmCatalog";
+import { useUnsavedChanges } from "../components/AgentSettings/useUnsavedChanges";
 
 const MOBILE_PLATFORMS = new Set(["ios", "android"]);
 
@@ -194,13 +195,48 @@ export default function DeviceManagement({ onNavigate }) {
     load();
   }, [load]);
 
-  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(load, "deviceManagementAutoRefresh");
-
   const currentSerialized = React.useMemo(
     () => JSON.stringify(managedAppFormToPolicy(form.managedApp)),
     [form.managedApp]
   );
   const dirty = loadedMam !== null && currentSerialized !== loadedMam;
+  const mdmDirty = React.useMemo(
+    () => ({
+      macos: JSON.stringify(mdmBlocks.macos || {}) !== loadedMdm.macos,
+      ios: JSON.stringify(mdmBlocks.ios || {}) !== loadedMdm.ios,
+    }),
+    [mdmBlocks, loadedMdm]
+  );
+  const anyDirty = dirty || mdmDirty.macos || mdmDirty.ios;
+
+  // ⚠️ `load` REESCRIBE el formulario MAM y los bloques macOS/iOS con lo que
+  // devuelve el servidor. Pasado tal cual a `useAutoRefresh` —que viene
+  // activo por defecto cada 20 min— borraba en silencio cualquier edición
+  // sin guardar. Misma guarda que Agent Settings (invariante 5): el refresco
+  // automático nunca pisa una edición, y el manual pregunta antes.
+  const dirtyRef = React.useRef(false);
+  dirtyRef.current = anyDirty;
+  useUnsavedChanges(anyDirty);
+
+  const autoRefresh = React.useCallback(() => {
+    if (dirtyRef.current) return;
+    load();
+  }, [load]);
+  const [refreshSeconds, setRefreshSeconds] = useAutoRefresh(autoRefresh, "deviceManagementAutoRefresh");
+
+  const manualRefresh = async () => {
+    if (dirtyRef.current) {
+      const ok = await confirm({
+        title: "Discard unsaved changes?",
+        body: "Reloading replaces the form with what the server has.",
+        confirmText: "Discard and reload",
+        danger: true,
+      });
+      if (!ok) return;
+      dirtyRef.current = false;
+    }
+    await load();
+  };
 
   const mobileDevices = React.useMemo(() => devices.filter(isMobileRow), [devices]);
   const mobileCounts = React.useMemo(() => {
@@ -354,7 +390,7 @@ export default function DeviceManagement({ onNavigate }) {
             <RefreshControl
               refreshSeconds={refreshSeconds}
               onRefreshSecondsChange={setRefreshSeconds}
-              onRefresh={load}
+              onRefresh={manualRefresh}
               loading={loading}
             />
           </>
@@ -515,7 +551,7 @@ export default function DeviceManagement({ onNavigate }) {
           (() => {
             const platform = mdmTab === 1 ? "ios" : "macos";
             const block = mdmBlocks[platform] || {};
-            const isDirty = JSON.stringify(block) !== loadedMdm[platform];
+            const isDirty = mdmDirty[platform];
             // Hoy ningún equipo está supervisado (no hay MDM operativo aún),
             // así que el aviso de aplicabilidad cuenta toda la flota de esa
             // plataforma. Cuando exista enrolamiento real, esto pasa a leer
