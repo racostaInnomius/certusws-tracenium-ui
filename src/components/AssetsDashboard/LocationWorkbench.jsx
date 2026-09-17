@@ -25,7 +25,9 @@ import GeofencePanel from "./GeofencePanel";
 import LocationExplorer from "./LocationExplorer";
 import RecentTransitions from "./RecentTransitions";
 
-const SECCIONES = ["Geofences", "Location history", "Recent transitions"];
+// «Fence activity» y no «Recent transitions»: el rótulo viejo describía la
+// tabla de la base, no la pregunta que trae aquí a un operador.
+const SECCIONES = ["Geofences", "Location history", "Fence activity"];
 
 export default function LocationWorkbench({ refreshNonce = 0 }) {
   const [seccion, setSeccion] = React.useState(0);
@@ -40,10 +42,14 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
   const [savingId, setSavingId] = React.useState(null);
   const [errorById, setErrorById] = React.useState({});
 
+  // Ventana de la ACTIVIDAD (las transiciones), no del estado de las cercas.
+  const [diasActividad, setDiasActividad] = React.useState(30);
+
   React.useEffect(() => {
     let cancelado = false;
+    const desde = new Date(Date.now() - diasActividad * 86400_000).toISOString();
     import("../../api/geofences")
-      .then((m) => m.listGeofences())
+      .then((m) => m.listGeofences({ from: desde }))
       .then((r) => {
         if (cancelado) return;
         setOverview(r || { sites: [], events: [] });
@@ -60,7 +66,7 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
     // ⚠️ `refreshNonce`: el Refresh de la cabecera tiene que alcanzar a esta
     // pestaña. Una que se lo salta enseña datos viejos con el gesto de haberlos
     // actualizado — ver Assets.refresh.test.
-  }, [refreshNonce, nonceLocal]);
+  }, [refreshNonce, nonceLocal, diasActividad]);
 
   // Los equipos sólo hacen falta para el selector de "Location history", así
   // que se piden cuando esa sección se abre por primera vez. La lista es la NO
@@ -178,6 +184,9 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
           sites={sites}
           loading={cargandoOverview}
           error={overviewError}
+          activity={overview?.activity ?? null}
+          days={diasActividad}
+          onDaysChange={setDiasActividad}
         />
       ) : null}
     </Box>

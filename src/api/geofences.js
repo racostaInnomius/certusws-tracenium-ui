@@ -14,8 +14,18 @@ import { updateLocationSite } from "./locationSites";
 
 const BASE = "/api/v1/dashboard/geofences";
 
-export async function listGeofences() {
-  return httpGetJson(BASE, { cache: "reload" });
+/**
+ * `from`/`to` acotan la ACTIVIDAD (transiciones y totales), no los sitios: el
+ * estado de cada cerca es siempre el de ahora. Sin ventana, el servidor usa los
+ * últimos 30 días.
+ */
+export async function listGeofences({ from, to, limit } = {}) {
+  const q = new URLSearchParams();
+  if (from) q.set("from", from);
+  if (to) q.set("to", to);
+  if (limit) q.set("limit", String(limit));
+  const qs = q.toString();
+  return httpGetJson(`${BASE}${qs ? `?${qs}` : ""}`, { cache: "reload" });
 }
 
 /** Enciende o apaga la cerca de un sitio, y/o fija su radio. */

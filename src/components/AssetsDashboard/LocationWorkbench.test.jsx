@@ -49,7 +49,7 @@ afterEach(cleanup);
 describe("LocationWorkbench", () => {
   it("ofrece las tres secciones de la misma funcionalidad", async () => {
     render(<LocationWorkbench />);
-    for (const s of ["Geofences", "Location history", "Recent transitions"]) {
+    for (const s of ["Geofences", "Location history", "Fence activity"]) {
       expect(await screen.findByRole("tab", { name: s })).toBeInTheDocument();
     }
   });
@@ -65,8 +65,8 @@ describe("LocationWorkbench", () => {
     await screen.findByText("City Towers Black");
     expect(listGeofences).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("tab", { name: "Recent transitions" }));
-    await screen.findByText(/Where devices stand/i);
+    await user.click(screen.getByRole("tab", { name: "Fence activity" }));
+    await screen.findByText(/Inside now/i);
     // Cambiar de sección NO vuelve a preguntar: es el mismo dato.
     expect(listGeofences).toHaveBeenCalledTimes(1);
   });
@@ -78,7 +78,7 @@ describe("LocationWorkbench", () => {
     const user = userEvent.setup();
     render(<LocationWorkbench />);
     await screen.findByText("City Towers Black");
-    await user.click(screen.getByRole("tab", { name: "Recent transitions" }));
+    await user.click(screen.getByRole("tab", { name: "Fence activity" }));
 
     expect(
       await screen.findByText(/device was first confirmed away from City Towers Black/i)
