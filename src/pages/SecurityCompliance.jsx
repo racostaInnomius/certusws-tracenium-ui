@@ -367,7 +367,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
 
   const canManage = isActiveMember && Boolean(myPermissions?.has("security_compliance"));
 
-  // Gates de tier — remediar lo habilita PMP (enterprise); SCP (professional)
+  // Gates de tier — remediar lo habilita PMP (business); SCP (professional)
   // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
   // no se sepa, así que un backend viejo o un parpadeo NO esconde la acción a
   // quien sí pagó; el control de verdad es el 402 de la API.
@@ -857,7 +857,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   );
 
   // El fix como fichero: .reg / .inf de secedit / script de GPO con el
-  // valor que el check espera. Enterprise (PMP): es una remediación.
+  // valor que el check espera. Business (PMP): es una remediación.
   const handleExportFix = React.useCallback(
     async (finding, format) => {
       if (!finding?.checkId) return;

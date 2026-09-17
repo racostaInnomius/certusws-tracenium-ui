@@ -2,8 +2,10 @@
 //
 // Qué bloques del Overview monta un tenant, según lo que su plan concede.
 //
-// Los tres tiers de ADR-0010 son ADITIVOS (Starter ⊂ Professional ⊂
-// Enterprise), así que la página se parte en tres bloques, uno por escalón. Un
+// Los tres paquetes de ADR-0010 son ADITIVOS (Starter ⊂ Professional ⊂
+// Business), así que la página se parte en tres bloques, uno por escalón. Un
+// tenant Enterprise (conjunto elegido por el staff) monta los bloques de los
+// plugins que tenga: la señal es `entitled`, no el nombre del tier. Un
 // bloque es la unidad de gate: se monta entero o no se monta, y si no se monta
 // no pide nada. Esconder cards sueltas dentro de una rejilla la dejaba coja y
 // seguía disparando las peticiones de los plugins que el plan no incluye.
@@ -17,11 +19,7 @@
 // tier y aquí no, el bloque sigue apareciendo por el otro plugin que tenga —
 // pero su card no, porque cada card se gatea también por su propio plugin.
 
-export const TIER_LABELS = {
-  starter: "Starter",
-  professional: "Professional",
-  enterprise: "Enterprise",
-};
+export { TIER_LABELS } from "../Billing/billingModel";
 
 export const OVERVIEW_BLOCKS = [
   {
@@ -42,7 +40,7 @@ export const OVERVIEW_BLOCKS = [
   },
   {
     id: "operations",
-    tier: "enterprise",
+    tier: "business",
     title: "Patching & crypto",
     plugins: ["pmp", "cdp"],
   },

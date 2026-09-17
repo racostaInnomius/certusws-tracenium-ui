@@ -25,6 +25,7 @@
 // y auditEventTypes.test.js impide que vuelva a pasar.
 
 import { getEventTypeMeta } from "../constants/auditEventTypes";
+import { tierLabel } from "../components/Billing/billingModel";
 
 /** Texto de `details` si es una cadena con contenido, si no null. */
 function str(value) {
@@ -68,6 +69,22 @@ const TEMPLATES = {
     { text: "extended the trial by " },
     { text: `${d?.months ?? "?"} month${d?.months === 1 ? "" : "s"}`, strong: true },
   ],
+  // El plan que fija el staff (PUT /billing/admin/subscriptions). Lleva antes y
+  // después; se dice el tier nuevo, las licencias y de qué tier venía si cambió.
+  SUBSCRIPTION_STAFF_SET: (d) => {
+    const after = d?.after ?? null;
+    const before = d?.before ?? null;
+    if (!after?.tier) return [{ text: "set the subscription plan" }];
+    const qty = Number(after.quantity);
+    return [
+      { text: "set the plan to " },
+      { text: tierLabel(after.tier), strong: true },
+      ...(Number.isFinite(qty) && qty > 0
+        ? [{ text: " with " }, { text: `${qty.toLocaleString("en-US")} license${qty === 1 ? "" : "s"}`, strong: true }]
+        : []),
+      ...(before?.tier && before.tier !== after.tier ? [{ text: ` (was ${tierLabel(before.tier)})` }] : []),
+    ];
+  },
 
   // ── Política ───────────────────────────────────────────────────────
   POLICY_TENANT_PUSHED: () => [{ text: "pushed the tenant policy to every device" }],

@@ -26,12 +26,30 @@ export const LINE_HINTS = {
   mdm: "managed mobiles — inventory included",
 };
 
-/** Debe coincidir con licensing/tiers.ts del backend. Orden = rango. */
-export const TIERS = ["starter", "professional", "enterprise"];
+/**
+ * Debe coincidir con licensing/tiers.ts del backend. Orden = rango.
+ *
+ * `starter | professional | business` son PAQUETES (Stripe, aditivos).
+ * `enterprise` no es un paquete más alto: se contrata con Tracenium, fuera de
+ * Stripe, y sus plugins los elige el staff uno a uno. Hasta 2026-09-16 el
+ * paquete alto se llamaba `enterprise`; hoy es `business`.
+ */
+export const TIERS = ["starter", "professional", "business", "enterprise"];
 
-/** Tiers ofrecidos en cada línea. MDM sólo tiene Professional hoy. */
+/** Los que se venden en autoservicio. */
+export const PACKAGE_TIERS = ["starter", "professional", "business"];
+
+/** El plan gestionado por Tracenium (conjunto explícito de plugins). */
+export const MANAGED_TIER = "enterprise";
+
+/**
+ * Tiers ofrecidos en cada línea. MDM sólo tiene Professional hoy.
+ *
+ * ⚠️ Enterprise NO está: no tiene precio en Stripe y el PlanPicker no puede
+ * ofrecerlo — el alta moriría resolviendo un precio que no existe.
+ */
 export const LINE_TIERS = {
-  endpoint: ["starter", "professional", "enterprise"],
+  endpoint: ["starter", "professional", "business"],
   mdm: ["professional"],
 };
 
@@ -50,8 +68,15 @@ export const INTERVAL_LABELS = {
 export const TIER_LABELS = {
   starter: "Starter",
   professional: "Professional",
+  business: "Business",
   enterprise: "Enterprise",
 };
+
+/** La etiqueta de un tier, o el valor tal cual si no se conoce (nunca vacío). */
+export function tierLabel(tier) {
+  if (!tier) return "";
+  return TIER_LABELS[tier] ?? String(tier);
+}
 
 /**
  * Los precios YA NO SE ESCRIBEN AQUÍ. Vienen de Stripe, vía /billing/catalog.
@@ -100,7 +125,9 @@ export function availableTiers(prices, line) {
 export const TIER_ADDS = {
   starter: ["amp", "sdp"],
   professional: ["scp", "rcp"],
-  enterprise: ["pmp", "cdp"],
+  // `asp` (Assessment Suite) exige `business` en el catálogo del backend: se
+  // enseña para que el plan no esconda algo que ya incluye.
+  business: ["pmp", "cdp", "asp"],
 };
 
 /**
@@ -114,12 +141,24 @@ export function tierRank(tier) {
   return TIERS.indexOf(tier);
 }
 
-/** Todos los plugins incluidos en un tier, acumulando los de abajo. */
+/**
+ * Todos los plugins incluidos en un PAQUETE, acumulando los de abajo.
+ *
+ * Enterprise no se deduce de su rango —sus plugins son los que eligió el staff—
+ * así que aquí devuelve [] y quien lo necesite usa `pluginKeys`.
+ */
 export function pluginsIncludedIn(tier) {
-  const rank = tierRank(tier);
+  const rank = PACKAGE_TIERS.indexOf(tier);
   if (rank < 0) return [];
-  return TIERS.slice(0, rank + 1).flatMap((t) => TIER_ADDS[t]);
+  return PACKAGE_TIERS.slice(0, rank + 1).flatMap((t) => TIER_ADDS[t]);
 }
+
+/**
+ * Gracia por impago, en días. Espejo de PAST_DUE_GRACE_DAYS del backend
+ * (licensing/tiers.ts). Eran 15 aquí mientras el backend corta a los 14: el
+ * aviso prometía un día que el sistema no respetaba.
+ */
+export const PAST_DUE_GRACE_DAYS = 14;
 
 /** Coste de UNA línea, en céntimos. Ver estimateTotal para el total. */
 export function estimateLine(prices, line, tier, quantity) {
@@ -282,7 +321,7 @@ export function statusNotice(sub, now = new Date()) {
 
   if (sub.status === "past_due" && sub.pastDueSince) {
     const since = new Date(sub.pastDueSince);
-    const daysLeft = 15 - Math.floor((now - since) / 86_400_000);
+    const daysLeft = PAST_DUE_GRACE_DAYS - Math.floor((now - since) / 86_400_000);
     return daysLeft > 0
       ? {
           severity: "warning",

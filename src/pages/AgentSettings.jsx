@@ -40,6 +40,7 @@ import { useAuthContext } from "../auth/AuthContext";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
+import { PACKAGE_TIERS, TIER_LABELS, tierRank } from "../components/Billing/billingModel";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import PageHeader from "../components/common/PageHeader";
@@ -126,20 +127,32 @@ export default function AgentSettings({ embedded = false, onNavigate = null }) {
   const { auth } = useAuthContext();
   const confirm = useConfirm();
   const { catalog, entitled, loading: catalogLoading } = usePluginCatalog();
-  // "Plan Enterprise" in the nav: the highest tier among the plugins the
-  // subscription includes. Derived from the catalog, no extra call.
+  // "Plan Business" in the nav, derived from the catalog (no extra call — the
+  // tier name itself is only readable by an OWNER).
+  //
+  // ⚠️ By EXACT match against a package, not "the highest tier among the
+  // entitled plugins". Enterprise is a set picked by staff: a tenant with
+  // AMP + SCP + PMP would read as "Business" under the highest-tier rule, and
+  // it isn't — it has neither SDP nor CDP. A set that matches no package gets
+  // no label rather than a wrong one.
   const planLabel = React.useMemo(() => {
-    if (!entitled || !Array.isArray(catalog)) return null;
-    const order = ["starter", "professional", "pro", "enterprise"];
-    let best = -1;
-    for (const p of catalog) {
-      if (!entitled.has(String(p.key).toLowerCase())) continue;
-      const i = order.indexOf(String(p.tier_required ?? p.tierRequired ?? "").toLowerCase());
-      if (i > best) best = i;
+    if (!entitled || !Array.isArray(catalog) || catalog.length === 0) return null;
+    const keyOf = (p) => String(p.key).toLowerCase();
+    // "pro" is an old alias of "professional" still tolerated here.
+    const tierOf = (p) => {
+      const t = String(p.tier_required ?? p.tierRequired ?? "").toLowerCase();
+      return t === "pro" ? "professional" : t;
+    };
+    const have = catalog.map(keyOf).filter((k) => entitled.has(k)).sort();
+    for (const tier of [...PACKAGE_TIERS].reverse()) {
+      // What this package includes: every plugin whose required tier it reaches.
+      const want = catalog
+        .filter((p) => tierRank(tierOf(p)) <= tierRank(tier))
+        .map(keyOf)
+        .sort();
+      if (want.length === have.length && want.every((k, i) => k === have[i])) return TIER_LABELS[tier];
     }
-    if (best < 0) return null;
-    const t = order[best] === "pro" ? "professional" : order[best];
-    return t.charAt(0).toUpperCase() + t.slice(1);
+    return null;
   }, [catalog, entitled]);
   const catalogReady = !catalogLoading && Array.isArray(catalog) && catalog.length > 0;
   // El catálogo se lee por ref dentro de las cargas para que su llegada NO

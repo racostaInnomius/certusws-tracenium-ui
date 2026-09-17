@@ -28,7 +28,7 @@ import { BRAND, TEXT } from "../../theme/brand";
 import { getTenantPolicy } from "../../api/policies";
 import { getPluginCoverageSummary } from "../../api/overview";
 import { usePluginCatalog } from "../../hooks/usePluginCatalog";
-import { tierRank } from "./billingModel";
+import { tierLabel, tierRank } from "./billingModel";
 
 function extractPolicyContent(response) {
   if (!response || typeof response !== "object") return null;
@@ -92,7 +92,7 @@ function PluginBox({ plugin, active, entitled, coverage, totalDevices }) {
                 whiteSpace: "nowrap",
               }}
             >
-              🔒 Requires {plugin.tier_required}
+              🔒 Requires {tierLabel(plugin.tier_required)}
             </Box>
           ) : (
             <Box

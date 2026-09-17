@@ -119,6 +119,7 @@ const EVENT_TYPE_CATALOG = {
 
   // ── Facturación, derechos e informes ─────────────────────────────
   TRIAL_EXTENDED:         { label: "Trial extended",               category: "Billing" },
+  SUBSCRIPTION_STAFF_SET: { label: "Plan set by staff",            category: "Billing" },
   ENTITLEMENTS_REDUCED:   { label: "Entitlements reduced",         category: "Billing" },
   REPORT_RUN:             { label: "Report generated",             category: "Billing" },
   REPORT_EMAILED:         { label: "Report emailed",               category: "Billing" },

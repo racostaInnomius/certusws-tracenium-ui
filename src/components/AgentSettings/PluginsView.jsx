@@ -1,7 +1,7 @@
 // src/components/AgentSettings/PluginsView.jsx
 //
 // The read-only "Plugins" section. Activation is NOT a toggle: it follows
-// the subscription (ADR-0010) — or "demo" with Enterprise open — and
+// the subscription (ADR-0010) — or "demo" with everything open — and
 // flipping it by hand breaks the subscription model. What this view does
 // is tell the operator, per plugin: is it active in this policy, is it in
 // the plan, what plan it needs, where its settings live, and how many

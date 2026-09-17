@@ -30,8 +30,8 @@ function row(over = {}) {
   return {
     tenantId: "111",
     tenantName: "Mountainside IG",
-    tier: "enterprise",
-    effectiveTier: "enterprise",
+    tier: "business",
+    effectiveTier: "business",
     status: "active",
     quantity: 55,
     mdmTier: null,
@@ -105,12 +105,12 @@ describe("lo que la tabla distingue", () => {
   it("señala cuando el tier que APLICA no es el contratado", async () => {
     // Es lo primero que confunde a quien mira: sin esto nadie entiende por qué
     // un Starter está usando PMP.
-    serve([row({ tier: "starter", effectiveTier: "enterprise", trialDaysLeft: 30 })]);
+    serve([row({ tier: "starter", effectiveTier: "business", trialDaysLeft: 30 })]);
     render(<StaffSubscriptions />);
     await ready();
 
     expect(screen.getByText("Starter")).toBeTruthy();
-    expect(screen.getByText("using Enterprise")).toBeTruthy();
+    expect(screen.getByText("using Business")).toBeTruthy();
   });
 
   it("cuenta atención SÓLO sobre suscripciones que existen", async () => {

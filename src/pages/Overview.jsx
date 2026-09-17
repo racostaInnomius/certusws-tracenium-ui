@@ -9,7 +9,7 @@
 //      audit and licences. This block IS the Starter product and has to stand
 //      on its own.
 //   2. Security & access  — Professional: SCP + RCP.
-//   3. Patching & crypto  — Enterprise: PMP + CDP.
+//   3. Patching & crypto  — Business: PMP + CDP.
 //
 // A block is the unit of gating (components/Overview/overviewPlan.js): it
 // mounts whole or not at all, and one that does not mount requests nothing.
@@ -364,7 +364,7 @@ export default function Overview({ onNavigate } = {}) {
         </OverviewBlock>
       ) : null}
 
-      {/* ── Block 3 · Patching & crypto — Enterprise ───────────────── */}
+      {/* ── Block 3 · Patching & crypto — Business ─────────────────── */}
       {operations ? (
         <OverviewBlock block={operations}>
           <Grid container spacing={2} alignItems="stretch">

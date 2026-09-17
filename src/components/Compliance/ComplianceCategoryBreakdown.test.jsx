@@ -112,7 +112,7 @@ describe("ComplianceCategoryBreakdown", () => {
 
 describe("gate de tier — el botón de auto-remediar", () => {
   // F4.3: `auto` hace que el agente REMEDIE, y eso lo habilita PMP
-  // (enterprise). SecurityCompliance pasa `onSetAuto: null` cuando el tenant no
+  // (business). SecurityCompliance pasa `onSetAuto: null` cuando el tenant no
   // tiene derecho; aquí se fija que la fila lo respeta aunque SÍ haya
   // capacidades que técnicamente podrían subir a auto.
   const bridgeBase = {

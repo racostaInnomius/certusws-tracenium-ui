@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  TIERS,
+  PACKAGE_TIERS,
+  PAST_DUE_GRACE_DAYS,
   usageWarning,
   pluginsIncludedIn,
   pricesFrom,
@@ -31,7 +32,7 @@ const NOW = new Date("2026-08-21T12:00:00Z");
 const CATALOG = [
   { line: "endpoint", tier: "starter", interval: "monthly", unitAmount: 200, currency: "usd" },
   { line: "endpoint", tier: "professional", interval: "monthly", unitAmount: 600, currency: "usd" },
-  { line: "endpoint", tier: "enterprise", interval: "monthly", unitAmount: 1000, currency: "usd" },
+  { line: "endpoint", tier: "business", interval: "monthly", unitAmount: 1000, currency: "usd" },
   { line: "mdm", tier: "professional", interval: "monthly", unitAmount: 400, currency: "usd" },
   { line: "endpoint", tier: "starter", interval: "yearly", unitAmount: 2000, currency: "usd" },
   { line: "endpoint", tier: "professional", interval: "yearly", unitAmount: 6000, currency: "usd" },
@@ -47,14 +48,18 @@ describe("planes aditivos", () => {
     expect(pluginsIncludedIn("professional").sort()).toEqual(
       ["amp", "rcp", "scp", "sdp"]
     );
-    expect(pluginsIncludedIn("enterprise")).toHaveLength(6);
+    expect(pluginsIncludedIn("business").sort()).toEqual(["amp", "asp", "cdp", "pmp", "rcp", "scp", "sdp"]);
+  });
+
+  it("Enterprise no se deduce del rango: sus plugins los elige el staff", () => {
+    expect(pluginsIncludedIn("enterprise")).toEqual([]);
   });
 
   it("subir de plan nunca quita nada", () => {
     // Es la propiedad que hace honesto presentar los planes como "+2 plugins".
-    for (let i = 1; i < TIERS.length; i++) {
-      const menor = new Set(pluginsIncludedIn(TIERS[i - 1]));
-      const mayor = new Set(pluginsIncludedIn(TIERS[i]));
+    for (let i = 1; i < PACKAGE_TIERS.length; i++) {
+      const menor = new Set(pluginsIncludedIn(PACKAGE_TIERS[i - 1]));
+      const mayor = new Set(pluginsIncludedIn(PACKAGE_TIERS[i]));
       for (const p of menor) expect(mayor.has(p)).toBe(true);
     }
   });
@@ -67,11 +72,20 @@ describe("catálogo de precios", () => {
   });
 
   it("sólo ofrece tiers que EXISTEN en esa periodicidad", () => {
-    // Enterprise no tiene precio anual en este catálogo. Ofrecerlo sería un
+    // Business no tiene precio anual en este catálogo. Ofrecerlo sería un
     // botón que falla al pulsarlo: el alta muere resolviendo un lookup_key
     // que no existe en Stripe.
-    expect(availableTiers(M, "endpoint")).toEqual(["starter", "professional", "enterprise"]);
+    expect(availableTiers(M, "endpoint")).toEqual(["starter", "professional", "business"]);
     expect(availableTiers(Y, "endpoint")).toEqual(["starter", "professional"]);
+  });
+
+  it("Enterprise nunca se ofrece en autoservicio, aunque llegara un precio", () => {
+    // Se contrata con Tracenium, fuera de Stripe.
+    const conEnterprise = pricesFrom(
+      [...CATALOG, { line: "endpoint", tier: "enterprise", interval: "monthly", unitAmount: 5000, currency: "usd" }],
+      "monthly"
+    );
+    expect(availableTiers(conEnterprise, "endpoint")).not.toContain("enterprise");
   });
 
   it("con catálogo vacío no ofrece nada", () => {
@@ -82,7 +96,7 @@ describe("catálogo de precios", () => {
 describe("estimación de coste", () => {
   it("multiplica precio por dispositivo, por línea", () => {
     expect(estimateLine(M, "endpoint", "starter", 50)).toBe(10_000);
-    expect(estimateLine(M, "endpoint", "enterprise", 12)).toBe(12_000);
+    expect(estimateLine(M, "endpoint", "business", 12)).toBe(12_000);
   });
 
   it("el Professional de MDM cuesta distinto que el de endpoints", () => {
@@ -96,7 +110,7 @@ describe("estimación de coste", () => {
     expect(
       estimateTotal(CATALOG, {
         interval: "monthly",
-        endpoint: { tier: "enterprise", quantity: 500 },
+        endpoint: { tier: "business", quantity: 500 },
         mdm: { tier: "professional", quantity: 30 },
       })
     ).toBe(500 * 1000 + 30 * 400);
@@ -121,7 +135,7 @@ describe("estimación de coste", () => {
     // que el usuario está editando.
     expect(estimateLine(M, "endpoint", "starter", 0)).toBeNull();
     expect(estimateLine(M, "endpoint", "starter", NaN)).toBeNull();
-    expect(estimateLine(M, "mdm", "enterprise", 10)).toBeNull(); // MDM no tiene ese tier
+    expect(estimateLine(M, "mdm", "business", 10)).toBeNull(); // MDM no tiene ese tier
     expect(estimateTotal(CATALOG, { interval: "monthly" })).toBeNull();
   });
 });
@@ -171,9 +185,9 @@ describe("clasificación del cambio", () => {
   const actual = { interval: "monthly", endpoint: { tier: "professional", quantity: 20 } };
 
   it("subir de tier es upgrade aunque el gasto baje", () => {
-    // Enterprise×10 = $100 < Professional×20 = $120, pero se lleva PMP y CDP
+    // Business×10 = $100 < Professional×20 = $120, pero se lleva PMP y CDP
     // de inmediato. Diferir el cargo le regalaría el tier alto todo el mes.
-    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "enterprise", quantity: 10 } })).toBe("upgrade");
+    expect(classifyChange(CATALOG, actual, { interval: "monthly", endpoint: { tier: "business", quantity: 10 } })).toBe("upgrade");
   });
 
   it("más licencias en el mismo tier es upgrade", () => {
@@ -257,7 +271,9 @@ describe("avisos de estado", () => {
       NOW
     );
     expect(n.severity).toBe("warning");
-    expect(n.message).toContain("12 days");
+    // 14 − 3: los MISMOS 14 días que aplica el backend (PAST_DUE_GRACE_DAYS).
+    expect(PAST_DUE_GRACE_DAYS).toBe(14);
+    expect(n.message).toContain("11 days");
   });
 
   it("pasa a error cuando la gracia se agotó", () => {

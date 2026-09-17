@@ -22,7 +22,7 @@ const httpPostJson = vi.fn(async () => ({ status: "active" }));
 const PLUGIN_CATALOG = [
   { key: "amp", label: "AMP", title: "Asset Management", description: "Hardware and software inventory.", required: true, tier_required: "starter" },
   { key: "scp", label: "SCP", title: "Security Compliance", description: "Compliance facts feeding the Security Compliance page.", tier_required: "professional" },
-  { key: "pmp", label: "PMP", title: "Patch Management", description: "Patch scan and install.", tier_required: "enterprise" },
+  { key: "pmp", label: "PMP", title: "Patch Management", description: "Patch scan and install.", tier_required: "business" },
 ];
 
 vi.mock("../../api/http", async (importOriginal) => {
@@ -60,7 +60,7 @@ vi.mock("../../auth/AuthContext", () => ({
 const CATALOG = [
   { line: "endpoint", tier: "starter", interval: "monthly", unitAmount: 200, currency: "usd" },
   { line: "endpoint", tier: "professional", interval: "monthly", unitAmount: 600, currency: "usd" },
-  { line: "endpoint", tier: "enterprise", interval: "monthly", unitAmount: 1000, currency: "usd" },
+  { line: "endpoint", tier: "business", interval: "monthly", unitAmount: 1000, currency: "usd" },
   { line: "mdm", tier: "professional", interval: "monthly", unitAmount: 400, currency: "usd" },
 ];
 
@@ -201,7 +201,7 @@ describe("la tarjeta va primero", () => {
 
     expect(screen.getByText(/Save a card before subscribing/)).toBeTruthy();
 
-    await userEvent.click(screen.getAllByText("Enterprise")[0]);
+    await userEvent.click(screen.getAllByText("Business")[0]);
     const boton = await screen.findByRole("button", { name: /Review change/ });
     expect(boton).toBeDisabled();
   });
@@ -221,7 +221,7 @@ describe("la barra de cambios", () => {
     render(<Billing />);
     await ready();
 
-    await userEvent.click(screen.getAllByText("Enterprise")[0]);
+    await userEvent.click(screen.getAllByText("Business")[0]);
     await userEvent.click(await screen.findByRole("button", { name: /Review change/ }));
 
     // El diálogo enseña el ANTES y el DESPUÉS: "de $300 a $500" responde la
@@ -241,7 +241,7 @@ describe("la barra de cambios", () => {
     await waitFor(() => expect(httpPostJson).toHaveBeenCalled());
 
     const [, body] = httpPostJson.mock.calls[0];
-    expect(body.endpoint).toEqual({ tier: "enterprise", quantity: 50 });
+    expect(body.endpoint).toEqual({ tier: "business", quantity: 50 });
     expect(body.interval).toBe("monthly");
     // Sube de tier: se cobra ya, aunque el importe pudiera bajar.
     expect(body.isUpgrade).toBe(true);
@@ -290,7 +290,7 @@ describe("what's included — the retired Plugin Control page's content", () => 
     expect(screen.queryByText("AMP — Asset Management")).toBeNull();
 
     // Count is entitled plugins only (AMP + SCP at "professional"), not
-    // the fixture catalog's full length — PMP (enterprise-only) is
+    // the fixture catalog's full length — PMP (business-only) is
     // still shown below, locked, but doesn't count toward "included".
     await userEvent.click(await screen.findByText(/What's included \(2 plugins\)/));
 
@@ -301,10 +301,10 @@ describe("what's included — the retired Plugin Control page's content", () => 
     // coverage from the fixture's plugin-coverage summary.
     expect(screen.getByText("SCP — Security Compliance")).toBeTruthy();
     expect(screen.getByText("7 / 10 reporting")).toBeTruthy();
-    // PMP: enterprise-only — SUB.tier is "professional", so this is
+    // PMP: business-only — SUB.tier is "professional", so this is
     // locked, not just "not active".
     expect(screen.getByText("PMP — Patch Management")).toBeTruthy();
-    expect(screen.getByText(/Requires enterprise/)).toBeTruthy();
+    expect(screen.getByText(/Requires Business/)).toBeTruthy();
   });
 
   it("expands a plugin chip's detail on the plan comparison card, tab-style", async () => {
@@ -316,7 +316,7 @@ describe("what's included — the retired Plugin Control page's content", () => 
     expect(screen.queryByText("Compliance facts feeding the Security Compliance page.")).toBeNull();
 
     // SCP is included from Professional up, so its chip appears on
-    // both the Professional and Enterprise cards — the first one in
+    // both the Professional and Business cards — the first one in
     // DOM order is Professional's.
     const scpChip = screen.getAllByText("SCP")[0];
     await userEvent.click(scpChip);

@@ -40,6 +40,7 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 import StatusChip from "../components/Assessments/StatusChip";
 import ActivateDialog from "../components/Assessments/ActivateDialog";
 import InstanceDetail from "../components/Assessments/InstanceDetail";
+import { tierLabel } from "../components/Billing/billingModel";
 import {
   INSTANCE_STATUS,
   RUN_STATUS,
@@ -64,8 +65,8 @@ function readInitialInstance() {
 
 function upgradeMessage(error) {
   if (error?.status === 402) {
-    const tier = error?.body?.tierRequired || error?.body?.tier_required || "enterprise";
-    return `Assessment Suite is not included in your plan. It requires the ${tier} tier.`;
+    const tier = error?.body?.tierRequired || error?.body?.tier_required || "business";
+    return `Assessment Suite is not included in your plan. It requires the ${tierLabel(tier)} tier.`;
   }
   return null;
 }

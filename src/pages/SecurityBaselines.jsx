@@ -90,7 +90,7 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
   const capabilitiesLoading = isActiveMember && myPermissions === null;
   const canManage = isActiveMember && Boolean(myPermissions?.has("security_compliance"));
 
-  // El modo `auto` remedia en el endpoint: lo habilita PMP (enterprise). Sin
+  // El modo `auto` remedia en el endpoint: lo habilita PMP (business). Sin
   // derecho la opción se deshabilita con el motivo, no se oculta.
   const { isEntitled } = usePluginCatalog();
   const autoEntitled = isEntitled("pmp");

@@ -19,7 +19,7 @@ vi.mock("../api/policies", () => ({
 import { usePluginCatalog } from "./usePluginCatalog";
 import { clearCachedFetch } from "./useCachedFetch";
 
-const CATALOG = [{ key: "pmp", tier_required: "enterprise" }];
+const CATALOG = [{ key: "pmp", tier_required: "business" }];
 
 const MATRIX = {
   rows: [],

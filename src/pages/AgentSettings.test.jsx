@@ -31,8 +31,8 @@ const CATALOG = [
   { key: "scp", label: "SCP", title: "Security Compliance", impliesModule: "compliance", tier_required: "pro" },
   { key: "pmp", label: "PMP", title: "Patch Management", impliesModule: "patch", tier_required: "pro" },
   { key: "sdp", label: "SDP", title: "Software Delivery", tier_required: "pro" },
-  { key: "cdp", label: "CDP", title: "Crypto Discovery", tier_required: "enterprise" },
-  { key: "rcp", label: "RCP", title: "Remote Control", impliesModule: "remoteControl", tier_required: "enterprise" },
+  { key: "cdp", label: "CDP", title: "Crypto Discovery", tier_required: "business" },
+  { key: "rcp", label: "RCP", title: "Remote Control", impliesModule: "remoteControl", tier_required: "business" },
 ];
 
 const TENANT_VERSION = "1788476532943";
@@ -224,7 +224,7 @@ describe("navigation", () => {
     // cdp: not enabled, not entitled
     const cdpRow = within(table).getByText("Crypto Discovery").closest("tr");
     expect(within(cdpRow).getByText("Not in plan")).toBeInTheDocument();
-    expect(within(cdpRow).getByText("Enterprise")).toBeInTheDocument();
+    expect(within(cdpRow).getByText("Business")).toBeInTheDocument();
     // rcp: enabled but not entitled → flagged
     const rcpRow = within(table).getByText("Remote Control").closest("tr");
     expect(within(rcpRow).getByText("Active · not in plan")).toBeInTheDocument();

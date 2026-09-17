@@ -20,10 +20,10 @@ import {
 import CardMembershipOutlinedIcon from "@mui/icons-material/CardMembershipOutlined";
 import { httpGetJson, httpPostJson } from "../../api/http";
 import { formatMoney } from "./money";
+import { TIER_LABELS } from "./billingModel";
 import { BRAND } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 
-const TIER_LABELS = { starter: "Starter", professional: "Professional", enterprise: "Enterprise" };
 
 /**
  * Cómo se lee el estado de pago de un vistazo.

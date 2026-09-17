@@ -119,7 +119,7 @@ describe("Overview por plan", () => {
 
     const note = await screen.findByRole("note", { name: "Not included in your plan" });
     expect(note.textContent).toMatch(/Security & access .*Professional/);
-    expect(note.textContent).toMatch(/Patching & crypto .*Enterprise/);
+    expect(note.textContent).toMatch(/Patching & crypto .*Business/);
     expect(within(note).getByRole("button", { name: "View plans" })).toBeTruthy();
   });
 
@@ -132,7 +132,7 @@ describe("Overview por plan", () => {
     expect(note.textContent).toMatch(/tenant owner/);
   });
 
-  it("Enterprise monta los tres bloques con sus cards y no ofrece nada", async () => {
+  it("Business monta los tres bloques con sus cards y no ofrece nada", async () => {
     renderWith(ENTERPRISE);
 
     expect(await screen.findByRole("heading", { name: "Security & access" })).toBeTruthy();

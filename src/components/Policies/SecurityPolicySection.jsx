@@ -37,7 +37,7 @@ export default function SecurityPolicySection({
   evidenceByCapability = null,
   onShowEvidence = null,
   // Gate de tier: `auto` hace que el agente REMEDIE en el endpoint, y eso lo
-  // habilita PMP (enterprise). Sin derecho la opción se deshabilita en vez de
+  // habilita PMP (business). Sin derecho la opción se deshabilita en vez de
   // desaparecer, para que se vea QUE existe y qué plan hace falta — un menú al
   // que le falta una opción sin explicación es peor que uno que dice por qué.
   autoEntitled = true,

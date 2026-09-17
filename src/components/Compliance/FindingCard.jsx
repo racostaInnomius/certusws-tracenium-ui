@@ -492,7 +492,7 @@ export default function FindingCard({
                 </Button>
               </Tooltip>
             ) : null}
-            {/* Enterprise: el fix como fichero. Es lo que perdura en un
+            {/* Business (PMP): el fix como fichero. Es lo que perdura en un
                 equipo de dominio (la GPO) y lo que se revisa antes de tocar
                 una clave con guarda. */}
             {!readOnly && onExportFix && finding.status === "fail" && finding.remediationPlan?.artifact ? (

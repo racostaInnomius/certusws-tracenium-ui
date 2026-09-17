@@ -24,7 +24,7 @@ import { clearCachedFetch } from "./useCachedFetch";
 const CATALOG = [
   { key: "amp", required: true, tier_required: "starter" },
   { key: "scp", tier_required: "professional" },
-  { key: "pmp", tier_required: "enterprise" },
+  { key: "pmp", tier_required: "business" },
 ];
 
 beforeEach(() => {
@@ -48,7 +48,7 @@ describe("usePluginCatalog — derechos de suscripción", () => {
     expect(result.current.entitled).toBeInstanceOf(Set);
   });
 
-  it("enterprise: pmp entitled", async () => {
+  it("business: pmp entitled", async () => {
     getPluginCatalog.mockResolvedValue({ ok: true, catalog: CATALOG, entitled: ["amp", "scp", "pmp", "cdp"] });
     const { result } = await mount();
     expect(result.current.isEntitled("pmp")).toBe(true);

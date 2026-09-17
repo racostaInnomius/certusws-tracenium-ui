@@ -94,6 +94,21 @@ describe("describeEvent — las frases con plantilla", () => {
     expect(describeEventText({ event_type: "TRIAL_EXTENDED", details: { months: 1 } }, deps)).toBe(
       "extended the trial by 1 month"
     );
+    expect(
+      describeEventText(
+        {
+          event_type: "SUBSCRIPTION_STAFF_SET",
+          details: { before: { tier: "business", quantity: 50 }, after: { tier: "enterprise", quantity: 2500 } },
+        },
+        deps
+      )
+    ).toBe("set the plan to Enterprise with 2,500 licenses (was Business)");
+    expect(
+      describeEventText({ event_type: "SUBSCRIPTION_STAFF_SET", details: { after: { tier: "starter", quantity: 1 } } }, deps)
+    ).toBe("set the plan to Starter with 1 license");
+    expect(describeEventText({ event_type: "SUBSCRIPTION_STAFF_SET", details: null }, deps)).toBe(
+      "set the subscription plan"
+    );
   });
 
   it("resuelve el hostname en vez de enseñar el UUID", () => {

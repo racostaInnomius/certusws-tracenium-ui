@@ -227,7 +227,7 @@ export async function fetchOverviewSecurity({ scp = false, rcp = false } = {}) {
   ]);
 }
 
-/** Bloque 3 — Enterprise: PMP + CDP. */
+/** Bloque 3 — Business: PMP + CDP. */
 export async function fetchOverviewOperations({ pmp = false, cdp = false } = {}) {
   return settle([
     pmp && ["patchSummary", getPatchSummary()],
