@@ -72,14 +72,14 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount({ campaign = CAMPAIGN } = {}) {
+function mount({ campaign = CAMPAIGN, devices = DEVICES } = {}) {
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
       const url = new URL(request.url);
       if (url.pathname.endsWith("/patch-management/campaign-status")) {
         return HttpResponse.json(campaign);
       }
-      const items = url.pathname.endsWith("/patch-management/devices") ? DEVICES : [];
+      const items = url.pathname.endsWith("/patch-management/devices") ? devices : [];
       return HttpResponse.json({
         ok: true,
         items,
@@ -178,6 +178,50 @@ describe("Patch Management — estado de campaña", () => {
     mount({ campaign: mixed });
     await waitFor(() => expect(within(grid()).getByText("Installed · 2 others pending")).toBeInTheDocument());
     expect(within(grid()).getByText("Restart needed · since Sep 16")).toBeInTheDocument();
+  });
+
+  it("🔴 MSIG-FILESHARE: un escaneo fallido explica qué pasó y no dice «0 missing» ni «up to date»", async () => {
+    const failed = [
+      ...DEVICES,
+      {
+        agentId: "a-9",
+        hostname: "MSIG-FILESHARE",
+        platform: "windows",
+        overallStatus: "error",
+        missingCount: 0,
+        criticalCount: 0,
+        rebootRequired: false,
+        collectedAtUtc: "2026-09-17T04:16:50Z",
+        scanNote: "Windows Update scan exceeded 150s. stderr_tail: #< CLIXML\r\n",
+      },
+    ];
+    mount({ devices: failed });
+    const row = await waitFor(() => within(grid()).getByText("MSIG-FILESHARE").closest('[role="row"]'));
+
+    // «Error» no decía nada; el motivo va en el tooltip del chip.
+    expect(within(row).getByText("Scan failed")).toBeInTheDocument();
+    // Su «0» es «desconocido»: la ingesta borró los pendientes con el escaneo fallido.
+    const missingCell = row.querySelector('[data-field="missingCount"]');
+    expect(missingCell).toHaveTextContent("—");
+    expect(missingCell).not.toHaveTextContent("0");
+
+    fireEvent.mouseOver(within(row).getByText("Scan failed"));
+    const tip = await screen.findByRole("tooltip");
+    expect(tip).toHaveTextContent(/Windows Update scan timed out/);
+    expect(tip).toHaveTextContent(/Run scan now/);
+    expect(tip).not.toHaveTextContent(/CLIXML/);
+
+    // Y el panel lateral no afirma que el equipo está al día.
+    fireEvent.click(within(row).getByText("MSIG-FILESHARE"));
+    expect(await screen.findByText(/missing-patch list is unknown/i)).toBeInTheDocument();
+    expect(screen.queryByText(/This device is up to date/i)).toBeNull();
+  });
+
+  it("no hay columna «Reboot»: repetía el chip «Reboot pending» sin acción", async () => {
+    mount();
+    await waitFor(() => expect(within(grid()).getByText("MSIG-WSUS")).toBeInTheDocument());
+    expect(within(grid()).queryByRole("columnheader", { name: "Reboot" })).toBeNull();
+    expect(within(grid()).getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
   });
 
   it("⚠️ sin respuesta de campaña la página sigue, sin inventar ceros", async () => {

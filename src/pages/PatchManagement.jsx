@@ -61,12 +61,15 @@ import SecurityConfigPanel from "../components/patch-management/SecurityConfigPa
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
+import { explainScanFailure } from "../components/patch-management/scanFailure";
 import { summarizeBulkInstall, goingOutNow, describeRebootChoice } from "../components/patch-management/bulkInstallOutcome";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
@@ -1117,26 +1120,41 @@ export default function PatchManagement({ onNavigate }) {
           unknown:           { label: L.unknown,           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
         };
         const m = meta[v] || meta.unknown;
+        // The scan's own explanation of why it came back with nothing —
+        // an IPC timeout, an empty Windows Update result, a provider error.
+        // Without it "Inventory only / 0 patches" reads as a clean machine,
+        // and a fleet that is silently failing to scan looks fine.
+        // ⚠️ Explained, not raw: «Windows Update scan exceeded 150s.
+        // stderr_tail: #< CLIXML» told nobody what to do (MSIG-FILESHARE, 17-sep).
+        const failure = explainScanFailure(params.row.scanNote);
         const chip = (
           <Chip
             size="small"
             label={m.label}
+            // The icon is the only visible hint that there is more to read.
+            icon={failure ? <InfoOutlinedIcon sx={{ fontSize: ICON.sm, "&&": { color: m.fg } }} /> : undefined}
             sx={{
               bgcolor: m.bg,
               color: m.fg,
               fontWeight: 700,
               height: 22,
-              ...(params.row.scanNote ? { cursor: "help" } : null),
+              ...(failure ? { cursor: "help" } : null),
             }}
           />
         );
-        // The scan's own explanation of why it came back with nothing —
-        // an IPC timeout, an empty Windows Update result, a provider error.
-        // Without it "Inventory only / 0 patches" reads as a clean machine,
-        // and a fleet that is silently failing to scan looks fine.
-        if (!params.row.scanNote) return chip;
+        if (!failure) return chip;
         return (
-          <Tooltip title={params.row.scanNote} arrow placement="top">
+          <Tooltip
+            arrow
+            placement="top"
+            title={
+              <Box sx={{ p: 0.5, maxWidth: 320 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: TEXT.sm }}>{failure.title}</Typography>
+                <Typography sx={{ fontSize: TEXT.sm, mt: 0.5 }}>{failure.cause}</Typography>
+                <Typography sx={{ fontSize: TEXT.sm, mt: 0.5 }}>{failure.action}</Typography>
+              </Box>
+            }
+          >
             {chip}
           </Tooltip>
         );
@@ -1150,24 +1168,30 @@ export default function PatchManagement({ onNavigate }) {
       minWidth: 100,
       align: "right",
       headerAlign: "right",
-      renderCell: (params) => (
-        <Typography sx={{ fontWeight: 700, color: params.row.missingCount > 0 ? BRAND.alert.errorText : BRAND.dark }}>
-          {params.row.missingCount}
-        </Typography>
-      )
+      renderCell: (params) => {
+        // ⚠️ A failed scan arrives with no items and replaces the device's
+        // pending list, so its «0» means «unknown», not «nothing missing».
+        if (params.row.overallStatus === "error") {
+          return (
+            <Tooltip title="Unknown — the last scan failed" arrow placement="top">
+              <Typography component="span" sx={{ color: BRAND.gray, fontSize: TEXT.md, cursor: "help" }}>—</Typography>
+            </Tooltip>
+          );
+        }
+        // `component="span"`: a block Typography sat at the top of the cell
+        // instead of on the row's centre line like every other column.
+        return (
+          <Typography
+            component="span"
+            sx={{ fontWeight: 700, fontSize: TEXT.md, color: params.row.missingCount > 0 ? BRAND.alert.errorText : BRAND.dark }}
+          >
+            {params.row.missingCount}
+          </Typography>
+        );
+      }
     },
-    {
-      field: "rebootRequired",
-      headerName: "Reboot",
-      flex: 0.5,
-      minWidth: 90,
-      renderCell: (params) =>
-        params.row.rebootRequired ? (
-          <RestartAltOutlinedIcon sx={{ fontSize: ICON.lg, color: BRAND.alert.errorText }} />
-        ) : (
-          <Typography sx={{ color: BRAND.gray, fontSize: TEXT.md }}>—</Typography>
-        )
-    },
+    // No «Reboot» column: a lone icon with no action that repeated the
+    // «Reboot pending» status chip one column to the left.
     {
       // El ÚLTIMO ENVÍO de Tracenium, contrastado con el escaneo posterior. No
       // dice si el equipo está al día —eso es Status/Missing/Reboot, del
@@ -1742,6 +1766,32 @@ export default function PatchManagement({ onNavigate }) {
                 <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
                   <CircularProgress size={32} sx={{ color: BRAND.teal }} />
                 </Box>
+              ) : drawerDevice.overallStatus === "error" ? (
+                // ⚠️ A failed scan comes with no items, so the branch below
+                // would say «This device is up to date» about a scan that never
+                // finished (MSIG-FILESHARE, 17-sep). Say what failed instead.
+                (() => {
+                  const failure = explainScanFailure(drawerDevice.scanNote) || {
+                    title: "Scan failed",
+                    cause: "The last patch scan did not finish, so the missing-patch list is unknown.",
+                    action: "Use Run scan now.",
+                  };
+                  return (
+                    <Box sx={{ p: 3 }}>
+                      <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", p: 2, borderRadius: 1, bgcolor: ROLE.criticalSoft }}>
+                        <ErrorOutlineOutlinedIcon sx={{ color: BRAND.alert.errorText, mt: 0.25 }} />
+                        <Box>
+                          <Typography sx={{ color: BRAND.alert.errorText, fontWeight: 700 }}>{failure.title}</Typography>
+                          <Typography sx={{ color: BRAND.dark, fontSize: TEXT.md, mt: 0.5 }}>{failure.cause}</Typography>
+                          <Typography sx={{ color: BRAND.dark, fontSize: TEXT.md, mt: 1 }}>{failure.action}</Typography>
+                          <Typography sx={{ color: "text.secondary", fontSize: TEXT.sm, mt: 1 }}>
+                            The missing-patch list is unknown until a scan completes.
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                })()
               ) : drawerItems.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: "center" }}>
                   <CheckCircleOutlineOutlinedIcon sx={{ fontSize: ICON["3xl"], color: ROLE.positive, mb: 1 }} />

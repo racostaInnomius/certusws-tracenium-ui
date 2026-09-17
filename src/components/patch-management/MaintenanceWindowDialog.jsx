@@ -14,7 +14,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  MenuItem,
   Stack,
   Box,
   Switch,
@@ -22,9 +21,11 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  Autocomplete,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { minutesToHHMM, hhmmToMinutes, durationFromTimes } from "./maintenanceWindowTime";
+import { buildTimezoneOptions, matchTimezone } from "./timezoneOptions";
 
 const DAYS = [
   { v: 0, l: "Sun" }, { v: 1, l: "Mon" }, { v: 2, l: "Tue" }, { v: 3, l: "Wed" },
@@ -32,17 +33,6 @@ const DAYS = [
 ];
 
 const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-const COMMON_TZ = [
-  BROWSER_TZ, "UTC", "America/Mexico_City", "America/New_York", "America/Chicago",
-  "America/Los_Angeles", "America/Sao_Paulo", "Europe/Madrid", "Europe/London",
-  "Europe/Berlin", "Asia/Tokyo",
-];
-
-function tzOptions(extra) {
-  const set = new Set(COMMON_TZ);
-  if (extra) set.add(extra);
-  return Array.from(set);
-}
 
 function defaults() {
   return { name: "", days: [1, 2, 3, 4, 5], startTime: "02:00", endTime: "04:00", timezone: BROWSER_TZ, enabled: true };
@@ -60,6 +50,8 @@ function fromEntry(e) {
 
 export default function MaintenanceWindowDialog({ open, mode, window: entry, submitting, onClose, onSubmit }) {
   const [form, setForm] = React.useState(defaults);
+  // Built once per open: the offsets shown are today's (DST changes them).
+  const tzOptionList = React.useMemo(() => buildTimezoneOptions({ extra: entry?.timezone }), [entry?.timezone]);
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
@@ -120,15 +112,26 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
             </Box>
           </Box>
 
-          <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "1fr 1fr 1.4fr" }}>
+          <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "1fr 1fr" }}>
             <TextField size="small" type="time" label="Start" value={form.startTime} onChange={(e) => update({ startTime: e.target.value })} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="time" label="End" value={form.endTime} onChange={(e) => update({ endTime: e.target.value })} InputLabelProps={{ shrink: true }} />
-            <TextField select size="small" label="Timezone" value={form.timezone} onChange={(e) => update({ timezone: e.target.value })}>
-              {tzOptions(entry?.timezone).map((tz) => (
-                <MenuItem key={tz} value={tz}>{tz}</MenuItem>
-              ))}
-            </TextField>
           </Box>
+
+          {/* Every IANA zone, with its UTC offset, searchable by city
+              («McAllen» → America/Chicago). See timezoneOptions.js. */}
+          <Autocomplete
+            size="small"
+            options={tzOptionList}
+            value={tzOptionList.find((o) => o.value === form.timezone) || null}
+            onChange={(_e, opt) => { if (opt) update({ timezone: opt.value }); }}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(o, v) => o.value === v.value}
+            filterOptions={(opts, state) => opts.filter((o) => matchTimezone(o, state.inputValue))}
+            disableClearable
+            renderInput={(params) => (
+              <TextField {...params} label="Timezone" placeholder="Search a city or zone — e.g. McAllen, Monterrey, Madrid" />
+            )}
+          />
 
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             Deployments created outside every window wait until the next one opens. An end time earlier than the start crosses midnight.
