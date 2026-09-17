@@ -100,16 +100,21 @@ export function CbomImportForm({ onImported }) {
  * de CBOM viven en Settings. Aquí se mira lo que trajeron; `onOpenSettings`
  * lleva a donde se configura.
  */
-export default function CbomAssetsPanel({ refreshNonce, onSelect, onOpenSettings }) {
+export default function CbomAssetsPanel({ refreshNonce, sourceName = "", origin = "", onSourceChange, onSelect, onOpenSettings }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
-  const [source, setSource] = React.useState("");
   const [error, setError] = React.useState(null);
+  // El origen elegido lo pone quien llama (vive en la URL): un gajo del
+  // sunburst abre este panel YA filtrado por su fuente, y el enlace lo
+  // conserva. `origin` (adcs, vcenter, ssh…) agrupa varias fuentes: es lo
+  // que necesita un gajo como «SSH host keys», que no es una sola.
+  const source = sourceName || "";
+  const pick = (next) => onSourceChange?.(next);
 
   React.useEffect(() => {
     let alive = true;
     setError(null);
-    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, limit: 200 })])
+    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, origin: origin || undefined, limit: 200 })])
       .then(([s, l]) => {
         if (!alive) return;
         setSummary(s ?? null);
@@ -119,7 +124,7 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect, onOpenSettings
     return () => {
       alive = false;
     };
-  }, [refreshNonce, source]);
+  }, [refreshNonce, source, origin]);
 
   const total = (summary?.sources ?? []).reduce((s, x) => s + x.assets, 0);
 
@@ -155,9 +160,10 @@ export default function CbomAssetsPanel({ refreshNonce, onSelect, onOpenSettings
       {summary && total > 0 ? (
         <>
           <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
-            <Chip size="small" label={`All sources · ${fmt(total)}`} onClick={() => setSource("")} variant={source ? "outlined" : "filled"} />
+            <Chip size="small" label={`All sources · ${fmt(total)}`} onClick={() => pick({})} variant={source || origin ? "outlined" : "filled"} />
+            {origin ? <Chip size="small" label={`Origin: ${origin}`} onDelete={() => pick({})} variant="filled" /> : null}
             {summary.sources.map((s) => (
-              <Chip key={s.sourceName} size="small" label={`${s.sourceName} · ${fmt(s.assets)}`} onClick={() => setSource(s.sourceName)} variant={source === s.sourceName ? "filled" : "outlined"} />
+              <Chip key={s.sourceName} size="small" label={`${s.sourceName} · ${fmt(s.assets)}`} onClick={() => pick({ sourceName: s.sourceName })} variant={source === s.sourceName ? "filled" : "outlined"} />
             ))}
           </Stack>
           <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.5 }}>

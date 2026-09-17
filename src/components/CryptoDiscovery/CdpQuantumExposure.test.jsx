@@ -2,7 +2,8 @@
 //
 // La tira de preparación y el sunburst del Dashboard: los números salen de
 // exposure/overview, cada par navega, el «Group by» cambia la petición y
-// un gajo abre Inventory con el filtro de ese gajo.
+// cada gajo abre la pantalla donde viven SUS filas —Inventory o Explore—
+// y una base amplía el sector en vez de prometer una lista que no existe.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -77,7 +78,7 @@ describe("ReadinessStrip", () => {
 
 describe("QuantumSunburst", () => {
   it("⭐ abre en Keys, pide las facetas de claves, y pinta las cuatro bases aunque tres estén vacías", async () => {
-    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true })));
     // 146 claves en los equipos + 27 que certificó la CA (grupo de On-prem).
     expect(await screen.findByText("173")).toBeInTheDocument();
@@ -87,7 +88,7 @@ describe("QuantumSunburst", () => {
   });
 
   it("«Certificates» pide facetas por propiedad, fuente y algoritmo y suma lo de fuera en el centro; «Services / Resources» pide el roadmap", async () => {
-    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     fireEvent.click(screen.getByLabelText("Certificates"));
     await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["ownership", "source", "key_algorithm"], stack: "key_size_bits" })));
     // 1,043 únicos en equipos + 27 de la CA.
@@ -99,16 +100,41 @@ describe("QuantumSunburst", () => {
   });
 
   it("⭐ un gajo de algoritmo abre Inventory con su filtro; una base vacía no navega", async () => {
-    const onDrillDown = vi.fn();
-    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={onDrillDown} />);
+    const onSelect = vi.fn();
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={onSelect} />);
     const arc = await screen.findByRole("button", { name: /RSA-2048: 146 private keys/ });
     fireEvent.click(arc);
-    expect(onDrillDown).toHaveBeenCalledWith(expect.objectContaining({ hasPrivateKey: true, keyAlgorithm: "RSA", keySizeBits: 2048, storeName: "LocalMachine\\My" }), { replace: true });
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ to: "inventory", hasPrivateKey: true, keyAlgorithm: "RSA", keySizeBits: 2048, storeName: "LocalMachine\\My" }));
     expect(screen.queryByRole("button", { name: /^Cloud/ })).not.toBeInTheDocument();
   });
 
+  it("⭐ lo que vive fuera de los equipos NO va a Inventory: el gajo de la CA abre Explore por su origen", async () => {
+    const onSelect = vi.fn();
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={onSelect} />);
+    const ca = await screen.findByRole("button", { name: /CA · MSIG-RADIUS-CA: 27 private keys/ });
+    expect(ca).toHaveAccessibleName(/open in Explore/i);
+    fireEvent.click(ca);
+    expect(onSelect).toHaveBeenCalledWith({ to: "outside", sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs" });
+  });
+
+  it("⭐ una base no navega: amplía su sector y se puede volver", async () => {
+    const onSelect = vi.fn();
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={onSelect} />);
+    const onprem = await screen.findByRole("button", { name: /On-prem devices: 173 private keys — click to zoom/ });
+    fireEvent.click(onprem);
+    // Ninguna navegación: el sector se abre, y las otras bases se quitan.
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(await screen.findByText("Showing On-prem devices only")).toBeInTheDocument();
+    expect(screen.queryByText("External key sources")).not.toBeInTheDocument();
+    // Y sus fuentes siguen navegando desde dentro.
+    fireEvent.click(screen.getByRole("button", { name: /LocalMachine/ }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ to: "inventory", storeName: "LocalMachine\\My" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to all bases" }));
+    expect(await screen.findByText("External key sources")).toBeInTheDocument();
+  });
+
   it("en Keys y Certificates se explica dónde está el verde de la tira; en Services no hace falta", async () => {
-    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     expect(await screen.findByText(/hybrid key exchange counted in the readiness figure/)).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Services / Resources"));
     await waitFor(() => expect(screen.queryByText(/hybrid key exchange counted in the readiness figure/)).not.toBeInTheDocument());
@@ -116,7 +142,7 @@ describe("QuantumSunburst", () => {
 
   it("un fallo al cargar se dice, no se calla", async () => {
     getCdpFacets.mockRejectedValueOnce(new Error("backend caído"));
-    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onDrillDown={vi.fn()} />);
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     expect(await screen.findByText("backend caído")).toBeInTheDocument();
   });
 });

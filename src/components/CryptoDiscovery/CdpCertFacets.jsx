@@ -37,7 +37,10 @@ export function facetFilterOf(filter) {
   const out = { lens: "list" };
   // `kem` faltaba desde que se añadió (09-sep): filtrar por intercambio de
   // claves acotaba la tabla y dejaba las facetas contando la flota entera.
-  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
+  // `certClass` entra por lo mismo (17-sep): el sunburst abre la lista con
+  // la lente abierta, y sin propagarla la faceta contaría sólo entidades
+  // finales al lado de una tabla que enseña también las CA.
+  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "certClass", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
     if (f[k] != null && f[k] !== "" && f[k] !== false) out[k] = f[k];
   }
   for (const k of ["hasPrivateKey", "hasFlags", "includeRoots"]) {

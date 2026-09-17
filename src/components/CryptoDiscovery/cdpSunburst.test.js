@@ -45,10 +45,38 @@ describe("buildCertificatesTree", () => {
   it("un gajo de algoritmo navega a Inventory con fuente, algoritmo y tamaño; el de raíces incluye system roots", () => {
     const tree = buildCertificatesTree([facet("own_leaf", "store", "RSA", 2048, 5), facet("vendor", "store", "EC", 384, 3)], []);
     const stores = tree[0].children.find((c) => c.name === "Certificate stores");
-    expect(stores.children[0].drill).toEqual({ source: "store", keyAlgorithm: "RSA", keySizeBits: 2048 });
+    expect(stores.children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "store", keyAlgorithm: "RSA", keySizeBits: 2048 });
     const vendor = tree[0].children.find((c) => c.name === "Vendor roots");
-    expect(vendor.children[0].drill).toEqual({ includeRoots: true, scope: "system-roots", keyAlgorithm: "EC", keySizeBits: 384 });
+    expect(vendor.children[0].drill).toEqual({ to: "inventory", certClass: "all", includeRoots: true, scope: "system-roots", keyAlgorithm: "EC", keySizeBits: 384 });
     expect(vendor.children[0].name).toBe("EC P-384");
+  });
+
+  it("⭐ `certClass: all` no es decoración: las facetas cuentan CA y raíces, y la lista por defecto no — sin él la cifra del gajo y la de la lista no cuadran, y «Vendor roots» abría una lista vacía", () => {
+    const tree = buildCertificatesTree([facet("vendor", "store", "RSA", 4096, 51)], []);
+    const vendor = tree[0].children.find((c) => c.name === "Vendor roots");
+    // La lente por defecto del servidor excluye `system-roots`, que es
+    // justo el ámbito que este filtro pide: sin `all`, cero filas.
+    expect(vendor.drill).toEqual({ to: "inventory", certClass: "all", includeRoots: true, scope: "system-roots" });
+    expect(vendor.children[0].drill.certClass).toBe("all");
+  });
+
+  it("⭐ el anillo de origen también navega, y lo de FUERA de los equipos va a Explore, no a un inventario donde no tiene filas", () => {
+    const tree = buildCertificatesTree(
+      [facet("own_leaf", "store", "RSA", 2048, 5), facet("foreign", "listener", "RSA", 2048, 2)],
+      [{ sourceName: "vcenter:vc.corp", origin: "vcenter", certificates: 3 }],
+      [{ sourceName: "adcs:MSIG-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 27 }]
+    );
+    const onprem = tree[0];
+    expect(onprem.children.find((c) => c.name === "Certificate stores").drill).toEqual({ to: "inventory", certClass: "all", source: "store" });
+    expect(onprem.children.find((c) => c.name === "TLS listeners").drill).toEqual({ to: "inventory", certClass: "all", source: "listener" });
+    // La CA y vCenter viven en cdp_crypto_assets: su lista es «Outside
+    // your devices», y la hoja lleva al mismo sitio que su fuente porque
+    // ese panel filtra por origen, no por algoritmo.
+    const ca = onprem.children.find((c) => c.name === "CA · MSIG-CA");
+    expect(ca.drill).toEqual({ to: "outside", sourceName: "adcs:MSIG-CA", origin: "adcs" });
+    expect(ca.children[0].drill).toEqual(ca.drill);
+    const vcenter = tree.find((b) => b.key === "infra").children[0];
+    expect(vcenter.drill).toEqual({ to: "outside", sourceName: "vcenter:vc.corp", origin: "vcenter" });
   });
 });
 
@@ -88,14 +116,29 @@ describe("buildKeysTree", () => {
     );
     const onprem = tree[0];
     expect(onprem.children.map((c) => c.name)).toEqual(["LocalMachine\\My", "CurrentUser\\My", "SSH host keys"]);
-    expect(onprem.children[0].children[0].drill).toEqual(expect.objectContaining({ hasPrivateKey: true, storeName: "LocalMachine\\My", keyAlgorithm: "RSA", keySizeBits: 2048 }));
+    expect(onprem.children[0].children[0].drill).toEqual(expect.objectContaining({ to: "inventory", hasPrivateKey: true, storeName: "LocalMachine\\My", keyAlgorithm: "RSA", keySizeBits: 2048 }));
+  });
+
+  it("⭐ huérfanas y claves SSH llevan a SU pantalla: ninguna de las dos es un certificado del inventario", () => {
+    const tree = buildKeysTree([facet("own_leaf", "store", "RSA", 2048, 5, { store_name: "LocalMachine\\My" })], { orphanKeys: 4, sshHostKeys: 13 });
+    const onprem = tree[0];
+    const orphan = onprem.children.find((c) => c.name === "Orphan keys");
+    expect(orphan.drill).toEqual({ to: "orphans" });
+    expect(orphan.children[0].drill).toEqual({ to: "orphans" });
+    // Las claves de host SSH son varias fuentes (una por equipo): el
+    // destino es el ORIGEN, no una `source_name` concreta.
+    const ssh = onprem.children.find((c) => c.name === "SSH host keys");
+    expect(ssh.drill).toEqual({ to: "outside", sourceName: null, origin: "ssh" });
+    // El almacén lleva a su lista con clave privada; las raíces entran
+    // porque el almacén ya acota.
+    expect(onprem.children[0].drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "store", storeName: "LocalMachine\\My" });
   });
 });
 
 describe("buildServicesTree", () => {
   it("procesos y objetivos son servicios con su KEM; los orígenes externos son recursos en su base", () => {
     const tree = buildServicesTree([
-      { key: "process:svchost.exe", name: "Served by svchost.exe", factors: { kemHybrid: 14, kemClassical: 4, kemUnknown: 0 } },
+      { key: "process:svchost.exe", name: "Served by svchost.exe", sampleSubject: "SRV-01.corp", factors: { kemHybrid: 14, kemClassical: 4, kemUnknown: 0 } },
       { key: "target:lb.corp:443", name: "lb.corp:443", factors: { kemHybrid: 0, kemClassical: 1, kemUnknown: 0 } },
       { key: "source:keyvault:kv-prod", name: "Azure Key Vault kv-prod", factors: { uniqueCerts: 12 } },
       { key: "issuer:corp ca", name: "Issued by corp ca", factors: { kemHybrid: 0, kemClassical: 0, kemUnknown: 0 } }
@@ -107,6 +150,27 @@ describe("buildServicesTree", () => {
     expect(byKey.external.children[0].name).toBe("Azure Key Vault kv-prod");
     expect(sumNode(byKey.external)).toBe(12);
     expect(byKey.cloud.children).toEqual([]);
+  });
+
+  it("⭐ «Hybrid» bajo un proceso abre SU lista, no todos los híbridos del parque; un recurso externo abre Explore", () => {
+    const tree = buildServicesTree([
+      { key: "process:svchost.exe", name: "Served by svchost.exe", sampleSubject: "SRV-01.corp", factors: { kemHybrid: 14, kemClassical: 4, kemUnknown: 0 } },
+      { key: "target:lb.corp:443", name: "lb.corp:443", sampleSubject: "lb.corp", factors: { kemHybrid: 0, kemClassical: 1, kemUnknown: 0 } },
+      { key: "source:keyvault:kv-prod", name: "Azure Key Vault kv-prod", factors: { uniqueCerts: 12 } }
+    ]);
+    const byKey = Object.fromEntries(tree.map((b) => [b.key, b]));
+    const proc = byKey.onprem.children[0];
+    // El mismo filtro con el que la hoja de ruta identifica ese sistema,
+    // más el KEM de la hoja: el inventario no sabe de procesos.
+    expect(proc.drill).toEqual({ to: "inventory", certClass: "all", source: "listener", search: "SRV-01.corp" });
+    expect(proc.children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "listener", search: "SRV-01.corp", kem: "hybrid" });
+    expect(byKey.infra.children[0].children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "probe", search: "lb.corp", kem: "classical" });
+    expect(byKey.external.children[0].drill).toEqual({ to: "outside", sourceName: "keyvault:kv-prod", origin: "keyvault" });
+  });
+
+  it("sin sujeto de muestra el filtro no inventa una búsqueda vacía", () => {
+    const tree = buildServicesTree([{ key: "process:java.exe", name: "java.exe", factors: { kemHybrid: 1, kemClassical: 0, kemUnknown: 0 } }]);
+    expect(tree[0].children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "listener" });
   });
 });
 
@@ -142,7 +206,26 @@ describe("layoutSunburst", () => {
     const { arcs } = layoutSunburst(t);
     const leaves = arcs.filter((a) => a.depth === 2).map((a) => a.name);
     expect(leaves).toEqual(["RSA-2048", "RSA-4096", "Other"]);
-    expect(arcs.find((a) => a.name === "Other").value).toBe(10);
+    const other = arcs.find((a) => a.name === "Other");
+    expect(other.value).toBe(10);
+    // ⭐ «Other» son tres algoritmos: ningún filtro dice «estos tres». En
+    // vez de no llevar a nada, lleva a la lista de su FUENTE entera y se
+    // marca como plegado para que quien la pinte lo diga.
+    expect(other.folded).toBe(true);
+    expect(other.drill).toEqual({ to: "inventory", certClass: "all", source: "store" });
+  });
+
+  it("⭐ una base no navega: se amplía. El arco trae su clave y ningún filtro", () => {
+    const { arcs } = layoutSunburst(tree);
+    const onprem = arcs.find((a) => a.depth === 0 && a.name === "On-prem devices");
+    expect(onprem.base).toBe("onprem");
+    expect(onprem.drill).toBeNull();
+    // Los anillos de dentro sí navegan, y no se anuncian como base.
+    expect(arcs.filter((a) => a.depth > 0).every((a) => a.base === null)).toBe(true);
+    // Ampliado = ese sector ocupa la vuelta entera y sus fuentes siguen ahí.
+    const zoom = layoutSunburst(tree.filter((b) => b.key === "onprem"));
+    expect(zoom.arcs.filter((a) => a.depth === 0).map((a) => a.name)).toEqual(["On-prem devices"]);
+    expect(zoom.arcs.filter((a) => a.depth === 1).map((a) => a.name)).toEqual(["Certificate stores", "Vendor roots"]);
   });
 });
 

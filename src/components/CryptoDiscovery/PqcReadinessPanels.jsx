@@ -3,7 +3,11 @@
 // Consolidación 2026-09-04: el horizonte 2030/2035 y las familias de
 // algoritmo se retiraron de aquí — el embudo del Dashboard y la
 // distribución por clave de Explore responden lo mismo con más contexto.
-// Quedan las tres referencias con valor propio, montadas en Roadmap.
+// Quedan las referencias con valor propio, montadas en Roadmap: las
+// anclas a reemplazar, lo que no puede migrar y lo que puede con un
+// ajuste. «CNSA 2.0» se fue el 17-sep por el mismo criterio —contaba por
+// parámetro lo que el sunburst ya cuenta por familia, y su plazo sólo
+// obliga a los National Security Systems de EE. UU.
 //
 // The post-quantum readiness surface (ADR-0004 e-F1 / e-F2), fed by a
 // single GET /api/v1/cdp/pqc.
@@ -316,87 +320,3 @@ export function OsTlsFixablePanel({ pqc, onSelectDevice }) {
   );
 }
 
-/**
- * CNSA 2.0 assessment.
- *
- * ⚠️ The applicability line is not decoration. CNSA 2.0 is mandatory only
- * for US National Security Systems; for everyone else it is a reference
- * timeline. Showing counts and a countdown without that sentence would
- * tell a commercial customer they are out of compliance with something
- * that does not bind them. It comes from the API rather than being
- * written here, so the claim has one source.
- *
- * The panel leads with the 2027 gate because that is the number that
- * bears on a purchasing decision this year — unlike the 2030/2035
- * horizon above it, which comes from a NIST draft.
- */
-export function CnsaPanel({ pqc, onSelect }) {
-  const cnsa = pqc?.cnsa;
-  if (!cnsa) return null;
-
-  const c = cnsa.certificates || {};
-  const next = (cnsa.gates || []).find((g) => !g.passed);
-
-  // Cuarto elemento: el filtro de inventario que enseña EXACTAMENTE esa
-  // cifra. Las dos clases post-cuánticas comparten familia `pq_safe`, así
-  // que no tienen filtro exacto y no navegan: mejor inertes que engañosas.
-  const rows = [
-    ["Approved parameter sets", c.approved, "ML-KEM-1024 or ML-DSA-87 throughout.", null],
-    [
-      "Post-quantum, not approved",
-      c.pqNotApproved,
-      "Genuinely post-quantum, but a parameter set CNSA 2.0 excludes — ML-DSA-44/65, ML-KEM-512/768, or SLH-DSA, which the suite omits entirely. A parameter change, not a migration.",
-      null
-    ],
-    ["Quantum-vulnerable", c.quantumVulnerable, "RSA, ECDSA and friends. A full algorithm migration.", { family: "quantum_broken" }],
-    ["Not classified", c.unknown, "No algorithm we could read. Neither passed nor failed.", { family: "unknown" }]
-  ];
-
-  return (
-    <SectionPaper sx={{ p: 2 }}>
-      <PanelTitle hint="CNSA 2.0 is the NSA's published suite: ML-KEM-1024 for key establishment and ML-DSA-87 for signatures, at the highest parameter sets only.">
-        CNSA 2.0
-      </PanelTitle>
-
-      <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1.5, fontStyle: "italic" }}>
-        {cnsa.applicability}
-      </Typography>
-
-      {next ? (
-        <Box sx={{ mb: 2, p: 1.25, borderRadius: 1, bgcolor: BRAND.surfaceMuted }}>
-          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-            {next.daysRemaining} days to {next.date}
-          </Typography>
-          <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{next.label}</Typography>
-        </Box>
-      ) : null}
-
-      <Stack spacing={0.75}>
-        {rows.map(([label, value, hint, filter]) => (
-          <Tooltip key={label} title={hint} arrow>
-            <Stack
-              direction="row"
-              justifyContent="space-between"
-              alignItems="baseline"
-              sx={{ cursor: "help", px: 0.5, mx: -0.5, ...ROW_ACTION_SX(Boolean(onSelect && filter)) }}
-              {...rowActionProps(onSelect && filter ? () => onSelect(filter) : null, `${label}: ${value ?? 0}`)}
-            >
-              <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{label}</Typography>
-              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-                {value ?? 0}
-              </Typography>
-            </Stack>
-          </Tooltip>
-        ))}
-      </Stack>
-
-      {c.weakDigest > 0 ? (
-        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1.5 }}>
-          {c.weakDigest} of {c.total} also sit below the SHA-384 digest floor. Counted separately
-          because on an estate that has already migrated its algorithms, the digest can be the
-          only thing left failing.
-        </Typography>
-      ) : null}
-    </SectionPaper>
-  );
-}

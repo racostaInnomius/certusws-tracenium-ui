@@ -41,6 +41,11 @@ export const CDP_URL_KEYS = {
   // su mitad clásica. Ésta es su única puerta.
   catalyst: "catalyst",
   includeRoots: "roots",
+  // Lente de la lista: `end-entity` (defecto del servidor), `ca` o `all`.
+  // La escribe el sunburst, cuyas facetas cuentan TODO: sin ella un gajo
+  // de 1.200 abría una lista de 300, y el de «Vendor roots» una vacía
+  // (la lente por defecto excluye justo el ámbito que ese filtro pedía).
+  certClass: "class",
   // Fase 1: los filtros de navegación. Son los que hacen que un segmento
   // de la distribución, una fila de almacenes o un año de la línea de
   // tiempo lleven a SU lista.
@@ -58,7 +63,13 @@ export const CDP_URL_KEYS = {
   notAfterTo: "to",
   // Fase 1, pieza D: agrupación de la lista de inventario. Ausente =
   // por certificado; `devices` = por equipo.
-  view: "view"
+  view: "view",
+  // Explore → «Outside your devices». Lo que vive donde no hay agente no
+  // tiene fila en el inventario: su lista es ese panel, y estas dos claves
+  // son las que hacen que un gajo del sunburst (la CA de Windows, vCenter,
+  // un vault, las claves de host SSH) llegue a SU origen y no a la nada.
+  assetSource: "asset",
+  assetOrigin: "aorigin"
 };
 
 const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst"]);

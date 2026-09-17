@@ -4,12 +4,11 @@
 // certificados deberían llevarnos a su detalle». Estos tres paneles
 // contaban y no navegaban. Lo que se fija: cada fila que cuenta algo
 // navega con el filtro EXACTO de esa cifra, y las cifras sin filtro
-// exacto (las dos clases post-cuánticas de CNSA) se quedan inertes en vez
-// de mentir.
+// exacto se quedan inertes en vez de mentir.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
-import { TrustAnchorsPanel, AgilityBlockersPanel, CnsaPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
+import { TrustAnchorsPanel, AgilityBlockersPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
 import { OS_TLS_FIX_STATE } from "./osTlsFixStates";
 
 const PQC = {
@@ -26,11 +25,6 @@ const PQC = {
       { agentId: "a1", host: "SRV-JAVA-01", runtime: "jvm", version: "8.0.392", reason: "JDK 8 has no ML-KEM" },
       { agentId: "a1", host: "SRV-JAVA-01", runtime: "openssl", version: "1.1.1", reason: "OpenSSL 1.1.1 has no ML-KEM" }
     ]
-  },
-  cnsa: {
-    applicability: "Mandatory for US National Security Systems only.",
-    gates: [{ date: "2027-01-01", label: "CNSA 2.0 in new products", passed: false, daysRemaining: 480 }],
-    certificates: { total: 100, approved: 0, pqNotApproved: 0, quantumVulnerable: 95, unknown: 5, weakDigest: 0 }
   }
 };
 
@@ -56,18 +50,6 @@ describe("PqcReadinessPanels — drill-down", () => {
     fireEvent.click(jvm);
     fireEvent.click(screen.getByText("SRV-JAVA-01"));
     expect(onSelectDevice).toHaveBeenCalledWith(expect.objectContaining({ agentId: "a1", host: "SRV-JAVA-01" }));
-  });
-
-  it("CNSA: lo cuántico-vulnerable navega por familia; lo post-cuántico sin filtro exacto NO navega", () => {
-    const onSelect = vi.fn();
-    render(<CnsaPanel pqc={PQC} onSelect={onSelect} />);
-    fireEvent.click(screen.getByRole("button", { name: /Quantum-vulnerable: 95/i }));
-    expect(onSelect).toHaveBeenLastCalledWith({ family: "quantum_broken" });
-    fireEvent.click(screen.getByRole("button", { name: /Not classified: 5/i }));
-    expect(onSelect).toHaveBeenLastCalledWith({ family: "unknown" });
-    // «Approved parameter sets» comparte familia pq_safe con «not
-    // approved»: un filtro que enseñara los dos juntos mentiría.
-    expect(screen.queryByRole("button", { name: /Approved parameter sets/i })).not.toBeInTheDocument();
   });
 
   it("sin callback las filas no se anuncian como botones", () => {

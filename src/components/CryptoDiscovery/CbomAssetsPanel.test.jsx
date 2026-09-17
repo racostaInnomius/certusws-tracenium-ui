@@ -55,6 +55,29 @@ describe("CbomAssetsPanel", () => {
     expect(onSelect).toHaveBeenCalledWith({ search: "a".repeat(64) });
     expect(screen.getByText("not on any device")).toBeInTheDocument();
   });
+
+  it("⭐ el origen que se mira lo pone quien llama: un gajo del sunburst abre este panel YA filtrado, y el chip escribe de vuelta", async () => {
+    getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "adcs:MSIG-CA", assets: 27, lastSeen: null }, { sourceName: "trivy", assets: 3, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
+    listCryptoAssets.mockResolvedValue({ items: [] });
+    const onSourceChange = vi.fn();
+    render(<CbomAssetsPanel refreshNonce={0} sourceName="adcs:MSIG-CA" onSourceChange={onSourceChange} />);
+    await waitFor(() => expect(listCryptoAssets).toHaveBeenCalledWith(expect.objectContaining({ sourceName: "adcs:MSIG-CA", limit: 200 })));
+    fireEvent.click(await screen.findByText(/trivy · 3/));
+    expect(onSourceChange).toHaveBeenCalledWith({ sourceName: "trivy" });
+  });
+
+  it("⭐ por ORIGEN cuando el gajo agrupa varias fuentes (claves SSH: una por equipo)", async () => {
+    getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "ssh:SRV-01", assets: 2, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
+    listCryptoAssets.mockResolvedValue({ items: [] });
+    const onSourceChange = vi.fn();
+    render(<CbomAssetsPanel refreshNonce={0} origin="ssh" onSourceChange={onSourceChange} />);
+    await waitFor(() => expect(listCryptoAssets).toHaveBeenCalledWith(expect.objectContaining({ origin: "ssh" })));
+    // Y se ve que hay un filtro puesto, con su salida: nunca un filtro
+    // invisible actuando.
+    expect(await screen.findByText("Origin: ssh")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("CancelIcon"));
+    expect(onSourceChange).toHaveBeenCalledWith({});
+  });
 });
 
 describe("CbomImportForm", () => {

@@ -12,7 +12,11 @@
 // El modelo y el trazado están en cdpSunburst.js, sin React, con tests.
 //
 // Todo lo que cuenta navega: un par de la tira abre su lista o su
-// pestaña; un arco del sunburst abre Inventory con el filtro de ese gajo.
+// pestaña; un gajo del sunburst abre SU lista —Inventory, «Outside your
+// devices» o las claves huérfanas, según dónde vivan esas filas— y una
+// base amplía el sector, porque abarca las dos cosas a la vez (revisión
+// 17-sep: había gajos que no llevaban a ningún sitio y otros que abrían
+// una lista más corta que su propio número).
 
 import * as React from "react";
 import { Box, FormControlLabel, GlobalStyles, Radio, RadioGroup, Stack, Typography } from "@mui/material";
@@ -163,10 +167,15 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
  * vista; `exposure` y `overview` llegan del Dashboard para no repetir
  * llamadas (activos externos, claves huérfanas).
  */
-export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillDown }) {
+export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect }) {
   const [mode, setMode] = React.useState("keys");
   const [data, setData] = React.useState({});
   const [error, setError] = React.useState(null);
+  // Sector ampliado. Una base no navega —abarca el inventario de equipos Y
+  // lo de fuera, y no hay lista que junte las dos cosas— así que se abre:
+  // es además lo que hace visible un origen pequeño (vCenter con 3
+  // certificados junto a un almacén con 1.000).
+  const [focus, setFocus] = React.useState(null);
 
   React.useEffect(() => {
     let alive = true;
@@ -195,11 +204,34 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
     if (mode === "keys") return buildKeysTree(rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys, outsideBySource: outside, outsideByAlgorithm });
     return buildServicesTree(rows);
   }, [data, mode, outside, outsideByAlgorithm, overview, sshHostKeys]);
-  const layout = React.useMemo(() => (tree ? layoutSunburst(tree) : null), [tree]);
+  // Ampliado: el árbol es SOLO ese sector, así que ocupa la vuelta entera.
+  const shown = React.useMemo(() => (tree && focus ? tree.filter((b) => b.key === focus) : tree), [tree, focus]);
+  const layout = React.useMemo(() => (shown ? layoutSunburst(shown) : null), [shown]);
+  const focused = focus ? BASES.find((b) => b.key === focus) : null;
 
-  const centerValue = mode === "certs"
-    ? (Number(exposure?.total ?? 0) || layout?.total || 0) + outside.filter((s) => s.origin !== "ssh").reduce((s, x) => s + Number(x.certificates ?? 0), 0)
-    : layout?.total ?? 0;
+  const centerValue = focus
+    ? layout?.total ?? 0
+    : mode === "certs"
+      ? (Number(exposure?.total ?? 0) || layout?.total || 0) + outside.filter((s) => s.origin !== "ssh").reduce((s, x) => s + Number(x.certificates ?? 0), 0)
+      : layout?.total ?? 0;
+
+  // Un gajo: o amplía su base, o abre su lista. `null` = no hace nada
+  // (una base vacía, una hoja sin destino).
+  const actionFor = (a) => {
+    if (a.empty) return null;
+    // La base ampliada vuelve atrás: es lo que dice su etiqueta, y un clic
+    // que no cambia nada se lee como que la vista se ha roto.
+    if (a.base) return () => setFocus((f) => (f === a.base ? null : a.base));
+    if (a.drill && onSelect) return () => onSelect(a.drill);
+    return null;
+  };
+  const arcHint = (a) => {
+    if (a.empty) return "nothing connected yet";
+    if (a.base) return focus ? "click to go back to all bases" : "click to zoom into this base";
+    if (!a.drill) return null;
+    if (a.folded) return "the rest of this source, folded — opens the whole source";
+    return a.drill.to === "outside" ? "open in Explore → Outside your devices" : a.drill.to === "orphans" ? "open the Orphan keys tab" : "open in Inventory";
+  };
 
   return (
     <SectionPaper>
@@ -216,11 +248,11 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
       }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (the Windows CA sits inside On-prem, after what the agents collect) → its algorithm or key exchange. Click a ring to open that slice in Inventory.
+        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (the Windows CA sits inside On-prem, after what the agents collect) → its algorithm or key exchange. Click a base to zoom into it; click any slice inside to open its list — in Inventory, or in Explore for what lives where there is no agent.
       </Typography>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: TEXT_MUTED }}>Group by:</Typography>
-        <RadioGroup row value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Group by">
+        <RadioGroup row value={mode} onChange={(e) => { setMode(e.target.value); setFocus(null); }} aria-label="Group by">
           {MODES.map((m) => (
             <FormControlLabel key={m.key} value={m.key} control={<Radio size="small" />} label={<Typography sx={{ fontSize: TEXT.md }}>{m.label}</Typography>} />
           ))}
@@ -228,31 +260,35 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
       </Stack>
       {error ? <Typography sx={{ mt: 1, fontSize: TEXT.sm, color: BRAND.alert.errorText }}>{error}</Typography> : null}
       <Stack direction={{ xs: "column", md: "row" }} spacing={3} alignItems="center" sx={{ mt: 1 }}>
-        <Box sx={{ position: "relative", width: 560, height: 560, flexShrink: 0, maxWidth: "100%" }} aria-label={`Sunburst by ${MODES.find((m) => m.key === mode)?.label}`}>
-          <svg key={mode} width="560" height="560" viewBox="-280 -280 560 560" style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
-            {(layout?.arcs ?? []).map((a) => (
-              <path
-                key={a.id}
-                className="cdp-sunburst-arc"
-                d={a.d}
-                fill={a.fill}
-                stroke="#FFFFFF"
-                strokeWidth="2"
-                role={a.drill && onDrillDown ? "button" : undefined}
-                tabIndex={a.drill && onDrillDown ? 0 : undefined}
-                aria-label={a.drill ? `${a.name}: ${fmt(a.value)} ${CENTER[mode]}` : undefined}
-                style={{ cursor: a.drill && onDrillDown ? "pointer" : "default", animationDelay: `${a.depth * 160}ms` }}
-                onClick={a.drill && onDrillDown ? () => onDrillDown(a.drill, { replace: true }) : undefined}
-                onKeyDown={a.drill && onDrillDown ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onDrillDown(a.drill, { replace: true }); } } : undefined}
-              >
-                <title>{`${a.name}: ${a.empty ? "nothing connected yet" : `${fmt(a.value)} ${CENTER[mode]}`}${a.note ? ` · ${a.note}` : ""}`}</title>
-              </path>
-            ))}
+        <Box sx={{ position: "relative", width: 560, height: 560, flexShrink: 0, maxWidth: "100%" }} aria-label={`Sunburst by ${MODES.find((m) => m.key === mode)?.label}${focused ? `, zoomed into ${focused.label}` : ""}`}>
+          <svg key={`${mode}:${focus ?? ""}`} width="560" height="560" viewBox="-280 -280 560 560" style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}>
+            {(layout?.arcs ?? []).map((a) => {
+              const act = actionFor(a);
+              const hint = arcHint(a);
+              return (
+                <path
+                  key={a.id}
+                  className="cdp-sunburst-arc"
+                  d={a.d}
+                  fill={a.fill}
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                  role={act ? "button" : undefined}
+                  tabIndex={act ? 0 : undefined}
+                  aria-label={act ? `${a.name}: ${fmt(a.value)} ${CENTER[mode]} — ${hint}` : undefined}
+                  style={{ cursor: act ? "pointer" : "default", animationDelay: `${a.depth * 160}ms` }}
+                  onClick={act ?? undefined}
+                  onKeyDown={act ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } } : undefined}
+                >
+                  <title>{`${a.name}: ${a.empty ? "nothing connected yet" : `${fmt(a.value)} ${CENTER[mode]}`}${a.note ? ` · ${a.note}` : ""}${hint && !a.empty ? ` — ${hint}` : ""}`}</title>
+                </path>
+              );
+            })}
             <circle cx="0" cy="0" r="58" fill="#FFFFFF" />
           </svg>
           {(layout?.labels ?? []).map((l, i) => (
             <Box
-              key={`${mode}:${i}`}
+              key={`${mode}:${focus ?? ""}:${i}`}
               className="cdp-sunburst-label"
               style={{ animationDelay: "560ms" }}
               sx={{
@@ -264,12 +300,37 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onDrillD
               {l.text}
             </Box>
           ))}
-          <Box sx={{ position: "absolute", left: 280, top: 280, transform: "translate(-50%, -50%)", textAlign: "center", pointerEvents: "none" }}>
-            <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1 }}>{layout ? fmt(centerValue) : "…"}</Typography>
-            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{CENTER[mode]}</Typography>
+          <Box sx={{ position: "absolute", left: 280, top: 280, transform: "translate(-50%, -50%)", textAlign: "center", width: 100 }}>
+            <Typography sx={{ fontSize: TEXT["2xl"], fontWeight: 800, color: BRAND.dark, lineHeight: 1, pointerEvents: "none" }}>{layout ? fmt(centerValue) : "…"}</Typography>
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, pointerEvents: "none" }}>{CENTER[mode]}</Typography>
+            {focused ? (
+              <Box
+                role="button"
+                tabIndex={0}
+                aria-label="Back to all bases"
+                onClick={() => setFocus(null)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFocus(null); } }}
+                sx={{ mt: 0.5, cursor: "pointer", fontSize: TEXT.xs, fontWeight: 700, color: BRAND.tealText, lineHeight: 1.1 }}
+              >
+                ← All bases
+              </Box>
+            ) : null}
           </Box>
         </Box>
         <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+          {focused ? (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>Showing {focused.label} only</Typography>
+              <Box
+                component="button"
+                type="button"
+                onClick={() => setFocus(null)}
+                sx={{ border: "none", bgcolor: "transparent", p: 0, cursor: "pointer", fontSize: TEXT.sm, fontWeight: 700, color: BRAND.tealText }}
+              >
+                Show all bases
+              </Box>
+            </Stack>
+          ) : null}
           <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: ".06em" }}>Legend</Typography>
           {LEGEND[mode].map((e) => (
             <Stack key={e.text} direction="row" spacing={1.25} alignItems="center">

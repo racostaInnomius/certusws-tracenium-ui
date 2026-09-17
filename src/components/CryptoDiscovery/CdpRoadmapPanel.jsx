@@ -56,7 +56,7 @@ import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessH
 // 2026-09-04.
 // «Trust anchors to replace» vive en la pestaña Trust anchors desde el
 // repaso UI 2026-09-06: una lista de anclas es cosa de esa pestaña.
-import { AgilityBlockersPanel, CnsaPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
+import { AgilityBlockersPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -429,7 +429,7 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
         setSnapshots(h?.snapshots ?? []);
       })
       .catch((e) => alive && setError(e?.message || String(e)));
-    // Las referencias (agilidad, CNSA, anclas) vienen de /pqc; fallo
+    // Las referencias (agilidad, ajustes de TLS, anclas) vienen de /pqc; fallo
     // blando: sin ellas la hoja de ruta sigue siendo legible — pero se
     // dice que faltan, en vez de desaparecer sin más.
     setPqcError(null);
@@ -624,13 +624,18 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
 
       {pqcError ? (
         <Alert severity="warning">
-          The references below (devices that can&apos;t migrate, CNSA 2.0) didn&apos;t load: {pqcError}. The systems
-          list above is unaffected.
+          The references below (which devices can&apos;t migrate, and which can with a fix) didn&apos;t load: {pqcError}.
+          The systems list above is unaffected.
         </Alert>
       ) : null}
 
-      {/* Referencias de la hoja de ruta: qué no puede migrar todavía, qué
-          exige CNSA 2.0, y qué anclas habría que reemplazar. */}
+      {/* Referencias de la hoja de ruta: qué no puede migrar todavía y qué
+          puede con un ajuste. El bloque «CNSA 2.0» que iba aquí se quitó el
+          17-sep: repetía por parámetro lo que la tira y el sunburst ya
+          dicen por familia, y su plazo sólo obliga a los National Security
+          Systems de EE. UU., así que a un cliente comercial le contaba un
+          incumplimiento que no existe. La evaluación sigue en la API
+          (/cdp/pqc.cnsa) para quien la necesite. */}
       {pqc ? (
         <>
           <AgilityBlockersPanel
@@ -643,7 +648,6 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
             pqc={pqc}
             onSelectDevice={onDrillDown ? (d) => onDrillDown({ view: "devices", search: d.host || d.agentId }) : undefined}
           />
-          <CnsaPanel pqc={pqc} onSelect={onDrillDown ? (f) => onDrillDown({ ...f, hasPrivateKey: true }) : undefined} />
         </>
       ) : null}
 

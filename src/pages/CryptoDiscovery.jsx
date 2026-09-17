@@ -5,7 +5,7 @@
 //   Dashboard     : ownership funnel, KPIs, expiry timeline against the
 //                   PQC deadlines, action list, issuers, hygiene, devices.
 //   Roadmap       : systems to migrate, priority, waves, trend, references
-//                   (agility blockers, CNSA 2.0, trust anchors to replace).
+//                   (agility blockers, devices one fix away, trust anchors).
 //   Explore       : distribution by key algorithm/size, where certificates
 //                   live (source → store → device) and what lives outside
 //                   your devices (imports, connectors).
@@ -170,6 +170,8 @@ const TAB_SX = {
 /** Intercambio de claves negociado por el servicio TLS que sirve el certificado. */
 const MONO = "ui-monospace, Menlo, monospace";
 const KEM_LABELS = { hybrid: "Hybrid ML-KEM", classical: "Classical only", unknown: "Not determined" };
+/** Lente de la lista. Por defecto el servidor enseña sólo entidades finales. */
+const CERT_CLASS_LABELS = { "end-entity": "End-entity certificates", ca: "CA certificates", all: "Every certificate, CAs included" };
 
 const STATUS_META = {
   active: { label: "Active", color: BRAND.alert.successText, soft: BRAND.alert.successSoft },
@@ -256,7 +258,7 @@ function TabPanel({ value, index, children }) {
 // Repaso UI 2026-09-05: el Dashboard es un OVERVIEW. Cifras y gráficos
 // que llevan a su pestaña; la prosa (modo «explicar») vive en Explore y
 // Roadmap, donde se mira con calma.
-function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
+function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices, onOpenTab }) {
   const [summary, setSummary] = React.useState(null);
   const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -435,7 +437,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 8 }}>
-          <QuantumSunburst exposure={exposure} overview={ov} refreshNonce={refreshNonce} onDrillDown={onDrillDown} />
+          <QuantumSunburst exposure={exposure} overview={ov} refreshNonce={refreshNonce} onSelect={onSelectSlice} />
         </Grid>
         <Grid size={{ xs: 12, lg: 4 }}>
           <ActionRequiredPanel
@@ -550,6 +552,10 @@ function CdpDashboard({ refreshNonce, onDrillDown, onOpenDevices, onOpenTab }) {
 
 function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
   const [scope, setScope] = React.useState("all");
+  // El origen que se mira en «Outside your devices» vive en la URL como el
+  // resto del filtro: así un gajo del sunburst puede abrir SU fuente, y el
+  // enlace resultante se puede compartir.
+  const [filter, patchFilter] = useCdpFilter();
   const [explain, toggleExplain] = useExplainMode();
   const [facets, setFacets] = React.useState(null);
   // Stores vive aquí: «dónde viven» es una dimensión de la exploración,
@@ -624,7 +630,14 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
         </Grid>
       </Grid>
       {/* Fase 4: lo que vive donde no hay agente. Solo lectura; se configura en Settings. */}
-      <CbomAssetsPanel refreshNonce={refreshNonce} onSelect={(f) => onDrillDown?.(f, { replace: true })} onOpenSettings={onOpenSettings} />
+      <CbomAssetsPanel
+        refreshNonce={refreshNonce}
+        sourceName={filter.assetSource ?? ""}
+        origin={filter.assetOrigin ?? ""}
+        onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "" })}
+        onSelect={(f) => onDrillDown?.(f, { replace: true })}
+        onOpenSettings={onOpenSettings}
+      />
     </Stack>
   );
 }
@@ -664,6 +677,10 @@ function CdpInventoryTab({ refreshNonce }) {
   const eku = filter.eku ?? "";
   const kem = ["hybrid", "classical", "unknown"].includes(filter.kem) ? filter.kem : "";
   const catalyst = filter.catalyst === true;
+  // Lente. Sin control propio: la eligen los paneles que cuentan sin ella
+  // (el sunburst), y se ve y se borra como chip. Un valor desconocido no
+  // ensancha la consulta — se ignora, igual que en el servidor.
+  const certClass = ["end-entity", "ca", "all"].includes(filter.certClass) ? filter.certClass : "";
   // Filtros de navegación (fase 1): llegan desde Explore / Stores. No
   // tienen control propio aquí —se eligen en su panel— pero sí chip
   // borrable, para que nunca haya un filtro invisible actuando.
@@ -696,6 +713,7 @@ function CdpInventoryTab({ refreshNonce }) {
     hasFlags: hasFlags || undefined,
     eku: eku || undefined,
     kem: kem || undefined,
+    certClass: certClass || undefined,
     // ⚠️ El catalyst abre la lente a propósito. La tarjeta de la portada
     // cuenta TAMBIÉN las anclas —que la cadena de confianza sea híbrida es
     // media noticia—, y con la lente por defecto (entidad final) la lista
@@ -711,6 +729,7 @@ function CdpInventoryTab({ refreshNonce }) {
     flag ? { key: "flag", label: `Flag: ${FLAG_LABELS[flag] ? FLAG_LABELS[flag].split(" — ")[0].split(" (")[0] : flag}` } : null,
     eku ? { key: "eku", label: `Purpose: ${eku}` } : null,
     kem ? { key: "kem", label: `Key exchange: ${KEM_LABELS[kem]}` } : null,
+    certClass ? { key: "certClass", label: `Showing: ${CERT_CLASS_LABELS[certClass]}` } : null,
     catalyst ? { key: "catalyst", label: "Post-quantum alternative signature" } : null,
     issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
     hasPrivateKey ? { key: "hasPrivateKey", label: "With private key" } : null,
@@ -1626,6 +1645,30 @@ export default function CryptoDiscovery({ onNavigate }) {
     [patchFilter, replaceFilter]
   );
 
+  // Un gajo del sunburst → la pantalla donde viven ESAS filas. No todo lo
+  // que el mapa cuenta está en el inventario de equipos: lo que llega de
+  // una CA, de vCenter, de un vault o de una nube vive en «Outside your
+  // devices» (Explore), y una clave huérfana en su propia pestaña.
+  // Mandarlo todo a Inventory era enseñar una lista vacía.
+  const openSlice = React.useCallback(
+    (target) => {
+      if (!target) return;
+      if (target.to === "outside") {
+        // Lo más específico y nada más: con la fuente puesta, el origen
+        // sobra (lo implica) y sólo añadiría un segundo chip que decir.
+        return replaceFilter({
+          tab: TAB.explore,
+          assetSource: target.sourceName ?? "",
+          assetOrigin: target.sourceName ? "" : target.origin ?? ""
+        });
+      }
+      if (target.to === "orphans") return replaceFilter({ tab: TAB.orphans });
+      const { to: _to, ...f } = target;
+      return drillDown(f, { replace: true });
+    },
+    [drillDown, replaceFilter]
+  );
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
@@ -1710,6 +1753,7 @@ export default function CryptoDiscovery({ onNavigate }) {
         <CdpDashboard
           refreshNonce={refreshNonce}
           onDrillDown={drillDown}
+          onSelectSlice={openSlice}
           onOpenDevices={(row) =>
             replaceFilter({ tab: TAB.inventory, view: "devices", ...(row?.host || row?.agentId ? { search: row.host || row.agentId } : {}) })
           }

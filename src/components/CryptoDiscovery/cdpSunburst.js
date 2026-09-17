@@ -26,6 +26,11 @@
 // pestaña Settings usa las MISMAS secciones (`SECTIONS`, cdpSources.js):
 // las cuatro bases y, colgando de On-prem, Windows CA.
 //
+// Todo gajo que cuenta algo tiene un destino (`drill`, ver más abajo) y
+// una base se AMPLÍA en vez de navegar: un sector abarca a la vez filas
+// del inventario de equipos y activos de fuera, y no hay una lista que
+// enseñe las dos cosas. Ampliar no miente; un filtro a medias, sí.
+//
 // Anillo 2 = origen; anillo 3 = algoritmo y tamaño (o KEM negociado en
 // la vista de servicios). Color = estado cuántico, no identidad:
 // quantum-broken en rojo, post-cuántico o híbrido en verde, lo que no es
@@ -86,6 +91,30 @@ function outsideSourceLabel(origin, sourceName) {
   }
   return SOURCE_LABEL[origin] ?? origin;
 }
+
+// ── A dónde lleva un clic ─────────────────────────────────────────────
+//
+// Cada gajo que cuenta algo tiene un destino, y el destino es la pantalla
+// donde ESAS filas viven (revisión 17-sep, pedida por el usuario: había
+// gajos que no llevaban a nada y otros que llevaban a una lista más corta
+// que su propia cifra).
+//
+//   inventory — crypto_current_cert: lo que un agente vio en un equipo.
+//   outside   — cdp_crypto_assets: lo que existe SIN equipo (la CA de
+//               Windows, vCenter, vaults, nubes, clusters, CT, CBOM, las
+//               claves de host SSH). No tiene una sola fila en el
+//               inventario: su lista es «Outside your devices», en Explore.
+//   orphans   — la pestaña de claves huérfanas.
+//
+// ⚠️ `certClass: "all"` no es decoración. Las facetas que alimentan este
+// sunburst se piden SIN lente (cuentan CA y raíces), y la lista de
+// Inventory por defecto sólo enseña entidades finales. Sin esto, un gajo
+// de 1.200 abría una lista de 300 — y el gajo «Vendor roots» abría una
+// lista VACÍA, porque la lente por defecto excluye `system-roots` y el
+// filtro pedía justo ese ámbito.
+const inv = (f) => ({ to: "inventory", certClass: "all", ...f });
+const out = (sourceName, origin) => ({ to: "outside", sourceName: sourceName ?? null, origin: origin ?? null });
+const ORPHANS = { to: "orphans" };
 
 export const SHADES = {
   broken: [BRAND.alert.error, "#EDA39F", "#F5CBC8"],
@@ -183,21 +212,30 @@ function finish(bases) {
  */
 function addOutside(bases, outsideBySource, outsideByAlgorithm, { skip, leafName }) {
   const detailed = new Set((outsideByAlgorithm ?? []).map((a) => a.sourceName));
+  // El gajo y sus hojas llevan al MISMO sitio: «Outside your devices» filtra
+  // por origen, no por algoritmo, así que una hoja no puede afinar más que
+  // su fuente. El número exacto sigue en la etiqueta y en el tooltip.
+  const to = (origin, sourceName) => ({
+    source: { note: sourceName, drill: out(sourceName, origin), ...(origin === "adcs" ? { group: "adcs" } : {}) },
+    drill: out(sourceName, origin)
+  });
   for (const a of outsideByAlgorithm ?? []) {
     const origin = a.origin ?? originOfSourceName(a.sourceName);
     if (skip.has(origin)) continue;
     const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
+    const t = to(origin, a.sourceName);
     addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
-      source: { note: a.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
-      leaf: { s: st }
+      source: t.source,
+      leaf: { s: st, drill: t.drill }
     });
   }
   for (const s of outsideBySource ?? []) {
     const origin = s.origin ?? originOfSourceName(s.sourceName);
     if (skip.has(origin) || detailed.has(s.sourceName)) continue;
+    const t = to(origin, s.sourceName);
     addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), leafName, leafName, Number(s.certificates ?? 0), {
-      source: { note: s.sourceName, ...(origin === "adcs" ? { group: "adcs" } : {}) },
-      leaf: { s: "broken" }
+      source: t.source,
+      leaf: { s: "broken", drill: t.drill }
     });
   }
 }
@@ -219,13 +257,23 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
     const isVendor = own === "vendor";
     const srcKey = isVendor ? "vendor" : source;
     const srcName = isVendor ? "Vendor roots" : SOURCE_LABEL[source] ?? source;
+    // Las raíces del fabricante son las que están en `system-roots`; el
+    // resto de la fuente es todo lo demás, con las CA intermedias dentro
+    // (`certClass: "all"`) y sin las raíces (`includeRoots` ausente), que
+    // es exactamente el reparto que hace el anillo.
+    const scoped = isVendor
+      ? { includeRoots: true, scope: "system-roots" }
+      : { source };
     addLeaf(bases, baseOfSource(source), srcKey, srcName, algoLabel(algo, bits), algoLabel(algo, bits), n, {
-      source: isVendor ? { status: "other", note: "Shipped with the OS and the JVM: not yours to migrate" } : {},
+      source: isVendor
+        ? { status: "other", note: "Shipped with the OS and the JVM: not yours to migrate", drill: inv(scoped) }
+        : { drill: inv(scoped) },
       // Las raíces del fabricante no llevan estado propio: heredan el gris
       // de su fuente, porque no son del cliente y no las migra él.
-      leaf: isVendor
-        ? { drill: { includeRoots: true, scope: "system-roots", keyAlgorithm: algo, keySizeBits: bits } }
-        : { s: statusOfAlgorithm(algo), drill: { source, keyAlgorithm: algo, keySizeBits: bits } }
+      leaf: {
+        ...(isVendor ? {} : { s: statusOfAlgorithm(algo) }),
+        drill: inv({ ...scoped, keyAlgorithm: algo, keySizeBits: bits })
+      }
     });
   }
   addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: new Set(["ssh"]), leafName: "certificates" });
@@ -252,12 +300,20 @@ export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outs
     const algo = r.keys?.key_algorithm ?? "unknown";
     const bits = r.stack ?? null;
     const n = Number(r.uniqueCerts ?? r.certs ?? 0);
+    // El almacén ya acota: por eso aquí sí van las raíces (una raíz propia
+    // con clave privada vive en `system-roots` y es del cliente).
+    const scoped = { hasPrivateKey: true, includeRoots: true, source, storeName: r.keys?.store_name ?? undefined };
     addLeaf(bases, baseOfSource(source), `${source}:${store}`, String(store).replace(/\s*\(S-1-5-[^)]*\)/, ""), algoLabel(algo, bits), algoLabel(algo, bits), n, {
-      leaf: { s: statusOfAlgorithm(algo), drill: { hasPrivateKey: true, source, storeName: r.keys?.store_name ?? undefined, keyAlgorithm: algo, keySizeBits: bits } }
+      source: { drill: inv(scoped) },
+      leaf: { s: statusOfAlgorithm(algo), drill: inv({ ...scoped, keyAlgorithm: algo, keySizeBits: bits }) }
     });
   }
-  addLeaf(bases, "onprem", "orphan", "Orphan keys", "keys", "keys", Number(orphanKeys), { leaf: { s: "broken" } });
-  addLeaf(bases, "onprem", "ssh", "SSH host keys", "keys", "keys", Number(sshHostKeys), { leaf: { s: "broken" } });
+  // Una huérfana no es un certificado: no tiene fila en el inventario. Su
+  // lista es su propia pestaña.
+  addLeaf(bases, "onprem", "orphan", "Orphan keys", "keys", "keys", Number(orphanKeys), { source: { drill: ORPHANS }, leaf: { s: "broken", drill: ORPHANS } });
+  // Las claves de host SSH las lee el agente pero no son certificados:
+  // viven en cdp_crypto_assets con origen `ssh`, como el resto de lo de fuera.
+  addLeaf(bases, "onprem", "ssh", "SSH host keys", "keys", "keys", Number(sshHostKeys), { source: { drill: out(null, "ssh") }, leaf: { s: "broken", drill: out(null, "ssh") } });
   addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: KEYLESS_ORIGINS, leafName: "keys" });
   return finish(bases);
 }
@@ -278,14 +334,30 @@ export function buildServicesTree(systems) {
       const hybrid = Number(f.kemHybrid ?? 0), classical = Number(f.kemClassical ?? 0), unknown = Number(f.kemUnknown ?? 0);
       if (hybrid + classical + unknown === 0) continue;
       const srcKey = `svc:${key}`;
-      addLeaf(bases, baseKey, srcKey, name, "hybrid", "Hybrid", hybrid, { leaf: { s: "ok", drill: { kem: "hybrid" } } });
-      addLeaf(bases, baseKey, srcKey, name, "classical", "Classical", classical, { leaf: { s: "broken", drill: { kem: "classical" } } });
-      addLeaf(bases, baseKey, srcKey, name, "unknown", "Unknown", unknown, { leaf: { s: "other", drill: { kem: "unknown" } } });
+      // El MISMO filtro que usa la hoja de ruta para un sistema (`drill`
+      // en CdpRoadmapPanel): el inventario no sabe de procesos, así que lo
+      // que identifica al servicio es su origen y el sujeto de su
+      // certificado. Sin él, «Hybrid» bajo svchost.exe abría TODOS los
+      // híbridos del parque, no los de ese proceso.
+      const sample = String(s.sampleSubject ?? "").trim();
+      const scoped = key.startsWith("target:")
+        ? { source: "probe", ...(sample ? { search: sample } : {}) }
+        : key.startsWith("process:")
+          ? { source: "listener", ...(sample ? { search: sample } : {}) }
+          : { hasPrivateKey: true, ...(sample ? { search: sample } : {}) };
+      addLeaf(bases, baseKey, srcKey, name, "hybrid", "Hybrid", hybrid, { source: { drill: inv(scoped) }, leaf: { s: "ok", drill: inv({ ...scoped, kem: "hybrid" }) } });
+      addLeaf(bases, baseKey, srcKey, name, "classical", "Classical", classical, { source: { drill: inv(scoped) }, leaf: { s: "broken", drill: inv({ ...scoped, kem: "classical" }) } });
+      addLeaf(bases, baseKey, srcKey, name, "unknown", "Unknown", unknown, { source: { drill: inv(scoped) }, leaf: { s: "other", drill: inv({ ...scoped, kem: "unknown" }) } });
     } else if (key.startsWith("source:")) {
-      const origin = originOfSourceName(key.slice("source:".length));
+      const sourceName = key.slice("source:".length);
+      const origin = originOfSourceName(sourceName);
       if (origin === "ssh") continue;
       const n = Number(f.uniqueCerts ?? f.certs ?? 0);
-      addLeaf(bases, baseOfSource(origin), `res:${key}`, s.name ?? key, "certs", "issues or holds", n, { source: origin === "adcs" ? { group: "adcs" } : {}, leaf: { s: "broken" } });
+      const drill = out(sourceName, origin);
+      addLeaf(bases, baseOfSource(origin), `res:${key}`, s.name ?? key, "certs", "issues or holds", n, {
+        source: { drill, ...(origin === "adcs" ? { group: "adcs" } : {}) },
+        leaf: { s: "broken", drill }
+      });
     }
   }
   for (const b of bases.values()) {
@@ -357,14 +429,17 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
     });
   };
 
-  const walk = (rawNodes, depth, a0, a1, parentStatus, path) => {
+  const walk = (rawNodes, depth, a0, a1, parentStatus, path, parentDrill) => {
     let nodes = (rawNodes ?? []).filter((n) => sumNode(n) > 0 || (depth === 0 && n.keep));
     if (nodes.length === 0) return;
     const tot = nodes.reduce((s, n) => s + sumNode(n), 0);
     if (depth === 2 && nodes.length > 2 && tot > 0) {
       const small = nodes.filter((n) => sumNode(n) / tot < foldBelow);
       if (small.length > 1) {
-        nodes = nodes.filter((n) => sumNode(n) / tot >= foldBelow).concat([{ key: "other", name: "Other", v: small.reduce((s, n) => s + sumNode(n), 0), s: small[0].s, drill: null }]);
+        // «Other» es un pliegue de varios algoritmos: no hay filtro que
+        // diga «estos tres y no los demás», así que lleva a la lista de su
+        // fuente ENTERA y lo dice (`folded`), en vez de no llevar a nada.
+        nodes = nodes.filter((n) => sumNode(n) / tot >= foldBelow).concat([{ key: "other", name: "Other", v: small.reduce((s, n) => s + sumNode(n), 0), s: small[0].s, drill: parentDrill ?? null, folded: true }]);
       }
     }
     const empties = nodes.filter((n) => sumNode(n) <= 0).length;
@@ -409,13 +484,18 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
         value: v,
         empty: isEmpty,
         note: n.note ?? null,
+        // Una base no filtra: un sector abarca dos almacenes distintos (el
+        // inventario de equipos y lo de fuera), así que se AMPLÍA en vez de
+        // prometer una lista que no existe. Lo hace el componente.
+        base: depth === 0 ? n.key ?? n.name : null,
+        folded: n.folded === true,
         drill: n.drill ?? null
       });
       label(n.name, v, depth, start, end, st);
-      if (!isEmpty && n.children && depth < 2) walk(n.children, depth + 1, start, end, st, [...path, n.key ?? n.name]);
+      if (!isEmpty && n.children && depth < 2) walk(n.children, depth + 1, start, end, st, [...path, n.key ?? n.name], n.drill ?? null);
       cursor = end + gapAfter(i);
     }
   };
-  walk(tree, 0, 0, Math.PI * 2, "other", []);
+  walk(tree, 0, 0, Math.PI * 2, "other", [], null);
   return { arcs, labels, total: (tree ?? []).reduce((s, n) => s + sumNode(n), 0) };
 }
