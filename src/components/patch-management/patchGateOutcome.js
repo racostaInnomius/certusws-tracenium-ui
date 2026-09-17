@@ -64,7 +64,8 @@ export function describeGateOutcome(res) {
 /** Un 409 de la puerta → motivo legible. `null` si el error es otro. */
 export function describeBlockedError(err) {
   if (err?.status !== 409) return null;
-  if (err?.body?.error !== "patch_install_blocked") return null;
+  // Mismo contrato para el reinicio bajo demanda (`device_reboot_blocked`).
+  if (err?.body?.error !== "patch_install_blocked" && err?.body?.error !== "device_reboot_blocked") return null;
   const reason = err?.body?.reason ? String(err.body.reason).replace(/_/g, " ") : "blocked by the patch gate";
   return `Not dispatched — ${reason}`;
 }

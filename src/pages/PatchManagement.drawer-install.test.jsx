@@ -146,3 +146,53 @@ describe("Patch Management — instalar desde el panel lateral", () => {
     expect(await screen.findByText(/Not dispatched — snapshot required but unavailable/i)).toBeInTheDocument();
   });
 });
+
+describe("Patch Management — reiniciar desde el panel lateral", () => {
+  async function openRestart() {
+    fireEvent.click(await screen.findByText("MSIG-DOMAIN"));
+    await screen.findByText("KB5122882");
+    fireEvent.click(screen.getByRole("button", { name: /^Restart$/ }));
+    return screen.findByRole("dialog");
+  }
+
+  it("⭐ por defecto espera a la ventana: manda `when: maintenance_window` y dice RETENIDO", async () => {
+    mount({
+      jobResponse: () =>
+        HttpResponse.json({ ok: true, jobId: "r1", status: "awaiting_window", gate: { status: "awaiting_window", opensAt: "2026-09-18T03:00:00.000Z" } }),
+    });
+    const dialog = await openRestart();
+    expect(posted).toEqual([]);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Schedule restart$/ }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({ jobType: "device_reboot", payload: { when: "maintenance_window" } });
+    expect(await screen.findByText(/Restart held until the maintenance window opens/i)).toBeInTheDocument();
+  });
+
+  it("🔴 «Restart now» no se puede confirmar hasta escribir el nombre del equipo", async () => {
+    mount({ jobResponse: () => HttpResponse.json({ ok: true, jobId: "r2", status: "queued", gate: { status: "pending" } }) });
+    const dialog = await openRestart();
+
+    fireEvent.click(within(dialog).getByLabelText(/Restart now/i));
+    const confirm = within(dialog).getByRole("button", { name: /^Restart now$/ });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText(/Device name/i), { target: { value: "MSIG-DOMAIN01" } });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText(/Device name/i), { target: { value: "msig-domain" } });
+    expect(confirm).not.toBeDisabled();
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({ jobType: "device_reboot", payload: { when: "now" } });
+  });
+
+  it("cancelar no manda nada", async () => {
+    mount({ jobResponse: () => HttpResponse.json({ ok: true }) });
+    const dialog = await openRestart();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Cancel$/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Restart MSIG-DOMAIN/ })).toBeNull());
+    expect(posted).toEqual([]);
+  });
+});

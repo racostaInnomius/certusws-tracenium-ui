@@ -23,6 +23,8 @@ import {
   InputAdornment,
   Tooltip,
   Typography,
+  Radio,
+  RadioGroup,
 } from "@mui/material";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 
@@ -62,6 +64,12 @@ import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-managemen
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
+import {
+  RESTART_WHEN,
+  buildRestartPayload,
+  canConfirmRestart,
+  describeRestartOutcome,
+} from "../components/patch-management/restartRequest";
 import { summarizeBulkInstall, goingOutNow, describeRebootChoice } from "../components/patch-management/bulkInstallOutcome";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
@@ -791,6 +799,8 @@ export default function PatchManagement({ onNavigate }) {
   // 10:03 de un martes (15-sep). El reinicio se elige en CADA envío: nunca se
   // hereda del anterior, igual que en el diálogo de flota.
   const [installConfirm, setInstallConfirm] = React.useState(null);
+  // Reinicio bajo demanda: { when, typedName }. Ver restartRequest.js.
+  const [restartDialog, setRestartDialog] = React.useState(null);
   const [drawerReboot, setDrawerReboot] = React.useState(false);
   const [dispatching, setDispatching] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
@@ -972,8 +982,8 @@ export default function PatchManagement({ onNavigate }) {
       // (09f7527). Si queda retenido se DICE, y no se mete en el seguidor de
       // jobs activos: estaría consultándolo durante horas hasta que abra la
       // ventana, pintando «en curso» algo que está esperando.
-      if (jobType === "patch_install") {
-        const outcome = describeGateOutcome(res);
+      if (jobType === "patch_install" || jobType === "device_reboot") {
+        const outcome = jobType === "device_reboot" ? describeRestartOutcome(res) : describeGateOutcome(res);
         notify(outcome.severity, `${label}: ${outcome.message}`);
         if (outcome.held) {
           closeDrawer();
@@ -1041,6 +1051,14 @@ export default function PatchManagement({ onNavigate }) {
   const handleRunScan = React.useCallback(() => {
     dispatchJob("patch_scan", {}, "Patch scan");
   }, [dispatchJob]);
+
+  const drawerDeviceName = drawerDevice ? drawerDevice.hostname || drawerDevice.agentId.slice(0, 12) : "";
+  const confirmRestart = React.useCallback(() => {
+    if (!restartDialog) return;
+    const { when } = restartDialog;
+    setRestartDialog(null);
+    dispatchJob("device_reboot", buildRestartPayload({ when }), "Restart");
+  }, [restartDialog, dispatchJob]);
 
   // KPI numbers, with sensible zeros when PMP is off or pre-first-scan.
   const kpis = React.useMemo(() => {
@@ -1758,6 +1776,21 @@ export default function PatchManagement({ onNavigate }) {
               >
                 Run scan now
               </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RestartAltOutlinedIcon />}
+                onClick={() => setRestartDialog({ when: RESTART_WHEN.WINDOW, typedName: "" })}
+                disabled={dispatching}
+                sx={{
+                  textTransform: "none",
+                  borderColor: BRAND.gray,
+                  color: BRAND.dark,
+                  "&:hover": { borderColor: BRAND.dark, bgcolor: BRAND.darkSoft }
+                }}
+              >
+                Restart
+              </Button>
             </Box>
 
             {/* Patch list */}
@@ -2064,6 +2097,87 @@ export default function PatchManagement({ onNavigate }) {
             sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
           >
             Install
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reinicio bajo demanda. Por defecto espera a la ventana de
+          mantenimiento; «Restart now» exige escribir el nombre del equipo. */}
+      <Dialog open={Boolean(restartDialog)} onClose={() => setRestartDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+          Restart {drawerDeviceName}
+        </DialogTitle>
+        <DialogContent>
+          <RadioGroup
+            value={restartDialog?.when ?? RESTART_WHEN.WINDOW}
+            onChange={(e) => setRestartDialog((d) => ({ ...d, when: e.target.value, typedName: "" }))}
+          >
+            <FormControlLabel
+              value={RESTART_WHEN.WINDOW}
+              control={<Radio />}
+              label={
+                <Box sx={{ py: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, fontWeight: 700 }}>
+                    At the next maintenance window (recommended)
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+                    Waits for the tenant&apos;s maintenance window. If a window is open now — or the tenant has none — it restarts in about a minute.
+                  </Typography>
+                </Box>
+              }
+            />
+            <FormControlLabel
+              value={RESTART_WHEN.NOW}
+              control={<Radio />}
+              label={
+                <Box sx={{ py: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, fontWeight: 700 }}>
+                    Restart now
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+                    Ignores the maintenance window. The device restarts about a minute after it receives the request.
+                  </Typography>
+                </Box>
+              }
+            />
+          </RadioGroup>
+
+          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1.5 }}>
+            Signed-in users see a warning and are disconnected. The restart does not start while a patch install or an agent update is running on the device.
+          </Typography>
+
+          {restartDialog?.when === RESTART_WHEN.NOW ? (
+            <Box sx={{ mt: 2, p: 1.5, borderRadius: 1, bgcolor: ROLE.criticalSoft }}>
+              <Typography sx={{ fontSize: TEXT.md, color: BRAND.alert.errorText, fontWeight: 700, mb: 1 }}>
+                Type {drawerDeviceName} to restart it outside the maintenance window
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
+                autoFocus
+                label="Device name"
+                value={restartDialog?.typedName ?? ""}
+                onChange={(e) => setRestartDialog((d) => ({ ...d, typedName: e.target.value }))}
+                sx={{ bgcolor: BRAND.surface }}
+              />
+            </Box>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRestartDialog(null)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={confirmRestart}
+            disabled={!canConfirmRestart({ when: restartDialog?.when, typedName: restartDialog?.typedName, deviceName: drawerDeviceName })}
+            sx={{
+              textTransform: "none",
+              bgcolor: restartDialog?.when === RESTART_WHEN.NOW ? BRAND.alert.errorText : BRAND.teal,
+              "&:hover": { bgcolor: restartDialog?.when === RESTART_WHEN.NOW ? BRAND.alert.errorText : BRAND.tealHover }
+            }}
+          >
+            {restartDialog?.when === RESTART_WHEN.NOW ? "Restart now" : "Schedule restart"}
           </Button>
         </DialogActions>
       </Dialog>
