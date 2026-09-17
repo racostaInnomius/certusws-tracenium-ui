@@ -35,6 +35,16 @@ export async function createTenantMember(tenantId, payload) {
   return httpPostJson(`${BASE}/${encodeURIComponent(tenantId)}/members`, payload);
 }
 
+// ¿Este email ya tiene cuenta en Tracenium? Sin caché: la respuesta cambia
+// en cuanto se añade a la persona, y el diálogo pregunta mientras se
+// escribe.
+export async function lookupTenantMember(tenantId, email) {
+  return httpGetJson(
+    `${BASE}/${encodeURIComponent(tenantId)}/members/lookup?email=${encodeURIComponent(email)}`,
+    { cache: "no-store" }
+  );
+}
+
 export async function updateTenantMember(tenantId, memberId, payload) {
   return httpPutJson(
     `${BASE}/${encodeURIComponent(tenantId)}/members/${encodeURIComponent(memberId)}`,

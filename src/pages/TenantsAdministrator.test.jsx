@@ -14,6 +14,7 @@ vi.mock("../api/tenants", () => ({
   deleteTenant: vi.fn(),
   listTenantMembers: vi.fn(),
   createTenantMember: vi.fn(),
+  lookupTenantMember: vi.fn(),
   updateTenantMember: vi.fn(),
   deleteTenantMember: vi.fn(),
   cancelPendingInvite: vi.fn(),
@@ -41,6 +42,7 @@ import {
   getTenantById,
   listTenantMembers,
   createTenantMember,
+  lookupTenantMember,
   cancelPendingInvite,
 } from "../api/tenants";
 import TenantsAdministrator from "./TenantsAdministrator";
@@ -203,5 +205,70 @@ describe("TenantsAdministrator — pending invites in the members grid", () => {
 
     await waitFor(() => expect(cancelPendingInvite).toHaveBeenCalledWith("7", 42));
     expect(await screen.findByText(/Invite canceled successfully/i)).toBeInTheDocument();
+  });
+});
+
+// ── Cuenta ya conocida ────────────────────────────────────────────────────
+//
+// Una invitación por email no se consume NUNCA para alguien que ya entró
+// alguna vez en Tracenium (el backend sólo la casa en el primer login de un
+// subject nuevo). El diálogo pregunta por el email mientras se escribe y,
+// si ya tiene cuenta, añade en el acto con su subject en vez de invitar.
+describe("Add Member — email that already has a Tracenium account", () => {
+  it("switches to 'Add Member' and submits the known subject instead of inviting", async () => {
+    lookupTenantMember.mockResolvedValue({ known: true, subject: "sub-35", alreadyMember: false, memberships: [{ tenantId: 111 }] });
+    createTenantMember.mockResolvedValue({ mode: "existing", email: "javier@certusitm.com", member: { id: 31 } });
+
+    renderPage();
+    const dialog = await openInviteDialog();
+    fireEvent.change(within(dialog).getByLabelText(/Email/i), {
+      target: { value: "javier@certusitm.com" },
+    });
+
+    const addButton = await within(dialog).findByText("Add Member");
+    expect(within(dialog).queryByText("Send Invite")).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/already has a Tracenium account/)).toBeInTheDocument();
+    expect(lookupTenantMember).toHaveBeenCalledWith("7", "javier@certusitm.com");
+
+    fireEvent.click(addButton);
+    await waitFor(() =>
+      expect(createTenantMember).toHaveBeenCalledWith("7", {
+        email: "javier@certusitm.com",
+        role: "USER",
+        subject: "sub-35",
+      })
+    );
+    expect(await screen.findByText("javier@certusitm.com added to this tenant")).toBeInTheDocument();
+  });
+
+  it("blocks the form when the person is already a member of this tenant", async () => {
+    lookupTenantMember.mockResolvedValue({ known: true, subject: "sub-35", alreadyMember: true });
+
+    renderPage();
+    const dialog = await openInviteDialog();
+    fireEvent.change(within(dialog).getByLabelText(/Email/i), {
+      target: { value: "javier@certusitm.com" },
+    });
+
+    expect(await within(dialog).findByText(/already a member of this tenant/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Send Invite")).toBeDisabled();
+    expect(createTenantMember).not.toHaveBeenCalled();
+  });
+
+  it("keeps the invite path for an unknown email", async () => {
+    lookupTenantMember.mockResolvedValue({ known: false, alreadyMember: false });
+    createTenantMember.mockResolvedValue({ message: "Invite sent" });
+
+    renderPage();
+    const dialog = await openInviteDialog();
+    fireEvent.change(within(dialog).getByLabelText(/Email/i), {
+      target: { value: "new.person@acme.com" },
+    });
+    await waitFor(() => expect(lookupTenantMember).toHaveBeenCalled());
+    expect(within(dialog).getByText("Send Invite")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByText("Send Invite"));
+    await waitFor(() =>
+      expect(createTenantMember).toHaveBeenCalledWith("7", { email: "new.person@acme.com", role: "USER" })
+    );
   });
 });

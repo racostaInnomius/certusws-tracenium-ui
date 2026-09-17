@@ -31,6 +31,7 @@ import {
   deleteTenant,
   listTenantMembers,
   createTenantMember,
+  lookupTenantMember,
   updateTenantMember,
   deleteTenantMember,
   cancelPendingInvite,
@@ -278,6 +279,7 @@ function TenantMemberDialog({
   open,
   mode,
   member,
+  tenantId,
   submitting,
   roles = [],
   onClose,
@@ -295,6 +297,9 @@ function TenantMemberDialog({
   const [email, setEmail] = React.useState("");
   const [role, setRole] = React.useState("USER");
   const [isActive, setIsActive] = React.useState(true);
+  // Resultado del lookup por email: null (desconocido / sin consultar) o
+  // { known, subject, alreadyMember, memberships? } del backend.
+  const [lookup, setLookup] = React.useState(null);
 
   React.useEffect(() => {
     if (open) {
@@ -305,8 +310,42 @@ function TenantMemberDialog({
       setEmail("");
       setRole("USER");
       setIsActive(true);
+      setLookup(null);
     }
   }, [open, member]);
+
+  // ¿Ya tiene cuenta? Si el email pertenece a un miembro de otro tenant,
+  // la invitación por correo NO se consumiría nunca: el backend sólo la
+  // casa en el PRIMER login de un subject nuevo, y quien ya entró alguna
+  // vez resuelve antes por su membresía existente. Se pregunta mientras
+  // se escribe, con un pequeño retardo, y si lo conoce el botón pasa a
+  // añadirlo en el acto en lugar de mandar un correo que no llevaría a nada.
+  React.useEffect(() => {
+    if (isEdit || !open) return undefined;
+    const value = String(email || "").trim();
+    if (!value.includes("@") || !tenantId) {
+      setLookup(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await lookupTenantMember(tenantId, value);
+        if (!cancelled) setLookup(result?.known ? result : null);
+      } catch {
+        if (!cancelled) setLookup(null);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [email, isEdit, open, tenantId]);
+
+  const knownSubject = !isEdit && lookup?.known && lookup?.subject ? String(lookup.subject) : null;
+  const alreadyMember = Boolean(lookup?.alreadyMember);
+  const addsDirectly = Boolean(knownSubject) && !alreadyMember;
+  const membershipCount = Array.isArray(lookup?.memberships) ? lookup.memberships.length : null;
 
   const handleSubmit = () => {
     if (isEdit) {
@@ -315,6 +354,13 @@ function TenantMemberDialog({
         email: String(email || "").trim(),
         role,
         isActive,
+      });
+    } else if (addsDirectly) {
+      // Cuenta conocida: el backend la añade en el acto con ese subject.
+      onSubmit?.({
+        email: String(email || "").trim(),
+        role,
+        subject: knownSubject,
       });
     } else {
       // Create mode invites by email — there's no `subject` (raw IDP user
@@ -328,7 +374,7 @@ function TenantMemberDialog({
     }
   };
 
-  const isDisabled = !String(email || "").trim();
+  const isDisabled = !String(email || "").trim() || alreadyMember;
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -338,7 +384,17 @@ function TenantMemberDialog({
 
       <DialogContent>
         <Box sx={{ display: "grid", gap: 2, pt: 1 }}>
-          {!isEdit && (
+          {!isEdit && alreadyMember && (
+            <Alert severity="warning">This person is already a member of this tenant.</Alert>
+          )}
+          {!isEdit && !alreadyMember && addsDirectly && (
+            <Alert severity="info">
+              This email already has a Tracenium account
+              {membershipCount ? ` (member of ${membershipCount} tenant${membershipCount === 1 ? "" : "s"})` : ""}.
+              They will be added right away — no invite email is sent.
+            </Alert>
+          )}
+          {!isEdit && !alreadyMember && !addsDirectly && (
             <Typography variant="body2" color="text.secondary">
               The recipient gets an email invite, registers in the IDP, and
               lands directly in this tenant on their first login.
@@ -403,7 +459,7 @@ function TenantMemberDialog({
           onClick={handleSubmit}
           disabled={submitting || isDisabled}
         >
-          {isEdit ? "Save Changes" : "Send Invite"}
+          {isEdit ? "Save Changes" : addsDirectly ? "Add Member" : "Send Invite"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -779,13 +835,16 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
           severity: "success",
         });
       } else {
-        // No member row exists yet — it's auto-provisioned on the
-        // invitee's first login. Say so, rather than implying a row
-        // just got created.
+        // Con `subject` (cuenta conocida) el backend crea la membresía en
+        // el acto. Sin él no existe fila todavía — se provisiona en el
+        // primer login del invitado —, y el mensaje tiene que decirlo en
+        // vez de dar a entender que ya hay un miembro.
         await createTenantMember(targetTenantId, payload);
         setSnackbar({
           open: true,
-          message: `Invite sent to ${payload.email}`,
+          message: payload.subject
+            ? `${payload.email} added to this tenant`
+            : `Invite sent to ${payload.email}`,
           severity: "success",
         });
       }
@@ -808,7 +867,9 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
           // how this dialog already surfaces every other failure.
           : e?.body?.error === "ROLE_EXCEEDS_ASSIGNER"
             ? "You can't assign a role with more permissions than your own."
-            : "Failed to save tenant member";
+            : e?.body?.error === "ALREADY_MEMBER"
+              ? "This person is already a member of this tenant."
+              : "Failed to save tenant member";
 
       setSnackbar({
         open: true,
@@ -1296,6 +1357,7 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
         open={memberDialogOpen}
         mode={memberDialogMode}
         member={editingMember}
+        tenantId={isTenantMode ? currentTenantId : selectedTenant?.id}
         submitting={submitting}
         roles={roles}
         onClose={() => setMemberDialogOpen(false)}
