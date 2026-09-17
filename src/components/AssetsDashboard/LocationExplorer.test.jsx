@@ -79,9 +79,47 @@ describe("LocationExplorer", () => {
     await elegirEquipo("ETE-3X5P8F4");
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
 
-    fireEvent.change(screen.getByLabelText("On"), { target: { value: "2026-09-03" } });
+    fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-03" } });
     await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(2));
     expect(getDeviceTimeline.mock.calls.at(-1)[1].from).toBe("2026-09-03T00:00:00.000Z");
+  });
+
+  it("⭐ un RANGO se pregunta de una vez: del primer instante del 1 al último del 7", async () => {
+    await montada();
+    await elegirEquipo("ETE-3X5P8F4");
+    await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-01" } });
+    await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(2));
+    fireEvent.change(screen.getAllByLabelText("To")[0], { target: { value: "2026-09-07" } });
+    await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(3));
+
+    const ventana = getDeviceTimeline.mock.calls.at(-1)[1];
+    expect(ventana.from).toBe("2026-09-01T00:00:00.000Z");
+    expect(ventana.to).toBe("2026-09-07T23:59:59.999Z");
+  });
+
+  it("⚠️ un rango del revés NO se pregunta: una lista vacía se leería como 'no estuvo'", async () => {
+    await montada();
+    await elegirEquipo("ETE-3X5P8F4");
+    await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-20" } });
+    fireEvent.change(screen.getAllByLabelText("To")[0], { target: { value: "2026-09-02" } });
+    await waitFor(() =>
+      expect(screen.getAllByText(/end date is before the start date/i).length).toBeGreaterThan(0)
+    );
+    expect(getDeviceTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("⚠️ un recorte del servidor se dice: 'las N más recientes', no 'esto es todo'", async () => {
+    getDeviceTimeline.mockResolvedValue({
+      episodes: [], retentionDays: 30, beyondRetention: false, retentionFloor: "2026-08-18T00:00:00.000Z",
+      truncated: true, limit: 200,
+    });
+    await montada();
+    await elegirEquipo("ETE-3X5P8F4");
+    expect(await screen.findByText(/Only the 200 most recent stays/i)).toBeInTheDocument();
   });
 
   it("⚠️ una petición que FALLA no se presenta como un día sin estancias", async () => {

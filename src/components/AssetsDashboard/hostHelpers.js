@@ -892,6 +892,36 @@ export function departureText(ep) {
 
 
 /** El día que se está mirando, como ventana [00:00, 24:00) en ISO. */
+/**
+ * Un RANGO de días, en la ventana UTC que entiende la API.
+ *
+ * ⚠️ El filtro del servidor es por SOLAPE: una estancia que empezó antes del
+ * rango y sigue dentro pertenece a la respuesta. Por eso basta con abrir el
+ * final del último día; no hay que ensanchar el principio.
+ *
+ * Devuelve null si alguna fecha no es válida o si el rango va del revés — un
+ * rango invertido devolvería una lista vacía que se leería como "no estuvo en
+ * ningún sitio", y eso es una afirmación.
+ */
+export function rangeWindow(desde, hasta) {
+  const a = dayWindow(desde);
+  const b = dayWindow(hasta);
+  if (!a || !b) return null;
+  if (Date.parse(a.from) > Date.parse(b.to)) return null;
+  return { from: a.from, to: b.to };
+}
+
+/** Los últimos N días contando hoy, como dos `yyyy-mm-dd` locales. */
+export function lastDaysRange(days, now = new Date()) {
+  const n = Math.max(1, Math.floor(Number(days) || 1));
+  const desde = new Date(now.getTime() - (n - 1) * 86400_000);
+  const fmt = (d) => {
+    const p = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  return { from: fmt(desde), to: fmt(now) };
+}
+
 export function dayWindow(yyyymmdd) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(yyyymmdd || ""))) return null;
   const desde = new Date(`${yyyymmdd}T00:00:00.000Z`);

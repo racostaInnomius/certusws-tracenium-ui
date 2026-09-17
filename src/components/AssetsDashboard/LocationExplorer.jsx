@@ -28,7 +28,8 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
-import { dayWindow, buildTrail, episodesToMapEntries } from "./hostHelpers";
+import { buildTrail, episodesToMapEntries, lastDaysRange, rangeWindow } from "./hostHelpers";
+import DateRangeControl from "./DateRangeControl";
 import DeviceLocationTimeline from "./DeviceLocationTimeline";
 // El mapa es lo que hace legible una lista de estancias: perezoso porque
 // arrastra leaflet, y sólo hace falta cuando hay un equipo elegido.
@@ -39,6 +40,21 @@ import SiteAttendance from "./SiteAttendance";
 export function todayInputValue(now = new Date()) {
   const p = (n) => String(n).padStart(2, "0");
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}
+
+/**
+ * ⚠️ Un recorte se DICE. El servidor devuelve como mucho `limit` estancias, y
+ * callarlo convertiría "las primeras 200" en "esto es todo lo que hubo" — que
+ * en un rango de treinta días es una afirmación falsa con formato de hecho.
+ */
+function AvisoRecorte({ data }) {
+  if (!data?.truncated) return null;
+  return (
+    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText, mt: 1 }}>
+      Only the {data.limit} most recent stays of this range are shown. Narrow the dates to see the
+      rest.
+    </Typography>
+  );
 }
 
 function Panel({ title, hint, children }) {
@@ -78,7 +94,9 @@ export default function LocationExplorer({
   const listaSitios = Array.isArray(sites) ? sites : [];
 
   const [equipo, setEquipo] = React.useState(null);
-  const [fechaEquipo, setFechaEquipo] = React.useState(() => todayInputValue());
+  // Un rango, no un día: `{ from, to }` en formato de `<input type="date">`.
+  // Arranca en hoy, que era el comportamiento anterior.
+  const [rangoEquipo, setRangoEquipo] = React.useState(() => lastDaysRange(1));
   const [linea, setLinea] = React.useState(null);
   const [lineaCargando, setLineaCargando] = React.useState(false);
   // ⚠️ El error se guarda APARTE del dato. Una petición que FALLÓ no es un
@@ -87,7 +105,7 @@ export default function LocationExplorer({
   const [lineaError, setLineaError] = React.useState(null);
 
   const [sitio, setSitio] = React.useState("");
-  const [fechaSitio, setFechaSitio] = React.useState(() => todayInputValue());
+  const [rangoSitio, setRangoSitio] = React.useState(() => lastDaysRange(1));
   const [asistencia, setAsistencia] = React.useState(null);
   const [asistenciaCargando, setAsistenciaCargando] = React.useState(false);
   const [asistenciaError, setAsistenciaError] = React.useState(null);
@@ -98,7 +116,7 @@ export default function LocationExplorer({
     () => episodesToMapEntries(linea?.episodes), [linea]);
 
   React.useEffect(() => {
-    const ventana = dayWindow(fechaEquipo);
+    const ventana = rangeWindow(rangoEquipo.from, rangoEquipo.to);
     if (!agentId || !ventana) {
       setLinea(null);
       return undefined;
@@ -122,12 +140,12 @@ export default function LocationExplorer({
     return () => {
       cancelado = true;
     };
-  }, [agentId, fechaEquipo, refreshNonce]);
+  }, [agentId, rangoEquipo.from, rangoEquipo.to, refreshNonce]);
 
-  React.useEffect(() => { setEstanciaSel(null); }, [agentId, fechaEquipo]);
+  React.useEffect(() => { setEstanciaSel(null); }, [agentId, rangoEquipo.from, rangoEquipo.to]);
 
   React.useEffect(() => {
-    const ventana = dayWindow(fechaSitio);
+    const ventana = rangeWindow(rangoSitio.from, rangoSitio.to);
     if (!sitio || !ventana) {
       setAsistencia(null);
       return undefined;
@@ -151,7 +169,7 @@ export default function LocationExplorer({
     return () => {
       cancelado = true;
     };
-  }, [sitio, fechaSitio, refreshNonce]);
+  }, [sitio, rangoSitio.from, rangoSitio.to, refreshNonce]);
 
   const sitioElegido = listaSitios.find((s) => String(s.id) === String(sitio)) || null;
 
@@ -169,12 +187,12 @@ export default function LocationExplorer({
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel
             title="Where was a device"
-            hint="Pick a device and a date to see the places it was confirmed at that day."
+            hint="Pick a device and a date range to see the places it was confirmed at."
           >
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 1.5 }}>
+            <Stack spacing={1.5} sx={{ mb: 1.5 }}>
               <Autocomplete
                 size="small"
-                sx={{ flex: 1, minWidth: 200 }}
+                sx={{ minWidth: 200 }}
                 options={listaEquipos}
                 loading={devicesLoading}
                 value={equipo}
@@ -183,14 +201,11 @@ export default function LocationExplorer({
                 isOptionEqualToValue={(a, b) => a?.agentId === b?.agentId}
                 renderInput={(params) => <TextField {...params} label="Device" />}
               />
-              <TextField
-                size="small"
-                type="date"
-                label="On"
-                value={fechaEquipo}
-                onChange={(e) => setFechaEquipo(e.target.value)}
-                slotProps={{ inputLabel: { shrink: true } }}
-                sx={{ width: 170 }}
+              <DateRangeControl
+                from={rangoEquipo.from}
+                to={rangoEquipo.to}
+                onChange={setRangoEquipo}
+                retentionFloor={linea?.retentionFloor ?? null}
               />
             </Stack>
 
@@ -232,6 +247,7 @@ export default function LocationExplorer({
                   beyondRetention={linea.beyondRetention}
                   retentionFloor={linea.retentionFloor}
                 />
+                <AvisoRecorte data={linea} />
               </>
             ) : null}
           </Panel>
@@ -240,7 +256,7 @@ export default function LocationExplorer({
         <Grid size={{ xs: 12, md: 6 }}>
           <Panel
             title="Who was at a site"
-            hint="Pick one of your declared sites and a date to see which devices were confirmed there."
+            hint="Pick one of your declared sites and a date range to see which devices were confirmed there."
           >
             <TextField
               select
@@ -278,8 +294,9 @@ export default function LocationExplorer({
                 siteName={sitioElegido.siteName}
                 data={asistencia}
                 loading={asistenciaCargando}
-                date={fechaSitio}
-                onDateChange={setFechaSitio}
+                from={rangoSitio.from}
+                to={rangoSitio.to}
+                onRangeChange={setRangoSitio}
               />
             ) : (
               <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>

@@ -16,12 +16,17 @@
 //      que es una afirmación sobre el paradero de personas.
 
 import * as React from "react";
-import { Box, Chip, Stack, TextField, Typography } from "@mui/material";
+import { Box, Chip, Stack, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import { formatDetailDate, departureText } from "./hostHelpers";
+import DateRangeControl from "./DateRangeControl";
 
-export default function SiteAttendance({ siteName, data, loading, date, onDateChange }) {
+export default function SiteAttendance({ siteName, data, loading, from, to, onRangeChange }) {
   const episodes = Array.isArray(data?.episodes) ? data.episodes : [];
+  // Un solo día y un rango no se cuentan igual: "ese día" afirma algo más
+  // estrecho que "en esas fechas", y decir lo estrecho cuando se preguntó lo
+  // ancho sería describir mal lo que se está mirando.
+  const unSoloDia = from === to;
 
   return (
     <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
@@ -29,15 +34,6 @@ export default function SiteAttendance({ siteName, data, loading, date, onDateCh
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
           Who was at {siteName}
         </Typography>
-        <TextField
-          size="small"
-          type="date"
-          label="On"
-          value={date}
-          onChange={(e) => onDateChange(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 170 }}
-        />
         {!loading && data ? (
           <Chip
             size="small"
@@ -50,6 +46,15 @@ export default function SiteAttendance({ siteName, data, loading, date, onDateCh
         ) : null}
       </Stack>
 
+      <Box sx={{ mb: 1.5 }}>
+        <DateRangeControl
+          from={from}
+          to={to}
+          onChange={onRangeChange}
+          retentionFloor={data?.retentionFloor ?? null}
+        />
+      </Box>
+
       {loading ? (
         <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>Loading…</Typography>
       ) : data?.beyondRetention ? (
@@ -57,17 +62,24 @@ export default function SiteAttendance({ siteName, data, loading, date, onDateCh
           {/* ⚠️ Caducado NO es vacío. Devolver una lista vacía aquí sería
               afirmar que nadie estuvo, cuando lo cierto es que ya no se
               guarda. */}
-          Stays are only kept for {data.retentionDays} days, so that date is no longer stored —
-          this is not the same as nobody having been here. Data starts from{" "}
+          Stays are only kept for {data.retentionDays} days, so {unSoloDia ? "that date is" : "the start of that range is"}{" "}
+          no longer stored — this is not the same as nobody having been here. Data starts from{" "}
           {formatDetailDate(data.retentionFloor)}.
         </Typography>
       ) : episodes.length === 0 ? (
         <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-          No device was recorded at this site that day. Devices are only recorded when they check
-          in, so a device that was here but never reported does not appear.
+          No device was recorded at this site {unSoloDia ? "that day" : "in those dates"}. Devices are
+          only recorded when they check in, so a device that was here but never reported does not
+          appear.
         </Typography>
       ) : (
         <Stack spacing={0.5}>
+          {/* ⚠️ Un recorte se dice: "las 200 más recientes" no es "todo lo que hubo". */}
+          {data?.truncated ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText }}>
+              Only the {data.limit} most recent stays of this range are shown.
+            </Typography>
+          ) : null}
           {episodes.map((ep) => (
             <Stack key={ep.id} direction="row" spacing={1} alignItems="baseline" sx={{ flexWrap: "wrap" }}>
               <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, minWidth: 160 }}>

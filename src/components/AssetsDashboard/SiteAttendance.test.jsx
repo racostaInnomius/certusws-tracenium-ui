@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import SiteAttendance from "./SiteAttendance";
-import { dayWindow } from "./hostHelpers";
+import { dayWindow, lastDaysRange, rangeWindow } from "./hostHelpers";
 
 afterEach(cleanup);
 
@@ -30,9 +30,9 @@ const datos = (over = {}) => ({
 describe("SiteAttendance", () => {
   it("⚠️ una fecha caducada NO se presenta como 'no estuvo nadie'", () => {
     render(
-      <SiteAttendance siteName="Mountainside IG" date="2026-06-01"
+      <SiteAttendance siteName="Mountainside IG" from="2026-06-01" to="2026-06-01"
         data={datos({ episodes: [], deviceCount: 0, beyondRetention: true })}
-        onDateChange={vi.fn()} />
+        onRangeChange={vi.fn()} />
     );
     const aviso = screen.getByText(/no longer stored/i);
     expect(aviso.textContent).toMatch(/not the same as nobody having been here/i);
@@ -43,8 +43,8 @@ describe("SiteAttendance", () => {
 
   it("un día vacío dentro de la ventana explica por qué puede estarlo", () => {
     render(
-      <SiteAttendance siteName="X" date="2026-09-03"
-        data={datos({ episodes: [], deviceCount: 0 })} onDateChange={vi.fn()} />
+      <SiteAttendance siteName="X" from="2026-09-03" to="2026-09-03"
+        data={datos({ episodes: [], deviceCount: 0 })} onRangeChange={vi.fn()} />
     );
     const t = screen.getByText(/No device was recorded at this site that day/i).textContent;
     // ⚠️ Un equipo que estuvo pero no reportó no aparece. Callarlo convertiría
@@ -56,7 +56,7 @@ describe("SiteAttendance", () => {
     // Un equipo que entró y salió dos veces es un equipo. Contar estancias
     // inflaría la cifra que un operador lee de un vistazo.
     render(
-      <SiteAttendance siteName="X" date="2026-09-03" onDateChange={vi.fn()}
+      <SiteAttendance siteName="X" from="2026-09-03" to="2026-09-03" onRangeChange={vi.fn()}
         data={datos({
           episodes: [
             { id: "1", agentId: "a", hostname: "PC-1", firstSeenAt: "2026-09-03T08:00:00Z", lastSeenAt: "2026-09-03T12:00:00Z", endedAt: "2026-09-03T13:00:00Z" },
@@ -72,16 +72,34 @@ describe("SiteAttendance", () => {
   });
 
   it("las horas son de observación, no de entrada y salida", () => {
-    render(<SiteAttendance siteName="X" date="2026-09-03" data={datos()} onDateChange={vi.fn()} />);
+    render(<SiteAttendance siteName="X" from="2026-09-03" to="2026-09-03" data={datos()} onRangeChange={vi.fn()} />);
     expect(screen.getByText(/^confirmed /i)).toBeInTheDocument();
     expect(screen.getByText(/left before/i)).toBeInTheDocument();
   });
 
-  it("cambiar la fecha avisa al padre, que es quien recarga", () => {
+  it("⚠️ un rango no se describe como un día, y un recorte se dice", () => {
+    render(
+      <SiteAttendance siteName="X" from="2026-09-01" to="2026-09-07"
+        data={datos({ episodes: [], deviceCount: 0 })} onRangeChange={vi.fn()} />
+    );
+    expect(screen.getByText(/in those dates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/that day/i)).not.toBeInTheDocument();
+
+    cleanup();
+    render(
+      <SiteAttendance siteName="X" from="2026-09-01" to="2026-09-07"
+        data={datos({ truncated: true, limit: 200 })} onRangeChange={vi.fn()} />
+    );
+    expect(screen.getByText(/Only the 200 most recent stays/i)).toBeInTheDocument();
+  });
+
+  it("cambiar el rango avisa al padre, que es quien recarga", () => {
     const onDateChange = vi.fn();
-    render(<SiteAttendance siteName="X" date="2026-09-03" data={datos()} onDateChange={onDateChange} />);
-    fireEvent.change(screen.getByLabelText(/^On$/i), { target: { value: "2026-09-04" } });
-    expect(onDateChange).toHaveBeenCalledWith("2026-09-04");
+    render(<SiteAttendance siteName="X" from="2026-09-03" to="2026-09-03" data={datos()} onRangeChange={onDateChange} />);
+    fireEvent.change(screen.getByLabelText(/^From$/i), { target: { value: "2026-09-01" } });
+    expect(onDateChange).toHaveBeenCalledWith({ from: "2026-09-01", to: "2026-09-03" });
+    fireEvent.change(screen.getByLabelText(/^To$/i), { target: { value: "2026-09-05" } });
+    expect(onDateChange).toHaveBeenCalledWith({ from: "2026-09-03", to: "2026-09-05" });
   });
 });
 
@@ -101,3 +119,28 @@ describe("dayWindow", () => {
     expect(dayWindow(null)).toBeNull();
   });
 });
+
+describe("rangeWindow / lastDaysRange", () => {
+  it("un rango cubre desde el primer instante del primer día hasta el último del último", () => {
+    expect(rangeWindow("2026-09-01", "2026-09-07")).toEqual({
+      from: "2026-09-01T00:00:00.000Z",
+      to: "2026-09-07T23:59:59.999Z",
+    });
+    // Un solo día sigue siendo el día entero: el caso de antes no cambia.
+    expect(rangeWindow("2026-09-03", "2026-09-03")).toEqual(dayWindow("2026-09-03"));
+  });
+
+  it("⚠️ del revés o con basura no se inventa ventana", () => {
+    expect(rangeWindow("2026-09-20", "2026-09-02")).toBeNull();
+    expect(rangeWindow("", "2026-09-02")).toBeNull();
+    expect(rangeWindow("2026-09-02", "ayer")).toBeNull();
+  });
+
+  it("los atajos cuentan HOY dentro de los N días", () => {
+    const now = new Date("2026-09-17T10:00:00");
+    expect(lastDaysRange(1, now)).toEqual({ from: "2026-09-17", to: "2026-09-17" });
+    expect(lastDaysRange(7, now)).toEqual({ from: "2026-09-11", to: "2026-09-17" });
+    expect(lastDaysRange(30, now)).toEqual({ from: "2026-08-19", to: "2026-09-17" });
+  });
+});
+

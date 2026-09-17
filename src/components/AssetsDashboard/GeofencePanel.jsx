@@ -29,7 +29,7 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
 import SiteAttendance from "./SiteAttendance";
-import { dayWindow } from "./hostHelpers";
+import { lastDaysRange, rangeWindow } from "./hostHelpers";
 import { sitiosConPin } from "./geofenceMap";
 
 // Leaflet en su propio chunk, como el resto de mapas de Asset Management.
@@ -69,13 +69,13 @@ function Cerca({ site, onSave, saving, error }) {
   // fecha, y cargarla para cada sitio al pintar el panel gastaría una consulta
   // por sitio en cada apertura del mapa para algo que casi nadie mira.
   const [asistenciaAbierta, setAsistenciaAbierta] = React.useState(false);
-  const [fecha, setFecha] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [rango, setRango] = React.useState(() => lastDaysRange(1));
   const [asistencia, setAsistencia] = React.useState(null);
   const [cargando, setCargando] = React.useState(false);
 
   React.useEffect(() => {
     if (!asistenciaAbierta) return undefined;
-    const ventana = dayWindow(fecha);
+    const ventana = rangeWindow(rango.from, rango.to);
     if (!ventana) return undefined;
     let cancelado = false;
     setCargando(true);
@@ -85,7 +85,7 @@ function Cerca({ site, onSave, saving, error }) {
       .catch(() => { if (!cancelado) setAsistencia(null); })
       .finally(() => { if (!cancelado) setCargando(false); });
     return () => { cancelado = true; };
-  }, [asistenciaAbierta, fecha, site.id]);
+  }, [asistenciaAbierta, rango.from, rango.to, site.id]);
 
   const [radio, setRadio] = React.useState(site.radiusM ?? "");
   React.useEffect(() => setRadio(site.radiusM ?? ""), [site.radiusM]);
@@ -257,8 +257,9 @@ function Cerca({ site, onSave, saving, error }) {
           siteName={site.siteName}
           data={asistencia}
           loading={cargando}
-          date={fecha}
-          onDateChange={setFecha}
+          from={rango.from}
+          to={rango.to}
+          onRangeChange={setRango}
         />
       ) : null}
     </Box>
