@@ -20,7 +20,11 @@ import {
 import CardMembershipOutlinedIcon from "@mui/icons-material/CardMembershipOutlined";
 import { httpGetJson, httpPostJson } from "../../api/http";
 import { formatMoney } from "./money";
-import { TIER_LABELS } from "./billingModel";
+import { MANAGED_TIER, TIER_LABELS } from "./billingModel";
+import StaffPlanForm from "./StaffPlanForm";
+import { planErrorMessage, planFromRow, planPayload, planSummary, validatePlan } from "./staffPlanModel";
+import { setTenantPlan } from "../../api/billingAdmin";
+import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 import { BRAND } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 
@@ -146,6 +150,14 @@ export default function StaffSubscriptions() {
   const [months, setMonths] = useState(1);
   const [saving, setSaving] = useState(false);
 
+  // "Edit plan": el tenant y el formulario. El catálogo sólo hace falta para el
+  // grid de Enterprise; se lee con el mismo hook y caché que el resto de la app.
+  const [planTarget, setPlanTarget] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [planTried, setPlanTried] = useState(false);
+  const [planError, setPlanError] = useState(null);
+  const { catalog, loading: catalogLoading } = usePluginCatalog();
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -207,6 +219,38 @@ export default function StaffSubscriptions() {
     }
   };
 
+  const openPlan = (row) => {
+    setPlanTarget(row);
+    setPlan(planFromRow(row));
+    setPlanTried(false);
+    setPlanError(null);
+  };
+
+  const planErrors = plan ? validatePlan(plan) : {};
+
+  const savePlan = async () => {
+    setPlanTried(true);
+    if (Object.keys(planErrors).length > 0) return;
+    setSaving(true);
+    setPlanError(null);
+    try {
+      const r = await setTenantPlan(planTarget.tenantId, planPayload(plan));
+      setNotice(
+        `${planTarget.tenantName ?? planTarget.tenantId}: plan set to ${planSummary(r)}.` +
+          // La escritura vale aunque la flota no se haya reconvergido: la
+          // recoge el barrido. Pero hay que decirlo, o nadie entiende por qué
+          // los equipos tardan.
+          (r?.reconciled === false ? " Devices will pick it up on the next hourly sweep." : "")
+      );
+      setPlanTarget(null);
+      await load();
+    } catch (err) {
+      setPlanError(planErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <SectionPaper variant="panel">
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
@@ -263,10 +307,12 @@ export default function StaffSubscriptions() {
                     </TableCell>
 
                     <TableCell>
-                      <Typography variant="body2">
-                        {TIER_LABELS[r.tier] ?? "—"}
-                        {r.mdmTier ? ` · MDM ×${r.mdmQuantity ?? 0}` : ""}
-                      </Typography>
+                      <Typography variant="body2">{planSummary(r)}</Typography>
+                      {r.tier === MANAGED_TIER && (
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          managed by Tracenium
+                        </Typography>
+                      )}
                       {/* Contratado y efectivo difieren durante una prueba, y
                           es lo primero que confunde a quien mira: sin esto,
                           nadie entiende por qué un Starter usa PMP. */}
@@ -322,6 +368,11 @@ export default function StaffSubscriptions() {
                       {/* Sin flota posible no hay plugins que conceder: ofrecer
                           el botón sería prometer una acción sin efecto. */}
                       {r.billable && (
+                        <Button size="small" onClick={() => openPlan(r)}>
+                          Edit plan
+                        </Button>
+                      )}
+                      {r.billable && (
                         <Tooltip title="Grant or extend full access — does not change what Stripe bills">
                           <Button
                             size="small"
@@ -366,9 +417,10 @@ export default function StaffSubscriptions() {
           {/* ⚠️ Lo que más se malinterpreta de esta pantalla. Se dice donde se
               decide, no en una nota al pie. */}
           <Alert severity="info" sx={{ mt: 2 }}>
-            This grants the highest tier until the date. It does <strong>not</strong>{" "}
+            This opens every plugin until the date. It does <strong>not</strong>{" "}
             change what Stripe bills — a tenant paying Professional keeps paying
-            Professional and uses Enterprise meanwhile.
+            Professional and uses everything meanwhile. An Enterprise tenant falls
+            back to its chosen plugins when it ends.
           </Alert>
 
           {target?.trialDaysLeft > 0 && (
@@ -381,6 +433,36 @@ export default function StaffSubscriptions() {
           <Button onClick={() => setTarget(null)} disabled={saving} color="inherit">Cancel</Button>
           <Button onClick={extend} disabled={saving} variant="contained">
             {saving ? "Granting…" : "Grant access"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(planTarget)} onClose={saving ? undefined : () => setPlanTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: BRAND.dark }}>
+          Plan for {planTarget?.tenantName ?? planTarget?.tenantId}
+        </DialogTitle>
+        <DialogContent>
+          {planError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPlanError(null)}>
+              {planError}
+            </Alert>
+          )}
+          {plan && (
+            <StaffPlanForm
+              plan={plan}
+              onChange={setPlan}
+              errors={planTried ? planErrors : {}}
+              catalog={catalog ?? []}
+              catalogLoading={catalogLoading}
+              stripeManaged={Boolean(planTarget?.hasStripeSubscription)}
+              disabled={saving}
+            />
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPlanTarget(null)} disabled={saving} color="inherit">Cancel</Button>
+          <Button onClick={savePlan} disabled={saving} variant="contained">
+            {saving ? "Saving…" : "Save plan"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -25,6 +25,19 @@ vi.mock("../api/tenants", () => ({
 // depend on network fallback behavior for an endpoint they don't care
 // about; the dynamic-selector behavior itself has its own coverage in
 // RolesAdministrator.test.jsx and member-role-selector.test.jsx.
+// Global mode (staff): Subscriptions needs its own API, and the create dialog
+// is tested on its own (CreateTenantDialog.test.jsx). Here only what the PAGE
+// does once a tenant exists matters.
+vi.mock("../components/Billing/StaffSubscriptions", () => ({ default: () => null }));
+vi.mock("../components/Tenants/CreateTenantDialog", () => ({
+  default: ({ open, onCreated }) =>
+    open ? (
+      <button type="button" onClick={() => onCreated({ id: 9, name: "Globex" }, { planError: null })}>
+        fake-create
+      </button>
+    ) : null,
+}));
+
 vi.mock("../api/roles", () => ({
   listTenantRoles: vi.fn().mockResolvedValue({ items: [] }),
 }));
@@ -39,6 +52,7 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 import {
+  listTenants,
   getTenantById,
   listTenantMembers,
   createTenantMember,
@@ -270,5 +284,27 @@ describe("Add Member — email that already has a Tracenium account", () => {
     await waitFor(() =>
       expect(createTenantMember).toHaveBeenCalledWith("7", { email: "new.person@acme.com", role: "USER" })
     );
+  });
+});
+
+describe("Create New Tenant (global mode)", () => {
+  it("after creating: reloads the list, selects the new tenant and opens the owner dialog", async () => {
+    const NEW = { id: 9, name: "Globex", externalIdpTenant: "ext-globex", tenantDb: "tenant_9", maxDevices: 40 };
+    listTenants.mockResolvedValueOnce({ items: [TENANT] }).mockResolvedValue({ items: [TENANT, NEW] });
+
+    render(<TenantsAdministrator mode="global" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Create New Tenant" }));
+    fireEvent.click(await screen.findByRole("button", { name: "fake-create" }));
+
+    // The owner dialog opens straight away, with OWNER preselected — the owner
+    // already exists in SafeCertus and just has to be added.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("combobox", { name: "Role" }).textContent).toMatch(/OWNER/);
+    await waitFor(() => expect(listTenants.mock.calls.length).toBeGreaterThanOrEqual(2));
+    // …on the NEW tenant: the lookup and the invite go to tenant 9, not the
+    // first one of the list.
+    expect(screen.getByText(/created\. Now add its owner/)).toBeTruthy();
+    fireEvent.change(within(dialog).getByLabelText(/Email/), { target: { value: "owner@globex.test" } });
+    await waitFor(() => expect(lookupTenantMember).toHaveBeenCalledWith(9, "owner@globex.test"));
   });
 });

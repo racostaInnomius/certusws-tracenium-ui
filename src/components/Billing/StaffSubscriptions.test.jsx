@@ -18,10 +18,24 @@ import userEvent from "@testing-library/user-event";
 
 const get = vi.fn();
 const post = vi.fn(async () => ({ trialEndsAt: "2026-09-26T12:00:00.000Z" }));
+const put = vi.fn(async (_url, body) => ({ ...body, mdmTier: null, reconciled: true }));
 
 vi.mock("../../api/http", () => ({
   httpGetJson: (...a) => get(...a),
   httpPostJson: (...a) => post(...a),
+  httpPutJson: (...a) => put(...a),
+}));
+
+const CATALOG = [
+  { key: "amp", title: "Asset Management", required: true, tier_required: "starter" },
+  { key: "sdp", title: "Software Delivery", tier_required: "starter" },
+  { key: "scp", title: "Security Compliance", tier_required: "professional" },
+  { key: "rcp", title: "Remote Control", tier_required: "professional" },
+  { key: "pmp", title: "Patch Management", tier_required: "business" },
+  { key: "cdp", title: "Crypto Discovery", tier_required: "business" },
+];
+vi.mock("../../hooks/usePluginCatalog", () => ({
+  usePluginCatalog: () => ({ catalog: CATALOG, loading: false }),
 }));
 
 import StaffSubscriptions from "./StaffSubscriptions";
@@ -267,5 +281,85 @@ describe("conceder acceso", () => {
     await screen.findByRole("dialog");
 
     expect(post).not.toHaveBeenCalled();
+  });
+});
+
+// "Edit plan": donde se prueba Business → Enterprise con un heredado.
+describe("editar el plan", () => {
+  beforeEach(() => put.mockClear());
+
+  it("Business sin Stripe → Enterprise con dos plugins: manda el reemplazo completo", async () => {
+    serve([row({ hasStripeSubscription: false, quantity: 55 })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Enterprise" }));
+    await userEvent.click(within(dialog).getByLabelText("Patch Management"));
+    await userEvent.click(within(dialog).getByLabelText("Security Compliance"));
+    const licenses = within(dialog).getByRole("spinbutton", { name: "Endpoint licenses" });
+    await userEvent.clear(licenses);
+    await userEvent.type(licenses, "2500");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Save plan" }));
+
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    const [url, body] = put.mock.calls[0];
+    expect(url).toBe("/api/v1/billing/admin/subscriptions/111");
+    expect(body).toEqual({
+      tier: "enterprise",
+      quantity: 2500,
+      trialEndsAt: null,
+      pluginKeys: ["pmp", "scp"],
+      mdm: { included: false },
+      status: "active",
+    });
+    expect(await screen.findByText(/plan set to Enterprise · 2 plugins/)).toBeTruthy();
+  });
+
+  it("Enterprise sin plugins elegidos avisa de que sólo queda el suelo", async () => {
+    serve([row({ hasStripeSubscription: false })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Enterprise" }));
+    expect(within(dialog).getByText(/No plugins chosen: only Asset Management/)).toBeTruthy();
+  });
+
+  it("con Stripe, plan y licencias no se pueden tocar aquí", async () => {
+    serve([row({ hasStripeSubscription: true })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/pays through Stripe/)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Enterprise" }).disabled).toBe(true);
+    expect(within(dialog).getByRole("spinbutton", { name: "Endpoint licenses" }).disabled).toBe(true);
+  });
+
+  it("un 409 del servidor se explica en el diálogo, que sigue abierto", async () => {
+    serve([row({ hasStripeSubscription: false })]);
+    put.mockRejectedValueOnce(Object.assign(new Error("Conflict"), { status: 409, body: { error: "CANCEL_STRIPE_FIRST" } }));
+    render(<StaffSubscriptions />);
+    await ready();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit plan" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Save plan" }));
+
+    expect(await within(dialog).findByText(/Cancel that subscription before moving it to Enterprise/)).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("un Enterprise se lista con su conjunto y como gestionado", async () => {
+    serve([row({ tier: "enterprise", effectiveTier: "enterprise", pluginKeys: ["pmp", "scp", "cdp"], hasStripeSubscription: false })]);
+    render(<StaffSubscriptions />);
+    await ready();
+
+    expect(screen.getByText("Enterprise · 3 plugins")).toBeTruthy();
+    expect(screen.getByText("managed by Tracenium")).toBeTruthy();
   });
 });

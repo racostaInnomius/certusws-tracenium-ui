@@ -16,6 +16,7 @@ import {
   Alert,
   Switch,
   FormControlLabel,
+  Stack,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
@@ -47,6 +48,7 @@ import BackToSettings from "../components/common/BackToSettings";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
 import StaffSubscriptions from "../components/Billing/StaffSubscriptions";
+import CreateTenantDialog from "../components/Tenants/CreateTenantDialog";
 import { formatDate } from "../utils/format";
 import { tenantDeleteErrorMessage } from "../utils/tenantDeleteError";
 
@@ -554,6 +556,10 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
   const [memberSearch, setMemberSearch] = React.useState("");
 
   const [tenantDialogOpen, setTenantDialogOpen] = React.useState(false);
+  const [createTenantOpen, setCreateTenantOpen] = React.useState(false);
+  // Remonta Subscriptions tras un alta: el tenant nuevo y su plan tienen que
+  // aparecer ahí sin recargar la página.
+  const [subscriptionsVersion, setSubscriptionsVersion] = React.useState(0);
   const [memberDialogOpen, setMemberDialogOpen] = React.useState(false);
   const [memberDialogMode, setMemberDialogMode] = React.useState("create");
 
@@ -741,6 +747,34 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
 
     return { totalTenants, totalMembers, activeMembers };
   }, [tenants]);
+
+  /**
+   * Tras "Create New Tenant": la lista, la selección, Subscriptions y el owner.
+   *
+   * ⚠️ Se recarga la lista ANTES de seleccionar. El efecto que reconcilia la
+   * selección con la lista cargada no encontraría el tenant nuevo en la lista
+   * vieja y la dejaría vacía.
+   */
+  const handleTenantCreated = async (tenant, { planError } = {}) => {
+    setCreateTenantOpen(false);
+    await reloadTenants();
+    setSelectedTenant(tenant);
+    setSelectedTenantId(tenant.id);
+    setSubscriptionsVersion((v) => v + 1);
+
+    setSnackbar({
+      open: true,
+      message: planError
+        ? `Tenant "${tenant.name}" created, but its plan was not set: ${planError} Fix it with Edit plan in Subscriptions.`
+        : `Tenant "${tenant.name}" created. Now add its owner.`,
+      severity: planError ? "warning" : "success",
+    });
+
+    // El owner ya existe en SafeCertus: se añade como miembro con rol OWNER.
+    setEditingMember({ role: "OWNER" });
+    setMemberDialogMode("create");
+    setMemberDialogOpen(true);
+  };
 
   const openEditTenant = (tenant) => {
     setEditingTenant(tenant);
@@ -1185,9 +1219,14 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
                 sx={{ width: { xs: "100%", sm: 260 } }}
               />
 
-              <Typography variant="body2" color="text.secondary">
-                Click a tenant row to load its members
-              </Typography>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Typography variant="body2" color="text.secondary">
+                  Click a tenant row to load its members
+                </Typography>
+                <Button variant="contained" onClick={() => setCreateTenantOpen(true)}>
+                  Create New Tenant
+                </Button>
+              </Stack>
             </Box>
 
             <Box
@@ -1236,7 +1275,7 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
               En modo tenant esta pantalla la abre un OWNER para gestionar SUS
               miembros, y no tiene por qué ver el estado de pago de nadie. */}
           <Box sx={{ mb: 2 }}>
-            <StaffSubscriptions />
+            <StaffSubscriptions key={subscriptionsVersion} />
           </Box>
         </>
       )}
@@ -1344,6 +1383,14 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
           />
         </Box>
       </SectionPaper>
+
+      {!isTenantMode && (
+        <CreateTenantDialog
+          open={createTenantOpen}
+          onClose={() => setCreateTenantOpen(false)}
+          onCreated={handleTenantCreated}
+        />
+      )}
 
       <TenantDialog
         open={tenantDialogOpen}

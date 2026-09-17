@@ -19,6 +19,15 @@ export async function getTenantSummary(tenantId) {
   return httpGetJson(`${BASE}/${encodeURIComponent(tenantId)}/summary`);
 }
 
+/**
+ * Alta de tenant (staff global). Crea también su base de datos, así que tarda
+ * unos segundos. El backend le siembra Starter con el trial estándar; el plan
+ * elegido se fija después con `setTenantPlan`.
+ */
+export async function createTenant(payload) {
+  return httpPostJson(BASE, payload);
+}
+
 export async function updateTenant(tenantId, payload) {
   return httpPutJson(`${BASE}/${encodeURIComponent(tenantId)}`, payload);
 }
