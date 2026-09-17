@@ -110,7 +110,8 @@ const SOURCE_LABEL = {
   cdp_pqc_roadmap:    "Post-quantum roadmap",
   disk_capacity:      "Disk capacity",
   browser_extension:  "Browser extension",
-  browser_threat:     "Browser threat"
+  browser_threat:     "Browser threat",
+  geofence_transition: "Geofence"
 };
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"];
@@ -862,6 +863,11 @@ function ManageRulesDrawer({
                               onEnableTemplate(t);
                             }
                           }}
+                          // MUI 7: el aria-label del input va por slotProps. Sin
+                          // él, una fila de interruptores sin nombre suena igual
+                          // en un lector de pantalla — y aquí cada uno enciende
+                          // una alerta distinta.
+                          slotProps={{ input: { "aria-label": t.name } }}
                         />
                       }
                       label=""
