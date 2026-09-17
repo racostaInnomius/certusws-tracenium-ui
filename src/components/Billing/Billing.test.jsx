@@ -331,3 +331,44 @@ describe("what's included — the retired Plugin Control page's content", () => 
     ).toBeNull();
   });
 });
+
+// Enterprise: plan gestionado por Tracenium, fuera de Stripe. La página enseña
+// lo contratado y no ofrece nada que contratar (el servidor lo rechaza igual con
+// 409 MANAGED_PLAN).
+describe("plan gestionado (Enterprise)", () => {
+  const MANAGED = {
+    ...SUB,
+    tier: "enterprise",
+    effectiveTier: "enterprise",
+    quantity: 2500,
+    managed: true,
+    pluginKeys: ["scp"],
+    entitledPluginKeys: ["amp", "scp"],
+    licensedQuantity: 2500,
+  };
+
+  it("en lectura: sin periodicidad, ni planes, ni facturas, ni cambios", async () => {
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: MANAGED });
+    render(<Billing />);
+    await ready();
+
+    expect(await screen.findByText("Managed by Tracenium")).toBeTruthy();
+    expect(screen.getByText(/Contact your account manager/)).toBeTruthy();
+    expect(screen.queryByText("Billing period")).toBeNull();
+    expect(screen.queryByRole("tab", { name: /Invoices/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review change" })).toBeNull();
+    expect(httpPostJson).not.toHaveBeenCalled();
+  });
+
+  it("lo incluido es SU conjunto, y lo que falta no 'requiere Business'", async () => {
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: MANAGED });
+    render(<Billing />);
+    await ready();
+
+    // AMP (siempre) + SCP (elegido). Por rango, un "enterprise" lo tendría todo.
+    await userEvent.click(await screen.findByText(/What's included \(2 plugins\)/));
+    expect(await screen.findByText("PMP — Patch Management")).toBeTruthy();
+    expect(screen.getByText(/Not in your plan/)).toBeTruthy();
+    expect(screen.queryByText(/Requires Business/)).toBeNull();
+  });
+});

@@ -150,7 +150,11 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
                         tier_required actually applies to; MDM has its own
                         fixed feature set (MDM_INCLUDES), not this catalog. */}
                     {line === "endpoint" ? (
-                      <PluginInclusion tenantId={tenantId} tier={tier} />
+                      <PluginInclusion
+                        tenantId={tenantId}
+                        tier={tier}
+                        includedKeys={sub?.managed ? sub?.pluginKeys ?? [] : null}
+                      />
                     ) : null}
                   </Box>
                 ))}

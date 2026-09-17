@@ -269,155 +269,168 @@ export default function Billing() {
 
       <SubscriptionSummary sub={sub} estimate={beforeTotal} currency={currency} />
 
-      <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
-        <Tab label="Plan" />
-        <Tab label={`Invoices${invoices.length ? ` (${invoices.length})` : ""}`} />
-      </Tabs>
-
-      {tab === 0 ? (
+      {/* ENTERPRISE: plan gestionado por Tracenium, fuera de Stripe. Se enseña
+          lo contratado y nada más — ni tarjeta, ni periodicidad, ni planes que
+          elegir. El servidor rechaza igualmente contratar (409 MANAGED_PLAN):
+          esto no es la barrera, es no ofrecer un botón que falla. */}
+      {sub?.managed ? (
+        <Alert severity="info">
+          <AlertTitle>Managed by Tracenium</AlertTitle>
+          Your plan, plugins and licenses are set by Tracenium. Contact your account manager to change them.
+        </Alert>
+      ) : (
         <>
-          <PaymentMethodCard
-            publishableKey={publishableKey}
-            hasPaymentMethod={hasCard}
-            onSaved={load}
-          />
+          <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ borderBottom: `1px solid ${BRAND.border}` }}>
+            <Tab label="Plan" />
+            <Tab label={`Invoices${invoices.length ? ` (${invoices.length})` : ""}`} />
+          </Tabs>
 
-          {/* El motivo va donde está el obstáculo. Deshabilitar el botón sin
-              decir por qué convierte un paso que falta en un fallo aparente. */}
-          {!hasCard && (
-            <Alert severity="info" sx={{ mb: 2.5 }}>
-              Save a card before subscribing. Without a payment method the
-              subscription never activates.
-            </Alert>
-          )}
+          {tab === 0 ? (
+            <>
+              <PaymentMethodCard
+                publishableKey={publishableKey}
+                hasPaymentMethod={hasCard}
+                onSaved={load}
+              />
 
-          <SectionPaper variant="panel">
-            <Typography variant="overline" color="text.secondary">
-              Billing period
-            </Typography>
-            {/* Una sola para toda la suscripción: Stripe rechaza mezclar
-                mensual y anual entre los items de una misma. */}
-            <Box sx={{ mt: 0.5 }}>
-              <ToggleButtonGroup
-                exclusive size="small" value={selection.interval}
-                onChange={(_e, v) => v && setSelection((s) => ({ ...s, interval: v }))}
-              >
-                {INTERVALS.map((i) => (
-                  <ToggleButton key={i} value={i} sx={{ px: 2.5 }}>
-                    {INTERVAL_LABELS[i]}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Box>
-          </SectionPaper>
+              {/* El motivo va donde está el obstáculo. Deshabilitar el botón sin
+                  decir por qué convierte un paso que falta en un fallo aparente. */}
+              {!hasCard && (
+                <Alert severity="info" sx={{ mb: 2.5 }}>
+                  Save a card before subscribing. Without a payment method the
+                  subscription never activates.
+                </Alert>
+              )}
 
-          {LINES.map((line) => (
-            <PlanPicker
-              key={line}
-              line={line}
-              prices={prices}
-              currency={currency}
-              interval={selection.interval}
-              selection={selection[line]}
-              used={sub?.usage?.[line] ?? null}
-              onChange={(patch) => setLine(line, patch)}
-              catalog={pluginCatalog}
-            />
-          ))}
-
-          {/* ⚠️ ESTO ERA UNA BARRA `position: sticky` Y SE QUITÓ.
-              Flotaba sobre el contenido y tapaba justo las tarjetas de plan que
-              el usuario estaba comparando — el elemento que resume la decisión
-              escondía la decisión. Ninguna otra página de la consola flota nada
-              sobre su contenido.
-
-              Como bloque al final del formulario cumple lo mismo: sólo aparece
-              cuando hay algo que confirmar, así que sigue distinguiendo "no he
-              tocado nada" de "tengo un cambio pendiente". */}
-          {change !== "none" && (
-            <SectionPaper
-              variant="panel"
-              sx={{ borderColor: BRAND.teal, bgcolor: BRAND.tealSoft ?? "#f2f8f8" }}
-            >
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                justifyContent="space-between"
-                alignItems={{ sm: "center" }}
-                spacing={1.5}
-              >
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    {afterTotal !== null
-                      ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "yr" : "mo"}`
-                      : "Incomplete selection"}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {change === "downgrade"
-                      ? "applies at the end of the cycle"
-                      : "charged on confirm"}
-                  </Typography>
+              <SectionPaper variant="panel">
+                <Typography variant="overline" color="text.secondary">
+                  Billing period
+                </Typography>
+                {/* Una sola para toda la suscripción: Stripe rechaza mezclar
+                    mensual y anual entre los items de una misma. */}
+                <Box sx={{ mt: 0.5 }}>
+                  <ToggleButtonGroup
+                    exclusive size="small" value={selection.interval}
+                    onChange={(_e, v) => v && setSelection((s) => ({ ...s, interval: v }))}
+                  >
+                    {INTERVALS.map((i) => (
+                      <ToggleButton key={i} value={i} sx={{ px: 2.5 }}>
+                        {INTERVAL_LABELS[i]}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
                 </Box>
-                <Button
-                  variant="contained"
-                  disabled={!hasCard || afterTotal === null}
-                  onClick={() => setConfirming(true)}
+              </SectionPaper>
+
+              {LINES.map((line) => (
+                <PlanPicker
+                  key={line}
+                  line={line}
+                  prices={prices}
+                  currency={currency}
+                  interval={selection.interval}
+                  selection={selection[line]}
+                  used={sub?.usage?.[line] ?? null}
+                  onChange={(patch) => setLine(line, patch)}
+                  catalog={pluginCatalog}
+                />
+              ))}
+
+              {/* ⚠️ ESTO ERA UNA BARRA `position: sticky` Y SE QUITÓ.
+                  Flotaba sobre el contenido y tapaba justo las tarjetas de plan que
+                  el usuario estaba comparando — el elemento que resume la decisión
+                  escondía la decisión. Ninguna otra página de la consola flota nada
+                  sobre su contenido.
+
+                  Como bloque al final del formulario cumple lo mismo: sólo aparece
+                  cuando hay algo que confirmar, así que sigue distinguiendo "no he
+                  tocado nada" de "tengo un cambio pendiente". */}
+              {change !== "none" && (
+                <SectionPaper
+                  variant="panel"
+                  sx={{ borderColor: BRAND.teal, bgcolor: BRAND.tealSoft ?? "#f2f8f8" }}
                 >
-                  Review change
-                </Button>
-              </Stack>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ sm: "center" }}
+                    spacing={1.5}
+                  >
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {afterTotal !== null
+                          ? `${money(afterTotal, currency)}/${selection.interval === "yearly" ? "yr" : "mo"}`
+                          : "Incomplete selection"}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {change === "downgrade"
+                          ? "applies at the end of the cycle"
+                          : "charged on confirm"}
+                      </Typography>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      disabled={!hasCard || afterTotal === null}
+                      onClick={() => setConfirming(true)}
+                    >
+                      Review change
+                    </Button>
+                  </Stack>
+                </SectionPaper>
+              )}
+
+              <ConfirmChangeDialog
+                open={confirming}
+                busy={saving}
+                onClose={() => setConfirming(false)}
+                onConfirm={submit}
+                current={current}
+                next={selection}
+                change={change}
+                beforeTotal={beforeTotal}
+                afterTotal={afterTotal}
+                currency={currency}
+              />
+            </>
+          ) : (
+            <SectionPaper variant="panel">
+              {invoices.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No invoices yet.
+                </Typography>
+              ) : (
+                <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Number</TableCell>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell align="right">Amount</TableCell>
+                          <TableCell />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {invoices.map((i) => (
+                          <TableRow key={i.id}>
+                            <TableCell>{i.number ?? i.id}</TableCell>
+                            <TableCell>{new Date(i.created).toLocaleDateString()}</TableCell>
+                            <TableCell>{i.status}</TableCell>
+                            <TableCell align="right">{money(i.amountDue, i.currency)}</TableCell>
+                            <TableCell align="right">
+                              {i.pdfUrl && (
+                                <Button size="small" href={i.pdfUrl} target="_blank" rel="noopener">
+                                  PDF
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                </Table>
+              )}
             </SectionPaper>
           )}
-
-          <ConfirmChangeDialog
-            open={confirming}
-            busy={saving}
-            onClose={() => setConfirming(false)}
-            onConfirm={submit}
-            current={current}
-            next={selection}
-            change={change}
-            beforeTotal={beforeTotal}
-            afterTotal={afterTotal}
-            currency={currency}
-          />
         </>
-      ) : (
-        <SectionPaper variant="panel">
-          {invoices.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No invoices yet.
-            </Typography>
-          ) : (
-            <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Number</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                      <TableCell />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {invoices.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell>{i.number ?? i.id}</TableCell>
-                        <TableCell>{new Date(i.created).toLocaleDateString()}</TableCell>
-                        <TableCell>{i.status}</TableCell>
-                        <TableCell align="right">{money(i.amountDue, i.currency)}</TableCell>
-                        <TableCell align="right">
-                          {i.pdfUrl && (
-                            <Button size="small" href={i.pdfUrl} target="_blank" rel="noopener">
-                              PDF
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-            </Table>
-          )}
-        </SectionPaper>
       )}
     </Box>
   );

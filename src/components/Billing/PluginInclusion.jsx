@@ -39,7 +39,7 @@ function extractPolicyContent(response) {
   return row;
 }
 
-function PluginBox({ plugin, active, entitled, coverage, totalDevices }) {
+function PluginBox({ plugin, active, entitled, coverage, totalDevices, managed = false }) {
   const locked = !entitled;
   const denom = Number(totalDevices) || 0;
   const count = Number(coverage) || 0;
@@ -92,7 +92,9 @@ function PluginBox({ plugin, active, entitled, coverage, totalDevices }) {
                 whiteSpace: "nowrap",
               }}
             >
-              🔒 Requires {tierLabel(plugin.tier_required)}
+              {/* Un Enterprise no "sube" a ningún tier para tenerlo: su conjunto
+                  lo elige Tracenium. "Requires Business" sería falso ahí. */}
+              {managed ? "🔒 Not in your plan" : `🔒 Requires ${tierLabel(plugin.tier_required)}`}
             </Box>
           ) : (
             <Box
@@ -126,7 +128,12 @@ function PluginBox({ plugin, active, entitled, coverage, totalDevices }) {
   );
 }
 
-export default function PluginInclusion({ tenantId, tier }) {
+/**
+ * `includedKeys` — el conjunto CONTRATADO de un plan gestionado (Enterprise). Sin
+ * él, lo incluido se deduce del rango del paquete, que es lo correcto para
+ * Starter/Professional/Business y falso para un conjunto elegido por el staff.
+ */
+export default function PluginInclusion({ tenantId, tier, includedKeys = null }) {
   const [open, setOpen] = React.useState(false);
   const [policyJson, setPolicyJson] = React.useState(null);
   const [coverage, setCoverage] = React.useState(null);
@@ -163,7 +170,10 @@ export default function PluginInclusion({ tenantId, tier }) {
   const enabledSet = getEnabledPluginSet(policyJson || {});
   const totalDevices = Number(coverage?.total ?? 0);
   const coverageByPlugin = coverage?.byPlugin || [];
-  const includedCount = catalog.filter((p) => tierRank(tier) >= tierRank(p.tier_required)).length;
+  const managed = Array.isArray(includedKeys);
+  const inPlan = (p) =>
+    managed ? Boolean(p.required) || includedKeys.includes(p.key) : tierRank(tier) >= tierRank(p.tier_required);
+  const includedCount = catalog.filter(inPlan).length;
 
   return (
     <Box sx={{ mt: 1.75, pt: 1.75, borderTop: `1px dashed ${BRAND.border}` }}>
@@ -194,7 +204,7 @@ export default function PluginInclusion({ tenantId, tier }) {
           }}
         >
           {catalog.map((plugin) => {
-            const entitled = tierRank(tier) >= tierRank(plugin.tier_required);
+            const entitled = inPlan(plugin);
             const active = entitled && enabledSet.has(plugin.key);
             const found = coverageByPlugin.find((c) => c.plugin === plugin.key);
             return (
@@ -205,6 +215,7 @@ export default function PluginInclusion({ tenantId, tier }) {
                 entitled={entitled}
                 coverage={found?.count ?? 0}
                 totalDevices={totalDevices}
+                managed={managed}
               />
             );
           })}
