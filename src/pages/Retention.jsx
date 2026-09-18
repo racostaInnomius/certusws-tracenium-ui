@@ -148,6 +148,27 @@ const FIELDS = [
     min: 1,
     max: 3650,
   },
+  // ── SCP findings timeline — tenant DB, append-only. Blank = never. ──
+  // Dos ventanas sobre la MISMA tabla porque sus filas no valen lo mismo. En
+  // T111, medido el 18-sep: 663.673 filas y 241 MB en cinco semanas, de las
+  // cuales 448.363 (68%) son `evidence_refreshed` —una por hallazgo abierto y
+  // día— y TRES las escribió una persona.
+  {
+    key: "complianceFindingEventsRefreshDays",
+    table: "compliance_finding_events",
+    label: "Finding timeline — evidence heartbeat",
+    hint: "Only the 'evidence refreshed' rows: one per open finding per day, saying the scanner still sees it. Nothing reads them after 24h — the evidence pack never queries them and the finding's own last-seen date carries the same signal — so this is the row type to age out first. 90d is plenty for hand-debugging a scanner. Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
+  {
+    key: "complianceFindingEventsDays",
+    table: "compliance_finding_events",
+    label: "Finding timeline — history",
+    hint: "Everything else on a finding's timeline: opened, closed, reopened, remediation status changes and exception decisions. This is what the evidence pack reads for a period, so it is compliance evidence: keep at least the audit period plus the audit itself (400d ≈ 13 months). Blank = keep forever.",
+    min: 1,
+    max: 3650,
+  },
   // ── Audit trail — control DB. Blank = never (opt-in). ──
   {
     key: "securityEventsDays",
