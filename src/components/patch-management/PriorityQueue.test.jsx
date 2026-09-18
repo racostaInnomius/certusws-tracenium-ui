@@ -77,3 +77,18 @@ describe("what the rows say", () => {
     expect(() => render(<PriorityQueue />)).not.toThrow();
   });
 });
+
+// La sección es «por dónde empiezo», no un inventario: cinco filas y el resto
+// vive en sus propias superficies (Vulnerabilities, Findings).
+describe("PriorityQueue — tamaño de la cola", () => {
+  it("⭐ enseña 5 como máximo aunque haya más", () => {
+    const exposures = Array.from({ length: 9 }, (_, i) => ({
+      cveId: `CVE-2026-${1000 + i}`,
+      cvssSeverity: "critical",
+      devicesAffected: 3,
+      kev: true,
+    }));
+    render(<PriorityQueue exposures={exposures} findings={[]} onOpen={() => {}} />);
+    expect(screen.getAllByRole("listitem")).toHaveLength(5);
+  });
+});

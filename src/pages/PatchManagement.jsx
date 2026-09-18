@@ -62,6 +62,7 @@ import {
 import SecurityConfigPanel from "../components/patch-management/SecurityConfigPanel";
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
+import PatchStatusDonut from "../components/patch-management/PatchStatusDonut";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -1386,8 +1387,19 @@ export default function PatchManagement({ onNavigate }) {
     </Box>
   ) : null;
 
+  // La cola a la izquierda y el reparto de la flota a la derecha: la mitad
+  // central de esta fila era espacio vacío, y «cuánta flota está ya al día» no
+  // lo contestaba ningún número de la página.
   const startHere = pmpEnabled ? (
-    <Box sx={{ mb: 2 }}>
+    <Box
+      sx={{
+        mb: 2,
+        display: "grid",
+        gap: 2,
+        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.5fr) minmax(300px, 1fr)" },
+        alignItems: "start",
+      }}
+    >
       <PriorityQueue
         exposures={queueData?.exposures}
         findings={queueData?.findings}
@@ -1397,6 +1409,9 @@ export default function PatchManagement({ onNavigate }) {
         refreshing={queueRefreshing}
         onOpen={handleOpenFromQueue}
       />
+      <SectionPaper variant="panel" sx={{ p: 0 }}>
+        <PatchStatusDonut statusBreakdown={summary?.statusBreakdown} />
+      </SectionPaper>
     </Box>
   ) : null;
 

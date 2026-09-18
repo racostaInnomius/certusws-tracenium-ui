@@ -36,7 +36,9 @@ export default function PriorityQueue({
   // hiding a perfectly good answer behind a spinner is what made this section
   // feel slow on every visit.
   refreshing = false,
-  limit = 6,
+  // Cinco: la cola es «por dónde empiezo», no un inventario. Ver la nota de
+  // la sección en PatchManagement.jsx.
+  limit = 5,
   onOpen,
 }) {
   const items = React.useMemo(
