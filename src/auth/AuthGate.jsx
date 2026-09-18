@@ -21,6 +21,7 @@ import { useAuthContext } from "./AuthContext";
 import { clearApiCache, setApiCacheSessionScope, getActiveTenantId } from "../api/http";
 import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 import { BRAND, NEUTRAL, TEXT } from "../theme/brand";
+import { consumeSsoError, ssoErrorCopy } from "./ssoError";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -355,6 +356,12 @@ export default function AuthGate({ children }) {
   const [retryNonce, setRetryNonce] = React.useState(0);
   const [isRetryingNow, setIsRetryingNow] = React.useState(false);
   const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
+  // ⚠️ SE LEE EN EL PRIMER RENDER, ANTES DEL BOOTSTRAP.
+  // El IdP denegó el acceso y el backend nos mandó aquí con ?auth_error=...:
+  // no hay token, así que bootstrap daría 401 y su rama manda a /auth/login,
+  // que es justo el bucle que este cambio corta. El parámetro se consume (se
+  // borra de la URL) para que recargar no repita el mensaje.
+  const [ssoError] = React.useState(() => consumeSsoError());
   const { refreshAuth } = useAuthContext();
 
   const handleLogout = async () => {
@@ -386,6 +393,9 @@ export default function AuthGate({ children }) {
   };
 
   React.useEffect(() => {
+    // Con un error del IdP no hay nada que arrancar: la pantalla es terminal.
+    if (ssoError) return undefined;
+
     let cancelled = false;
     const loopController = new AbortController();
     let lastConnectivityState = "unknown";
@@ -543,7 +553,7 @@ export default function AuthGate({ children }) {
       cancelled = true;
       loopController.abort();
     };
-  }, [retryNonce, refreshAuth]);
+  }, [retryNonce, refreshAuth, ssoError]);
 
   const retryNow = () => {
     setIsRetryingNow(true);
@@ -654,6 +664,57 @@ export default function AuthGate({ children }) {
           </Fade>
         </Box>
       </Box>
+    );
+  }
+
+  if (ssoError) {
+    const copy = ssoErrorCopy(ssoError);
+
+    return (
+      <AuthShell title={copy.title} description={copy.description} maxWidth={500} minHeight={420}>
+        <Box
+          sx={{
+            width: "100%",
+            maxWidth: 380,
+            mb: 2.5,
+            px: 2,
+            py: 1.5,
+            borderRadius: "14px",
+            border: "1px solid rgba(248, 181, 52, 0.45)",
+            background: "rgba(248, 181, 52, 0.10)",
+            textAlign: "left",
+          }}
+        >
+          <Typography
+            sx={{ color: BRAND.alert.warningOnDark, fontWeight: 700, fontSize: TEXT.md }}
+          >
+            {ssoError}
+          </Typography>
+        </Box>
+
+        {/* Reintentar sólo donde puede cambiar algo: volver a /auth/login es
+            una acción deliberada del usuario, no el rebote automático. */}
+        {copy.retry ? (
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={() => {
+              window.location.href = `${API.BASE}${API.LOGIN}`;
+            }}
+            sx={{
+              maxWidth: 380,
+              textTransform: "none",
+              fontWeight: 700,
+              borderRadius: "12px",
+              py: 1.25,
+              background: "rgb(70,157,159)",
+              "&:hover": { background: "rgb(60,140,142)" },
+            }}
+          >
+            Try again
+          </Button>
+        ) : null}
+      </AuthShell>
     );
   }
 
