@@ -10,7 +10,11 @@ import {
   Button,
   Chip,
   CircularProgress,
+  MenuItem,
   Table,
+  TablePagination,
+  TextField,
+  Tooltip,
   TableBody,
   TableCell,
   TableHead,
@@ -36,17 +40,12 @@ import {
 } from "../../api/patchManagement";
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
+import { affectedRangeLabel, NO_VERSION_DATA_HINT } from "./cveRange";
 import { listFrom } from "../../api/shape";
 import { useMspOptional } from "../../msp/MspContext";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
-}
-
-function rangeLabel(it) {
-  const lo = it.introducedVersion || "*";
-  const hi = it.fixedVersion || "∞";
-  return `${lo} → ${hi}`;
 }
 
 function timeAgo(iso) {
@@ -96,6 +95,14 @@ export default function CveCatalogManager({ canManage, notify }) {
   const msp = useMspOptional?.();
   const esProveedor = msp?.portfolio?.level === "vendor";
   const [items, setItems] = React.useState([]);
+  // ⚠️ Paginación CONTRA EL SERVIDOR (17-sep): el catálogo son 51.988 CVEs y
+  // pintarlos todos tiraba la pestaña del navegador por memoria.
+  const [total, setTotal] = React.useState(0);
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(50);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [search, setSearch] = React.useState("");
+  const [severity, setSeverity] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [dialog, setDialog] = React.useState(null); // { mode, entry }
   const [submitting, setSubmitting] = React.useState(false);
@@ -160,20 +167,41 @@ export default function CveCatalogManager({ canManage, notify }) {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await listCveCatalog();
+      const res = await listCveCatalog({
+        limit: rowsPerPage,
+        offset: page * rowsPerPage,
+        ...(search ? { search } : {}),
+        ...(severity ? { severity } : {}),
+      });
       setItems(listFrom(res, { context: "cveCatalog" }));
+      // Sin `total` (backend anterior) se usa lo que llegó: la tabla sigue
+      // funcionando, sólo sin número exacto de páginas.
+      setTotal(Number.isFinite(Number(res?.total)) ? Number(res.total) : listFrom(res, { context: "cveCatalog" }).length);
     } catch (err) {
       notify?.("error", errMsg(err, "Failed to load CVE catalog"));
     } finally {
       setLoading(false);
     }
-  }, [notify]);
+  }, [notify, page, rowsPerPage, search, severity]);
 
   React.useEffect(() => {
     load();
+  }, [load]);
+
+  React.useEffect(() => {
     loadStatus();
     loadKevStatus();
-  }, [load, loadStatus, loadKevStatus]);
+  }, [loadStatus, loadKevStatus]);
+
+  // El buscador va al servidor, así que se espera a que el operador pare de
+  // teclear en vez de una consulta por letra.
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(0);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -308,14 +336,39 @@ export default function CveCatalogManager({ canManage, notify }) {
         </Typography>
       </Box>
 
+      <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mb: 2 }}>
+        <TextField
+          size="small"
+          label="Search"
+          placeholder="CVE-2026-40058, product, publisher…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          sx={{ minWidth: 300 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Severity"
+          value={severity}
+          onChange={(e) => { setSeverity(e.target.value); setPage(0); }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All severities</MenuItem>
+          {["critical", "high", "medium", "low", "none"].map((s) => (
+            <MenuItem key={s} value={s}>{severityMeta(s).label}</MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
           <CircularProgress size={28} sx={{ color: BRAND.teal }} />
         </Box>
       ) : items.length === 0 ? (
         <Box sx={{ p: 4, textAlign: "center", color: BRAND.gray }}>
-          No CVE entries yet. Add one to start matching installed software against known
-          vulnerabilities.
+          {search || severity
+            ? "No CVE entries match this search."
+            : "No CVE entries yet. Add one to start matching installed software against known vulnerabilities."}
         </Box>
       ) : (
         <Box sx={{ overflowX: "auto" }}>
@@ -355,7 +408,31 @@ export default function CveCatalogManager({ canManage, notify }) {
                       <Chip size="small" label={m.label} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 800, bgcolor: m.bg, color: m.fg }} />
                     </TableCell>
                     <TableCell>
-                      <Typography sx={{ fontSize: TEXT.sm, fontFamily: "monospace", color: BRAND.dark }}>{rangeLabel(it)}</Typography>
+                      {(() => {
+                        const r = affectedRangeLabel(it);
+                        const text = (
+                          <Typography
+                            sx={{
+                              fontSize: TEXT.sm,
+                              fontFamily: r.unknown ? undefined : "monospace",
+                              color: r.unknown ? BRAND.gray : BRAND.dark,
+                              fontStyle: r.unknown ? "italic" : undefined,
+                              cursor: r.unknown ? "help" : undefined,
+                            }}
+                          >
+                            {r.label}
+                          </Typography>
+                        );
+                        // «* → ∞» se leía como «afecta a todas las versiones»;
+                        // lo que significa es que NVD aún no las ha publicado.
+                        return r.unknown ? (
+                          <Tooltip title={NO_VERSION_DATA_HINT} arrow placement="top">
+                            <span>{text}</span>
+                          </Tooltip>
+                        ) : (
+                          text
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {it.packageId == null ? (
@@ -379,6 +456,16 @@ export default function CveCatalogManager({ canManage, notify }) {
               })}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={total}
+            page={page}
+            onPageChange={(_e, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(Number(e.target.value)); setPage(0); }}
+            rowsPerPageOptions={[25, 50, 100, 200]}
+            labelDisplayedRows={({ from, to, count }) => `${from}–${to} of ${count.toLocaleString()} CVEs`}
+          />
         </Box>
       )}
 
