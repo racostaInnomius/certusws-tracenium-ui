@@ -536,7 +536,19 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
     async () => listFrom(await listTenants(), { keys: ["items"], context: "tenants.list" }),
     { enabled: !isTenantMode, staleMs: 30_000, storageMaxAgeMs: 5 * 60_000, revalidateOnMount: "stale" }
   );
-  const tenants = React.useMemo(() => tenantsData ?? [], [tenantsData]);
+  /**
+   * ⚠️ SÓLO TENANTS CON BASE PROPIA.
+   *
+   * `listTenants` trae también los contenedores de MSP (`TenantType = 'msp'`,
+   * sin `TenantDB`), que no sostienen flota ni miembros de producto y se
+   * administran en la pantalla de MSP. Contarlos hacía que "Total Tenants"
+   * dijera 6 donde hay 4, y ponerlos en la tabla ofrecía miembros y plan a
+   * algo que no puede tener ninguno de los dos.
+   */
+  const tenants = React.useMemo(
+    () => (tenantsData ?? []).filter((t) => String(t?.tenantDb || "").trim() !== ""),
+    [tenantsData]
+  );
 
   const [selectedTenant, setSelectedTenant] = React.useState(null);
   const [selectedTenantId, setSelectedTenantId] = React.useState(null);
@@ -1271,12 +1283,6 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
             </Box>
           </SectionPaper>
 
-          {/* Suscripciones — sólo en la vista global, que es la de staff.
-              En modo tenant esta pantalla la abre un OWNER para gestionar SUS
-              miembros, y no tiene por qué ver el estado de pago de nadie. */}
-          <Box sx={{ mb: 2 }}>
-            <StaffSubscriptions key={subscriptionsVersion} />
-          </Box>
         </>
       )}
 
@@ -1383,6 +1389,16 @@ export default function TenantsAdministrator({ mode = "global", onBack, onNaviga
           />
         </Box>
       </SectionPaper>
+
+      {/* Suscripciones al FINAL: la tabla de tenants dice "click a tenant row
+          to load its members", así que lo siguiente tiene que ser la tabla de
+          miembros. Sólo en la vista global — en modo tenant esta pantalla la
+          abre un OWNER para gestionar SUS miembros y no ve el plan de nadie. */}
+      {!isTenantMode && (
+        <Box sx={{ mt: 2 }}>
+          <StaffSubscriptions key={subscriptionsVersion} />
+        </Box>
+      )}
 
       {!isTenantMode && (
         <CreateTenantDialog

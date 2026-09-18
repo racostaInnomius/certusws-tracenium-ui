@@ -28,7 +28,9 @@ vi.mock("../api/tenants", () => ({
 // Global mode (staff): Subscriptions needs its own API, and the create dialog
 // is tested on its own (CreateTenantDialog.test.jsx). Here only what the PAGE
 // does once a tenant exists matters.
-vi.mock("../components/Billing/StaffSubscriptions", () => ({ default: () => null }));
+vi.mock("../components/Billing/StaffSubscriptions", () => ({
+  default: () => <div data-testid="subs-panel">Subscriptions</div>,
+}));
 vi.mock("../components/Tenants/CreateTenantDialog", () => ({
   default: ({ open, onCreated }) =>
     open ? (
@@ -60,6 +62,7 @@ import {
   cancelPendingInvite,
 } from "../api/tenants";
 import TenantsAdministrator from "./TenantsAdministrator";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 const TENANT = {
   id: 7,
@@ -71,6 +74,10 @@ const TENANT = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // useCachedFetch cachea en memoria (y en localStorage) entre montajes: sin
+  // vaciarlo un test hereda las filas del anterior y el conteo deja de ser el
+  // de SU caso — pasó con "Total Tenants".
+  clearCachedFetch();
   getTenantById.mockResolvedValue(TENANT);
   listTenantMembers.mockResolvedValue({ items: [], total: 0 });
 });
@@ -306,5 +313,36 @@ describe("Create New Tenant (global mode)", () => {
     expect(screen.getByText(/created\. Now add its owner/)).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText(/Email/), { target: { value: "owner@globex.test" } });
     await waitFor(() => expect(lookupTenantMember).toHaveBeenCalledWith(9, "owner@globex.test"));
+  });
+});
+
+describe("qué se lista (global mode)", () => {
+  const MSP = { id: 112, name: "NextGsys MSP", externalIdpTenant: "ext-msp", tenantDb: null, maxDevices: null };
+
+  it("only tenants with their own database — MSP containers are not tenants here", async () => {
+    // Counting them made "Total Tenants" say 6 where there are 4, and putting
+    // them in the table offered members and a plan to something that can hold
+    // neither. They have their own screen.
+    listTenants.mockResolvedValue({ items: [TENANT, MSP] });
+
+    render(<TenantsAdministrator mode="global" />);
+
+    expect(await screen.findByText("Acme")).toBeTruthy();
+    expect(screen.queryByText("NextGsys MSP")).toBeNull();
+    // El valor es el <Typography> hermano del título dentro de la tarjeta.
+    const card = screen.getByText("Total Tenants").parentElement;
+    expect(card.textContent).toBe("Total Tenants1");
+  });
+
+  it("members come right after the tenant table; the plan panel goes last", async () => {
+    // The tenant table says "click a tenant row to load its members", so what
+    // follows it has to BE the members table.
+    listTenants.mockResolvedValue({ items: [TENANT] });
+
+    render(<TenantsAdministrator mode="global" />);
+
+    const members = await screen.findByRole("heading", { name: "Tenant Members" });
+    const subs = screen.getByTestId("subs-panel");
+    expect(members.compareDocumentPosition(subs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
