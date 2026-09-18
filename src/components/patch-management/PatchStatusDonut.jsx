@@ -12,6 +12,12 @@
 // Cada banda filtra la tabla de equipos, y comparte estado con las tarjetas de
 // «Fleet totals»: una sola dimensión de filtro y un solo chip.
 //
+// ⚠️ LA CABECERA VIVE FUERA DEL PANEL, y es el mismo bloque que «Start here»
+// (título grande + apunte pequeño, `mb: 1.5`). Así el panel empieza justo a la
+// altura de la PRIMERA FILA de la cola en vez de a la de su título, sin ningún
+// margen puesto a ojo: si el bloque de cabecera cambia, los dos se mueven
+// igual. El panel se estira (`flex: 1`) para acabar donde acaba la quinta fila.
+//
 // ⚠️ COLOUR IS THE SECOND ENCODING, NEVER THE FIRST. Every band is named with
 // its count in the legend, so the donut is readable without distinguishing the
 // hues. The critical fill is `errorText` (#B23A33) rather than the soft red for
@@ -20,6 +26,7 @@
 
 import * as React from "react";
 import { Box, Stack, Tooltip, Typography } from "@mui/material";
+import SectionPaper from "../common/SectionPaper";
 import { Cell, Pie, PieChart } from "recharts";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { patchStatusChartData } from "./patchStatusChart";
@@ -35,26 +42,31 @@ const FILL = {
 export default function PatchStatusDonut({ statusBreakdown, size = 148, selectedStatus = null, onSelectStatus }) {
   const data = React.useMemo(() => patchStatusChartData(statusBreakdown), [statusBreakdown]);
 
-  if (data.reporting === 0) {
-    return (
-      <Box sx={{ p: 2 }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>OS patch status</Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
-          No device has reported its patch status yet.
+  const frame = (children) => (
+    <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, height: "100%" }}>
+      {/* Mismo bloque de cabecera que «Start here» — ver la nota de arriba. */}
+      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}>
+        <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>OS patch status</Typography>
+        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+          Operating-system updates · select a band to filter the devices table
         </Typography>
-      </Box>
+      </Stack>
+      <SectionPaper variant="panel" sx={{ p: 2, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        {children}
+      </SectionPaper>
+    </Box>
+  );
+
+  if (data.reporting === 0) {
+    return frame(
+      <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
+        No device has reported its patch status yet.
+      </Typography>
     );
   }
 
-  return (
-    <Box sx={{ p: 2 }}>
-      <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark, mb: 0.25 }}>
-        OS patch status
-      </Typography>
-      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mb: 1 }}>
-        Operating-system updates · select a band to filter the devices table
-      </Typography>
-
+  return frame(
+    <>
       <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
         <Box sx={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
           <PieChart width={size} height={size}>
@@ -130,7 +142,7 @@ export default function PatchStatusDonut({ statusBreakdown, size = 148, selected
         </Box>
       </Stack>
 
-      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 1 }}>
+      <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 1.5 }}>
         {data.patched} of {data.reporting} reporting devices
         {data.notKnown > 0 ? (
           <Tooltip
@@ -144,6 +156,6 @@ export default function PatchStatusDonut({ statusBreakdown, size = 148, selected
           </Tooltip>
         ) : null}
       </Typography>
-    </Box>
+    </>
   );
 }

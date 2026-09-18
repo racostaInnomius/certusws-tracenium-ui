@@ -1389,19 +1389,26 @@ export default function PatchManagement({ onNavigate }) {
     </Box>
   ) : null;
 
-  // La cola a la izquierda y el reparto de la flota a la derecha: la mitad
-  // central de esta fila era espacio vacío, y «cuánta flota está ya al día» no
-  // lo contestaba ningún número de la página.
+  // El reparto de la flota PRIMERO y la cola después: el resumen ya está en
+  // memoria cuando se pinta la página, mientras la cola espera a exposiciones y
+  // hallazgos — poner lo lento a la izquierda deja el hueco a la vista.
+  // `alignItems: stretch` (el de serie) es lo que hace que el panel del chart
+  // acabe donde acaba la quinta fila de la cola.
   const startHere = pmpEnabled ? (
     <Box
       sx={{
         mb: 2,
         display: "grid",
         gap: 2,
-        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.5fr) minmax(300px, 1fr)" },
-        alignItems: "start",
+        gridTemplateColumns: { xs: "1fr", lg: "minmax(300px, 1fr) minmax(0, 1.6fr)" },
       }}
     >
+      <PatchStatusDonut
+        statusBreakdown={summary?.statusBreakdown}
+        // Mismo filtro que las tarjetas: una sola dimensión, un solo chip.
+        selectedStatus={statusOfCardFilter(cardFilter)}
+        onSelectStatus={(status) => handleCardFilter(cardFilterForStatus(status))}
+      />
       <PriorityQueue
         exposures={queueData?.exposures}
         findings={queueData?.findings}
@@ -1411,14 +1418,6 @@ export default function PatchManagement({ onNavigate }) {
         refreshing={queueRefreshing}
         onOpen={handleOpenFromQueue}
       />
-      <SectionPaper variant="panel" sx={{ p: 0 }}>
-        <PatchStatusDonut
-          statusBreakdown={summary?.statusBreakdown}
-          // Mismo filtro que las tarjetas: una sola dimensión, un solo chip.
-          selectedStatus={statusOfCardFilter(cardFilter)}
-          onSelectStatus={(status) => handleCardFilter(cardFilterForStatus(status))}
-        />
-      </SectionPaper>
     </Box>
   ) : null;
 

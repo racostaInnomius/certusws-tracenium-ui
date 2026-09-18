@@ -224,6 +224,15 @@ describe("Patch Management — estado de campaña", () => {
     expect(within(grid()).getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
   });
 
+  it("el chart va ANTES de la cola: el resumen ya está y la cola tarda en llegar", async () => {
+    mount();
+    const chart = await screen.findByText("OS patch status");
+    // Sin cola pendiente, esa columna enseña su estado vacío en vez del título.
+    const queue = await screen.findByText(/Start here|Nothing is waiting on you/);
+    // compareDocumentPosition: 4 = «queue va después de chart» en el documento.
+    expect(chart.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("⚠️ sin respuesta de campaña la página sigue, sin inventar ceros", async () => {
     // Una respuesta vacía diría «0 of 0 enrolled devices»: una afirmación sobre
     // la flota, y encima falsa.
