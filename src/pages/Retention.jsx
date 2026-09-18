@@ -157,7 +157,7 @@ const FIELDS = [
     key: "complianceFindingEventsRefreshDays",
     table: "compliance_finding_events",
     label: "Finding timeline — evidence heartbeat",
-    hint: "Only the 'evidence refreshed' rows: one per open finding per day, saying the scanner still sees it. Nothing reads them after 24h — the evidence pack never queries them and the finding's own last-seen date carries the same signal — so this is the row type to age out first. 90d is plenty for hand-debugging a scanner. Blank = keep forever.",
+    hint: "Only the 'evidence refreshed' rows: one per open finding per day, saying the scanner still sees it. Nothing reads them after 24h — the evidence pack never queries them and the finding's own last-seen date carries the same signal — so this is the row type to age out first, and the window mostly decides how big the table settles at (30d ≈ one month of heartbeat, ~1M rows on a 50-device tenant with the full browser catalog). 30d is what Certus ITM runs. Blank = keep forever.",
     min: 1,
     max: 3650,
   },
