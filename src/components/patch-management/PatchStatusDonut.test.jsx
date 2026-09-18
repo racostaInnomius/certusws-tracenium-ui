@@ -1,12 +1,40 @@
 // src/components/patch-management/PatchStatusDonut.test.jsx
 
-import { describe, it, expect, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import PatchStatusDonut from "./PatchStatusDonut";
 
 afterEach(cleanup);
 
 describe("PatchStatusDonut", () => {
+  it("⭐ el título dice OS: cuenta parches del sistema operativo, no aplicaciones", () => {
+    render(<PatchStatusDonut statusBreakdown={{ healthy: 1 }} />);
+    expect(screen.getByText("OS patch status")).toBeInTheDocument();
+    expect(screen.getByText(/Operating-system updates/)).toBeInTheDocument();
+  });
+
+  it("cada banda filtra la tabla, y la seleccionada se anuncia como pulsada", () => {
+    const onSelectStatus = vi.fn();
+    render(
+      <PatchStatusDonut
+        statusBreakdown={{ healthy: 2, updates_available: 3 }}
+        selectedStatus="updates_available"
+        onSelectStatus={onSelectStatus}
+      />
+    );
+    const band = screen.getByRole("button", { name: /Updates available/ });
+    expect(band).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Fully patched/ })).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: /Fully patched/ }));
+    expect(onSelectStatus).toHaveBeenCalledWith("healthy");
+  });
+
+  it("⚠️ sin onSelectStatus las bandas no invitan a pulsar", () => {
+    render(<PatchStatusDonut statusBreakdown={{ healthy: 2 }} />);
+    expect(screen.getByRole("button", { name: /Fully patched/ })).toBeDisabled();
+  });
+
   it("⭐ contesta «cuánta flota está al día» con el porcentaje y el conteo", () => {
     render(<PatchStatusDonut statusBreakdown={{ healthy: 30, updates_available: 18, reboot_required: 4, error: 3 }} />);
     expect(screen.getByText("54%")).toBeInTheDocument();

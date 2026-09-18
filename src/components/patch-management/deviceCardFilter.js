@@ -32,9 +32,42 @@ export const DEVICE_CARD_FILTERS = {
   },
 };
 
+/**
+ * Prefijo para filtrar por un `overall_status` que no tiene tarjeta propia
+ * («Updates available», «Scan failed»…). Lo usa el donut de estado del SO.
+ *
+ * ⚠️ Una sola dimensión de filtro a propósito: las tarjetas y el donut
+ * comparten estado, así que no hay dos filtros compitiendo ni un chip que
+ * contradiga al otro. Y las bandas que YA tienen tarjeta reutilizan su tecla,
+ * de modo que pulsar la banda deja la tarjeta marcada igual.
+ */
+export const STATUS_FILTER_PREFIX = "status:";
+
+const STATUS_WITH_CARD = { healthy: "healthy", reboot_required: "reboot" };
+
+/** La tecla de filtro para un estado del donut. */
+export function cardFilterForStatus(status) {
+  const s = String(status ?? "").trim();
+  if (!s) return null;
+  return STATUS_WITH_CARD[s] ?? `${STATUS_FILTER_PREFIX}${s}`;
+}
+
+/** El estado que representa una tecla de filtro, si representa alguno. */
+export function statusOfCardFilter(key) {
+  const k = String(key ?? "");
+  if (k.startsWith(STATUS_FILTER_PREFIX)) return k.slice(STATUS_FILTER_PREFIX.length);
+  for (const [status, card] of Object.entries(STATUS_WITH_CARD)) if (card === k) return status;
+  return null;
+}
+
 export function applyDeviceCardFilter(devices, key) {
   const list = Array.isArray(devices) ? devices : [];
-  const f = key ? DEVICE_CARD_FILTERS[key] : null;
+  if (!key) return list;
+  if (String(key).startsWith(STATUS_FILTER_PREFIX)) {
+    const status = String(key).slice(STATUS_FILTER_PREFIX.length);
+    return list.filter((d) => d?.overallStatus === status);
+  }
+  const f = DEVICE_CARD_FILTERS[key];
   return f ? list.filter(f.test) : list;
 }
 
@@ -51,4 +84,16 @@ export function toggleCardFilter(current, key) {
  */
 export function hasCriticalCounts(devices) {
   return Array.isArray(devices) && devices.some((d) => d && d.criticalCount !== undefined);
+}
+
+/**
+ * El rótulo del chip de filtro. Un filtro por estado dice de qué estado se
+ * trata con la misma palabra que la columna Status de la tabla, no con la clave
+ * interna: «Status: Scan failed», no «status:error».
+ */
+export function deviceFilterLabel(key, statusLabel = (s) => s) {
+  if (!key) return "";
+  const status = statusOfCardFilter(key);
+  if (status && !DEVICE_CARD_FILTERS[key]) return `Status: ${statusLabel(status)}`;
+  return DEVICE_CARD_FILTERS[key]?.label || String(key);
 }

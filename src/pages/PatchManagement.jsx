@@ -50,9 +50,11 @@ import {
 } from "../components/patch-management/campaignState";
 import {
   applyDeviceCardFilter,
+  cardFilterForStatus,
+  statusOfCardFilter,
+  deviceFilterLabel,
   toggleCardFilter,
   hasCriticalCounts,
-  DEVICE_CARD_FILTERS,
 } from "../components/patch-management/deviceCardFilter";
 import {
   describeGateOutcome,
@@ -1410,7 +1412,12 @@ export default function PatchManagement({ onNavigate }) {
         onOpen={handleOpenFromQueue}
       />
       <SectionPaper variant="panel" sx={{ p: 0 }}>
-        <PatchStatusDonut statusBreakdown={summary?.statusBreakdown} />
+        <PatchStatusDonut
+          statusBreakdown={summary?.statusBreakdown}
+          // Mismo filtro que las tarjetas: una sola dimensión, un solo chip.
+          selectedStatus={statusOfCardFilter(cardFilter)}
+          onSelectStatus={(status) => handleCardFilter(cardFilterForStatus(status))}
+        />
       </SectionPaper>
     </Box>
   ) : null;
@@ -1434,7 +1441,7 @@ export default function PatchManagement({ onNavigate }) {
       {cardFilter ? (
         <Chip
           size="small"
-          label={DEVICE_CARD_FILTERS[cardFilter]?.label || cardFilter}
+          label={deviceFilterLabel(cardFilter, (s) => DEVICE_STATUS_LABEL[s] || s)}
           onDelete={clearCardFilter}
           sx={{ fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.dark }}
         />
@@ -1478,7 +1485,7 @@ export default function PatchManagement({ onNavigate }) {
           deviceSearch.trim()
             ? { noRowsLabel: `No devices match “${deviceSearch.trim()}”` }
             : cardFilter
-              ? { noRowsLabel: `No devices: ${DEVICE_CARD_FILTERS[cardFilter]?.label || cardFilter}` }
+              ? { noRowsLabel: `No devices: ${deviceFilterLabel(cardFilter, (s) => DEVICE_STATUS_LABEL[s] || s)}` }
               : undefined
         }
         // Row-level pulse for the device we just arrived to highlight

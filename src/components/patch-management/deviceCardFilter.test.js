@@ -6,6 +6,9 @@ import {
   toggleCardFilter,
   hasCriticalCounts,
   DEVICE_CARD_FILTERS,
+  cardFilterForStatus,
+  statusOfCardFilter,
+  deviceFilterLabel,
 } from "./deviceCardFilter";
 
 const DEVICES = [
@@ -58,5 +61,54 @@ describe("⚠️ tarjetas que cuentan parches, filtros que enseñan equipos", ()
     expect(hasCriticalCounts([{ agentId: "x", missingCount: 2 }])).toBe(false);
     expect(hasCriticalCounts(DEVICES)).toBe(true);
     expect(hasCriticalCounts([])).toBe(false);
+  });
+});
+
+// ── El donut de estado del SO filtra la tabla con el MISMO filtro ──────────
+//
+// Una sola dimensión a propósito: si el chart tuviera su propio filtro, la
+// tabla podría estar filtrada por dos cosas y el chip contradecir al otro.
+describe("filtro por estado (donut de OS patch status)", () => {
+  const devices = [
+    { hostname: "a", overallStatus: "healthy", missingCount: 0 },
+    { hostname: "b", overallStatus: "updates_available", missingCount: 3 },
+    { hostname: "c", overallStatus: "error", missingCount: 0 },
+    { hostname: "d", overallStatus: "reboot_required", missingCount: 0 },
+  ];
+
+  it("⭐ las bandas que YA tienen tarjeta reutilizan su tecla, para que quede marcada", () => {
+    expect(cardFilterForStatus("healthy")).toBe("healthy");
+    expect(cardFilterForStatus("reboot_required")).toBe("reboot");
+    expect(cardFilterForStatus("error")).toBe("status:error");
+    expect(cardFilterForStatus("")).toBeNull();
+  });
+
+  it("filtra por el estado exacto de la columna Status", () => {
+    expect(applyDeviceCardFilter(devices, "status:error").map((d) => d.hostname)).toEqual(["c"]);
+    expect(applyDeviceCardFilter(devices, "status:updates_available").map((d) => d.hostname)).toEqual(["b"]);
+    // Y las teclas compartidas siguen filtrando como siempre.
+    expect(applyDeviceCardFilter(devices, "healthy").map((d) => d.hostname)).toEqual(["a"]);
+    expect(applyDeviceCardFilter(devices, "reboot").map((d) => d.hostname)).toEqual(["d"]);
+  });
+
+  it("ida y vuelta: de tecla a estado", () => {
+    expect(statusOfCardFilter("status:error")).toBe("error");
+    expect(statusOfCardFilter("healthy")).toBe("healthy");
+    expect(statusOfCardFilter("reboot")).toBe("reboot_required");
+    expect(statusOfCardFilter("missing")).toBeNull();
+    expect(statusOfCardFilter(null)).toBeNull();
+  });
+
+  it("⚠️ el chip dice el estado con la palabra de la tabla, no la clave interna", () => {
+    const label = (s) => ({ error: "Scan failed", updates_available: "Updates avail." })[s] || s;
+    expect(deviceFilterLabel("status:error", label)).toBe("Status: Scan failed");
+    expect(deviceFilterLabel("status:updates_available", label)).toBe("Status: Updates avail.");
+    // Una tecla de tarjeta conserva su propio rótulo.
+    expect(deviceFilterLabel("reboot", label)).toBe("Reboot pending");
+    expect(deviceFilterLabel(null)).toBe("");
+  });
+
+  it("un estado desconocido no vacía la tabla en silencio: filtra por él y ya", () => {
+    expect(applyDeviceCardFilter(devices, "status:nuevo_estado")).toEqual([]);
   });
 });
