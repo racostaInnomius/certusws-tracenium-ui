@@ -32,6 +32,7 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
+  Checkbox,
   Alert,
   ToggleButton,
   ToggleButtonGroup,
@@ -93,6 +94,16 @@ export default function DeployWizardDialog({
 
   // ── Rollout preset (Phase C) ──────────────────────────────────
   const [rolloutPreset, setRolloutPreset] = React.useState("fast");
+
+  // ── ¿Esperar a la ventana de mantenimiento? ───────────────────
+  //
+  // ⚠️ APAGADO POR DEFECTO, y antes era obligatorio y ni se veía. Las ventanas
+  // son de Patch Management: existen para reinicios y parches. Heredarlas aquí
+  // hacía que un software enviado a las 17:12 llegara a las 22:00, mientras el
+  // MISMO paquete pedido por el usuario desde su bandeja salía al instante.
+  // Quien sí quiere esperar —desinstalar, instaladores que reinician, envíos
+  // grandes por WAN— lo marca aquí.
+  const [waitForWindow, setWaitForWindow] = React.useState(false);
 
   // ── Target state ──────────────────────────────────────────────
   const [targetMode, setTargetMode] = React.useState("asset_group");
@@ -240,10 +251,13 @@ export default function DeployWizardDialog({
     setSubmitting(true);
     try {
       const rollout = rolloutPreset === "conservative" ? { rollout: CONSERVATIVE_ROLLOUT } : {};
+      // Sólo se manda cuando se pide: ausente = enviar ya (el servidor decide
+      // igual, pero el cuerpo dice lo que el operador eligió).
+      const window = waitForWindow ? { waitForMaintenanceWindow: true } : {};
       const body =
         targetMode === "asset_group"
-          ? { mode, assetGroupId: Number(groupId), ...rollout }
-          : { mode, deviceIds: parsedDeviceIds, ...rollout };
+          ? { mode, assetGroupId: Number(groupId), ...rollout, ...window }
+          : { mode, deviceIds: parsedDeviceIds, ...rollout, ...window };
       await onConfirm?.(body);
       // Parent closes the dialog on success
     } catch (err) {
@@ -358,6 +372,28 @@ export default function DeployWizardDialog({
               <MenuItem value="fast">Fast — single wave</MenuItem>
               <MenuItem value="conservative">Conservative — canary rings</MenuItem>
             </TextField>
+
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={waitForWindow}
+                  onChange={(e) => setWaitForWindow(e.target.checked)}
+                />
+              }
+              label={
+                <Box>
+                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                    Wait for the maintenance window
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                    {waitForWindow
+                      ? "Held until the tenant's next window opens. Use it when the install interrupts — a reboot, closing the app, or a large download."
+                      : "Dispatches now. Devices that are offline pick it up when they reconnect."}
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start", m: 0 }}
+            />
 
             <RadioGroup
               row
@@ -619,6 +655,13 @@ export default function DeployWizardDialog({
                     : " Detection will skip devices that already have the package."
                   : " No detection rule — the action runs on every device."}
                 {" "}Per-device cap is 1000 — split larger groups.
+              </Typography>
+              {/* Cuándo sale, en la misma pantalla donde se dispara: un envío
+                  retenido sin decirlo se lee como que se colgó. */}
+              <Typography sx={{ fontSize: TEXT.md, mt: 1 }}>
+                {waitForWindow
+                  ? "Held until the tenant's next maintenance window opens."
+                  : "Dispatches now — no maintenance window wait."}
               </Typography>
             </Alert>
           </Stack>

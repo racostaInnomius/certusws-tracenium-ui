@@ -404,6 +404,17 @@ export default function DeploymentDetailDrawer({
                   {deployment.finishedAt ? ` · finished ${formatTime(deployment.finishedAt)}` : ""}
                 </Typography>
               </Stack>
+              {/* ⚠️ PARA CUÁNDO, Y POR QUÉ. La etiqueta `scheduled` a secas se
+                  lee como «se colgó»: el dato ya venía en la respuesta y no se
+                  enseñaba, así que el operador no tenía forma de saber que lo
+                  estaba reteniendo la ventana de mantenimiento. */}
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                {deployment.status === "scheduled" && deployment.scheduledAt ? (
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert?.warningText || BRAND.dark }}>
+                    Waiting for the maintenance window — dispatches {formatTime(deployment.scheduledAt)}
+                  </Typography>
+                ) : null}
+              </Stack>
             </Box>
             <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ color: BRAND.gray }}>
               <CloseOutlinedIcon fontSize="small" />

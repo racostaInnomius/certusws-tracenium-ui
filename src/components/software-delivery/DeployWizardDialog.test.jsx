@@ -269,3 +269,54 @@ describe("DeployWizardDialog — deploy result surfacing", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("DeployWizardDialog — esperar a la ventana de mantenimiento", () => {
+  // ⚠️ Las ventanas son de Patch Management. SDP las heredaba SIEMPRE y sin
+  // enseñarlo: un envío de las 17:12 salía a las 22:00, mientras el mismo
+  // paquete pedido por el usuario desde su bandeja salía al instante. Ahora es
+  // una elección por envío, y por defecto NO se espera.
+  async function fireWithGroup(user) {
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
+  }
+
+  it("⭐ por defecto NO manda waitForMaintenanceWindow: el envío sale ya", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+
+    await fireWithGroup(user);
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm.mock.calls[0][0]).not.toHaveProperty("waitForMaintenanceWindow");
+  });
+
+  it("marcando la casilla, el cuerpo lo pide", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+
+    await user.click(screen.getByRole("checkbox", { name: /wait for the maintenance window/i }));
+    await fireWithGroup(user);
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm.mock.calls[0][0]).toMatchObject({ waitForMaintenanceWindow: true });
+  });
+
+  it("la revisión dice cuándo sale, en los dos casos", async () => {
+    const user = setupUser();
+    renderWizard();
+
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByText(/dispatches now/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Back$/i }));
+    await user.click(screen.getByRole("checkbox", { name: /wait for the maintenance window/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByText(/held until the tenant's next maintenance window/i)).toBeInTheDocument();
+  });
+});

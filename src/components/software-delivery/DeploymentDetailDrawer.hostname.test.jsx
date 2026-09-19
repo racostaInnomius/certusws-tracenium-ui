@@ -103,3 +103,35 @@ describe("los equipos se nombran, no se enumeran", () => {
     expect(boton.getAttribute("aria-label")).toContain("T111-VENTAS");
   });
 });
+
+describe("un despliegue retenido dice PARA CUÁNDO", () => {
+  // ⚠️ El cajón sólo enseñaba la etiqueta `scheduled` y la fecha de creación.
+  // El operador no podía saber que lo retenía la ventana de mantenimiento: se
+  // leía como que el envío se había colgado. El dato ya venía en la respuesta.
+  function showDeployment(over) {
+    sdpApi.listDeploymentResults.mockResolvedValue({ items: [] });
+    render(
+      <DeploymentDetailDrawer
+        open
+        deployment={{ ...DEPLOYMENT, ...over }}
+        canManage
+        notify={() => {}}
+        onChanged={() => {}}
+        onClose={() => {}}
+      />
+    );
+  }
+
+  it("enseña la ventana y la hora de salida cuando está scheduled", async () => {
+    showDeployment({ status: "scheduled", scheduledAt: "2026-09-19T03:00:00.000Z" });
+    expect(
+      await screen.findByText(/waiting for the maintenance window — dispatches/i)
+    ).toBeInTheDocument();
+  });
+
+  it("un despliegue normal no dice nada de ventanas", async () => {
+    showDeployment({ status: "running", scheduledAt: null });
+    await screen.findByText(/Created/i);
+    expect(screen.queryByText(/maintenance window/i)).toBeNull();
+  });
+});
