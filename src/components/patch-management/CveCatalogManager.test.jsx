@@ -167,13 +167,19 @@ describe("los feeds, con el proveedor delante", () => {
 
   it("⭐ cada feed lleva su acción al lado de su última ejecución", async () => {
     api.getNvdSyncStatus.mockResolvedValue({
-      status: { status: "completed", finishedAt: new Date().toISOString(), summary: { cvesUpserted: 41, productsQueried: 12 } },
+      status: {
+        status: "completed",
+        finishedAt: new Date().toISOString(),
+        summary: { cvesMapped: 41, cvesUpserted: 38, productsQueried: 12 },
+      },
     });
     await renderAsVendor();
     const sync = await screen.findByRole("button", { name: "Sync now" });
     expect(sync).toBeEnabled();
     // El botón y el dato que permite decidir si pulsarlo, en la misma línea.
-    expect(within(sync.closest("div")).getByText(/Last NVD sync .* 41 CVEs from 12 products/)).toBeInTheDocument();
+    expect(
+      within(sync.closest("div")).getByText(/Last NVD sync .* 12 products checked · 41 CVEs matched our software/)
+    ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Refresh now" })).toBeInTheDocument();
   });
 

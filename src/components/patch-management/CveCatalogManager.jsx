@@ -42,47 +42,12 @@ import {
 import CveCatalogDialog from "./CveCatalogDialog";
 import { severityMeta } from "./cveSeverity";
 import { affectedRangeLabel, NO_VERSION_DATA_HINT } from "./cveRange";
+import { nvdStatusLine, kevStatusLine } from "./cveFeedStatus";
 import { listFrom } from "../../api/shape";
 import { useMspOptional } from "../../msp/MspContext";
 
 function errMsg(err, fallback) {
   return err?.body?.message || err?.message || fallback;
-}
-
-function timeAgo(iso) {
-  if (!iso) return "";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "";
-  const mins = Math.round((Date.now() - t) / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const h = Math.round(mins / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-}
-
-// One-line summary of the last/current NVD sync for the toolbar.
-function syncStatusText(s) {
-  if (!s || s.status === "idle") return "Never synced from NVD.";
-  if (s.status === "running") return "NVD sync running…";
-  if (s.status === "failed") return `Last NVD sync failed ${timeAgo(s.finishedAt)}${s.error ? `: ${s.error}` : ""}`;
-  // completed
-  const c = s.summary || {};
-  const parts = [
-    `${c.cvesUpserted ?? 0} CVE${(c.cvesUpserted ?? 0) === 1 ? "" : "s"} from ${c.productsQueried ?? 0} product${(c.productsQueried ?? 0) === 1 ? "" : "s"}`,
-  ];
-  if (c.productsTruncated) parts.push(`(capped at ${c.productsQueried} of ${c.productsInFleet})`);
-  return `Last NVD sync ${timeAgo(s.finishedAt)} · ${parts.join(" ")}`;
-}
-
-// One-line summary of the last/current CISA KEV refresh (global catalog).
-function kevStatusText(s) {
-  if (!s || s.status === "idle") return "KEV catalog not synced yet.";
-  if (s.status === "running") return "Refreshing CISA KEV catalog…";
-  if (s.status === "failed") return `Last KEV refresh failed ${timeAgo(s.finishedAt)}${s.error ? `: ${s.error}` : ""}`;
-  const c = s.summary || {};
-  const ver = c.catalogVersion ? ` (catalog ${c.catalogVersion})` : "";
-  return `KEV catalog refreshed ${timeAgo(s.finishedAt)} · ${c.upserted ?? 0} entries${ver}`;
 }
 
 /**
@@ -95,12 +60,30 @@ function kevStatusText(s) {
  * `running` deja el estado en UN solo sitio: el texto ya dice «running…», así
  * que el botón sólo se apaga y muestra el giro.
  */
-function FeedRow({ icon: Icon, text, failed, running, action, sx }) {
-  const color = failed ? BRAND.alert?.error : BRAND.gray;
+function FeedRow({ icon: Icon, status, running, action, sx }) {
+  const color =
+    status.tone === "error"
+      ? BRAND.alert?.error
+      : status.tone === "warning"
+        ? BRAND.alert?.warningText
+        : BRAND.gray;
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5, ...sx }}>
       <Icon sx={{ fontSize: ICON.sm, color, flexShrink: 0 }} />
-      <Typography sx={{ fontSize: TEXT.sm, color, minWidth: 0 }}>{text}</Typography>
+      {/* El desglose —escritos, sin versiones, fallidos, recorte de la
+          rotación— va detrás del subrayado: la línea dice lo que cuenta y
+          quien necesite el reparto lo tiene a un hover. */}
+      {status.detail ? (
+        <Tooltip title={status.detail} arrow>
+          <Typography
+            sx={{ fontSize: TEXT.sm, color, minWidth: 0, cursor: "help", borderBottom: `1px dotted ${BRAND.gray}` }}
+          >
+            {status.text}
+          </Typography>
+        </Tooltip>
+      ) : (
+        <Typography sx={{ fontSize: TEXT.sm, color, minWidth: 0 }}>{status.text}</Typography>
+      )}
       {action ? (
         <Button
           size="small"
@@ -343,8 +326,7 @@ export default function CveCatalogManager({ canManage, notify }) {
 
       <FeedRow
         icon={CloudSyncOutlinedIcon}
-        text={syncStatusText(syncStatus)}
-        failed={syncStatus?.status === "failed"}
+        status={nvdStatusLine(syncStatus)}
         running={syncStatus?.status === "running" || syncing}
         // Sincronizar los feeds es acción de PROVEEDOR: reescribe el catálogo
         // global. A un tenant no se le ofrece un botón que el backend le niega.
@@ -352,8 +334,7 @@ export default function CveCatalogManager({ canManage, notify }) {
       />
       <FeedRow
         icon={GppMaybeOutlinedIcon}
-        text={kevStatusText(kevStatus)}
-        failed={kevStatus?.status === "failed"}
+        status={kevStatusLine(kevStatus)}
         running={kevStatus?.status === "running" || kevSyncing}
         action={esProveedor ? { label: "Refresh now", onClick: handleKevSync } : null}
         sx={{ mb: 2 }}
