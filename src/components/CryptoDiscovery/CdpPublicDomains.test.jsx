@@ -11,10 +11,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 const createCdpConnector = vi.fn();
 const updateCdpConnector = vi.fn();
 const deleteCdpConnector = vi.fn();
+const runCdpConnector = vi.fn();
+const listCdpConnectorRuns = vi.fn();
 vi.mock("../../api/cdp", () => ({
   createCdpConnector: (...a) => createCdpConnector(...a),
   updateCdpConnector: (...a) => updateCdpConnector(...a),
-  deleteCdpConnector: (...a) => deleteCdpConnector(...a)
+  deleteCdpConnector: (...a) => deleteCdpConnector(...a),
+  runCdpConnector: (...a) => runCdpConnector(...a),
+  listCdpConnectorRuns: (...a) => listCdpConnectorRuns(...a),
+  listCdpConnectors: vi.fn()
 }));
 
 import CdpPublicDomains, { ctDomains } from "./CdpPublicDomains";
@@ -26,6 +31,8 @@ beforeEach(() => {
   createCdpConnector.mockResolvedValue({ ok: true, connector: { connectorId: 9 } });
   updateCdpConnector.mockResolvedValue({ ok: true });
   deleteCdpConnector.mockResolvedValue({ ok: true });
+  runCdpConnector.mockResolvedValue({ ok: true, summary: { certificates: 12, removed: 1, matchedFleetCertificates: 4 } });
+  listCdpConnectorRuns.mockResolvedValue({ runs: [] });
 });
 afterEach(() => {
   cleanup();
@@ -84,6 +91,48 @@ describe("CdpPublicDomains", () => {
     await waitFor(() => expect(deleteCdpConnector).toHaveBeenCalledWith(2));
     // La UI para volver a añadir no se va con el conector.
     expect(screen.getByLabelText(/add a domain/i)).toBeInTheDocument();
+  });
+
+  it("⭐ «Run now» vive aquí: el refactor por sectores dejó al conector CT sin ninguna fila, y con ella se fue la lectura manual", async () => {
+    const onChanged = vi.fn();
+    render(<CdpPublicDomains connectors={[KV, { ...CT, lastRunAt: "2026-09-17T22:31:00Z", lastStatus: "ok", lastSummary: { certificates: 11 } }]} onChanged={onChanged} />);
+    expect(screen.getByText(/Last read .* · 11 certificate\(s\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    await waitFor(() => expect(runCdpConnector).toHaveBeenCalledWith(2, { dryRun: false }));
+    expect(await screen.findByText(/Read: 12 certificate\(s\) · 1 retired · 4 also on your devices/)).toBeInTheDocument();
+    // Lo que trajo cambia Explore y el roadmap: el padre tiene que recargar.
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("«Test» pregunta a crt.sh sin importar nada, y un fallo se lee", async () => {
+    render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    await waitFor(() => expect(runCdpConnector).toHaveBeenCalledWith(2, { dryRun: true }));
+    expect(await screen.findByText(/Nothing was imported/)).toBeInTheDocument();
+    runCdpConnector.mockRejectedValueOnce(new Error("crt.sh timed out"));
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    expect(await screen.findByText("crt.sh timed out")).toBeInTheDocument();
+  });
+
+  it("sin dominios no hay nada que leer: ni estado ni botones", () => {
+    render(<CdpPublicDomains connectors={[KV]} onChanged={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Run now" })).toBeNull();
+  });
+
+  it("⚠️ un conector CT deshabilitado se ve y se puede volver a habilitar (no hay otra UI que lo liste)", async () => {
+    render(<CdpPublicDomains connectors={[{ ...CT, enabled: false }]} onChanged={vi.fn()} />);
+    expect(screen.getByText("disabled")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Enable" }));
+    await waitFor(() => expect(updateCdpConnector).toHaveBeenCalledWith(2, { enabled: true }));
+  });
+
+  it("el historial de lecturas se despliega aquí", async () => {
+    listCdpConnectorRuns.mockResolvedValue({ runs: [{ runId: 7, startedAt: "2026-09-17T22:31:00Z", trigger: "scheduled", status: "failed", error: "crt.sh HTTP 502" }] });
+    render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    expect(await screen.findByText("crt.sh HTTP 502")).toBeInTheDocument();
+    await waitFor(() => expect(listCdpConnectorRuns).toHaveBeenCalledWith(2, { limit: 20 }));
   });
 
   it("ctDomains normaliza y deduplica lo que venga como texto o lista", () => {

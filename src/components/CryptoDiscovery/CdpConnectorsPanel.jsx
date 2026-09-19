@@ -206,7 +206,7 @@ export function ConnectorForm({ onCreated, secretsConfigured = true, kinds = nul
  * caído a las 22:31) tapaba la ejecución buena de la víspera y no había
  * forma de saber si el conector «suele» funcionar.
  */
-function RunHistory({ connectorId, nonce }) {
+export function RunHistory({ connectorId, nonce }) {
   const [runs, setRuns] = React.useState(null);
   const [error, setError] = React.useState(null);
   React.useEffect(() => {
@@ -264,7 +264,7 @@ function RunHistory({ connectorId, nonce }) {
   );
 }
 
-function StatusChip({ c }) {
+export function StatusChip({ c }) {
   if (!c.lastStatus) return <Chip size="small" label="never run" variant="outlined" />;
   if (c.lastStatus === "ok") return <Chip size="small" label="ok" sx={{ bgcolor: BRAND.alert.successSoft, color: BRAND.alert.successText, fontWeight: 700 }} />;
   return <Chip size="small" label="failed" sx={{ bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700 }} />;

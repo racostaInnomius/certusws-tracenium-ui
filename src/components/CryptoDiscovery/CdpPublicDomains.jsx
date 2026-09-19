@@ -15,13 +15,24 @@
 // dominio y se borra con el último, avisando de que lo que trajo se retira).
 // El tipo `ct` ya no se ofrece en el formulario genérico: sustituir, no
 // duplicar.
+//
+// Repaso 2026-09-18: el refactor por sectores (640ab0e, 14-sep) dio a cada
+// panel de conectores su lista de tipos, y ninguna incluye `ct` —el bloque de
+// Cloud lo filtra a mano—. Consecuencia: el conector CT dejó de tener fila en
+// ninguna lista y con ella se fueron «Run now», «Test», el estado de la última
+// lectura y el historial. El propio mensaje al añadir un dominio remitía a un
+// «Run now» que ya no existía: un dominio nuevo no se podía leer hasta el
+// refresco diario. La lectura vuelve aquí, que es donde vive su conector.
 
 import * as React from "react";
 import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
-import { createCdpConnector, deleteCdpConnector, updateCdpConnector } from "../../api/cdp";
+import { createCdpConnector, deleteCdpConnector, runCdpConnector, updateCdpConnector } from "../../api/cdp";
+import { RunHistory, StatusChip } from "./CdpConnectorsPanel";
 
 const MONO = "ui-monospace, Menlo, monospace";
+const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
+const when = (iso) => (iso ? new Date(iso).toLocaleString() : "never");
 export const CT_DEFAULT_LABEL = "Public domains";
 // Un nombre de dominio registrable: al menos dos etiquetas, sin esquema ni
 // ruta. `*.` delante se acepta y se quita (el backend hace lo mismo).
@@ -50,6 +61,8 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState(null);
   const [confirmLast, setConfirmLast] = React.useState(null);
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [nonce, setNonce] = React.useState(0);
 
   const rows = ctDomains(connectors);
   const ct = (connectors ?? []).filter((c) => c?.kind === "ct");
@@ -59,8 +72,10 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
     setBusy(true);
     setNotice(null);
     try {
-      await fn();
-      setNotice({ sev: "success", text: okText });
+      // Sin `okText`, el propio trabajo dice cómo fue (una lectura resume lo
+      // que trajo, y eso no se sabe hasta que termina).
+      const text = await fn();
+      setNotice({ sev: "success", text: okText ?? text });
       onChanged?.();
     } catch (e) {
       setNotice({ sev: "error", text: e?.message || String(e) });
@@ -94,6 +109,25 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
       return;
     }
     run(() => updateCdpConnector(row.connector.connectorId, { config: { ...row.connector.config, domains: remaining } }), `${row.domain} removed. What it brought is retired on the next refresh.`);
+  };
+
+  /**
+   * Leer ahora. `dryRun` pregunta a crt.sh y no guarda nada: sirve para ver
+   * que el dominio recién añadido devuelve algo sin esperar al refresco
+   * diario. La corrida de verdad recarga al padre para que el estado y el
+   * historial se vean al momento.
+   */
+  const runNow = (dryRun) => {
+    if (!primary) return;
+    run(async () => {
+      const r = await runCdpConnector(primary.connectorId, { dryRun });
+      if (!r?.ok) throw new Error(r?.message || r?.error || "Run failed");
+      const s = r.summary ?? {};
+      setNonce((n) => n + 1);
+      return dryRun
+        ? `crt.sh answered: ${fmt(s.certificates)} certificate(s) for these domains. Nothing was imported.`
+        : `Read: ${fmt(s.certificates)} certificate(s) · ${fmt(s.removed)} retired · ${fmt(s.matchedFleetCertificates)} also on your devices.`;
+    });
   };
 
   const removeLast = () => {
@@ -142,6 +176,34 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
           {busy ? "Saving…" : "Add domain"}
         </Button>
       </Stack>
+
+      {primary ? (
+        <Box sx={{ mt: 1.25, pt: 1, borderTop: `1px dashed ${BRAND.border}` }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+            <StatusChip c={primary} />
+            {primary.enabled === false ? <Chip size="small" label="disabled" variant="outlined" /> : null}
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
+              Last read {when(primary.lastRunAt)}
+              {primary.lastSummary ? ` · ${fmt(primary.lastSummary.certificates)} certificate(s)` : ""}
+              {primary.lastError ? ` · ${primary.lastError}` : ""}
+            </Typography>
+            <Box sx={{ flex: 1 }} />
+            <Button size="small" variant="outlined" disabled={busy} onClick={() => runNow(true)}>Test</Button>
+            <Button size="small" variant="contained" disabled={busy || primary.enabled === false} onClick={() => runNow(false)}>
+              {busy ? "Reading…" : "Run now"}
+            </Button>
+            {primary.enabled === false ? (
+              <Button size="small" disabled={busy} onClick={() => run(() => updateCdpConnector(primary.connectorId, { enabled: true }), "Public domains re-enabled; they are read again on the daily refresh.")}>
+                Enable
+              </Button>
+            ) : null}
+            <Button size="small" aria-expanded={historyOpen} onClick={() => setHistoryOpen((v) => !v)}>
+              {historyOpen ? "Hide history" : "History"}
+            </Button>
+          </Stack>
+          {historyOpen ? <RunHistory connectorId={primary.connectorId} nonce={nonce} /> : null}
+        </Box>
+      ) : null}
 
       <Dialog open={confirmLast != null} onClose={() => setConfirmLast(null)}>
         <DialogTitle>Stop watching {confirmLast?.domain}?</DialogTitle>
