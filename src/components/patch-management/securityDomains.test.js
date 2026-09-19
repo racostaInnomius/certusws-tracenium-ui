@@ -112,11 +112,14 @@ describe("the narrowing slices", () => {
     }
   });
 
-  it("browser policies have their own slice and do not double up in Everything else", () => {
+  it("browser policies have their own slice and no other slice claims them", () => {
     const browsers = domainParams("browsers");
     expect(domainShows(browsers, "browser_hardening")).toBe(true);
     expect(domainShows(browsers, "firewall")).toBe(false);
-    expect(domainShows(domainParams("rest"), "browser_hardening")).toBe(false);
+    for (const d of SECURITY_DOMAINS) {
+      if (d.key === "browsers" || d.key === DEFAULT_DOMAIN) continue;
+      expect(domainShows(d.params, "browser_hardening"), `${d.key} también los muestra`).toBe(false);
+    }
   });
 
   it("falls back to everything for an unknown slice", () => {
@@ -130,5 +133,58 @@ describe("the narrowing slices", () => {
       expect(d.label?.trim(), `${d.key} has no label`).toBeTruthy();
       expect(d.hint?.trim(), `${d.key} has no hint`).toBeTruthy();
     }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Fuera el cajón de sastre (18-sep).
+//
+// «Everything else» era el complemento de las rebanadas con nombre. Su trabajo
+// —que ninguna categoría quedase sin superficie— ya lo hace «Everything», que
+// es el por defecto; lo único que aportaba de más era esconder BitLocker, el
+// cortafuegos y tres dominios más detrás de una etiqueta que no los nombra.
+describe("ningún dominio se esconde tras un «resto»", () => {
+  it("⭐ no queda ninguna rebanada definida SOLO por exclusión, salvo el default", () => {
+    for (const d of SECURITY_DOMAINS) {
+      if (d.key === DEFAULT_DOMAIN) continue;
+      expect(d.params.category, `${d.key} se define por lo que NO es`).toBeTruthy();
+    }
+  });
+
+  it("⭐ cada categoría viva tiene un dominio CON NOMBRE, o la pinta otra superficie", () => {
+    // Más fuerte que «es alcanzable»: alcanzable lo era también desde el cajón.
+    for (const category of LIVE_CATEGORIES) {
+      if (CLAIMED_ELSEWHERE[category]) continue;
+      // «Con nombre» = definido por lo que ES (`category`), no por lo que no
+      // es: un cajón de sastre también «mostraba» la categoría.
+      const named = SECURITY_DOMAINS.filter(
+        (d) => d.key !== DEFAULT_DOMAIN && d.params.category && domainShows(d.params, category)
+      );
+      expect(named.length, `${category} no tiene dominio propio`).toBeGreaterThan(0);
+    }
+  });
+
+  it("los dominios con nombre no se solapan entre sí", () => {
+    // Un hallazgo en dos pestañas se cuenta dos veces en la tira de severidad.
+    for (const category of LIVE_CATEGORIES) {
+      if (CLAIMED_ELSEWHERE[category]) continue;
+      const claimants = SECURITY_DOMAINS.filter(
+        (d) => d.key !== DEFAULT_DOMAIN && d.params.category && domainShows(d.params, category) && !d.params.checkIdContains
+      );
+      expect(claimants.length, `${category} lo reclaman ${claimants.map((d) => d.key).join(", ")}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("un enlace viejo al cajón de sastre enseña de más, nunca de menos", () => {
+    expect(LEGACY_TAB_TO_DOMAIN.other).toBe(DEFAULT_DOMAIN);
+    expect(LEGACY_TAB_TO_DOMAIN.rest).toBe(DEFAULT_DOMAIN);
+  });
+
+  it("BitLocker y el cortafuegos dejan de vivir en un «resto»", () => {
+    // El caso concreto de la captura: los dos controles más citados de una
+    // auditoría aparecían bajo una etiqueta que no los nombra.
+    expect(domainShows(domainParams("disk"), "disk_encryption")).toBe(true);
+    expect(domainShows(domainParams("firewall"), "firewall")).toBe(true);
+    expect(SECURITY_DOMAINS.some((d) => /else|other|rest/i.test(d.label))).toBe(false);
   });
 });
