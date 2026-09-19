@@ -112,3 +112,77 @@ describe("CveCatalogManager", () => {
     expect(await screen.findByText(/of 1 CVEs/)).toBeInTheDocument();
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// Los cuatro botones de la cabecera (18-sep).
+//
+// Tres decían «refrescar»: uno recargaba la tabla desde nuestra base —sin
+// escribir nada— y los otros dos lanzaban jobs de minutos que reescriben un
+// catálogo que ve TODA la flota. Se distinguían en una palabra y estaban a dos
+// centímetros. Ahora cada feed vive junto a su línea de estado y arriba sólo
+// queda lo que actúa sobre esta pantalla.
+
+describe("los feeds viven con su estado, no en la cabecera", () => {
+  it("⚠️ recargar la vista NO comparte aspecto con reescribir el catálogo global", async () => {
+    render(<CveCatalogManager canManage notify={vi.fn()} />);
+    await waitFor(() => expect(api.listCveCatalog).toHaveBeenCalled());
+    // Recargar es un icono con nombre accesible, no un botón de texto junto a
+    // los que escriben.
+    const reload = screen.getByRole("button", { name: "Reload the list" });
+    expect(reload).toBeInTheDocument();
+    // Y ya no hay dos etiquetas que se diferencien en una palabra.
+    expect(screen.queryByRole("button", { name: /^Refresh$/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Refresh KEV/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Sync from NVD/ })).toBeNull();
+  });
+
+  it("⭐ un tenant ve el estado de los feeds pero no el botón que los dispara", async () => {
+    // Reescriben el catálogo global; el backend ya le devuelve 403.
+    render(<CveCatalogManager canManage notify={vi.fn()} />);
+    expect(await screen.findByText(/Never synced from NVD/)).toBeInTheDocument();
+    expect(await screen.findByText(/KEV catalog not synced yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sync now" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh now" })).toBeNull();
+  });
+
+  it("recargar la lista vuelve a pedir la página", async () => {
+    render(<CveCatalogManager canManage notify={vi.fn()} />);
+    await waitFor(() => expect(api.listCveCatalog).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Reload the list" }));
+    await waitFor(() => expect(api.listCveCatalog).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("los feeds, con el proveedor delante", () => {
+  beforeEach(() => {
+    vi.doMock("../../msp/MspContext", () => ({ useMspOptional: () => ({ portfolio: { level: "vendor" } }) }));
+  });
+  afterEach(() => vi.doUnmock("../../msp/MspContext"));
+
+  async function renderAsVendor() {
+    vi.resetModules();
+    const { default: Fresh } = await import("./CveCatalogManager");
+    return render(<Fresh canManage notify={vi.fn()} />);
+  }
+
+  it("⭐ cada feed lleva su acción al lado de su última ejecución", async () => {
+    api.getNvdSyncStatus.mockResolvedValue({
+      status: { status: "completed", finishedAt: new Date().toISOString(), summary: { cvesUpserted: 41, productsQueried: 12 } },
+    });
+    await renderAsVendor();
+    const sync = await screen.findByRole("button", { name: "Sync now" });
+    expect(sync).toBeEnabled();
+    // El botón y el dato que permite decidir si pulsarlo, en la misma línea.
+    expect(within(sync.closest("div")).getByText(/Last NVD sync .* 41 CVEs from 12 products/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Refresh now" })).toBeInTheDocument();
+  });
+
+  it("⚠️ mientras corre, el estado se dice UNA vez y el botón no se puede repulsar", async () => {
+    api.getNvdSyncStatus.mockResolvedValue({ status: { status: "running" } });
+    await renderAsVendor();
+    expect(await screen.findByText("NVD sync running…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync now" })).toBeDisabled();
+    // La etiqueta ya no duplica el estado («Syncing…») que dice la línea.
+    expect(screen.queryByRole("button", { name: /Syncing/ })).toBeNull();
+  });
+});

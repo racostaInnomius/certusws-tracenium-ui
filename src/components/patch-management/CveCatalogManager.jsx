@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   MenuItem,
   Table,
   TablePagination,
@@ -82,6 +83,37 @@ function kevStatusText(s) {
   const c = s.summary || {};
   const ver = c.catalogVersion ? ` (catalog ${c.catalogVersion})` : "";
   return `KEV catalog refreshed ${timeAgo(s.finishedAt)} · ${c.upserted ?? 0} entries${ver}`;
+}
+
+/**
+ * Una línea de feed: qué pasó la última vez y, al lado, el botón que lo repite.
+ *
+ * La acción vive pegada al hecho que cambia — «Last NVD sync 2h ago · 41 CVEs»
+ * es justo lo que hace falta para decidir si merece la pena pulsarlo. Arriba,
+ * en la cabecera, no se podía saber.
+ *
+ * `running` deja el estado en UN solo sitio: el texto ya dice «running…», así
+ * que el botón sólo se apaga y muestra el giro.
+ */
+function FeedRow({ icon: Icon, text, failed, running, action, sx }) {
+  const color = failed ? BRAND.alert?.error : BRAND.gray;
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5, ...sx }}>
+      <Icon sx={{ fontSize: ICON.sm, color, flexShrink: 0 }} />
+      <Typography sx={{ fontSize: TEXT.sm, color, minWidth: 0 }}>{text}</Typography>
+      {action ? (
+        <Button
+          size="small"
+          onClick={action.onClick}
+          disabled={running}
+          startIcon={running ? <CircularProgress size={14} sx={{ color: BRAND.gray }} /> : null}
+          sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal, whiteSpace: "nowrap", flexShrink: 0, ml: 0.5 }}
+        >
+          {action.label}
+        </Button>
+      ) : null}
+    </Box>
+  );
 }
 
 export default function CveCatalogManager({ canManage, notify }) {
@@ -266,75 +298,66 @@ export default function CveCatalogManager({ canManage, notify }) {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
+      {/* ⚠️ CUATRO BOTONES EN FILA, TRES DICIENDO «REFRESCAR» (18-sep).
+          «Refresh» recargaba la tabla desde nuestra base —local, instantáneo,
+          sin escribir nada— y a dos centímetros, con una palabra de diferencia,
+          «Refresh KEV» lanzaba un job de minutos que reescribe un catálogo que
+          ve TODA la flota. Además el párrafo compartía fila con ellos y les
+          comía el ancho, así que las etiquetas se partían en tres líneas.
+
+          Ahora cada feed vive pegado a su propia línea de estado, que ya
+          existía: el botón queda junto al dato que cambia y con la última
+          ejecución delante, que es lo que permite decidir si hace falta
+          pulsarlo. Arriba sólo lo que actúa sobre ESTA pantalla. */}
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, mb: 2 }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray, flex: 1, minWidth: 0 }}>
           The shared CVE catalog: each entry maps a product to an affected version range, and
           detection flags installed software whose version falls inside it. Kept current for every
           tenant by one background feed — a CVE is a fact about a product, not about a customer.
         </Typography>
-        <Box sx={{ flex: 1 }} />
-        <Button onClick={load} startIcon={<RefreshOutlinedIcon />} sx={{ textTransform: "none", color: BRAND.gray }}>
-          Refresh
-        </Button>
-        {esProveedor ? (
-          <Button
-            onClick={handleSync}
-            disabled={syncing || syncStatus?.status === "running"}
-            startIcon={
-              syncStatus?.status === "running" || syncing ? (
-                <CircularProgress size={16} sx={{ color: BRAND.gray }} />
-              ) : (
-                <CloudSyncOutlinedIcon />
-              )
-            }
-            sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
-          >
-            {syncStatus?.status === "running" ? "Syncing…" : "Sync from NVD"}
-          </Button>
-        ) : null}
-        {esProveedor ? (
-          <Button
-            onClick={handleKevSync}
-            disabled={kevSyncing || kevStatus?.status === "running"}
-            startIcon={
-              kevStatus?.status === "running" || kevSyncing ? (
-                <CircularProgress size={16} sx={{ color: BRAND.gray }} />
-              ) : (
-                <GppMaybeOutlinedIcon />
-              )
-            }
-            sx={{ textTransform: "none", fontWeight: 700, color: BRAND.teal }}
-          >
-            {kevStatus?.status === "running" ? "Refreshing…" : "Refresh KEV"}
-          </Button>
-        ) : null}
+        <Tooltip title="Reload the list" arrow>
+          {/* Icono y no botón con texto: recargar la vista no compite con las
+              acciones que escriben. */}
+          <IconButton onClick={load} aria-label="Reload the list" sx={{ color: BRAND.gray, flexShrink: 0 }}>
+            <RefreshOutlinedIcon sx={{ fontSize: ICON.md }} />
+          </IconButton>
+        </Tooltip>
         {canManage ? (
           <Button
             onClick={() => setDialog({ mode: "create", entry: null })}
             startIcon={<AddOutlinedIcon />}
             variant="contained"
-            sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+              bgcolor: BRAND.teal,
+              "&:hover": { bgcolor: BRAND.tealHover },
+            }}
           >
             Add CVE
           </Button>
         ) : null}
       </Box>
 
-      {/* NVD sync status line */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-        <CloudSyncOutlinedIcon sx={{ fontSize: ICON.sm, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
-        <Typography sx={{ fontSize: TEXT.sm, color: syncStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
-          {syncStatusText(syncStatus)}
-        </Typography>
-      </Box>
-
-      {/* CISA KEV refresh status line (global catalog) */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 2 }}>
-        <GppMaybeOutlinedIcon sx={{ fontSize: ICON.sm, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }} />
-        <Typography sx={{ fontSize: TEXT.sm, color: kevStatus?.status === "failed" ? BRAND.alert?.error : BRAND.gray }}>
-          {kevStatusText(kevStatus)}
-        </Typography>
-      </Box>
+      <FeedRow
+        icon={CloudSyncOutlinedIcon}
+        text={syncStatusText(syncStatus)}
+        failed={syncStatus?.status === "failed"}
+        running={syncStatus?.status === "running" || syncing}
+        // Sincronizar los feeds es acción de PROVEEDOR: reescribe el catálogo
+        // global. A un tenant no se le ofrece un botón que el backend le niega.
+        action={esProveedor ? { label: "Sync now", onClick: handleSync } : null}
+      />
+      <FeedRow
+        icon={GppMaybeOutlinedIcon}
+        text={kevStatusText(kevStatus)}
+        failed={kevStatus?.status === "failed"}
+        running={kevStatus?.status === "running" || kevSyncing}
+        action={esProveedor ? { label: "Refresh now", onClick: handleKevSync } : null}
+        sx={{ mb: 2 }}
+      />
 
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", mb: 2 }}>
         <TextField
