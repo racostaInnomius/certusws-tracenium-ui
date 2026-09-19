@@ -39,16 +39,25 @@ const FILL = {
   muted: BRAND.gray,
 };
 
-export default function PatchStatusDonut({ statusBreakdown, size = 148, selectedStatus = null, onSelectStatus }) {
+export default function PatchStatusDonut({ statusBreakdown, size = 168, selectedStatus = null, onSelectStatus }) {
   const data = React.useMemo(() => patchStatusChartData(statusBreakdown), [statusBreakdown]);
 
   const frame = (children) => (
     <Box sx={{ display: "flex", flexDirection: "column", minWidth: 0, height: "100%" }}>
       {/* Mismo bloque de cabecera que «Start here» — ver la nota de arriba. */}
-      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5 }}>
-        <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark }}>OS patch status</Typography>
-        <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
-          Operating-system updates · select a band to filter the devices table
+      {/* ⚠️ UNA SOLA LÍNEA, SIEMPRE: en cuanto el título parte en dos, este
+          panel baja y deja de empezar a la altura de los otros. `noWrap` en
+          ambos y el texto largo, al `title` nativo. */}
+      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mb: 1.5, minWidth: 0 }}>
+        <Typography noWrap sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, flexShrink: 0 }}>
+          OS patch status
+        </Typography>
+        <Typography
+          noWrap
+          title="Operating-system updates — Windows Update, apt/dnf, softwareupdate. Select a band to filter the devices table."
+          sx={{ fontSize: TEXT.xs, color: "text.secondary", minWidth: 0 }}
+        >
+          Operating-system updates · click a band to filter
         </Typography>
       </Stack>
       <SectionPaper variant="panel" sx={{ p: 2, flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>

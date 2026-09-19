@@ -65,6 +65,7 @@ import SecurityConfigPanel from "../components/patch-management/SecurityConfigPa
 import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-management/securityDomains";
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import PatchStatusDonut from "../components/patch-management/PatchStatusDonut";
+import MissingBySeverityChart from "../components/patch-management/MissingBySeverityChart";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -1392,23 +1393,41 @@ export default function PatchManagement({ onNavigate }) {
   // El reparto de la flota PRIMERO y la cola después: el resumen ya está en
   // memoria cuando se pinta la página, mientras la cola espera a exposiciones y
   // hallazgos — poner lo lento a la izquierda deja el hueco a la vista.
-  // `alignItems: stretch` (el de serie) es lo que hace que el panel del chart
-  // acabe donde acaba la quinta fila de la cola.
+  // `alignItems: stretch` (el de serie) es lo que hace que los paneles de los
+  // charts acaben donde acaba la quinta fila de la cola.
+  //
+  // ⚠️ DOS CHARTS Y LA COLA MÁS ANGOSTA (18-sep): con un solo chart la mitad del
+  // panel quedaba vacía. Los dos responden preguntas distintas y en unidades
+  // distintas — cuántos EQUIPOS por estado, y cuántos PARCHES pendientes y de
+  // qué severidad—, así que el hueco se llena con información nueva y no con un
+  // donut más grande. La cola son títulos de hallazgo: se lee bien más estrecha,
+  // pero no baja de 320 px.
   const startHere = pmpEnabled ? (
     <Box
       sx={{
         mb: 2,
         display: "grid",
         gap: 2,
-        gridTemplateColumns: { xs: "1fr", lg: "minmax(300px, 1fr) minmax(0, 1.6fr)" },
+        gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.45fr) minmax(320px, 1fr)" },
       }}
     >
-      <PatchStatusDonut
-        statusBreakdown={summary?.statusBreakdown}
-        // Mismo filtro que las tarjetas: una sola dimensión, un solo chip.
-        selectedStatus={statusOfCardFilter(cardFilter)}
-        onSelectStatus={(status) => handleCardFilter(cardFilterForStatus(status))}
-      />
+      <Box
+        sx={{
+          display: "grid",
+          gap: 2,
+          // En pantallas medias los dos charts se apilan antes de espachurrarse:
+          // el donut necesita su leyenda al lado para ser legible.
+          gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(260px, 1fr))" },
+        }}
+      >
+        <PatchStatusDonut
+          statusBreakdown={summary?.statusBreakdown}
+          // Mismo filtro que las tarjetas: una sola dimensión, un solo chip.
+          selectedStatus={statusOfCardFilter(cardFilter)}
+          onSelectStatus={(status) => handleCardFilter(cardFilterForStatus(status))}
+        />
+        <MissingBySeverityChart severityBreakdown={summary?.severityBreakdown} />
+      </Box>
       <PriorityQueue
         exposures={queueData?.exposures}
         findings={queueData?.findings}
