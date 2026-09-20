@@ -1,6 +1,6 @@
 // src/components/AgentSettings/AdPrinterCollectorPanel.jsx
 //
-// ADR-0023 F2 — qué equipo de la flota lee las impresoras que los servidores de
+// ADR-0023 F2 — qué equipo de la flota lee Active Directory: las impresoras que los servidores de
 // impresión publican en Active Directory.
 //
 // ⚠️ Un panel PROPIO y no un campo del formulario de la sección (D4): la
@@ -191,13 +191,14 @@ export default function AdPrinterCollectorPanel() {
         <PrintOutlinedIcon sx={{ color: BRAND.tealText, mt: 0.25 }} fontSize="small" />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
-            Printers published in Active Directory
+            Reading Active Directory
           </Typography>
           <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
-            One Windows device of the fleet reads, once a day and with its own machine account, the print queues your
-            print servers publish in the directory — including servers without the agent and queues nobody has
-            connected to yet. Pick a device that stays on and is joined to the domain; the backup is used only when the
-            primary is offline.
+            One Windows device of the fleet reads the directory once a day with its own machine account, and it reads
+            two things: the print queues your print servers publish — including servers without the agent and queues
+            nobody has connected to yet — and the computer objects, which is what Coverage in Asset Management uses to
+            tell you which computers have no agent. Pick a device that stays on and is joined to the domain; the backup
+            is used only when the primary is offline.
           </Typography>
         </Box>
       </Stack>
