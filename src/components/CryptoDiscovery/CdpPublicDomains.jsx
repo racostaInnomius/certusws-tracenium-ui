@@ -67,6 +67,9 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
   const rows = ctDomains(connectors);
   const ct = (connectors ?? []).filter((c) => c?.kind === "ct");
   const primary = ct[0] ?? null;
+  // Lo que la última lectura no pudo leer. Es una corrida «ok» con avisos:
+  // sin esto sería un estado invisible —cifra corta y ninguna explicación—.
+  const partialDomains = Array.isArray(primary?.lastSummary?.problems) ? primary.lastSummary.problems : [];
 
   const run = async (fn, okText) => {
     setBusy(true);
@@ -124,9 +127,13 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
       if (!r?.ok) throw new Error(r?.message || r?.error || "Run failed");
       const s = r.summary ?? {};
       setNonce((n) => n + 1);
-      return dryRun
+      // Una corrida puede salir bien y aun así dejar un dominio sin leer
+      // (crt.sh contesta 502 a ratos). Eso se dice: callarlo sería enseñar
+      // una cifra que no incluye a todos tus dominios.
+      const partial = Array.isArray(s.problems) && s.problems.length > 0 ? ` Not read this time: ${s.problems.join(" · ")}` : "";
+      return (dryRun
         ? `crt.sh answered: ${fmt(s.certificates)} certificate(s) for these domains. Nothing was imported.`
-        : `Read: ${fmt(s.certificates)} certificate(s) · ${fmt(s.removed)} retired · ${fmt(s.matchedFleetCertificates)} also on your devices.`;
+        : `Read: ${fmt(s.certificates)} certificate(s) · ${fmt(s.removed)} retired · ${fmt(s.matchedFleetCertificates)} also on your devices.`) + partial;
     });
   };
 
@@ -187,6 +194,9 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
               {primary.lastSummary ? ` · ${fmt(primary.lastSummary.certificates)} certificate(s)` : ""}
               {primary.lastError ? ` · ${primary.lastError}` : ""}
             </Typography>
+            {partialDomains.length > 0 ? (
+              <Chip size="small" label={`${partialDomains.length} not read`} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 700 }} />
+            ) : null}
             <Box sx={{ flex: 1 }} />
             <Button size="small" variant="outlined" disabled={busy} onClick={() => runNow(true)}>Test</Button>
             <Button size="small" variant="contained" disabled={busy || primary.enabled === false} onClick={() => runNow(false)}>
@@ -201,6 +211,17 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
               {historyOpen ? "Hide history" : "History"}
             </Button>
           </Stack>
+          {partialDomains.length > 0 ? (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              <Typography sx={{ fontSize: TEXT.sm, mb: 0.5 }}>
+                The last read left {partialDomains.length} domain(s) out. What they brought is kept as it was and nothing
+                was retired for them; the next read is within the hour.
+              </Typography>
+              {partialDomains.map((p) => (
+                <Typography key={p} sx={{ fontSize: TEXT.xs }}>{p}</Typography>
+              ))}
+            </Alert>
+          ) : null}
           {historyOpen ? <RunHistory connectorId={primary.connectorId} nonce={nonce} /> : null}
         </Box>
       ) : null}

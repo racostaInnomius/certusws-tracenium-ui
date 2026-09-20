@@ -127,6 +127,22 @@ describe("CdpPublicDomains", () => {
     await waitFor(() => expect(updateCdpConnector).toHaveBeenCalledWith(2, { enabled: true }));
   });
 
+  it("⭐ una lectura «ok» que dejó un dominio fuera lo DICE: ni cifra corta sin explicación ni chip verde a secas", async () => {
+    const partial = { ...CT, lastRunAt: "2026-09-20T03:00:00Z", lastStatus: "ok", lastSummary: { certificates: 8, problems: ["ddi-tx.net: crt.sh is rate-limiting or overloaded (HTTP 502)."] } };
+    render(<CdpPublicDomains connectors={[partial]} onChanged={vi.fn()} />);
+    expect(screen.getByText("1 not read")).toBeInTheDocument();
+    // Y lo que trajeron esos dominios NO se da por desaparecido.
+    expect(screen.getByText(/left 1 domain\(s\) out/)).toHaveTextContent(/nothing\s+was retired for them/);
+    expect(screen.getByText(/^ddi-tx\.net: crt\.sh is rate-limiting/)).toBeInTheDocument();
+  });
+
+  it("«Run now» que termina con avisos los repite en el mensaje", async () => {
+    runCdpConnector.mockResolvedValueOnce({ ok: true, summary: { certificates: 12, removed: 0, matchedFleetCertificates: 1, problems: ["ddi-tx.net: crt.sh is rate-limiting or overloaded (HTTP 502)."] } });
+    render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    expect(await screen.findByText(/Not read this time: ddi-tx\.net/)).toBeInTheDocument();
+  });
+
   it("el historial de lecturas se despliega aquí", async () => {
     listCdpConnectorRuns.mockResolvedValue({ runs: [{ runId: 7, startedAt: "2026-09-17T22:31:00Z", trigger: "scheduled", status: "failed", error: "crt.sh HTTP 502" }] });
     render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
