@@ -10,21 +10,25 @@
 // están siempre, con o sin datos, para que el mapa sea el mismo hoy y
 // cuando se conecten fuentes nuevas:
 //
-//   On-prem devices = el parque con agente (almacenes, keystores,
-//                     listeners, ficheros, NSS, claves SSH, CBOM) y, DENTRO
-//                     del mismo sector pero como grupo aparte, lo que la CA
-//                     de Windows REPORTA (AD CS): son cosas distintas (un
-//                     inventario frente a un registro de emisión) y el
-//                     usuario quiere verlas separadas, no como quinta base.
-//   Infra           = infraestructura virtual y de red: sondas remotas,
-//                     Kubernetes, vCenter / hipervisores (gateway)
+//   On-prem devices = SOLO lo que los agentes recogen en los equipos
+//                     gestionados (almacenes, keystores, listeners,
+//                     ficheros, NSS, claves SSH) más un CBOM importado.
+//   Infra           = los servicios de infraestructura que se integran sin
+//                     ser un equipo del parque: sondas remotas, Kubernetes,
+//                     vCenter / hipervisores (gateway) y, DENTRO del mismo
+//                     sector pero como grupo aparte, lo que la CA de
+//                     Windows emitió (AD CS). (19-sep, a petición del
+//                     usuario: la CA estuvo en On-prem porque la LEE el
+//                     agente instalado en ella, pero lo que aporta es un
+//                     registro de emisión de un servicio, no el inventario
+//                     de un endpoint; On-prem queda para los agentes.)
 //   Cloud           = dominios públicos (CT), AWS ACM, Google Cloud
 //   External key sources = Azure Key Vault, HashiCorp Vault
 //
-// En el anillo 2 los grupos de On-prem van seguidos (agente primero, CA al
-// final) con una separación mayor entre ellos y la CA con su nombre. La
+// En el anillo 2 los grupos de Infra van seguidos (el resto primero, la CA
+// al final) con una separación mayor entre ellos y la CA con su nombre. La
 // pestaña Settings usa las MISMAS secciones (`SECTIONS`, cdpSources.js):
-// las cuatro bases y, colgando de On-prem, Windows CA.
+// las cuatro bases y, colgando de Infra, Windows CA.
 //
 // Todo gajo que cuenta algo tiene un destino (`drill`, ver más abajo) y
 // una base se AMPLÍA en vez de navegar: un sector abarca a la vez filas
@@ -39,11 +43,11 @@
 
 import { BRAND, NEUTRAL } from "../../theme/brand";
 
-/** Las secciones de Settings: las cuatro bases y, colgando de On-prem, la CA. */
+/** Las secciones de Settings: las cuatro bases y, colgando de Infra, la CA. */
 export const SECTIONS = [
-  { key: "onprem", label: "On-prem devices", note: "Collected by the agent on managed endpoints, plus what the Windows CA issued" },
-  { key: "adcs", label: "Windows CA", parent: "onprem", note: "Issued by AD CS, reported by the agent on the CA server" },
-  { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter" },
+  { key: "onprem", label: "On-prem devices", note: "Collected by the agents on managed endpoints" },
+  { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter, the Windows CA" },
+  { key: "adcs", label: "Windows CA", parent: "infra", note: "Issued by AD CS, read by the agent on the CA server" },
   { key: "cloud", label: "Cloud", note: "Public domains, AWS ACM, Google Cloud" },
   { key: "external", label: "External key sources", note: "Azure Key Vault, HashiCorp Vault" }
 ];
@@ -51,12 +55,16 @@ export const SECTIONS = [
 /** Los sectores del anillo base del sunburst: solo las cuatro bases. */
 export const BASES = SECTIONS.filter((s) => !s.parent);
 
-/** Grupos del anillo 2 dentro de On-prem, en este orden. */
-export const ONPREM_GROUPS = { agent: 0, adcs: 1 };
+/**
+ * Grupos del anillo 2 dentro de una base, en este orden. Hoy el único es la
+ * CA de Windows dentro de Infra, que va al final y con más separación: es un
+ * registro de emisión, no una fuente de inventario más.
+ */
+export const SECTOR_GROUPS = { main: 0, adcs: 1 };
 
 const BASE_OF_SOURCE = {
-  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem", adcs: "onprem",
-  probe: "infra", k8s: "infra", vcenter: "infra",
+  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem",
+  probe: "infra", k8s: "infra", vcenter: "infra", adcs: "infra",
   ct: "cloud", acm: "cloud", gcp: "cloud",
   keyvault: "external", vault: "external"
 };
@@ -189,14 +197,14 @@ function addLeaf(bases, baseKey, sourceKey, sourceName, leafKey, leafName, value
   leaf.v += value;
 }
 
-const groupRank = (n) => ONPREM_GROUPS[n.group ?? "agent"] ?? 0;
+const groupRank = (n) => SECTOR_GROUPS[n.group ?? "main"] ?? 0;
 
 function finish(bases) {
   const toArray = (m, depth = 0) =>
     Array.from(m.values()).map((n) => {
       if (!(n.children instanceof Map)) return n;
       let children = toArray(n.children, depth + 1);
-      // En el anillo 2 los grupos van seguidos: agente primero, CA al final.
+      // En el anillo 2 los grupos van seguidos: el resto primero, CA al final.
       if (depth === 0) children = children.map((c, i) => [c, i]).sort((a, b) => groupRank(a[0]) - groupRank(b[0]) || a[1] - b[1]).map(([c]) => c);
       const status = n.status ?? rollupStatus(children);
       return { ...n, children, ...(status ? { status } : {}) };
@@ -284,7 +292,7 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
  * Vista «Keys»: facetas by=source,store_name,key_algorithm con
  * stack=key_size_bits y hasPrivateKey=true, más claves huérfanas, claves de
  * host SSH (activos con origen ssh) y las fuentes de FUERA que guardan o
- * certifican claves: la CA de Windows (grupo de On-prem: las claves que
+ * certifican claves: la CA de Windows (grupo de Infra: las claves que
  * certificó viven en los solicitantes, pero es la CA quien las emitió con
  * ese algoritmo — pedido del usuario, 14-sep), los vaults, los clusters,
  * ACM/GCP y los hosts de vCenter. Los dominios públicos (CT) no: ahí solo
@@ -446,7 +454,7 @@ export function layoutSunburst(tree, { radii = [58, 128, 198, 270], gap = 0.012,
     // Entre dos grupos distintos del mismo sector (agente | CA) la
     // separación es mayor: es lo que hace visible la partición sin gastar
     // un sector base en ella.
-    const gapAfter = (i) => (i < nodes.length - 1 ? (depth === 1 && (nodes[i].group ?? "agent") !== (nodes[i + 1].group ?? "agent") ? gap * 4 : gap) : 0);
+    const gapAfter = (i) => (i < nodes.length - 1 ? (depth === 1 && (nodes[i].group ?? "main") !== (nodes[i + 1].group ?? "main") ? gap * 4 : gap) : 0);
     const gaps = nodes.reduce((t, _n, i) => t + gapAfter(i), 0);
     const usable = a1 - a0 - gaps - empties * placeholder;
     // Ancho mínimo en los anillos base y de origen (14-sep): con 185

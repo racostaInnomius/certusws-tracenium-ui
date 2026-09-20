@@ -12,10 +12,12 @@ const facet = (source, uniqueCerts, devices) => ({ keys: { source }, certs: uniq
 const find = (bases, baseKey, key) => bases.find((b) => b.key === baseKey).sources.find((s) => s.key === key);
 
 describe("sourcesByBase", () => {
-  it("⭐ sin nada cargado: las cuatro bases del sunburst más Windows CA colgando de On-prem, en su orden, y cada fuente con su estado por defecto", () => {
+  it("⭐ sin nada cargado: las cuatro bases del sunburst más Windows CA colgando de Infra, en su orden, y cada fuente con su estado por defecto", () => {
     const bases = sourcesByBase({});
     expect(bases.map((b) => b.key)).toEqual(SECTIONS.map((b) => b.key));
-    expect(bases.find((b) => b.key === "adcs").parent).toBe("onprem");
+    // 19-sep: On-prem es sólo lo que recogen los agentes; la CA es un
+    // servicio de infraestructura integrado, aunque la lea un agente.
+    expect(bases.find((b) => b.key === "adcs").parent).toBe("infra");
     // El agente escanea almacenes por defecto: «configurada, nada aún», no «no conectada».
     expect(find(bases, "onprem", "store").state).toBe("configured");
     expect(find(bases, "onprem", "cbom").state).toBe("unconfigured");

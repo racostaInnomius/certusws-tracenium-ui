@@ -248,7 +248,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
       }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (the Windows CA sits inside On-prem, after what the agents collect) → its algorithm or key exchange. Click a base to zoom into it; click any slice inside to open its list — in Inventory, or in Explore for what lives where there is no agent.
+        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (On-prem is only what the agents collect on your endpoints; the Windows CA sits inside Infra, after the rest) → its algorithm or key exchange. Click a base to zoom into it; click any slice inside to open its list — in Inventory, or in Explore for what lives where there is no agent.
       </Typography>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: TEXT_MUTED }}>Group by:</Typography>

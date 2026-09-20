@@ -80,7 +80,7 @@ describe("QuantumSunburst", () => {
   it("⭐ abre en Keys, pide las facetas de claves, y pinta las cuatro bases aunque tres estén vacías", async () => {
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true })));
-    // 146 claves en los equipos + 27 que certificó la CA (grupo de On-prem).
+    // 146 claves en los equipos + 27 que certificó la CA (grupo de Infra).
     expect(await screen.findByText("173")).toBeInTheDocument();
     expect(screen.getByText("private keys")).toBeInTheDocument();
     for (const base of ["On-prem devices", "Infra", "Cloud", "External key sources"]) expect(screen.getByText(base)).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("QuantumSunburst", () => {
   it("⭐ una base no navega: amplía su sector y se puede volver", async () => {
     const onSelect = vi.fn();
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={onSelect} />);
-    const onprem = await screen.findByRole("button", { name: /On-prem devices: 173 private keys — click to zoom/ });
+    const onprem = await screen.findByRole("button", { name: /On-prem devices: 146 private keys — click to zoom/ });
     fireEvent.click(onprem);
     // Ninguna navegación: el sector se abre, y las otras bases se quitan.
     expect(onSelect).not.toHaveBeenCalled();

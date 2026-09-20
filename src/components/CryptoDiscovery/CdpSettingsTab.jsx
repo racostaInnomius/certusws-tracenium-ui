@@ -8,9 +8,9 @@
 // que saber que eso se hacía debajo de una tabla de activos.
 //
 // Repaso 2026-09-14: la pestaña se ordena por los MISMOS sectores que el
-// sunburst del Dashboard (On-prem devices, con Windows CA colgando · Infra
-// · Cloud · External key sources). Cada sección lleva en su cabecera una
-// ficha por fuente —reporta, configurada y muda, falla, no conectada— y
+// sunburst del Dashboard (On-prem devices · Infra, con Windows CA
+// colgando desde el 19-sep · Cloud · External key sources). Cada sección
+// lleva en su cabecera una ficha por fuente —reporta, configurada y muda, falla, no conectada— y
 // se pliega: cerrada, la pestaña se lee como un mapa; abierta, se
 // configura. (Hubo un mapa aparte arriba; el usuario lo vio como
 // información duplicada y lo era.) Se abre sola la sección con algo
@@ -152,13 +152,13 @@ function AdcsReaders({ sources, caHosts }) {
  * reporting» y las fichas de estado; el cuerpo, lo que se configura. El
  * cuerpo queda montado aunque esté plegado: los paneles cargan lo suyo y
  * las fichas reflejan su estado sin abrir nada. Windows CA cuelga de
- * On-prem: misma tarjeta, sangrada y con el padre delante.
+ * Infra: misma tarjeta, sangrada y con el padre delante.
  */
 function Sector({ baseKey, section, sub, open, onToggle, onChip, nested = false, children }) {
   const b = baseOf(baseKey);
   const label = b?.label ?? baseKey;
   const headerId = `${sectorAnchor(baseKey)}-header`;
-  // Anidada (Windows CA dentro de On-prem): mismo cuerpo, sin tarjeta propia.
+  // Anidada (Windows CA dentro de Infra): mismo cuerpo, sin tarjeta propia.
   const Wrapper = nested ? Box : SectionPaper;
   const wrapperSx = nested ? { mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}`, scrollMarginTop: 16 } : { scrollMarginTop: 16 };
   return (
@@ -241,21 +241,21 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       return next;
     });
   const sectorProps = (key) => ({ baseKey: key, section: sectionOf(key), open: open.has(key), onToggle: toggle(key) });
-  // Windows CA es parte de On-prem: su cabecera lleva también las fichas
-  // de la CA (con «CA ·» delante) y cuenta sus fuentes; el bloque de la CA
-  // va DENTRO de la tarjeta, plegable a su vez. Una ficha de la CA abre
-  // los dos niveles.
-  const onpremHeader = React.useMemo(() => {
-    const a = sections.find((b) => b.key === "onprem");
+  // Windows CA es parte de Infra (19-sep; antes colgaba de On-prem): su
+  // cabecera lleva también las fichas de la CA (con «CA ·» delante) y
+  // cuenta sus fuentes; el bloque de la CA va DENTRO de la tarjeta,
+  // plegable a su vez. Una ficha de la CA abre los dos niveles.
+  const infraHeader = React.useMemo(() => {
+    const a = sections.find((b) => b.key === "infra");
     const ca = sections.find((b) => b.key === "adcs");
     if (!a) return a;
     const caSources = (ca?.sources ?? []).map((x) => ({ ...x, key: `ca:${x.key}`, label: `CA · ${x.label}`, ca: true }));
     return { ...a, sources: [...a.sources, ...caSources], reporting: a.reporting + (ca?.reporting ?? 0), total: a.total + (ca?.total ?? 0) };
   }, [sections]);
-  const openOnprem = (source) =>
+  const openInfra = (source) =>
     setOpen((prev) => {
       const next = new Set(prev);
-      next.add("onprem");
+      next.add("infra");
       if (source?.ca) next.add("adcs");
       return next;
     });
@@ -267,7 +267,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         The same sectors as the Dashboard sunburst, inside out. Each source is reporting, configured but silent, failing, or not connected; open a sector to set it up.
       </Typography>
 
-      <Sector {...sectorProps("onprem")} section={onpremHeader} onChip={openOnprem} sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
+      <Sector {...sectorProps("onprem")} sub="What the agents collect on every managed endpoint: certificate stores, Java keystores, certificate files, NSS databases, the TLS services each device serves and its SSH host keys. It is part of the agent policy — interval, paths, listener ports — so it is set per policy and per device group. The approval matrix (which crypto discovery capabilities need a second person’s sign-off) lives there too: it is a permissions change, for administrators.">
         <Button component="a" href="?page=policies" size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}>
           Open Policies → Crypto Discovery
         </Button>
@@ -277,12 +277,9 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           Crypto assets found by another scanner, as a CycloneDX file. They join the on-prem inventory under the source name you give.
         </Typography>
         <CbomImportForm onImported={changed} />
-        <Sector {...sectorProps("adcs")} nested sub="Its own group inside On-prem: what the Windows Certification Authority issued, read by the agent on the CA server. Kept apart from what the agents find on devices because one is an inventory and the other is the CA's issuance record.">
-          <AdcsReaders sources={src.adcs} caHosts={caHosts} />
-        </Sector>
       </Sector>
 
-      <Sector {...sectorProps("infra")} sub="Virtual and network infrastructure without an agent: services probed remotely, Kubernetes clusters and vCenter with its ESXi hosts.">
+      <Sector {...sectorProps("infra")} section={infraHeader} onChip={openInfra} sub="Infrastructure services integrated without being a managed endpoint: services probed remotely, Kubernetes clusters, vCenter with its ESXi hosts and the Windows Certification Authority.">
         <CdpRemoteProbes refreshNonce={refreshNonce} />
         <Divider />
         <CdpConnectorsPanel
@@ -311,6 +308,9 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           separately. What is read: the certificate vCenter serves on 443 and the one each ESXi host serves on 443, as the
           Infra sector of the Dashboard.
         </Typography>
+        <Sector {...sectorProps("adcs")} nested sub="Its own group inside Infra: what the Windows Certification Authority issued, read by the agent installed on the CA server. Kept apart from the rest because it is an issuance record — every certificate the CA handed out, wherever it ended up — and not an inventory of what a machine holds.">
+          <AdcsReaders sources={src.adcs} caHosts={caHosts} />
+        </Sector>
       </Sector>
 
       <Sector {...sectorProps("cloud")} sub="What is exposed on the internet or lives in a cloud provider: your public domains (from Certificate Transparency logs, no credentials), AWS Certificate Manager and Google Cloud.">

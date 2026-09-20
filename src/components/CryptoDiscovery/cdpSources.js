@@ -72,7 +72,7 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
   const bases = new Map(SECTIONS.map((b) => [b.key, { key: b.key, label: b.label, note: b.note, parent: b.parent ?? null, sources: [] }]));
   const push = (base, s) => bases.get(base).sources.push(s);
 
-  // ── On-prem devices: lo que el agente recoge ──
+  // ── On-prem devices: SOLO lo que los agentes recogen en los equipos ──
   for (const src of AGENT_SOURCES) {
     const row = byAgentSource.get(src);
     const n = Number(row?.uniqueCerts ?? row?.certs ?? 0);
@@ -89,7 +89,9 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
     ? { key: "cbom", label: SOURCE_LABEL.cbom, state: "reporting", detail: `${plural(importNames.size, "import")}, ${plural(cbomAssets, "asset")}` }
     : { key: "cbom", label: SOURCE_LABEL.cbom, state: "unconfigured", detail: "Upload a CycloneDX file from a scanner below." });
 
-  // ── Windows CA: lo que AD CS reporta ──
+  // ── Windows CA: lo que AD CS emitió (grupo dentro de Infra desde el
+  // 19-sep; lo lee el agente de la CA, pero lo que aporta es el registro de
+  // emisión de un servicio, no el inventario de un endpoint) ──
   const caHosts = Array.isArray(cdp?.adcs?.hosts) ? cdp.adcs.hosts : Array.isArray(cdp?.adcsHosts) ? cdp.adcsHosts : [];
   if ((adcs ?? []).length > 0) {
     for (const s of adcs) {

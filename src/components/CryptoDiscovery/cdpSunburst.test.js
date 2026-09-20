@@ -1,8 +1,9 @@
 // src/components/CryptoDiscovery/cdpSunburst.test.js
 //
 // El sunburst del Dashboard: cuatro sectores base SIEMPRE presentes, la CA
-// de Windows DENTRO de On-prem como grupo aparte (al final, con más
-// separación), los orígenes en su sector, y un trazado sin gajos invisibles.
+// de Windows DENTRO de Infra como grupo aparte (al final, con más
+// separación; desde el 19-sep — antes colgaba de On-prem), los orígenes en
+// su sector, y un trazado sin gajos invisibles.
 
 import { describe, expect, it } from "vitest";
 import { BASES, arcPath, baseOfSource, buildCertificatesTree, buildKeysTree, buildServicesTree, layoutSunburst, statusOfAlgorithm, sumNode } from "./cdpSunburst";
@@ -10,10 +11,12 @@ import { BASES, arcPath, baseOfSource, buildCertificatesTree, buildKeysTree, bui
 const facet = (ownership, source, algo, bits, uniqueCerts, extra = {}) => ({ keys: { ownership, source, key_algorithm: algo, ...extra }, stack: bits, certs: uniqueCerts, uniqueCerts, devices: 1 });
 
 describe("mapa origen → sector base", () => {
-  it("⭐ los orígenes del agente Y la CA son On-prem (la CA es un grupo, no una base); conectores y sondas van a su base; lo desconocido a On-prem", () => {
-    expect(["store", "java-store", "listener", "file", "nss", "ssh", "cbom", "adcs"].map(baseOfSource)).toEqual(Array(8).fill("onprem"));
+  it("⭐ On-prem es SÓLO lo que recogen los agentes; la CA de Windows es un grupo de Infra, no una base ni una fuente de equipo; lo desconocido a On-prem", () => {
+    expect(["store", "java-store", "listener", "file", "nss", "ssh", "cbom"].map(baseOfSource)).toEqual(Array(7).fill("onprem"));
     expect(BASES.map((b) => b.key)).toEqual(["onprem", "infra", "cloud", "external"]);
-    expect(["probe", "k8s", "vcenter"].map(baseOfSource)).toEqual(["infra", "infra", "infra"]);
+    // La lee el agente de la CA, pero lo que aporta es el registro de
+    // emisión de un servicio: va con la infraestructura.
+    expect(["probe", "k8s", "vcenter", "adcs"].map(baseOfSource)).toEqual(["infra", "infra", "infra", "infra"]);
     expect(["ct", "acm", "gcp"].map(baseOfSource)).toEqual(["cloud", "cloud", "cloud"]);
     expect(["keyvault", "vault"].map(baseOfSource)).toEqual(["external", "external"]);
     expect(baseOfSource("something-new")).toBe("onprem");
@@ -21,17 +24,18 @@ describe("mapa origen → sector base", () => {
 });
 
 describe("buildCertificatesTree", () => {
-  it("⭐ las cuatro bases están aunque sólo On-prem tenga datos; la CA va DENTRO de On-prem, al final y con su nombre; las raíces del fabricante van aparte y en gris", () => {
+  it("⭐ las cuatro bases están aunque sólo dos tengan datos; la CA va DENTRO de Infra, al final y con su nombre; las raíces del fabricante van aparte y en gris", () => {
     const tree = buildCertificatesTree(
       [facet("own_leaf", "store", "RSA", 2048, 146), facet("foreign", "store", "RSA", 2048, 572), facet("vendor", "store", "RSA", 4096, 51), facet("vendor", "java-store", "RSA", 4096, 43), facet("foreign", "listener", "RSA", 2048, 46)],
       [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }, { sourceName: "ssh", origin: "ssh", certificates: 13 }]
     );
     expect(tree.map((b) => b.key)).toEqual(BASES.map((b) => b.key));
     const onprem = tree[0];
-    expect(onprem.children.map((c) => c.name)).toEqual(["Certificate stores", "Vendor roots", "TLS listeners", "CA · MSIG-RADIUS-CA"]);
-    // La CA no se mezcla con lo que el agente recoge: grupo propio, último,
-    // un gajo por CA con su nombre.
-    const ca = onprem.children.find((c) => c.name === "CA · MSIG-RADIUS-CA");
+    expect(onprem.children.map((c) => c.name)).toEqual(["Certificate stores", "Vendor roots", "TLS listeners"]);
+    // La CA no se mezcla con lo que el agente recoge en los equipos: otro
+    // sector, grupo propio dentro de él, un gajo por CA con su nombre.
+    const infra = tree.find((b) => b.key === "infra");
+    const ca = infra.children.find((c) => c.name === "CA · MSIG-RADIUS-CA");
     expect(ca.group).toBe("adcs");
     expect(sumNode(ca)).toBe(27);
     const vendor = onprem.children.find((c) => c.name === "Vendor roots");
@@ -39,7 +43,7 @@ describe("buildCertificatesTree", () => {
     expect(sumNode(vendor)).toBe(94);
     // Las claves SSH no son certificados: fuera de esta vista.
     expect(onprem.children.some((c) => c.name === "SSH host keys")).toBe(false);
-    expect(tree.slice(1).every((b) => b.children.length === 0 && b.keep)).toBe(true);
+    expect(tree.filter((b) => b.key === "cloud" || b.key === "external").every((b) => b.children.length === 0 && b.keep)).toBe(true);
   });
 
   it("un gajo de algoritmo navega a Inventory con fuente, algoritmo y tamaño; el de raíces incluye system roots", () => {
@@ -72,7 +76,7 @@ describe("buildCertificatesTree", () => {
     // La CA y vCenter viven en cdp_crypto_assets: su lista es «Outside
     // your devices», y la hoja lleva al mismo sitio que su fuente porque
     // ese panel filtra por origen, no por algoritmo.
-    const ca = onprem.children.find((c) => c.name === "CA · MSIG-CA");
+    const ca = tree.find((b) => b.key === "infra").children.find((c) => c.name === "CA · MSIG-CA");
     expect(ca.drill).toEqual({ to: "outside", sourceName: "adcs:MSIG-CA", origin: "adcs" });
     expect(ca.children[0].drill).toEqual(ca.drill);
     const vcenter = tree.find((b) => b.key === "infra").children[0];
@@ -87,7 +91,7 @@ describe("buildCertificatesTree — fuera de los equipos por algoritmo", () => {
       [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }, { sourceName: "ct:tracenium.com", origin: "ct", certificates: 8 }],
       [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 27 }]
     );
-    const adcs = tree[0].children.find((c) => c.name === "CA · MSIG-RADIUS-CA");
+    const adcs = tree.find((b) => b.key === "infra").children.find((c) => c.name === "CA · MSIG-RADIUS-CA");
     expect(adcs.children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 27, "broken"]]);
     const cloud = tree.find((b) => b.key === "cloud");
     expect(cloud.children[0].children.map((l) => [l.name, l.v])).toEqual([["certificates", 8]]);
@@ -95,17 +99,19 @@ describe("buildCertificatesTree — fuera de los equipos por algoritmo", () => {
 });
 
 describe("buildKeysTree", () => {
-  it("⭐ la CA aparece en el anillo de almacenes de On-prem (al final, como grupo) con los algoritmos que certificó; vaults y clusters en su base; CT no (no guarda claves)", () => {
+  it("⭐ la CA aparece en el anillo de Infra (al final, como grupo) con los algoritmos que certificó; vaults y clusters en su base; CT no (no guarda claves)", () => {
     const tree = buildKeysTree([facet("own_leaf", "store", "RSA", 2048, 146, { store_name: "LocalMachine\\My" })], {
       sshHostKeys: 13,
       outsideBySource: [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }, { sourceName: "keyvault:kv-prod", origin: "keyvault", certificates: 120 }, { sourceName: "ct:tracenium.com", origin: "ct", certificates: 8 }, { sourceName: "k8s:prod", origin: "k8s", certificates: 57 }],
       outsideByAlgorithm: [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 27 }]
     });
     const onprem = tree[0];
-    expect(onprem.children.map((c) => [c.name, c.group ?? "agent"])).toEqual([["LocalMachine\\My", "agent"], ["SSH host keys", "agent"], ["CA · MSIG-RADIUS-CA", "adcs"]]);
-    expect(onprem.children[2].children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 27, "broken"]]);
+    expect(onprem.children.map((c) => [c.name, c.group ?? "main"])).toEqual([["LocalMachine\\My", "main"], ["SSH host keys", "main"]]);
+    const infra = tree.find((b) => b.key === "infra");
+    // Kubernetes primero, la CA al final y como grupo aparte.
+    expect(infra.children.map((c) => [c.name, c.group ?? "main"])).toEqual([["Kubernetes", "main"], ["CA · MSIG-RADIUS-CA", "adcs"]]);
+    expect(infra.children[1].children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 27, "broken"]]);
     expect(tree.find((b) => b.key === "external").children[0].name).toBe("Azure Key Vault");
-    expect(tree.find((b) => b.key === "infra").children[0].name).toBe("Kubernetes");
     expect(tree.find((b) => b.key === "cloud").children).toEqual([]);
   });
 
@@ -263,19 +269,19 @@ describe("⭐ color = estado cuántico, no gris por defecto (visto por el usuari
   });
 });
 
-describe("⭐ la CA dentro de On-prem: grupo al final con más separación (pedido del usuario, 14-sep)", () => {
-  it("los gajos de la CA van después de los del agente aunque lleguen antes, y el hueco entre grupos es mayor", () => {
+describe("⭐ la CA dentro de Infra: grupo al final con más separación (grupo pedido el 14-sep; movida a Infra el 19-sep)", () => {
+  it("los gajos de la CA van después del resto de Infra aunque lleguen antes, y el hueco entre grupos es mayor", () => {
     const tree = buildCertificatesTree(
-      [facet("own_leaf", "store", "RSA", 2048, 100), facet("foreign", "listener", "RSA", 2048, 50)],
-      [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 100 }],
+      [facet("own_leaf", "store", "RSA", 2048, 100)],
+      [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 100 }, { sourceName: "k8s:prod", origin: "k8s", certificates: 50 }],
       [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", certificates: 100 }]
     );
-    expect(tree[0].children.map((c) => [c.name, c.group ?? "agent"])).toEqual([["Certificate stores", "agent"], ["TLS listeners", "agent"], ["CA · MSIG-RADIUS-CA", "adcs"]]);
+    const infra = tree.find((b) => b.key === "infra");
+    expect(infra.children.map((c) => [c.name, c.group ?? "main"])).toEqual([["Kubernetes", "main"], ["CA · MSIG-RADIUS-CA", "adcs"]]);
     const { arcs } = layoutSunburst(tree);
     const ring2 = arcs.filter((a) => a.depth === 1);
-    expect(ring2.map((a) => a.name)).toEqual(["Certificate stores", "TLS listeners", "CA · MSIG-RADIUS-CA"]);
-    // Sin grupo distinto entre almacenes y listeners; con grupo distinto
-    // antes de la CA: el ángulo de inicio de la CA salta más.
+    expect(ring2.map((a) => a.name)).toEqual(["Certificate stores", "Kubernetes", "CA · MSIG-RADIUS-CA"]);
+    // Con grupo distinto antes de la CA, su ángulo de inicio salta más.
     const startOf = (d) => Number(/A[\d.]+ [\d.]+ 0 \d 1 [-\d.]+ [-\d.]+ L([-\d.]+) ([-\d.]+)/.exec(d)?.[1]);
     expect(Number.isFinite(startOf(ring2[2].d))).toBe(true);
   });
