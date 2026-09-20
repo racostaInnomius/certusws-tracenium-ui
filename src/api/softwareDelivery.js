@@ -169,6 +169,17 @@ export async function getAgentUpdateSources(window = "30d") {
  * parque: «¿quién no tiene Chrome?» no cambia por mirar 7 días o 90, y pasarle
  * una ventana sugeriría lo contrario.
  */
+/**
+ * Ancho de banda de WAN que ahorran los puntos de distribución.
+ *
+ * ⚠️ SUSTITUYE a `getDownloadTierStats` + `getAgentUpdateSources` en el
+ * Overview: las dos devolvían porcentajes por población, y un porcentaje no
+ * dice si se ahorraron 2 GB o 200. Siguen existiendo para quien las use.
+ */
+export async function getLanSavings(window = "30d") {
+  return httpGetJson(`${BASE}/analytics/lan-savings${buildQuery({ window })}`);
+}
+
 export async function getCatalogCoverage() {
   return httpGetJson(`${BASE}/analytics/catalog-coverage`);
 }

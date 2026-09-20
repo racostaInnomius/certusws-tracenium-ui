@@ -42,8 +42,7 @@ import {
   listSites,
   listDistributionPoints,
   getDeploymentTimeseries,
-  getAgentUpdateSources,
-  getDownloadTierStats,
+  getLanSavings,
   getGlobalCatalog,
   getCatalogCoverage,
 } from "../../api/softwareDelivery";
@@ -70,8 +69,7 @@ const SOURCE_KEYS = [
   "sites",
   "dps",
   "buckets",
-  "tiers",
-  "agentTiers",
+  "savings",
   "globalCatalog",
   "coverage",
 ];
@@ -116,8 +114,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
     sites: [],
     dps: [],
     buckets: [],
-    tiers: null,
-    agentTiers: null,
+    savings: null,
     globalCatalog: [],
     coverage: null,
     failures: new Set(),
@@ -146,8 +143,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
       listSites(),
       listDistributionPoints(),
       getDeploymentTimeseries(windowKey),
-      getDownloadTierStats(windowKey),
-      getAgentUpdateSources(windowKey),
+      getLanSavings(windowKey),
       getGlobalCatalog(),
       // Sin ventana: es una foto del parque, no actividad (ver el cliente).
       getCatalogCoverage(),
@@ -170,10 +166,9 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
           sites: listFrom(val(3)),
           dps: listFrom(val(4)),
           buckets: Array.isArray(val(5)?.buckets) ? val(5).buckets : [],
-          tiers: val(6)?.stats ?? null,
-          agentTiers: val(7)?.stats ?? null,
-          globalCatalog: val(8)?.entries ?? [],
-          coverage: val(9) ?? null,
+          savings: val(6) ?? null,
+          globalCatalog: val(7)?.entries ?? [],
+          coverage: val(8) ?? null,
           failures,
         });
       })
@@ -376,11 +371,9 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
 
       {/* ── De dónde se sirvieron las descargas ─────────────────── */}
       <LanSavingsPanel
-        agentStats={data.agentTiers}
-        softwareStats={data.tiers}
-        hasDistributionPoints={data.dps.length > 0}
-        agentFailed={data.failures.has("agentTiers")}
-        softwareFailed={data.failures.has("tiers")}
+        loading={loading}
+        savings={data.savings}
+        failed={data.failures.has("savings")}
       />
 
     </Stack>

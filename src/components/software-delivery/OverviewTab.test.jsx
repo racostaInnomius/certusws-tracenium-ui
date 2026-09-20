@@ -28,9 +28,14 @@ function seed({ packages = [], deployments = [], intakes = [], sites = [], dps =
     windowDays: 30,
     buckets: [{ bucket: "2026-07-18", succeeded: 4, failed: 1, total: 5 }],
   });
-  respond("get", /\/api\/v1\/software-delivery\/analytics\/tier-stats.*/, {
+  // El Overview ya no pide los dos repartos por tier: pide el AHORRO.
+  respond("get", /\/api\/v1\/software-delivery\/analytics\/lan-savings.*/, {
     ok: true,
-    stats: tiers ?? { dp: 0, cdn: 0, origin: 0, unknown: 0, total: 0 },
+    windowDays: 30,
+    lan: tiers?.lan ?? { downloads: 0, bytes: 0 },
+    wan: tiers?.wan ?? { downloads: 0, bytes: 0 },
+    unpricedDownloads: 0,
+    activeDistributionPoints: tiers?.dps ?? 0,
   });
   respond("get", /\/api\/v1\/software-delivery\/distribution\/sites.*/, { ok: true, items: sites });
   respond("get", /\/api\/v1\/software-delivery\/distribution\/dps.*/, { ok: true, items: dps });
@@ -136,16 +141,20 @@ describe("OverviewTab", () => {
     });
   });
 
-  // ⚠️ Sembrado SIN distribution points a propósito: si hay tráfico servido por
-  // LAN, evidentemente hubo un DP sirviéndolo (la lista puede venir vacía
-  // porque se retiró, o porque esa llamada degradó a []). El dato manda sobre
-  // la configuración — la primera versión del panel escondía esto.
-  it("surfaces the LAN share when tier stats are present", async () => {
-    seed({ tiers: { dp: 90, cdn: 8, origin: 2, unknown: 0, total: 100 } });
+  // El panel dejó de hablar en porcentajes: el titular son los BYTES que no
+  // cruzaron la WAN, porque un 90% no dice si son 2 GB o 200.
+  it("enseña el ahorro de ancho de banda cuando hay descargas servidas por LAN", async () => {
+    const GB = 1024 ** 3;
+    seed({
+      tiers: {
+        lan: { downloads: 90, bytes: 90 * GB },
+        wan: { downloads: 10, bytes: 10 * GB },
+        dps: 1,
+      },
+    });
     render(<OverviewTab />);
-    await waitFor(() =>
-      expect(screen.getByText("90%")).toBeInTheDocument()
-    );
+    await waitFor(() => expect(screen.getByText(/≈ 90/)).toBeInTheDocument());
+    expect(screen.getByText("90 of 100 downloads")).toBeInTheDocument();
   });
 
   it("renders without crashing when every endpoint fails", async () => {
