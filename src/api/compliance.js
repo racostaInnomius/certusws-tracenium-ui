@@ -44,6 +44,16 @@ export async function getCategorySummary() {
   return httpGetJson(`${BASE}/category-summary`);
 }
 
+// El HUB de remediación: las ACCIONES pendientes, no los hallazgos. Donde
+// `getTopFailingChecks` responde "qué control incumple más gente", esto
+// responde "qué hago, y cuánto cierra": agrupa los checks que arregla un mismo
+// handler (los tres perfiles de firewall son UN trabajo), cuenta equipos
+// distintos —no los suma— y cada fila dice si se puede pulsar. Ver requiere
+// SCP; ejecutar requiere PMP, y la fila lo explica cuando falta.
+export async function getRemediationHub({ category, severity, limit } = {}) {
+  return httpGetJson(`${BASE}/remediation-hub${buildQuery({ category, severity, limit })}`);
+}
+
 // "What to fix first" — los controles que MÁS equipos incumplen en la flota.
 // Es la única agregación por control que existe: el resto de la página agrega
 // por severidad, framework, categoría o equipo, y ninguna responde "¿qué

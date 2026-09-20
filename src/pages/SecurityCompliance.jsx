@@ -103,7 +103,9 @@ import GoToReportButton from "../components/common/GoToReportButton";
 const COMPLIANCE_EVIDENCE_KEY = "scp.compliance-evidence";
 import SectionPaper from "../components/common/SectionPaper";
 import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
+import RemediationHubPanel from "../components/Compliance/RemediationHubPanel";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import DeviceDrawerContent from "../components/Compliance/DeviceDrawerContent";
 import { PatchChip, formatRelativeTime } from "../components/Compliance/PatchLevel";
@@ -316,7 +318,7 @@ const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
 // ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
 // `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
 // volvería a "posture". Añadir un <Tab> sin tocar esto lo deja muerto.
-const SCP_TABS = ["posture", "baselines", "exceptions", "catalog", "settings"];
+const SCP_TABS = ["posture", "fix", "baselines", "exceptions", "catalog", "settings"];
 
 /**
  * Estilo de pestaña, el mismo que Asset Management (`Assets.jsx`).
@@ -1243,6 +1245,17 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               sx={TAB_SX}
             />
           ) : null}
+          {/* El hub de remediación. Va aquí, pegado a Posture, porque es el
+              paso siguiente a mirar la postura: de "qué está mal" a "qué hago".
+              NO se gatea con `canManage`: ver qué habría que arreglar es parte
+              del diagnóstico; lo que exige permiso (y PMP) es pulsar. */}
+          <Tab
+            value="fix"
+            label="Fix"
+            icon={<BuildOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            sx={TAB_SX}
+          />
           {/* P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
               deciden aquí. Sólo quien gestiona compliance las ve. */}
           {canManage ? (
@@ -1303,6 +1316,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               distintas, una encima de otra. */}
           <SecurityBaselines embedded reloadKey={refreshToken} onNavigate={() => setTab("posture")} />
         </React.Suspense>
+      ) : null}
+
+      {effectiveTab === "fix" ? (
+        <RemediationHubPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
       ) : null}
 
       {effectiveTab === "exceptions" ? (
