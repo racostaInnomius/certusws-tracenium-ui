@@ -28,8 +28,7 @@ import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
 import CatalogCoveragePanel from "./CatalogCoveragePanel";
 import CompositionBars from "../common/CompositionBars";
-import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
-import InstallDaysStrip, { shouldUseStrip } from "./InstallDaysStrip";
+import InstallActivityCalendar from "./InstallActivityCalendar";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
   listPackages,
@@ -229,22 +228,13 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
     };
   }, [data]);
 
-  const chartData = React.useMemo(
-    () =>
-      data.buckets.map((b) => ({
-        day: String(b.bucket ?? "").slice(5), // MM-DD keeps the axis readable
-        succeeded: Number(b.succeeded ?? 0),
-        failed: Number(b.failed ?? 0),
-      })),
-    [data.buckets]
+  // ⚠️ El calendario recibe los buckets CRUDOS: necesita el día completo
+  // (YYYY-MM-DD) para rotular los extremos de la ventana, y recortarlo a
+  // "MM-DD" para un eje —lo que hacía la gráfica que esto sustituye— dejaba
+  // una fecha que no se puede leer como fecha.
+  const hasChartData = data.buckets.some(
+    (b) => Number(b?.succeeded ?? 0) > 0 || Number(b?.failed ?? 0) > 0
   );
-
-  const hasChartData = chartData.some((d) => d.succeeded > 0 || d.failed > 0);
-  // ⚠️ La misma página a dos volúmenes distintos NO debe verse igual. Con tres
-  // días de actividad en un mes, una línea es 90 % ceros y además interpola
-  // entre eventos que no tienen nada en medio; con densidad de verdad, la
-  // forma dice cosas que los totales no.
-  const sparse = shouldUseStrip(chartData);
   const catalogUpdates = React.useMemo(
     () => countCatalogUpdates(data.globalCatalog),
     [data.globalCatalog]
@@ -300,7 +290,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
 
       {/* ── Trend + outcomes ────────────────────────────────────── */}
       <Grid container spacing={2}>
-        <Grid size={sparse ? { xs: 12 } : { xs: 12, md: 7 }}>
+        <Grid size={{ xs: 12, md: 7 }}>
           <SectionPaper variant="card" sx={{ p: 2 }}>
             <Stack
               direction="row"
@@ -312,14 +302,13 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
             >
               <Box>
                 <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-                  {sparse ? "When installs happened" : "Installs over time"}
+                  When installs happened
                 </Typography>
                 <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                  Per-device outcomes by day
+                  One square per day in the window
                 </Typography>
               </Box>
               <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" gap={1}>
-                {sparse ? null : <InstallsLegend />}
                 <ToggleButtonGroup
                 size="small"
                 exclusive
@@ -333,45 +322,38 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
               </Stack>
             </Stack>
 
-            <Box sx={{ height: sparse ? "auto" : 220 }}>
+            <Box>
               {loading ? (
-                <Skeleton variant="rounded" height={220} />
-              ) : !hasChartData ? (
-                <Box
-                  sx={{
-                    height: "100%",
-                    display: "grid",
-                    placeItems: "center",
-                    color: BRAND.gray,
-                    fontSize: TEXT.md,
-                  }}
-                >
-                  No installs completed in this window
-                </Box>
-              ) : sparse ? (
-                <InstallDaysStrip buckets={chartData} />
+                <Skeleton variant="rounded" height={140} />
               ) : (
-                <InstallsOverTimeChart data={chartData} />
+                // ⚠️ El calendario se pinta TAMBIÉN sin actividad: los días
+                // vacíos son la respuesta a «¿cada cuánto entregamos?», y un
+                // cartel de "no installs" ocupa el mismo sitio diciendo menos.
+                <>
+                  <InstallActivityCalendar buckets={data.buckets} />
+                  {!hasChartData ? (
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1 }}>
+                      Nothing was installed in this window.
+                    </Typography>
+                  ) : null}
+                </>
               )}
             </Box>
           </SectionPaper>
         </Grid>
 
-        {/* ⚠️ Con la tira, sus totales ya están en la leyenda: repetirlos en
-            tres barras horizontales es la tercera aparición del mismo
-            primitivo en la página, y de ahí venía la sensación de "todo se ve
-            igual". A volumen, el desglose por desenlace SÍ dice algo que los
-            totales no — siete categorías no caben en una leyenda. */}
-        {sparse ? null : (
+        {/* El desglose por desenlace dice lo que el calendario no: siete
+            categorías (ya instalado, pendiente de reinicio, firma inválida…)
+            no caben en una leyenda de colores. */}
         <Grid size={{ xs: 12, md: 5 }}>
           <CompositionBars
             title="Install outcomes"
             items={stats.outcomeItems}
             totalLabel="installs"
             emptyLabel="No install results yet"
-            minHeight={286}
+            minHeight={220}
           />
-        </Grid>)}
+        </Grid>
       </Grid>
 
       {/* ── De dónde se sirvieron las descargas ─────────────────── */}
