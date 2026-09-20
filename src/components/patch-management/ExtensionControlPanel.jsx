@@ -11,6 +11,11 @@
 // "To review" lists the extensions that are behind those findings: critical
 // or high risk, or installed outside a store, and without a rule yet. Once an
 // extension has a rule it moves to "Rules".
+//
+// ⚠️ An approval expires after six months and then the extension comes BACK to
+// "To review" — Security Compliance is counting it again, so leaving it under
+// "Rules" would show a decision that no longer holds. It is listed once, where
+// the work is.
 
 import * as React from "react";
 import { Box, Chip, Paper, Skeleton, Stack, TextField, Typography } from "@mui/material";
@@ -20,6 +25,7 @@ import { severityMeta } from "../../theme/severity";
 import { getSearchParam } from "../../utils/browserState";
 import { deleteExtensionRule, getBrowserExtensions, getExtensionRules, putExtensionRule } from "../../api/inventoryDashboard";
 import { BlockAllOthersControls, ExtensionRuleActions, RuleChip } from "./ExtensionRuleControls";
+import { isExpiredApproval } from "./extensionRuleExpiry";
 
 const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge", firefox: "Firefox" };
 const OUTSIDE_STORE = new Set(["sideloaded", "unpacked"]);
@@ -100,8 +106,20 @@ export default function ExtensionControlPanel({ notify, canManage = false, entit
   const extensions = Array.isArray(inventory?.extensions) ? inventory.extensions : [];
   const q = query.trim().toLowerCase();
   const matches = (e) => !q || String(e.name).toLowerCase().includes(q) || String(e.extensionId).toLowerCase().includes(q);
-  const toReview = extensions.filter((e) => needsReview(e) && !rulesByKey.has(`${e.browser}|${e.extensionId}`) && matches(e));
-  const ruled = (rulesView?.rules || []).filter((r) => r.extensionId !== "*" && (!q || String(r.name || "").toLowerCase().includes(q) || r.extensionId.includes(q)));
+  const ruleFor = (e) => rulesByKey.get(`${e.browser}|${e.extensionId}`);
+  const toReview = extensions.filter((e) => {
+    const rule = ruleFor(e);
+    if (!matches(e)) return false;
+    // Una aprobación vencida es trabajo pendiente aunque haya regla.
+    if (isExpiredApproval(rule)) return true;
+    return needsReview(e) && !rule;
+  });
+  const ruled = (rulesView?.rules || []).filter(
+    (r) =>
+      r.extensionId !== "*" &&
+      !isExpiredApproval(r) &&
+      (!q || String(r.name || "").toLowerCase().includes(q) || r.extensionId.includes(q))
+  );
   const inventoryByKey = new Map(extensions.map((e) => [`${e.browser}|${e.extensionId}`, e]));
 
   const save = async (rule) => {
@@ -158,14 +176,20 @@ export default function ExtensionControlPanel({ notify, canManage = false, entit
               To review ({toReview.length})
             </Typography>
             <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 1 }}>
-              Critical or high risk, or installed outside a store, and without a rule — what the browser extension findings in Security Compliance count.
+              Critical or high risk, or installed outside a store, and without a rule — plus approvals that ran out. This is what the browser extension findings in Security Compliance count.
             </Typography>
             {toReview.length === 0 ? (
               <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>Nothing to review.</Typography>
             ) : (
               <Stack spacing={1}>
                 {toReview.map((e) => (
-                  <ExtensionRow key={`${e.browser}|${e.extensionId}`} extension={e} highlighted={linked === `${e.browser}|${e.extensionId}`} {...shared} />
+                  <ExtensionRow
+                    key={`${e.browser}|${e.extensionId}`}
+                    extension={e}
+                    rule={ruleFor(e) || null}
+                    highlighted={linked === `${e.browser}|${e.extensionId}`}
+                    {...shared}
+                  />
                 ))}
               </Stack>
             )}

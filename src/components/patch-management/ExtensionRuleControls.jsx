@@ -15,6 +15,11 @@
 //
 // ⚠️ "Applied" is what the agents REPORTED writing, not what the portal asked
 // for. A rule saved a second ago shows 0 applied and N pending, which is true.
+//
+// ⚠️ An approval EXPIRES after six months (the server dates it). Expiring puts
+// the extension back in "To review" and Security Compliance counts it again —
+// but the devices keep allowing it. Nobody's password manager disappears on a
+// timer; a person renews the approval or blocks the extension.
 
 import * as React from "react";
 import {
@@ -31,6 +36,8 @@ import {
 } from "@mui/material";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
+import { formatDate } from "../../utils/format";
+import { isExpiredApproval } from "./extensionRuleExpiry";
 
 const RULE_BROWSERS = new Set(["chrome", "edge"]);
 const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge" };
@@ -40,17 +47,38 @@ const BROWSER_LABEL = { chrome: "Chrome", edge: "Edge" };
 const NOT_ENTITLED = "Blocking and approving extensions requires Patch Management.";
 const NO_CAPABILITY = "Changing rules needs the Security Compliance capability.";
 
-/** "Blocked" / "Allowed" chip for a row that has a rule. */
+/** "Blocked" / "Approved" / "Approval expired" chip for a row that has a rule. */
 export function RuleChip({ rule }) {
   if (!rule) return null;
   const blocked = rule.action === "block";
-  const meta = blocked ? severityMeta("critical") : severityMeta("low");
+  const expired = isExpiredApproval(rule);
+  const meta = blocked ? severityMeta("critical") : expired ? severityMeta("medium") : severityMeta("low");
   return (
     <Chip
       size="small"
-      label={blocked ? "Blocked" : "Approved"}
+      label={blocked ? "Blocked" : expired ? "Approval expired" : "Approved"}
       sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: meta.bg, color: meta.fg, ml: 1 }}
     />
+  );
+}
+
+/**
+ * When the approval runs out, or that it already did. Nothing for a block:
+ * blocks do not expire.
+ */
+export function ApprovalExpiryLine({ rule }) {
+  if (!rule || rule.action !== "allow" || !rule.expiresAt) return null;
+  if (isExpiredApproval(rule)) {
+    return (
+      <Typography sx={{ fontSize: TEXT.xs, color: severityMeta("medium").fg, fontWeight: 700 }}>
+        Approval expired on {formatDate(rule.expiresAt)} — devices still allow it. Renew it or block it.
+      </Typography>
+    );
+  }
+  return (
+    <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
+      Approval expires on {formatDate(rule.expiresAt)}. Approving again renews it for six months.
+    </Typography>
   );
 }
 
@@ -118,6 +146,7 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
   }
 
   const browser = BROWSER_LABEL[extension.browser];
+  const expiredApproval = isExpiredApproval(rule);
   const run = async (fn) => {
     setBusy(true);
     try {
@@ -137,9 +166,9 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
       confirm: (reason) => onSave({ browser: extension.browser, extensionId: extension.extensionId, action: "block", name: extension.name, reason }),
     },
     allow: {
-      title: `Approve ${extension.name} in ${browser}?`,
-      body: `Approving accepts its risk: Security Compliance stops counting it on every device, and it stays installable when "block all other extensions" is on for ${browser}.`,
-      confirmLabel: "Approve extension",
+      title: expiredApproval ? `Renew the approval of ${extension.name} in ${browser}?` : `Approve ${extension.name} in ${browser}?`,
+      body: `Approving accepts its risk: Security Compliance stops counting it on every device, and it stays installable when "block all other extensions" is on for ${browser}. The approval lasts six months, and then comes back here for review.`,
+      confirmLabel: expiredApproval ? "Renew approval" : "Approve extension",
       danger: false,
       confirm: (reason) => onSave({ browser: extension.browser, extensionId: extension.extensionId, action: "allow", name: extension.name, reason }),
     },
@@ -159,7 +188,12 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
     <Box>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <Typography sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.dark }}>Policy</Typography>
-        {rule ? <RuleStatusLine rule={rule} windowsDevices={windowsDevices} /> : (
+        {rule ? (
+          <Box sx={{ minWidth: 0 }}>
+            <RuleStatusLine rule={rule} windowsDevices={windowsDevices} />
+            <ApprovalExpiryLine rule={rule} />
+          </Box>
+        ) : (
           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>No rule for this extension.</Typography>
         )}
         <Box sx={{ flex: 1 }} />
@@ -170,9 +204,9 @@ export function ExtensionRuleActions({ extension, rule, canManage, entitled = tr
                 Block
               </Button>
             ) : null}
-            {rule?.action !== "allow" ? (
+            {rule?.action !== "allow" || expiredApproval ? (
               <Button size="small" variant="outlined" onClick={() => setPending("allow")}>
-                Approve
+                {expiredApproval ? "Renew approval" : "Approve"}
               </Button>
             ) : null}
             {rule ? (

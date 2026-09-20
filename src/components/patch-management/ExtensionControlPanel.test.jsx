@@ -99,6 +99,47 @@ describe("ExtensionControlPanel", () => {
     expect(screen.getByText("Rules are available for Chrome and Edge on Windows.")).toBeInTheDocument();
   });
 
+  it("⭐ una aprobación vencida vuelve a To review, con su fecha, y se renueva desde ahí", async () => {
+    // Seis meses después, la aprobación deja de valer: Security Compliance la
+    // cuenta otra vez, así que la extensión es trabajo pendiente — pero los
+    // equipos la siguen permitiendo y la UI lo dice.
+    const expired = {
+      browser: "edge", extensionId: B, action: "allow", name: "Password Vault",
+      expiresAt: "2026-03-20T10:00:00Z", expired: true, status: { applied: 5, pending: 0, failed: 0 },
+    };
+    getExtensionRules.mockResolvedValue({ ok: true, windowsDevices: 5, rules: [expired] });
+    putExtensionRule.mockResolvedValue({ ok: true });
+    render(<ExtensionControlPanel canManage notify={() => {}} />);
+
+    expect(await screen.findByText("To review (2)")).toBeInTheDocument();
+    expect(screen.getByText("Rules (0)")).toBeInTheDocument();
+    const row = within(screen.getByTestId(`extension-edge-${B}`));
+    expect(row.getByText("Approval expired")).toBeInTheDocument();
+    expect(row.getByText(/Approval expired on .* devices still allow it/)).toBeInTheDocument();
+
+    fireEvent.click(row.getByRole("button", { name: "Renew approval" }));
+    expect(screen.getByText(/The approval lasts six months/)).toBeInTheDocument();
+    getExtensionRules.mockResolvedValue({ ok: true, windowsDevices: 5, rules: [{ ...expired, expired: false, expiresAt: "2027-03-20T10:00:00Z" }] });
+    fireEvent.click(screen.getByRole("button", { name: "Renew approval" }));
+    await waitFor(() => expect(putExtensionRule).toHaveBeenCalledWith(expect.objectContaining({ browser: "edge", extensionId: B, action: "allow" })));
+
+    expect(await screen.findByText("Rules (1)")).toBeInTheDocument();
+    expect(screen.getByText("To review (1)")).toBeInTheDocument();
+    expect(screen.getByText(/Approval expires on .* Approving again renews it/)).toBeInTheDocument();
+  });
+
+  it("una aprobación vigente se queda en Rules, sin botón de renovar", async () => {
+    getExtensionRules.mockResolvedValue({
+      ok: true, windowsDevices: 5,
+      rules: [{ browser: "edge", extensionId: B, action: "allow", name: "Password Vault", expiresAt: "2027-03-20T10:00:00Z", expired: false, status: { applied: 5, pending: 0, failed: 0 } }],
+    });
+    render(<ExtensionControlPanel canManage notify={() => {}} />);
+    expect(await screen.findByText("Rules (1)")).toBeInTheDocument();
+    expect(screen.getByText("To review (1)")).toBeInTheDocument();
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Renew approval" })).not.toBeInTheDocument();
+  });
+
   it("deep link ?extension=browser|id (from a finding or an alert) filters and highlights it", async () => {
     window.history.replaceState({}, "", `/?page=patch&pmTab=browsers&extension=edge|${B}`);
     render(<ExtensionControlPanel canManage />);
