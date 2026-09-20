@@ -63,7 +63,8 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
   const [keyLabel, setKeyLabel] = React.useState("");
   const [revealed, setRevealed] = React.useState(null); // { label, secret }
   const [targetDialog, setTargetDialog] = React.useState(false);
-  const [form, setForm] = React.useState({ kind: "webhook", label: "", url: "", secret: "", clientId: "", clientSecret: "", resourceId: "" });
+  const EMPTY_FORM = { kind: "webhook", label: "", url: "", secret: "", clientId: "", clientSecret: "", resourceId: "", directoryId: "", siteId: "", driveId: "", rootFolder: "" };
+  const [form, setForm] = React.useState(EMPTY_FORM);
   const [formError, setFormError] = React.useState("");
 
   const load = React.useCallback(async () => {
@@ -150,14 +151,28 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
 
   const handleCreateTarget = async () => {
     setFormError("");
-    const input = form.kind === "webhook"
-      ? { kind: "webhook", label: form.label, config: { url: form.url }, secret: form.secret }
-      : { kind: "vanta", label: form.label, config: { clientId: form.clientId, resourceId: form.resourceId }, secret: form.clientSecret };
+    const input =
+      form.kind === "webhook"
+        ? { kind: "webhook", label: form.label, config: { url: form.url }, secret: form.secret }
+        : form.kind === "sharepoint"
+          ? {
+              kind: "sharepoint",
+              label: form.label,
+              config: {
+                directoryId: form.directoryId,
+                clientId: form.clientId,
+                siteId: form.siteId,
+                ...(form.driveId.trim() ? { driveId: form.driveId.trim() } : {}),
+                ...(form.rootFolder.trim() ? { rootFolder: form.rootFolder.trim() } : {}),
+              },
+              secret: form.clientSecret,
+            }
+          : { kind: "vanta", label: form.label, config: { clientId: form.clientId, resourceId: form.resourceId }, secret: form.clientSecret };
     setBusy("target");
     try {
       await createGrcTarget(input);
       setTargetDialog(false);
-      setForm({ kind: "webhook", label: "", url: "", secret: "", clientId: "", clientSecret: "", resourceId: "" });
+      setForm(EMPTY_FORM);
       notify("Target created.");
       load();
     } catch (err) {
@@ -223,7 +238,13 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
   );
 
   const setF = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const canCreateTarget = form.label.trim() && (form.kind === "webhook" ? form.url.trim() && form.secret.length >= 16 : form.clientId.trim() && form.clientSecret && form.resourceId.trim());
+  const canCreateTarget =
+    form.label.trim() &&
+    (form.kind === "webhook"
+      ? form.url.trim() && form.secret.length >= 16
+      : form.kind === "sharepoint"
+        ? form.directoryId.trim() && form.clientId.trim() && form.siteId.trim() && form.clientSecret
+        : form.clientId.trim() && form.clientSecret && form.resourceId.trim());
 
   return (
     <Box>
@@ -280,7 +301,7 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
         </Tooltip>
       </Box>
       <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mb: 1 }}>
-        Attach a target to a schedule and every completed run is pushed to it: a signed webhook (any platform) or a Vanta private integration.
+        Attach a target to a schedule and every completed run is pushed to it: a signed webhook (any platform), a Vanta private integration, or a SharePoint document library.
       </Typography>
       {targets.length === 0 ? (
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} data-testid="grc-targets-empty">No targets.</Typography>
@@ -397,7 +418,16 @@ export default function GrcConnectorPanel({ onNotify, refreshNonce = 0 }) {
               {TARGET_KINDS.map((k) => <MenuItem key={k.value} value={k.value}>{k.label}</MenuItem>)}
             </TextField>
             <TextField size="small" label="Label" value={form.label} onChange={setF("label")} inputProps={{ "aria-label": "Label" }} />
-            {form.kind === "webhook" ? (
+            {form.kind === "sharepoint" ? (
+              <>
+                <TextField size="small" label="Entra directory" value={form.directoryId} onChange={setF("directoryId")} inputProps={{ "aria-label": "Entra directory" }} placeholder="certusitm.onmicrosoft.com" />
+                <TextField size="small" label="Client ID" value={form.clientId} onChange={setF("clientId")} inputProps={{ "aria-label": "Client ID" }} />
+                <TextField size="small" label="Client secret" type="password" value={form.clientSecret} onChange={setF("clientSecret")} inputProps={{ "aria-label": "Client secret" }} helperText="App registration with Sites.ReadWrite.All (or Sites.Selected granted on this site), admin-consented." />
+                <TextField size="small" label="Site ID" value={form.siteId} onChange={setF("siteId")} inputProps={{ "aria-label": "Site ID" }} placeholder="contoso.sharepoint.com,<guid>,<guid>" />
+                <TextField size="small" label="Document library ID (optional)" value={form.driveId} onChange={setF("driveId")} inputProps={{ "aria-label": "Document library ID" }} helperText="Empty = the site's default library." />
+                <TextField size="small" label="Root folder (optional)" value={form.rootFolder} onChange={setF("rootFolder")} inputProps={{ "aria-label": "Root folder" }} placeholder="04-Evidence" helperText="The PDF lands in <root>/<framework>/<period>/." />
+              </>
+            ) : form.kind === "webhook" ? (
               <>
                 <TextField size="small" label="URL (https)" value={form.url} onChange={setF("url")} inputProps={{ "aria-label": "URL" }} placeholder="https://grc.example.com/tracenium" />
                 <TextField size="small" label="Shared secret" type="password" value={form.secret} onChange={setF("secret")} inputProps={{ "aria-label": "Shared secret" }} helperText="At least 16 characters. Used to sign every request (HMAC-SHA256)." />
