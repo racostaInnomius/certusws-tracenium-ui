@@ -34,6 +34,7 @@ import {
   RING_SIZE as SIZE,
   RING_STROKE as STROKE,
   ringArcs,
+  snapDelta,
 } from "./ringGeometry";
 
 // ⭐ La entrada: el anillo se descubre en sentido horario desde arriba, como
@@ -50,6 +51,50 @@ const SWEEP_STYLES = {
   ".ring-card-sweep": { animation: "ringCardSweep 1500ms ease both" },
   "@media (prefers-reduced-motion: reduce)": { ".ring-card-sweep": { animation: "none" } },
 };
+
+/**
+ * Pega la dona a la rejilla de píxeles del dispositivo. Ver `snapDelta`.
+ *
+ * Es un efecto de LAYOUT y no de render: mide después de colocar y antes de
+ * pintar, así el ajuste no se ve entrar. El desplazamiento se guarda en una
+ * ref además del estado para poder descontarlo en la siguiente medición — sin
+ * eso, cada pasada mediría la posición YA corregida y el valor se perseguiría
+ * a sí mismo.
+ */
+function usePixelSnap() {
+  const ref = React.useRef(null);
+  const aplicado = React.useRef({ x: 0, y: 0 });
+  const [ajuste, setAjuste] = React.useState({ x: 0, y: 0 });
+
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof el.getBoundingClientRect !== "function") return undefined;
+
+    const medir = () => {
+      const r = el.getBoundingClientRect();
+      // jsdom y un nodo aún sin colocar dan ceros: no hay nada que ajustar.
+      if (!r.width && !r.height) return;
+      const dpr = window.devicePixelRatio || 1;
+      const x = snapDelta(r.left - aplicado.current.x, dpr);
+      const y = snapDelta(r.top - aplicado.current.y, dpr);
+      if (Math.abs(x - aplicado.current.x) < 0.01 && Math.abs(y - aplicado.current.y) < 0.01) return;
+      aplicado.current = { x, y };
+      setAjuste({ x, y });
+    };
+
+    medir();
+    const observado = el.parentElement ?? el;
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(medir) : null;
+    ro?.observe(observado);
+    window.addEventListener("resize", medir);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener("resize", medir);
+    };
+  }, []);
+
+  return { ref, transform: `translate(${ajuste.x}px, ${ajuste.y}px)` };
+}
 
 function Centered({ children }) {
   return (
@@ -94,6 +139,7 @@ export default function RingCard({
   // Cambian los datos → se vuelve a barrer, como hacía Recharts. Remontar
   // sólo el trazo de la máscara basta para reiniciar la animación.
   const sweepKey = visible.map((v) => `${v.key}:${v.value}`).join("|");
+  const { ref: snapRef, transform: snapTransform } = usePixelSnap();
 
   // stopPropagation: pulsar una rebanada no debe disparar también la
   // navegación sin filtro de la card, que perdería el filtro.
@@ -147,9 +193,14 @@ export default function RingCard({
         <>
           <Centered>
             <svg
+              ref={snapRef}
               width={SIZE}
               height={SIZE}
               viewBox={`0 0 ${SIZE} ${SIZE}`}
+              // Precisión antes que velocidad: son cuatro arcos, y el borde de
+              // un trazo de 22 px es justo lo que se mira.
+              shapeRendering="geometricPrecision"
+              style={{ transform: snapTransform }}
               role="img"
               aria-label={`${shownTotal} ${ariaNoun}: ${visible
                 .map((s) => `${s.value} ${String(s.label).toLowerCase()}`)

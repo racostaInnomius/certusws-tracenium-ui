@@ -31,3 +31,28 @@ export function ringArcs(slices) {
     return [...acc, { ...s, len, end: start + len, rotation: -90 + (start / RING_CIRCUMFERENCE) * 360 }];
   }, []);
 }
+
+/**
+ * Cuánto hay que mover la dona para que caiga en la rejilla de píxeles.
+ *
+ * ⚠️ POR QUÉ EXISTE, MEDIDO EN LA PESTAÑA PRINTERS (2026-09-20).
+ *
+ * Las tres cards de una fila salen de un Grid de tercios, y el ancho del
+ * contenedor no suele ser divisible por tres: sus donas caían en x = 241,33 /
+ * 835,99 / 1430,66. Con `devicePixelRatio` 2 eso son 0,66 / 1,98 / 1,32 píxeles
+ * de dispositivo, así que cada anillo se rasterizaba contra una rejilla
+ * distinta: un trazo de 22 px reparte su borde entre uno o dos píxeles según
+ * dónde caiga, y el resultado es que la MISMA dona se ve más gruesa en una card
+ * y con el borde plano en otra. No era un tamaño distinto —los tres SVG miden
+ * 128×128 y el arco pintado 118 px en los tres—, era el borde.
+ *
+ * Devuelve el desplazamiento (en px de CSS) hacia el píxel de dispositivo más
+ * cercano. `posicion` tiene que ser la de la dona SIN el ajuste ya aplicado, o
+ * el cálculo se persigue a sí mismo en cada pasada.
+ */
+export function snapDelta(posicion, dpr = 1) {
+  const ratio = Number(dpr) > 0 ? Number(dpr) : 1;
+  if (!Number.isFinite(posicion)) return 0;
+  return Math.round(posicion * ratio) / ratio - posicion;
+}
+
