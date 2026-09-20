@@ -143,6 +143,34 @@ describe("CdpPublicDomains", () => {
     expect(await screen.findByText(/Not read this time: ddi-tx\.net/)).toBeInTheDocument();
   });
 
+  it("⭐ la clave de CertSpotter se pega aquí, viaja una vez y sólo se sabe si la hay", async () => {
+    render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
+    // Sin clave: se explica que crt.sh no pide nada y que la alternativa es gratis.
+    expect(screen.getByText(/Read from crt\.sh, which needs no credentials/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove key" })).toBeNull();
+    const field = screen.getByLabelText(/CertSpotter API key/i);
+    expect(field).toHaveAttribute("type", "password");
+    fireEvent.change(field, { target: { value: "k.unaclave.123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+    await waitFor(() => expect(updateCdpConnector).toHaveBeenCalledWith(2, { clientSecret: "k.unaclave.123456" }));
+    expect(await screen.findByText(/next read uses CertSpotter, with crt\.sh as the fallback/)).toBeInTheDocument();
+  });
+
+  it("con clave puesta se puede reemplazar o quitar; quitarla vuelve a crt.sh y no rompe nada", async () => {
+    render(<CdpPublicDomains connectors={[{ ...CT, hasSecret: true }]} onChanged={vi.fn()} />);
+    expect(screen.getByText(/Read through CertSpotter \(SSLMate\) with your API key/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Replace the API key/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
+    await waitFor(() => expect(updateCdpConnector).toHaveBeenCalledWith(2, { clientSecret: null }));
+    expect(await screen.findByText(/read from crt\.sh again/)).toBeInTheDocument();
+  });
+
+  it("⭐ la cifra dice de qué proveedor sale: crt.sh y CertSpotter no ven lo mismo", () => {
+    const read = { ...CT, hasSecret: true, lastRunAt: "2026-09-20T03:00:00Z", lastStatus: "ok", lastSummary: { certificates: 1, provider: "certspotter" } };
+    render(<CdpPublicDomains connectors={[read]} onChanged={vi.fn()} />);
+    expect(screen.getByText(/1 certificate\(s\) · via CertSpotter/)).toBeInTheDocument();
+  });
+
   it("el historial de lecturas se despliega aquí", async () => {
     listCdpConnectorRuns.mockResolvedValue({ runs: [{ runId: 7, startedAt: "2026-09-17T22:31:00Z", trigger: "scheduled", status: "failed", error: "crt.sh HTTP 502" }] });
     render(<CdpPublicDomains connectors={[CT]} onChanged={vi.fn()} />);
