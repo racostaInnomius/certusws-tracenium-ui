@@ -166,6 +166,26 @@ describe("CdpPublicDomains", () => {
     await waitFor(() => expect(listCdpConnectorRuns).toHaveBeenCalledWith(2, { limit: 20 }));
   });
 
+  it("⭐ ADR-0026 · el tope del paquete se dice antes de ir al servidor, y dice qué lo levanta", async () => {
+    const tres = { ...CT, config: { ...CT.config, domains: ["a.com", "b.com", "c.com"] } };
+    render(<CdpPublicDomains connectors={[tres]} onChanged={vi.fn()} maxDomains={3} />);
+    expect(screen.getByText("3 of 3 included in your package")).toBeInTheDocument();
+    type("d.com");
+    fireEvent.click(screen.getByRole("button", { name: /add domain/i }));
+    expect(await screen.findByText(/CDP Coverage lifts the limit; nothing you already watch is affected/)).toBeInTheDocument();
+    // Ni una llamada: el tope se conoce aquí.
+    expect(updateCdpConnector).not.toHaveBeenCalled();
+  });
+
+  it("con el complemento no hay contador ni tope propio", async () => {
+    const tres = { ...CT, config: { ...CT.config, domains: ["a.com", "b.com", "c.com"] } };
+    render(<CdpPublicDomains connectors={[tres]} onChanged={vi.fn()} />);
+    expect(screen.queryByText(/included in your package/)).toBeNull();
+    type("d.com");
+    fireEvent.click(screen.getByRole("button", { name: /add domain/i }));
+    await waitFor(() => expect(updateCdpConnector).toHaveBeenCalled());
+  });
+
   it("ctDomains normaliza y deduplica lo que venga como texto o lista", () => {
     const rows = ctDomains([{ kind: "ct", config: { domains: "*.Example.com, example.com corp.net." } }, { kind: "keyvault", config: {} }]);
     expect(rows.map((r) => r.domain)).toEqual(["example.com", "corp.net"]);

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { SECTIONS } from "./cdpSunburst";
-import { CONNECTOR_KINDS_BY_BASE, sourcesByBase } from "./cdpSources";
+import { CONNECTOR_KINDS_BY_BASE, FREE_DOMAINS, FREE_PROBE_TARGETS, sourcesByBase } from "./cdpSources";
 
 const facet = (source, uniqueCerts, devices) => ({ keys: { source }, certs: uniqueCerts, uniqueCerts, devices });
 const find = (bases, baseKey, key) => bases.find((b) => b.key === baseKey).sources.find((s) => s.key === key);
@@ -121,5 +121,40 @@ describe("sourcesByBase — vCenter por el gateway de infraestructura", () => {
     expect(find(sourcesByBase({ gateways: [gw()] }), "infra", "vcenter:7")).toMatchObject({ state: "configured", detail: expect.stringMatching(/next Crypto Discovery scan/) });
     expect(find(sourcesByBase({ gateways: [gw({ credentialState: "not_configured" })] }), "infra", "vcenter:7")).toMatchObject({ state: "configured", detail: expect.stringMatching(/No credential/) });
     expect(find(sourcesByBase({ gateways: [gw({ health: "failed", lastVerifyClassify: "bad_credentials" })] }), "infra", "vcenter:7")).toMatchObject({ state: "failed", detail: expect.stringMatching(/bad_credentials/) });
+  });
+});
+
+describe("⭐ ADR-0026 · sin «CDP Coverage» lo de pago se CONGELA, no desaparece", () => {
+  const input = {
+    facets: [facet("probe", 3, 1)],
+    cdp: { probeHosts: ["probe01"], probeTargets: ["lb:443"] },
+    adcs: [{ sourceName: "adcs:X", caName: "X", assets: 51, assetsValid: 51, lastSeen: "2026-09-16T03:09:06Z", columnsFound: null }],
+    connectors: [
+      { connectorId: 1, kind: "keyvault", label: "Prod vault", enabled: true, lastRunAt: "2026-09-19T06:00:00Z", lastStatus: "ok", lastSummary: { certificates: 120, keys: 11 } },
+      { connectorId: 2, kind: "ct", label: "Dominios", config: { domains: ["tracenium.com"] }, enabled: true, lastRunAt: "2026-09-19T22:22:00Z", lastStatus: "ok", lastSummary: { certificates: 8, keys: 0 } }
+    ]
+  };
+
+  it("el vault, la CA y las sondas quedan congelados CON su fecha; los dominios públicos siguen en el paquete", () => {
+    const bases = sourcesByBase({ ...input, coverage: false });
+    const vault = find(bases, "external", "connector:1");
+    expect(vault.state).toBe("frozen");
+    // Lo que importa del mensaje: no se ha perdido nada y se dice desde cuándo.
+    expect(vault.detail).toMatch(/What it brought is kept, last read/);
+    expect(find(bases, "adcs", "adcs:X").state).toBe("frozen");
+    expect(find(bases, "infra", "probe").state).toBe("frozen");
+    // Los dominios públicos NO son del complemento.
+    expect(find(bases, "cloud", "connector:2").state).toBe("reporting");
+  });
+
+  it("con el complemento, todo sigue como siempre", () => {
+    const bases = sourcesByBase({ ...input, coverage: true });
+    expect(find(bases, "external", "connector:1").state).toBe("reporting");
+    expect(find(bases, "adcs", "adcs:X").state).toBe("reporting");
+    expect(find(bases, "infra", "probe").state).toBe("reporting");
+  });
+
+  it("los topes del paquete son los del ADR", () => {
+    expect([FREE_DOMAINS, FREE_PROBE_TARGETS]).toEqual([3, 3]);
   });
 });

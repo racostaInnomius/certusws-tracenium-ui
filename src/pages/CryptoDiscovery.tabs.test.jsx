@@ -74,6 +74,10 @@ vi.mock("../api/policies", async (importOriginal) => {
   };
 });
 vi.mock("../hooks/useEffectiveTenantId", () => ({ useEffectiveTenantId: () => "1" }));
+// ADR-0026 — los derechos del tenant. Por defecto, CON el complemento: lo que
+// cambia sin él tiene su propio caso más abajo.
+const isEntitled = vi.fn(() => true);
+vi.mock("../hooks/usePluginCatalog", () => ({ usePluginCatalog: () => ({ catalog: [], entitled: null, isEntitled: (k) => isEntitled(k) }) }));
 // El gateway de vCenter compartido (Settings → Infra) y las capacidades del que mira.
 vi.mock("../api/infrastructure", () => ({
   listGateways: vi.fn(async () => ({ gateways: [] })),
@@ -118,6 +122,28 @@ describe("pestañas de Crypto Discovery", () => {
     // La matriz de vistobueno se movió a Agent Settings (08-sep): es un
     // cambio de permisos y no puede estar en la página del plugin.
     expect(screen.queryByText(/Privileged access policy/i)).not.toBeInTheDocument();
+  });
+
+  it("⭐ ADR-0026 · sin «CDP Coverage» se EXPLICA lo que falta y se congela lo que ya había — nunca se esconde", async () => {
+    isEntitled.mockImplementation((k) => k !== "cdp_coverage");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    (await screen.findByRole("tab", { name: /^settings$/i }, { timeout: 4000 })).click();
+    screen.getByRole("button", { name: /^Expand Infra$/ }).click();
+    // Explica, con el nombre del complemento y qué pasa con lo ya recogido.
+    const notices = await screen.findAllByText(/Included in CDP Coverage/);
+    expect(notices.length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/stays visible with the date it was last read/)[0]).toBeInTheDocument();
+    // Y el alta de conectores de pago no se ofrece (el servidor contestaría 402).
+    expect(screen.queryByText("Kubernetes clusters")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/API server/i)).toBeNull();
+    // Los dominios públicos siguen siendo del paquete, con su contador.
+    screen.getByRole("button", { name: /^Expand Cloud$/ }).click();
+    expect(await screen.findByText(/of 3 included in your package/)).toBeInTheDocument();
+    isEntitled.mockImplementation(() => true);
   });
 
   it("⭐ Settings concentra lo configurable, ordenado por los sectores del sunburst; Explore solo mira", async () => {

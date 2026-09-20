@@ -33,13 +33,14 @@ import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
 import SourceChips from "./CdpSourceChips";
 import GatewayPanel from "../patch-management/gateway/GatewayPanel";
 import { SECTIONS } from "./cdpSunburst";
-import { CONNECTOR_KINDS_BY_BASE, sectorAnchor, sourcesByBase } from "./cdpSources";
+import { CONNECTOR_KINDS_BY_BASE, FREE_DOMAINS, FREE_PROBE_TARGETS, sectorAnchor, sourcesByBase } from "./cdpSources";
 import { getCdpFacets, getCryptoAssetsSummary, listCdpAdcsSources, listCdpConnectors, listCdpDevices, listCdpVcenterSources } from "../../api/cdp";
 import * as infrastructureApi from "../../api/infrastructure";
 import { getTenantPolicy } from "../../api/policies";
 import { getMyCapabilities } from "../../api/roles";
 import { useAuthContext } from "../../auth/AuthContext";
 import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
+import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
@@ -197,10 +198,34 @@ function Sector({ baseKey, section, sub, open, onToggle, onChip, nested = false,
 
 const Divider = () => <Box sx={{ mt: 2.5, pt: 2, borderTop: `1px dashed ${BRAND.border}` }} />;
 
+/**
+ * ADR-0026 — lo que no se ha contratado se EXPLICA, no se esconde. Un mapa que
+ * oculta lo que no tienes te hace creer que no existe; y lo ya recogido sigue
+ * ahí, congelado con su fecha, no borrado.
+ */
+function CoverageNotice({ what }) {
+  return (
+    <Alert severity="info" icon={false} sx={{ mb: 1.5, border: `1px solid ${BRAND.border}`, bgcolor: "transparent" }}>
+      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>Included in CDP Coverage</Typography>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.85 }}>
+        {what} covers machines you don&apos;t license with an agent, so it belongs to the CDP Coverage add-on. Anything
+        already collected stays visible with the date it was last read — it just stops refreshing. Ask your Tracenium
+        contact to enable it.
+      </Typography>
+    </Alert>
+  );
+}
+
 export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
   const tenantId = useEffectiveTenantId();
   const { auth } = useAuthContext();
   const src = useCdpSources(refreshNonce, tenantId);
+  // ADR-0026 — «CDP Coverage»: los orígenes que cubren máquinas que el cliente
+  // no licencia. `isEntitled` devuelve true mientras no se sepa: esconder de
+  // más por un parpadeo deja tirado a quien sí pagó, y mostrar de más cuesta
+  // un 402 que explica qué contratar.
+  const { isEntitled } = usePluginCatalog();
+  const coverage = isEntitled("cdp_coverage");
   const caHosts = Array.isArray(src.cdp?.adcs?.hosts) ? src.cdp.adcs.hosts : [];
   const changed = () => {
     onSourcesChanged?.();
@@ -219,8 +244,8 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
   const [snack, setSnack] = React.useState(null);
   const notify = React.useCallback((severity, message) => setSnack({ severity, message }), []);
   const sections = React.useMemo(
-    () => sourcesByBase({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp, gateways, vcenterSources: src.vcenterSources }),
-    [src.facets, src.assets, src.connectors, src.adcs, src.cdp, src.vcenterSources, gateways]
+    () => sourcesByBase({ facets: src.facets, assets: src.assets, connectors: src.connectors?.connectors ?? [], adcs: src.adcs ?? [], cdp: src.cdp, gateways, vcenterSources: src.vcenterSources, coverage }),
+    [src.facets, src.assets, src.connectors, src.adcs, src.cdp, src.vcenterSources, gateways, coverage]
   );
   const sectionOf = (key) => sections.find((b) => b.key === key);
 
@@ -274,10 +299,12 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       </Sector>
 
       <Sector {...sectorProps("infra")} section={infraHeader} onChip={openInfra} sub="Everything that reports without being a managed endpoint: services probed remotely, Kubernetes clusters, vCenter with its ESXi hosts, a CBOM from another scanner and the Windows Certification Authority.">
-        <CdpRemoteProbes refreshNonce={refreshNonce} />
+        {coverage ? null : <CoverageNotice what="Reading machines you have no agent on — remote probes past the three included, Kubernetes, vCenter and the Windows CA —" />}
+        <CdpRemoteProbes refreshNonce={refreshNonce} maxTargets={coverage ? undefined : FREE_PROBE_TARGETS} />
         <Divider />
         <CdpConnectorsPanel
           embedded
+          locked={!coverage}
           kinds={CONNECTOR_KINDS_BY_BASE.infra}
           state={connectorsState}
           reload={src.reload}
@@ -315,10 +342,12 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       </Sector>
 
       <Sector {...sectorProps("cloud")} sub="What is exposed on the internet or lives in a cloud provider: your public domains (from Certificate Transparency logs, no credentials), AWS Certificate Manager and Google Cloud.">
-        {src.connectors ? <CdpPublicDomains connectors={src.connectors.connectors ?? []} onChanged={changed} /> : null}
+        {src.connectors ? <CdpPublicDomains connectors={src.connectors.connectors ?? []} onChanged={changed} maxDomains={coverage ? undefined : FREE_DOMAINS} /> : null}
         <Divider />
+        {coverage ? null : <CoverageNotice what="AWS Certificate Manager and Google Cloud" />}
         <CdpConnectorsPanel
           embedded
+          locked={!coverage}
           kinds={CONNECTOR_KINDS_BY_BASE.cloud.filter((k) => k !== "ct")}
           state={connectorsState}
           reload={src.reload}
@@ -330,8 +359,10 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       </Sector>
 
       <Sector {...sectorProps("external")} sub="Vaults that hold or issue keys for your systems: Azure Key Vault and HashiCorp Vault PKI. Read-only; the keys stay where they are.">
+        {coverage ? null : <CoverageNotice what="Azure Key Vault and HashiCorp Vault" />}
         <CdpConnectorsPanel
           embedded
+          locked={!coverage}
           kinds={CONNECTOR_KINDS_BY_BASE.external}
           state={connectorsState}
           reload={src.reload}

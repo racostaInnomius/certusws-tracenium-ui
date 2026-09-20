@@ -17,12 +17,16 @@ const STATE = {
   failed: { text: "failing", bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText, dot: BRAND.alert.error },
   disabled: { text: "disabled", bg: "transparent", fg: TEXT_MUTED, dot: "#C7CBD1" },
   unconfigured: { text: "not connected", bg: "transparent", fg: TEXT_MUTED, dot: "#E4E7EC" },
-  unavailable: { text: "not available yet", bg: "transparent", fg: TEXT_MUTED, dot: "transparent" }
+  unavailable: { text: "not available yet", bg: "transparent", fg: TEXT_MUTED, dot: "transparent" },
+  // ADR-0026. Ni «failing» —no ha fallado nada— ni «not connected», que
+  // borraría el trabajo que el cliente ya hizo: esto está configurado y
+  // conserva lo que trajo; lo único que no ocurre es el refresco.
+  frozen: { text: "frozen · needs CDP Coverage", bg: "transparent", fg: TEXT_MUTED, dot: "#C7CBD1" }
 };
 
 export function SourceChip({ source, onClick }) {
   const st = STATE[source.state] ?? STATE.unconfigured;
-  const outlined = source.state === "disabled" || source.state === "unconfigured" || source.state === "unavailable";
+  const outlined = source.state === "disabled" || source.state === "unconfigured" || source.state === "unavailable" || source.state === "frozen";
   return (
     <Tooltip title={<Box sx={{ fontSize: TEXT.xs }}><strong>{source.label}</strong> — {st.text}. {source.detail}</Box>} arrow>
       <Chip

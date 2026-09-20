@@ -43,7 +43,7 @@ export function envelopeOf(res) {
   return { version: version == null ? null : String(version), cdp: json?.cdp && typeof json.cdp === "object" ? json.cdp : {} };
 }
 
-export default function CdpRemoteProbes({ refreshNonce }) {
+export default function CdpRemoteProbes({ refreshNonce, maxTargets }) {
   const tenantId = useEffectiveTenantId();
   const [env, setEnv] = React.useState(null);
   const [candidates, setCandidates] = React.useState(null);
@@ -106,6 +106,13 @@ export default function CdpRemoteProbes({ refreshNonce }) {
       setNotice({ sev: "error", text: `${target} is not a valid host:port.` });
       return;
     }
+    // ADR-0026: sondear una máquina sin agente es del complemento «CDP
+    // Coverage»; el paquete incluye 3 objetivos para que se pueda medir algo
+    // real antes de contratarlo.
+    if (maxTargets != null && targets.length >= maxTargets) {
+      setNotice({ sev: "info", text: `Your package includes ${maxTargets} probe targets — enough to measure what remote probing tells you. CDP Coverage lifts the limit; the targets you already have keep working.` });
+      return;
+    }
     if (targets.length >= CDP_PROBE_TARGETS_MAX) {
       setNotice({ sev: "error", text: `At most ${CDP_PROBE_TARGETS_MAX} targets.` });
       return;
@@ -143,7 +150,9 @@ export default function CdpRemoteProbes({ refreshNonce }) {
       </Stack>
 
       <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, minWidth: 110 }}>Targets ({targets.length})</Typography>
+        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, minWidth: 110 }}>
+          Targets ({targets.length}{maxTargets != null ? ` of ${maxTargets}` : ""})
+        </Typography>
         {env == null ? null : targets.length === 0 ? (
           <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>None yet — add a discovered service below, or type them in Agent Settings.</Typography>
         ) : (

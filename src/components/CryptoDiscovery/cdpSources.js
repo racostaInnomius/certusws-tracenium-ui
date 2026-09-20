@@ -30,6 +30,32 @@ export const sectorAnchor = (baseKey) => `cdp-sector-${baseKey}`;
 /** Qué tipos de conector viven en cada sector del anillo base. */
 export const CONNECTOR_KINDS_BY_BASE = { infra: ["k8s"], cloud: ["ct", "acm", "gcp"], external: ["keyvault", "vault"] };
 
+/**
+ * ADR-0026 — lo que cubre máquinas que el cliente NO licencia y, por tanto,
+ * vive en el complemento «CDP Coverage». Los dominios públicos NO están aquí:
+ * se quedan en el paquete, con tope de 3.
+ */
+export const COVERAGE_KINDS = new Set(["k8s", "keyvault", "vault", "acm", "gcp"]);
+export const COVERAGE_SOURCES = new Set(["probe", "vcenter"]);
+/** Dominios y sondas incluidos en el paquete base. */
+export const FREE_DOMAINS = 3;
+export const FREE_PROBE_TARGETS = 3;
+
+/**
+ * Sin complemento, una fuente de pago NO se esconde ni se marca como fallo:
+ * queda CONGELADA. Conserva lo que trajo y su configuración, y lo que se
+ * pierde es el refresco — que es justo lo que hay que decir, con la fecha.
+ */
+function freeze(source, lastSeen) {
+  return {
+    ...source,
+    state: "frozen",
+    detail: lastSeen
+      ? `Not refreshing: needs CDP Coverage. What it brought is kept, last read ${new Date(lastSeen).toLocaleString()}.`
+      : "Needs CDP Coverage — it covers machines you don't license with an agent."
+  };
+}
+
 const CONNECTOR_ORIGINS = new Set(Object.keys(CONNECTOR_KIND_LABEL));
 
 const AGENT_SOURCES = ["store", "java-store", "file", "nss", "listener"];
@@ -47,11 +73,14 @@ function connectorStatus(c) {
   const certs = Number(c.lastSummary?.certificates ?? 0);
   const keys = Number(c.lastSummary?.keys ?? 0);
   const label = `${CONNECTOR_KIND_LABEL[c.kind] ?? c.kind} · ${c.label}`;
-  if (c.enabled === false) return { key: `connector:${c.connectorId}`, label, state: "disabled", detail: "Disabled: it keeps what it brought, nothing refreshes.", connectorId: c.connectorId };
-  if (c.lastStatus === "failed" || c.lastError) return { key: `connector:${c.connectorId}`, label, state: "failed", detail: c.lastError || "The last run failed.", connectorId: c.connectorId };
-  if (c.lastRunAt && certs + keys > 0) return { key: `connector:${c.connectorId}`, label, state: "reporting", detail: `${plural(certs, "certificate")}, ${plural(keys, "key")} · last run ${new Date(c.lastRunAt).toLocaleString()}`, connectorId: c.connectorId };
-  if (c.lastRunAt) return { key: `connector:${c.connectorId}`, label, state: "configured", detail: `Ran ${new Date(c.lastRunAt).toLocaleString()} and found nothing.`, connectorId: c.connectorId };
-  return { key: `connector:${c.connectorId}`, label, state: "configured", detail: "Added; not run yet (daily, or “Run now”).", connectorId: c.connectorId };
+  // `kind` y `lastSeen` viajan para que el congelado (ADR-0026) sepa qué es
+  // de pago y desde cuándo no se refresca.
+  const meta = { kind: c.kind, lastSeen: c.lastRunAt ?? null };
+  if (c.enabled === false) return { ...meta, key: `connector:${c.connectorId}`, label, state: "disabled", detail: "Disabled: it keeps what it brought, nothing refreshes.", connectorId: c.connectorId };
+  if (c.lastStatus === "failed" || c.lastError) return { ...meta, key: `connector:${c.connectorId}`, label, state: "failed", detail: c.lastError || "The last run failed.", connectorId: c.connectorId };
+  if (c.lastRunAt && certs + keys > 0) return { ...meta, key: `connector:${c.connectorId}`, label, state: "reporting", detail: `${plural(certs, "certificate")}, ${plural(keys, "key")} · last run ${new Date(c.lastRunAt).toLocaleString()}`, connectorId: c.connectorId };
+  if (c.lastRunAt) return { ...meta, key: `connector:${c.connectorId}`, label, state: "configured", detail: `Ran ${new Date(c.lastRunAt).toLocaleString()} and found nothing.`, connectorId: c.connectorId };
+  return { ...meta, key: `connector:${c.connectorId}`, label, state: "configured", detail: "Added; not run yet (daily, or “Run now”).", connectorId: c.connectorId };
 }
 
 /**
@@ -65,12 +94,20 @@ function connectorStatus(c) {
  * @param {Array}  input.vcenterSources /cdp/vcenter/sources (lo que ya reportó por el gateway)
  * @returns {Array<{key,label,note,sources:Array,reporting:number,total:number}>}
  */
-export function sourcesByBase({ facets = [], assets = null, connectors = [], adcs = [], cdp = {}, gateways = [], vcenterSources = [] } = {}) {
+export function sourcesByBase({ facets = [], assets = null, connectors = [], adcs = [], cdp = {}, gateways = [], vcenterSources = [], coverage = true } = {}) {
   const byAgentSource = new Map((facets ?? []).map((r) => [String(r.keys?.source ?? ""), r]));
   const assetSources = assets?.sources ?? [];
   const assetsByName = new Map(assetSources.map((s) => [String(s.sourceName), s]));
   const bases = new Map(SECTIONS.map((b) => [b.key, { key: b.key, label: b.label, note: b.note, parent: b.parent ?? null, sources: [] }]));
-  const push = (base, s) => bases.get(base).sources.push(s);
+  /** ¿Esta fuente cubre máquinas que el cliente no licencia? (ADR-0026) */
+  const isPaid = (base, s) =>
+    base === "adcs" ||
+    COVERAGE_SOURCES.has(s.key) ||
+    String(s.key).startsWith("vcenter:") ||
+    COVERAGE_KINDS.has(s.kind);
+  const push = (base, s) => {
+    bases.get(base).sources.push(!coverage && isPaid(base, s) ? freeze(s, s.lastSeen) : s);
+  };
 
   // ── On-prem devices: SOLO lo que los agentes recogen en los equipos ──
   for (const src of AGENT_SOURCES) {

@@ -306,7 +306,7 @@ const DEFAULT_INTRO =
  * `state` + `reload`: lista de conectores cargada por el padre (una sola
  * petición para varios paneles); sin ellos el panel se carga solo.
  */
-export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded = false, kinds = null, state: externalState, reload: externalReload, title = "Connectors", intro = DEFAULT_INTRO }) {
+export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded = false, kinds = null, state: externalState, reload: externalReload, title = "Connectors", intro = DEFAULT_INTRO, locked = false }) {
   const [ownState, setOwnState] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
@@ -391,7 +391,10 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
           on the control plane before adding a connector with credentials. Public CT logs need none and work now.
         </Alert>
       ) : null}
-      <ConnectorForm secretsConfigured={secretsConfigured} kinds={kinds} onCreated={() => { reload(); }} />
+      {/* ADR-0026: sin el complemento no se dan de alta conectores nuevos —el
+          servidor contesta 402—, pero los que YA existen siguen a la vista con
+          lo que trajeron. Esconder la lista sería borrarles el trabajo. */}
+      {locked ? null : <ConnectorForm secretsConfigured={secretsConfigured} kinds={kinds} onCreated={() => { reload(); }} />}
 
       {connectors.length > 0 ? (
         <Stack spacing={1} sx={{ mt: 1.5 }}>
@@ -416,10 +419,16 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
                 <StatusChip c={c} />
                 {!c.enabled ? <Chip size="small" label="disabled" variant="outlined" /> : null}
                 <Box sx={{ flex: 1 }} />
-                <Button size="small" variant="outlined" disabled={busyId != null} onClick={() => run(c, true)}>Test</Button>
-                <Button size="small" variant="contained" disabled={busyId != null} onClick={() => run(c, false)}>
-                  {busyId === c.connectorId ? "Running…" : "Run now"}
-                </Button>
+                {locked ? (
+                  <Chip size="small" label="frozen" variant="outlined" sx={{ height: 24, fontSize: TEXT.xs }} />
+                ) : (
+                  <>
+                    <Button size="small" variant="outlined" disabled={busyId != null} onClick={() => run(c, true)}>Test</Button>
+                    <Button size="small" variant="contained" disabled={busyId != null} onClick={() => run(c, false)}>
+                      {busyId === c.connectorId ? "Running…" : "Run now"}
+                    </Button>
+                  </>
+                )}
                 <Button size="small" disabled={busyId != null} onClick={() => toggle(c)}>{c.enabled ? "Disable" : "Enable"}</Button>
                 <Button
                   size="small"
@@ -438,6 +447,7 @@ export default function CdpConnectorsPanel({ refreshNonce, onChanged, embedded =
                 <Button size="small" color="error" disabled={busyId != null} onClick={() => setToRemove(c)}>Remove</Button>
               </Stack>
               <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
+                {locked ? "Not refreshing (needs CDP Coverage) · what it brought is kept · " : ""}
                 Last run {when(c.lastRunAt)}
                 {c.lastSummary ? ` · ${fmt(c.lastSummary.certificates)} certificate(s), ${fmt(c.lastSummary.keys)} key(s)${c.lastSummary.complete === false ? " (listing incomplete: nothing retired)" : ""}` : ""}
                 {c.lastError ? ` · ${c.lastError}` : ""}

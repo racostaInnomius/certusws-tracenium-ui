@@ -56,7 +56,7 @@ export function ctDomains(connectors) {
   return out;
 }
 
-export default function CdpPublicDomains({ connectors, onChanged }) {
+export default function CdpPublicDomains({ connectors, onChanged, maxDomains }) {
   const [draft, setDraft] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState(null);
@@ -96,6 +96,12 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
   const add = () => {
     const d = normalizeDomain(draft);
     if (!d) return;
+    // ADR-0026: el paquete incluye 3 dominios. El tope se dice ANTES de ir al
+    // servidor (que contestaría 402) y se dice qué lo levanta.
+    if (maxDomains != null && rows.length >= maxDomains) {
+      setNotice({ sev: "info", text: `Your package includes ${maxDomains} public domains. CDP Coverage lifts the limit; nothing you already watch is affected.` });
+      return;
+    }
     if (!DOMAIN_RE.test(d)) {
       setNotice({ sev: "error", text: `“${draft.trim()}” is not a domain name (example.com, corp.example.net).` });
       return;
@@ -188,6 +194,11 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
         <Button size="small" variant="contained" disabled={busy || normalizeDomain(draft).length === 0} onClick={add}>
           {busy ? "Saving…" : "Add domain"}
         </Button>
+        {maxDomains != null ? (
+          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            {rows.length} of {maxDomains} included in your package
+          </Typography>
+        ) : null}
       </Stack>
 
       {primary ? (
