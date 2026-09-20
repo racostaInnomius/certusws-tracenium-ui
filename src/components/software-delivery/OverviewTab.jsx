@@ -27,6 +27,11 @@ import InstallFailuresPanel from "./InstallFailuresPanel";
 import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
 import CatalogCoveragePanel from "./CatalogCoveragePanel";
+import InFlightDeploymentsPanel, {
+  FAILURE_OUTCOMES,
+  IN_FLIGHT_STATUSES,
+  SUCCESS_OUTCOMES,
+} from "./InFlightDeploymentsPanel";
 import CompositionBars from "../common/CompositionBars";
 import InstallActivityCalendar from "./InstallActivityCalendar";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -43,12 +48,12 @@ import {
   getCatalogCoverage,
 } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
+import { formatDate } from "../../utils/format";
 
-// Deployment statuses that still consume fleet capacity.
-const IN_FLIGHT_STATUSES = new Set(["scheduled", "queued", "running"]);
-// Per-device outcomes the operator reads as a good landing.
-const SUCCESS_OUTCOMES = ["success", "already_installed", "reboot_required"];
-const FAILURE_OUTCOMES = ["failed", "rejected", "signature_invalid", "timed_out"];
+// ⚠️ Los tres conjuntos viven en InFlightDeploymentsPanel y se importan: eran
+// una copia aquí y otra allí, y dos listas de desenlaces que se separen hacen
+// que la franja de arriba y el embudo de abajo cuenten cosas distintas del
+// mismo despliegue.
 
 // How many deployments we pull for the client-side rollup. Deliberately
 // modest: every row costs an extra counts query server-side, so this is the
@@ -183,7 +188,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
   const stats = React.useMemo(() => {
     const { deployments, intakes, sites, dps } = data;
 
-    const inFlight = deployments.filter((d) => IN_FLIGHT_STATUSES.has(d.status));
+    const inFlight = deployments.filter((d) => IN_FLIGHT_STATUSES.includes(d.status));
     const devicesInFlight = inFlight.reduce(
       (acc, d) => acc + Number(d?.counts?.pending ?? 0) + Number(d?.counts?.running ?? 0),
       0
@@ -287,6 +292,19 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
         failed={data.failures.has("coverage")}
         onNavigateTab={onNavigateTab}
       />
+
+      {/* ── Lo que está pasando ahora, y por qué no avanza ──────
+          Va entre el estado del parque y la actividad histórica: es el único
+          bloque con caducidad. Desaparece cuando no hay nada en vuelo. */}
+      {!loading ? (
+        <InFlightDeploymentsPanel
+          deployments={data.deployments}
+          formatTime={formatDate}
+          onOpenDeployment={(deployment) =>
+            onNavigateTab?.("deployments", { deploymentId: deployment.id })
+          }
+        />
+      ) : null}
 
       {/* ── Trend + outcomes ────────────────────────────────────── */}
       <Grid container spacing={2}>

@@ -292,3 +292,41 @@ describe("cobertura del catálogo", () => {
     expect(screen.getByText("Catalog coverage")).toBeInTheDocument();
   });
 });
+
+describe("despliegues en vuelo", () => {
+  // El cableado: que el Overview pase SUS despliegues al panel y que abrir una
+  // fila lleve a ESE despliegue, no a la lista. La lectura del reparto vive en
+  // InFlightDeploymentsPanel.test.jsx.
+  it("⭐ enseña el retenido con su motivo, y la fila abre ese despliegue", async () => {
+    const onNavigateTab = vi.fn();
+    seed({
+      deployments: [
+        {
+          id: 44,
+          status: "scheduled",
+          mode: "install",
+          scheduledAt: "2026-09-19T03:00:00Z",
+          packageSnapshot: { name: "Microsoft Edge", version: "152.0.4191.66" },
+          counts: counts({ pending: 3 }),
+        },
+      ],
+    });
+
+    render(<OverviewTab onNavigateTab={onNavigateTab} />);
+
+    expect(await screen.findByText("In flight now")).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the maintenance window/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Deployment 44/i }));
+    expect(onNavigateTab).toHaveBeenCalledWith("deployments", { deploymentId: 44 });
+  });
+
+  it("sin nada en vuelo el bloque no ocupa sitio", async () => {
+    seed({ deployments: [{ id: 9, status: "completed", counts: counts({ success: 2 }) }] });
+
+    render(<OverviewTab />);
+
+    await screen.findByText("Catalog coverage");
+    expect(screen.queryByText("In flight now")).toBeNull();
+  });
+});
