@@ -115,14 +115,14 @@ describe("Printers tab", () => {
         readBy: "MSIG-WSUS", queues: 21, lastAttempt: null,
       },
       printers: [{
-        ...fleet.printers[0], key: "q:msig-wsus\\pool", name: "Pool Finanzas", pooled: true, users: [],
+        ...fleet.printers[0], key: "q:msig-wsus\\pool", name: "Pool Finanzas", pooled: true, deviceCount: 2, users: [],
         sources: ["active_directory"], addresses: ["10.100.25.20"], hostAddress: "10.100.25.20", addressSource: "declared",
       }],
     });
     render(<Printers />);
     expect(await screen.findByText("21 queues published in Active Directory · corp.local · read 3h ago by MSIG-WSUS")).toBeTruthy();
     expect(screen.getByText("From 5 print queues · 1 without a network address · 12 only in Active Directory")).toBeTruthy();
-    expect(await screen.findByText("Pool")).toBeTruthy();
+    expect(await screen.findByText("Pool · 2 printers")).toBeTruthy();
     expect(screen.getByText("Active Directory")).toBeTruthy();
     expect(screen.getByText("No connected devices")).toBeTruthy();
   });

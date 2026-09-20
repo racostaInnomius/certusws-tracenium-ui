@@ -117,14 +117,15 @@ export default function Printers({ refreshNonce }) {
         <Box sx={{ py: 0.5, minWidth: 0 }}>
           <Stack direction="row" spacing={0.75} alignItems="center">
             <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{p.row.name}</Typography>
-            {/* ⚠️ ADR-0023 D9: un pool reparte trabajos entre aparatos, y cada
-                dirección cuenta como una impresora. Sin la marca, la misma cola
-                repetida en dos filas parecería un duplicado. */}
+            {/* ⚠️ ADR-0023 D9: un pool es UNA cola repartiendo entre varios
+                aparatos. Va en una sola fila —dos filas con el mismo nombre se
+                leen como un duplicado— y la fila dice cuántos hay detrás, que
+                es lo que suma en la cifra de arriba. */}
             {p.row.pooled ? (
               <Chip
                 size="small"
-                label="Pool"
-                title="This queue spreads jobs across several printers; each address counts as one"
+                label={`Pool · ${p.row.deviceCount} printers`}
+                title="One queue spreading jobs across several printers; each address is counted as one printer"
                 sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
               />
             ) : null}
