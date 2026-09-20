@@ -18,13 +18,29 @@
 // donde se configura el plugin y adonde hay que ir a propósito.
 //
 // Aquí se queda la evidencia, que es lo que esta pestaña sabe contar.
+//
+// ── ⚠️ Por qué el registro llega FILTRADO por familia ─────────────────
+//
+// `access_requests` es una tabla común a todo el acceso privilegiado
+// (ADR-0011 decisiones 5 y 10): las sesiones remotas piden `rcp.*` y la
+// rotación de certificados de CDP pide `cert.rotate`. Común de almacén está
+// bien; común de pantalla no. Esta pestaña pedía el registro entero, y como
+// la rotación es automática y continua, tapaba a lo demás: en T111, el
+// 2026-09-19, 54 filas de `cert.rotate` contra 11 de `rcp.file` — un
+// registro de accesos remotos que era en su mayor parte otra cosa.
+//
+// Se pide `family=rcp` por defecto. El selector deja ver el resto sin salir
+// de aquí, porque hoy esta es la ÚNICA pantalla que lee esa tabla: filtrar
+// sin dejar puerta habría escondido las rotaciones del portal entero.
 
 import * as React from "react";
 import {
   Box,
   Chip,
   CircularProgress,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -40,10 +56,21 @@ import { listAccessRequests } from "../../api/remoteControl";
 
 const STATUS_META = {
   approved: { label: "Approved", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
+  // El estado que escribe el servicio cuando el acceso llega a usarse, y el
+  // más frecuente de la tabla. Faltaba aquí, así que salía como texto crudo
+  // en gris — el mismo aspecto que un estado que no sabemos leer.
+  consumed: { label: "Used", fg: BRAND.alert.successText, bg: ROLE.positiveSoft },
   denied: { label: "Denied", fg: BRAND.alert.errorText, bg: ROLE.criticalSoft },
   pending: { label: "Pending", fg: BRAND.alert.warningText, bg: ROLE.cautionSoft },
   expired: { label: "Expired", fg: BRAND.gray, bg: BRAND.surfaceMuted }
 };
+
+// Lo que el backend entiende en `?family=`. "all" no manda el parámetro.
+const FAMILIES = [
+  { id: "rcp", label: "Remote control" },
+  { id: "cert", label: "Certificate rotation" },
+  { id: "all", label: "All privileged access" }
+];
 
 function StatusChip({ status }) {
   const meta = STATUS_META[String(status || "").toLowerCase()] || {
@@ -70,17 +97,23 @@ function StatusChip({ status }) {
 function AccessLog({ refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [family, setFamily] = React.useState("rcp");
 
   React.useEffect(() => {
     let alive = true;
-    listAccessRequests({ limit: 100 })
+    setLoading(true);
+    // El filtro es del SERVIDOR: la respuesta viene recortada a 100 filas, así
+    // que descartarlas aquí enseñaría "las de RCP que quepan entre las 100
+    // más recientes" — y con la rotación de certificados copando la tabla,
+    // eso es una lista vacía indistinguible de no haber entrado nadie.
+    listAccessRequests(family === "all" ? { limit: 100 } : { limit: 100, family })
       .then((r) => alive && setItems(Array.isArray(r?.items) ? r.items : []))
       .catch(() => alive && setItems([]))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [refreshNonce]);
+  }, [refreshNonce, family]);
 
   return (
     <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
@@ -90,10 +123,25 @@ function AccessLog({ refreshNonce = 0 }) {
             Access record
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
-            Every privileged access requested on this tenant, with its reason and ticket.
+            {family === "all"
+              ? "Every privileged access requested on this tenant, with its reason and ticket."
+              : "Privileged access requested on this tenant, with its reason and ticket."}
           </Typography>
         </Box>
         {loading ? <CircularProgress size={16} sx={{ color: BRAND.teal }} /> : null}
+        <Select
+          size="small"
+          value={family}
+          onChange={(e) => setFamily(e.target.value)}
+          inputProps={{ "aria-label": "Capability family" }}
+          sx={{ minWidth: 200, fontSize: TEXT.sm }}
+        >
+          {FAMILIES.map((f) => (
+            <MenuItem key={f.id} value={f.id}>
+              {f.label}
+            </MenuItem>
+          ))}
+        </Select>
       </Stack>
 
       <TableContainer>
@@ -113,7 +161,13 @@ function AccessLog({ refreshNonce = 0 }) {
             {items.length === 0 && !loading ? (
               <TableRow>
                 <TableCell colSpan={7} align="center" sx={{ color: BRAND.gray, py: 3 }}>
-                  No access has been requested yet.
+                  {/* Un vacío con un filtro puesto no es "no ha entrado
+                      nadie": es "nadie con estas capacidades". Decir lo
+                      primero en la pantalla de auditoría sería un silencio
+                      indistinguible del bueno. */}
+                  {family === "all"
+                    ? "No access has been requested yet."
+                    : "No access of this kind has been requested yet."}
                 </TableCell>
               </TableRow>
             ) : (
