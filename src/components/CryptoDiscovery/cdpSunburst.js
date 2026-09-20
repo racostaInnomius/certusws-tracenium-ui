@@ -11,17 +11,17 @@
 // cuando se conecten fuentes nuevas:
 //
 //   On-prem devices = SOLO lo que los agentes recogen en los equipos
-//                     gestionados (almacenes, keystores, listeners,
-//                     ficheros, NSS, claves SSH) más un CBOM importado.
-//   Infra           = los servicios de infraestructura que se integran sin
-//                     ser un equipo del parque: sondas remotas, Kubernetes,
-//                     vCenter / hipervisores (gateway) y, DENTRO del mismo
-//                     sector pero como grupo aparte, lo que la CA de
-//                     Windows emitió (AD CS). (19-sep, a petición del
-//                     usuario: la CA estuvo en On-prem porque la LEE el
-//                     agente instalado en ella, pero lo que aporta es un
-//                     registro de emisión de un servicio, no el inventario
-//                     de un endpoint; On-prem queda para los agentes.)
+//                     gestionados: almacenes, keystores, listeners,
+//                     ficheros, NSS y claves de host SSH. Nada más.
+//   Infra           = todo lo que se integra sin ser un equipo del parque:
+//                     sondas remotas, Kubernetes, vCenter / hipervisores
+//                     (gateway), un CBOM importado de otro escáner y,
+//                     DENTRO del mismo sector pero como grupo aparte, lo
+//                     que la CA de Windows emitió (AD CS). (19-sep, a
+//                     petición del usuario: la CA estuvo en On-prem porque
+//                     la LEE el agente instalado en ella, y el CBOM porque
+//                     describe sistemas propios, pero ninguno de los dos
+//                     lo recoge un agente; On-prem queda para los agentes.)
 //   Cloud           = dominios públicos (CT), AWS ACM, Google Cloud
 //   External key sources = Azure Key Vault, HashiCorp Vault
 //
@@ -46,7 +46,7 @@ import { BRAND, NEUTRAL } from "../../theme/brand";
 /** Las secciones de Settings: las cuatro bases y, colgando de Infra, la CA. */
 export const SECTIONS = [
   { key: "onprem", label: "On-prem devices", note: "Collected by the agents on managed endpoints" },
-  { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter, the Windows CA" },
+  { key: "infra", label: "Infra", note: "Remote probes, Kubernetes, vCenter, imported CBOMs, the Windows CA" },
   { key: "adcs", label: "Windows CA", parent: "infra", note: "Issued by AD CS, read by the agent on the CA server" },
   { key: "cloud", label: "Cloud", note: "Public domains, AWS ACM, Google Cloud" },
   { key: "external", label: "External key sources", note: "Azure Key Vault, HashiCorp Vault" }
@@ -63,8 +63,8 @@ export const BASES = SECTIONS.filter((s) => !s.parent);
 export const SECTOR_GROUPS = { main: 0, adcs: 1 };
 
 const BASE_OF_SOURCE = {
-  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem", cbom: "onprem",
-  probe: "infra", k8s: "infra", vcenter: "infra", adcs: "infra",
+  store: "onprem", "java-store": "onprem", file: "onprem", nss: "onprem", listener: "onprem", ssh: "onprem",
+  probe: "infra", k8s: "infra", vcenter: "infra", adcs: "infra", cbom: "infra",
   ct: "cloud", acm: "cloud", gcp: "cloud",
   keyvault: "external", vault: "external"
 };

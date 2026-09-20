@@ -271,15 +271,9 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
         <Button component="a" href="?page=policies" size="small" variant="outlined" endIcon={<OpenInNewIcon fontSize="small" />}>
           Open Policies → Crypto Discovery
         </Button>
-        <Divider />
-        <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Import a CBOM</Typography>
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
-          Crypto assets found by another scanner, as a CycloneDX file. They join the on-prem inventory under the source name you give.
-        </Typography>
-        <CbomImportForm onImported={changed} />
       </Sector>
 
-      <Sector {...sectorProps("infra")} section={infraHeader} onChip={openInfra} sub="Infrastructure services integrated without being a managed endpoint: services probed remotely, Kubernetes clusters, vCenter with its ESXi hosts and the Windows Certification Authority.">
+      <Sector {...sectorProps("infra")} section={infraHeader} onChip={openInfra} sub="Everything that reports without being a managed endpoint: services probed remotely, Kubernetes clusters, vCenter with its ESXi hosts, a CBOM from another scanner and the Windows Certification Authority.">
         <CdpRemoteProbes refreshNonce={refreshNonce} />
         <Divider />
         <CdpConnectorsPanel
@@ -308,6 +302,13 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
           separately. What is read: the certificate vCenter serves on 443 and the one each ESXi host serves on 443, as the
           Infra sector of the Dashboard.
         </Typography>
+        <Divider />
+        <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Import a CBOM</Typography>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
+          Crypto assets found by another scanner, as a CycloneDX file — nothing an agent collects, which is why it lives
+          here and not under On-prem devices. They join the inventory under the source name you give.
+        </Typography>
+        <CbomImportForm onImported={changed} />
         <Sector {...sectorProps("adcs")} nested sub="Its own group inside Infra: what the Windows Certification Authority issued, read by the agent installed on the CA server. Kept apart from the rest because it is an issuance record — every certificate the CA handed out, wherever it ended up — and not an inventory of what a machine holds.">
           <AdcsReaders sources={src.adcs} caHosts={caHosts} />
         </Sector>

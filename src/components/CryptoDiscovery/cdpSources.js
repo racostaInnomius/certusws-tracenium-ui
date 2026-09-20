@@ -83,12 +83,6 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
   }
   const ssh = assetsByName.get("ssh");
   push("onprem", ssh ? { key: "ssh", label: SOURCE_LABEL.ssh, state: "reporting", detail: plural(ssh.assets, "host key") } : { key: "ssh", label: SOURCE_LABEL.ssh, state: "configured", detail: "Read from disk by every agent; nothing reported yet." });
-  const importNames = new Set((assets?.imports ?? []).map((i) => String(i.sourceName)));
-  const cbomAssets = assetSources.filter((s) => importNames.has(String(s.sourceName))).reduce((t, s) => t + Number(s.assets ?? 0), 0);
-  push("onprem", importNames.size > 0
-    ? { key: "cbom", label: SOURCE_LABEL.cbom, state: "reporting", detail: `${plural(importNames.size, "import")}, ${plural(cbomAssets, "asset")}` }
-    : { key: "cbom", label: SOURCE_LABEL.cbom, state: "unconfigured", detail: "Upload a CycloneDX file from a scanner below." });
-
   // ── Windows CA: lo que AD CS emitió (grupo dentro de Infra desde el
   // 19-sep; lo lee el agente de la CA, pero lo que aporta es el registro de
   // emisión de un servicio, no el inventario de un endpoint) ──
@@ -169,12 +163,21 @@ export function sourcesByBase({ facets = [], assets = null, connectors = [], adc
     else push("infra", { key, label, state: "configured", detail: "Reads vCenter and its ESXi hosts on the gateway's next Crypto Discovery scan." });
   }
 
+  // El CBOM importado NO lo recoge ningún agente: es un fichero que sube
+  // una persona, así que vive en Infra desde el 19-sep, como la CA.
+  const importNames = new Set((assets?.imports ?? []).map((i) => String(i.sourceName)));
+  const cbomAssets = assetSources.filter((s) => importNames.has(String(s.sourceName))).reduce((t, s) => t + Number(s.assets ?? 0), 0);
+  push("infra", importNames.size > 0
+    ? { key: "cbom", label: SOURCE_LABEL.cbom, state: "reporting", detail: `${plural(importNames.size, "import")}, ${plural(cbomAssets, "asset")}` }
+    : { key: "cbom", label: SOURCE_LABEL.cbom, state: "unconfigured", detail: "Upload a CycloneDX file from a scanner below." });
+
   // Lo que hay en activos con un origen que no es de ningún conector ni de
   // las fuentes conocidas (p. ej. un import de CBOM ya contado, o un origen
-  // nuevo del servidor) no se pierde: cae en On-prem devices como «otros».
+  // nuevo del servidor) no se pierde: cae en Infra como «otros» —son
+  // activos de `cdp_crypto_assets`, que ningún agente recogió.
   const known = new Set(["ssh", ...importNames]);
   const stray = assetSources.filter((s) => !known.has(String(s.sourceName)) && !CONNECTOR_ORIGINS.has(originOf(s.sourceName)) && originOf(s.sourceName) !== "adcs");
-  if (stray.length > 0) push("onprem", { key: "other", label: "Other assets", state: "reporting", detail: stray.map((s) => `${s.sourceName} (${fmt(s.assets)})`).join(", ") });
+  if (stray.length > 0) push("infra", { key: "other", label: "Other assets", state: "reporting", detail: stray.map((s) => `${s.sourceName} (${fmt(s.assets)})`).join(", ") });
 
   return Array.from(bases.values()).map((b) => ({ ...b, reporting: b.sources.filter((s) => s.state === "reporting").length, total: b.sources.filter((s) => s.state !== "unavailable").length }));
 }

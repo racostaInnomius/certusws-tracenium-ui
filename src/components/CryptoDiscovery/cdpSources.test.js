@@ -20,14 +20,15 @@ describe("sourcesByBase", () => {
     expect(bases.find((b) => b.key === "adcs").parent).toBe("infra");
     // El agente escanea almacenes por defecto: «configurada, nada aún», no «no conectada».
     expect(find(bases, "onprem", "store").state).toBe("configured");
-    expect(find(bases, "onprem", "cbom").state).toBe("unconfigured");
+    // Ni el CBOM ni la CA los recoge un agente: los dos en Infra (19-sep).
+    expect(find(bases, "infra", "cbom").state).toBe("unconfigured");
     expect(find(bases, "adcs", "adcs").state).toBe("unconfigured");
     expect(find(bases, "infra", "probe").state).toBe("unconfigured");
     expect(find(bases, "infra", "vcenter").state).toBe("unconfigured");
     expect(find(bases, "cloud", "ct").state).toBe("unconfigured");
     expect(find(bases, "external", "keyvault").state).toBe("unconfigured");
     const infra = bases.find((b) => b.key === "infra");
-    expect(infra.total).toBe(3);
+    expect(infra.total).toBe(4);
     expect(infra.reporting).toBe(0);
   });
 
@@ -92,8 +93,10 @@ describe("sourcesByBase", () => {
       }
     });
     expect(find(bases, "onprem", "ssh")).toMatchObject({ state: "reporting", detail: "38 host keys" });
-    expect(find(bases, "onprem", "cbom")).toMatchObject({ state: "reporting", detail: "1 import, 12 assets" });
-    expect(find(bases, "onprem", "other")).toMatchObject({ state: "reporting", detail: "mystery (2)" });
+    expect(find(bases, "infra", "cbom")).toMatchObject({ state: "reporting", detail: "1 import, 12 assets" });
+    // Un origen que nadie reclama tampoco es cosa del agente: Infra.
+    expect(find(bases, "infra", "other")).toMatchObject({ state: "reporting", detail: "mystery (2)" });
+    expect(bases.find((b) => b.key === "onprem").sources.some((x) => x.key === "cbom" || x.key === "other")).toBe(false);
   });
 
   it("los tipos de conector por sector cubren todos los tipos, una vez cada uno", () => {

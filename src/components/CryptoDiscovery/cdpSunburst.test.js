@@ -12,11 +12,11 @@ const facet = (ownership, source, algo, bits, uniqueCerts, extra = {}) => ({ key
 
 describe("mapa origen → sector base", () => {
   it("⭐ On-prem es SÓLO lo que recogen los agentes; la CA de Windows es un grupo de Infra, no una base ni una fuente de equipo; lo desconocido a On-prem", () => {
-    expect(["store", "java-store", "listener", "file", "nss", "ssh", "cbom"].map(baseOfSource)).toEqual(Array(7).fill("onprem"));
+    expect(["store", "java-store", "listener", "file", "nss", "ssh"].map(baseOfSource)).toEqual(Array(6).fill("onprem"));
     expect(BASES.map((b) => b.key)).toEqual(["onprem", "infra", "cloud", "external"]);
-    // La lee el agente de la CA, pero lo que aporta es el registro de
-    // emisión de un servicio: va con la infraestructura.
-    expect(["probe", "k8s", "vcenter", "adcs"].map(baseOfSource)).toEqual(["infra", "infra", "infra", "infra"]);
+    // La CA la lee el agente instalado en ella y el CBOM lo sube una
+    // persona: ninguno de los dos sale del inventario de un equipo.
+    expect(["probe", "k8s", "vcenter", "adcs", "cbom"].map(baseOfSource)).toEqual(Array(5).fill("infra"));
     expect(["ct", "acm", "gcp"].map(baseOfSource)).toEqual(["cloud", "cloud", "cloud"]);
     expect(["keyvault", "vault"].map(baseOfSource)).toEqual(["external", "external"]);
     expect(baseOfSource("something-new")).toBe("onprem");
