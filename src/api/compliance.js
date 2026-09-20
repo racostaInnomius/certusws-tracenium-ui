@@ -282,6 +282,14 @@ export async function getDeviceFleetRanking(agentId) {
 }
 
 // ── Sprint 5 — tenant compliance settings CRUD ────────────────────
+// El COMPROMISO de remediación y cómo va: objetivos por severidad, cuántos
+// hallazgos abiertos los incumplen, cuáles están a punto, y los peores. Los
+// objetivos se fijan con `updateComplianceSettings({ slaDaysCritical, ... })`;
+// `null` retira el compromiso, que NO es lo mismo que cumplirlo.
+export async function getComplianceSla() {
+  return httpGetJson(`${BASE}/sla`);
+}
+
 // GET returns { ok, settings: { effective, overrides, systemDefaults,
 // updatedAt } }; PUT accepts a partial patch and returns the post-
 // update view. Null clears an override; undefined leaves a field

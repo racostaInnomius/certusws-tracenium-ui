@@ -104,6 +104,7 @@ const COMPLIANCE_EVIDENCE_KEY = "scp.compliance-evidence";
 import SectionPaper from "../components/common/SectionPaper";
 import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
 import RemediationHubPanel from "../components/Compliance/RemediationHubPanel";
+import SlaPanel from "../components/Compliance/SlaPanel";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -1319,7 +1320,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
       ) : null}
 
       {effectiveTab === "fix" ? (
-        <RemediationHubPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
+        <Stack spacing={2}>
+          {/* El compromiso va ENCIMA de la cola: es lo que decide qué se hace
+              primero, así que se lee antes que la lista. */}
+          <SlaPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
+          <RemediationHubPanel reloadKey={refreshToken} onToast={showToast} canManage={canManage} />
+        </Stack>
       ) : null}
 
       {effectiveTab === "exceptions" ? (
