@@ -16,7 +16,13 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function seed({ packages = [], deployments = [], intakes = [], sites = [], dps = [], tiers = null } = {}) {
+function seed({ packages = [], deployments = [], intakes = [], sites = [], dps = [], tiers = null, coverage } = {}) {
+  respond("get", /\/api\/v1\/software-delivery\/analytics\/catalog-coverage.*/, {
+    ok: true,
+    totalDevices: coverage?.totalDevices ?? 0,
+    items: coverage?.items ?? [],
+    truncated: false,
+  });
   respond("get", /\/api\/v1\/software-delivery\/analytics\/timeseries.*/, {
     ok: true,
     windowDays: 30,
@@ -232,5 +238,57 @@ describe("countCatalogUpdates · se cuentan TÍTULOS, no entradas", () => {
   it("aguanta lo vacío y lo ausente", () => {
     expect(countCatalogUpdates([])).toBe(0);
     expect(countCatalogUpdates(undefined)).toBe(0);
+  });
+});
+
+describe("cobertura del catálogo", () => {
+  // El bloque que cambió el encuadre de la página: de «qué hizo la
+  // herramienta» a «cómo está el parque». Aquí sólo se comprueba el CABLEADO
+  // —que la llamada se hace y su respuesta llega al panel—; la lectura de la
+  // barra vive en CatalogCoveragePanel.test.jsx.
+  it("⭐ pide la cobertura y la pinta con la flota como denominador", async () => {
+    seed({
+      coverage: {
+        totalDevices: 56,
+        items: [
+          {
+            packageId: 9,
+            name: "Google Chrome",
+            catalogVersion: "152.0.7977.83",
+            installedDevices: 30,
+            missingDevices: 26,
+            current: 2,
+            ahead: 25,
+            behind: 3,
+            unknown: 0,
+            versions: [{ version: "153.0.8010.48", devices: 11, state: "ahead" }],
+          },
+        ],
+      },
+    });
+
+    render(<OverviewTab />);
+
+    expect(await screen.findByText("Catalog coverage")).toBeInTheDocument();
+    expect(await screen.findByText("30/56")).toBeInTheDocument();
+    expect(screen.getByText("26 without it")).toBeInTheDocument();
+  });
+
+  it("⚠️ si la cobertura falla, el resto del Overview sigue en pie", async () => {
+    // `allSettled`: una llamada caída no puede llevarse la página por delante,
+    // y el panel dice que no pudo cargar en vez de esfumarse.
+    seed({});
+    // El status va en el TERCER argumento de `respond`, no dentro del cuerpo.
+    respond(
+      "get",
+      /\/api\/v1\/software-delivery\/analytics\/catalog-coverage.*/,
+      { error: "INTERNAL_ERROR" },
+      { status: 500 }
+    );
+
+    render(<OverviewTab />);
+
+    expect(await screen.findByText(/Couldn’t load catalog coverage/)).toBeInTheDocument();
+    expect(screen.getByText("Catalog coverage")).toBeInTheDocument();
   });
 });

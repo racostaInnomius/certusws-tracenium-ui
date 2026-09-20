@@ -26,6 +26,7 @@ import SectionPaper from "../common/SectionPaper";
 import InstallFailuresPanel from "./InstallFailuresPanel";
 import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
+import CatalogCoveragePanel from "./CatalogCoveragePanel";
 import CompositionBars from "../common/CompositionBars";
 import InstallsOverTimeChart, { InstallsLegend } from "./InstallsOverTimeChart";
 import InstallDaysStrip, { shouldUseStrip } from "./InstallDaysStrip";
@@ -40,6 +41,7 @@ import {
   getAgentUpdateSources,
   getDownloadTierStats,
   getGlobalCatalog,
+  getCatalogCoverage,
 } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
 
@@ -67,6 +69,7 @@ const SOURCE_KEYS = [
   "tiers",
   "agentTiers",
   "globalCatalog",
+  "coverage",
 ];
 
 /**
@@ -112,6 +115,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
     tiers: null,
     agentTiers: null,
     globalCatalog: [],
+    coverage: null,
     failures: new Set(),
   });
 
@@ -141,6 +145,8 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
       getDownloadTierStats(windowKey),
       getAgentUpdateSources(windowKey),
       getGlobalCatalog(),
+      // Sin ventana: es una foto del parque, no actividad (ver el cliente).
+      getCatalogCoverage(),
     ])
       .then((results) => {
         if (cancelled) return;
@@ -163,6 +169,7 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
           tiers: val(6)?.stats ?? null,
           agentTiers: val(7)?.stats ?? null,
           globalCatalog: val(8)?.entries ?? [],
+          coverage: val(9) ?? null,
           failures,
         });
       })
@@ -277,6 +284,17 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
         coveredSites={stats.coveredSites}
         totalActiveSites={stats.totalActiveSites}
         uncoveredSites={stats.uncoveredSites}
+        onNavigateTab={onNavigateTab}
+      />
+
+      {/* ── El estado del parque, antes que la actividad ─────────
+          La actividad de la herramienta es escasa por naturaleza (28
+          instalaciones en 30 días en T111); esto tiene dato todos los días y
+          además es accionable: «26 equipos sin Chrome» es un despliegue. */}
+      <CatalogCoveragePanel
+        loading={loading}
+        coverage={data.coverage}
+        failed={data.failures.has("coverage")}
         onNavigateTab={onNavigateTab}
       />
 

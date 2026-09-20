@@ -162,6 +162,17 @@ export async function getAgentUpdateSources(window = "30d") {
   return httpGetJson(`${BASE}/analytics/agent-update-sources${buildQuery({ window })}`);
 }
 
+/**
+ * Cuánta flota tiene cada título del catálogo, y en qué versión.
+ *
+ * ⚠️ SIN VENTANA TEMPORAL, a diferencia de las tres de arriba. Es una FOTO del
+ * parque: «¿quién no tiene Chrome?» no cambia por mirar 7 días o 90, y pasarle
+ * una ventana sugeriría lo contrario.
+ */
+export async function getCatalogCoverage() {
+  return httpGetJson(`${BASE}/analytics/catalog-coverage`);
+}
+
 // ── Distribution (Phase B) — sites + distribution points ──────────
 
 export async function listSites() {
