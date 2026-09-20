@@ -20,12 +20,18 @@
 //
 // Separately, each capability carries `enforced` (from the backend's
 // capability-registry.ts) — whether a route actually calls
-// requireCapability(key) yet. As of Phase 1 that's only jobs, alerts,
-// and remote_control; the other ~17 keys are still gated purely by
-// requireRole(OWNER,ADMIN) server-side, so granting them here is
-// currently a no-op. Unlike entitled/callerHasIt this does NOT disable
-// the toggle (an admin may reasonably want to pre-configure a role
+// requireCapability(key) yet. Hoy lo están las 20: la nota anterior aquí
+// («sólo jobs, alerts y remote_control; las otras ~17 son no-op») describía
+// una fase 1 terminada hacía meses. Unlike entitled/callerHasIt this does NOT
+// disable the toggle (an admin may reasonably want to pre-configure a role
 // ahead of enforcement landing) — it's a label, not a block.
+//
+// ⚠️ CREAR, EDITAR y BORRAR roles es de OWNER: el backend lo pide con la
+// capacidad `roles_management`, que es isSystemOnly y ADMIN no tiene
+// (ADR-0011). Un ADMIN sigue ENTRANDO —consultar la matriz es cómo se entiende
+// por qué alguien no puede hacer algo— pero en sólo lectura. Si esta página le
+// ofreciera los botones, el 403 llegaría al pulsar Guardar, con el formulario
+// ya relleno.
 
 import * as React from "react";
 import {
@@ -54,6 +60,7 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import {
   listTenantRoles,
   listCapabilities,
+  getMyCapabilities,
   createTenantRole,
   updateTenantRole,
   deleteTenantRole,
@@ -66,7 +73,7 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 
 const GROUP_ORDER = ["Operations", "Visibility", "Administration"];
 
-function RoleRow({ role, onEdit, onDelete }) {
+function RoleRow({ role, onEdit, onDelete, canManage = true }) {
   const count = role.permissions?.length ?? 0;
   return (
     <Box
@@ -98,11 +105,19 @@ function RoleRow({ role, onEdit, onDelete }) {
         </Typography>
       </Box>
       <Stack direction="row" spacing={0.5}>
-        <Tooltip title={role.isSystem ? "Built-in roles can't be edited" : "Edit"}>
+        <Tooltip
+          title={
+            role.isSystem
+              ? "Built-in roles can't be edited"
+              : canManage
+                ? "Edit"
+                : "Only a tenant OWNER can change roles"
+          }
+        >
           <span>
             <IconButton
               size="small"
-              disabled={role.isSystem}
+              disabled={role.isSystem || !canManage}
               onClick={() => onEdit(role)}
               aria-label={`Edit ${role.name}`}
             >
@@ -110,11 +125,19 @@ function RoleRow({ role, onEdit, onDelete }) {
             </IconButton>
           </span>
         </Tooltip>
-        <Tooltip title={role.isSystem ? "Built-in roles can't be deleted" : "Delete"}>
+        <Tooltip
+          title={
+            role.isSystem
+              ? "Built-in roles can't be deleted"
+              : canManage
+                ? "Delete"
+                : "Only a tenant OWNER can change roles"
+          }
+        >
           <span>
             <IconButton
               size="small"
-              disabled={role.isSystem}
+              disabled={role.isSystem || !canManage}
               onClick={() => onDelete(role)}
               aria-label={`Delete ${role.name}`}
             >
@@ -355,6 +378,9 @@ export default function RolesAdministrator({ onNavigate } = {}) {
   const callerRoleName = String(auth?.tenantMember?.role || "").toUpperCase();
 
   const [roles, setRoles] = React.useState([]);
+  // null = todavía no lo sabemos (o el endpoint falló): no se bloquea la página
+  // por no haber podido preguntar; el backend sigue siendo quien decide.
+  const [myPermissions, setMyPermissions] = React.useState(null);
   const [capabilities, setCapabilities] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -368,12 +394,19 @@ export default function RolesAdministrator({ onNavigate } = {}) {
     if (!tenantId) return;
     try {
       setLoading(true);
-      const [rolesResp, capsResp] = await Promise.all([
+      const [rolesResp, capsResp, mineResp] = await Promise.all([
         listTenantRoles(tenantId),
         listCapabilities(tenantId),
+        // Lo que el backend cree que puede el llamante, no lo que diga su fila:
+        // los permisos de un rol built-in los resuelve del registro, así que
+        // esta respuesta es la misma con la que se va a autorizar el guardado.
+        getMyCapabilities(tenantId).catch(() => null),
       ]);
       setRoles(Array.isArray(rolesResp?.items) ? rolesResp.items : []);
       setCapabilities(Array.isArray(capsResp?.items) ? capsResp.items : []);
+      setMyPermissions(
+        Array.isArray(mineResp?.permissions) ? new Set(mineResp.permissions) : null
+      );
     } catch (e) {
       console.error(e);
       setSnackbar({ open: true, message: "Failed to load roles", severity: "error" });
@@ -395,6 +428,14 @@ export default function RolesAdministrator({ onNavigate } = {}) {
     const own = roles.find((r) => r.name === callerRoleName);
     return new Set(own?.permissions || []);
   }, [roles, callerRoleName]);
+
+  // La MISMA llave que exige el backend, no el nombre del rol: así un rol que
+  // algún día la reciba no necesita que esta página aprenda su nombre. Se lee
+  // de /roles/me/capabilities y NO de la fila del rol en la tabla: la fila es
+  // una copia que puede ir por detrás del registro (es justo la deriva que se
+  // arregló en el backend), y con ella un OWNER legítimo se habría quedado sin
+  // botones hasta que corriera la migración.
+  const canManageRoles = myPermissions === null || myPermissions.has("roles_management");
 
   const existingNames = React.useMemo(
     () => new Set(roles.map((r) => r.name.toUpperCase())),
@@ -480,6 +521,7 @@ export default function RolesAdministrator({ onNavigate } = {}) {
             variant="contained"
             startIcon={<AddOutlinedIcon />}
             onClick={handleOpenCreate}
+            disabled={!canManageRoles}
             sx={{
               textTransform: "none",
               fontWeight: 700,
@@ -493,6 +535,12 @@ export default function RolesAdministrator({ onNavigate } = {}) {
         }
       />
 
+      {!loading && !canManageRoles ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Read-only: only a tenant OWNER can create, edit or delete roles.
+        </Alert>
+      ) : null}
+
       <SectionPaper variant="panel" sx={{ p: 2 }}>
         <Stack spacing={1.25}>
           {loading ? (
@@ -504,6 +552,7 @@ export default function RolesAdministrator({ onNavigate } = {}) {
               <RoleRow
                 key={role.id}
                 role={role}
+                canManage={canManageRoles}
                 onEdit={handleOpenEdit}
                 onDelete={(r) => {
                   setDeleteTarget(r);

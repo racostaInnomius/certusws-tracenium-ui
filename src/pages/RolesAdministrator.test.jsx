@@ -10,6 +10,7 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-li
 vi.mock("../api/roles", () => ({
   listTenantRoles: vi.fn(),
   listCapabilities: vi.fn(),
+  getMyCapabilities: vi.fn(),
   createTenantRole: vi.fn(),
   updateTenantRole: vi.fn(),
   deleteTenantRole: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../auth/AuthContext", () => ({
 import {
   listTenantRoles,
   listCapabilities,
+  getMyCapabilities,
   createTenantRole,
   updateTenantRole,
   deleteTenantRole,
@@ -65,6 +67,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   listTenantRoles.mockResolvedValue({ items: [OWNER, ADMIN, USER, CUSTOM] });
   listCapabilities.mockResolvedValue({ items: CAPABILITIES });
+  // El llamante es OWNER, que es quien puede gestionar roles (ADR-0011:
+  // `roles_management` es isSystemOnly, así que ADMIN no la tiene). La página
+  // lo pregunta al backend en vez de deducirlo de la fila del rol.
+  getMyCapabilities.mockResolvedValue({
+    role: "OWNER",
+    permissions: ["jobs", "alerts", "remote_control", "reports", "roles_management"],
+  });
 });
 
 afterEach(cleanup);
@@ -82,6 +91,29 @@ describe("RolesAdministrator — list", () => {
     expect(screen.getByLabelText("Delete OWNER")).toBeDisabled();
     expect(screen.getByLabelText("Edit IT Support")).not.toBeDisabled();
     expect(screen.getByLabelText("Delete IT Support")).not.toBeDisabled();
+  });
+});
+
+describe("RolesAdministrator — sólo OWNER gestiona", () => {
+  it("un ADMIN ve la matriz en sólo lectura", async () => {
+    getMyCapabilities.mockResolvedValue({ role: "ADMIN", permissions: ["jobs", "alerts", "reports"] });
+
+    render(<RolesAdministrator />);
+
+    expect(await screen.findByText(/only a tenant owner can create, edit or delete roles/i)).toBeInTheDocument();
+    expect(screen.getByText("New role").closest("button")).toBeDisabled();
+    expect(screen.getByLabelText("Edit IT Support")).toBeDisabled();
+    expect(screen.getByLabelText("Delete IT Support")).toBeDisabled();
+  });
+
+  // Si no se puede preguntar, no se bloquea la pantalla: quien autoriza de
+  // verdad es el backend, y un fallo de red no debe disfrazarse de permiso.
+  it("no bloquea la página si /me/capabilities falla", async () => {
+    getMyCapabilities.mockRejectedValue(new Error("network"));
+
+    render(<RolesAdministrator />);
+
+    expect(await screen.findByLabelText("Edit IT Support")).not.toBeDisabled();
   });
 });
 
