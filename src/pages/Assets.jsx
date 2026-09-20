@@ -13,7 +13,9 @@ import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
+import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
 import AssetsDashboard from "./AssetsDashboard";
+import SignalCoverageCard from "../components/Assets/SignalCoverageCard";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
@@ -25,6 +27,9 @@ const LocationWorkbench = React.lazy(() =>
 import WindowsGpos from "./WindowsGpos";
 import Printers from "./Printers";
 import AssetGroups from "./AssetGroups";
+// Qué equipos EXISTEN frente a los que gestionamos. Perezosa: quien no la abra
+// no paga su chunk, y su API sólo responde con la migración de Cobertura.
+const CoveragePanel = React.lazy(() => import("../components/discovery/CoveragePanel"));
 
 // Note: the "Agent Downloads" tab moved to its own top-level page
 // (Device Enrollment) in tandem with the enrollment-token surface.
@@ -37,7 +42,7 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
 // las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
-const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6 };
+const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6, coverage: 7 };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
@@ -156,6 +161,9 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   // puerta que termina en "no disponible". Sólo decide qué se PINTA — quien
   // manda es el gate del backend.
   const { auth } = useAuthContext();
+  // ADMIN/OWNER activo. Lo miran dos cosas: el botón de informe y las acciones
+  // de Cobertura (lanzar una lectura, sacar el paquete de instalación), que el
+  // backend gatea con ese mismo rol.
   const canReport =
     auth?.tenantMember?.isActive === true &&
     ["ADMIN", "OWNER"].includes(String(auth?.tenantMember?.role || ""));
@@ -277,10 +285,27 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             {...a11yProps(6)}
             sx={TAB_SX}
           />
+
+          {/* La otra mitad del inventario: lo que existe y NO tenemos. Al final
+              de la barra a propósito — se mira al incorporar un cliente o al
+              cuadrar la facturación, no todos los días. */}
+          <Tab
+            icon={<TravelExploreOutlinedIcon fontSize="small" />}
+            iconPosition="start"
+            label="Coverage"
+            {...a11yProps(7)}
+            sx={TAB_SX}
+          />
         </Tabs>
       </SectionPaper>
 
+      {/* La ausencia como hallazgo: de los equipos que SÍ gestionamos, de
+          cuáles no sabemos nada. Va sobre el dashboard de assets porque es la
+          advertencia que hay que leer ANTES de creerse los números de abajo. */}
       <TabPanel value={activeTab} index={0}>
+        <Box sx={{ mb: 2 }}>
+          <SignalCoverageCard refreshNonce={refreshNonce} />
+        </Box>
         <AssetsDashboard
           onAssetsEmptyStateChange={onAssetsEmptyStateChange}
           refreshNonce={refreshNonce}
@@ -318,6 +343,12 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
 
       <TabPanel value={activeTab} index={6}>
         <WindowsGpos refreshNonce={refreshNonce} />
+      </TabPanel>
+
+      <TabPanel value={activeTab} index={7}>
+        <React.Suspense fallback={null}>
+          <CoveragePanel refreshNonce={refreshNonce} canManage={canReport} />
+        </React.Suspense>
       </TabPanel>
     </Box>
   );

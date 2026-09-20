@@ -2,6 +2,10 @@ import { httpGetJson } from "./http";
 
 export const dashboardApi = {
   getSummary: () => httpGetJson("/api/v1/dashboard/summary"),
+  // De cuántos equipos NO podemos afirmar nada: por cada señal, quién reporta,
+  // quién lleva demasiado callado y quién no reportó nunca. Complementa al
+  // descubrimiento de AD, que cuenta los equipos del dominio SIN agente.
+  getSignalCoverage: () => httpGetJson("/api/v1/dashboard/signal-coverage"),
   getHosts: () => httpGetJson("/api/v1/dashboard/hosts"),
   // Map view. Unpaginated by design — see fetchHostLocations in the backend.
   getHostLocations: () => httpGetJson("/api/v1/dashboard/hosts/locations"),
