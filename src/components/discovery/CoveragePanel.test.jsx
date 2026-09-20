@@ -143,6 +143,16 @@ describe("CoveragePanel", () => {
     expect(await screen.findByText(/collector was offline.*previous list is kept/)).toBeInTheDocument();
   });
 
+  it("el botón de informe lleva a Reports con el tipo ya elegido, sin generar nada aquí", async () => {
+    const onNavigate = vi.fn();
+    render(<CoveragePanel canManage onNavigate={onNavigate} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Report" }));
+    // El tipo viaja en la URL (lo consume Reports) y aquí no se descarga nada:
+    // el documento tiene que quedar registrado en el motor, con su hash.
+    expect(onNavigate).toHaveBeenCalledWith("reports");
+    expect(window.location.search).toContain("reportKey=amp.coverage");
+  });
+
   it("sin permiso no hay acciones, y sin la migración lo dice en vez de enseñar un cero", async () => {
     render(<CoveragePanel />);
     await screen.findByText("pc-ventas");

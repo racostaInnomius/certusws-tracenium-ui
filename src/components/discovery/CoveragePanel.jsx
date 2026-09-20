@@ -41,6 +41,7 @@ import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { formatDate } from "../../utils/format";
 import BrandSnackbar from "../common/BrandSnackbar";
+import GoToReportButton from "../common/GoToReportButton";
 import {
   getCoverage,
   getDiscoveryInstallPackage,
@@ -113,7 +114,7 @@ function ActivityCell({ device }) {
   );
 }
 
-export default function CoveragePanel({ refreshNonce = 0, canManage = false }) {
+export default function CoveragePanel({ refreshNonce = 0, canManage = false, onNavigate = null }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState("");
@@ -222,15 +223,25 @@ export default function CoveragePanel({ refreshNonce = 0, canManage = false }) {
         </Box>
         <Box sx={{ flex: 1 }} />
         {canManage ? (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={run}
-            disabled={Boolean(busy)}
-            startIcon={busy === "run" ? <CircularProgress size={14} /> : null}
-          >
-            Look now
-          </Button>
+          <>
+            {/* El documento que se enseña al incorporar un cliente o en una
+                auditoría. No lo genera aquí: lleva a Reports, que es donde
+                queda registrado con su hash. */}
+            <GoToReportButton
+              onNavigate={onNavigate}
+              reportKey="amp.coverage"
+              tooltip="Coverage report: what exists, what is managed, and what is not being counted"
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={run}
+              disabled={Boolean(busy)}
+              startIcon={busy === "run" ? <CircularProgress size={14} /> : null}
+            >
+              Look now
+            </Button>
+          </>
         ) : null}
       </Box>
 

@@ -347,7 +347,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
 
       <TabPanel value={activeTab} index={7}>
         <React.Suspense fallback={null}>
-          <CoveragePanel refreshNonce={refreshNonce} canManage={canReport} />
+          <CoveragePanel refreshNonce={refreshNonce} canManage={canReport} onNavigate={onNavigate} />
         </React.Suspense>
       </TabPanel>
     </Box>
