@@ -62,7 +62,6 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
   const [notice, setNotice] = React.useState(null);
   const [confirmLast, setConfirmLast] = React.useState(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
-  const [apiKey, setApiKey] = React.useState("");
   const [nonce, setNonce] = React.useState(0);
 
   const rows = ctDomains(connectors);
@@ -142,22 +141,6 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
         ? `crt.sh answered: ${fmt(s.certificates)} certificate(s) for these domains. Nothing was imported.`
         : `Read: ${fmt(s.certificates)} certificate(s) · ${fmt(s.removed)} retired · ${fmt(s.matchedFleetCertificates)} also on your devices.`) + partial;
     });
-  };
-
-  /**
-   * La clave de CertSpotter la pone el tenant y es SUYA: viaja una vez,
-   * el servidor la sella y aquí sólo se sabe si hay clave. Sin clave se
-   * lee crt.sh, así que quitarla no rompe nada, sólo lee peor.
-   */
-  const saveKey = () => {
-    const k = apiKey.trim();
-    if (!k || !primary) return;
-    run(() => updateCdpConnector(primary.connectorId, { clientSecret: k }), "API key saved. The next read uses CertSpotter, with crt.sh as the fallback.").then(() => setApiKey(""));
-  };
-
-  const removeKey = () => {
-    if (!primary) return;
-    run(() => updateCdpConnector(primary.connectorId, { clientSecret: null }), "API key removed. Public domains are read from crt.sh again.");
   };
 
   const removeLast = () => {
@@ -246,32 +229,12 @@ export default function CdpPublicDomains({ connectors, onChanged }) {
               ))}
             </Alert>
           ) : null}
-          <Box sx={{ mt: 1.25 }}>
-            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 0.5 }}>
-              {primary.hasSecret
-                ? "Read through CertSpotter (SSLMate) with your API key; crt.sh stays as the fallback if the key fails or its hourly quota runs out."
-                : "Read from crt.sh, which needs no credentials. Optional: a CertSpotter (SSLMate) API key — their free plan costs nothing and allows 10 full-domain queries per hour. It returns the certificate itself in the listing, so reads are faster, and it has shown live certificates that crt.sh was missing. It only lists unexpired certificates."}
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
-              <TextField
-                size="small"
-                type="password"
-                label={primary.hasSecret ? "Replace the API key" : "CertSpotter API key (optional)"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="k.…"
-                disabled={busy}
-                autoComplete="off"
-                sx={{ minWidth: 280 }}
-              />
-              <Button size="small" variant="outlined" disabled={busy || apiKey.trim().length === 0} onClick={saveKey}>
-                {primary.hasSecret ? "Replace key" : "Save key"}
-              </Button>
-              {primary.hasSecret ? (
-                <Button size="small" color="error" disabled={busy} onClick={removeKey}>Remove key</Button>
-              ) : null}
-            </Stack>
-          </Box>
+          <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 1 }}>
+            Read through CertSpotter, a commercial Certificate Transparency index Tracenium subscribes to — nothing for you
+            to sign up for or pay separately. It has shown live certificates that the free crt.sh was missing, and crt.sh
+            stays as the fallback whenever the hourly allowance is spent, so a read never comes back empty for lack of a
+            source.
+          </Typography>
           {historyOpen ? <RunHistory connectorId={primary.connectorId} nonce={nonce} /> : null}
         </Box>
       ) : null}
