@@ -296,3 +296,88 @@ describe("ADR-0020 D2 — a un grupo, no sólo a equipos sueltos", () => {
     );
   });
 });
+
+describe("macOS y Linux — un despliegue por tipo de equipo", () => {
+  // El agente rechaza un snapshot de otra plataforma: 2 Windows y 1 Mac son
+  // DOS despliegues. Mandarlos juntos lo rechaza el backend entero.
+  const mixedPreview = () => ({
+    actionable: [
+      { deviceId: "d1", hostname: "T111-VENTAS", plan: { ok: true, target: "windows", preview: "C:\\u.exe /S" } },
+      { deviceId: "m1", hostname: "MAC-DISENO", plan: { ok: true, target: "macos", preview: "rm -rf /Applications/Dropbox.app" } },
+      { deviceId: "d2", hostname: "T111-ALMACEN", plan: { ok: true, target: "windows", preview: "C:\\u.exe /S" } },
+    ],
+    blocked: [],
+    notInstalled: [],
+  });
+
+  it("⭐ manda un envío por tipo, y avisa antes de que van separados", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue(mixedPreview());
+    sdpApi.uninstallDetected.mockResolvedValue({ deployment: { id: 40 } });
+
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(/Sent as 2 deployments, one per device type: Windows 2 · macOS 1/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Uninstall on 3 device(s)" }));
+
+    await waitFor(() => expect(sdpApi.uninstallDetected).toHaveBeenCalledTimes(2));
+    expect(sdpApi.uninstallDetected.mock.calls.map((c) => c[0])).toEqual([
+      { appName: "Dropbox", deviceIds: ["d1", "d2"], target: "windows" },
+      { appName: "Dropbox", deviceIds: ["m1"], target: "macos" },
+    ]);
+  });
+
+  // ⚠️ Lo despachado no se deshace. Si el segundo envío falla y el diálogo
+  // sigue con la misma vista previa, volver a pulsar crearía OTRO despliegue
+  // de desinstalación para los Windows.
+  it("⭐ si falla uno, dice cuáles salieron y no los vuelve a mandar", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue(mixedPreview());
+    sdpApi.uninstallDetected
+      .mockResolvedValueOnce({ deployment: { id: 41 } })
+      .mockRejectedValueOnce({ body: { message: "MAC-DISENO está dado de baja." } })
+      .mockResolvedValueOnce({ deployment: { id: 42 } });
+
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(await screen.findByRole("button", { name: "Uninstall on 3 device(s)" }));
+
+    expect(
+      await screen.findByText("Dispatched for Windows (2). macOS was rejected: MAC-DISENO está dado de baja.")
+    ).toBeTruthy();
+
+    // Reintentar sólo lleva lo que falta.
+    await user.click(screen.getByRole("button", { name: "Uninstall on 1 device(s)" }));
+    await waitFor(() => expect(sdpApi.uninstallDetected).toHaveBeenCalledTimes(3));
+    expect(sdpApi.uninstallDetected.mock.calls[2][0]).toEqual({
+      appName: "Dropbox",
+      deviceIds: ["m1"],
+      target: "macos",
+    });
+  });
+
+  it("un bloqueado de Apple se explica como app de macOS, no como el agente", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [],
+      blocked: [
+        {
+          deviceId: "m1",
+          hostname: "MAC-DISENO",
+          app: { name: "Dropbox", source: "macos-app-bundle", packageFamilyName: "com.apple.dropbox" },
+          plan: { ok: false, reason: "protected", detail: "x" },
+        },
+      ],
+      notInstalled: [],
+    });
+
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(/an Apple app that is part of macOS/)).toBeTruthy();
+  });
+});

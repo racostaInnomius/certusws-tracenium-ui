@@ -55,6 +55,12 @@ import { getSoftwareInventoryDetail } from "../../api/inventoryDashboard";
 import { previewUninstall, uninstallDetected } from "../../api/softwareDelivery";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listFrom } from "../../api/shape";
+import {
+  TARGET_LABEL,
+  batchesByTarget,
+  describeBlocked,
+  uninstallRequestBody,
+} from "./uninstallPlanning";
 
 const STEPS = ["Find", "Devices", "Review"];
 
@@ -63,22 +69,6 @@ const STEPS = ["Find", "Devices", "Review"];
 // se pagina en vez de leer una página y llamarla «todos».
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
-
-// Motivos del backend traducidos a algo que un operador pueda accionar. Si
-// llega uno que no conocemos se enseña crudo: un motivo desconocido escondido
-// tras «no se puede» es peor que uno feo.
-const BLOCKED_COPY = {
-  protected: "Protected: uninstalling it would leave the device without an agent.",
-  unsupported_source: "Unsupported source — F1 only covers the Windows registry.",
-  per_user_install: "Installed for a single user, not for the device — the agent cannot remove it on that person's behalf.",
-  no_identity: "No uninstall command was recorded.",
-  name_not_expressible: "The name contains % or _ and there is no ProductCode to identify it by.",
-};
-
-function describeBlocked(plan) {
-  if (!plan || plan.ok) return "";
-  return BLOCKED_COPY[plan.reason] || plan.detail || plan.reason || "Blocked.";
-}
 
 export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
   const [activeStep, setActiveStep] = React.useState(0);
@@ -254,10 +244,47 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
       // mirar y confirmar, y mandar el grupo lo re-resolvería y ejecutaría sobre
       // otra población. El precio es que el despliegue queda como «N devices»
       // en vez de con el nombre del grupo.
-      const deviceIds = preview.actionable.map((r) => r.deviceId);
-      const res = await uninstallDetected({ appName, deviceIds });
-      notify?.("success", `Uninstall dispatched for ${appName} to ${deviceIds.length} device(s).`);
-      onDone?.(res?.deployment || null);
+      //
+      // ⚠️ UN ENVÍO POR TIPO DE EQUIPO. El agente rechaza un snapshot de otra
+      // plataforma, así que 20 Windows y 3 Macs son dos despliegues. Se mandan
+      // en serie y, si uno falla, se dice cuáles SÍ salieron: los que ya se
+      // despacharon no se deshacen, y callarlo haría que el operador los
+      // mandara otra vez.
+      const toSend = batchesByTarget(preview.actionable);
+      const sent = [];
+      let last = null;
+      for (const batch of toSend) {
+        try {
+          last = await uninstallDetected(uninstallRequestBody(appName, batch));
+          sent.push(batch);
+        } catch (e) {
+          // ⚠️ Lo ya despachado sale de la vista previa: el diálogo se queda
+          // abierto para leer el motivo, y volver a pulsar reenviaría esos
+          // equipos en un SEGUNDO despliegue de desinstalación.
+          if (sent.length > 0) {
+            const sentIds = new Set(sent.flatMap((b) => b.deviceIds));
+            setPreview((p) => (p ? { ...p, actionable: p.actionable.filter((r) => !sentIds.has(r.deviceId)) } : p));
+          }
+          const what = batch.target ? TARGET_LABEL[batch.target] || batch.target : "these devices";
+          const done = sent.map((b) => `${TARGET_LABEL[b.target] || "devices"} (${b.deviceIds.length})`).join(", ");
+          const reason = e?.body?.message || e?.message || "The deployment was rejected.";
+          throw Object.assign(new Error(reason), {
+            body: {
+              message: done
+                ? `Dispatched for ${done}. ${what} was rejected: ${reason}`
+                : reason,
+            },
+          });
+        }
+      }
+      const total = toSend.reduce((n, b) => n + b.deviceIds.length, 0);
+      notify?.(
+        "success",
+        toSend.length > 1
+          ? `Uninstall dispatched for ${appName} to ${total} device(s) in ${toSend.length} deployments (one per device type).`
+          : `Uninstall dispatched for ${appName} to ${total} device(s).`
+      );
+      onDone?.(last?.deployment || null);
       reset();
     } catch (e) {
       console.error(e);
@@ -271,6 +298,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
   };
 
   const actionableCount = preview?.actionable?.length || 0;
+  const batches = React.useMemo(() => batchesByTarget(preview?.actionable), [preview]);
 
   return (
     <Box>
@@ -293,8 +321,9 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
         {activeStep === 0 ? (
           <Stack spacing={2}>
             <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
-              Search the fleet inventory. Windows only: other sources are listed
-              but cannot be uninstalled yet.
+              Search the fleet inventory. Windows, Mac apps in /Applications and
+              Linux deb/rpm packages can be uninstalled; other sources are listed
+              with the reason they cannot.
             </Typography>
             <Stack direction="row" spacing={1}>
               <TextField
@@ -443,6 +472,16 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, mb: 0.5 }}>
                 Will uninstall on {actionableCount} device(s)
               </Typography>
+              {/* Con varios tipos de equipo se dice que van en despliegues
+                  separados: el operador verá N filas en Deployments, no una. */}
+              {batches.length > 1 ? (
+                <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 0.5 }}>
+                  Sent as {batches.length} deployments, one per device type:{" "}
+                  {batches
+                    .map((b) => `${TARGET_LABEL[b.target] || "other"} ${b.deviceIds.length}`)
+                    .join(" · ")}
+                </Typography>
+              ) : null}
               <Box sx={{ maxHeight: 220, overflow: "auto", border: `1px solid ${BRAND.gray}`, borderRadius: 1 }}>
                 <List dense disablePadding>
                   {preview.actionable.map((r) => (
@@ -477,7 +516,7 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
                     <ListItem key={r.deviceId} divider>
                       <ListItemText
                         primary={r.hostname || r.deviceId}
-                        secondary={describeBlocked(r.plan)}
+                        secondary={describeBlocked(r.plan, r.app)}
                         primaryTypographyProps={{ fontSize: TEXT.base }}
                         secondaryTypographyProps={{ fontSize: TEXT.xs }}
                       />
