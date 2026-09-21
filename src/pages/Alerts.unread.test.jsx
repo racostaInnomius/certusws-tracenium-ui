@@ -10,7 +10,7 @@
 // `firstSeenAt` —de `alert_occurrences`, que ya mantiene el barrido horario—
 // contesta desde cuándo pasa esto de verdad, y es lo que hay que comparar.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { server, respond } from "../test/msw/server";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
@@ -30,6 +30,13 @@ import Alerts from "./Alerts";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 const CURSOR = "2026-09-08T12:00:00.000Z";
+// ⚠️ "Ahora" va DESPUÉS del cursor, y se fija en vez de fiarlo al reloj: con
+// un reloj anterior al cursor, `occurredAt` quedaba antes de él y el caso "sin
+// edad conocida" daba 0 por la razón equivocada. Sólo Date: waitFor necesita
+// timers reales.
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-09-10T12:00:00.000Z"));
+afterAll(() => vi.useRealTimers());
 const AHORA = new Date().toISOString();
 
 /** Un ancla de confianza tal y como llega: sellada con la hora de la consulta. */

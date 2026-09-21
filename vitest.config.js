@@ -11,6 +11,15 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
+// ⚠️ Zona horaria fija para toda la suite. La UI pinta fechas en la hora LOCAL
+// del operador (bien hecho), y los tests esperan el día tal y como se ve desde
+// México: "Installed · Sep 16" para un 15:03Z. En Auckland ese instante ya es
+// 17-sep y cinco tests de PMP fallaban sin que el código estuviera mal. Se fija
+// aquí —antes de que arranquen los workers, que heredan el entorno— para que
+// el resultado no dependa de la máquina (portátil en CST, CI en UTC).
+// America/Mexico_City no tiene horario de verano desde 2022: sin saltos.
+process.env.TZ = "America/Mexico_City";
+
 export default defineConfig({
   plugins: [react()],
   test: {

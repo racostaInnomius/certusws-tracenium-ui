@@ -507,6 +507,8 @@ describe("normalizeHostDetailPayload — el allowlist deja pasar location", () =
   it("deja pasar el pin completo de una posición vieja", () => {
     // El caso de campo entero: una Mac offline cuyo último fix es de ayer
     // tiene que llegar al drawer con coordenadas Y con su fecha.
+    // ⚠️ "De ayer" relativo al reloj, no una fecha fija: la frescura se mide
+    // contra ahora, y con el reloj antes de esa fecha el fix salía "current".
     const out = normalizeHostDetailPayload({
       agent: {
         agent_id: "a1",
@@ -515,7 +517,7 @@ describe("normalizeHostDetailPayload — el allowlist deja pasar location", () =
         locationMapSource: "gps",
         locationLat: 19.364695,
         locationLon: -99.183,
-        locationFixAt: "2026-08-18T09:11:00.000Z",
+        locationFixAt: new Date(Date.now() - 26 * 3600_000).toISOString(),
       },
     });
     const pin = getMapPin(out);
