@@ -77,6 +77,7 @@ import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
+import { describeJobOrigin, jobOriginText } from "../utils/jobOrigin";
 import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
 import { deriveTriage, groupFailingDevices, groupFailureCauses } from "../utils/jobInsights";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
@@ -1423,6 +1424,9 @@ export default function Jobs({ onNavigate }) {
           </Typography>
           <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap>
             {jobTypeLabels.get(params.row.job_type) || params.row.job_type}
+            {/* "Who" se oculta en pantallas medianas: la recuperación se
+                sigue viendo aquí. */}
+            {!params.row.__isBatch && describeJobOrigin(params.row).recovery ? " · Automatic recovery" : null}
           </Typography>
         </Box>
       ),
@@ -1479,13 +1483,32 @@ export default function Jobs({ onNavigate }) {
       headerName: "Who",
       minWidth: 190,
       flex: 0.8,
-      valueGetter: (_value, row) =>
-        row.created_by_email || row.created_by || "system",
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap title={params.value}>
-          {params.value}
-        </Typography>
-      ),
+      // Los jobs `system:*` (autorreparaciones, puertas de parcheo…) salen
+      // como "Automatic recovery" / "Automatic" + el motivo: el texto crudo
+      // hacía parecer que nadie los había lanzado. Ver utils/jobOrigin.js.
+      valueGetter: (_value, row) => jobOriginText(row),
+      renderCell: (params) => {
+        const origin = describeJobOrigin(params.row);
+        if (!origin.automatic) {
+          return (
+            <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap title={params.value}>
+              {params.value}
+            </Typography>
+          );
+        }
+        return (
+          <Box sx={{ minWidth: 0, py: 0.5 }} title={origin.raw || undefined}>
+            <Chip
+              size="small"
+              label={origin.label}
+              sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+            />
+            <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, mt: 0.25 }} noWrap>
+              {origin.detail}
+            </Typography>
+          </Box>
+        );
+      },
     },
   ];
 
@@ -2783,7 +2806,7 @@ export default function Jobs({ onNavigate }) {
                     <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
                       <DetailRow label="Type" value={selectedBatchJobs[0]?.job_type} />
                       <DetailRow label="Devices" value={String(selectedBatchJobs.length)} />
-                      <DetailRow label="Created By" value={selectedBatchJobs[0]?.created_by_email || selectedBatchJobs[0]?.created_by || "—"} />
+                      <DetailRow label="Created By" value={selectedBatchJobs[0] ? jobOriginText(selectedBatchJobs[0]) : "—"} />
                       <DetailRow label="Created" value={formatDate(selectedBatchJobs[0]?.created_at)} />
                     </Box>
                   </Box>
@@ -2875,7 +2898,7 @@ export default function Jobs({ onNavigate }) {
                         as the history table. getJob now LEFT JOINs TenantMember
                         so this matches what the row showed — before, clicking a
                         row flipped this from a readable email to `auth0|…`. */}
-                    <DetailRow label="Created By" value={selectedJob.created_by_email || selectedJob.created_by || "—"} />
+                    <DetailRow label="Created By" value={jobOriginText(selectedJob)} />
                     <DetailRow label="Trace ID" value={selectedJob.trace_id || "—"} mono />
                   </Box>
                 </Box>
