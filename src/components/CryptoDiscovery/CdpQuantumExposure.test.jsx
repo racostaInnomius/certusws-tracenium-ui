@@ -12,7 +12,7 @@ const getCdpFacets = vi.fn();
 const getCdpRoadmap = vi.fn();
 vi.mock("../../api/cdp", () => ({ getCdpFacets: (...a) => getCdpFacets(...a), getCdpRoadmap: (...a) => getCdpRoadmap(...a) }));
 
-import { ReadinessStrip, QuantumSunburst } from "./CdpQuantumExposure";
+import { ReadinessStrip, QuantumSunburst, CoverageGapLine } from "./CdpQuantumExposure";
 
 const EXPOSURE = { total: 1043, own: 151, ownPostQuantum: 0, devicesBlocked: 20, kem: { hybrid: 20, classicalOnly: 44, unknown: 0, endpoints: 64, probes: 0 }, outside: { bySource: [{ sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", certificates: 27 }] } };
 const OVERVIEW = { roadmap: { systemsTotal: 34, systemsPlanned: 0, devicesBlocked: 20 }, orphanKeys: { total: 0, stale: 0 } };
@@ -144,5 +144,54 @@ describe("QuantumSunburst", () => {
     getCdpFacets.mockRejectedValueOnce(new Error("backend caído"));
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     expect(await screen.findByText("backend caído")).toBeInTheDocument();
+  });
+});
+
+describe("⭐ ADR-0026 · la tira dice sobre QUÉ se calculó", () => {
+  it("con activos fuera de los equipos, dice que no están en la cifra", () => {
+    render(<ReadinessStrip exposure={{ ...EXPOSURE, outside: { certificates: 812, sources: 4 } }} overview={OVERVIEW} devicesReporting={54} />);
+    expect(screen.getByText("Measured on 54 devices with an agent. The 812 certificates found outside your devices are not in this figure.")).toBeInTheDocument();
+  });
+
+  it("⭐ sin nada conectado fuera, lo dice: la cifra sólo cubre lo que ven los agentes (y por eso sale optimista)", () => {
+    render(<ReadinessStrip exposure={{ ...EXPOSURE, outside: { certificates: 0, sources: 0 } }} overview={OVERVIEW} devicesReporting={1} />);
+    expect(screen.getByText(/Measured on 1 device with an agent\. Nothing outside your devices is connected/)).toBeInTheDocument();
+  });
+
+  it("sin saber cuántos equipos reportan no se inventa la base", () => {
+    render(<ReadinessStrip exposure={EXPOSURE} overview={OVERVIEW} devicesReporting={null} />);
+    expect(screen.queryByText(/Measured on/)).toBeNull();
+  });
+});
+
+describe("⭐ ADR-0026 · el número del agujero", () => {
+  const NOW = Date.parse("2026-09-21T12:00:00Z");
+
+  it("con los números de T111 del 21-sep: 27 vigentes, 17 a la vista — y dice dónde están los otros 10 sin acusar", () => {
+    render(<CoverageGapLine gap={{ caIssued: 27, caOnDevices: 17, caLastRead: "2026-09-21T06:00:00Z", devicesWithAgent: 56 }} now={NOW} />);
+    const line = screen.getByLabelText("Coverage gap");
+    expect(line).toHaveTextContent("Your Windows CA issued 27 certificates that are still valid. Tracenium knows where 17 of them are — on the 56 devices with an agent.");
+    expect(line).toHaveTextContent("The other 10 are on machines without an agent");
+    // No acusa: «sin agente», no «perdidos» ni «desconocidos».
+    expect(line).not.toHaveTextContent(/lost|unknown|rogue/i);
+    // Lectura reciente: sin aviso de fecha.
+    expect(screen.queryByText(/As last read from the CA/)).toBeNull();
+  });
+
+  it("⭐ si la lectura de la CA es vieja (congelada o su lector paró), dice de cuándo es la foto", () => {
+    render(<CoverageGapLine gap={{ caIssued: 27, caOnDevices: 17, caLastRead: "2026-09-08T15:24:17Z", devicesWithAgent: 56 }} now={NOW} />);
+    expect(screen.getByText(/As last read from the CA on/)).toBeInTheDocument();
+  });
+
+  it("sin CA leída no se pinta: una frase con ceros no dice nada", () => {
+    const { container } = render(<CoverageGapLine gap={{ caIssued: 0, caOnDevices: 0, caLastRead: null, devicesWithAgent: 19 }} now={NOW} />);
+    expect(container).toBeEmptyDOMElement();
+    const { container: c2 } = render(<CoverageGapLine gap={null} now={NOW} />);
+    expect(c2).toBeEmptyDOMElement();
+  });
+
+  it("si todo está a la vista, lo dice en vez de inventar un agujero", () => {
+    render(<CoverageGapLine gap={{ caIssued: 5, caOnDevices: 5, caLastRead: "2026-09-21T06:00:00Z", devicesWithAgent: 4 }} now={NOW} />);
+    expect(screen.getByLabelText("Coverage gap")).toHaveTextContent("Every one of them is on a device you can see.");
   });
 });

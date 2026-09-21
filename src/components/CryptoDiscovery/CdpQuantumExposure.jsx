@@ -82,6 +82,21 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
   // ADR-0024: los que PUEDEN migrar con un ajuste. null (backend anterior o
   // sin evaluar) no se pinta como cero.
   const fixable = exposure?.devicesFixable ?? null;
+  // ADR-0026 §7 — el porcentaje dice SOBRE QUÉ se calculó. Se calcula sólo
+  // sobre lo que ven los agentes (y los servicios medidos); lo que vive fuera
+  // de los equipos no entra, así que para quien no tiene nada conectado sale
+  // optimista. Decirlo es más honesto que dejar que la cifra lo esconda.
+  const outsideCerts = exposure?.outside?.certificates ?? null;
+  const outsideSources = exposure?.outside?.sources ?? null;
+  const basis =
+    devicesReporting == null
+      ? null
+      : `Measured on ${fmt(devicesReporting)} device${Number(devicesReporting) === 1 ? "" : "s"} with an agent. ` +
+        (outsideCerts > 0
+          ? `The ${fmt(outsideCerts)} certificates found outside your devices are not in this figure.`
+          : outsideSources === 0
+            ? "Nothing outside your devices is connected, so this only covers what the agents see."
+            : "");
 
   const pairs = [
     {
@@ -124,6 +139,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
           <Typography sx={{ mt: 0.5, fontSize: TEXT.xs, color: TEXT_MUTED }} title={snapshotDate ? `Systems and blocked devices as of the ${snapshotDate} roadmap snapshot.` : undefined}>
             {fmt(ownPq)} of {fmt(own)} certificates you own are post-quantum · {fmt(kemH)} of {fmt(measured)} TLS services negotiate hybrid ML-KEM.
           </Typography>
+          {basis ? <Typography sx={{ mt: 0.25, fontSize: TEXT.xs, color: TEXT_MUTED }}>{basis}</Typography> : null}
         </Box>
         {pairs.map((p, i) => (
           <Box
@@ -354,6 +370,53 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
           </Typography>
         </Stack>
       </Stack>
+      <CoverageGapLine gap={exposure?.coverageGap} />
     </SectionPaper>
+  );
+}
+
+/**
+ * ADR-0026 §4 — el NÚMERO DEL AGUJERO, con los datos del propio cliente: de
+ * lo que emitió su CA y sigue vigente, cuánto está en un equipo que Tracenium
+ * ve. Es el mejor argumento para poner agentes y no se dice con un
+ * argumentario: lo dicen sus números.
+ *
+ * ⚠️ No acusa. Hay certificados que viven legítimamente en cosas que nunca
+ * tendrán agente (un balanceador, un appliance), así que la frase dice «en
+ * ningún equipo con agente», no «perdidos».
+ *
+ * Sin CA leída no se pinta: una frase con ceros no dice nada. Y si la lectura
+ * es vieja —la CA se congela sin el complemento, o su lector dejó de leer—
+ * se dice la fecha, para no presentar una foto vieja como actual.
+ */
+export function CoverageGapLine({ gap, now }) {
+  // El reloj se lee UNA vez, al montar: leerlo en cada render lo haría
+  // impuro (y el aviso de «vieja» podría parpadear entre renders).
+  const [mountedAt] = React.useState(() => now ?? Date.now());
+  if (!gap || !(gap.caIssued > 0)) return null;
+  const elsewhere = Math.max(0, gap.caIssued - gap.caOnDevices);
+  const lastRead = gap.caLastRead ? new Date(gap.caLastRead) : null;
+  const stale = lastRead && mountedAt - lastRead.getTime() > 2 * 24 * 60 * 60 * 1000;
+  return (
+    <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }} aria-label="Coverage gap">
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
+        Your Windows CA issued <strong>{fmt(gap.caIssued)}</strong> certificates that are still valid. Tracenium knows
+        where <strong>{fmt(gap.caOnDevices)}</strong> of them are — on the {fmt(gap.devicesWithAgent)} devices with an
+        agent.{" "}
+        {elsewhere > 0 ? (
+          <>
+            The other <strong>{fmt(elsewhere)}</strong> are on machines without an agent, where nothing here can see
+            them: who holds them, when they expire, or whether their key is still safe.
+          </>
+        ) : (
+          "Every one of them is on a device you can see."
+        )}
+      </Typography>
+      {stale ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
+          As last read from the CA on {lastRead.toLocaleDateString()}.
+        </Typography>
+      ) : null}
+    </Box>
   );
 }
