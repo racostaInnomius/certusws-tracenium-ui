@@ -56,7 +56,10 @@ export function ctDomains(connectors) {
   return out;
 }
 
-export default function CdpPublicDomains({ connectors, onChanged, maxDomains }) {
+// `onViewCertificates(domain?)` lleva a Explore → «Public domain certificates»
+// (21-sep): antes el bloque no enlazaba con lo que había traído, y quien sólo
+// vigila dominios no encontraba dónde verlos.
+export default function CdpPublicDomains({ connectors, onChanged, maxDomains, onViewCertificates }) {
   const [draft, setDraft] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState(null);
@@ -161,7 +164,7 @@ export default function CdpPublicDomains({ connectors, onChanged, maxDomains }) 
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, color: BRAND.dark, mb: 0.5 }}>Public domains</Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark, opacity: 0.8, mb: 1 }}>
         Every certificate a public CA (Let&apos;s Encrypt, DigiCert, Sectigo, Google…) logs for these domains and their
-        subdomains, read from the Certificate Transparency logs via crt.sh. No credentials. A certificate here that no
+        subdomains, read from the Certificate Transparency logs. No credentials. A certificate here that no
         device has is either a service without an agent or someone requesting certificates for your domains on their own.
       </Typography>
       {notice ? <Alert severity={notice.sev} sx={{ mb: 1 }} onClose={() => setNotice(null)}>{notice.text}</Alert> : null}
@@ -170,7 +173,15 @@ export default function CdpPublicDomains({ connectors, onChanged, maxDomains }) 
           <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>No domain watched yet.</Typography>
         ) : (
           rows.map((r) => (
-            <Chip key={r.domain} size="small" label={r.domain} onDelete={busy ? undefined : () => remove(r)} sx={{ fontFamily: MONO, height: 24, fontSize: TEXT.xs }} />
+            <Chip
+              key={r.domain}
+              size="small"
+              label={r.domain}
+              onClick={onViewCertificates ? () => onViewCertificates(r.domain) : undefined}
+              title={onViewCertificates ? `View the certificates of ${r.domain}` : undefined}
+              onDelete={busy ? undefined : () => remove(r)}
+              sx={{ fontFamily: MONO, height: 24, fontSize: TEXT.xs }}
+            />
           ))
         )}
       </Stack>
@@ -216,6 +227,9 @@ export default function CdpPublicDomains({ connectors, onChanged, maxDomains }) 
               <Chip size="small" label={`${partialDomains.length} not read`} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, fontWeight: 700 }} />
             ) : null}
             <Box sx={{ flex: 1 }} />
+            {onViewCertificates ? (
+              <Button size="small" onClick={() => onViewCertificates()}>View certificates</Button>
+            ) : null}
             <Button size="small" variant="outlined" disabled={busy} onClick={() => runNow(true)}>Test</Button>
             <Button size="small" variant="contained" disabled={busy || primary.enabled === false} onClick={() => runNow(false)}>
               {busy ? "Reading…" : "Run now"}

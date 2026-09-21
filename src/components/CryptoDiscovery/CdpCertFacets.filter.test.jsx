@@ -25,7 +25,7 @@ import { CDP_URL_KEYS } from "../../hooks/useCdpFilter";
  *                  a estas facetas no acotaría nada, lo dejaría a cero.
  * Cualquier otra ES un filtro y tiene que viajar a las facetas.
  */
-const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin"]);
+const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain"]);
 
 const VALOR_DE_MUESTRA = {
   search: "msig",

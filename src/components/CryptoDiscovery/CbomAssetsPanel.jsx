@@ -15,6 +15,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCryptoAssetsSummary, importCdpCbom, listCryptoAssets } from "../../api/cdp";
+import PublicDomainCertificates from "./PublicDomainCertificates";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 const TYPE_LABEL = {
@@ -100,7 +101,28 @@ export function CbomImportForm({ onImported }) {
  * de CBOM viven en Settings. Aquí se mira lo que trajeron; `onOpenSettings`
  * lleva a donde se configura.
  */
-export default function CbomAssetsPanel({ refreshNonce, sourceName = "", origin = "", onSourceChange, onSelect, onOpenSettings }) {
+const isPublicDomains = (origin, sourceName) => origin === "ct" || String(sourceName ?? "").startsWith("ct:");
+
+export default function CbomAssetsPanel(props) {
+  const { sourceName = "", origin = "", domain = "", onSourceChange } = props;
+  // Los dominios públicos tienen su vista (caducidad, dominio, emisor): la
+  // tabla genérica de fuera no sirve a quien sólo vigila dominios (21-sep).
+  if (isPublicDomains(origin, sourceName)) {
+    return (
+      <PublicDomainCertificates
+        refreshNonce={props.refreshNonce}
+        domain={domain}
+        onDomainChange={(d) => onSourceChange?.({ origin: "ct", domain: d })}
+        onShowAll={() => onSourceChange?.({})}
+        onSelect={props.onSelect}
+        onOpenSettings={props.onOpenSettings}
+      />
+    );
+  }
+  return <OutsideAssets {...props} />;
+}
+
+function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceChange, onSelect, onOpenSettings }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
   const [error, setError] = React.useState(null);
@@ -127,6 +149,10 @@ export default function CbomAssetsPanel({ refreshNonce, sourceName = "", origin 
   }, [refreshNonce, source, origin]);
 
   const total = (summary?.sources ?? []).reduce((s, x) => s + x.assets, 0);
+  // Los de CT, en UN chip: son una sola cosa para el cliente («mis dominios»)
+  // y el conector puede haber tenido varios nombres.
+  const ctAssets = (summary?.sources ?? []).filter((x) => isPublicDomains("", x.sourceName)).reduce((s, x) => s + x.assets, 0);
+  const otherSources = (summary?.sources ?? []).filter((x) => !isPublicDomains("", x.sourceName));
 
   return (
     <SectionPaper>
@@ -162,7 +188,8 @@ export default function CbomAssetsPanel({ refreshNonce, sourceName = "", origin 
           <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
             <Chip size="small" label={`All sources · ${fmt(total)}`} onClick={() => pick({})} variant={source || origin ? "outlined" : "filled"} />
             {origin ? <Chip size="small" label={`Origin: ${origin}`} onDelete={() => pick({})} variant="filled" /> : null}
-            {summary.sources.map((s) => (
+            {ctAssets > 0 ? <Chip size="small" label={`Public domains · ${fmt(ctAssets)}`} onClick={() => pick({ origin: "ct" })} variant="outlined" /> : null}
+            {otherSources.map((s) => (
               <Chip key={s.sourceName} size="small" label={`${s.sourceName} · ${fmt(s.assets)}`} onClick={() => pick({ sourceName: s.sourceName })} variant={source === s.sourceName ? "filled" : "outlined"} />
             ))}
           </Stack>

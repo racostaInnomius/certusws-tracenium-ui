@@ -601,8 +601,27 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
   // segmento = esa lista con clave privada.
   const select = (f) => onDrillDown?.(scope === "own" ? { hasPrivateKey: true, ...f } : f, { replace: true });
 
+  // Fase 4: lo que vive donde no hay agente. Solo lectura; se configura en Settings.
+  const outsidePanel = (
+    <CbomAssetsPanel
+      refreshNonce={refreshNonce}
+      sourceName={filter.assetSource ?? ""}
+      origin={filter.assetOrigin ?? ""}
+      domain={filter.assetDomain ?? ""}
+      onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "", assetDomain: next.domain ?? "" })}
+      onSelect={(f) => onDrillDown?.(f, { replace: true })}
+      onOpenSettings={onOpenSettings}
+    />
+  );
+  // Quien llega con una fuente de fuera elegida (Settings → «View
+  // certificates», un gajo del sunburst) vino a por ESA lista: va arriba.
+  // Al fondo quedaba bajo paneles de agentes que cargan después y la empujan
+  // —y que, para quien sólo vigila dominios, están vacíos— (21-sep).
+  const outsideFocused = Boolean(filter.assetSource || filter.assetOrigin);
+
   return (
     <Stack spacing={2}>
+      {outsideFocused ? outsidePanel : null}
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
         <OwnershipScopeToggle value={scope} onChange={setScope} />
         <ExplainToggle on={explain} onToggle={toggleExplain} />
@@ -629,15 +648,7 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
           <IssuersPanel issuers={issuers} onSelect={(issuer) => select({ issuer })} />
         </Grid>
       </Grid>
-      {/* Fase 4: lo que vive donde no hay agente. Solo lectura; se configura en Settings. */}
-      <CbomAssetsPanel
-        refreshNonce={refreshNonce}
-        sourceName={filter.assetSource ?? ""}
-        origin={filter.assetOrigin ?? ""}
-        onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "" })}
-        onSelect={(f) => onDrillDown?.(f, { replace: true })}
-        onOpenSettings={onOpenSettings}
-      />
+      {outsideFocused ? null : outsidePanel}
     </Stack>
   );
 }
@@ -1659,7 +1670,8 @@ export default function CryptoDiscovery({ onNavigate }) {
         return replaceFilter({
           tab: TAB.explore,
           assetSource: target.sourceName ?? "",
-          assetOrigin: target.sourceName ? "" : target.origin ?? ""
+          assetOrigin: target.sourceName ? "" : target.origin ?? "",
+          assetDomain: ""
         });
       }
       if (target.to === "orphans") return replaceFilter({ tab: TAB.orphans });
@@ -1791,7 +1803,11 @@ export default function CryptoDiscovery({ onNavigate }) {
         test de la página fija que cada Tab tenga exactamente un panel.
       */}
       <TabPanel value={tab} index={TAB.settings}>
-        <CdpSettingsTab refreshNonce={refreshNonce} onSourcesChanged={() => setRefreshNonce((n) => n + 1)} />
+        <CdpSettingsTab
+          refreshNonce={refreshNonce}
+          onSourcesChanged={() => setRefreshNonce((n) => n + 1)}
+          onViewPublicCertificates={(domain) => replaceFilter({ tab: TAB.explore, assetOrigin: "ct", assetDomain: domain ?? "" })}
+        />
       </TabPanel>
 
       <Drawer

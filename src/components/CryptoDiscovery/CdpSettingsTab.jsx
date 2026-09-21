@@ -216,7 +216,7 @@ function CoverageNotice({ what }) {
   );
 }
 
-export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
+export default function CdpSettingsTab({ refreshNonce, onSourcesChanged, onViewPublicCertificates }) {
   const tenantId = useEffectiveTenantId();
   const { auth } = useAuthContext();
   const src = useCdpSources(refreshNonce, tenantId);
@@ -342,7 +342,7 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged }) {
       </Sector>
 
       <Sector {...sectorProps("cloud")} sub="What is exposed on the internet or lives in a cloud provider: your public domains (from Certificate Transparency logs, no credentials), AWS Certificate Manager and Google Cloud.">
-        {src.connectors ? <CdpPublicDomains connectors={src.connectors.connectors ?? []} onChanged={changed} maxDomains={coverage ? undefined : FREE_DOMAINS} /> : null}
+        {src.connectors ? <CdpPublicDomains connectors={src.connectors.connectors ?? []} onChanged={changed} maxDomains={coverage ? undefined : FREE_DOMAINS} onViewCertificates={onViewPublicCertificates} /> : null}
         <Divider />
         {coverage ? null : <CoverageNotice what="AWS Certificate Manager and Google Cloud" />}
         <CdpConnectorsPanel

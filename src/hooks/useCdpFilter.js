@@ -69,7 +69,9 @@ export const CDP_URL_KEYS = {
   // son las que hacen que un gajo del sunburst (la CA de Windows, vCenter,
   // un vault, las claves de host SSH) llegue a SU origen y no a la nada.
   assetSource: "asset",
-  assetOrigin: "aorigin"
+  assetOrigin: "aorigin",
+  // El dominio elegido en «Public domain certificates» (con aorigin=ct).
+  assetDomain: "adomain"
 };
 
 const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst"]);
