@@ -89,3 +89,21 @@ describe("FileIntegrityPanel", () => {
     expect(screen.getByDisplayValue("C:\\etc")).toBeDisabled();
   });
 });
+
+describe("FileIntegrityPanel en ámbito de equipo", () => {
+  const tenantFim = { enabled: true, sets: [{ id: "hosts", label: "Hosts", platform: "windows", purpose: "system", path: "C:\\etc", recursive: false, maxDepth: 4 }] };
+  const compareForm = { compliance: { fileIntegrity: tenantFim } };
+
+  it("⭐ dice si el equipo sigue la lista del tenant o tiene la suya, y que la suya SUSTITUYE, no suma", () => {
+    render(<FileIntegrityPanel scope="device" compareForm={compareForm} form={{ compliance: { fileIntegrity: tenantFim } }} onChange={() => {}} />);
+    expect(screen.getByText(/follows the organization's sets/)).toBeInTheDocument();
+    cleanup();
+
+    const own = { enabled: true, sets: [{ id: "srv-logs", label: "Server logs", platform: "windows", purpose: "audit_logs", path: "D:\\Logs", recursive: false, maxDepth: 4 }] };
+    const onChange = vi.fn();
+    render(<FileIntegrityPanel scope="device" compareForm={compareForm} form={{ compliance: { fileIntegrity: own } }} onChange={onChange} />);
+    expect(screen.getByText(/replace the organization's list for this device; they are not added/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use the organization's sets" }));
+    expect(onChange.mock.calls[0][0].compliance.fileIntegrity).toEqual(tenantFim);
+  });
+});

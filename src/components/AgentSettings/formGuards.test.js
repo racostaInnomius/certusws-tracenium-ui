@@ -119,3 +119,22 @@ describe("domainsTouched / overriddenDomains", () => {
     expect([...overriddenDomains(["cdp", "features.remoteShell", "gateway"])]).toEqual(["cdp", "rcp"]);
   });
 });
+
+describe("scp por subclave (ADR-0027)", () => {
+  it("⭐ cambiar el intervalo de un equipo NO copia los conjuntos de FIM del tenant a su override", () => {
+    const fim = { enabled: true, sets: [{ id: "hosts", path: "C:\\etc" }] };
+    const tenantSlice = { compliance: { intervalSeconds: 28800, fileIntegrity: fim } };
+    const deviceSlice = { compliance: { intervalSeconds: 3600, fileIntegrity: fim } };
+    // Sólo lo que difiere: si se guardara el bloque entero, el equipo dejaría
+    // de recibir los cambios que el tenant haga en sus conjuntos.
+    expect(deviceDomainSlice("scp", deviceSlice, tenantSlice)).toEqual({ compliance: { intervalSeconds: 3600 } });
+  });
+
+  it("unos conjuntos propios del equipo sí viajan, y solos", () => {
+    const tenantSlice = { compliance: { intervalSeconds: 28800, fileIntegrity: { enabled: true, sets: [] } } };
+    const own = { enabled: true, sets: [{ id: "srv-logs", path: "D:\\Logs" }] };
+    expect(deviceDomainSlice("scp", { compliance: { intervalSeconds: 28800, fileIntegrity: own } }, tenantSlice)).toEqual({
+      compliance: { fileIntegrity: own },
+    });
+  });
+});

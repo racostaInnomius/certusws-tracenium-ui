@@ -48,9 +48,14 @@ import {
 
 const EMPTY = { enabled: false, sets: [], maxFilesPerDevice: null, maxFileMb: null };
 
-export default function FileIntegrityPanel({ form, onChange, readOnly = false }) {
+export default function FileIntegrityPanel({ form, onChange, readOnly = false, scope = "tenant", compareForm = null }) {
   const fim = form?.compliance?.fileIntegrity ?? null;
   const value = fim ?? EMPTY;
+  // En ámbito de equipo, la lista del equipo SUSTITUYE a la del tenant (no se
+  // suma): es una decisión sobre ESE equipo. Se dice cuál manda.
+  const deviceScope = scope === "device" && compareForm;
+  const tenantFim = compareForm?.compliance?.fileIntegrity ?? null;
+  const overridden = deviceScope && JSON.stringify(fim ?? null) !== JSON.stringify(tenantFim ?? null);
   const [menuAnchor, setMenuAnchor] = React.useState(null);
 
   const problems = React.useMemo(() => fileIntegrityProblems(fim), [fim]);
@@ -102,6 +107,24 @@ export default function FileIntegrityPanel({ form, onChange, readOnly = false })
           sx={{ mr: 0 }}
         />
       </Stack>
+
+      {deviceScope ? (
+        <Alert
+          severity={overridden ? "warning" : "info"}
+          sx={{ mt: 1.5 }}
+          action={
+            overridden && !readOnly ? (
+              <Button color="inherit" size="small" onClick={() => commit(tenantFim ? JSON.parse(JSON.stringify(tenantFim)) : null)}>
+                Use the organization's sets
+              </Button>
+            ) : null
+          }
+        >
+          {overridden
+            ? "This device watches its own sets. They replace the organization's list for this device; they are not added to it."
+            : "This device follows the organization's sets. Editing here gives it a list of its own, which replaces the organization's for this device."}
+        </Alert>
+      ) : null}
 
       {value.sets.length === 0 ? (
         <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, mt: 2 }}>

@@ -104,11 +104,12 @@ export default function PolicySectionPanel({
           ) : null}
           {/* ADR-0027 — conjuntos de ficheros vigilados. A diferencia del
               colector y del conector, esto SÍ vive en la política: edita el
-              formulario y se guarda con él. Sólo en ámbito tenant de momento:
-              un override por equipo de una lista de rutas es otra UI. */}
-          {section.id === "scp" && scope === "tenant" ? (
+              formulario y se guarda con él. También en ámbito de equipo: una
+              lista propia sustituye a la del tenant para ese equipo (el
+              dominio scp va por subclave, así que no arrastra el intervalo). */}
+          {section.id === "scp" ? (
             <Box sx={{ mt: 2 }}>
-              <FileIntegrityPanel form={form} onChange={onChange} readOnly={readOnly} />
+              <FileIntegrityPanel form={form} onChange={onChange} readOnly={readOnly} scope={scope} compareForm={compareForm} />
             </Box>
           ) : null}
           {/* Conector de Chrome Enterprise: fuente de eventos de navegador del

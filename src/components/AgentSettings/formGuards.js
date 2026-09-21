@@ -83,7 +83,11 @@ export function agentConfigSlice(form, catalog, formToPolicy) {
 export const DOMAIN_PATHS = {
   agent: ["update", "agent", "features.selfUpdate", "features.deviceInfoWidget", "features.locationTracking"],
   amp: ["inventory"],
-  scp: ["compliance"],
+  // Por subclave (ADR-0027), igual que el backend. Entero, tocar el
+  // intervalo de un equipo guardaba el bloque `compliance` completo en su
+  // override —con una COPIA de los conjuntos de FIM del tenant dentro—, y ese
+  // equipo ya no recibía los cambios que el tenant hiciera después.
+  scp: ["compliance.intervalSeconds", "compliance.fileIntegrity"],
   pmp: ["patch"],
   sdp: ["sdp"],
   cdp: ["cdp"],
