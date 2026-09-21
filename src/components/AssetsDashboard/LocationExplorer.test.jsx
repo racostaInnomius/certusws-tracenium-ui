@@ -100,16 +100,43 @@ describe("LocationExplorer", () => {
   });
 
   it("⚠️ un rango del revés NO se pregunta: una lista vacía se leería como 'no estuvo'", async () => {
-    await montada();
-    await elegirEquipo("ETE-3X5P8F4");
-    await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
+    // ⚠️ El rango arranca en "hoy → hoy", así que si el paso intermedio es
+    // válido o ya está del revés dependía del reloj: escrito el 17-sep, "From =
+    // 20-sep" ya invertía el rango; desde el 20-sep es un rango legítimo que SÍ
+    // debe preguntarse, y el test contaba esa llamada como si fuera la del
+    // revés. Se fija el reloj (sólo Date: waitFor necesita timers reales) y el
+    // paso válido se hace explícito, para que lo que se cuente sea únicamente
+    // lo que ocurre DESPUÉS de invertir el rango.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 8, 10, 12, 0, 0));
+    try {
+      await montada();
+      await elegirEquipo("ETE-3X5P8F4");
+      await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(1));
 
-    fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-20" } });
-    fireEvent.change(screen.getAllByLabelText("To")[0], { target: { value: "2026-09-02" } });
-    await waitFor(() =>
-      expect(screen.getAllByText(/end date is before the start date/i).length).toBeGreaterThan(0)
-    );
-    expect(getDeviceTimeline).toHaveBeenCalledTimes(1);
+      // Del 1 a hoy (10-sep): válido, se pregunta.
+      fireEvent.change(screen.getAllByLabelText("From")[0], { target: { value: "2026-09-01" } });
+      await waitFor(() => expect(getDeviceTimeline).toHaveBeenCalledTimes(2));
+      expect(getDeviceTimeline.mock.calls.at(-1)[1]).toEqual({
+        from: "2026-09-01T00:00:00.000Z",
+        to: "2026-09-10T23:59:59.999Z",
+      });
+
+      // Del 1 al 25 de agosto: del revés. Ni una llamada más.
+      fireEvent.change(screen.getAllByLabelText("To")[0], { target: { value: "2026-08-25" } });
+      await waitFor(() =>
+        expect(screen.getAllByText(/end date is before the start date/i).length).toBeGreaterThan(0)
+      );
+      // La consulta sale tras un import() dinámico: se deja correr la cola antes
+      // de contar, o una llamada tardía pasaría desapercibida.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(getDeviceTimeline).toHaveBeenCalledTimes(2);
+      for (const [, ventana] of getDeviceTimeline.mock.calls) {
+        expect(Date.parse(ventana.from)).toBeLessThanOrEqual(Date.parse(ventana.to));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("⚠️ un recorte del servidor se dice: 'las N más recientes', no 'esto es todo'", async () => {
