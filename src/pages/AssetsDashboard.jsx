@@ -112,6 +112,11 @@ const FleetLocationMap = React.lazy(() =>
 );
 import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import ExperienceTab from "../components/dex/ExperienceTab";
+import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
+
+// Índice de la pestaña Experience (ADR-0030) en el detalle del equipo.
+const EXPERIENCE_TAB = 4;
 import HardwareChangesPanel from "../components/AssetsDashboard/HardwareChangesPanel";
 
 // ---------- deep-link filter helpers -----------------------------------------
@@ -253,6 +258,7 @@ function AgentDetailWorkbench({
           <Tab label="Hardware" />
           <Tab label="Software" />
           <Tab label="Printers" />
+          <Tab label="Experience" />
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -299,6 +305,11 @@ function AgentDetailWorkbench({
 
           {!loading && tab === 3 ? (
             <PrintersTab printerRows={printerRows} printersLoading={printersLoading} printerScan={printerScan} />
+          ) : null}
+
+          {/* ADR-0030 — el id CRUDO, como HardwareChangesPanel. */}
+          {!loading && tab === EXPERIENCE_TAB ? (
+            <ExperienceTab agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
           ) : null}
         </Box>
       </Paper>
@@ -1082,6 +1093,15 @@ export default function AssetsDashboard({
     setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
 
+  // ADR-0030 — desde la tarjeta de flota: abre el equipo ya en Experience.
+  const openDeviceExperience = React.useCallback(
+    (agentId, hostname) => {
+      handleAgentSelect({ agent_id: agentId, agentId, hostname });
+      setAgentDetailTab(EXPERIENCE_TAB);
+    },
+    [handleAgentSelect]
+  );
+
   const handleCloseAgentDetail = React.useCallback(() => {
     setSelectedAgent(null);
     setAgentDetailTab(0);
@@ -1622,6 +1642,13 @@ const osVersionItems = React.useMemo(() => {
           </Box>
         </Grid>
       </Grid>
+
+      {/* ADR-0030 — equipos con señales de experiencia. Se esconde sola si
+          ningún equipo informa todavía. Encima de la tabla porque es desde
+          donde se abre la ficha. */}
+      <Box sx={{ mb: 2 }}>
+        <ExperienceFleetCard refreshNonce={refreshNonce} onOpenDevice={openDeviceExperience} />
+      </Box>
 
       {/* Row 4 — Devices table. No more "Selected Host Detail"
           panel below — the table stands on its own. Deep-link
