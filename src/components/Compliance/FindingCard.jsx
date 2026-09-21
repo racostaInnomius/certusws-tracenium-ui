@@ -42,6 +42,7 @@ import {
 } from "./complianceChips";
 import {
   REMEDIATION_TRANSITIONS,
+  remediationVerification,
   shortRelativeTime,
   shortDate,
 } from "./complianceHelpers";
@@ -133,6 +134,11 @@ export default function FindingCard({
   const ackExpired = Boolean(finding.acknowledgementExpired);
   const ackUntil = finding.acknowledgedUntil || null;
   const remediationStatus = finding.remediationStatus || "open";
+  // Arreglado y pendiente del siguiente escaneo, o desmentido por él.
+  // Ver remediationVerification.
+  const verification = remediationVerification(finding);
+  const awaitingVerification = verification === "awaiting";
+  const fixDidNotHold = verification === "did_not_hold";
   const nextTransitions = REMEDIATION_TRANSITIONS[remediationStatus] || [];
 
   // A card-level pending flag covers both the ack toggle AND the
@@ -149,9 +155,15 @@ export default function FindingCard({
       sx={{
         p: 1.5,
         borderRadius: 2,
-        border: `1px solid ${borderColor}`,
-        bgcolor:
-          isAcked && finding.status === "fail"
+        // Pendiente de verificar: borde discontinuo y fondo neutro. El arreglo
+        // ya se hizo, pero sólo el siguiente escaneo lo confirma — ni el rojo
+        // de «sin tocar» ni el blanco liso de «resuelto».
+        border: awaitingVerification
+          ? `1px dashed ${BRAND.alert.successText}99`
+          : `1px solid ${borderColor}`,
+        bgcolor: awaitingVerification
+          ? BRAND.surface
+          : isAcked && finding.status === "fail"
             ? // Acknowledged fail = soft red (still attention-worthy)
               // but less visually loud than a brand-new fail card.
               `${ROLE.critical}1e` // ≈12 %: sufijo sobre el HEX; sobre criticalSoft (rgba) era CSS inválido
@@ -192,6 +204,31 @@ export default function FindingCard({
             {/* Sprint 3 — show remediation state inline with the
                 outcome status so operators can sort/scan by either. */}
             <RemediationStatusChip status={remediationStatus} />
+            {awaitingVerification ? (
+              <Tooltip
+                title={`Fix applied${finding.remediatedAt ? ` on ${new Date(finding.remediatedAt).toLocaleString()}` : ""}. The next scan of this device confirms it: a pass closes the finding, a fail sends it back to open.`}
+                arrow
+              >
+                <Chip
+                  size="small"
+                  icon={<ScheduleOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                  label="Awaiting scan"
+                  sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
+                />
+              </Tooltip>
+            ) : null}
+            {fixDidNotHold ? (
+              <Tooltip
+                title={`A scan after the fix${finding.remediationRevertedAt ? ` (${new Date(finding.remediationRevertedAt).toLocaleString()})` : ""} still found this failing, so it went back to open. Something on the device, such as a GPO or a reboot, is undoing it.`}
+                arrow
+              >
+                <Chip
+                  size="small"
+                  label="Fix didn't hold"
+                  sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: ROLE.criticalSoft, color: BRAND.alert.errorText }}
+                />
+              </Tooltip>
+            ) : null}
             <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "monospace" }}>
               {finding.checkId}
             </Typography>
@@ -422,7 +459,10 @@ export default function FindingCard({
                 Patch Management grid does fleet-wide campaigns; this is
                 the "fix it here, now" affordance the finding was
                 missing. */}
-            {!readOnly && onRemediate && finding.agentRemediable && finding.status === "fail" ? (
+            {/* Pendiente de verificar: repetir el arreglo sólo relanzaría el
+                mismo job. Si el escaneo lo desmiente vuelve a `open` y el
+                botón reaparece. */}
+            {!readOnly && onRemediate && finding.agentRemediable && finding.status === "fail" && !awaitingVerification ? (
               <Tooltip
                 title="Run the agent's remediation handler for this check on this device (apply mode)"
                 arrow

@@ -77,3 +77,23 @@ export function shortDate(isoString) {
   if (!Number.isFinite(t)) return null;
   return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+// ── ¿Se ha verificado el arreglo? ────────────────────────────────────────
+//
+// `remediated` es una AFIRMACIÓN (el agente dice que aplicó el arreglo, o el
+// operador lo marcó a mano): el hallazgo sigue en `fail` hasta que un escaneo
+// posterior lo confirma. Pintarlo en rojo como uno sin tocar ocultaba que ya
+// se había hecho algo; pintarlo como resuelto mentiría si el arreglo no
+// aguanta. De ahí tres estados:
+//   · "awaiting"     — arreglado, pendiente del siguiente escaneo;
+//   · "did_not_hold" — un escaneo POSTERIOR al arreglo siguió en fail y el
+//                      backend lo devolvió a `open` (remediationRevertedAt);
+//   · null           — cualquier otro caso: la tarjeta se pinta como siempre.
+// Un pass no llega aquí: el hallazgo se cierra y sale de la lista.
+export function remediationVerification(finding) {
+  if (!finding || finding.status !== "fail") return null;
+  const status = finding.remediationStatus || "open";
+  if (status === "remediated") return "awaiting";
+  if (status === "open" && finding.remediationRevertedAt) return "did_not_hold";
+  return null;
+}

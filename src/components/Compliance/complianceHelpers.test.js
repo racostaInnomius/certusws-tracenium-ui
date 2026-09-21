@@ -5,6 +5,7 @@ import {
   expiryIsoFromDateInput,
   shortRelativeTime,
   shortDate,
+  remediationVerification,
 } from "./complianceHelpers";
 
 describe("REMEDIATION_TRANSITIONS", () => {
@@ -55,5 +56,26 @@ describe("shortDate", () => {
   });
   it("formats a month + day", () => {
     expect(shortDate("2026-09-30T00:00:00.000Z")).toMatch(/Sep/);
+  });
+});
+
+// `remediated` es una afirmación pendiente del siguiente escaneo, no un
+// resuelto: la tarjeta necesita distinguir las dos cosas.
+describe("remediationVerification", () => {
+  it("fail + remediated: pendiente del siguiente escaneo", () => {
+    expect(remediationVerification({ status: "fail", remediationStatus: "remediated" })).toBe("awaiting");
+  });
+
+  it("fail + open con marca de reversión: el arreglo no aguantó", () => {
+    expect(
+      remediationVerification({ status: "fail", remediationStatus: "open", remediationRevertedAt: "2026-09-21T10:00:00Z" })
+    ).toBe("did_not_hold");
+  });
+
+  it("cualquier otro caso se pinta como siempre", () => {
+    expect(remediationVerification({ status: "fail", remediationStatus: "open" })).toBeNull();
+    expect(remediationVerification({ status: "pass", remediationStatus: "remediated" })).toBeNull();
+    expect(remediationVerification({ status: "fail", remediationStatus: "in_progress" })).toBeNull();
+    expect(remediationVerification(null)).toBeNull();
   });
 });

@@ -57,6 +57,51 @@ describe("FindingCard background", () => {
   });
 });
 
+// 2026-09-21: un hallazgo arreglado seguía pintado en rojo, igual que uno sin
+// tocar, y seguía ofreciendo «Fix now». `remediated` es una afirmación que el
+// siguiente escaneo confirma o desmiente: ni rojo ni blanco de «resuelto».
+describe("FindingCard remediation verification", () => {
+  const remediable = { agentRemediable: true };
+
+  function renderWithFix(overrides) {
+    return render(
+      <FindingCard
+        finding={{ ...baseFinding, ...remediable, ...overrides }}
+        onRequestException={noop}
+        onRevoke={noop}
+        onChangeStatus={noop}
+        onShowHistory={noop}
+        onRemediate={noop}
+        pendingAction={null}
+      />
+    );
+  }
+
+  it("awaiting scan: neutral card, dashed border, no Fix now", () => {
+    const { container } = renderWithFix({ remediationStatus: "remediated", remediatedAt: "2026-09-21T10:00:00Z" });
+    const paper = container.querySelector(".MuiPaper-root");
+    expect(getComputedStyle(paper).backgroundColor).toBe("rgb(255, 255, 255)");
+    expect(getComputedStyle(paper).borderStyle).toBe("dashed");
+    expect(screen.getByText("Awaiting scan")).toBeInTheDocument();
+    expect(screen.queryByText("Fix now")).not.toBeInTheDocument();
+  });
+
+  it("fix didn't hold: red card with the reason and Fix now back", () => {
+    const { container } = renderWithFix({ remediationStatus: "open", remediationRevertedAt: "2026-09-21T12:00:00Z" });
+    const paper = container.querySelector(".MuiPaper-root");
+    expect(getComputedStyle(paper).backgroundColor).not.toBe("rgb(255, 255, 255)");
+    expect(screen.getByText("Fix didn't hold")).toBeInTheDocument();
+    expect(screen.getByText("Fix now")).toBeInTheDocument();
+  });
+
+  it("an untouched fail is unchanged", () => {
+    renderWithFix({});
+    expect(screen.queryByText("Awaiting scan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fix didn't hold")).not.toBeInTheDocument();
+    expect(screen.getByText("Fix now")).toBeInTheDocument();
+  });
+});
+
 describe("FindingCard (render smoke)", () => {
   it("renders the title, severity and status without crashing", () => {
     renderCard();
