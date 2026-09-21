@@ -8,6 +8,8 @@
 // catalogs declare each capability's control shape so the form and the
 // transforms stay in lockstep with the agent-side schema.
 
+import { fileIntegrityToPolicy, readFileIntegrityForm } from "../AgentSettings/fileIntegrityModel";
+
 export const INVENTORY_INTERVAL_MIN = 60;       // 1m   — AMP scans can be tight
 export const INVENTORY_INTERVAL_MAX = 86400;    // 24h
 
@@ -506,6 +508,10 @@ export function readFormFromPolicy(policy, catalog = []) {
     compliance: {
       intervalSeconds:
         Number.isFinite(complianceNum) && complianceNum > 0 ? complianceNum : null,
+      // ADR-0027 — conjuntos de ficheros vigilados. null = no hay nada
+      // declarado. Tiene que viajar por el formulario: si no, guardar esta
+      // sección reconstruye `compliance` sin él y lo borra.
+      fileIntegrity: readFileIntegrityForm(policy?.compliance?.fileIntegrity),
     },
     patch: {
       intervalSeconds:
@@ -719,13 +725,20 @@ export function formToPolicy(form, catalog = []) {
     if (Object.keys(inventario).length > 0) policy.inventory = inventario;
   }
 
-  maybeAddInterval(
-    "compliance",
-    form?.compliance?.intervalSeconds,
-    COMPLIANCE_INTERVAL_MIN,
-    COMPLIANCE_INTERVAL_MAX,
-    modules.compliance === true
-  );
+  // ⚠️ `compliance` ya NO usa maybeAddInterval, por la misma razón que
+  // `inventory`: ese helper SUSTITUYE el bloque entero con `{ intervalSeconds }`,
+  // y en cuanto el bloque lleva `fileIntegrity` (ADR-0027) guardar la sección
+  // borraba los conjuntos vigilados sin decir nada.
+  if (modules.compliance === true) {
+    const cumplimiento = {};
+    const intervalo = Number(form?.compliance?.intervalSeconds);
+    if (Number.isFinite(intervalo) && intervalo >= COMPLIANCE_INTERVAL_MIN && intervalo <= COMPLIANCE_INTERVAL_MAX) {
+      cumplimiento.intervalSeconds = intervalo;
+    }
+    const fim = fileIntegrityToPolicy(form?.compliance?.fileIntegrity);
+    if (fim) cumplimiento.fileIntegrity = fim;
+    if (Object.keys(cumplimiento).length > 0) policy.compliance = cumplimiento;
+  }
 
   maybeAddInterval(
     "patch",

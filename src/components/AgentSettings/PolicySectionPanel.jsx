@@ -14,6 +14,7 @@ import SectionFields from "./SectionFields";
 import AccessPolicyMatrix from "../common/AccessPolicyMatrix";
 import AdPrinterCollectorPanel from "./AdPrinterCollectorPanel";
 import ChromeConnectorSection from "./ChromeConnectorSection";
+import FileIntegrityPanel from "./FileIntegrityPanel";
 
 // Plugins con capacidades privilegiadas y, por tanto, con matriz de
 // vistobueno. Es un cambio de permisos: vive aquí, en Agent Settings —solo
@@ -99,6 +100,15 @@ export default function PolicySectionPanel({
           {section.id === "amp" && scope === "tenant" && !readOnly ? (
             <Box sx={{ mt: 2 }}>
               <AdPrinterCollectorPanel />
+            </Box>
+          ) : null}
+          {/* ADR-0027 — conjuntos de ficheros vigilados. A diferencia del
+              colector y del conector, esto SÍ vive en la política: edita el
+              formulario y se guarda con él. Sólo en ámbito tenant de momento:
+              un override por equipo de una lista de rutas es otra UI. */}
+          {section.id === "scp" && scope === "tenant" ? (
+            <Box sx={{ mt: 2 }}>
+              <FileIntegrityPanel form={form} onChange={onChange} readOnly={readOnly} />
             </Box>
           ) : null}
           {/* Conector de Chrome Enterprise: fuente de eventos de navegador del

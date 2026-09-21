@@ -74,6 +74,13 @@ const CATEGORY_META = {
     label: "Browser hardening",
     description:
       "The machine policies Chrome, Edge and Firefox enforce on the device: extension blocklists, Safe Browsing and SmartScreen, password saving, sync, and data sent to the vendor. Only measured where that browser is installed."
+  },
+  // ADR-0027. No va a Patch Management → Security configuration: no hay nada
+  // que remediar por equipo, se declara QUÉ vigilar en Agent Settings.
+  file_integrity: {
+    label: "File integrity",
+    description:
+      "Whether the device is detecting changes in the files your organization declared to watch — including its audit logs — and whether every declared file could be verified. A changed file does not fail these checks: it is reported in Alerts."
   }
 };
 

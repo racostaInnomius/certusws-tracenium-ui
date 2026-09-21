@@ -8,6 +8,7 @@
 // PATCH on the tenant policy: the device slice carries only the paths that
 // differ from the tenant, so an override says exactly what it changes.
 
+import { fileIntegrityProblems } from "./fileIntegrityModel";
 import {
   CDP_INTERVAL_MAX,
   CDP_INTERVAL_MIN,
@@ -48,6 +49,12 @@ export function formProblems(form) {
     if (!Number.isFinite(n) || n < spec.min || n > spec.max) {
       out.push({ section: spec.section, message: `${spec.label} must be between ${spec.min} and ${spec.max} seconds.` });
     }
+  }
+  // ADR-0027 — un conjunto vigilado imposible bloquea el guardado aquí, con
+  // su motivo, en vez de volver del servidor como un 400.
+  const fim = fileIntegrityProblems(form?.compliance?.fileIntegrity);
+  if (fim.length > 0) {
+    out.push({ section: "scp", message: `File integrity: ${fim.length} problem${fim.length === 1 ? "" : "s"} in the watched sets (${fim[0].message})` });
   }
   return out;
 }

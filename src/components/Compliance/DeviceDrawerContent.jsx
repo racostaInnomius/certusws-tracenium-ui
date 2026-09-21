@@ -43,6 +43,7 @@ import FindingCard from "./FindingCard";
 import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
+import FileIntegritySection from "./FileIntegritySection";
 import FleetRankingLine from "./FleetRankingLine";
 import FrameworkControlsPanel from "./FrameworkControlsPanel";
 import BulkFindingToolbar from "./BulkFindingToolbar";
@@ -488,6 +489,9 @@ export default function DeviceDrawerContent({
 
           {/* Sprint 4 — diff vs last scan -------------------------------- */}
           <DeviceDiffSection agentId={agentId} />
+
+          {/* ADR-0027 — integridad de ficheros de este equipo ------------- */}
+          <FileIntegritySection agentId={agentId} />
 
           {/* Sprint 6 — bulk action toolbar. Renders only when the
               operator has selected one or more findings. Sticky
