@@ -54,6 +54,10 @@ export function publicDomainView(items, { domain = "", query = "", expiringOnly 
   return {
     domains,
     rows,
+    // Todos los de CT, sin filtros: decide entre «vacío» y la tabla. No se
+    // mira `domains` —un backend anterior no manda el dominio y la lista
+    // saldría vacía teniendo certificados—.
+    count: certs.length,
     total: scope.length,
     expiring: scope.filter((a) => {
       const d = daysLeft(a.notAfter, now);
@@ -139,15 +143,15 @@ export default function PublicDomainCertificates({ refreshNonce, domain = "", on
       </Typography>
       {error ? <Alert severity="error">{error}</Alert> : null}
 
-      {items && v.domains.length === 0 && !error ? (
+      {items && v.count === 0 && !error ? (
         <Alert severity="info" action={onOpenSettings ? <Button color="inherit" size="small" onClick={onOpenSettings}>Add a domain</Button> : null}>
           No public certificates yet. Add a domain in Settings → Public domains and run it.
         </Alert>
       ) : null}
 
-      {v.domains.length > 0 ? (
+      {v.count > 0 ? (
         <>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }} role="group" aria-label="Domain">
+          <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1, display: v.domains.length > 0 ? "flex" : "none" }} role="group" aria-label="Domain">
             <Chip size="small" label="All domains" onClick={() => onDomainChange?.("")} variant={domain ? "outlined" : "filled"} />
             {v.domains.map((d) => (
               <Chip key={d} size="small" label={d} onClick={() => onDomainChange?.(d)} variant={domain === d ? "filled" : "outlined"} sx={{ fontFamily: MONO }} />

@@ -75,6 +75,13 @@ describe("PublicDomainCertificates", () => {
     expect(onDomainChange).toHaveBeenCalledWith("tns.com.mx");
   });
 
+  it("con un backend que aún no manda el dominio, lista igual (sin chips de dominio)", async () => {
+    listCryptoAssets.mockResolvedValue({ items: ITEMS.map(({ domain: _d, ...a }) => a) });
+    render(<PublicDomainCertificates refreshNonce={0} now={NOW} />);
+    expect(await screen.findByText("mail.tns.com.mx")).toBeInTheDocument();
+    expect(screen.queryByText(/No public certificates yet/)).toBeNull();
+  });
+
   it("sin certificados todavía, lleva a añadir un dominio", async () => {
     listCryptoAssets.mockResolvedValue({ items: [] });
     const onOpenSettings = vi.fn();
