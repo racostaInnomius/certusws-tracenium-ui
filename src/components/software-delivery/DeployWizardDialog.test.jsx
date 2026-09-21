@@ -15,7 +15,7 @@
 //     inline error notification via notify()
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import DeployWizardDialog from "./DeployWizardDialog";
@@ -318,5 +318,98 @@ describe("DeployWizardDialog — esperar a la ventana de mantenimiento", () => {
     await user.click(screen.getByRole("checkbox", { name: /wait for the maintenance window/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText(/held until the tenant's next maintenance window/i)).toBeInTheDocument();
+  });
+});
+
+describe("DeployWizardDialog — programar el envío para más tarde", () => {
+  // La hora se escribe en hora de pared local y viaja como instante: ver
+  // `deploymentSchedule.test.js` para la conversión. Aquí se comprueba el
+  // tramo que ninguna prueba pura cubre — que la elección LLEGUE al cuerpo.
+  const localValue = (hoursFromNow) => {
+    const d = new Date(Date.now() + hoursFromNow * 3600_000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  async function fireWithGroup(user) {
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Install$/i }));
+  }
+
+  it("por defecto no hay selector: programar es la excepción", async () => {
+    renderWizard();
+    await screen.findByRole("combobox", { name: /Asset group/i });
+    expect(screen.getByRole("radio", { name: /send now/i })).toBeChecked();
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+  });
+
+  it("⭐ la hora elegida llega al cuerpo como un instante con zona", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    const value = localValue(48);
+    fireEvent.change(document.querySelector('input[type="datetime-local"]'), { target: { value } });
+    await fireWithGroup(user);
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    const body = onConfirm.mock.calls[0][0];
+    expect(body.scheduledAt).toBe(new Date(value).toISOString());
+    expect(body.scheduledAt).toMatch(/Z$/); // nunca la hora de pared a pelo
+  });
+
+  // ⚠️ El backend la rechaza, pero el operador se llevaría un 400 después de
+  // recorrer el asistente entero. El botón no debe dejarle llegar ahí.
+  it("⭐ una hora imposible no se puede disparar, y dice por qué", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
+      target: { value: localValue(-5) },
+    });
+    expect(screen.getByText(/already passed/i)).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByRole("button", { name: /^Install$/i })).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("volviendo a «send now» no queda rastro de la hora", async () => {
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
+      target: { value: localValue(24) },
+    });
+    await user.click(screen.getByRole("radio", { name: /send now/i }));
+    await fireWithGroup(user);
+
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+    expect(onConfirm.mock.calls[0][0]).not.toHaveProperty("scheduledAt");
+  });
+
+  it("la revisión avisa de que con hora Y ventana sale en la más tardía", async () => {
+    const user = setupUser();
+    renderWizard();
+
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
+      target: { value: localValue(24) },
+    });
+    await user.click(screen.getByRole("checkbox", { name: /wait for the maintenance window/i }));
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+
+    expect(screen.getByText(/window opens after that/i)).toBeInTheDocument();
   });
 });

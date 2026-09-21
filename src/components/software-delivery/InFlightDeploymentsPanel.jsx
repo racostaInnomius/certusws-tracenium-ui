@@ -12,7 +12,9 @@
 // ⚠️ LA SEGUNDA ES LA QUE NOS COSTÓ UN SUSTO. El despliegue #44 de T111 estuvo
 // horas en `scheduled` sin que la UI dijera por qué; la única lectura posible
 // era «se colgó». Lo retenía la ventana de mantenimiento y el dato de CUÁNDO
-// saldría ya venía en la respuesta (`scheduledAt`), sin pintarse. Aquí se pinta.
+// saldría ya venía en la respuesta (`scheduledAt`), sin pintarse. Aquí se pinta
+// —y desde que se pueden programar envíos, también POR QUÉ: una hora que
+// eligió el operador no es la política del tenant.
 //
 // ── Decisiones ───────────────────────────────────────────────────────────
 //
@@ -30,6 +32,10 @@ import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
 
 import SectionPaper from "../common/SectionPaper";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
+// La frase vive en un módulo propio: la comparten este panel y el cajón de
+// detalle, y decir dos cosas distintas del mismo despliegue sería peor que no
+// decir nada.
+import { waitingReason } from "./deploymentSchedule";
 
 /** Estados de despliegue que todavía consumen flota. */
 export const IN_FLIGHT_STATUSES = ["scheduled", "queued", "running"];
@@ -64,20 +70,6 @@ export function deviceFunnel(counts) {
     total: done + failed + running + pending,
     settled: done + failed,
   };
-}
-
-/**
- * Por qué este despliegue no se ha movido, en una frase, o null si se está
- * moviendo.
- *
- * `scheduledAt` ya viajaba en la respuesta y no se pintaba en ningún sitio.
- */
-export function waitingReason(deployment, formatTime) {
-  if (deployment?.status !== "scheduled") return null;
-  const when = deployment?.scheduledAt ? formatTime(deployment.scheduledAt) : null;
-  return when
-    ? `Waiting for the maintenance window — dispatches ${when}`
-    : "Waiting for the maintenance window to open";
 }
 
 /** Los que siguen en vuelo, con los que se mueven primero. */

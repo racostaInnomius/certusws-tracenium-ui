@@ -31,6 +31,7 @@ import {
   summarise as summariseSnapshots,
 } from "../patch-management/gateway/snapshotStatus";
 import { listFrom } from "../../api/shape";
+import { waitingReason } from "./deploymentSchedule";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled", "failed"]);
 
@@ -407,11 +408,13 @@ export default function DeploymentDetailDrawer({
               {/* ⚠️ PARA CUÁNDO, Y POR QUÉ. La etiqueta `scheduled` a secas se
                   lee como «se colgó»: el dato ya venía en la respuesta y no se
                   enseñaba, así que el operador no tenía forma de saber que lo
-                  estaba reteniendo la ventana de mantenimiento. */}
+                  estaba reteniendo la ventana de mantenimiento. Y desde que se
+                  pueden programar envíos hay DOS motivos, con la misma
+                  etiqueta: la frase sale del módulo que los distingue. */}
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-                {deployment.status === "scheduled" && deployment.scheduledAt ? (
+                {waitingReason(deployment, formatTime) ? (
                   <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert?.warningText || BRAND.dark }}>
-                    Waiting for the maintenance window — dispatches {formatTime(deployment.scheduledAt)}
+                    {waitingReason(deployment, formatTime)}
                   </Typography>
                 ) : null}
               </Stack>

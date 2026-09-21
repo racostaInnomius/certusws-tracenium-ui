@@ -10,8 +10,9 @@
 //
 // Why only two steps: the package is already chosen (the wizard is opened
 // from a row's "Deploy" button, so packageId is known). The operator picks a
-// mode (install / reinstall / uninstall) on the Target step; scheduling is a
-// separate future concern.
+// mode (install / reinstall / uninstall) and WHEN it goes out on the Target
+// step — ahora o a una hora concreta, con la ventana de mantenimiento como
+// opción de las dos.
 
 import * as React from "react";
 import {
@@ -45,6 +46,13 @@ import { listAssetGroups } from "../../api/assetGroups";
 import { listAllKnownDevices } from "../../api/jobs";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import { listFrom } from "../../api/shape";
+import { formatDate } from "../../utils/format";
+import {
+  MAX_SCHEDULE_HORIZON_DAYS,
+  parseScheduleInput,
+  toLocalInputValue,
+  dispatchSentence as buildDispatchSentence,
+} from "./deploymentSchedule";
 
 const STEPS = ["Target", "Review"];
 
@@ -104,6 +112,49 @@ export default function DeployWizardDialog({
   // Quien sí quiere esperar —desinstalar, instaladores que reinician, envíos
   // grandes por WAN— lo marca aquí.
   const [waitForWindow, setWaitForWindow] = React.useState(false);
+
+  // ── ¿Ahora, o a una hora? ─────────────────────────────────────
+  //
+  // «now» por defecto: programar es la excepción, y un asistente que abre con
+  // un selector de fecha invita a rellenarlo.
+  const [scheduleMode, setScheduleMode] = React.useState("now");
+  const [scheduleAt, setScheduleAt] = React.useState("");
+
+  // Límites del selector, en hora de pared local. Con `min`/`max` el navegador
+  // ya impide lo imposible; la validación de abajo es la que da el porqué.
+  const scheduleBounds = React.useMemo(() => {
+    // Se recalculan al abrir: unos límites congelados desde hace horas dejarían
+    // elegir una hora que ya pasó.
+    if (!open) return { min: "", max: "" };
+    const now = new Date();
+    return {
+      min: toLocalInputValue(new Date(now.getTime() + 60_000)),
+      max: toLocalInputValue(
+        new Date(now.getTime() + MAX_SCHEDULE_HORIZON_DAYS * 24 * 3600_000)
+      ),
+    };
+  }, [open]);
+
+  const localZoneLabel = React.useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+    } catch {
+      return "local time";
+    }
+  }, []);
+
+  // Se valida mientras escribe, pero el error sólo aparece cuando hay algo
+  // escrito: un campo recién abierto no es un campo mal rellenado.
+  const schedule = React.useMemo(
+    () => (scheduleMode === "later" ? parseScheduleInput(scheduleAt) : { ok: true, iso: null }),
+    [scheduleMode, scheduleAt]
+  );
+  const scheduleError = scheduleMode === "later" && scheduleAt && !schedule.ok ? schedule.message : "";
+
+  const dispatchSentence = React.useMemo(
+    () => buildDispatchSentence({ at: schedule.ok ? schedule.at : null, waitForWindow }, formatDate),
+    [schedule.ok, schedule.at, waitForWindow]
+  );
 
   // ── Target state ──────────────────────────────────────────────
   const [targetMode, setTargetMode] = React.useState("asset_group");
@@ -242,9 +293,13 @@ export default function DeployWizardDialog({
 
   const canFire = React.useMemo(() => {
     if (submitting) return false;
+    // ⚠️ Una hora inválida NO puede llegar a disparar: el backend la rechaza,
+    // pero el operador se lleva un 400 en vez de un envío, después de haber
+    // recorrido el asistente entero.
+    if (scheduleMode === "later" && !schedule.ok) return false;
     if (targetMode === "asset_group") return Boolean(groupId);
     return parsedDeviceIds.length > 0;
-  }, [submitting, targetMode, groupId, parsedDeviceIds.length]);
+  }, [submitting, targetMode, groupId, parsedDeviceIds.length, scheduleMode, schedule.ok]);
 
   const handleFire = async () => {
     if (!canFire) return;
@@ -254,10 +309,16 @@ export default function DeployWizardDialog({
       // Sólo se manda cuando se pide: ausente = enviar ya (el servidor decide
       // igual, pero el cuerpo dice lo que el operador eligió).
       const window = waitForWindow ? { waitForMaintenanceWindow: true } : {};
+      // ⚠️ El instante, no lo que escribió. `datetime-local` da una hora de
+      // pared sin zona y el backend la rechaza a propósito: sin offset
+      // significaría la hora local del servidor. Ver `parseScheduleInput`.
+      const when = scheduleMode === "later" && schedule.ok && schedule.iso
+        ? { scheduledAt: schedule.iso }
+        : {};
       const body =
         targetMode === "asset_group"
-          ? { mode, assetGroupId: Number(groupId), ...rollout, ...window }
-          : { mode, deviceIds: parsedDeviceIds, ...rollout, ...window };
+          ? { mode, assetGroupId: Number(groupId), ...rollout, ...window, ...when }
+          : { mode, deviceIds: parsedDeviceIds, ...rollout, ...window, ...when };
       await onConfirm?.(body);
       // Parent closes the dialog on success
     } catch (err) {
@@ -373,27 +434,95 @@ export default function DeployWizardDialog({
               <MenuItem value="conservative">Conservative — canary rings</MenuItem>
             </TextField>
 
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={waitForWindow}
-                  onChange={(e) => setWaitForWindow(e.target.checked)}
+            {/* ── Cuándo sale ─────────────────────────────────────────────
+                Las dos formas de no salir ya, juntas y en el mismo sitio: una
+                hora concreta, y la ventana del tenant. Estaban separadas
+                —la casilla aquí, la hora en ninguna parte— y son la MISMA
+                pregunta. */}
+            <Box
+              sx={{
+                p: 1.5,
+                borderRadius: 1,
+                border: `1px solid ${BRAND.border}`,
+              }}
+            >
+              <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>
+                When
+              </Typography>
+
+              <RadioGroup
+                value={scheduleMode}
+                onChange={(e) => setScheduleMode(e.target.value)}
+              >
+                <FormControlLabel
+                  value="now"
+                  control={<Radio size="small" />}
+                  label={
+                    <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                      Send now
+                      <Typography component="span" sx={{ fontSize: TEXT.sm, color: BRAND.gray, ml: 1 }}>
+                        Devices that are offline pick it up when they reconnect.
+                      </Typography>
+                    </Typography>
+                  }
                 />
-              }
-              label={
-                <Box>
-                  <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
-                    Wait for the maintenance window
-                  </Typography>
-                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                    {waitForWindow
-                      ? "Held until the tenant's next window opens. Use it when the install interrupts — a reboot, closing the app, or a large download."
-                      : "Dispatches now. Devices that are offline pick it up when they reconnect."}
-                  </Typography>
+                <FormControlLabel
+                  value="later"
+                  control={<Radio size="small" />}
+                  label={
+                    <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                      Schedule for a specific time
+                    </Typography>
+                  }
+                />
+              </RadioGroup>
+
+              {scheduleMode === "later" ? (
+                <Box sx={{ pl: 3.75, pt: 0.5 }}>
+                  <TextField
+                    type="datetime-local"
+                    size="small"
+                    value={scheduleAt}
+                    onChange={(e) => setScheduleAt(e.target.value)}
+                    inputProps={{ min: scheduleBounds.min, max: scheduleBounds.max }}
+                    error={Boolean(scheduleError)}
+                    helperText={
+                      scheduleError ||
+                      // ⚠️ DECIR EN QUÉ HORA SE ESTÁ HABLANDO. El operador y el
+                      // tenant pueden estar en husos distintos, y una hora sin
+                      // huso es la vía rápida a un envío a las 4 de la mañana.
+                      `Your local time (${localZoneLabel}). Up to ${MAX_SCHEDULE_HORIZON_DAYS} days out — the package is frozen when the deployment is created.`
+                    }
+                    sx={{ minWidth: 260 }}
+                  />
                 </Box>
-              }
-              sx={{ alignItems: "flex-start", m: 0 }}
-            />
+              ) : null}
+
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={waitForWindow}
+                    onChange={(e) => setWaitForWindow(e.target.checked)}
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
+                      Wait for the maintenance window
+                    </Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                      {waitForWindow
+                        ? scheduleMode === "later"
+                          ? "Goes out at the later of the two: your time, or the next window after it."
+                          : "Held until the tenant's next window opens. Use it when the install interrupts — a reboot, closing the app, or a large download."
+                        : "The tenant's maintenance windows are ignored — they exist for patching."}
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: "flex-start", m: 0, mt: 1 }}
+              />
+            </Box>
 
             <RadioGroup
               row
@@ -659,9 +788,7 @@ export default function DeployWizardDialog({
               {/* Cuándo sale, en la misma pantalla donde se dispara: un envío
                   retenido sin decirlo se lee como que se colgó. */}
               <Typography sx={{ fontSize: TEXT.md, mt: 1 }}>
-                {waitForWindow
-                  ? "Held until the tenant's next maintenance window opens."
-                  : "Dispatches now — no maintenance window wait."}
+                {dispatchSentence}
               </Typography>
             </Alert>
           </Stack>

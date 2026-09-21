@@ -14,7 +14,6 @@ import userEvent from "@testing-library/user-event";
 import InFlightDeploymentsPanel, {
   deviceFunnel,
   inFlightDeployments,
-  waitingReason,
 } from "./InFlightDeploymentsPanel";
 
 afterEach(cleanup);
@@ -52,22 +51,8 @@ describe("deviceFunnel", () => {
   });
 });
 
-describe("waitingReason", () => {
-  it("⭐ un despliegue retenido dice POR QUÉ y HASTA CUÁNDO", () => {
-    expect(waitingReason(deployment({ status: "scheduled", scheduledAt: "2026-09-19T03:00:00Z" }), formatTime))
-      .toBe("Waiting for the maintenance window — dispatches Sep 18, 26, 22:00");
-  });
-
-  it("retenido sin hora sigue explicando la causa", () => {
-    expect(waitingReason(deployment({ status: "scheduled", scheduledAt: null }), formatTime))
-      .toBe("Waiting for the maintenance window to open");
-  });
-
-  it("lo que se está moviendo no necesita excusa", () => {
-    expect(waitingReason(deployment({ status: "running" }), formatTime)).toBeNull();
-    expect(waitingReason(deployment({ status: "queued" }), formatTime)).toBeNull();
-  });
-});
+// `waitingReason` se mudó a `deploymentSchedule.js` cuando el cajón de detalle
+// pasó a usar la misma frase: sus pruebas viven ahí, con las de la hora.
 
 describe("inFlightDeployments", () => {
   it("se queda con lo que sigue en vuelo y pone delante lo que se mueve", () => {
