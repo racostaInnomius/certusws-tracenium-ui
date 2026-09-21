@@ -77,6 +77,8 @@ import {
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
 import { listFrom } from "../api/shape";
+import { SOURCE_LABEL } from "../components/Alerts/alertSources";
+import SiemDestinationsDrawer from "../components/Alerts/SiemDestinationsDrawer";
 
 // ---------- presentational helpers ------------------------------------------
 
@@ -87,35 +89,6 @@ const SEVERITY_META = {
   high:     { label: "High",     color: severityMeta("high").fg,     soft: severityMeta("high").bg },
   medium:   { label: "Medium",   color: severityMeta("medium").fg,   soft: severityMeta("medium").bg },
   low:      { label: "Low",      color: severityMeta("low").fg,      soft: severityMeta("low").bg }
-};
-
-// Must stay in step with the backend's handler map (ALERT_SOURCES in
-// modules/alerts/alerts.service.ts). This list feeds the feed's source
-// filter, so a missing entry means that source cannot be filtered on —
-// which is how compliance_stale, software_change and both CDP sources
-// went unreachable here for a while.
-const SOURCE_LABEL = {
-  security_event:     "Security event",
-  compliance_finding: "Compliance finding",
-  compliance_score:   "Compliance score",
-  compliance_stale:   "Compliance stale",
-  device_offline:     "Device offline",
-  cert_expiry:        "Agent cert expiry",
-  job_failure:        "Job failure",
-  device_enrollment:  "Device enrolled",
-  software_change:    "Software change",
-  cdp_cert_expiry:    "Endpoint cert expiry",
-  cdp_weak_crypto:    "Certificate hygiene",
-  cdp_trust_anchor:   "Trust anchor",
-  cdp_pqc_roadmap:    "Post-quantum roadmap",
-  disk_capacity:      "Disk capacity",
-  browser_extension:  "Browser extension",
-  browser_threat:     "Browser threat",
-  geofence_transition: "Geofence",
-  hardware_change:    "Hardware change",
-  // Un informe programado que se rindió con un periodo: ese mes de evidencia
-  // no existe y no se arregla solo.
-  report_schedule_abandoned: "Scheduled report missed"
 };
 
 const SEVERITY_ORDER = ["low", "medium", "high", "critical"];
@@ -263,6 +236,8 @@ export default function Alerts({ onNavigate }) {
   const [searchText, setSearchText] = React.useState("");
 
   const [rulesDrawerOpen, setRulesDrawerOpen] = React.useState(false);
+  // ADR-0028 — a dónde salen las alertas (SIEM del cliente o de su MSP).
+  const [destinationsOpen, setDestinationsOpen] = React.useState(false);
   const [detailEvent, setDetailEvent] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
 
@@ -417,6 +392,13 @@ export default function Alerts({ onNavigate }) {
               sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
             >
               Manage rules
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => setDestinationsOpen(true)}
+              sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
+            >
+              Destinations
             </Button>
             <GoToReportButton
               onNavigate={onNavigate}
@@ -640,6 +622,16 @@ export default function Alerts({ onNavigate }) {
           </Button>
         </Stack>
       </SectionPaper>
+
+      {/* ADR-0028 — destinos SIEM -------------------------------------- */}
+      <Drawer
+        anchor="right"
+        open={destinationsOpen}
+        onClose={() => setDestinationsOpen(false)}
+        PaperProps={{ sx: { width: { xs: "100%", sm: 560, md: 640 }, maxWidth: "100%" } }}
+      >
+        {destinationsOpen ? <SiemDestinationsDrawer onClose={() => setDestinationsOpen(false)} notify={notify} /> : null}
+      </Drawer>
 
       {/* Manage Rules drawer ------------------------------------------- */}
       <Drawer
