@@ -24,6 +24,7 @@ import {
   Autocomplete,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import BrandTimeField from "../common/BrandTimeField";
 import { minutesToHHMM, hhmmToMinutes, durationFromTimes } from "./maintenanceWindowTime";
 import { buildTimezoneOptions, matchTimezone } from "./timezoneOptions";
 
@@ -113,8 +114,10 @@ export default function MaintenanceWindowDialog({ open, mode, window: entry, sub
           </Box>
 
           <Box sx={{ display: "grid", gap: 1.5, gridTemplateColumns: "1fr 1fr" }}>
-            <TextField size="small" type="time" label="Start" value={form.startTime} onChange={(e) => update({ startTime: e.target.value })} InputLabelProps={{ shrink: true }} />
-            <TextField size="small" type="time" label="End" value={form.endTime} onChange={(e) => update({ endTime: e.target.value })} InputLabelProps={{ shrink: true }} />
+            {/* No `type="time"`: su desplegable lo pinta el navegador en azul y
+                no se puede tematizar (ver common/timeOptions.js). */}
+            <BrandTimeField label="Start" value={form.startTime} onChange={(v) => update({ startTime: v })} />
+            <BrandTimeField label="End" value={form.endTime} onChange={(v) => update({ endTime: v })} />
           </Box>
 
           {/* Every IANA zone, with its UTC offset, searchable by city

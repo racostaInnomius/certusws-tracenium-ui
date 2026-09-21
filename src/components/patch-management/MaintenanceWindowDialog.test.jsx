@@ -1,7 +1,7 @@
 // src/components/patch-management/MaintenanceWindowDialog.test.jsx
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import MaintenanceWindowDialog from "./MaintenanceWindowDialog";
@@ -61,9 +61,34 @@ describe("MaintenanceWindowDialog", () => {
     const user = userEvent.setup({ delay: null });
     const { onSubmit } = renderDialog();
     await user.type(screen.getByRole("textbox", { name: /^Name/ }), "X"); // name validates first
-    fireEvent.change(screen.getByLabelText(/^End/), { target: { value: "02:00" } }); // == default start
+    // El campo es un desplegable de marca, no un input nativo: se abre y se elige.
+    await user.click(screen.getByRole("combobox", { name: /^End/ }));
+    await user.click(screen.getByRole("option", { name: /^0?2:00( AM)?$/ })); // == default start
     await user.click(screen.getByRole("button", { name: /Create/i }));
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText(/must differ/i)).toBeInTheDocument();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 21-sep: los campos de hora dejan de ser `<input type="time">`. Su desplegable
+// lo pinta el navegador en azul y ningún CSS lo alcanza.
+describe("campos de hora", () => {
+  it("⭐ no queda ningún input de hora nativo en el diálogo", () => {
+    renderDialog();
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    expect(screen.getByRole("combobox", { name: /^Start/ })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^End/ })).toBeInTheDocument();
+  });
+
+  it("elegir otra hora llega al payload en minutos, como antes", async () => {
+    const user = userEvent.setup({ delay: null });
+    const { onSubmit } = renderDialog();
+    await user.type(screen.getByRole("textbox", { name: /^Name/ }), "Overnight");
+    await user.click(screen.getByRole("combobox", { name: /^Start/ }));
+    await user.click(screen.getByRole("option", { name: /^(10:00 PM|22:00)$/ }));
+    await user.click(screen.getByRole("button", { name: /Create/i }));
+    // 22:00 → 1320; hasta las 04:00 por defecto → 6 h, cruzando medianoche.
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ startMinute: 1320, durationMinutes: 360 });
   });
 });
