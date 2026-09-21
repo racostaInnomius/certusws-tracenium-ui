@@ -10,7 +10,13 @@ import { NEUTRAL } from "../../theme/brand";
 // SO" y "este equipo aún no reporta" se leerían como la misma rebanada.
 export const PENDING_COLOR = NEUTRAL[300];
 
-export const RING_SIZE = 128;
+// RING_SIZE deja RING_RADIUS + RING_STROKE/2 = 59px de radio pintado contra
+// un viewBox de 144: 13px de margen por lado (11px con la rebanada activa,
+// que engorda el trazo a RING_STROKE + 4). Antes el viewBox medía 128 y ese
+// margen era de sólo 5px (3px activo) — bastaba matemáticamente para no
+// desbordar, pero al ojo el anillo se veía pegado al borde de la tarjeta por
+// los cuatro lados. El anillo en sí no cambia de tamaño, sólo su marco.
+export const RING_SIZE = 144;
 export const RING_RADIUS = 48;
 export const RING_STROKE = 22;
 export const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
