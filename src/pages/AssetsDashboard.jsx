@@ -112,6 +112,7 @@ const FleetLocationMap = React.lazy(() =>
 );
 import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
 import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import HardwareChangesPanel from "../components/AssetsDashboard/HardwareChangesPanel";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -277,7 +278,13 @@ function AgentDetailWorkbench({
             />
           ) : null}
 
-          {!loading && tab === 1 ? <HardwareTab hardware={hardware} /> : null}
+          {!loading && tab === 1 ? (
+            <>
+              <HardwareTab hardware={hardware} />
+              {/* El id CRUDO: `agentId` de arriba está formateado para mostrar. */}
+              <HardwareChangesPanel agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
+            </>
+          ) : null}
 
           {!loading && tab === 2 ? (
             <SoftwareTab

@@ -112,6 +112,7 @@ const SOURCE_LABEL = {
   browser_extension:  "Browser extension",
   browser_threat:     "Browser threat",
   geofence_transition: "Geofence",
+  hardware_change:    "Hardware change",
   // Un informe programado que se rindió con un periodo: ese mes de evidencia
   // no existe y no se arregla solo.
   report_schedule_abandoned: "Scheduled report missed"

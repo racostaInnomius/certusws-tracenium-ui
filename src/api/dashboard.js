@@ -21,5 +21,10 @@ export const dashboardApi = {
   // that predates it ignores the parameter and returns the bare array, so
   // read the response through normalizeHostPrintersResponse.
   getHostPrinters: (agentId) =>
-    httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/printers?include=scan`)
+    httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/printers?include=scan`),
+  // Cambios de hardware detectados al ingerir: `{ available, baselineAt, changes }`.
+  // baselineAt null = el equipo aún no envió inventario desde que existe la
+  // detección; NO es "sin cambios".
+  getHostHardwareChanges: (agentId) =>
+    httpGetJson(`/api/v1/dashboard/hosts/${encodeURIComponent(agentId)}/hardware-changes`)
 };
