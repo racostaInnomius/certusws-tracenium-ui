@@ -49,6 +49,10 @@ export function usePluginCatalog() {
       const resp = await getPluginCatalog();
       return {
         catalog: Array.isArray(resp?.catalog) ? resp.catalog : [],
+        // ADR-0026 — COMPLEMENTOS, aparte de los plugins a propósito: no se
+        // proyectan a la flota ni tienen interruptor en Policies. Los marca el
+        // staff; sus claves aparecen en `entitled` igual que las de un plugin.
+        addons: Array.isArray(resp?.addons) ? resp.addons : [],
         // null = el backend no pudo resolver los derechos. Distinto de []
         // ("no tienes ninguno"): con null la UI no debe esconder nada, o un
         // parpadeo dejaría la consola inservible.
@@ -78,6 +82,7 @@ export function usePluginCatalog() {
     () => (Array.isArray(payload?.catalog) ? payload.catalog : []),
     [payload]
   );
+  const addons = useMemo(() => (Array.isArray(payload?.addons) ? payload.addons : []), [payload]);
 
   /**
    * Plugins a los que ESTE tenant tiene derecho por su suscripción
@@ -182,6 +187,7 @@ export function usePluginCatalog() {
 
   return {
     catalog,
+    addons,
     entitled,
     isEntitled,
     remediation,

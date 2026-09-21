@@ -311,6 +311,7 @@ describe("editar el plan", () => {
       quantity: 2500,
       trialEndsAt: null,
       pluginKeys: ["pmp", "scp"],
+      addons: [],
       mdm: { included: false },
       status: "active",
     });

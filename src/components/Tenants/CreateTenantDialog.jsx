@@ -38,7 +38,7 @@ function createErrorMessage(err) {
 }
 
 export default function CreateTenantDialog({ open, onClose, onCreated }) {
-  const { catalog, loading: catalogLoading } = usePluginCatalog();
+  const { catalog, addons, loading: catalogLoading } = usePluginCatalog();
   const [step, setStep] = React.useState(0);
   const [name, setName] = React.useState("");
   const [externalIdpTenant, setExternalIdpTenant] = React.useState("");
@@ -138,6 +138,7 @@ export default function CreateTenantDialog({ open, onClose, onCreated }) {
             onChange={setPlan}
             errors={showErrors ? errors : {}}
             catalog={catalog ?? []}
+              addons={addons ?? []}
             catalogLoading={catalogLoading}
             disabled={saving}
           />

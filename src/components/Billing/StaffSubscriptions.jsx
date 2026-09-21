@@ -22,7 +22,7 @@ import { httpGetJson, httpPostJson } from "../../api/http";
 import { formatMoney } from "./money";
 import { MANAGED_TIER, TIER_LABELS } from "./billingModel";
 import StaffPlanForm from "./StaffPlanForm";
-import { planErrorMessage, planFromRow, planPayload, planSummary, validatePlan } from "./staffPlanModel";
+import { addonsOutcome, planErrorMessage, planFromRow, planPayload, planSummary, validatePlan } from "./staffPlanModel";
 import { setTenantPlan } from "../../api/billingAdmin";
 import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 import { BRAND } from "../../theme/brand";
@@ -156,7 +156,7 @@ export default function StaffSubscriptions() {
   const [plan, setPlan] = useState(null);
   const [planTried, setPlanTried] = useState(false);
   const [planError, setPlanError] = useState(null);
-  const { catalog, loading: catalogLoading } = usePluginCatalog();
+  const { catalog, addons, loading: catalogLoading } = usePluginCatalog();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -240,7 +240,10 @@ export default function StaffSubscriptions() {
           // La escritura vale aunque la flota no se haya reconvergido: la
           // recoge el barrido. Pero hay que decirlo, o nadie entiende por qué
           // los equipos tardan.
-          (r?.reconciled === false ? " Devices will pick it up on the next hourly sweep." : "")
+          (r?.reconciled === false ? " Devices will pick it up on the next hourly sweep." : "") +
+          // ADR-0026: con Stripe el complemento llega con su webhook, y si
+          // Stripe lo rechazó hay que decirlo aunque el resto se guardara.
+          (addonsOutcome(r) ? ` ${addonsOutcome(r)}` : "")
       );
       setPlanTarget(null);
       await load();
@@ -453,6 +456,7 @@ export default function StaffSubscriptions() {
               onChange={setPlan}
               errors={planTried ? planErrors : {}}
               catalog={catalog ?? []}
+              addons={addons ?? []}
               catalogLoading={catalogLoading}
               stripeManaged={Boolean(planTarget?.hasStripeSubscription)}
               disabled={saving}

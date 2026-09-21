@@ -1,7 +1,7 @@
 // src/components/Billing/StaffPlanForm.jsx
 //
 // El formulario del plan que fija el staff: tier, licencias, trial, plugins de
-// Enterprise y MDM/MAM. Lo usan el alta de tenant (Manage Tenants → Create New
+// Enterprise, complementos (ADR-0026) y MDM/MAM. Lo usan el alta de tenant (Manage Tenants → Create New
 // Tenant) y "Edit plan" en Subscriptions. Controlado: el estado vive en quien
 // lo monta, y las reglas en staffPlanModel.js.
 
@@ -25,6 +25,7 @@ export default function StaffPlanForm({
   onChange,
   errors = {},
   catalog = [],
+  addons = [],
   catalogLoading = false,
   stripeManaged = false,
   disabled = false,
@@ -172,6 +173,46 @@ export default function StaffPlanForm({
               No plugins chosen: only {titleOf("amp")} will be active.
             </Alert>
           )}
+        </Box>
+      )}
+
+      {/* ADR-0026 — complementos, en CUALQUIER plan. En un tenant de Stripe
+          NO se bloquean como el resto: es justo lo que el staff puede cambiar,
+          y el cambio va a su suscripción de Stripe como un item más. */}
+      {addons.length > 0 && (
+        <Box>
+          <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, mb: 0.5 }}>Add-ons</Typography>
+          <Stack role="group" aria-label="Add-ons" divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />}>
+            {addons.map((a) => {
+              const on = (plan.addons ?? []).includes(a.key);
+              return (
+                <Stack key={a.key} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.5 }}>
+                  <Box sx={{ minWidth: 0, pr: 1 }}>
+                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>{a.title}</Typography>
+                    {a.description ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{a.description}</Typography> : null}
+                    <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.25 }}>
+                      {stripeManaged
+                        ? "Added to or removed from the tenant's Stripe subscription, prorated; it takes effect when Stripe confirms."
+                        : managed
+                          ? "Billed outside Stripe, like the rest of this plan."
+                          : "Billed outside Stripe until this tenant pays through a Stripe subscription."}
+                    </Typography>
+                  </Box>
+                  <Switch
+                    checked={on}
+                    disabled={disabled}
+                    onChange={(e) => {
+                      const next = new Set(plan.addons ?? []);
+                      if (e.target.checked) next.add(a.key);
+                      else next.delete(a.key);
+                      set({ addons: [...next].sort() });
+                    }}
+                    slotProps={{ input: { "aria-label": a.title } }}
+                  />
+                </Stack>
+              );
+            })}
+          </Stack>
         </Box>
       )}
 

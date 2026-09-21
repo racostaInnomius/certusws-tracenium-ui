@@ -11,6 +11,13 @@
 import { MANAGED_TIER, PACKAGE_TIERS, TIERS, tierLabel } from "./billingModel";
 
 /**
+ * ADR-0026 — las claves de complemento. Se reconocen aquí para separarlas de
+ * los plugins en `pluginKeys` (el backend las guarda juntas). El título y la
+ * descripción vienen del servidor (`/plugin-catalog` → `addons`).
+ */
+export const ADDON_KEYS = new Set(["cdp_coverage"]);
+
+/**
  * La prueba estándar de alta. Espejo de TRIAL_MONTHS del backend (el trigger
  * que siembra un tenant nuevo concede exactamente esto).
  */
@@ -54,6 +61,7 @@ export function newPlan(now = new Date()) {
     quantity: "",
     ...tierDefaults("starter", now),
     pluginKeys: [],
+    addons: [],
     mdmIncluded: false,
     mdmQuantity: "",
     canceled: false,
@@ -74,7 +82,10 @@ export function planFromRow(row) {
     quantity: row?.quantity ?? row?.maxDevices ?? "",
     trialEnabled: Boolean(trialEndsOn),
     trialEndsOn,
-    pluginKeys: Array.isArray(row?.pluginKeys) ? [...row.pluginKeys] : [],
+    // ADR-0026: los complementos viven en el mismo conjunto que los plugins
+    // de Enterprise; el formulario los separa para enseñarlos en cualquier plan.
+    pluginKeys: Array.isArray(row?.pluginKeys) ? row.pluginKeys.filter((k) => !ADDON_KEYS.has(k)) : [],
+    addons: Array.isArray(row?.pluginKeys) ? row.pluginKeys.filter((k) => ADDON_KEYS.has(k)).sort() : [],
     mdmIncluded: Boolean(row?.mdmTier),
     mdmQuantity: row?.mdmQuantity ?? "",
     canceled: row?.status === "canceled",
@@ -125,12 +136,32 @@ export function planPayload(plan) {
     trialEndsAt: plan.trialEnabled ? endOfDayIso(plan.trialEndsOn) : null,
     // Sólo Enterprise lleva conjunto; un paquete que lo mandara recibiría 400.
     pluginKeys: managed ? [...new Set(plan.pluginKeys ?? [])].sort() : null,
+    // ADR-0026 — en CUALQUIER plan, y siempre explícito: el backend conserva
+    // los que haya si no llega el campo, pero este formulario sí sabe cuáles
+    // quiere.
+    addons: [...new Set(plan.addons ?? [])].sort(),
     mdm: plan.mdmIncluded ? { included: true, quantity: toInt(plan.mdmQuantity) } : { included: false },
   };
   // El estado sólo lo fija el staff en planes que NO pasan por Stripe; el
   // formulario sólo enseña el interruptor en Enterprise.
   if (managed) body.status = plan.canceled ? "canceled" : "active";
   return body;
+}
+
+/**
+ * ADR-0026 — lo que pasó con los complementos al guardar, para la pantalla.
+ * Con Stripe el derecho llega con su webhook; si Stripe no lo aceptó, el resto
+ * del plan SÍ se guardó y hay que decirlo sin que parezca un éxito completo.
+ */
+export function addonsOutcome(result) {
+  switch (result?.addonsApplied) {
+    case "stripe":
+      return "CDP Coverage was sent to the tenant's Stripe subscription (prorated); it switches on as soon as Stripe confirms, usually within seconds.";
+    case "failed":
+      return `The plan was saved, but the add-on could not be changed in Stripe: ${result.addonsError ?? "unknown error"}`;
+    default:
+      return "";
+  }
 }
 
 /**
@@ -144,6 +175,8 @@ export function planErrorMessage(err) {
       return "This tenant pays through Stripe. Cancel that subscription before moving it to Enterprise.";
     case "STRIPE_MANAGED":
       return "Plan, licenses and MDM of a Stripe subscription are managed by Stripe. Only the trial date can change here.";
+    case "UNKNOWN_ADDON":
+      return "That add-on doesn't exist on the server. Reload the page and try again.";
     case "NOT_BILLABLE":
       return "This tenant has no fleet database, so it cannot hold a plan.";
     case "SCHEMA_NOT_MIGRATED":
@@ -160,10 +193,11 @@ export function planSummary(row) {
   if (!row?.tier) return "—";
   const parts = [tierLabel(row.tier)];
   if (row.tier === MANAGED_TIER) {
-    const n = Array.isArray(row.pluginKeys) ? row.pluginKeys.length : 0;
+    const n = Array.isArray(row.pluginKeys) ? row.pluginKeys.filter((k) => !ADDON_KEYS.has(k)).length : 0;
     parts.push(n === 0 ? "no plugins chosen" : `${n} plugin${n === 1 ? "" : "s"}`);
   }
   if (row.mdmTier) parts.push(`MDM ×${row.mdmQuantity ?? 0}`);
+  if (Array.isArray(row.pluginKeys) && row.pluginKeys.includes("cdp_coverage")) parts.push("CDP Coverage");
   return parts.join(" · ");
 }
 

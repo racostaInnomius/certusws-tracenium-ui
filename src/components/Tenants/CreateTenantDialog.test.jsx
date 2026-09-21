@@ -78,6 +78,7 @@ describe("Create New Tenant", () => {
       quantity: 2500,
       trialEndsAt: null,
       pluginKeys: ["pmp"],
+      addons: [],
       mdm: { included: false },
       status: "active",
     });

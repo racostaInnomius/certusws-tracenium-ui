@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  addonsOutcome,
   dateInMonths,
   endOfDayIso,
   newPlan,
@@ -36,6 +37,7 @@ describe("el cuerpo del PUT", () => {
       quantity: 50,
       trialEndsAt: "2026-10-17T23:59:59.000Z",
       pluginKeys: null,
+      addons: [],
       mdm: { included: false },
     });
   });
@@ -55,6 +57,7 @@ describe("el cuerpo del PUT", () => {
       quantity: 50,
       trialEndsAt: null,
       pluginKeys: ["pmp", "scp"],
+      addons: [],
       mdm: { included: true, quantity: 300 },
       status: "active",
     });
@@ -130,5 +133,33 @@ describe("mensajes y resumen", () => {
     expect(planSummary({ tier: "enterprise", pluginKeys: [] })).toBe("Enterprise · no plugins chosen");
     expect(planSummary({ tier: "business" })).toBe("Business");
     expect(planSummary({ tier: null })).toBe("—");
+  });
+});
+
+describe("⭐ ADR-0026 · complementos en el plan", () => {
+  it("viajan en CUALQUIER plan, ordenados y sin repetir — no sólo en Enterprise", () => {
+    expect(planPayload(valid({ addons: ["cdp_coverage", "cdp_coverage"] })).addons).toEqual(["cdp_coverage"]);
+    expect(planPayload(valid({ tier: "enterprise", addons: ["cdp_coverage"] })).addons).toEqual(["cdp_coverage"]);
+  });
+
+  it("⭐ desde la fila, el complemento se separa de los plugins (el backend los guarda juntos)", () => {
+    const plan = planFromRow({ tier: "enterprise", quantity: 10, pluginKeys: ["scp", "cdp_coverage", "pmp"] });
+    expect(plan.pluginKeys).toEqual(["scp", "pmp"]);
+    expect(plan.addons).toEqual(["cdp_coverage"]);
+    // Y al guardar, el complemento no se cuela como plugin.
+    expect(planPayload(plan).pluginKeys).toEqual(["pmp", "scp"]);
+  });
+
+  it("el resumen lo nombra y no lo cuenta como plugin", () => {
+    expect(planSummary({ tier: "enterprise", pluginKeys: ["scp", "cdp_coverage"] })).toBe("Enterprise · 1 plugin · CDP Coverage");
+    expect(planSummary({ tier: "business", pluginKeys: ["cdp_coverage"] })).toBe("Business · CDP Coverage");
+  });
+
+  it("⭐ tras guardar dice qué pasó: con Stripe llega al confirmar; si Stripe lo rechazó, NO parece un éxito completo", () => {
+    expect(addonsOutcome({ addonsApplied: "stripe" })).toMatch(/switches on as soon as Stripe confirms/);
+    expect(addonsOutcome({ addonsApplied: "failed", addonsError: "No such price" })).toBe(
+      "The plan was saved, but the add-on could not be changed in Stripe: No such price"
+    );
+    expect(addonsOutcome({ addonsApplied: "local" })).toBe("");
   });
 });
