@@ -148,3 +148,15 @@ describe("fijar los objetivos", () => {
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("INVALID", "error"));
   });
 });
+
+describe("la criticidad en el SLA", () => {
+  it("el titular dice cuántos vencidos caen en equipos críticos", () => {
+    const h = headline({ configured: true, compliancePct: 50, breached: 4, breachedOnCritical: 2 });
+    expect(h.text).toMatch(/4 open findings past the committed time — 2 on critical devices/);
+  });
+
+  it("null o 0 no añaden nada: «0 on critical» afirmaría lo que no se sabe", () => {
+    expect(headline({ configured: true, compliancePct: 50, breached: 4, breachedOnCritical: null }).text).not.toMatch(/critical/);
+    expect(headline({ configured: true, compliancePct: 50, breached: 4, breachedOnCritical: 0 }).text).not.toMatch(/critical/);
+  });
+});

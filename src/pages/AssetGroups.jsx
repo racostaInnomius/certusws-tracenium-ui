@@ -82,6 +82,7 @@ import CriteriaBuilder from "../components/AssetGroups/CriteriaBuilder";
 import KnownDevicesPicker from "../components/AssetGroups/KnownDevicesPicker";
 import GroupCoverageNotice from "../components/AssetGroups/GroupCoverageNotice";
 import UngroupedDevicesDrawer from "../components/AssetGroups/UngroupedDevicesDrawer";
+import { CRITICALITY_OPTIONS, CriticalityChip } from "../components/AssetGroups/criticality";
 import { listFrom } from "../api/shape";
 
 
@@ -501,11 +502,12 @@ function CreateGroupDialog({ open, onClose, onCreated, coverage, coverageLoading
   );
 }
 
-// ── Rename dialog (in-place edit of name + description) ──────────
+// ── Edit dialog (in-place edit of name, description, criticality) ─
 
-function RenameGroupDialog({ open, group, onClose, onUpdated }) {
+export function RenameGroupDialog({ open, group, onClose, onUpdated }) {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
+  const [criticality, setCriticality] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState("");
 
@@ -513,6 +515,7 @@ function RenameGroupDialog({ open, group, onClose, onUpdated }) {
     if (open && group) {
       setName(group.name || "");
       setDescription(group.description || "");
+      setCriticality(group.criticality || "");
       setErrorMessage("");
       setSubmitting(false);
     }
@@ -529,6 +532,8 @@ function RenameGroupDialog({ open, group, onClose, onUpdated }) {
       const res = await updateAssetGroup(group.id, {
         name: name.trim(),
         description: description.trim() || null,
+        // "" = volver a normal; el backend lo guarda como NULL.
+        criticality: criticality || null,
       });
       onUpdated(res?.group ?? null);
       onClose();
@@ -541,7 +546,7 @@ function RenameGroupDialog({ open, group, onClose, onUpdated }) {
   return (
     <Dialog open={open} onClose={submitting ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ color: BRAND.dark, fontWeight: 800 }}>
-        Rename group
+        Edit group
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -565,6 +570,24 @@ function RenameGroupDialog({ open, group, onClose, onUpdated }) {
             minRows={2}
             inputProps={{ maxLength: 280 }}
           />
+          <TextField
+            select
+            label="Business criticality"
+            size="small"
+            value={criticality}
+            onChange={(e) => setCriticality(e.target.value)}
+            disabled={submitting}
+            fullWidth
+            helperText={
+              (CRITICALITY_OPTIONS.find((o) => o.value === criticality)?.help ?? "") +
+              " Devices take the highest criticality of their groups. It orders remediation work; it never changes a finding's severity or a CVE's score."
+            }
+            inputProps={{ "data-testid": "group-criticality" }}
+          >
+            {CRITICALITY_OPTIONS.map((o) => (
+              <MenuItem key={o.value || "none"} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </TextField>
           {errorMessage ? <Alert severity="error" variant="outlined">{errorMessage}</Alert> : null}
         </Stack>
       </DialogContent>
@@ -1136,6 +1159,7 @@ export function GroupDetailDrawer({ open, group, onClose, devices, canManage, no
                 </Typography>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
                   <KindChip kind={group.kind} />
+                  <CriticalityChip value={group.criticality} />
                   <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
                     {memberRows.length} member(s)
                   </Typography>
@@ -1500,6 +1524,12 @@ export default function AssetGroups({ refreshNonce = 0, onAskGroup }) {
       renderCell: (params) => <KindChip kind={params.value} />,
     },
     {
+      field: "criticality",
+      headerName: "Criticality",
+      width: 120,
+      renderCell: (params) => <CriticalityChip value={params.value} emptyAsDash />,
+    },
+    {
       field: "memberCount",
       headerName: "Members",
       width: 110,
@@ -1545,14 +1575,14 @@ export default function AssetGroups({ refreshNonce = 0, onAskGroup }) {
           renderCell: (params) => (
             <Stack direction="row" spacing={0.5}>
               <IconButton
-                aria-label="Rename group"
+                aria-label="Edit group"
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();
                   setRenameTarget(params.row);
                 }}
                 sx={{ color: BRAND.gray, "&:hover": { color: BRAND.dark } }}
-                title="Rename"
+                title="Edit name, description and criticality"
               >
                 <EditOutlinedIcon fontSize="small" />
               </IconButton>

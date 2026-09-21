@@ -58,6 +58,17 @@ export function devicesLabel(action) {
   return action.devicesExact ? `${n} ${unit}` : `≥ ${n} ${unit}`;
 }
 
+/**
+ * «3 critical» cuando la acción toca equipos críticos por su grupo de activos.
+ * null (no se pudo contar) y 0 no se pintan: ni «0 critical» —que afirmaría
+ * algo que con null no se sabe— ni ruido cuando no hay ninguno.
+ */
+export function criticalDevicesLabel(action) {
+  const n = action.criticalDevices;
+  if (n == null || n <= 0) return null;
+  return `${n} critical`;
+}
+
 export default function RemediationHubPanel({ reloadKey, onToast, canManage = false }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -222,6 +233,15 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                     <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                       {devicesLabel(a)}
                     </Typography>
+                    {criticalDevicesLabel(a) ? (
+                      <Tooltip title="Devices in an asset group marked Critical. Among actions of equal severity, these go first.">
+                        <Chip
+                          size="small"
+                          label={criticalDevicesLabel(a)}
+                          sx={{ mt: 0.5, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700 }}
+                        />
+                      </Tooltip>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>

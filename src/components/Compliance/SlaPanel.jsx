@@ -46,7 +46,11 @@ export function headline(sla) {
     return { text: "Targets are set, but no open finding falls under them yet.", tone: "info" };
   }
   if (sla.breached > 0) {
-    return { text: `${sla.breached} open finding${sla.breached === 1 ? "" : "s"} past the committed time`, tone: "error" };
+    // Los que caen en equipos críticos van en el titular: cuatro vencidos en
+    // el controlador de dominio no pesan lo mismo que cuatro en portátiles.
+    // null (no se pudo saber) y 0 no añaden nada.
+    const onCritical = sla.breachedOnCritical > 0 ? ` — ${sla.breachedOnCritical} on critical devices` : "";
+    return { text: `${sla.breached} open finding${sla.breached === 1 ? "" : "s"} past the committed time${onCritical}`, tone: "error" };
   }
   return { text: "Every measured finding is within its committed time.", tone: "success" };
 }
@@ -231,12 +235,19 @@ export default function SlaPanel({ reloadKey, canManage = false, onToast }) {
       {(sla?.worst?.length ?? 0) > 0 ? (
         <Box sx={{ mt: 2 }}>
           <Typography sx={{ fontSize: TEXT.base, fontWeight: 700, mb: 0.5 }}>
-            Longest overdue
+            {sla.worst.some((w) => w.criticality === "critical") ? "Overdue — critical devices first" : "Longest overdue"}
           </Typography>
           <Stack spacing={0.5}>
             {sla.worst.map((w) => (
               <Typography key={`${w.deviceId}:${w.checkId}`} sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
                 <strong>{w.overdueDays} d</strong> over · {w.hostname || w.deviceId} · {w.title || w.checkId}
+                {w.criticality === "critical" ? (
+                  <Chip
+                    size="small"
+                    label="critical device"
+                    sx={{ ml: 1, height: 18, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText, fontWeight: 700 }}
+                  />
+                ) : null}
               </Typography>
             ))}
           </Stack>

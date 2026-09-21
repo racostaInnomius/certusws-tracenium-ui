@@ -19,7 +19,7 @@ vi.mock("../../api/patchManagement", () => ({ remediate: vi.fn() }));
 
 import { getRemediationHub } from "../../api/compliance";
 import { remediate } from "../../api/patchManagement";
-import RemediationHubPanel, { blockedReasonText, devicesLabel } from "./RemediationHubPanel";
+import RemediationHubPanel, { blockedReasonText, criticalDevicesLabel, devicesLabel } from "./RemediationHubPanel";
 
 const action = (over = {}) => ({
   key: "windows.firewall.profiles_enabled",
@@ -170,5 +170,17 @@ describe("estados vacíos y de error", () => {
     getRemediationHub.mockRejectedValue(new Error("boom"));
     render(<RemediationHubPanel canManage />);
     expect(await screen.findByText("boom")).toBeInTheDocument();
+  });
+});
+
+describe("los equipos críticos", () => {
+  it("null (no se pudo contar) y 0 no pintan nada", () => {
+    expect(criticalDevicesLabel({ criticalDevices: null })).toBeNull();
+    expect(criticalDevicesLabel({ criticalDevices: 0 })).toBeNull();
+    expect(criticalDevicesLabel({})).toBeNull();
+  });
+
+  it("con alguno lo dice", () => {
+    expect(criticalDevicesLabel({ criticalDevices: 3 })).toBe("3 critical");
   });
 });
