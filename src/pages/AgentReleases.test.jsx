@@ -87,3 +87,30 @@ describe("AgentReleases — catálogo global, de sólo consulta", () => {
     expect(await screen.findByText(/Tracenium-Agent-1\.1\.66-x64\.msi/)).toBeTruthy();
   });
 });
+
+// 21-sep: las filas son `latest` y se reutilizan en cada release. La columna de
+// fecha enseñaba cuándo se dio de alta la FILA (abril, julio) y la versión
+// decía «latest»; ahora se ve lo que se instala y cuándo se publicó ese build.
+describe("AgentReleases — versión y fecha del build publicado", () => {
+  it("enseña la versión resuelta y la fecha del build, no la de la fila", async () => {
+    listAgentReleases.mockResolvedValue({
+      items: [
+        {
+          ...fila,
+          version: "latest",
+          createdAt: "2026-04-06T12:00:00Z",
+          publishedVersion: "1.1.78",
+          publishedAt: "2026-09-21T17:53:57Z",
+        },
+      ],
+    });
+    await renderizar();
+
+    expect(screen.getByRole("columnheader", { name: /published/i })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /created at/i })).toBeNull();
+    expect(screen.getByText("1.1.78")).toBeInTheDocument();
+    const grid = screen.getByRole("grid");
+    expect(within(grid).queryByText(/Apr/i)).toBeNull();
+    expect(within(grid).getByText(/Sep/i)).toBeInTheDocument();
+  });
+});

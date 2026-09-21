@@ -26,6 +26,7 @@ import {
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import UnattendedInstallDialog from "../components/agent-releases/UnattendedInstallDialog";
+import { displayVersion } from "../components/agent-releases/releaseDisplay";
 
 const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
 const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
@@ -200,7 +201,27 @@ export default function AgentReleases({ embedded = false }) {
     { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.5 },
     { field: "arch", headerName: "Arch", minWidth: 100, flex: 0.45 },
     { field: "format", headerName: "Format", minWidth: 100, flex: 0.45 },
-    { field: "version", headerName: "Version", minWidth: 100, flex: 0.45 },
+    {
+      // `latest` no dice nada: se enseña la versión a la que resuelve hoy.
+      field: "version",
+      headerName: "Version",
+      minWidth: 110,
+      flex: 0.5,
+      valueGetter: (_value, row) => displayVersion(row),
+      renderCell: (params) =>
+        String(params.row.version).toLowerCase() === "latest" && params.row.publishedVersion ? (
+          <Tooltip title="This row always serves the newest published build" arrow>
+            <span>
+              {params.row.publishedVersion}{" "}
+              <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                (latest)
+              </Typography>
+            </span>
+          </Tooltip>
+        ) : (
+          displayVersion(params.row)
+        ),
+    },
     { field: "channel", headerName: "Channel", minWidth: 100, flex: 0.45 },
     {
       field: "isActive",
@@ -210,11 +231,23 @@ export default function AgentReleases({ embedded = false }) {
       renderCell: (params) => renderActiveChip(params.value),
     },
     {
-      field: "createdAt",
-      headerName: "Created At",
+      // ⚠️ La fecha del BUILD que se descarga, no la de la fila del catálogo:
+      // `createdAt` es cuándo se dio de alta la fila (abril, julio…) y la
+      // fila se reutiliza en cada release, así que parecía que el agente
+      // llevaba meses sin publicarse.
+      field: "publishedAt",
+      headerName: "Published",
       minWidth: 150,
       flex: 0.7,
-      renderCell: (params) => formatDate(params.value),
+      valueGetter: (_value, row) => row.publishedAt ?? null,
+      renderCell: (params) =>
+        params.row.publishedAt ? (
+          formatDate(params.row.publishedAt)
+        ) : (
+          <Tooltip title="No published build found for this platform, architecture and format" arrow>
+            <span>—</span>
+          </Tooltip>
+        ),
     },
     {
       field: "download",
@@ -268,13 +301,13 @@ export default function AgentReleases({ embedded = false }) {
       return {
         version: false,
         channel: false,
-        createdAt: false,
+        publishedAt: false,
       };
     }
 
     if (isMdDown) {
       return {
-        createdAt: false,
+        publishedAt: false,
       };
     }
 
