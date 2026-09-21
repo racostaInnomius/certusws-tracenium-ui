@@ -117,7 +117,7 @@ export default function LanSavingsPanel({ loading, savings, failed }) {
         <Box sx={{ textAlign: "right" }}>
           <Typography
             sx={{
-              fontSize: 28,
+              fontSize: TEXT["3xl"],
               fontWeight: 800,
               lineHeight: 1.1,
               color: s.hasDp ? BRAND.tealText : BRAND.alert.warningText,
