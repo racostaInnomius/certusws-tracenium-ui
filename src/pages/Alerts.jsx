@@ -761,6 +761,7 @@ function ManageRulesDrawer({
   const editorProfileProps = {
     profiles: np.profiles,
     onManageProfiles: () => setTab("profiles"),
+    roleOptions: np.roleOptions,
   };
   // Group: which templates already have a tenant rule, which don't.
   // A template may have multiple instances (future-proof) so we look up
@@ -832,6 +833,7 @@ function ManageRulesDrawer({
             loading={np.loadingProfiles && !np.profiles}
             members={np.members}
             canListMembers={Boolean(np.access?.canListMembers)}
+            roleOptions={np.roleOptions}
             notify={notify}
             onChanged={() => {
               np.reload();

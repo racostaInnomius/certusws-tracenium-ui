@@ -11,6 +11,9 @@ import {
   buildNotifyPayload,
   summarizeRecipients,
   describeNotifyError,
+  roleChoices,
+  hasRole,
+  toggleRole,
 } from "./notifyHelpers";
 
 describe("parseRecipients", () => {
@@ -250,5 +253,40 @@ describe("describeNotifyError — el backend nombra lo que falla", () => {
 
   it("un código desconocido cae al mensaje por defecto", () => {
     expect(describeNotifyError(new Error("boom"), "Could not save")).toBe("Could not save");
+  });
+});
+
+// ADR-0025 F3 — los roles salen de TenantRoleDef.
+describe("roleChoices — el menú de roles", () => {
+  const T1 = [
+    { name: "OWNER", isSystem: true, reachable: 1 },
+    { name: "ADMIN", isSystem: true, reachable: 1 },
+    { name: "USER", isSystem: true, reachable: 0 },
+    { name: "IT Support", isSystem: false, reachable: 1 },
+  ];
+
+  it("⭐ ofrece los roles propios del tenant, con a cuántos llega cada uno", () => {
+    expect(roleChoices(T1, [])).toContainEqual({ name: "IT Support", reachable: 1, missing: false });
+  });
+
+  it("⚠️ un rol guardado que ya no existe se enseña marcado, no desaparece", () => {
+    // Si se ocultara, seguiría en la config guardada sin que nadie lo viera.
+    const choices = roleChoices(T1, ["OWNER", "Contractors"]);
+    expect(choices.at(-1)).toEqual({ name: "Contractors", reachable: null, missing: true });
+    expect(choices.filter((c) => c.missing)).toHaveLength(1);
+  });
+
+  it("sin la lista del servidor ofrece los de sistema y no marca nada como perdido", () => {
+    // No saber no es lo mismo que «no existe».
+    const choices = roleChoices(null, ["IT Support"]);
+    expect(choices.map((c) => c.name)).toEqual(["OWNER", "ADMIN", "USER", "IT Support"]);
+    expect(choices.some((c) => c.missing)).toBe(false);
+  });
+
+  it("casa sin distinguir mayúsculas, como el backend", () => {
+    expect(roleChoices(T1, ["it support"]).some((c) => c.missing)).toBe(false);
+    expect(hasRole(["IT Support"], "it SUPPORT")).toBe(true);
+    expect(toggleRole(["it support", "OWNER"], "IT Support")).toEqual(["OWNER"]);
+    expect(toggleRole(["OWNER"], "IT Support")).toEqual(["OWNER", "IT Support"]);
   });
 });

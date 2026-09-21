@@ -15,14 +15,51 @@ export const MAX_RECIPIENTS = 20;
 export const SEVERITIES = ["low", "medium", "high", "critical"];
 
 /**
- * Roles a rule can target, matching TenantMember.Role.
+ * The built-in roles every tenant has. Only a FALLBACK now (ADR-0025 F3):
+ * the roles a rule can target come from the tenant's TenantRoleDef via
+ * GET /alerts/notify-roles, custom ones included — this list used to be
+ * the whole menu, which is how `IT Support` could not be targeted.
  *
  * Targeting a role is the recommended path, and not for convenience:
  * the address is read from TenantMember at send time, so someone who
  * leaves the tenant stops being notified without anyone editing the
  * rule. A typed-in address keeps arriving until a human remembers it.
  */
-export const NOTIFY_ROLES = ["OWNER", "ADMIN", "USER"];
+export const SYSTEM_ROLES = ["OWNER", "ADMIN", "USER"];
+
+/**
+ * The role chips to show: the tenant's roles, plus any role the rule or
+ * profile already targets that no longer exists — flagged `missing`, so
+ * it can be removed on purpose instead of vanishing from the screen while
+ * still sitting in the saved config. Matching is case-insensitive, like
+ * the backend's.
+ *
+ * `options` is `[{ name, isSystem, reachable }]` or null (not loaded /
+ * not allowed), in which case the built-in roles are offered.
+ */
+export function roleChoices(options, selected = []) {
+  const base = Array.isArray(options)
+    ? options.map((o) => ({ name: o.name, reachable: o.reachable ?? null, missing: false }))
+    : SYSTEM_ROLES.map((name) => ({ name, reachable: null, missing: false }));
+  const known = new Set(base.map((c) => c.name.toUpperCase()));
+  const gone = (Array.isArray(selected) ? selected : [])
+    .filter((r) => typeof r === "string" && r && !known.has(r.toUpperCase()))
+    .map((name) => ({ name, reachable: null, missing: Array.isArray(options) }));
+  return [...base, ...gone];
+}
+
+/** Case-insensitive membership, so "it support" and "IT Support" are one chip. */
+export function hasRole(list, name) {
+  const key = String(name).toUpperCase();
+  return (Array.isArray(list) ? list : []).some((r) => String(r).toUpperCase() === key);
+}
+
+export function toggleRole(list, name) {
+  const current = Array.isArray(list) ? list : [];
+  return hasRole(current, name)
+    ? current.filter((r) => String(r).toUpperCase() !== String(name).toUpperCase())
+    : [...current, name];
+}
 
 /**
  * Delivery channels. `console` is not a delivery — it is the feed, where
@@ -177,7 +214,8 @@ export function describeNotifyError(err, fallback = "Could not save") {
     case "INVALID_EMAILS":
       return `Not a valid address: ${names(body.invalid)}`;
     case "UNKNOWN_ROLES":
-      return `Roles that cannot be targeted yet: ${names(body.unknown)}. Add those people as members instead.`;
+    case "UNKNOWN_NOTIFY_ROLES":
+      return `No such role in this tenant: ${names(body.unknown)}. It may have been renamed or removed — reload and pick again.`;
     case "UNKNOWN_MEMBERS":
       return `Not a member of this tenant: ${names(body.unknown)}`;
     case "PROFILE_EMPTY":

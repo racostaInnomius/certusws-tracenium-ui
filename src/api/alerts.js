@@ -61,6 +61,12 @@ export async function deleteNotifyProfile(id) {
   return httpDeleteJson(`${BASE}/notify-profiles/${encodeURIComponent(id)}`);
 }
 
+// ADR-0025 F3 — roles apuntables del tenant (TenantRoleDef), con cuántas
+// personas con correo alcanza hoy cada uno: [{ name, isSystem, reachable }].
+export async function getNotifyRoles() {
+  return httpGetJson(`${BASE}/notify-roles`);
+}
+
 export async function getNotifyProfileRecipients(id) {
   return httpGetJson(`${BASE}/notify-profiles/${encodeURIComponent(id)}/recipients`, { cache: "no-store" });
 }

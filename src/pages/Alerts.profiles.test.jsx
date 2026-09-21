@@ -68,7 +68,14 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount({ permissions = ["alerts", "tenant_members"], deleteResponse } = {}) {
+const ROLES = [
+  { name: "OWNER", isSystem: true, reachable: 1 },
+  { name: "ADMIN", isSystem: true, reachable: 1 },
+  { name: "USER", isSystem: true, reachable: 0 },
+  { name: "IT Support", isSystem: false, reachable: 1 },
+];
+
+function mount({ permissions = ["alerts", "tenant_members"], deleteResponse, rule = RULE } = {}) {
   const calls = [];
   const bodies = {};
   server.use(
@@ -98,11 +105,12 @@ function mount({ permissions = ["alerts", "tenant_members"], deleteResponse } = 
       if (path.includes("/alerts/notify-profiles/") && method === "DELETE") {
         return deleteResponse ?? HttpResponse.json({ ok: true });
       }
+      if (path.endsWith("/alerts/notify-roles")) return HttpResponse.json({ ok: true, roles: ROLES });
       if (path.endsWith("/recipients")) {
         return HttpResponse.json({ ok: true, configured: true, to: ["ana@cliente.com"], missingProfiles: [], truncated: 0 });
       }
       if (path.endsWith("/alerts/rules") && method === "GET") {
-        return HttpResponse.json({ ok: true, rules: [RULE], templates: [TEMPLATE] });
+        return HttpResponse.json({ ok: true, rules: [rule], templates: [TEMPLATE] });
       }
       if (path.includes("/alerts/rules/") && method === "PATCH") {
         return HttpResponse.json({ ok: true, rule: RULE });
@@ -132,6 +140,7 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
 
     expect(screen.queryByRole("tab", { name: /profiles/i })).not.toBeInTheDocument();
     expect(calls.some((c) => c.includes("/notify-profiles"))).toBe(false);
+    expect(calls.some((c) => c.includes("/notify-roles"))).toBe(false);
     expect(calls.some((c) => c.includes("/members"))).toBe(false);
     expect(calls.some((c) => c.endsWith("/recipients"))).toBe(false);
   });
@@ -215,5 +224,27 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
     expect(notify.profiles).toEqual([P1]);
     expect(notify.roles).toEqual(["OWNER"]);
     expect(notify.members).toEqual(["sub-1"]);
+  });
+
+  it("⭐ F3: un rol propio del tenant se puede apuntar desde la regla", async () => {
+    const { bodies } = mount();
+    await openDrawer();
+    await userEvent.click(await screen.findByRole("button", { name: "Email…" }));
+
+    // El chip dice a cuántos llega hoy.
+    const chip = await screen.findByRole("button", { name: "IT Support" });
+    expect(chip).toHaveTextContent("IT Support · 1");
+    await userEvent.click(chip);
+    await userEvent.click(screen.getByRole("button", { name: /save delivery/i }));
+
+    await waitFor(() => expect(bodies["PATCH /api/v1/alerts/rules/rule-1"]).toBeDefined());
+    expect(bodies["PATCH /api/v1/alerts/rules/rule-1"].notify.roles).toEqual(["OWNER", "IT Support"]);
+  });
+
+  it("⚠️ un rol guardado que ya no existe se enseña marcado para quitarlo", async () => {
+    mount({ rule: { ...RULE, notify: { roles: ["Contractors"] } } });
+    await openDrawer();
+    await userEvent.click(await screen.findByRole("button", { name: "Email…" }));
+    expect(await screen.findByText("Contractors (removed)")).toBeInTheDocument();
   });
 });

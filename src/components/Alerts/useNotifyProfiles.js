@@ -12,7 +12,7 @@
 import * as React from "react";
 import { getMyCapabilities } from "../../api/roles";
 import { listTenantMembers } from "../../api/tenants";
-import { listNotifyProfiles } from "../../api/alerts";
+import { listNotifyProfiles, getNotifyRoles } from "../../api/alerts";
 import { useEffectiveTenantId } from "../../hooks/useEffectiveTenantId";
 
 /**
@@ -26,6 +26,8 @@ export function useNotifyProfiles() {
   const [profiles, setProfiles] = React.useState(null);
   const [loadingProfiles, setLoadingProfiles] = React.useState(false);
   const [members, setMembers] = React.useState([]);
+  // ADR-0025 F3 — the tenant's targetable roles; null until loaded.
+  const [roleOptions, setRoleOptions] = React.useState(null);
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
@@ -57,6 +59,18 @@ export function useNotifyProfiles() {
   }, [access?.canManage, nonce]);
 
   React.useEffect(() => {
+    if (!access?.canManage) return undefined;
+    let alive = true;
+    getNotifyRoles()
+      .then((res) => alive && setRoleOptions(Array.isArray(res?.roles) ? res.roles : null))
+      // Sin la lista se ofrecen los de sistema: mejor eso que un editor sin roles.
+      .catch(() => alive && setRoleOptions(null));
+    return () => {
+      alive = false;
+    };
+  }, [access?.canManage, nonce]);
+
+  React.useEffect(() => {
     if (!access?.canManage || !access?.canListMembers || !tenantId) return undefined;
     let alive = true;
     listTenantMembers(tenantId)
@@ -82,6 +96,7 @@ export function useNotifyProfiles() {
     profileNames,
     loadingProfiles,
     members,
+    roleOptions: access?.canManage ? roleOptions : null,
     reload: () => setNonce((n) => n + 1),
   };
 }

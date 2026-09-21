@@ -28,7 +28,6 @@ import {
   parseRecipients,
   validateRecipients,
   MAX_RECIPIENTS,
-  NOTIFY_ROLES,
   NOTIFY_CHANNELS,
   PENDING_CHANNELS,
   MATRIX_SEVERITIES,
@@ -41,6 +40,7 @@ import {
   summarizeRecipients,
 } from "./notifyHelpers";
 import { getAlertRuleRecipients } from "../../api/alerts";
+import RoleChips from "./RoleChips";
 
 
 /** Compact read-only badge for the rule row. */
@@ -87,14 +87,23 @@ export function NotifyBadge({ notify, profileNames = null }) {
  * when they are not available to this user (no `alerts` capability) or
  * not loaded yet. `null` hides the picker; `[]` shows the empty state.
  */
-export default function RuleNotifyEditor({ rule, onSave, busy = false, profiles = null, onManageProfiles }) {
+export default function RuleNotifyEditor({
+  rule,
+  onSave,
+  busy = false,
+  profiles = null,
+  onManageProfiles,
+  roleOptions = null,
+}) {
   // Plain derivation, not useMemo: both values are primitives, so the
   // effect below re-syncs on value change rather than identity.
   const initialEmails = Array.isArray(rule?.notify?.email)
     ? rule.notify.email.join("\n")
     : "";
   const initialSeverity = rule?.notify?.minSeverity ?? "low";
-  const initialRoles = Array.isArray(rule?.notify?.roles) ? rule.notify.roles.join(",") : "";
+  // JSON, not a comma-joined string: a custom role name can contain a comma
+  // (ADR-0025 F3), and a string keeps the re-sync effect keyed on value.
+  const initialRoles = JSON.stringify(Array.isArray(rule?.notify?.roles) ? rule.notify.roles : []);
   const initialMatrix = JSON.stringify(normalizeMatrix(rule?.notify?.channels));
   const initialProfiles = profileIdsOf(rule?.notify).map((id) => id.toLowerCase()).join(",");
 
@@ -146,7 +155,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false, profiles 
     setMatrixJson(JSON.stringify({ ...matrix, [severity]: next }));
   };
 
-  const selectedRoles = roles ? roles.split(",").filter(Boolean) : [];
+  const selectedRoles = JSON.parse(roles);
   const selectedProfiles = profileIds ? profileIds.split(",").filter(Boolean) : [];
   const toggleProfile = (id) =>
     setProfileIds(
@@ -159,13 +168,6 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false, profiles 
   // Selected but gone — deleted after the rule saved, or never this
   // tenant's. Shown so they can be removed, never silently dropped.
   const missingProfiles = profiles ? selectedProfiles.filter((id) => !knownProfileIds.has(id)) : [];
-  const toggleRole = (role) =>
-    setRoles(
-      (selectedRoles.includes(role)
-        ? selectedRoles.filter((r) => r !== role)
-        : [...selectedRoles, role]
-      ).join(",")
-    );
 
   const parsed = parseRecipients(emails);
   const { invalid, unique, overCap, ok } = validateRecipients(parsed);
@@ -326,26 +328,12 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false, profiles 
           Notify by role — the address comes from the member record, so someone who leaves
           the tenant stops being notified without anyone editing this rule.
         </Typography>
-        <Stack direction="row" spacing={0.75}>
-          {NOTIFY_ROLES.map((role) => {
-            const on = selectedRoles.includes(role);
-            return (
-              <Chip
-                key={role}
-                size="small"
-                label={role}
-                onClick={busy ? undefined : () => toggleRole(role)}
-                sx={{
-                  cursor: busy ? "default" : "pointer",
-                  fontWeight: 700,
-                  fontSize: TEXT.xs,
-                  bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
-                  color: on ? BRAND.tealText : BRAND.gray,
-                }}
-              />
-            );
-          })}
-        </Stack>
+        <RoleChips
+          options={roleOptions}
+          selected={selectedRoles}
+          onChange={(next) => setRoles(JSON.stringify(next))}
+          busy={busy}
+        />
       </Box>
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">

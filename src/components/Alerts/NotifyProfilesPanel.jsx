@@ -16,7 +16,6 @@ import {
   Box,
   Button,
   Checkbox,
-  Chip,
   CircularProgress,
   FormControlLabel,
   Paper,
@@ -34,7 +33,6 @@ import {
   getNotifyProfileRecipients,
 } from "../../api/alerts";
 import {
-  NOTIFY_ROLES,
   MAX_RECIPIENTS,
   parseRecipients,
   validateRecipients,
@@ -42,10 +40,11 @@ import {
   describeNotifyError,
   summarizeRecipients,
 } from "./notifyHelpers";
+import RoleChips from "./RoleChips";
 
 const NAME_MAX = 80;
 
-function ProfileForm({ profile, members, canListMembers, busy, error, onSubmit, onCancel }) {
+function ProfileForm({ profile, members, canListMembers, roleOptions, busy, error, onSubmit, onCancel }) {
   const [name, setName] = React.useState(profile?.name ?? "");
   const [description, setDescription] = React.useState(profile?.description ?? "");
   const [roles, setRoles] = React.useState(profile?.roles ?? []);
@@ -101,27 +100,7 @@ function ProfileForm({ profile, members, canListMembers, busy, error, onSubmit, 
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.75 }}>
             Roles — everyone active in the role, read at send time.
           </Typography>
-          <Stack direction="row" spacing={0.75}>
-            {NOTIFY_ROLES.map((role) => {
-              const on = roles.includes(role);
-              return (
-                <Chip
-                  key={role}
-                  size="small"
-                  label={role}
-                  aria-pressed={on}
-                  onClick={busy ? undefined : () => toggle(roles, setRoles, role)}
-                  sx={{
-                    cursor: busy ? "default" : "pointer",
-                    fontWeight: 700,
-                    fontSize: TEXT.xs,
-                    bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
-                    color: on ? BRAND.tealText : BRAND.gray,
-                  }}
-                />
-              );
-            })}
-          </Stack>
+          <RoleChips options={roleOptions} selected={roles} onChange={setRoles} busy={busy} />
         </Box>
 
         <Box>
@@ -232,7 +211,15 @@ function ProfileForm({ profile, members, canListMembers, busy, error, onSubmit, 
  * `members` — active members with an email, `[]` when not listable.
  * `onChanged()` — refetch after any write.
  */
-export default function NotifyProfilesPanel({ profiles, loading, members = [], canListMembers, onChanged, notify }) {
+export default function NotifyProfilesPanel({
+  profiles,
+  loading,
+  members = [],
+  canListMembers,
+  roleOptions = null,
+  onChanged,
+  notify,
+}) {
   const confirm = useConfirm();
   // "new" | profile id | null — one form open at a time; the drawer is narrow.
   const [editing, setEditing] = React.useState(null);
@@ -325,6 +312,7 @@ export default function NotifyProfilesPanel({ profiles, loading, members = [], c
           <ProfileForm
             members={members}
             canListMembers={canListMembers}
+            roleOptions={roleOptions}
             busy={busy}
             error={error}
             onSubmit={save}
@@ -400,6 +388,7 @@ export default function NotifyProfilesPanel({ profiles, loading, members = [], c
                     profile={p}
                     members={members}
                     canListMembers={canListMembers}
+                    roleOptions={roleOptions}
                     busy={busy}
                     error={error}
                     onSubmit={save}
