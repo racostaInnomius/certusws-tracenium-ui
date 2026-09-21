@@ -53,6 +53,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RemoveCircleOutlineOutlinedIcon from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
+import ManageSearchOutlinedIcon from "@mui/icons-material/ManageSearchOutlined";
 
 import { BRAND, DATAGRID_SX, ICON, ROLE, TEXT } from "../theme/brand";
 import SectionPaper from "../components/common/SectionPaper";
@@ -878,7 +879,7 @@ export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }
 
 // ── Detail drawer (members list + add/remove) ────────────────────
 
-function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, onMembersChanged }) {
+export function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, onMembersChanged, onAskGroup }) {
   const [members, setMembers] = React.useState([]);
   const [membersTotal, setMembersTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
@@ -1198,6 +1199,24 @@ function GroupDetailDrawer({ open, group, onClose, devices, canManage, notify, o
                   Dispatch job
                 </Button>
               ) : null}
+              {/* ADR-0029 — preguntar AHORA a los miembros conectados. Sólo si
+                  quien mira tiene `live_query` (Assets pasa el atajo o no). */}
+              {onAskGroup ? (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<ManageSearchOutlinedIcon />}
+                  onClick={() => {
+                    onClose?.();
+                    onAskGroup(group);
+                  }}
+                  disabled={memberRows.length === 0}
+                  sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.teal }}
+                  title="Ask the connected members of this group a question now (Live Query)"
+                >
+                  Ask this group
+                </Button>
+              ) : null}
               {canManage && group.kind === "static" ? (
                 <Button
                   size="small"
@@ -1345,7 +1364,7 @@ function AddMembersDialog({ open, onClose, onConfirm, excludeIds, groupName }) {
 
 // ── Main page component ──────────────────────────────────────────
 
-export default function AssetGroups({ refreshNonce = 0 }) {
+export default function AssetGroups({ refreshNonce = 0, onAskGroup }) {
   const { auth } = useAuthContext();
   const tenantRole = String(auth?.tenantMember?.role || "");
   const isActiveMember = auth?.tenantMember?.isActive === true;
@@ -1688,6 +1707,7 @@ export default function AssetGroups({ refreshNonce = 0 }) {
         canManage={canManage}
         notify={notify}
         onMembersChanged={() => { loadGroups(); loadCoverage(); }}
+        onAskGroup={onAskGroup}
       />
 
       <UngroupedDevicesDrawer

@@ -314,6 +314,7 @@ export default function AssetsDashboard({
   onNavigateToHardwareInventory,
   suppressEmptyStateOverlay = false,
   onNavigate,
+  onAskDevice,
 }) {
   // ADR-0011 Phase 3: gate on the "assets_view" capability — the
   // backend routes exclusive to this tab (hardware/software inventory
@@ -1916,6 +1917,14 @@ const osVersionItems = React.useMemo(() => {
                   onToggleDecommissionSelection={toggleHostForDecommission}
                   onDeleteDevice={openDecommissionDialog}
                   onOpenInPage={navigateToDeviceAction}
+                  onAskDevice={
+                    onAskDevice
+                      ? (host) => {
+                          const id = getHostDeviceId(host);
+                          if (id) onAskDevice(id, host?.hostname || host?.host || id);
+                        }
+                      : undefined
+                  }
                   onRowClick={handleAgentSelect}
                   loading={loading}
                   page={hostsPaginationModel.page}

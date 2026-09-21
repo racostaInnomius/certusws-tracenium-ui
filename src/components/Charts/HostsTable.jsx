@@ -36,6 +36,7 @@ import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import DesktopWindowsOutlinedIcon from "@mui/icons-material/DesktopWindowsOutlined";
 import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
+import ManageSearchOutlinedIcon from "@mui/icons-material/ManageSearchOutlined";
 
 // Same page keys pageRegistry.jsx dispatches on, same icons Sidebar.jsx
 // uses for these three entries — keeps the menu recognizable as "the
@@ -216,7 +217,7 @@ function DecommissionStatusChip({ job, row }) {
 // Without `canDecommission` the Delete half is not rendered at all and the
 // caret stands alone: the backend requires `device_management` to decommission,
 // so a Delete a role cannot use would only end in a 403.
-function RowActions({ row, canDecommission, canDelete, rowLocked, checked, onDeleteDevice, onOpenInPage }) {
+function RowActions({ row, canDecommission, canDelete, rowLocked, checked, onDeleteDevice, onOpenInPage, onAskDevice }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
 
   const tone = canDelete
@@ -277,6 +278,21 @@ function RowActions({ row, canDecommission, canDelete, rowLocked, checked, onDel
             <ListItemText>{action.label}</ListItemText>
           </MenuItem>
         ))}
+        {/* ADR-0029 — no es un enlace a otra página sino la pestaña Live
+            Query de esta misma, con el equipo puesto. Sólo con el permiso. */}
+        {onAskDevice ? (
+          <MenuItem
+            onClick={() => {
+              setAnchorEl(null);
+              onAskDevice(row);
+            }}
+          >
+            <ListItemIcon>
+              <ManageSearchOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Ask this device (Live Query)</ListItemText>
+          </MenuItem>
+        ) : null}
       </Menu>
     </>
   );
@@ -316,6 +332,7 @@ export default function HostsTable({
   onToggleDecommissionSelection,
   onDeleteDevice,
   onOpenInPage,
+  onAskDevice,
   onRowClick,
   loading = false,
   page = 0,
@@ -577,6 +594,7 @@ export default function HostsTable({
                       checked={checked}
                       onDeleteDevice={onDeleteDevice}
                       onOpenInPage={onOpenInPage}
+                      onAskDevice={onAskDevice}
                     />
                   </TableCell>
                 </TableRow>

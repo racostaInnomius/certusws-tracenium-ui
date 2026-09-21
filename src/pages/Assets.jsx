@@ -30,6 +30,12 @@ import AssetGroups from "./AssetGroups";
 // Qué equipos EXISTEN frente a los que gestionamos. Perezosa: quien no la abra
 // no paga su chunk, y su API sólo responde con la migración de Cobertura.
 const CoveragePanel = React.lazy(() => import("../components/discovery/CoveragePanel"));
+// ADR-0029 — consulta en vivo. Perezosa por lo mismo; sólo se pinta con el
+// permiso `live_query`.
+const LiveQueryPanel = React.lazy(() => import("../components/liveQuery/LiveQueryPanel"));
+import ManageSearchOutlinedIcon from "@mui/icons-material/ManageSearchOutlined";
+import { getMyCapabilities } from "../api/roles";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 // Note: the "Agent Downloads" tab moved to its own top-level page
 // (Device Enrollment) in tandem with the enrollment-token surface.
@@ -42,7 +48,8 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
 // las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
-const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6, coverage: 7 };
+const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6, coverage: 7, "live-query": 8 };
+const LIVE_QUERY_TAB = 8;
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
@@ -168,6 +175,39 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     auth?.tenantMember?.isActive === true &&
     ["ADMIN", "OWNER"].includes(String(auth?.tenantMember?.role || ""));
 
+  // ADR-0029 — la pestaña Live Query y sus atajos, sólo con el permiso
+  // `live_query` (el backend además exige el plugin AMP). Cerrado mientras se
+  // pregunta: sin permiso no se pinta nada que termine en un 403.
+  const tenantId = useEffectiveTenantId();
+  const [canLiveQuery, setCanLiveQuery] = React.useState(false);
+  React.useEffect(() => {
+    if (!tenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(tenantId)
+      .then((r) => alive && setCanLiveQuery(Array.isArray(r?.permissions) && r.permissions.includes("live_query")))
+      .catch(() => alive && setCanLiveQuery(false));
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+  // Los atajos («Ask this device», «Ask this group») llevan a la pestaña con
+  // el objetivo puesto. El nonce reaplica el objetivo si ya estaba abierta.
+  const [liveTarget, setLiveTarget] = React.useState(null);
+  const [liveTargetNonce, setLiveTargetNonce] = React.useState(0);
+  const openLiveQuery = React.useCallback((target) => {
+    setLiveTarget(target);
+    setLiveTargetNonce((n) => n + 1);
+    setActiveTab(LIVE_QUERY_TAB);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }, []);
+  const askDevice = React.useCallback(
+    (deviceId, label) => openLiveQuery({ scope: "devices", deviceIds: [deviceId], label: label || deviceId }),
+    [openLiveQuery]
+  );
+  const askGroup = React.useCallback((group) => openLiveQuery({ scope: "group", groupId: group.id }), [openLiveQuery]);
+  // Un enlace a `?assetsTab=live-query` sin permiso cae en el Dashboard.
+  const visibleTab = activeTab === LIVE_QUERY_TAB && !canLiveQuery ? 0 : activeTab;
+
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
       <PageHeader
@@ -205,7 +245,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         }}
       >
         <Tabs
-          value={activeTab}
+          value={visibleTab}
           onChange={handleChange}
           variant="scrollable"
           scrollButtons="auto"
@@ -296,13 +336,27 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             {...a11yProps(7)}
             sx={TAB_SX}
           />
+
+          {/* ADR-0029 — preguntar AHORA a los equipos conectados. Aquí y no en
+              la barra lateral: hoy son seis preguntas fijas sobre el estado
+              del equipo, no una pregunta libre. Al final: la última pestaña,
+              así su presencia condicional no mueve los índices de las demás. */}
+          {canLiveQuery ? (
+            <Tab
+              icon={<ManageSearchOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              label="Live Query"
+              {...a11yProps(LIVE_QUERY_TAB)}
+              sx={TAB_SX}
+            />
+          ) : null}
         </Tabs>
       </SectionPaper>
 
       {/* La ausencia como hallazgo: de los equipos que SÍ gestionamos, de
           cuáles no sabemos nada. Va sobre el dashboard de assets porque es la
           advertencia que hay que leer ANTES de creerse los números de abajo. */}
-      <TabPanel value={activeTab} index={0}>
+      <TabPanel value={visibleTab} index={0}>
         <Box sx={{ mb: 2 }}>
           <SignalCoverageCard refreshNonce={refreshNonce} />
         </Box>
@@ -312,14 +366,15 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
           onNavigateToHardwareInventory={navigateToHardwareInventory}
           suppressEmptyStateOverlay={suppressEmptyStateOverlay}
           onNavigate={onNavigate}
+          onAskDevice={canLiveQuery ? askDevice : undefined}
         />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={1}>
-        <AssetGroups refreshNonce={refreshNonce} />
+      <TabPanel value={visibleTab} index={1}>
+        <AssetGroups refreshNonce={refreshNonce} onAskGroup={canLiveQuery ? askGroup : undefined} />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={2}>
+      <TabPanel value={visibleTab} index={2}>
         <HardwareInventory
           initialSearch={pendingHardwareSearch}
           initialFleetFilter={initialFleetFilter}
@@ -327,29 +382,37 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={3}>
+      <TabPanel value={visibleTab} index={3}>
         <React.Suspense fallback={null}>
           <LocationWorkbench refreshNonce={refreshNonce} />
         </React.Suspense>
       </TabPanel>
 
-      <TabPanel value={activeTab} index={4}>
+      <TabPanel value={visibleTab} index={4}>
         <Printers refreshNonce={refreshNonce} />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={5}>
+      <TabPanel value={visibleTab} index={5}>
         <SoftwareInventory refreshNonce={refreshNonce} />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={6}>
+      <TabPanel value={visibleTab} index={6}>
         <WindowsGpos refreshNonce={refreshNonce} />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={7}>
+      <TabPanel value={visibleTab} index={7}>
         <React.Suspense fallback={null}>
           <CoveragePanel refreshNonce={refreshNonce} canManage={canReport} onNavigate={onNavigate} />
         </React.Suspense>
       </TabPanel>
+
+      {canLiveQuery ? (
+        <TabPanel value={visibleTab} index={LIVE_QUERY_TAB}>
+          <React.Suspense fallback={null}>
+            <LiveQueryPanel initialTarget={liveTarget} targetNonce={liveTargetNonce} />
+          </React.Suspense>
+        </TabPanel>
+      ) : null}
     </Box>
   );
 }

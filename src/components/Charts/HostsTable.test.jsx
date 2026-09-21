@@ -109,3 +109,19 @@ describe("More actions menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+describe("Ask this device (ADR-0029)", () => {
+  it("⭐ con el atajo, el menú ofrece preguntar a ESTE equipo en Live Query", async () => {
+    const onAskDevice = vi.fn();
+    render(<HostsTable rows={[row()]} onAskDevice={onAskDevice} />);
+    await userEvent.click(screen.getByRole("button", { name: /More actions for this device/i }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Ask this device \(Live Query\)/ }));
+    expect(onAskDevice).toHaveBeenCalledWith(expect.objectContaining({ agentId: "agent-1", hostname: "MYHOST-01" }));
+  });
+
+  it("sin el permiso (sin atajo), la entrada no existe", async () => {
+    render(<HostsTable rows={[row()]} />);
+    await userEvent.click(screen.getByRole("button", { name: /More actions for this device/i }));
+    expect(screen.queryByRole("menuitem", { name: /Ask this device/ })).toBeNull();
+  });
+});
