@@ -40,8 +40,8 @@ export default function OsPlatformDonut({ osPlatform }) {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                innerRadius="62%"
-                outerRadius="89%"
+                innerRadius="55%"
+                outerRadius="82%"
                 paddingAngle={2}
                 isAnimationActive={true}
               >

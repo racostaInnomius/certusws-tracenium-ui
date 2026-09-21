@@ -15,10 +15,8 @@
 import * as React from "react";
 import { Box, Paper, Stack, Tooltip, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import { RING_RADIUS as RADIUS, RING_SIZE as SIZE, RING_STROKE as STROKE } from "../Charts/ringGeometry";
 
-const SIZE = 128;
-const RADIUS = 48;
-const STROKE = 22;
 const CIRC = 2 * Math.PI * RADIUS;
 
 /** Paleta de la marca, en orden de lectura. "Others" siempre en gris. */
