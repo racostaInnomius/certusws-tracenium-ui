@@ -23,13 +23,46 @@ export async function createAlertRule(body) {
 }
 
 // Partial update — send only the fields that changed.
-// Body: { name?, enabled?, severity?, criteria? }
+// Body: { name?, enabled?, severity?, criteria?, notify? }
 export async function patchAlertRule(id, body) {
   return httpPatchJson(`${BASE}/rules/${encodeURIComponent(id)}`, body);
 }
 
 export async function deleteAlertRule(id) {
   return httpDeleteJson(`${BASE}/rules/${encodeURIComponent(id)}`);
+}
+
+// A quién le llega HOY un correo de esta regla (perfiles + roles + miembros +
+// direcciones). Refleja lo GUARDADO, no lo que haya sin guardar en el editor.
+export async function getAlertRuleRecipients(id) {
+  // no-store: es una foto de AHORA — con la caché de 60 s, dar de baja a
+  // alguien y mirar el preview seguiría enseñándolo.
+  return httpGetJson(`${BASE}/rules/${encodeURIComponent(id)}/recipients`, { cache: "no-store" });
+}
+
+// ADR-0025 — perfiles de notificaciones: audiencias con nombre que las reglas
+// apuntan por referencia. Todo exige la capacidad `alerts`, lectura incluida.
+export async function listNotifyProfiles() {
+  return httpGetJson(`${BASE}/notify-profiles`);
+}
+
+// Body: { name, description?, email[], members[], roles[] }
+export async function createNotifyProfile(body) {
+  return httpPostJson(`${BASE}/notify-profiles`, body);
+}
+
+// Parcial: los campos ausentes se conservan en el servidor.
+export async function patchNotifyProfile(id, body) {
+  return httpPatchJson(`${BASE}/notify-profiles/${encodeURIComponent(id)}`, body);
+}
+
+// 409 PROFILE_IN_USE { rules: [{id, name}] } si alguna regla lo apunta.
+export async function deleteNotifyProfile(id) {
+  return httpDeleteJson(`${BASE}/notify-profiles/${encodeURIComponent(id)}`);
+}
+
+export async function getNotifyProfileRecipients(id) {
+  return httpGetJson(`${BASE}/notify-profiles/${encodeURIComponent(id)}/recipients`, { cache: "no-store" });
 }
 
 // Feed — same query params accepted by the backend.

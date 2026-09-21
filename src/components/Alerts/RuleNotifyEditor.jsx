@@ -36,11 +36,15 @@ import {
   severitiesFor,
   hasAnyTarget,
   describeTargets,
+  profileIdsOf,
+  buildNotifyPayload,
+  summarizeRecipients,
 } from "./notifyHelpers";
+import { getAlertRuleRecipients } from "../../api/alerts";
 
 
 /** Compact read-only badge for the rule row. */
-export function NotifyBadge({ notify }) {
+export function NotifyBadge({ notify, profileNames = null }) {
   // Counts every kind of target, not just typed addresses. A rule that
   // notifies the tenant's OWNERs used to render as "No email", which is
   // the opposite of what it does.
@@ -65,7 +69,7 @@ export function NotifyBadge({ notify }) {
       </Tooltip>
     );
   }
-  const summary = describeTargets(notify);
+  const summary = describeTargets(notify, profileNames);
   return (
     <Tooltip title={summary} arrow>
       <Chip
@@ -78,7 +82,12 @@ export function NotifyBadge({ notify }) {
   );
 }
 
-export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
+/**
+ * `profiles` — the tenant's notification profiles (ADR-0025), or `null`
+ * when they are not available to this user (no `alerts` capability) or
+ * not loaded yet. `null` hides the picker; `[]` shows the empty state.
+ */
+export default function RuleNotifyEditor({ rule, onSave, busy = false, profiles = null, onManageProfiles }) {
   // Plain derivation, not useMemo: both values are primitives, so the
   // effect below re-syncs on value change rather than identity.
   const initialEmails = Array.isArray(rule?.notify?.email)
@@ -87,6 +96,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
   const initialSeverity = rule?.notify?.minSeverity ?? "low";
   const initialRoles = Array.isArray(rule?.notify?.roles) ? rule.notify.roles.join(",") : "";
   const initialMatrix = JSON.stringify(normalizeMatrix(rule?.notify?.channels));
+  const initialProfiles = profileIdsOf(rule?.notify).map((id) => id.toLowerCase()).join(",");
 
   const [emails, setEmails] = React.useState(initialEmails);
   // Ya no es editable. La matriz gobierna el enrutado; dejar el selector
@@ -99,13 +109,32 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
   const [minSeverity] = React.useState(initialSeverity);
   const [roles, setRoles] = React.useState(initialRoles);
   const [matrixJson, setMatrixJson] = React.useState(initialMatrix);
+  const [profileIds, setProfileIds] = React.useState(initialProfiles);
 
   // Re-sync when the rule refreshes underneath us (post-save reload).
   React.useEffect(() => {
     setEmails(initialEmails);
     setRoles(initialRoles);
     setMatrixJson(initialMatrix);
-  }, [initialEmails, initialRoles, initialMatrix]);
+    setProfileIds(initialProfiles);
+  }, [initialEmails, initialRoles, initialMatrix, initialProfiles]);
+
+  // Who this rule reaches TODAY, as saved. Re-read after every save
+  // (`updatedAt` moves) — it is the number ADR-0025 asks the UI to show,
+  // because with profiles the recipient cap stops being theoretical.
+  const canPreview = profiles !== null && Boolean(rule?.id);
+  const [reach, setReach] = React.useState(null);
+  React.useEffect(() => {
+    if (!canPreview) return undefined;
+    let alive = true;
+    setReach(null);
+    getAlertRuleRecipients(rule.id)
+      .then((res) => alive && setReach(summarizeRecipients(res)))
+      .catch(() => alive && setReach({ tone: "muted", text: "Could not work out who this reaches right now." }));
+    return () => {
+      alive = false;
+    };
+  }, [canPreview, rule?.id, rule?.updatedAt]);
 
   const matrix = JSON.parse(matrixJson);
   const toggleChannel = (severity, channel) => {
@@ -118,6 +147,18 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
   };
 
   const selectedRoles = roles ? roles.split(",").filter(Boolean) : [];
+  const selectedProfiles = profileIds ? profileIds.split(",").filter(Boolean) : [];
+  const toggleProfile = (id) =>
+    setProfileIds(
+      (selectedProfiles.includes(id)
+        ? selectedProfiles.filter((p) => p !== id)
+        : [...selectedProfiles, id]
+      ).join(",")
+    );
+  const knownProfileIds = new Set((profiles ?? []).map((p) => String(p.id).toLowerCase()));
+  // Selected but gone — deleted after the rule saved, or never this
+  // tenant's. Shown so they can be removed, never silently dropped.
+  const missingProfiles = profiles ? selectedProfiles.filter((id) => !knownProfileIds.has(id)) : [];
   const toggleRole = (role) =>
     setRoles(
       (selectedRoles.includes(role)
@@ -132,6 +173,7 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
   const dirty =
     emails.trim() !== initialEmails.trim() ||
     roles !== initialRoles ||
+    profileIds !== initialProfiles ||
     matrixJson !== initialMatrix;
 
   const mailSeverities = severitiesFor(matrix, "email");
@@ -141,21 +183,26 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
     : overCap
       ? `Too many recipients (${unique.length}). At most ${MAX_RECIPIENTS}.`
       : unique.length === 0
-        ? "For mailboxes that are not people — soc@, a ticket queue. For people, target a role above."
+        ? "For mailboxes that are not people — soc@, a ticket queue. For people, use a profile or a role above."
         : `${unique.length} recipient${unique.length === 1 ? "" : "s"}. Digest per rule, deduplicated — you are told once per finding.`;
 
   const handleSave = () => {
-    // No targets at all is the documented way to turn delivery off, so it
-    // saves as `{}` rather than being treated as "nothing to do".
-    const payload = {};
-    if (unique.length > 0) payload.email = unique;
-    if (selectedRoles.length > 0) payload.roles = selectedRoles;
-    // La matriz se guarda siempre que haya destinatarios: es lo que hace
-    // que «solo consola» sea un estado legible en la fila y no la
-    // ausencia de configuración.
-    if (Object.keys(payload).length > 0) payload.channels = matrix;
-    onSave(Object.keys(payload).length > 0 ? { ...payload, minSeverity } : {});
+    // buildNotifyPayload carries `members` over from the saved rule — this
+    // editor has no control for it, and rebuilding the object from email +
+    // roles alone used to erase it on every save.
+    onSave(
+      buildNotifyPayload({
+        current: rule?.notify,
+        emails: unique,
+        roles: selectedRoles,
+        profiles: selectedProfiles,
+        matrix,
+        minSeverity,
+      })
+    );
   };
+
+  const reachColor = { ok: BRAND.tealText, warning: BRAND.alert.warningText, error: BRAND.alert.errorText, muted: BRAND.gray };
 
   return (
     <Box sx={{ mt: 1.25, pt: 1.25, borderTop: `1px dashed ${BRAND.border}` }}>
@@ -223,6 +270,57 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
         </Typography>
       </Box>
 
+      {profiles !== null ? (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.75 }}>
+            Notify a profile — a named audience you edit once and every rule that uses it follows.
+          </Typography>
+          {profiles.length === 0 && missingProfiles.length === 0 ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+              No profiles yet.{" "}
+              {onManageProfiles ? (
+                <Button size="small" onClick={onManageProfiles} sx={{ textTransform: "none", p: 0, minWidth: 0 }}>
+                  Create one
+                </Button>
+              ) : null}
+            </Typography>
+          ) : (
+            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+              {profiles.map((p) => {
+                const id = String(p.id).toLowerCase();
+                const on = selectedProfiles.includes(id);
+                return (
+                  <Chip
+                    key={id}
+                    size="small"
+                    label={p.name}
+                    aria-pressed={on}
+                    onClick={busy ? undefined : () => toggleProfile(id)}
+                    sx={{
+                      cursor: busy ? "default" : "pointer",
+                      fontWeight: 700,
+                      fontSize: TEXT.xs,
+                      bgcolor: on ? BRAND.tealSoft : BRAND.surfaceMuted,
+                      color: on ? BRAND.tealText : BRAND.gray,
+                    }}
+                  />
+                );
+              })}
+              {missingProfiles.map((id) => (
+                <Tooltip key={id} title="This profile no longer exists. Click to remove it from the rule." arrow>
+                  <Chip
+                    size="small"
+                    label="Missing profile"
+                    onDelete={busy ? undefined : () => toggleProfile(id)}
+                    sx={{ fontWeight: 700, fontSize: TEXT.xs, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText }}
+                  />
+                </Tooltip>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      ) : null}
+
       <Box sx={{ mb: 1.5 }}>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.75 }}>
           Notify by role — the address comes from the member record, so someone who leaves
@@ -266,6 +364,16 @@ export default function RuleNotifyEditor({ rule, onSave, busy = false }) {
           sx={{ flex: 1, minWidth: 0, "& textarea": { fontSize: TEXT.sm } }}
         />
       </Stack>
+
+      {canPreview && reach ? (
+        <Typography
+          role="status"
+          sx={{ fontSize: TEXT.xs, color: reachColor[reach.tone] ?? BRAND.gray, mt: 1, overflowWrap: "anywhere" }}
+        >
+          {dirty ? "As saved — " : ""}
+          {reach.text}
+        </Typography>
+      ) : null}
 
       <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1 }}>
         <Button

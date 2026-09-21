@@ -27,12 +27,14 @@ import {
   Select,
   Stack,
   Switch,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography
@@ -65,6 +67,9 @@ import { BRAND, ROLE, TEXT } from "../theme/brand";
 import { formatOpenFor } from "../utils/alertAge";
 import { severityMeta } from "../theme/severity";
 import RuleNotifyEditor, { NotifyBadge } from "../components/Alerts/RuleNotifyEditor";
+import NotifyProfilesPanel from "../components/Alerts/NotifyProfilesPanel";
+import { useNotifyProfiles } from "../components/Alerts/useNotifyProfiles";
+import { describeTargets, describeNotifyError, hasAnyTarget } from "../components/Alerts/notifyHelpers";
 import {
   getAlertRules,
   createAlertRule,
@@ -676,23 +681,25 @@ export default function Alerts({ onNavigate }) {
               notify("error", "Could not enable template");
             }
           }}
+          notify={notify}
           onSaveNotify={async (rule, notifyConfig) => {
             try {
               await patchAlertRule(rule.id, { notify: notifyConfig });
-              const count = notifyConfig?.email?.length ?? 0;
+              // Cuenta todas las vías, no sólo `email`: una regla que avisa
+              // a un perfil decía «email delivery off».
               notify(
                 "success",
-                count > 0
-                  ? `${rule.name}: emailing ${count} recipient${count === 1 ? "" : "s"}`
+                hasAnyTarget(notifyConfig)
+                  ? `${rule.name}: delivery saved — ${describeTargets(notifyConfig)}`
                   : `${rule.name}: email delivery off`
               );
               refetchRules();
             } catch (err) {
               console.error(err);
-              // The backend rejects malformed recipients outright, which is
-              // what keeps a typo from saving "successfully" and silently
-              // never delivering.
-              notify("error", "Could not save email delivery — check the addresses");
+              // The backend rejects bad recipients by name — show it, so a
+              // typo is fixed instead of saving "successfully" and never
+              // delivering.
+              notify("error", describeNotifyError(err, "Could not save email delivery — check the recipients"));
             }
           }}
           onDeleteRule={async (rule) => {
@@ -740,11 +747,21 @@ function ManageRulesDrawer({
   onToggle,
   onEnableTemplate,
   onDeleteRule,
-  onSaveNotify
+  onSaveNotify,
+  notify
 }) {
   // Which rule has its delivery editor open. One at a time — the drawer
   // is narrow and the editor is two full-width fields.
   const [notifyOpenFor, setNotifyOpenFor] = React.useState(null);
+  // ADR-0025 — "rules" | "profiles". The Profiles tab only exists for users
+  // who can manage them; everyone else sees the drawer exactly as before.
+  const [tab, setTab] = React.useState("rules");
+  const np = useNotifyProfiles();
+  const showProfiles = Boolean(np.access?.canManage);
+  const editorProfileProps = {
+    profiles: np.profiles,
+    onManageProfiles: () => setTab("profiles"),
+  };
   // Group: which templates already have a tenant rule, which don't.
   // A template may have multiple instances (future-proof) so we look up
   // by templateId → count.
@@ -772,10 +789,20 @@ function ManageRulesDrawer({
             Manage alert rules
           </Typography>
           <Typography variant="caption" sx={{ color: BRAND.gray }}>
-            Catalog is global. Toggle a template to create an instance for this tenant.
+            {tab === "profiles"
+              ? "Named audiences your rules can notify."
+              : "Catalog is global. Toggle a template to create an instance for this tenant."}
           </Typography>
         </Box>
-        <IconButton aria-label="Refresh alerts" onClick={onRefresh} size="small" sx={{ mr: 0.5 }}>
+        <IconButton
+          aria-label="Refresh alerts"
+          onClick={() => {
+            onRefresh();
+            if (showProfiles) np.reload();
+          }}
+          size="small"
+          sx={{ mr: 0.5 }}
+        >
           <RefreshOutlinedIcon fontSize="small" />
         </IconButton>
         <IconButton aria-label="Close" onClick={onClose} size="small">
@@ -783,6 +810,37 @@ function ManageRulesDrawer({
         </IconButton>
       </Stack>
 
+      {showProfiles ? (
+        <Tabs
+          value={tab}
+          onChange={(_e, v) => setTab(v)}
+          sx={{ px: 2, borderBottom: `1px solid ${BRAND.border}`, minHeight: 40 }}
+        >
+          <Tab value="rules" label="Rules" sx={{ textTransform: "none", minHeight: 40 }} />
+          <Tab
+            value="profiles"
+            label={np.profiles?.length ? `Profiles (${np.profiles.length})` : "Profiles"}
+            sx={{ textTransform: "none", minHeight: 40 }}
+          />
+        </Tabs>
+      ) : null}
+
+      {showProfiles && tab === "profiles" ? (
+        <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
+          <NotifyProfilesPanel
+            profiles={np.profiles ?? []}
+            loading={np.loadingProfiles && !np.profiles}
+            members={np.members}
+            canListMembers={Boolean(np.access?.canListMembers)}
+            notify={notify}
+            onChanged={() => {
+              np.reload();
+              // Borrar o renombrar un perfil cambia los badges de las reglas.
+              onRefresh();
+            }}
+          />
+        </Box>
+      ) : (
       <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
         {loading ? (
           <Stack alignItems="center" sx={{ py: 4 }}>
@@ -834,7 +892,7 @@ function ManageRulesDrawer({
                         tenant rule to hang it off. */}
                     {primary ? (
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                        <NotifyBadge notify={primary.notify} />
+                        <NotifyBadge notify={primary.notify} profileNames={np.profileNames} />
                         <Button
                           size="small"
                           onClick={() =>
@@ -876,6 +934,7 @@ function ManageRulesDrawer({
                   <RuleNotifyEditor
                     rule={primary}
                     onSave={(notify) => onSaveNotify(primary, notify)}
+                    {...editorProfileProps}
                   />
                 ) : null}
               </Paper>
@@ -925,7 +984,7 @@ function ManageRulesDrawer({
                         {JSON.stringify(r.criteria)}
                       </Typography>
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                        <NotifyBadge notify={r.notify} />
+                        <NotifyBadge notify={r.notify} profileNames={np.profileNames} />
                         <Button
                           size="small"
                           onClick={() => setNotifyOpenFor(notifyOpenFor === r.id ? null : r.id)}
@@ -947,7 +1006,7 @@ function ManageRulesDrawer({
                   </Stack>
 
                   {notifyOpenFor === r.id ? (
-                    <RuleNotifyEditor rule={r} onSave={(notify) => onSaveNotify(r, notify)} />
+                    <RuleNotifyEditor rule={r} onSave={(notify) => onSaveNotify(r, notify)} {...editorProfileProps} />
                   ) : null}
                 </Paper>
               ))}
@@ -962,6 +1021,7 @@ function ManageRulesDrawer({
           Custom rule builder lands in Phase 2. For now, enable templates from the catalog above.
         </Typography>
       </Box>
+      )}
     </Box>
   );
 }

@@ -8,6 +8,9 @@ import {
   normalizeMatrix,
   severitiesFor,
   MATRIX_SEVERITIES,
+  buildNotifyPayload,
+  summarizeRecipients,
+  describeNotifyError,
 } from "./notifyHelpers";
 
 describe("parseRecipients", () => {
@@ -151,5 +154,101 @@ describe("severitiesFor (UI)", () => {
 
   it("console siempre son las cuatro", () => {
     expect(severitiesFor(normalizeMatrix({}), "console")).toHaveLength(4);
+  });
+});
+
+// ADR-0025 — perfiles de notificaciones.
+describe("ADR-0025 — perfiles en los helpers", () => {
+  const P1 = "11111111-1111-4111-8111-111111111111";
+  const P2 = "22222222-2222-4222-8222-222222222222";
+  const matrix = normalizeMatrix({ critical: ["email"] });
+
+  it("⚠️ guardar desde el editor conserva `members`, que el editor no enseña", () => {
+    // Antes el payload se rehacía con email + roles: una regla que avisaba
+    // a personas por `members` (puesto por API) las perdía al guardar.
+    const payload = buildNotifyPayload({
+      current: { members: ["sub-1"], roles: ["OWNER"] },
+      emails: [],
+      roles: ["OWNER"],
+      profiles: [],
+      matrix,
+      minSeverity: "low",
+    });
+    expect(payload.members).toEqual(["sub-1"]);
+  });
+
+  it("guarda los perfiles elegidos junto a la matriz", () => {
+    const payload = buildNotifyPayload({ current: {}, emails: [], roles: [], profiles: [P1], matrix, minSeverity: "high" });
+    expect(payload).toEqual({ profiles: [P1], channels: matrix, minSeverity: "high" });
+  });
+
+  it("sin ningún destino, `{}` — la forma documentada de apagar", () => {
+    expect(buildNotifyPayload({ current: {}, emails: [], roles: [], profiles: [], matrix })).toEqual({});
+  });
+
+  it("una regla que sólo apunta a un perfil cuenta como configurada; un id malformado no", () => {
+    expect(hasAnyTarget({ profiles: [P1] })).toBe(true);
+    // El backend descarta ids sin forma de UUID: aquí tampoco pueden contar,
+    // o el badge diría «configurada» de una regla que no avisa a nadie.
+    expect(hasAnyTarget({ profiles: ["nope"] })).toBe(false);
+  });
+
+  it("el badge nombra los perfiles y cuenta los que ya no existen", () => {
+    const names = new Map([[P1, "IT on-call"]]);
+    expect(describeTargets({ profiles: [P1, P2], roles: ["OWNER"] }, names)).toBe(
+      "IT on-call · 1 missing profile · OWNER"
+    );
+    // Sin nombres cargados (no puede verlos) cuenta, no inventa.
+    expect(describeTargets({ profiles: [P1, P2] })).toBe("2 profiles");
+  });
+});
+
+describe("summarizeRecipients — a quién le llega hoy", () => {
+  it("sin configurar es 'solo consola', no un error", () => {
+    expect(summarizeRecipients({ configured: false }).tone).toBe("muted");
+  });
+
+  it("⚠️ una regla configurada que no llega a nadie se pinta como error", () => {
+    const r = summarizeRecipients({ configured: true, to: [], missingProfiles: [], truncated: 0 });
+    expect(r.tone).toBe("error");
+    expect(r.text).toMatch(/Reaches nobody today/);
+  });
+
+  it("⚠️ el tope y los perfiles perdidos se dicen aunque el correo salga", () => {
+    const r = summarizeRecipients({ to: ["a@c.com"], missingProfiles: ["x"], truncated: 3 });
+    expect(r.tone).toBe("warning");
+    expect(r.text).toMatch(/1 profile no longer exists/);
+    expect(r.text).toMatch(/3 recipients left out by the 20-recipient cap/);
+  });
+
+  it("sano: lista las direcciones", () => {
+    expect(summarizeRecipients({ to: ["a@c.com", "b@c.com"], missingProfiles: [], truncated: 0 })).toEqual({
+      tone: "ok",
+      text: "Reaches 2 addresses today: a@c.com, b@c.com.",
+    });
+  });
+});
+
+describe("describeNotifyError — el backend nombra lo que falla", () => {
+  const err = (body) => ({ status: 400, body, code: body.error });
+
+  it("nombra el correo, el rol o el miembro que no vale", () => {
+    expect(describeNotifyError(err({ error: "INVALID_EMAILS", invalid: ["soc@cliente"] }))).toBe(
+      "Not a valid address: soc@cliente"
+    );
+    expect(describeNotifyError(err({ error: "UNKNOWN_ROLES", unknown: ["IT Support"] }))).toMatch(/IT Support/);
+    expect(describeNotifyError(err({ error: "UNKNOWN_MEMBERS", unknown: ["sub-x"] }))).toMatch(/sub-x/);
+  });
+
+  it("⚠️ un perfil en uso dice qué reglas lo usan", () => {
+    const msg = describeNotifyError({
+      status: 409,
+      body: { error: "PROFILE_IN_USE", rules: [{ id: "r1", name: "Device offline" }, { id: "r2", name: "Cert expiry" }] },
+    });
+    expect(msg).toBe("Still used by 2 rules: Device offline, Cert expiry. Remove it from those rules first.");
+  });
+
+  it("un código desconocido cae al mensaje por defecto", () => {
+    expect(describeNotifyError(new Error("boom"), "Could not save")).toBe("Could not save");
   });
 });
