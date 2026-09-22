@@ -150,7 +150,7 @@ describe("loaders por bloque del Overview", () => {
 
     expect(sdp).toHaveLength(0);
     expect(Object.keys(results).sort()).toEqual([
-      "agentVersions", "alertsUnread", "auditTimeseries",
+      "agentVersions", "auditTimeseries",
       "connectedDevices", "dashboardSummary", "expiringCerts", "hardwareSummary",
       "jobsTimeseries", "latestVersions", "reportRuns", "reportSchedules",
     ]);
@@ -201,7 +201,6 @@ describe("loaders por bloque del Overview", () => {
     stubCore();
     respond("get", "/api/v1/dashboard/summary", { message: "boom" }, { status: 500 });
     respond("get", "/api/v1/alerts/events", { message: "boom" }, { status: 500 });
-    respond("get", "/api/v1/alerts/unread-count", { message: "boom" }, { status: 500 });
     respond("get", "/api/v1/security/compliance/devices", { message: "boom" }, { status: 500 });
     respond("get", "/api/v1/security/compliance/summary", { ok: true, summary: {} });
     respond("get", "/api/v1/security/compliance/fleet-timeseries", { message: "boom" }, { status: 500 });
@@ -210,7 +209,6 @@ describe("loaders por bloque del Overview", () => {
     const security = await fetchOverviewSecurity({ scp: true });
 
     expect(core.dashboardSummary.status).toBe("rejected");
-    expect(core.alertsUnread.value).toEqual({ count: 0 });
     expect(security.devicePosture.value).toEqual({ items: [] });
     expect(security.fleetComplianceTimeseries.value).toEqual({ windowDays: 30, buckets: [] });
   });

@@ -18,12 +18,20 @@ import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import CloudDoneOutlinedIcon from "@mui/icons-material/CloudDoneOutlined";
 import ErrorOutlineOutlinedIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
-import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { KpiRow } from "./Kpi";
+import { coverageKpiCard } from "./coverageKpi";
 import { formatPct, getValue, listLength } from "./overviewResults";
 
-export default function HeroKpis({ results, loading, onNavigate, hasSdp = false }) {
+export default function HeroKpis({
+  results,
+  loading,
+  onNavigate,
+  hasSdp = false,
+  coverageSignal = null,
+  coverageFleet = 0,
+  onOpenGapDevices,
+}) {
   const dashboard = getValue(results?.dashboardSummary);
   const connected = getValue(results?.connectedDevices);
   const jobsTs = getValue(results?.jobsTimeseries);
@@ -64,8 +72,6 @@ export default function HeroKpis({ results, loading, onNavigate, hasSdp = false 
   const buckets = Array.isArray(jobsTs?.buckets) ? jobsTs.buckets : [];
   const failedJobs = buckets.reduce((sum, b) => sum + Number(b?.failed ?? 0), 0);
   const failedSpark = buckets.map((b) => Number(b?.failed ?? 0));
-
-  const unreadCount = Number(getValue(results?.alertsUnread)?.count ?? 0);
 
   const navigate = (page, query) => onNavigate?.(page, query);
 
@@ -135,16 +141,15 @@ export default function HeroKpis({ results, loading, onNavigate, hasSdp = false 
       // navegador sólo veía las 200 filas más recientes.
       onClick: () => navigate("jobs", { status: "failed,timeout", since: "7d" }),
     },
-    {
-      title: "Unread alerts",
-      value: unreadCount,
-      subtitle: unreadCount > 0 ? "since last visit" : "all caught up",
-      icon: NotificationsActiveOutlinedIcon,
-      accent: unreadCount > 0 ? ROLE.critical : ROLE.positive,
-      tint: unreadCount > 0 ? ROLE.criticalSoft : ROLE.positiveSoft,
-      onClick: () => navigate("alerts"),
-    }
   );
+
+  // De cuántos equipos no sabemos nada. Ocupa el sitio de "Unread alerts":
+  // esa cifra ya está en la campana de la barra superior, en todas las
+  // páginas, así que aquí no añadía nada. Sin datos de cobertura (403 sin
+  // `assets_view`, o fallo) la fila se queda con las demás.
+  if (coverageSignal) {
+    cards.push(coverageKpiCard(coverageSignal, coverageFleet, onOpenGapDevices, "Blind spots"));
+  }
 
   return <KpiRow cards={cards} loading={loading} />;
 }

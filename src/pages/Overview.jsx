@@ -55,7 +55,6 @@ import {
 } from "../components/Overview/PluginSummaryCards";
 import { OverviewBlock, PlanScopeNotice } from "../components/Overview/OverviewBlock";
 import { resolveOverviewPlan } from "../components/Overview/overviewPlan";
-import BlindSpotCard from "../components/Overview/BlindSpotCard";
 import SignalCoverageTile from "../components/Overview/SignalCoverageTile";
 import SignalGapDrawer from "../components/Overview/SignalGapDrawer";
 import { coverageKpiCard } from "../components/Overview/coverageKpi";
@@ -310,7 +309,16 @@ export default function Overview({ onNavigate } = {}) {
 
       {/* ── Block 1 · Fleet & operations — every plan ─────────────── */}
       <OverviewBlock block={core}>
-        <HeroKpis results={results} loading={loading} onNavigate={navigateWithQuery} hasSdp={hasSdp} />
+        <HeroKpis
+          results={results}
+          loading={loading}
+          onNavigate={navigateWithQuery}
+          hasSdp={hasSdp}
+          // "Blind spots" en el sitio que tenía "Unread alerts".
+          coverageSignal={inventorySignal}
+          coverageFleet={coverageFleet}
+          onOpenGapDevices={setGapSignal}
+        />
 
         {/* The one number here that can eventually stop enrollment. Renders
             nothing for tenants the license rule doesn't apply to. */}
@@ -329,19 +337,14 @@ export default function Overview({ onNavigate } = {}) {
           ) : null}
         </Grid>
 
-        {/* What needs a person, side by side: derived signals, which
-            devices we can't see, and what was reported. "Latest alerts" was
-            here and left: the unread bell in the top bar already says it. */}
+        {/* What needs a person, side by side. "Latest alerts" was here and
+            left (the unread bell in the top bar already says it), and the
+            coverage gap is a KPI above, next to the numbers it qualifies. */}
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: inventorySignal ? 4 : 6 }}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <AttentionPanel results={results} onNavigate={navigateWithQuery} />
           </Grid>
-          {inventorySignal ? (
-            <Grid size={{ xs: 12, md: 4 }}>
-              <BlindSpotCard signal={inventorySignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
-            </Grid>
-          ) : null}
-          <Grid size={{ xs: 12, md: inventorySignal ? 4 : 6 }}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <ReportsCard results={results} loading={loading} onNavigate={navigateWithQuery} />
           </Grid>
         </Grid>

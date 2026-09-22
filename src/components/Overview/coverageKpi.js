@@ -1,8 +1,11 @@
 // src/components/Overview/coverageKpi.js
 //
-// La señal de compliance como quinto KPI de Security & access: "59/68"
-// equipos reportando postura, con el hueco debajo. Pulsarlo abre la lista de
-// esos equipos; sin hueco no es un botón (no hay nada que abrir).
+// Una señal de cobertura como KPI, en la fila de KPIs de su bloque:
+//   · Fleet & operations → "Blind spots" (inventario), en el sitio que tenía
+//     "Unread alerts" — esa cifra ya vive en la campana de la barra superior.
+//   · Security & access  → "Compliance reporting".
+// Pulsarlo abre la lista de esos equipos; sin hueco no es un botón (no hay
+// nada que abrir).
 
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
@@ -11,11 +14,11 @@ import { barColor, gapText } from "./signalCoverageModel";
 
 const ROLE_OF = { error: "critical", warning: "caution", success: "positive" };
 
-export function coverageKpiCard(signal, fleet, onOpenDevices) {
+export function coverageKpiCard(signal, fleet, onOpenDevices, title = "Compliance reporting") {
   const role = ROLE_OF[barColor(signal)] ?? null;
   const blind = signal.blind > 0;
   return {
-    title: "Compliance reporting",
+    title,
     value: `${signal.reporting}/${fleet}`,
     subtitle: gapText(signal),
     icon: blind ? VisibilityOffOutlinedIcon : FactCheckOutlinedIcon,
