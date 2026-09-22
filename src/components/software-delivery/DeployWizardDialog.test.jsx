@@ -325,11 +325,23 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
   // La hora se escribe en hora de pared local y viaja como instante: ver
   // `deploymentSchedule.test.js` para la conversión. Aquí se comprueba el
   // tramo que ninguna prueba pura cubre — que la elección LLEGUE al cuerpo.
+  //
+  // La hora sale de un desplegable en pasos de 15 minutos (BrandTimeField), así
+  // que el instante se redondea hacia abajo a un paso para que la opción exista.
   const localValue = (hoursFromNow) => {
     const d = new Date(Date.now() + hoursFromNow * 3600_000);
+    d.setMinutes(d.getMinutes() - (d.getMinutes() % 15), 0, 0);
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  /** Elige fecha y hora como lo hace el operador: el día en el campo de fecha, la hora en la lista. */
+  async function pickSchedule(user, value) {
+    const [date, time] = value.split("T");
+    fireEvent.change(document.querySelector('input[type="date"]'), { target: { value: date } });
+    await user.click(screen.getByRole("combobox", { name: /^Time/ }));
+    await user.click(document.querySelector(`li[data-value="${time}"]`));
+  }
 
   async function fireWithGroup(user) {
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
@@ -342,7 +354,8 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
     renderWizard();
     await screen.findByRole("combobox", { name: /Asset group/i });
     expect(screen.getByRole("radio", { name: /send now/i })).toBeChecked();
-    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /^Time/ })).toBeNull();
   });
 
   it("⭐ la hora elegida llega al cuerpo como un instante con zona", async () => {
@@ -352,7 +365,7 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
 
     await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
     const value = localValue(48);
-    fireEvent.change(document.querySelector('input[type="datetime-local"]'), { target: { value } });
+    await pickSchedule(user, value);
     await fireWithGroup(user);
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -369,9 +382,7 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
     renderWizard({ onConfirm });
 
     await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
-    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
-      target: { value: localValue(-5) },
-    });
+    await pickSchedule(user, localValue(-5));
     expect(screen.getByText(/already passed/i)).toBeInTheDocument();
 
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
@@ -387,9 +398,7 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
     renderWizard({ onConfirm });
 
     await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
-    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
-      target: { value: localValue(24) },
-    });
+    await pickSchedule(user, localValue(24));
     await user.click(screen.getByRole("radio", { name: /send now/i }));
     await fireWithGroup(user);
 
@@ -402,14 +411,39 @@ describe("DeployWizardDialog — programar el envío para más tarde", () => {
     renderWizard();
 
     await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
-    fireEvent.change(document.querySelector('input[type="datetime-local"]'), {
-      target: { value: localValue(24) },
-    });
+    await pickSchedule(user, localValue(24));
     await user.click(screen.getByRole("checkbox", { name: /wait for the maintenance window/i }));
     await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
     await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
 
     expect(screen.getByText(/window opens after that/i)).toBeInTheDocument();
+  });
+
+  // ── 21-sep: la hora deja de ser el `datetime-local` nativo ───────────────
+  it("⭐ la hora es un desplegable de marca, no el selector nativo", async () => {
+    const user = setupUser();
+    renderWizard();
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(document.querySelector('input[type="time"]')).toBeNull();
+    expect(screen.getByRole("combobox", { name: /^Time/ })).toBeInTheDocument();
+  });
+
+  it("con sólo el día, dice que falta la hora y no deja disparar", async () => {
+    // Partir el campo en dos abre un estado nuevo —medio rellenado—, y el botón
+    // no puede quedarse apagado sin decir por qué.
+    const user = setupUser();
+    const onConfirm = vi.fn().mockResolvedValue({});
+    renderWizard({ onConfirm });
+    await user.click(await screen.findByRole("radio", { name: /schedule for a specific time/i }));
+    fireEvent.change(document.querySelector('input[type="date"]'), {
+      target: { value: localValue(24).split("T")[0] },
+    });
+    expect(screen.getByText(/pick a date and time/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole("combobox", { name: /Asset group/i }));
+    await user.click(await screen.findByRole("option", { name: /Lab Windows/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByRole("button", { name: /^Install$/i })).toBeDisabled();
   });
 });

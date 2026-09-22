@@ -39,9 +39,11 @@ import {
   ToggleButtonGroup,
   CircularProgress,
   Tooltip,
+  FormHelperText,
 } from "@mui/material";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
 import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
+import BrandTimeField from "../common/BrandTimeField";
 import { listAssetGroups } from "../../api/assetGroups";
 import { listAllKnownDevices } from "../../api/jobs";
 import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
@@ -118,7 +120,14 @@ export default function DeployWizardDialog({
   // «now» por defecto: programar es la excepción, y un asistente que abre con
   // un selector de fecha invita a rellenarlo.
   const [scheduleMode, setScheduleMode] = React.useState("now");
-  const [scheduleAt, setScheduleAt] = React.useState("");
+  // Fecha y hora por separado: la hora es un BrandTimeField (el desplegable
+  // del `datetime-local` nativo lo pinta el navegador en azul y ningún CSS lo
+  // alcanza). La cadena de siempre —«YYYY-MM-DDTHH:MM», hora de pared local—
+  // se deriva de las dos, así que `parseScheduleInput` y lo que viaja al
+  // backend no cambian. Mientras falte una de las dos, no hay hora.
+  const [scheduleDate, setScheduleDate] = React.useState("");
+  const [scheduleTime, setScheduleTime] = React.useState("");
+  const scheduleAt = scheduleDate && scheduleTime ? `${scheduleDate}T${scheduleTime}` : "";
 
   // Límites del selector, en hora de pared local. Con `min`/`max` el navegador
   // ya impide lo imposible; la validación de abajo es la que da el porqué.
@@ -149,7 +158,10 @@ export default function DeployWizardDialog({
     () => (scheduleMode === "later" ? parseScheduleInput(scheduleAt) : { ok: true, iso: null }),
     [scheduleMode, scheduleAt]
   );
-  const scheduleError = scheduleMode === "later" && scheduleAt && !schedule.ok ? schedule.message : "";
+  // Con sólo una de las dos puestas también se avisa («Pick a date and time.»):
+  // si no, el botón queda apagado sin decir por qué.
+  const scheduleError =
+    scheduleMode === "later" && (scheduleDate || scheduleTime) && !schedule.ok ? schedule.message : "";
 
   const dispatchSentence = React.useMemo(
     () => buildDispatchSentence({ at: schedule.ok ? schedule.at : null, waitForWindow }, formatDate),
@@ -479,22 +491,34 @@ export default function DeployWizardDialog({
 
               {scheduleMode === "later" ? (
                 <Box sx={{ pl: 3.75, pt: 0.5 }}>
-                  <TextField
-                    type="datetime-local"
-                    size="small"
-                    value={scheduleAt}
-                    onChange={(e) => setScheduleAt(e.target.value)}
-                    inputProps={{ min: scheduleBounds.min, max: scheduleBounds.max }}
-                    error={Boolean(scheduleError)}
-                    helperText={
-                      scheduleError ||
+                  <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
+                    <TextField
+                      type="date"
+                      size="small"
+                      label="Date"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                      // Los límites son del `datetime-local`; aquí sólo cuenta el día.
+                      inputProps={{ min: scheduleBounds.min.slice(0, 10), max: scheduleBounds.max.slice(0, 10) }}
+                      InputLabelProps={{ shrink: true }}
+                      error={Boolean(scheduleError)}
+                      sx={{ minWidth: 170 }}
+                    />
+                    <BrandTimeField
+                      label="Time"
+                      value={scheduleTime}
+                      onChange={setScheduleTime}
+                      error={Boolean(scheduleError)}
+                      sx={{ minWidth: 140 }}
+                    />
+                  </Box>
+                  <FormHelperText error={Boolean(scheduleError)} sx={{ mx: 0 }}>
+                    {scheduleError ||
                       // ⚠️ DECIR EN QUÉ HORA SE ESTÁ HABLANDO. El operador y el
                       // tenant pueden estar en husos distintos, y una hora sin
                       // huso es la vía rápida a un envío a las 4 de la mañana.
-                      `Your local time (${localZoneLabel}). Up to ${MAX_SCHEDULE_HORIZON_DAYS} days out — the package is frozen when the deployment is created.`
-                    }
-                    sx={{ minWidth: 260 }}
-                  />
+                      `Your local time (${localZoneLabel}). Up to ${MAX_SCHEDULE_HORIZON_DAYS} days out — the package is frozen when the deployment is created.`}
+                  </FormHelperText>
                 </Box>
               ) : null}
 
