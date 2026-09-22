@@ -109,6 +109,6 @@ describe("la desinstalación es ALCANZABLE, no sólo está montada", () => {
     mount();
     await screen.findByRole("tab", { name: /uninstall/i });
     const labels = screen.getAllByRole("tab").map((t) => t.textContent.trim());
-    expect(labels).toEqual(["Overview", "Catalog", "Deployments", "Distribution", "Uninstall"]);
+    expect(labels).toEqual(["Dashboard", "Catalog", "Deployments", "Distribution", "Uninstall"]);
   });
 });

@@ -301,7 +301,7 @@ export default function SoftwareDelivery({ onNavigate }) {
           <Tab
             icon={<SpaceDashboardOutlinedIcon fontSize="small" />}
             iconPosition="start"
-            label="Overview"
+            label="Dashboard"
             sx={TAB_SX}
           />
           <Tab
