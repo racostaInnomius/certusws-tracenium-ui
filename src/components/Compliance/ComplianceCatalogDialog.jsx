@@ -214,7 +214,7 @@ function CheckRow({ check, focused = false }) {
 // `reloadKey` — el Refresh de la página que aloja este navegador. Sin esto el
 // catálogo se leía UNA vez, al hacerse visible, y el botón de la cabecera no
 // llegaba hasta aquí: pulsarlo dejaba exactamente la misma lista en pantalla.
-export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId = null, onClearFocus }) {
+export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId = null, focusControl = null, onClearFocus }) {
   const [loading, setLoading] = React.useState(false);
   const [checks, setChecks] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -233,6 +233,17 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
   React.useEffect(() => {
     if (focusCheckId) setQ(focusCheckId);
   }, [focusCheckId]);
+
+  // Arriving from a control in the Frameworks section ("12 checks behind
+  // this control"): the list narrows to the checks mapped to THAT control of
+  // THAT framework. The Frameworks panel used to print those check ids
+  // itself: the same relationship this tab already shows, and most of that
+  // response's weight (247 checks behind ISO A.8.9). Now it links here.
+  // Filtering by the mapping, not by search text: a control id like "1.1"
+  // would match half the catalog as a substring.
+  React.useEffect(() => {
+    if (focusControl) setQ("");
+  }, [focusControl]);
 
   React.useEffect(() => {
     if (!active) return;
@@ -273,6 +284,11 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
       .filter((c) => family === "all" || (c.frameworks || []).some((f) => frameworkFamily(f.framework) === family))
       .filter(
         (c) =>
+          !focusControl ||
+          (c.frameworks || []).some((f) => f.framework === focusControl.framework && String(f.controlId) === String(focusControl.controlId))
+      )
+      .filter(
+        (c) =>
           !needle ||
           String(c.checkId).toLowerCase().includes(needle) ||
           String(c.title).toLowerCase().includes(needle)
@@ -282,7 +298,7 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
         if (s !== 0) return s;
         return String(a.checkId).localeCompare(String(b.checkId));
       });
-  }, [checks, platform, category, severity, family, q]);
+  }, [checks, platform, category, severity, family, q, focusControl]);
 
   const selSx = { minWidth: 130 };
 
@@ -350,6 +366,16 @@ export function CatalogBrowser({ active = true, reloadKey = 0, sx, focusCheckId 
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
             {loading ? "Loading…" : `${filtered.length} of ${checks.length} checks`}
           </Typography>
+          {focusControl ? (
+            <Chip
+              size="small"
+              label={`Checks behind ${focusControl.controlId}${focusControl.controlTitle ? ` · ${focusControl.controlTitle}` : ""}`}
+              onDelete={() => {
+                if (onClearFocus) onClearFocus();
+              }}
+              sx={{ height: 20, maxWidth: 420, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+            />
+          ) : null}
           {focusCheckId ? (
             <Chip
               size="small"

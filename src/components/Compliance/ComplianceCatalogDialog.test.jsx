@@ -7,7 +7,7 @@ vi.mock("../../api/compliance", () => ({
   getComplianceCatalog: vi.fn(),
 }));
 import { getComplianceCatalog } from "../../api/compliance";
-import ComplianceCatalogDialog from "./ComplianceCatalogDialog";
+import ComplianceCatalogDialog, { CatalogBrowser } from "./ComplianceCatalogDialog";
 
 const CHECKS = {
   ok: true,
@@ -96,5 +96,45 @@ describe("ComplianceCatalogDialog", () => {
     getComplianceCatalog.mockResolvedValue(CHECKS);
     render(<ComplianceCatalogDialog open={false} onClose={() => {}} />);
     expect(getComplianceCatalog).not.toHaveBeenCalled();
+  });
+});
+
+// ── Desde un control de la sección Frameworks (22-sep) ───────────────
+//
+// La sección Frameworks pintaba en cada control la lista de sus checks: la
+// misma relación que este tab ya enseña, y la mayor parte del peso de esa
+// respuesta (247 checks detrás de ISO A.8.9). Ahora enlaza aquí, filtrado
+// por el MAPEO de ese control — no por texto: un id como «SC-1» casaría
+// con «SC-13» como subcadena.
+describe("CatalogBrowser — focused on a control", () => {
+  it("shows only the checks mapped to that control of that framework, and says so", async () => {
+    getComplianceCatalog.mockResolvedValue(CHECKS);
+    const onClearFocus = vi.fn();
+    render(
+      <CatalogBrowser
+        active
+        focusControl={{ framework: "nist_800_53_rev5", controlId: "SC-13", controlTitle: "Cryptographic Protection" }}
+        onClearFocus={onClearFocus}
+      />
+    );
+    expect(await screen.findByText("1 of 3 checks")).toBeInTheDocument();
+    expect(screen.getByText("linux.ssh.strong_ciphers_only")).toBeInTheDocument();
+    expect(screen.queryByText("linux.mounts.tmp_noexec")).toBeNull();
+
+    const chip = screen.getByText("Checks behind SC-13 · Cryptographic Protection").closest(".MuiChip-root");
+    fireEvent.click(within(chip).getByTestId("CancelIcon"));
+    expect(onClearFocus).toHaveBeenCalled();
+  });
+
+  it("does not match a control by substring: SC-1 is not SC-13", async () => {
+    getComplianceCatalog.mockResolvedValue(CHECKS);
+    render(<CatalogBrowser active focusControl={{ framework: "nist_800_53_rev5", controlId: "SC-1" }} />);
+    expect(await screen.findByText("0 of 3 checks")).toBeInTheDocument();
+  });
+
+  it("the same control id in another framework does not count", async () => {
+    getComplianceCatalog.mockResolvedValue(CHECKS);
+    render(<CatalogBrowser active focusControl={{ framework: "stig_ubuntu_22", controlId: "SC-13" }} />);
+    expect(await screen.findByText("0 of 3 checks")).toBeInTheDocument();
   });
 });

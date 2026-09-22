@@ -21,143 +21,25 @@
 import * as React from "react";
 import {
   Box,
-  Button,
   Chip,
-  CircularProgress,
-  InputAdornment,
   LinearProgress,
-  Link,
   Stack,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@mui/material";
-import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { formatDate } from "../../utils/format";
 import { getCategoryFailingChecks, getCategoryCheckDevices, getCategoryDevices } from "../../api/compliance";
+import { SearchBox, PageFooter, ListState, DeviceName } from "./pagedList";
+import { usePagedList, useDebounced } from "./usePagedList";
 
 export const CHECKS_PAGE = 25;
 export const DEVICES_PAGE = 50;
-
-/**
- * One paginated list: first page on mount (and whenever `fetchPage`
- * changes), then "show more" appends. A response that arrives after a newer
- * request was issued is dropped — typing in the search box fires several.
- */
-function usePagedList(fetchPage, pageSize) {
-  const [state, setState] = React.useState({ items: [], total: 0, loading: true, err: null });
-  const seq = React.useRef(0);
-
-  const load = React.useCallback(
-    async (offset, append) => {
-      const id = ++seq.current;
-      setState((s) => ({ ...s, loading: true, err: null }));
-      try {
-        const res = await fetchPage({ limit: pageSize, offset });
-        if (id !== seq.current) return;
-        const items = Array.isArray(res?.items) ? res.items : [];
-        setState((s) => ({
-          items: append ? [...s.items, ...items] : items,
-          total: Number.isFinite(Number(res?.total)) ? Number(res.total) : items.length,
-          loading: false,
-          err: null,
-        }));
-      } catch (e) {
-        if (id !== seq.current) return;
-        setState((s) => ({ ...s, loading: false, err: e?.body?.message || e?.message || "Failed to load" }));
-      }
-    },
-    [fetchPage, pageSize]
-  );
-
-  React.useEffect(() => {
-    load(0, false);
-  }, [load]);
-
-  return { ...state, loadMore: () => load(state.items.length, true) };
-}
-
-function useDebounced(value, ms = 300) {
-  const [v, setV] = React.useState(value);
-  React.useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
-
-function SearchBox({ value, onChange, label }) {
-  return (
-    <TextField
-      size="small"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={label}
-      inputProps={{ "aria-label": label }}
-      sx={{ width: { xs: "100%", sm: 260 } }}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <SearchOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray }} />
-          </InputAdornment>
-        ),
-      }}
-    />
-  );
-}
-
-/** "Showing 50 of 1,203" + the button for the next page. */
-function PageFooter({ shown, total, loading, onMore, noun, pageSize }) {
-  if (total <= shown && !loading) return null;
-  const remaining = Math.max(0, total - shown);
-  return (
-    <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mt: 1 }}>
-      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-        Showing {shown.toLocaleString()} of {total.toLocaleString()} {noun}
-      </Typography>
-      {remaining > 0 ? (
-        <Button size="small" onClick={onMore} disabled={loading} sx={{ textTransform: "none" }}>
-          Show {Math.min(remaining, pageSize).toLocaleString()} more
-        </Button>
-      ) : null}
-      {loading ? <CircularProgress size={14} sx={{ color: BRAND.teal }} /> : null}
-    </Stack>
-  );
-}
-
-function ListState({ loading, err, empty, children }) {
-  if (err) return <Box sx={{ py: 1.5, color: BRAND.alert?.errorText, fontSize: TEXT.sm }}>{err}</Box>;
-  if (loading && empty) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-        <CircularProgress size={20} sx={{ color: BRAND.teal }} />
-      </Box>
-    );
-  }
-  return children;
-}
-
-function DeviceName({ device, onOpenDevice }) {
-  const name = device.hostname || device.agentId;
-  if (!onOpenDevice) return <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>{name}</Typography>;
-  return (
-    <Link
-      component="button"
-      type="button"
-      underline="hover"
-      onClick={() => onOpenDevice(device.agentId)}
-      sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, textAlign: "left" }}
-    >
-      {name}
-    </Link>
-  );
-}
 
 // ── By check ────────────────────────────────────────────────────────────
 

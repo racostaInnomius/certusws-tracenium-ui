@@ -456,6 +456,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // top of all 94 checks, leaving them to remember what they had clicked
   // and search for it by hand.
   const [focusCheckId, setFocusCheckId] = React.useState(null);
+  // Desde un control de la sección Frameworks: el Catalog enseña los checks
+  // que lo sostienen ({ framework, controlId, controlTitle }).
+  const [focusControl, setFocusControl] = React.useState(null);
 
   // ── Ámbito por grupo de activos ────────────────────────────────────
   // "Supongamos que genero un grupo con los equipos que deben cumplir
@@ -1223,7 +1226,11 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             reloadKey={refreshToken}
             sx={{ height: "72vh" }}
             focusCheckId={focusCheckId}
-            onClearFocus={() => setFocusCheckId(null)}
+            focusControl={focusControl}
+            onClearFocus={() => {
+              setFocusCheckId(null);
+              setFocusControl(null);
+            }}
           />
         </SectionPaper>
       ) : null}
@@ -1416,6 +1423,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         assetGroupLabel={assetGroupLabel}
         onOpenCheck={(row) => {
           setFocusCheckId(row?.checkId ?? null);
+          setFocusControl(null);
           setTab("catalog");
         }}
         onRemediate={canRemediate ? handleRemediateCheck : null}
@@ -1680,6 +1688,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                     <TableCell colSpan={7} sx={{ py: 0, borderBottom: expandedFramework === f.framework ? undefined : "none" }}>
                       <Collapse in={expandedFramework === f.framework} timeout="auto" unmountOnExit>
                         <FrameworkControlsPanel
+                          onShowChecks={(fc) => {
+                            setFocusCheckId(null);
+                            setFocusControl(fc);
+                            setTab("catalog");
+                          }}
+                          onOpenDevice={openDrawer}
                           framework={f.framework}
                           assetGroupId={assetGroupId}
                           reloadKey={refreshToken}

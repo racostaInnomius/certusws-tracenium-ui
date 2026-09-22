@@ -205,7 +205,7 @@ describe("controls of one standard on this device", () => {
     fireEvent.mouseDown(screen.getByRole("combobox", { name: /Standard/ }));
     fireEvent.click(await screen.findByRole("option", { name: "CIS Windows 11" }));
     await waitFor(() =>
-      expect(getFrameworkControls).toHaveBeenCalledWith({ framework: "cis_windows_11_v5.1.0", assetGroupId: undefined, agentId: "agent-1" })
+      expect(getFrameworkControls).toHaveBeenCalledWith({ framework: "cis_windows_11_v5.1.0", assetGroupId: undefined, agentId: "agent-1", fields: "summary", fresh: false })
     );
   });
 

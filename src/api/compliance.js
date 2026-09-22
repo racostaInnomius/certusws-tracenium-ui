@@ -100,8 +100,23 @@ export async function getCategoryCheckDevices(category, checkId, { limit, offset
 // question, which everything else on the page inverts.
 // `agentId` scopes the same table to one device (the device drawer);
 // `assetGroupId` to a group. The device wins when both are given.
-export async function getFrameworkControls({ framework, assetGroupId, agentId } = {}) {
-  return httpGetJson(`${BASE}/framework-controls${buildQuery({ framework, assetGroupId, agentId })}`);
+// `fields: "summary"` → each control with `checkCount` instead of its list of
+// checks (that relationship is the Catalog tab's; the list was most of the
+// weight — 314 KB for ISO's 93 controls). `fresh: true` skips the server's
+// short cache: the page's Refresh sends it. The response says when it was
+// computed (`generatedAt`) and whether it came from the cache.
+export async function getFrameworkControls({ framework, assetGroupId, agentId, fields, fresh } = {}) {
+  return httpGetJson(
+    `${BASE}/framework-controls${buildQuery({ framework, assetGroupId, agentId, fields, fresh: fresh ? "1" : undefined })}`
+  );
+}
+
+// The devices failing ONE control, paginated and searchable. `framework` is a
+// concrete benchmark — in a family, the section's, not the family.
+export async function getFrameworkControlDevices({ framework, controlId, assetGroupId, limit, offset, q } = {}) {
+  return httpGetJson(
+    `${BASE}/framework-controls/devices${buildQuery({ framework, controlId, assetGroupId, limit, offset, q })}`
+  );
 }
 
 export async function getFrameworkSummary(params = {}) {

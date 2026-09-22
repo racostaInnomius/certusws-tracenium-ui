@@ -24,6 +24,8 @@ import {
   Box,
   Chip,
   CircularProgress,
+  IconButton,
+  Link,
   Stack,
   Table,
   TableBody,
@@ -36,8 +38,18 @@ import {
   Typography,
 } from "@mui/material";
 
-import { getFrameworkControls } from "../../api/compliance";
-import { BRAND, TEXT } from "../../theme/brand";
+import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
+import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import { getFrameworkControls, getFrameworkControlDevices } from "../../api/compliance";
+import { BRAND, ICON, TEXT } from "../../theme/brand";
+import { formatDate, formatRelative } from "../../utils/format";
+import { SearchBox, PageFooter, ListState, DeviceName } from "./pagedList";
+import { usePagedList, useDebounced } from "./usePagedList";
+
+// Filas de controles por página. NIST 800-53 tiene 1.014 controles y la
+// familia CIS 1.444 filas: pintarlas todas de golpe no le sirve a nadie.
+export const CONTROLS_PAGE = 50;
+export const CONTROL_DEVICES_PAGE = 50;
 
 // El veredicto de un control, y por qué cada palabra.
 //
@@ -103,6 +115,11 @@ const STATUS_META = {
   },
 };
 
+/** Cuántos checks sostienen un control (`checkCount`; la lista sólo en respuestas antiguas). */
+function checkCountOf(row) {
+  return row.checkCount ?? row.checks?.length ?? 0;
+}
+
 /** Evidencia capturada → texto legible, una línea por clave. */
 function formatEvidence(ev) {
   if (!ev || typeof ev !== "object") return "";
@@ -139,12 +156,72 @@ const BASELINES = ["low", "moderate", "high"];
 const DEFAULT_BASELINE = "moderate";
 
 /**
+ * Los equipos que incumplen UN control, paginados y con buscador.
+ *
+ * La fila decía «15 fallan» y no había forma de ver cuáles sin abrir los
+ * equipos uno a uno. El backend cuenta con el mismo predicado que la fila
+ * (fail o error, mismo alcance), así que el total cuadra con su número.
+ */
+function ControlDevices({ framework, controlId, assetGroupId, onOpenDevice }) {
+  const [search, setSearch] = React.useState("");
+  const q = useDebounced(search.trim());
+  const fetchPage = React.useCallback(
+    (p) => getFrameworkControlDevices({ framework, controlId, assetGroupId: assetGroupId || undefined, q, ...p }),
+    [framework, controlId, assetGroupId, q]
+  );
+  const list = usePagedList(fetchPage, CONTROL_DEVICES_PAGE);
+
+  return (
+    <Box sx={{ pl: 5, pr: 1, py: 1 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} spacing={1} sx={{ mb: 1 }}>
+        <Typography sx={{ fontSize: TEXT.xs, fontWeight: 800, color: BRAND.gray }}>
+          {list.loading && !list.items.length
+            ? "Devices failing this control"
+            : `${list.total.toLocaleString()} device${list.total === 1 ? "" : "s"} failing this control`}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <SearchBox value={search} onChange={setSearch} label="Search devices" />
+      </Stack>
+      <ListState loading={list.loading} err={list.err} empty={!list.items.length}>
+        {!list.items.length ? (
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+            {q ? `No device matches “${q}”.` : "No devices are failing this control."}
+          </Typography>
+        ) : (
+          list.items.map((d) => (
+            <Stack key={d.agentId} direction="row" alignItems="baseline" spacing={1.25} sx={{ py: 0.4, borderBottom: `1px solid ${BRAND.border}` }}>
+              <Box sx={{ width: 200, flexShrink: 0, minWidth: 0 }}>
+                <DeviceName device={d} onOpenDevice={onOpenDevice} />
+              </Box>
+              <Typography noWrap sx={{ flex: 1, minWidth: 0, fontSize: TEXT.xs, color: BRAND.dark }}>
+                {d.sampleChecks?.join(" · ")}
+                {d.failingChecks > (d.sampleChecks?.length ?? 0) ? ` +${d.failingChecks - d.sampleChecks.length} more` : ""}
+              </Typography>
+              <Typography noWrap sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                {[d.platform, d.failingSince ? `since ${formatDate(d.failingSince, { month: "short", day: "numeric" })}` : null].filter(Boolean).join(" · ")}
+              </Typography>
+            </Stack>
+          ))
+        )}
+        <PageFooter shown={list.items.length} total={list.total} loading={list.loading} onMore={list.loadMore} noun="devices" pageSize={CONTROL_DEVICES_PAGE} />
+      </ListState>
+    </Box>
+  );
+}
+
+/**
  * Los controles de UN benchmark ya cargados: titular de cobertura,
  * veredicto y tabla. Separado de la carga para que una familia pueda
  * pintar una instancia por sección con el mismo código.
  */
-function ControlsBody({ controls, agentId }) {
+function ControlsBody({ controls, agentId, framework, assetGroupId, onShowChecks, onOpenDevice }) {
   const [baseline, setBaseline] = React.useState(DEFAULT_BASELINE);
+  // «Evaluated» por defecto: los controles que algún check nuestro mide. En
+  // NIST 800-53 son 56 de 1.014; los otros 958 no son hallazgos sobre tus
+  // equipos, y el titular de arriba ya dice cuántos son y por qué.
+  const [scope, setScope] = React.useState("evaluated");
+  const [shown, setShown] = React.useState(CONTROLS_PAGE);
+  const [openControl, setOpenControl] = React.useState(null);
 
   // Sólo los estándares con baselines (800-53) enseñan el selector; el
   // filtro es local porque las baselines viajan en cada fila.
@@ -173,6 +250,16 @@ function ControlsBody({ controls, agentId }) {
   const coveragePct = deviceEvidenceable
     ? Math.round((covered / deviceEvidenceable) * 100)
     : 0;
+
+  const evaluated = React.useMemo(() => visible.filter((r) => checkCountOf(r) > 0), [visible]);
+  const rows = scope === "evaluated" && evaluated.length > 0 ? evaluated : visible;
+  const hasUnevaluated = evaluated.length < visible.length;
+  // Cambiar de filtro vuelve a la primera página.
+  React.useEffect(() => {
+    setShown(CONTROLS_PAGE);
+  }, [scope, baseline]);
+  const canDrill = !agentId && Boolean(framework);
+  const colSpan = (agentId ? 5 : 6) + (canDrill ? 1 : 0);
 
   if (controls.length === 0) {
     return (
@@ -233,9 +320,26 @@ function ControlsBody({ controls, agentId }) {
         </Box>
       </Typography>
 
+      {hasUnevaluated && evaluated.length > 0 ? (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <ToggleButtonGroup size="small" exclusive value={scope} onChange={(_, v) => { if (v) setScope(v); }} aria-label="Which controls">
+            <ToggleButton value="evaluated" sx={{ textTransform: "none", fontSize: TEXT.xs, py: 0.25 }}>
+              Evaluated ({evaluated.length.toLocaleString()})
+            </ToggleButton>
+            <ToggleButton value="all" sx={{ textTransform: "none", fontSize: TEXT.xs, py: 0.25 }}>
+              All ({visible.length.toLocaleString()})
+            </ToggleButton>
+          </ToggleButtonGroup>
+          <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+            {scope === "evaluated" ? "Controls a Tracenium check measures on your devices." : "Every control in the standard, covered or not."}
+          </Typography>
+        </Stack>
+      ) : null}
+
       <Table size="small">
         <TableHead>
           <TableRow>
+            {canDrill ? <TableCell sx={{ width: 34, pr: 0 }} /> : null}
             <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Control</TableCell>
             <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>Status</TableCell>
             <TableCell align="right" sx={{ fontWeight: 700, color: BRAND.dark }}>Devices met</TableCell>
@@ -247,8 +351,29 @@ function ControlsBody({ controls, agentId }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {visible.map((row) => (
-            <TableRow key={row.controlId} hover sx={row.status === "no_evidence" || row.status === "not_applicable" || row.status === "organizational" ? { opacity: 0.55 } : undefined}>
+          {rows.slice(0, shown).map((row) => {
+            const drillable = canDrill && row.devicesFailing > 0;
+            const open = openControl === row.controlId;
+            const n = checkCountOf(row);
+            return (
+            <React.Fragment key={row.controlId}>
+            <TableRow hover sx={{ ...(row.status === "no_evidence" || row.status === "not_applicable" || row.status === "organizational" ? { opacity: 0.55 } : null), "& > *": { borderBottom: open ? "none" : undefined } }}>
+              {canDrill ? (
+                <TableCell sx={{ width: 34, pr: 0 }}>
+                  {drillable ? (
+                    <Tooltip title={open ? "Hide devices" : "Show the devices failing this control"} arrow placement="right">
+                      <IconButton
+                        size="small"
+                        aria-label={`Devices failing ${row.controlId}`}
+                        aria-expanded={open}
+                        onClick={() => setOpenControl((cur) => (cur === row.controlId ? null : row.controlId))}
+                      >
+                        {open ? <ExpandLessOutlinedIcon sx={{ fontSize: ICON.sm }} /> : <ExpandMoreOutlinedIcon sx={{ fontSize: ICON.sm }} />}
+                      </IconButton>
+                    </Tooltip>
+                  ) : null}
+                </TableCell>
+              ) : null}
               <TableCell>
                 <Stack spacing={0.25}>
                   <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
@@ -274,10 +399,25 @@ function ControlsBody({ controls, agentId }) {
                   {/* Qué evidencia sostiene el veredicto. Sin esto el
                       operador no puede discutir un "Not met" ni el
                       auditor comprobarlo. */}
-                  {row.checks.length ? (
-                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontFamily: "monospace" }}>
-                      {row.checks.map((c) => c.checkId).join(" · ")}
-                    </Typography>
+                  {/* Cuántos checks lo sostienen y dónde verlos. La lista
+                      vivía aquí y repetía el tab Catalog (y era lo que
+                      pesaba: 247 checks en A.8.9); ahora es un enlace. */}
+                  {n > 0 ? (
+                    onShowChecks ? (
+                      <Link
+                        component="button"
+                        type="button"
+                        underline="hover"
+                        onClick={() => onShowChecks({ framework, controlId: row.controlId, controlTitle: row.controlTitle })}
+                        sx={{ alignSelf: "flex-start", fontSize: TEXT.xs, color: BRAND.tealText, textAlign: "left" }}
+                      >
+                        {n} check{n === 1 ? "" : "s"} behind this control — see them in the Catalog
+                      </Link>
+                    ) : (
+                      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                        {n} check{n === 1 ? "" : "s"} behind this control
+                      </Typography>
+                    )
                   ) : (
                     <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, fontStyle: "italic" }}>
                       {row.status === "organizational"
@@ -328,9 +468,26 @@ function ControlsBody({ controls, agentId }) {
                 </TableCell>
               )}
             </TableRow>
-          ))}
+            {open ? (
+              <TableRow>
+                <TableCell colSpan={colSpan} sx={{ py: 0 }}>
+                  <ControlDevices framework={framework} controlId={row.controlId} assetGroupId={assetGroupId} onOpenDevice={onOpenDevice} />
+                </TableCell>
+              </TableRow>
+            ) : null}
+            </React.Fragment>
+            );
+          })}
         </TableBody>
       </Table>
+      <PageFooter
+        shown={Math.min(shown, rows.length)}
+        total={rows.length}
+        loading={false}
+        onMore={() => setShown((v) => v + CONTROLS_PAGE)}
+        noun="controls"
+        pageSize={CONTROLS_PAGE}
+      />
     </Box>
   );
 }
@@ -340,14 +497,36 @@ function ControlsBody({ controls, agentId }) {
  * (`family:cis`). `frameworkLabels` (Map id → nombre corto) rotula las
  * secciones de una familia; sin él sale el id.
  */
-export default function FrameworkControlsPanel({ framework, assetGroupId, agentId, reloadKey, frameworkLabels }) {
-  const [state, setState] = React.useState({ loading: true, error: null, controls: [], sections: null });
+export default function FrameworkControlsPanel({
+  framework,
+  assetGroupId,
+  agentId,
+  reloadKey,
+  frameworkLabels,
+  onShowChecks = null,
+  onOpenDevice = null,
+}) {
+  const [state, setState] = React.useState({ loading: true, error: null, controls: [], sections: null, generatedAt: null, cached: false });
+  // El servidor cachea esta respuesta unos minutos (es cara y cambia con los
+  // ciclos del agente, no con cada click). El Refresh de la página cambia
+  // `reloadKey`: entonces, y sólo entonces, se pide saltándose la caché. Un
+  // Refresh que no refresca ya nos costó un «no funciona».
+  const lastReloadKey = React.useRef(reloadKey);
 
   React.useEffect(() => {
     if (!framework) return undefined;
     let alive = true;
-    setState({ loading: true, error: null, controls: [], sections: null });
-    getFrameworkControls({ framework, assetGroupId: assetGroupId || undefined, agentId: agentId || undefined })
+    const fresh = reloadKey !== lastReloadKey.current;
+    lastReloadKey.current = reloadKey;
+    setState({ loading: true, error: null, controls: [], sections: null, generatedAt: null, cached: false });
+    getFrameworkControls({
+      framework,
+      assetGroupId: assetGroupId || undefined,
+      agentId: agentId || undefined,
+      // Sin la lista de checks de cada control: sólo `checkCount`.
+      fields: "summary",
+      fresh,
+    })
       .then((res) => {
         if (!alive) return;
         setState({
@@ -356,6 +535,8 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
           controls: Array.isArray(res?.controls) ? res.controls : [],
           // Una familia responde por secciones; un framework, con `controls`.
           sections: Array.isArray(res?.sections) ? res.sections : null,
+          generatedAt: res?.generatedAt ?? null,
+          cached: Boolean(res?.cached),
         });
       })
       .catch((err) => {
@@ -367,6 +548,8 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
           error: err?.body?.message || err?.message || "Could not load the controls for this framework.",
           controls: [],
           sections: null,
+          generatedAt: null,
+          cached: false,
         });
       });
     return () => {
@@ -402,6 +585,7 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
     }
     return (
       <Stack spacing={1} divider={<Box sx={{ borderTop: `1px solid ${BRAND.border}` }} />} sx={{ py: 0.5 }}>
+        <ComputedAt generatedAt={state.generatedAt} cached={state.cached} />
         {state.sections.map((s) => (
           <Box key={s.framework} data-testid={`family-section-${s.framework}`}>
             {/* Cada sección es SU benchmark, con el id debajo del nombre:
@@ -413,12 +597,44 @@ export default function FrameworkControlsPanel({ framework, assetGroupId, agentI
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
               {s.framework}
             </Typography>
-            <ControlsBody controls={Array.isArray(s.controls) ? s.controls : []} agentId={agentId} />
+            <ControlsBody
+              controls={Array.isArray(s.controls) ? s.controls : []}
+              agentId={agentId}
+              framework={s.framework}
+              assetGroupId={assetGroupId}
+              onShowChecks={onShowChecks}
+              onOpenDevice={onOpenDevice}
+            />
           </Box>
         ))}
       </Stack>
     );
   }
 
-  return <ControlsBody key={framework} controls={state.controls} agentId={agentId} />;
+  return (
+    <>
+      <ComputedAt generatedAt={state.generatedAt} cached={state.cached} />
+      <ControlsBody
+        key={framework}
+        controls={state.controls}
+        agentId={agentId}
+        framework={framework}
+        assetGroupId={assetGroupId}
+        onShowChecks={onShowChecks}
+        onOpenDevice={onOpenDevice}
+      />
+    </>
+  );
+}
+
+/** «Figures from 3m ago» cuando la respuesta salió de la caché del servidor. */
+function ComputedAt({ generatedAt, cached }) {
+  if (!cached || !generatedAt) return null;
+  return (
+    <Tooltip arrow title={`Computed at ${formatDate(generatedAt)}. Use Refresh at the top of the page to recompute now.`}>
+      <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, pt: 1, cursor: "help" }}>
+        Figures from {formatRelative(generatedAt)}
+      </Typography>
+    </Tooltip>
+  );
 }
