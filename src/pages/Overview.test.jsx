@@ -72,7 +72,6 @@ beforeEach(() => {
   dashboardApi.getSignalCoverage.mockResolvedValue(COVERAGE);
   fetchOverviewCore.mockResolvedValue({
     dashboardSummary: ok({ fleetDevices: 12, totalHosts: 12, inactiveAssets7d: 2 }),
-    alertEvents: ok({ items: [] }),
     alertsUnread: ok({ count: 0 }),
     reportRuns: ok({ total: 0, runs: [] }),
     sdpTimeseries: ok({ buckets: [{ bucket: "2026-09-11", succeeded: 3, failed: 1, total: 4 }] }),
@@ -127,7 +126,8 @@ describe("Overview por plan", () => {
     expect(await screen.findByRole("button", { name: "Software delivery" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Reports" })).toBeTruthy();
     expect(screen.getByText("Deployments in progress")).toBeTruthy();
-    expect(screen.getByText("Latest alerts")).toBeTruthy();
+    // "Latest alerts" se fue: la campana de la barra superior ya lo dice.
+    expect(screen.queryByText("Latest alerts")).toBeNull();
     expect(screen.getByText("Attention required")).toBeTruthy();
   });
 
@@ -193,35 +193,50 @@ describe("Overview por plan", () => {
 describe("Overview — quién reporta cada señal (antes «Blind spots» en Asset Management)", () => {
   const blockOf = (name) => screen.getByRole("heading", { name }).closest("section");
 
-  it("⭐ el titular en la cabecera y una franja por bloque, con SUS señales", async () => {
+  it("⭐ titular en la cabecera; cada señal integrada en la fila de SU bloque", async () => {
     renderWith(ENTERPRISE);
     expect(await screen.findByTestId("coverage-headline")).toHaveTextContent("20 of 68 devices are missing at least one signal");
-
     await screen.findByRole("heading", { name: "Patching & crypto" });
-    await waitFor(() => expect(screen.getAllByTestId("signal-coverage-strip")).toHaveLength(3));
-    expect(within(blockOf("Fleet & operations")).getByText("Hardware & OS inventory")).toBeTruthy();
-    expect(within(blockOf("Fleet & operations")).queryByText("Compliance posture")).toBeNull();
-    expect(within(blockOf("Security & access")).getByText("Compliance posture")).toBeTruthy();
-    expect(within(blockOf("Patching & crypto")).getByText("Missing patches")).toBeTruthy();
-    expect(within(blockOf("Patching & crypto")).getByText("Certificates")).toBeTruthy();
-    expect(within(blockOf("Patching & crypto")).getByText("16 never reported")).toBeTruthy();
+
+    // Fleet & operations: una card "Blind spots" en la fila de cards, con el inventario.
+    const fleet = blockOf("Fleet & operations");
+    const card = await within(fleet).findByRole("region", { name: "Blind spots" });
+    expect(within(card).getByText("Hardware & OS inventory")).toBeTruthy();
+    expect(within(card).getByText("64/68")).toBeTruthy();
+    expect(within(fleet).queryByText("Compliance posture")).toBeNull();
+
+    // Security & access: quinto KPI.
+    const security = blockOf("Security & access");
+    const kpi = within(security).getByRole("button", { name: /Compliance reporting/ });
+    expect(kpi).toHaveTextContent("59/68");
+    expect(kpi).toHaveTextContent("9 silent for over 3 days");
+
+    // Patching & crypto: una pieza por card de abajo.
+    const patching = blockOf("Patching & crypto");
+    expect(within(patching).getAllByTestId("signal-coverage-tile")).toHaveLength(2);
+    expect(within(patching).getByText("Missing patches")).toBeTruthy();
+    expect(within(patching).getByText("Certificates")).toBeTruthy();
   });
 
-  it("⚠️ Starter: sólo la franja de inventario; compliance/parches/certificados no aparecen", async () => {
+  it("⚠️ Starter: sólo la card de inventario; ni KPI de compliance ni piezas de parches/certificados", async () => {
     renderWith(STARTER);
-    await waitFor(() => expect(screen.getAllByTestId("signal-coverage-strip")).toHaveLength(1));
-    expect(screen.getByText("Hardware & OS inventory")).toBeTruthy();
-    expect(screen.queryByText("Compliance posture")).toBeNull();
+    expect(await screen.findByRole("region", { name: "Blind spots" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Compliance reporting/ })).toBeNull();
+    expect(screen.queryByTestId("signal-coverage-tile")).toBeNull();
     expect(screen.queryByText("Missing patches")).toBeNull();
   });
 
-  it("sin permiso assets_view (403) la página sigue entera, sin franjas ni titular", async () => {
+  it("sin permiso assets_view (403) la página sigue entera, sin ninguna pieza de cobertura", async () => {
     dashboardApi.getSignalCoverage.mockRejectedValue(Object.assign(new Error("forbidden"), { status: 403 }));
     renderWith(ENTERPRISE);
     expect(await screen.findByRole("heading", { name: "Security & access" })).toBeTruthy();
     await waitFor(() => expect(dashboardApi.getSignalCoverage).toHaveBeenCalled());
-    expect(screen.queryByTestId("signal-coverage-strip")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Blind spots" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Compliance reporting/ })).toBeNull();
+    expect(screen.queryByTestId("signal-coverage-tile")).toBeNull();
     expect(screen.queryByTestId("coverage-headline")).toBeNull();
+    // La fila de cards sigue con las suyas.
+    expect(screen.getByRole("region", { name: "Reports" })).toBeTruthy();
   });
 });
 
@@ -256,5 +271,16 @@ describe("Overview — QUIÉNES son los equipos del hueco", () => {
     renderWith(ENTERPRISE);
     expect(await screen.findByText("Every device is reporting.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Every device is reporting/ })).toBeNull();
+  });
+
+  it("el KPI de compliance y la card de inventario abren la lista de SU señal", async () => {
+    dashboardApi.getSignalGapDevices.mockResolvedValue({ signal: "x", label: "x", staleAfterDays: 3, entitled: true, truncated: false, devices: [] });
+    renderWith(ENTERPRISE);
+    fireEvent.click(await screen.findByRole("button", { name: /Compliance reporting/ }));
+    expect(dashboardApi.getSignalGapDevices).toHaveBeenLastCalledWith("compliance");
+    fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+    const card = await screen.findByRole("region", { name: "Blind spots" });
+    fireEvent.click(within(card).getByRole("button", { name: /See devices/ }));
+    await waitFor(() => expect(dashboardApi.getSignalGapDevices).toHaveBeenLastCalledWith("inventory"));
   });
 });

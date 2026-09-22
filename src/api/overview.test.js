@@ -150,12 +150,12 @@ describe("loaders por bloque del Overview", () => {
 
     expect(sdp).toHaveLength(0);
     expect(Object.keys(results).sort()).toEqual([
-      "agentVersions", "alertEvents", "alertsUnread", "auditTimeseries",
+      "agentVersions", "alertsUnread", "auditTimeseries",
       "connectedDevices", "dashboardSummary", "expiringCerts", "hardwareSummary",
       "jobsTimeseries", "latestVersions", "reportRuns", "reportSchedules",
     ]);
-    // Tres alertas, no cinco: la card mide lo mismo que sus vecinas de fila.
-    expect(alertCalls[0].search).toEqual({ limit: "3" });
+    // "Latest alerts" salió del Overview (la campana ya lo dice): no se piden.
+    expect(alertCalls).toHaveLength(0);
     // Carril admin: el que abre la página de Audit al pulsar la gráfica.
     expect(auditCalls[0].search).toEqual({ window: "7d", lane: "admin" });
     for (const [key, slot] of Object.entries(results)) {
@@ -210,7 +210,6 @@ describe("loaders por bloque del Overview", () => {
     const security = await fetchOverviewSecurity({ scp: true });
 
     expect(core.dashboardSummary.status).toBe("rejected");
-    expect(core.alertEvents.value).toEqual({ items: [] });
     expect(core.alertsUnread.value).toEqual({ count: 0 });
     expect(security.devicePosture.value).toEqual({ items: [] });
     expect(security.fleetComplianceTimeseries.value).toEqual({ windowDays: 30, buckets: [] });

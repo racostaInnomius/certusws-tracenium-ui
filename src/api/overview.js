@@ -13,7 +13,7 @@
 // charts + tables on the Overview.
 
 import { httpGetJson, isTemporaryApiError } from "./http";
-import { getAlertEvents, getAlertsUnreadCount } from "./alerts";
+import { getAlertsUnreadCount } from "./alerts";
 import { getDevicePosture } from "./compliance";
 import { getDeploymentTimeseries, listDeployments } from "./softwareDelivery";
 import { getRemoteControlSummary } from "./remoteControl";
@@ -197,7 +197,6 @@ export async function fetchOverviewCore({ sdp = false } = {}) {
     // 3 y no 5: la card comparte fila con Attention y Reports y tiene que
     // medir lo mismo que ellas. Es un vistazo; la lista está en Alerts. El
     // feed ya trae `hostname` desde el servidor.
-    ["alertEvents", getAlertEvents({ limit: 3 }).catch(() => ({ items: [] }))],
     ["alertsUnread", getAlertsUnreadCount().catch(() => ({ count: 0 }))],
     // `limit: 1` da la última corrida y, por `COUNT(*) OVER()`, el total.
     ["reportRuns", getReportRuns({ limit: 1 })],

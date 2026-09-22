@@ -9,8 +9,7 @@
 //   · el titular sale del backend deduplicado, no de sumar las señales.
 
 import { describe, expect, it } from "vitest";
-import { barColor, gapText, headline, signalsForBlock } from "./signalCoverageModel";
-import { resolveOverviewPlan } from "./overviewPlan";
+import { barColor, entitledSignal, gapText, headline } from "./signalCoverageModel";
 
 const signal = (over = {}) => ({
   key: "compliance",
@@ -58,25 +57,19 @@ describe("el color", () => {
   });
 });
 
-describe("signalsForBlock — cada señal al bloque de su plugin", () => {
-  it("⭐ con todo el plan: inventario en Fleet, compliance en Security, certificados en Patching", () => {
-    const plan = resolveOverviewPlan({ entitled: new Set(["amp", "sdp", "scp", "rcp", "pmp", "cdp"]) });
-    const by = (id) => signalsForBlock(COVERAGE, plan.blocks.find((b) => b.id === id)).map((s) => s.key);
-    expect(by("core")).toEqual(["inventory"]);
-    expect(by("security")).toEqual(["compliance"]);
-    // `patches` llega sin plan en esta respuesta: no se pinta aunque el bloque exista.
-    expect(by("operations")).toEqual(["certificates"]);
+describe("entitledSignal — cada bloque pide SUS señales por clave", () => {
+  it("devuelve la señal concedida por clave", () => {
+    expect(entitledSignal(COVERAGE, "compliance")?.plugin).toBe("scp");
+    expect(entitledSignal(COVERAGE, "certificates")?.plugin).toBe("cdp");
   });
 
-  it("⚠️ Starter: el bloque 1 sólo enseña inventario — nada de compliance aunque el backend lo mande", () => {
-    const plan = resolveOverviewPlan({ entitled: new Set(["amp", "sdp"]) });
-    const core = plan.blocks.find((b) => b.id === "core");
-    expect(signalsForBlock(COVERAGE, core).map((s) => s.key)).toEqual(["inventory"]);
+  it("⚠️ una señal fuera del plan no es un hueco: null", () => {
+    expect(entitledSignal(COVERAGE, "patches")).toBeNull();
   });
 
-  it("sin respuesta (403 sin assets_view, o fallo) no hay señales", () => {
-    const plan = resolveOverviewPlan({ entitled: new Set(["amp"]) });
-    expect(signalsForBlock(null, plan.blocks[0])).toEqual([]);
+  it("sin respuesta (403 sin assets_view, o fallo) o sin parque, no hay nada", () => {
+    expect(entitledSignal(null, "inventory")).toBeNull();
+    expect(entitledSignal({ ...COVERAGE, fleet: 0 }, "inventory")).toBeNull();
   });
 });
 

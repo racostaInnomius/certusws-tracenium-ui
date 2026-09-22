@@ -6,9 +6,12 @@
 // Era la tarjeta "Blind spots" de Asset Management, pero de sus cuatro señales
 // sólo una (inventario) es de esa página: compliance, parches y certificados
 // son de SCP, PMP y CDP. En el Overview cada señal va al bloque de SU plugin
-// —la misma regla que cualquier card de la página— y queda encima de los
-// números que pone en duda: "59/68 reportan compliance" junto a la tendencia
-// de compliance, que es donde hay que leerlo antes de creerse la gráfica.
+// —la misma regla que cualquier card de la página—, junto a los números que
+// pone en duda:
+//   · Fleet & operations → card "Blind spots" (inventario) en la fila de cards
+//   · Security & access  → quinto KPI "Compliance reporting"
+//   · Patching & crypto  → una pieza sobre cada card (parches | certificados)
+// Y cada hueco abre la lista de ESOS equipos (SignalGapDrawer).
 //
 // Dos cosas que NO hace, y que son las que la hacen creíble:
 //
@@ -39,16 +42,15 @@ export function barColor(signal) {
 }
 
 /**
- * Las señales que pinta un bloque: las de sus plugins, concedidas.
+ * Una señal de la respuesta, si el plan la incluye (si no, no es un hueco y no
+ * se pinta). Cada bloque del Overview pide las SUYAS por clave.
  *
- * @param coverage  respuesta de /dashboard/signal-coverage (o null)
- * @param block     bloque de resolveOverviewPlan (plugins + has)
+ * @param coverage respuesta de /dashboard/signal-coverage (o null: 403 sin
+ *                 `assets_view`, o fallo — entonces no hay nada que pintar)
  */
-export function signalsForBlock(coverage, block) {
-  if (!coverage || !block || !Array.isArray(coverage.signals)) return [];
-  return coverage.signals.filter(
-    (s) => s.entitled && block.plugins.includes(s.plugin) && block.has(s.plugin)
-  );
+export function entitledSignal(coverage, key) {
+  if (!coverage || !Array.isArray(coverage.signals) || !(Number(coverage.fleet) > 0)) return null;
+  return coverage.signals.find((s) => s.key === key && s.entitled) ?? null;
 }
 
 /**

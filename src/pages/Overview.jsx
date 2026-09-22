@@ -19,7 +19,7 @@
 // failing endpoint leaves its card in a quiet empty state instead of blanking
 // the page.
 
-import { useCallback, lazy, Suspense } from "react";
+import { useCallback, useState, lazy, Suspense } from "react";
 import GoToReportButton from "../components/common/GoToReportButton";
 
 // La clave del catálogo de reportes (`REPORT_REGISTRY`) que corresponde a
@@ -45,7 +45,6 @@ import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import HeroKpis from "../components/Overview/HeroKpis";
 import SecurityKpis from "../components/Overview/SecurityKpis";
 import AttentionPanel from "../components/Overview/AttentionPanel";
-import LatestAlerts from "../components/Overview/LatestAlerts";
 import LicenseUsageCard from "../components/Overview/LicenseUsageCard";
 import HealthDistributionCard from "../components/Overview/HealthDistributionCard";
 import {
@@ -56,8 +55,11 @@ import {
 } from "../components/Overview/PluginSummaryCards";
 import { OverviewBlock, PlanScopeNotice } from "../components/Overview/OverviewBlock";
 import { resolveOverviewPlan } from "../components/Overview/overviewPlan";
-import SignalCoverageStrip from "../components/Overview/SignalCoverageStrip";
-import { headline as coverageHeadline } from "../components/Overview/signalCoverageModel";
+import BlindSpotCard from "../components/Overview/BlindSpotCard";
+import SignalCoverageTile from "../components/Overview/SignalCoverageTile";
+import SignalGapDrawer from "../components/Overview/SignalGapDrawer";
+import { coverageKpiCard } from "../components/Overview/coverageKpi";
+import { entitledSignal, headline as coverageHeadline } from "../components/Overview/signalCoverageModel";
 import { dashboardApi } from "../api/dashboard";
 // ── Recharts, off the first paint ────────────────────────────────────
 //
@@ -211,6 +213,15 @@ export default function Overview({ onNavigate } = {}) {
 
   const coverage = coverageFetch.error ? null : coverageFetch.data;
   const coverageTitle = coverageHeadline(coverage);
+  const coverageFleet = Number(coverage?.fleet) || 0;
+  // Cada señal en el bloque de su plugin (ver signalCoverageModel). Null si el
+  // plan no la incluye o no hay datos: entonces su pieza no se pinta.
+  const inventorySignal = entitledSignal(coverage, "inventory");
+  const complianceSignal = entitledSignal(coverage, "compliance");
+  const patchesSignal = entitledSignal(coverage, "patches");
+  const certificatesSignal = entitledSignal(coverage, "certificates");
+  // La señal cuyos equipos se están mirando: un solo panel para la página.
+  const [gapSignal, setGapSignal] = useState(null);
 
   const results = coreFetch.data;
   const loading = coreFetch.loading;
@@ -299,7 +310,6 @@ export default function Overview({ onNavigate } = {}) {
 
       {/* ── Block 1 · Fleet & operations — every plan ─────────────── */}
       <OverviewBlock block={core}>
-        <SignalCoverageStrip coverage={coverage} block={core} onNavigate={navigateWithQuery} />
         <HeroKpis results={results} loading={loading} onNavigate={navigateWithQuery} hasSdp={hasSdp} />
 
         {/* The one number here that can eventually stop enrollment. Renders
@@ -319,16 +329,19 @@ export default function Overview({ onNavigate } = {}) {
           ) : null}
         </Grid>
 
-        {/* What needs a person, side by side: derived signals, the alert
-            feed, and what was reported. */}
+        {/* What needs a person, side by side: derived signals, which
+            devices we can't see, and what was reported. "Latest alerts" was
+            here and left: the unread bell in the top bar already says it. */}
         <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: inventorySignal ? 4 : 6 }}>
             <AttentionPanel results={results} onNavigate={navigateWithQuery} />
           </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <LatestAlerts result={results?.alertEvents} loading={loading} onNavigate={navigateWithQuery} />
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
+          {inventorySignal ? (
+            <Grid size={{ xs: 12, md: 4 }}>
+              <BlindSpotCard signal={inventorySignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
+            </Grid>
+          ) : null}
+          <Grid size={{ xs: 12, md: inventorySignal ? 4 : 6 }}>
             <ReportsCard results={results} loading={loading} onNavigate={navigateWithQuery} />
           </Grid>
         </Grid>
@@ -359,12 +372,13 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 2 · Security & access — Professional ─────────────── */}
       {security ? (
         <OverviewBlock block={security}>
-          <SignalCoverageStrip coverage={coverage} block={security} onNavigate={navigateWithQuery} />
           <SecurityKpis
             results={securityFetch.data}
             loading={securityFetch.loading}
             onNavigate={navigateWithQuery}
             has={security.has}
+            // Quinto KPI: cuántos equipos reportan postura (el hueco de SCP).
+            extraCards={hasScp && complianceSignal ? [coverageKpiCard(complianceSignal, coverageFleet, setGapSignal)] : []}
           />
           {hasScp ? (
             // Trend and current state are two halves of one question: the
@@ -405,7 +419,27 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 3 · Patching & crypto — Business ─────────────────── */}
       {operations ? (
         <OverviewBlock block={operations}>
-          <SignalCoverageStrip coverage={coverage} block={operations} onNavigate={navigateWithQuery} />
+          {/* Una pieza por señal, con las MISMAS columnas que las cards de
+              abajo: parches sobre Patch Management, certificados sobre
+              Crypto Discovery, y los bordes casan. */}
+          {(hasPmp && patchesSignal) || (hasCdp && certificatesSignal) ? (
+            <Grid container spacing={2} alignItems="stretch">
+              {hasPmp ? (
+                <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>
+                  {patchesSignal ? (
+                    <SignalCoverageTile signal={patchesSignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
+                  ) : null}
+                </Grid>
+              ) : null}
+              {hasCdp ? (
+                <Grid size={{ xs: 12, md: hasPmp ? 6 : 12 }}>
+                  {certificatesSignal ? (
+                    <SignalCoverageTile signal={certificatesSignal} fleet={coverageFleet} onOpenDevices={setGapSignal} />
+                  ) : null}
+                </Grid>
+              ) : null}
+            </Grid>
+          ) : null}
           <Grid container spacing={2} alignItems="stretch">
             {hasPmp ? (
               <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>
@@ -430,6 +464,13 @@ export default function Overview({ onNavigate } = {}) {
       ) : null}
 
       <PlanScopeNotice locked={plan.locked} canManageBilling={isOwner} onNavigate={navigateWithQuery} />
+
+      <SignalGapDrawer
+        signal={gapSignal}
+        open={Boolean(gapSignal)}
+        onClose={() => setGapSignal(null)}
+        onNavigate={navigateWithQuery}
+      />
     </Box>
   );
 }

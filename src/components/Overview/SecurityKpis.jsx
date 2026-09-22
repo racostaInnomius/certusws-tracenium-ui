@@ -22,7 +22,7 @@ function scoreRole(score) {
   return score >= 85 ? "positive" : score >= 60 ? "caution" : "critical";
 }
 
-export default function SecurityKpis({ results, loading, onNavigate, has }) {
+export default function SecurityKpis({ results, loading, onNavigate, has, extraCards = [] }) {
   const navigate = (page, query) => onNavigate?.(page, query);
   const cards = [];
 
@@ -95,6 +95,10 @@ export default function SecurityKpis({ results, loading, onNavigate, has }) {
       }
     );
   }
+
+  // Lo que la página añade a la fila (hoy: "Compliance reporting", el hueco de
+  // SCP — ver coverageKpi.js). KpiRow reparte el ancho entre las que haya.
+  cards.push(...extraCards);
 
   if (cards.length === 0) return null;
   return <KpiRow cards={cards} loading={loading} />;
