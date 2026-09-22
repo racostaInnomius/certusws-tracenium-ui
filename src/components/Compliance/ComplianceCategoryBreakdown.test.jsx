@@ -6,8 +6,10 @@ import { cleanup, render, screen, waitFor, within, fireEvent } from "@testing-li
 vi.mock("../../api/compliance", () => ({
   getCategorySummary: vi.fn(),
   getCategoryDevices: vi.fn(),
+  getCategoryFailingChecks: vi.fn(),
+  getCategoryCheckDevices: vi.fn(),
 }));
-import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
+import { getCategorySummary, getCategoryDevices, getCategoryFailingChecks } from "../../api/compliance";
 import ComplianceCategoryBreakdown from "./ComplianceCategoryBreakdown";
 
 const ITEMS = {
@@ -87,35 +89,22 @@ describe("ComplianceCategoryBreakdown", () => {
     await waitFor(() => expect(screen.getByText("boom")).toBeInTheDocument());
   });
 
-  it("drills into a failing category to show the failing devices + checks", async () => {
+  it("expanding a failing category opens the drill-in by CHECK (CategoryDrilldown)", async () => {
+    // The drill-in itself is tested in CategoryDrilldown.test.jsx; here, only
+    // that the row wires it: the check axis loads, the device list does not.
     getCategorySummary.mockResolvedValue(ITEMS);
-    getCategoryDevices.mockResolvedValue({
+    getCategoryFailingChecks.mockResolvedValue({
       ok: true,
-      category: "firewall",
-      items: [
-        {
-          agentId: "a1",
-          hostname: "W11-Lab01",
-          platform: "windows",
-          failingChecks: 2,
-          highSeverityFails: 2,
-          checks: [
-            { checkId: "windows.firewall.domain", title: "Domain firewall on", severity: "high" },
-            { checkId: "windows.firewall.public", title: "Public firewall on", severity: "high" },
-          ],
-        },
-      ],
+      items: [{ checkId: "windows.firewall.domain", title: "Domain firewall on", severity: "high", deviceCount: 15, devicesEvaluated: 32, agentRemediable: false }],
+      total: 1,
     });
     render(<ComplianceCategoryBreakdown />);
     const firewallCell = await screen.findByText("Firewall");
-    const row = firewallCell.closest("tr");
-    // Expand the firewall row (it has failures → expandable).
-    fireEvent.click(within(row).getByRole("button"));
+    fireEvent.click(within(firewallCell.closest("tr")).getByRole("button"));
 
-    expect(await screen.findByText("W11-Lab01")).toBeInTheDocument();
-    expect(screen.getByText("Domain firewall on")).toBeInTheDocument();
-    expect(screen.getByText(/1 device failing this category/)).toBeInTheDocument();
-    expect(getCategoryDevices).toHaveBeenCalledWith("firewall");
+    expect(await screen.findByText("Domain firewall on")).toBeInTheDocument();
+    expect(getCategoryFailingChecks).toHaveBeenCalledWith("firewall", { limit: 25, offset: 0 });
+    expect(getCategoryDevices).not.toHaveBeenCalled();
   });
 
   it("does not fetch drill-in devices until a category is expanded", async () => {
@@ -123,6 +112,7 @@ describe("ComplianceCategoryBreakdown", () => {
     render(<ComplianceCategoryBreakdown />);
     await screen.findByText("Firewall");
     expect(getCategoryDevices).not.toHaveBeenCalled();
+    expect(getCategoryFailingChecks).not.toHaveBeenCalled();
   });
 });
 

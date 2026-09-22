@@ -1701,7 +1701,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           the fleet analogue of the drawer's per-device category grouping.
           Sits below the framework table (compliance vs benchmarks) and above
           the MTTR/device views (triage). */}
-      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} reloadKey={refreshToken} />
+      <ComplianceCategoryBreakdown baselineBridge={baselineBridge} reloadKey={refreshToken} onOpenDevice={openDrawer} />
 
       {/* Sprint 5 — fleet time-to-close by severity. Mounted between
           the framework table (top-down "how does the fleet compare to

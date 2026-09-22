@@ -3,8 +3,9 @@
 // Fleet-wide "Posture by category" — the fleet analogue of the per-device
 // category grouping in the drawer. One row per catalog category with a pass-rate
 // bar, pass/fail counts, high-severity fails, and how many devices are failing
-// it. A category with failures EXPANDS in place to a drill-in: exactly which
-// devices are failing it and which checks (getCategoryDevices).
+// it. A category with failures EXPANDS in place to a drill-in (CategoryDrilldown):
+// the failing checks with how many devices fail each, and the devices one click
+// away — paginated, because the device list is what grows with the fleet.
 
 import * as React from "react";
 import {
@@ -29,10 +30,9 @@ import { scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
-import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
-import { severityMeta } from "../../theme/severity";
-import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
+import { getCategorySummary } from "../../api/compliance";
+import CategoryDrilldown from "./CategoryDrilldown";
 import { listFrom } from "../../api/shape";
 import { categoryLabel, categoryDescription, compareCategoryLabels } from "./categoryMeta";
 
@@ -43,11 +43,6 @@ import { categoryLabel, categoryDescription, compareCategoryLabels } from "./cat
 function rateColor(rate, bands) {
   const role = scoreBandRole(rate, bands);
   return role ?? BRAND.gray;
-}
-
-function sevChip(s) {
-  // Canonical severity scale (theme/severity.js) — removes the hardcoded hex.
-  return severityMeta(s);
 }
 
 function PassRateBar({ rate }) {
@@ -62,77 +57,6 @@ function PassRateBar({ rate }) {
       <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: textColor, minWidth: 34, textAlign: "right" }}>
         {rate == null ? "n/a" : `${rate}%`}
       </Typography>
-    </Box>
-  );
-}
-
-// Drill-in body: devices failing this category + their failing checks. Fetched
-// lazily the first time the row is expanded.
-function CategoryDrilldown({ category }) {
-  const [state, setState] = React.useState({ loading: true, err: null, devices: [] });
-
-  React.useEffect(() => {
-    let cancelled = false;
-    getCategoryDevices(category)
-      .then((res) => {
-        if (!cancelled) setState({ loading: false, err: null, devices: listFrom(res, { context: "categoryDevices" }) });
-      })
-      .catch((e) => {
-        if (!cancelled) setState({ loading: false, err: e?.body?.message || e?.message || "Failed to load devices", devices: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [category]);
-
-  if (state.loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-        <CircularProgress size={20} sx={{ color: BRAND.teal }} />
-      </Box>
-    );
-  }
-  if (state.err) return <Box sx={{ py: 1.5, color: BRAND.alert?.error, fontSize: TEXT.sm }}>{state.err}</Box>;
-  if (state.devices.length === 0) {
-    return <Box sx={{ py: 1.5, color: BRAND.gray, fontSize: TEXT.sm }}>No devices are currently failing this category.</Box>;
-  }
-
-  return (
-    <Box sx={{ py: 1 }}>
-      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-        <DevicesOutlinedIcon sx={{ fontSize: ICON.sm, color: BRAND.gray }} />
-        <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.gray }}>
-          {state.devices.length} device{state.devices.length === 1 ? "" : "s"} failing this category
-        </Typography>
-      </Stack>
-      <Stack spacing={0.75}>
-        {state.devices.map((d) => (
-          <Box key={d.agentId} sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1, p: 1 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5, flexWrap: "wrap", gap: 0.5 }}>
-              <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>
-                {d.hostname || d.agentId}
-              </Typography>
-              {d.platform ? (
-                <Chip size="small" label={d.platform} sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark }} />
-              ) : null}
-              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                {d.failingChecks} failing
-                {d.highSeverityFails ? ` · ${d.highSeverityFails} critical/high` : ""}
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
-              {(d.checks || []).map((c) => {
-                const m = sevChip(c.severity);
-                return (
-                  <Tooltip key={c.checkId} title={c.checkId} arrow>
-                    <Chip size="small" label={c.title || c.checkId} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 600, bgcolor: m.bg, color: m.fg }} />
-                  </Tooltip>
-                );
-              })}
-            </Stack>
-          </Box>
-        ))}
-      </Stack>
     </Box>
   );
 }
@@ -236,7 +160,7 @@ function CategoryName({ category }) {
   );
 }
 
-function CategoryRow({ row, baselineBridge }) {
+function CategoryRow({ row, baselineBridge, onOpenDevice }) {
   const [open, setOpen] = React.useState(false);
   const expandable = row.failed > 0;
   return (
@@ -291,7 +215,7 @@ function CategoryRow({ row, baselineBridge }) {
         <TableRow>
           <TableCell colSpan={baselineBridge ? 8 : 7} sx={{ py: 0, borderBottom: open ? `1px solid ${BRAND.border}` : "none" }}>
             <Collapse in={open} timeout="auto" unmountOnExit>
-              <Box sx={{ pl: 5, pr: 2 }}>{open ? <CategoryDrilldown category={row.category} /> : null}</Box>
+              <Box sx={{ pl: 5, pr: 2 }}>{open ? <CategoryDrilldown category={row.category} onOpenDevice={onOpenDevice} /> : null}</Box>
             </Collapse>
           </TableCell>
         </TableRow>
@@ -300,7 +224,7 @@ function CategoryRow({ row, baselineBridge }) {
   );
 }
 
-export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge = null }) {
+export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge = null, onOpenDevice = null }) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState(null);
@@ -365,7 +289,7 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
             </TableHead>
             <TableBody>
               {rows.map((r) => (
-                <CategoryRow key={r.category} row={r} baselineBridge={baselineBridge} />
+                <CategoryRow key={r.category} row={r} baselineBridge={baselineBridge} onOpenDevice={onOpenDevice} />
               ))}
             </TableBody>
           </Table>

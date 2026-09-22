@@ -68,10 +68,30 @@ export async function getTopFailingChecks({ limit, framework, assetGroupId } = {
   );
 }
 
-// Drill-in for a category: devices FAILING at least one check in the category,
-// with the failing checks. Powers the category-breakdown expand-in-place.
-export async function getCategoryDevices(category) {
-  return httpGetJson(`${BASE}/category-summary/${encodeURIComponent(category)}/devices`);
+// Drill-in for a category, "By device": devices FAILING at least one check in
+// the category, worst first, paginated. `fields: "counts"` drops each
+// device's list of failing checks — with it, Integrity in a 54-device tenant
+// was 15,706 chips; the checks view is "By check" (getCategoryFailingChecks).
+export async function getCategoryDevices(category, { limit, offset, q, fields } = {}) {
+  return httpGetJson(
+    `${BASE}/category-summary/${encodeURIComponent(category)}/devices${buildQuery({ limit, offset, q, fields })}`
+  );
+}
+
+// Drill-in for a category, "By check": the checks failing in the category,
+// with how many devices fail each one out of how many it was evaluated on.
+// Grows with the catalog, not with the fleet. Returns { items, total }.
+export async function getCategoryFailingChecks(category, { limit, offset } = {}) {
+  return httpGetJson(
+    `${BASE}/category-summary/${encodeURIComponent(category)}/checks${buildQuery({ limit, offset })}`
+  );
+}
+
+// The devices failing ONE check of a category, paginated, searchable by name.
+export async function getCategoryCheckDevices(category, checkId, { limit, offset, q } = {}) {
+  return httpGetJson(
+    `${BASE}/category-summary/${encodeURIComponent(category)}/checks/${encodeURIComponent(checkId)}/devices${buildQuery({ limit, offset, q })}`
+  );
 }
 
 // Per-framework tenant aggregate (one row per framework; counts + avg score).
