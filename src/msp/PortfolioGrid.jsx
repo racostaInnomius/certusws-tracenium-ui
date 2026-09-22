@@ -6,8 +6,12 @@
 // MSP cards and the click behavior the parent wires via onSelect.
 //
 // Each card shows the four locked metrics: Devices, Online%, Alerts,
-// Compliance% (see docs/MSP_PLATFORM_SPEC.md). Missing roll-up data
-// (tenant never swept) renders as "—" rather than a misleading 0.
+// Compliance% (see docs/MSP_PLATFORM_SPEC.md), y una quinta SÓLO si el
+// cliente tiene Assessment Suite activo: el PEOR score de sus instancias de
+// servicio (ADR-0022, decisión «Vista MSP» — el MSP quiere ver dónde arde).
+// Missing roll-up data (tenant never swept) renders as "—" rather than a
+// misleading 0; un cliente sin el plugin no enseña la quinta, que es distinto
+// de tenerla vacía.
 
 import * as React from "react";
 import { scoreBandKey } from "../theme/scoreBands";
@@ -42,11 +46,12 @@ function MetricChip({ label, value, tone = "neutral" }) {
   );
 }
 
-// Compliance tone via the shared score-band scale (theme/scoreBands).
-// MSP is cross-tenant, so it uses the DEFAULT bands rather than any one
-// tenant's override — but at least it's the same default scale the rest
-// of the product uses (this was one of the two 90/70 divergences).
-function complianceTone(pct) {
+// Tono de un score 0-100 por la escala compartida (theme/scoreBands). MSP es
+// cross-tenant, así que usa las bandas POR DEFECTO y no la override de un
+// tenant — pero al menos es la misma escala que el resto del producto (era una
+// de las dos divergencias 90/70). Lo usan el cumplimiento y el score de
+// Assessment Suite: los dos son 0-100 con el mismo significado.
+function scoreTone(pct) {
   const key = scoreBandKey(pct);
   if (key === null) return "neutral";
   if (key === "good") return "good";
@@ -183,8 +188,15 @@ function PortfolioCard({ item, onSelect }) {
           <MetricChip
             label="Compliance"
             value={item.compliancePct == null ? "—" : `${item.compliancePct}%`}
-            tone={complianceTone(item.compliancePct)}
+            tone={scoreTone(item.compliancePct)}
           />
+          {item.aspInstances > 0 ? (
+            <MetricChip
+              label={item.aspInstances > 1 ? `Assessment (worst of ${item.aspInstances})` : "Assessment"}
+              value={item.aspScoreMin == null ? "—" : String(item.aspScoreMin)}
+              tone={scoreTone(item.aspScoreMin)}
+            />
+          ) : null}
         </Box>
       </Stack>
     </SectionPaper>
