@@ -210,6 +210,52 @@ export const FIELD_SPECS = {
       validate: absolutePaths(CDP_KEYSTORE_PATHS_MAX, "directories"),
     },
     {
+      // Ola 1.1. Va JUSTO detrás de las rutas porque decide si esas rutas
+      // son un añadido a las raíces del sistema o la lista entera.
+      key: "cdp.fileDiscovery",
+      label: "Where to look for certificate files",
+      sub:
+        "Default = the OS-specific roots (/etc/ssl, /etc/pki, the web-server config trees, C:\\inetpub…) plus the directories above. " +
+        "Only the directories above = nothing but that list. Off = no file walk at all. " +
+        "Each device stops after 45 seconds or 3000 files, whichever comes first, and reports what it did read. " +
+        "On Linux the agent does not run as root, so anything only root can read is skipped — a shorter list there is the permissions, not an empty disk. " +
+        "Blank keeps the agent's own default; a value that is not one of these three is rejected by the server.",
+      type: "select",
+      options: [
+        { value: "", label: "Default (agent default: system roots + the list above)" },
+        { value: "default", label: "System roots + the directories above" },
+        { value: "configured", label: "Only the directories above" },
+        { value: "off", label: "Off — do not walk the disk" },
+      ],
+    },
+    {
+      // Ola 1.4. El aviso de EDR es la mitad del control: sin él, «full»
+      // parece «un poco más de detalle» y es lo que dispara una detección
+      // High de acceso a credenciales en el equipo del cliente.
+      key: "cdp.sshUserKeys",
+      label: "SSH keys in user home directories",
+      sub:
+        "Public-only (the agent default) reads authorized_keys and *.pub — who can log into each account — and of a private key file only its name, permissions, size and date. " +
+        "Full also OPENS each private key file to say whether it is encrypted. Off collects nothing. " +
+        "Never any key material: the inventory records fingerprints and paths.",
+      type: "select",
+      options: [
+        { value: "", label: "Default (agent default: public only)" },
+        { value: "public-only", label: "Public only — authorized_keys and *.pub" },
+        { value: "full", label: "Full — also open private key files ⚠" },
+        { value: "off", label: "Off — collect no user SSH keys" },
+      ],
+      // Aviso, no error: el valor es válido y el servidor lo acepta. Lo que
+      // hace falta es que quien lo enciende sepa lo que va a pasar en los
+      // equipos ANTES de guardar, no cuando llame el SOC del cliente. Por
+      // eso va en el mismo recuadro ámbar que el aviso de los switches y no
+      // como una línea de texto más bajo la descripción.
+      warnWhen: (v) =>
+        v === "full"
+          ? "Full opens private key files (~/.ssh/id_*). EDR products read that as credential access: measured as a High detection on CrowdStrike, and Microsoft Defender and SentinelOne have equivalent rules. Agree the exclusions with the customer first — the agent repo documents them in docs/EDR_EXCLUSIONS.md. Public-only needs no exclusion at all."
+          : null,
+    },
+    {
       key: "cdp.scanTlsListeners",
       label: "Probe local TLS services",
       sub: "Runs on every device under this policy. Captures the certificate each local service actually serves (which can differ from every store), what the handshake negotiates, and which process serves it. Every probe goes to 127.0.0.1 and closes at the handshake; SMTP, IMAP, POP3, LDAP, PostgreSQL and MySQL get their StartTLS preamble, while SSH, telnet, DNS, MSSQL and Oracle are never probed (SSH host keys are read from disk instead). The same switch also reports the internal TLS services each device connects to, as suggestions for remote probing.",

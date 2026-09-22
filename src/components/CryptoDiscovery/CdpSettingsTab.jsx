@@ -31,6 +31,7 @@ import CdpPublicDomains from "./CdpPublicDomains";
 import { CbomImportForm } from "./CbomAssetsPanel";
 import CdpCryptoPolicyEditor from "./CdpCryptoPolicyEditor";
 import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
+import CdpProbeRanges from "./CdpProbeRanges";
 import SourceChips from "./CdpSourceChips";
 import GatewayPanel from "../patch-management/gateway/GatewayPanel";
 import { SECTIONS } from "./cdpSunburst";
@@ -304,6 +305,12 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged, onViewP
       <Sector {...sectorProps("infra")} section={infraHeader} onChip={openInfra} sub="Everything that reports without being a managed endpoint: services probed remotely, Kubernetes clusters, vCenter with its ESXi hosts, a CBOM from another scanner and the Windows Certification Authority.">
         {coverage ? null : <CoverageNotice what="Reading machines you have no agent on — remote probes past the three included, Kubernetes, vCenter and the Windows CA —" />}
         <CdpRemoteProbes refreshNonce={refreshNonce} maxTargets={coverage ? undefined : FREE_PROBE_TARGETS} />
+        <Divider />
+        {/* Ola 1.2 — los rangos van pegados a las sondas: misma policy, mismos
+            equipos «Runs from», misma pregunta contada al revés (nombrar un
+            servicio vs. descubrirlos). El complemento los trata distinto y el
+            panel lo dice: aquí NO hay muestra gratis. */}
+        <CdpProbeRanges refreshNonce={refreshNonce} locked={!coverage} />
         <Divider />
         <CdpConnectorsPanel
           embedded

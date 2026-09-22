@@ -102,7 +102,14 @@ export function FieldRow({ spec, form, onChange, scope = "tenant", compareForm =
   const overridden = scope === "device" && compareForm ? !sameFormValue(value, tenantValue) : false;
   const message = spec.validate ? spec.validate(value, form) : null;
   const isError = Boolean(message) && !spec.warnOnly;
-  const showWarnOn = spec.warnWhenOn && spec.type === "switch" && switchOn(spec, value);
+  // Dos formas del MISMO recuadro ámbar: `warnWhenOn` para un switch
+  // encendido, `warnWhen(value)` para el valor concreto de cualquier otro
+  // control (p. ej. `cdp.sshUserKeys = "full"`, que abre claves privadas y
+  // dispara los EDR). No es un error — el servidor lo acepta —, así que ni
+  // bloquea el guardado ni se pinta en rojo; sólo tiene que verse antes.
+  const warnText =
+    (spec.warnWhenOn && spec.type === "switch" && switchOn(spec, value) ? spec.warnWhenOn : null) ??
+    (typeof spec.warnWhen === "function" ? spec.warnWhen(value) : null);
 
   return (
     <Box
@@ -127,15 +134,16 @@ export function FieldRow({ spec, form, onChange, scope = "tenant", compareForm =
         {message ? (
           <Typography sx={{ fontSize: TEXT.xs, color: isError ? BRAND.alert.errorText : BRAND.alert.warningText, mt: 0.25, fontWeight: 600 }}>{message}</Typography>
         ) : null}
-        {showWarnOn ? (
-          // A caution, not an error: the switch is valid, it just reaches
-          // devices whose agent may be too old for it. Amber, not red.
+        {warnText ? (
+          // A caution, not an error: the value is valid, it just reaches
+          // devices whose agent may be too old for it, or does something on
+          // the endpoint that the operator has to agree to first. Amber.
           <Alert
             severity="warning"
             icon={false}
             sx={{ mt: 0.75, py: 0.25, fontSize: TEXT.xs, bgcolor: BRAND.alert.warningSoft, color: BRAND.alert.warningText, border: `1px solid ${BRAND.alert.warning}`, "& .MuiAlert-message": { py: 0.25 } }}
           >
-            {spec.warnWhenOn}
+            {warnText}
           </Alert>
         ) : null}
       </Box>

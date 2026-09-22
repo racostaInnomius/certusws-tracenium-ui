@@ -413,6 +413,12 @@ describe("policyTransforms — cdp (Crypto Discovery)", () => {
       tlsListenerPorts: "",
       probeTargets: "",
       certFilePaths: "",
+      // Ola 1.1 / 1.4: sin elegir. "" ≠ el defecto del agente escrito a mano.
+      fileDiscovery: "",
+      sshUserKeys: "",
+      // Ola 1.2: paso a través para que un guardado de esta página no borre
+      // los rangos que se editan en Crypto Discovery → Settings.
+      probeRangesRaw: null,
     });
   });
 

@@ -75,6 +75,103 @@ export function invalidProbeTargets(text) {
 }
 export const CDP_TLS_PORTS_MAX = 64;
 
+// ── Ola 1.1 / 1.4 — alcance de dos colectores del agente ─────────────
+//
+// Los dos son un ENUM y el agente trata un valor desconocido como su
+// defecto EN SILENCIO: un typo parecería puesto y estrecharía el alcance
+// sin que nadie lo supiera. Por eso son un desplegable y no texto libre,
+// y por eso la lista vive aquí, junto a la que valida el backend
+// (`validateCdpBlock` → `cdp.fileDiscovery` / `cdp.sshUserKeys`,
+// code `INVALID_TYPE`).
+export const CDP_FILE_DISCOVERY_MODES = ["default", "configured", "off"];
+export const CDP_SSH_USER_KEYS_MODES = ["public-only", "full", "off"];
+
+// ── Ola 1.2 — rangos a barrer (`cdp.probeRanges`) ────────────────────
+//
+// Los MISMOS topes que valida `policies.service.ts` y que parsea el
+// agente (`domain/probe-range.ts`). No son de rendimiento: barrer una red
+// es lo único que hace el agente que un IDS puede leer como un escaneo de
+// puertos, y un /16 son 65.536 handshakes.
+//
+// ⚠️ Una entrada que se pasa del tope se descarta ENTERA, no se recorta:
+// el agente no barre «los primeros 1024» de un /16. La UI lo dice con esas
+// palabras porque la diferencia entre «recortado» y «no barre nada» es la
+// diferencia entre un descubrimiento parcial y ninguno.
+export const CDP_PROBE_RANGES_MAX = 16;
+export const CDP_PROBE_RANGE_MIN_PREFIX = 22;
+export const CDP_PROBE_RANGE_MAX_ADDRESSES = 1024;
+export const CDP_PROBE_RANGE_MAX_PORTS = 8;
+
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const SNI_RE = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)+$/i;
+
+function ipv4Int(s) {
+  const m = IPV4_RE.exec(String(s ?? "").trim());
+  if (!m) return null;
+  let out = 0;
+  for (let i = 1; i <= 4; i += 1) {
+    const o = Number(m[i]);
+    if (!Number.isInteger(o) || o < 0 || o > 255) return null;
+    out = out * 256 + o;
+  }
+  return out >>> 0;
+}
+
+/**
+ * `10.0.0.0/24` o `10.0.0.1-10.0.0.60` → tamaño en direcciones, o null si
+ * no es ninguna de las dos formas. Portado literalmente de
+ * `probeRangeSize` del backend: si las dos cuentas divergen, el portal
+ * acepta lo que el servidor rechaza (o al revés).
+ */
+export function probeRangeSize(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s || s.length > 64) return null;
+  const slash = s.indexOf("/");
+  if (slash > 0) {
+    const base = ipv4Int(s.slice(0, slash));
+    const prefixStr = s.slice(slash + 1);
+    if (base === null || !/^\d{1,2}$/.test(prefixStr)) return null;
+    const prefix = Number(prefixStr);
+    if (prefix < CDP_PROBE_RANGE_MIN_PREFIX || prefix > 32) return null;
+    return prefix === 32 ? 1 : 2 ** (32 - prefix);
+  }
+  const dash = s.indexOf("-");
+  if (dash > 0) {
+    const start = ipv4Int(s.slice(0, dash));
+    const end = ipv4Int(s.slice(dash + 1));
+    if (start === null || end === null || end < start) return null;
+    return end - start + 1;
+  }
+  return null;
+}
+
+/**
+ * Los problemas de UNA entrada `{ range, ports, sni? }`, con el mismo
+ * criterio que el validador del servidor. Lista vacía = el servidor la
+ * aceptará y el agente la barrerá.
+ */
+export function probeRangeIssues(entry) {
+  const out = [];
+  const e = entry && typeof entry === "object" ? entry : {};
+  const size = typeof e.range === "string" ? probeRangeSize(e.range) : null;
+  if (size === null) {
+    out.push(`“${String(e.range ?? "").slice(0, 40)}” is not an IPv4 CIDR of /${CDP_PROBE_RANGE_MIN_PREFIX} or narrower, nor a start-end pair.`);
+  } else if (size > CDP_PROBE_RANGE_MAX_ADDRESSES) {
+    out.push(`A range covers at most ${CDP_PROBE_RANGE_MAX_ADDRESSES} addresses; this one covers ${size.toLocaleString()}.`);
+  }
+  const ports = Array.isArray(e.ports) ? e.ports : [];
+  if (ports.length === 0) out.push("At least one TCP port.");
+  else {
+    if (ports.length > CDP_PROBE_RANGE_MAX_PORTS) out.push(`At most ${CDP_PROBE_RANGE_MAX_PORTS} ports per range; this one has ${ports.length}.`);
+    const bad = ports.filter((p) => !Number.isInteger(Number(p)) || Number(p) < 1 || Number(p) > 65535);
+    if (bad.length > 0) out.push(`Not a TCP port: ${bad.slice(0, 3).join(", ")}.`);
+  }
+  if (e.sni !== undefined && e.sni !== null && e.sni !== "") {
+    if (typeof e.sni !== "string" || e.sni.length > 253 || !SNI_RE.test(e.sni.trim())) out.push("SNI must be a DNS hostname.");
+  }
+  return out;
+}
+
 // ── Form ⇄ policy mapping. The form tracks plugin toggles plus the
 //    compliance collection interval; modules are derived from plugins
 //    (see formToPolicy). Required plugins are clamped to true regardless
@@ -608,6 +705,18 @@ export function readFormFromPolicy(policy, catalog = []) {
       // getCdpScanTlsListeners().
       scanTlsListeners: policy?.cdp?.scanTlsListeners === true,
       certFilePaths: (policy?.cdp?.certFilePaths ?? []).join("\n"),
+      // Ola 1.1 / 1.4 — los dos enums de alcance. "" = la clave no está en
+      // la policy, que es el defecto del agente y NO lo mismo que elegirlo
+      // a mano: escribirlo fijaría el valor aunque el defecto cambie.
+      fileDiscovery: CDP_FILE_DISCOVERY_MODES.includes(policy?.cdp?.fileDiscovery) ? policy.cdp.fileDiscovery : "",
+      sshUserKeys: CDP_SSH_USER_KEYS_MODES.includes(policy?.cdp?.sshUserKeys) ? policy.cdp.sshUserKeys : "",
+      // ⚠️ PASO A TRAVÉS, no un campo editable. `cdp.probeRanges` se edita en
+      // Crypto Discovery → Settings (es una lista de objetos y va con las
+      // sondas remotas), pero guardar la sección CDP de aquí hace un PATCH
+      // del bloque `cdp` ENTERO con lo que construya `formToPolicy`. Sin
+      // esto, tocar el intervalo de escaneo borraría los rangos en silencio
+      // — la misma familia de fallo que el guardado que apagó cinco plugins.
+      probeRangesRaw: Array.isArray(policy?.cdp?.probeRanges) ? policy.cdp.probeRanges : null,
       tlsListenerPorts: (policy?.cdp?.tlsListenerPorts ?? []).join(", "),
       probeTargets: (policy?.cdp?.probeTargets ?? []).join("\n"),
       // Quién sondea: hostnames, uno por línea. Vacío = nadie.
@@ -849,6 +958,21 @@ export function formToPolicy(form, catalog = []) {
     // rutas la función está apagada, que es su estado por defecto.
     const certFiles = splitPathLines(form?.cdp?.certFilePaths);
     if (certFiles.length > 0) cdp.certFilePaths = certFiles;
+
+    // Ola 1.1 / 1.4 — sólo si se eligió un modo. En blanco no se escribe
+    // la clave: el defecto del agente (`default` / `public-only`) sigue
+    // mandando, y fijarlo por escrito congelaría el valor si ese defecto
+    // cambiara. Lista blanca porque el backend rechaza cualquier otra cosa
+    // (`INVALID_TYPE` sobre `cdp.fileDiscovery` / `cdp.sshUserKeys`) y una
+    // cadena rara aquí perdería el guardado entero.
+    if (CDP_FILE_DISCOVERY_MODES.includes(form?.cdp?.fileDiscovery)) cdp.fileDiscovery = form.cdp.fileDiscovery;
+    if (CDP_SSH_USER_KEYS_MODES.includes(form?.cdp?.sshUserKeys)) cdp.sshUserKeys = form.cdp.sshUserKeys;
+
+    // Los rangos vuelven tal cual entraron: esta página no los edita, y el
+    // PATCH del dominio `cdp` los borraría si no viajaran de vuelta.
+    if (Array.isArray(form?.cdp?.probeRangesRaw) && form.cdp.probeRangesRaw.length > 0) {
+      cdp.probeRanges = form.cdp.probeRangesRaw;
+    }
 
     // Written only when ON. `false` is the agent's default, so persisting
     // it would add a key that changes nothing — and omit-when-empty is the
