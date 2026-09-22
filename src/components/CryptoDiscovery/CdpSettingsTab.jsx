@@ -29,6 +29,7 @@ import SectionPaper from "../common/SectionPaper";
 import CdpConnectorsPanel from "./CdpConnectorsPanel";
 import CdpPublicDomains from "./CdpPublicDomains";
 import { CbomImportForm } from "./CbomAssetsPanel";
+import CdpCryptoPolicyEditor from "./CdpCryptoPolicyEditor";
 import CdpRemoteProbes, { envelopeOf } from "./CdpRemoteProbes";
 import SourceChips from "./CdpSourceChips";
 import GatewayPanel from "../patch-management/gateway/GatewayPanel";
@@ -155,9 +156,11 @@ function AdcsReaders({ sources, caHosts }) {
  * las fichas reflejan su estado sin abrir nada. Windows CA cuelga de
  * Infra: misma tarjeta, sangrada y con el padre delante.
  */
-function Sector({ baseKey, section, sub, open, onToggle, onChip, nested = false, children }) {
+function Sector({ baseKey, label: labelOverride, section, sub, open, onToggle, onChip, nested = false, children }) {
   const b = baseOf(baseKey);
-  const label = b?.label ?? baseKey;
+  // `label` explícito para las secciones que no son un sector del sunburst
+  // (la política criptográfica): mismo marco plegable, sin fichas de fuente.
+  const label = labelOverride ?? b?.label ?? baseKey;
   const headerId = `${sectorAnchor(baseKey)}-header`;
   // Anidada (Windows CA dentro de Infra): mismo cuerpo, sin tarjeta propia.
   const Wrapper = nested ? Box : SectionPaper;
@@ -371,6 +374,18 @@ export default function CdpSettingsTab({ refreshNonce, onSourcesChanged, onViewP
           title="Azure Key Vault and HashiCorp Vault"
           intro="Refreshed daily. Each reports its certificates and keys, who uses them and what it will issue next. A certificate that also lives on a device is matched by fingerprint."
         />
+      </Sector>
+
+      {/* Ola 1.6: la política criptográfica del tenant. No es una fuente, así
+          que va al final y sin fichas; plegada como el resto. Aquí se
+          configura; su efecto se mira en la pestaña Risk. */}
+      <Sector
+        baseKey="crypto-policy"
+        label="Crypto policy"
+        open={open.has("crypto-policy")}
+        onToggle={toggle("crypto-policy")}
+      >
+        <CdpCryptoPolicyEditor />
       </Sector>
 
       <Snackbar open={Boolean(snack)} autoHideDuration={6000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>

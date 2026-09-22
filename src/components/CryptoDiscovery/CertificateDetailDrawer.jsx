@@ -152,6 +152,9 @@ function ChainSummary({ tls }) {
   );
 }
 
+/** `revocation_source` del backend: 'crl' u 'ocsp' (ola 1.7). */
+const REVOCATION_SOURCE = { crl: "CRL", ocsp: "OCSP" };
+
 function RevocationChip({ revocation }) {
   if (!revocation?.status) {
     return (
@@ -164,22 +167,35 @@ function RevocationChip({ revocation }) {
       </Tooltip>
     );
   }
-  const revoked = revocation.status === "revoked";
+  // ⚠️ Tres estados, no dos. `unknown` = se preguntó y no hubo veredicto
+  // fiable (la CRL no bajó, el OCSP no respondió o su firma no verificó).
+  // Se pintaba «not revoked» en verde —todo lo que no era `revoked` lo era—,
+  // que es justo la afirmación que no se pudo hacer.
+  const status = revocation.status;
+  const source = REVOCATION_SOURCE[revocation.source] ?? revocation.source ?? null;
+  const meta =
+    status === "revoked"
+      ? { label: "REVOKED", bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText }
+      : status === "good"
+        ? { label: "not revoked", bg: BRAND.alert.successSoft, fg: BRAND.alert.successText }
+        : { label: "revocation could not be verified", bg: BRAND.alert.warningSoft, fg: BRAND.alert.warningText };
+  const tip =
+    status === "good" || status === "revoked"
+      ? `Checked ${formatDate(revocation.checkedAt)}${source ? ` via ${source}` : ""}`
+      : `Last attempt ${formatDate(revocation.checkedAt)}${source ? ` via ${source}` : ""}: no trustworthy answer. Not the same as 'good'.`;
   return (
-    <Tooltip arrow title={`Checked ${formatDate(revocation.checkedAt)} via ${revocation.source ?? "?"}`}>
+    <Tooltip arrow title={tip}>
       <Chip
         size="small"
-        label={revoked ? "REVOKED" : "not revoked"}
-        sx={{
-          bgcolor: revoked ? BRAND.alert.errorSoft : BRAND.alert.successSoft,
-          color: revoked ? BRAND.alert.errorText : BRAND.alert.successText,
-          fontWeight: 700,
-          fontSize: TEXT.xs,
-        }}
+        // La fuente en la propia etiqueta: CRL y OCSP no dicen lo mismo con
+        // la misma frescura, y en la ficha se compara entre equipos.
+        label={source ? `${meta.label} · ${source}` : meta.label}
+        sx={{ bgcolor: meta.bg, color: meta.fg, fontWeight: 700, fontSize: TEXT.xs }}
       />
     </Tooltip>
   );
 }
+
 
 export default function CertificateDetailDrawer({
   fingerprint,
