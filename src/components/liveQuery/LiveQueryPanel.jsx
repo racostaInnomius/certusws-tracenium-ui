@@ -42,6 +42,7 @@ import { formatRelative } from "../../utils/format";
 import { listFrom } from "../../api/shape";
 import { listAssetGroups } from "../../api/assetGroups";
 import { createLiveQuery, getLiveQuery, listLiveQueries } from "../../api/liveQuery";
+import KnownDevicesPicker from "../AssetGroups/KnownDevicesPicker";
 import {
   PROBES,
   PROBE_BY_KEY,
@@ -58,6 +59,8 @@ import {
 } from "./liveQueryModel";
 
 const POLL_MS = 2000;
+/** El tope del backend (ADR-0029 D4): más allá, la pregunta se rechaza entera. */
+export const MAX_SELECTED_DEVICES = 500;
 const PAGE_SIZE = 50;
 const MONO = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
@@ -242,12 +245,20 @@ function QueryResult({ queryId, groups = [] }) {
  * @param initialTarget  objetivo que traen los atajos: { scope: "devices", deviceIds, label } o { scope: "group", groupId }
  * @param targetNonce    cambia cada vez que se usa un atajo con la pestaña ya montada
  */
-export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0, notify = () => {} }) {
+export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0 }) {
   const [probe, setProbe] = React.useState("process");
   const [params, setParams] = React.useState(() => emptyParams("process"));
   const [scope, setScope] = React.useState(initialTarget?.scope ?? "all");
   const [groupId, setGroupId] = React.useState(initialTarget?.scope === "group" ? String(initialTarget.groupId) : "");
-  const [device, setDevice] = React.useState(initialTarget?.scope === "devices" ? initialTarget : null);
+  // «Selected devices»: el mismo selector que Asset Groups y Software Delivery
+  // (búsqueda en servidor, paginado, casillas). La selección vive aquí, así
+  // que sobrevive a cambiar de página y de búsqueda.
+  const [pickedIds, setPickedIds] = React.useState(() => new Set(initialTarget?.scope === "devices" ? initialTarget.deviceIds : []));
+  // Hostname de lo marcado, para los chips: lo marcado puede estar en otra
+  // página del listado (el equipo que trae «Ask this device», p. ej.).
+  const [pickedNames, setPickedNames] = React.useState(() =>
+    initialTarget?.scope === "devices" && initialTarget.label ? new Map([[initialTarget.deviceIds[0], initialTarget.label]]) : new Map()
+  );
   const [groups, setGroups] = React.useState([]);
   const [history, setHistory] = React.useState([]);
   const [current, setCurrent] = React.useState(null);
@@ -259,7 +270,12 @@ export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0, 
     if (!initialTarget) return;
     setScope(initialTarget.scope);
     if (initialTarget.scope === "group") setGroupId(String(initialTarget.groupId));
-    if (initialTarget.scope === "devices") setDevice(initialTarget);
+    // «Ask this device» ya no es una opción aparte de un solo equipo: marca ESE
+    // equipo en la selección, y se pueden añadir más.
+    if (initialTarget.scope === "devices") {
+      setPickedIds(new Set(initialTarget.deviceIds));
+      if (initialTarget.label) setPickedNames(new Map([[initialTarget.deviceIds[0], initialTarget.label]]));
+    }
   }, [initialTarget, targetNonce]);
 
   const loadHistory = React.useCallback(async () => {
@@ -280,10 +296,28 @@ export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0, 
 
   const def = PROBE_BY_KEY[probe];
   const target =
-    scope === "group" ? { scope: "group", groupId: Number(groupId) } : scope === "devices" && device ? { scope: "devices", deviceIds: device.deviceIds } : { scope: "all" };
+    scope === "group" ? { scope: "group", groupId: Number(groupId) } : scope === "devices" ? { scope: "devices", deviceIds: [...pickedIds] } : { scope: "all" };
+
+  const toggleDevice = (deviceId, device) => {
+    if (!pickedIds.has(deviceId) && pickedIds.size >= MAX_SELECTED_DEVICES) {
+      setFormError(`A live query can ask up to ${MAX_SELECTED_DEVICES} devices. Use a group for more.`);
+      return;
+    }
+    if (device?.hostname) setPickedNames((prev) => (prev.get(deviceId) === device.hostname ? prev : new Map(prev).set(deviceId, device.hostname)));
+    setPickedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(deviceId)) next.delete(deviceId);
+      else next.add(deviceId);
+      return next;
+    });
+  };
+  const PICKED_CHIPS = 12;
 
   const ask = async () => {
-    const problem = paramsProblem(probe, params) || (scope === "group" && !groupId ? "Choose a group." : null);
+    const problem =
+      paramsProblem(probe, params) ||
+      (scope === "group" && !groupId ? "Choose a group." : null) ||
+      (scope === "devices" && pickedIds.size === 0 ? "Select at least one device." : null);
     if (problem) {
       setFormError(problem);
       return;
@@ -355,7 +389,7 @@ export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0, 
               <Select size="small" value={scope} onChange={(e) => setScope(e.target.value)} inputProps={{ "aria-label": "Who to ask" }} sx={{ minWidth: 180 }}>
                 <MenuItem value="all">All devices</MenuItem>
                 <MenuItem value="group">A group</MenuItem>
-                {device ? <MenuItem value="devices">{device.label || "This device"}</MenuItem> : null}
+                <MenuItem value="devices">Selected devices{pickedIds.size ? ` (${pickedIds.size})` : ""}</MenuItem>
               </Select>
               {scope === "group" ? (
                 <Select size="small" value={groupId} displayEmpty onChange={(e) => setGroupId(e.target.value)} inputProps={{ "aria-label": "Group" }} sx={{ minWidth: 220 }}>
@@ -376,6 +410,37 @@ export default function LiveQueryPanel({ initialTarget = null, targetNonce = 0, 
                 Ask
               </Button>
             </Box>
+            {scope === "devices" ? (
+              <Box data-testid="lq-device-picker">
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, flex: 1 }}>
+                    Up to {MAX_SELECTED_DEVICES}. Only the ones connected when you press Ask are asked; the rest show as offline.
+                  </Typography>
+                  {pickedIds.size ? (
+                    <Button size="small" onClick={() => setPickedIds(new Set())} sx={{ textTransform: "none" }}>
+                      Clear selection
+                    </Button>
+                  ) : null}
+                </Box>
+                {pickedIds.size ? (
+                  <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 1 }} data-testid="lq-picked">
+                    {[...pickedIds].slice(0, PICKED_CHIPS).map((id) => (
+                      <Chip key={id} size="small" label={pickedNames.get(id) || id} onDelete={() => toggleDevice(id)} sx={{ fontSize: TEXT.xs }} />
+                    ))}
+                    {pickedIds.size > PICKED_CHIPS ? (
+                      <Chip size="small" variant="outlined" label={`+${pickedIds.size - PICKED_CHIPS} more`} sx={{ fontSize: TEXT.xs }} />
+                    ) : null}
+                  </Box>
+                ) : null}
+                <KnownDevicesPicker
+                  open={scope === "devices"}
+                  selectedIds={pickedIds}
+                  onToggleDevice={toggleDevice}
+                  selectedLabel="selected"
+                  emptyLabel="No device matches this search."
+                />
+              </Box>
+            ) : null}
             {formError ? <Alert severity="error">{formError}</Alert> : null}
           </Stack>
         </SectionPaper>

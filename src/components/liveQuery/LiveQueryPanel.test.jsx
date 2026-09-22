@@ -12,6 +12,8 @@ vi.mock("../../api/liveQuery", () => ({
   listLiveQueryProbes: vi.fn(),
 }));
 vi.mock("../../api/assetGroups", () => ({ listAssetGroups: vi.fn() }));
+vi.mock("../../api/jobs", () => ({ listKnownDevices: vi.fn() }));
+import { listKnownDevices } from "../../api/jobs";
 import { createLiveQuery, getLiveQuery, listLiveQueries } from "../../api/liveQuery";
 import { listAssetGroups } from "../../api/assetGroups";
 import LiveQueryPanel from "./LiveQueryPanel";
@@ -50,6 +52,14 @@ beforeEach(() => {
   listAssetGroups.mockResolvedValue({ ok: true, items: [{ id: 4, name: "Servers" }] });
   getLiveQuery.mockResolvedValue({ ok: true, query: answer() });
   createLiveQuery.mockResolvedValue({ ok: true, query: { queryId: Q } });
+  listKnownDevices.mockResolvedValue({
+    ok: true,
+    total: 2,
+    items: [
+      { deviceId: "d1", hostname: "FINANZAS-01", platform: "windows", isConnected: true },
+      { deviceId: "d2", hostname: "SRV-01", platform: "linux", isConnected: false },
+    ],
+  });
 });
 afterEach(() => {
   cleanup();
@@ -118,11 +128,46 @@ describe("LiveQueryPanel", () => {
     expect(getLiveQuery.mock.calls.length).toBe(calls);
   });
 
-  it("⭐ el atajo de un equipo lo deja puesto como objetivo", async () => {
-    render(<LiveQueryPanel initialTarget={{ scope: "devices", deviceIds: ["d1"], label: "FINANZAS-01" }} targetNonce={1} />);
-    expect(await screen.findByText("FINANZAS-01")).toBeInTheDocument();
+  it("⭐ el atajo de un equipo abre «Selected devices» con ESE equipo marcado, y se pueden añadir más", async () => {
+    render(<LiveQueryPanel initialTarget={{ scope: "devices", deviceIds: ["d9"], label: "PORTATIL-VIAJE" }} targetNonce={1} />);
+    const picked = within(await screen.findByTestId("lq-picked"));
+    expect(picked.getByText("PORTATIL-VIAJE")).toBeInTheDocument();
+    fireEvent.click(await screen.findByText("SRV-01"));
+    await askFor("AnyDesk.exe");
+    await waitFor(() => expect(createLiveQuery.mock.calls[0][0].target).toEqual({ scope: "devices", deviceIds: ["d9", "d2"] }));
+  });
+
+  it("⭐ «Selected devices»: el listado de Assets con búsqueda y casillas; la selección se ve en chips y se puede quitar", async () => {
+    render(<LiveQueryPanel />);
+    fireEvent.mouseDown(await screen.findByLabelText("Who to ask"));
+    fireEvent.click(await screen.findByRole("option", { name: /Selected devices/ }));
+    const picker = within(await screen.findByTestId("lq-device-picker"));
+    expect(picker.getByPlaceholderText(/Search hostname/)).toBeInTheDocument();
+    fireEvent.click(await picker.findByText("FINANZAS-01"));
+    fireEvent.click(picker.getByText("SRV-01"));
+    const chips = within(screen.getByTestId("lq-picked"));
+    expect(chips.getByText("FINANZAS-01")).toBeInTheDocument();
+    // Quitar uno desde su chip.
+    fireEvent.click(chips.getByText("SRV-01").parentElement.querySelector("svg"));
     await askFor("AnyDesk.exe");
     await waitFor(() => expect(createLiveQuery.mock.calls[0][0].target).toEqual({ scope: "devices", deviceIds: ["d1"] }));
+  });
+
+  it("sin ningún equipo marcado no se pregunta", async () => {
+    render(<LiveQueryPanel />);
+    fireEvent.mouseDown(await screen.findByLabelText("Who to ask"));
+    fireEvent.click(await screen.findByRole("option", { name: /Selected devices/ }));
+    await askFor("AnyDesk.exe");
+    expect(await screen.findByText("Select at least one device.")).toBeInTheDocument();
+    expect(createLiveQuery).not.toHaveBeenCalled();
+  });
+
+  it("⚠️ el tope de 500 del backend se aplica al marcar, no al fallar la pregunta", async () => {
+    const many = Array.from({ length: 500 }, (_, i) => `x${i}`);
+    render(<LiveQueryPanel initialTarget={{ scope: "devices", deviceIds: many }} targetNonce={1} />);
+    fireEvent.click(await screen.findByText("FINANZAS-01"));
+    expect(await screen.findByText(/up to 500 devices. Use a group for more/)).toBeInTheDocument();
+    expect(within(screen.getByTestId("lq-picked")).getByText("+488 more")).toBeInTheDocument();
   });
 
   it("el atajo de un grupo pregunta a ese grupo", async () => {
