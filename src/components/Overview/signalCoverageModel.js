@@ -18,6 +18,8 @@
 //     estar callado en varias. `devicesWithAnyGap` llega deduplicado del
 //     backend.
 
+import { formatRelative } from "../../utils/format";
+
 /** El texto del hueco. Distingue "nunca" de "hace mucho": no son el mismo problema. */
 export function gapText(signal) {
   if (!signal.entitled) return "Not in plan — nothing is expected from these devices.";
@@ -64,4 +66,10 @@ export function headline(coverage) {
     tone: "warning",
     text: `${anyGap} of ${fleet} devices are missing at least one signal`,
   };
+}
+
+/** "Never reported" / "Last report 12 days ago" — el porqué de cada equipo del hueco. */
+export function gapReason(device) {
+  if (device.reason === "never" || !device.lastReportAt) return "Never reported";
+  return `Last report ${formatRelative(device.lastReportAt)}`;
 }

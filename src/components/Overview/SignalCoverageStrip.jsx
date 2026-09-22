@@ -7,16 +7,20 @@
 // falló) no pinta nada: una franja vacía se leería como "todo bien".
 
 import * as React from "react";
-import { Box, LinearProgress, Stack, Typography } from "@mui/material";
+import { Box, Link, LinearProgress, Stack, Typography } from "@mui/material";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { barColor, gapText, signalsForBlock } from "./signalCoverageModel";
+import SignalGapDrawer from "./SignalGapDrawer";
 
 /**
  * @param coverage respuesta de /dashboard/signal-coverage, o null
  * @param block    bloque de resolveOverviewPlan: se pintan SUS señales
  */
-export default function SignalCoverageStrip({ coverage, block }) {
+export default function SignalCoverageStrip({ coverage, block, onNavigate }) {
+  // La señal cuyo hueco se está mirando: "5 silent for over 3 days" abre la
+  // lista de ESOS equipos (SignalGapDrawer).
+  const [open, setOpen] = React.useState(null);
   const signals = signalsForBlock(coverage, block);
   const fleet = Number(coverage?.fleet) || 0;
   if (!signals.length || !fleet) return null;
@@ -58,13 +62,23 @@ export default function SignalCoverageStrip({ coverage, block }) {
             color={barColor(s)}
             sx={{ height: 5, borderRadius: 3, my: 0.5 }}
           />
-          <Typography
-            sx={{ fontSize: TEXT.xs, color: s.blind > 0 ? BRAND.alert.warningText : "text.secondary" }}
-          >
-            {gapText(s)}
-          </Typography>
+          {s.blind > 0 ? (
+            <Link
+              component="button"
+              type="button"
+              underline="always"
+              onClick={() => setOpen(s)}
+              aria-label={`${gapText(s)} — see which devices`}
+              sx={{ fontSize: TEXT.xs, color: BRAND.alert.warningText, textAlign: "left", fontWeight: 700 }}
+            >
+              {gapText(s)}
+            </Link>
+          ) : (
+            <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>{gapText(s)}</Typography>
+          )}
         </Box>
       ))}
+      <SignalGapDrawer signal={open} open={Boolean(open)} onClose={() => setOpen(null)} onNavigate={onNavigate} />
     </Box>
   );
 }

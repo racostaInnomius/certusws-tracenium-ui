@@ -299,7 +299,7 @@ export default function Overview({ onNavigate } = {}) {
 
       {/* ── Block 1 · Fleet & operations — every plan ─────────────── */}
       <OverviewBlock block={core}>
-        <SignalCoverageStrip coverage={coverage} block={core} />
+        <SignalCoverageStrip coverage={coverage} block={core} onNavigate={navigateWithQuery} />
         <HeroKpis results={results} loading={loading} onNavigate={navigateWithQuery} hasSdp={hasSdp} />
 
         {/* The one number here that can eventually stop enrollment. Renders
@@ -359,7 +359,7 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 2 · Security & access — Professional ─────────────── */}
       {security ? (
         <OverviewBlock block={security}>
-          <SignalCoverageStrip coverage={coverage} block={security} />
+          <SignalCoverageStrip coverage={coverage} block={security} onNavigate={navigateWithQuery} />
           <SecurityKpis
             results={securityFetch.data}
             loading={securityFetch.loading}
@@ -405,7 +405,7 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 3 · Patching & crypto — Business ─────────────────── */}
       {operations ? (
         <OverviewBlock block={operations}>
-          <SignalCoverageStrip coverage={coverage} block={operations} />
+          <SignalCoverageStrip coverage={coverage} block={operations} onNavigate={navigateWithQuery} />
           <Grid container spacing={2} alignItems="stretch">
             {hasPmp ? (
               <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>

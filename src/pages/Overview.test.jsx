@@ -21,7 +21,7 @@ vi.mock("../auth/AuthContext", () => ({
 }));
 
 vi.mock("../api/dashboard", () => ({
-  dashboardApi: { getSignalCoverage: vi.fn() },
+  dashboardApi: { getSignalCoverage: vi.fn(), getSignalGapDevices: vi.fn() },
 }));
 
 vi.mock("../api/overview", () => ({
@@ -222,5 +222,39 @@ describe("Overview — quién reporta cada señal (antes «Blind spots» en Asse
     await waitFor(() => expect(dashboardApi.getSignalCoverage).toHaveBeenCalled());
     expect(screen.queryByTestId("signal-coverage-strip")).toBeNull();
     expect(screen.queryByTestId("coverage-headline")).toBeNull();
+  });
+});
+
+describe("Overview — QUIÉNES son los equipos del hueco", () => {
+  it("⭐ «16 never reported» abre la lista de esos equipos, y cada uno lleva a su ficha", async () => {
+    dashboardApi.getSignalGapDevices.mockResolvedValue({
+      signal: "patches", label: "Missing patches", staleAfterDays: 14, entitled: true, truncated: false,
+      devices: [
+        { agentId: "a-1", hostname: "FINANZAS-07", reason: "never", lastReportAt: null },
+        { agentId: "a-2", hostname: "RECEPCION", reason: "stale", lastReportAt: "2026-08-01T00:00:00Z" },
+      ],
+    });
+    const navigated = [];
+    const onPop = () => navigated.push(window.location.search);
+    window.addEventListener("popstate", onPop);
+    try {
+      renderWith(ENTERPRISE);
+      const link = await screen.findByRole("button", { name: /16 never reported — see which devices/i });
+      fireEvent.click(link);
+      expect(dashboardApi.getSignalGapDevices).toHaveBeenCalledWith("patches");
+      const drawer = await screen.findByRole("region", { name: /Missing patches — devices not reporting/i });
+      expect(within(drawer).getByText("FINANZAS-07")).toBeTruthy();
+      expect(within(drawer).getByText("Never reported")).toBeTruthy();
+      fireEvent.click(within(drawer).getByText("RECEPCION"));
+      await waitFor(() => expect(navigated.some((q) => /page=assets/.test(q) && /device=a-2/.test(q))).toBe(true));
+    } finally {
+      window.removeEventListener("popstate", onPop);
+    }
+  });
+
+  it("una señal sin huecos no es un enlace", async () => {
+    renderWith(ENTERPRISE);
+    expect(await screen.findByText("Every device is reporting.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Every device is reporting/ })).toBeNull();
   });
 });

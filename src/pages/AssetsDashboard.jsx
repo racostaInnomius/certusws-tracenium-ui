@@ -71,7 +71,7 @@ import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnroll
 import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
 import { groupOsVersionsByPlatform } from "../utils/osVersionGrouping";
 import { formatBytesToGb } from "../utils/format";
-import { updateSearchParams } from "../utils/browserState";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { listFrom } from "../api/shape";
 
 import HostsTable from "../components/Charts/HostsTable";
@@ -1092,6 +1092,17 @@ export default function AssetsDashboard({
     setAgentDetailError("");
     setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
+
+  // Enlace a un equipo: `?page=assets&device=<agentId>` abre su ficha. Lo usa
+  // el Overview (lista de "Blind spots"); hasta ahora no había forma de
+  // enlazar a UN equipo desde otra página. Se lee una vez y se consume, para
+  // que recargar no vuelva a abrirlo.
+  React.useEffect(() => {
+    const deviceId = String(getSearchParam("device", "") || "").trim();
+    if (!deviceId) return;
+    handleAgentSelect({ agent_id: deviceId, agentId: deviceId });
+    updateSearchParams({ device: "" });
+  }, [handleAgentSelect]);
 
   // ADR-0030 — desde la tarjeta de flota: abre el equipo ya en Experience.
   const openDeviceExperience = React.useCallback(

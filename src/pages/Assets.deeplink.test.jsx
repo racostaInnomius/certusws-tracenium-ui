@@ -24,6 +24,8 @@ vi.mock("../msp/MspContext", () => ({
 
 import Assets from "./Assets";
 
+const hostDetail = [];
+
 afterEach(() => {
   cleanup();
   server.resetHandlers();
@@ -31,10 +33,13 @@ afterEach(() => {
 
 function mount(search) {
   const detail = [];
+  hostDetail.length = 0;
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
       const url = new URL(request.url);
       if (url.pathname.endsWith("/hardware-inventory/detail")) detail.push(Object.fromEntries(url.searchParams));
+      const m = url.pathname.match(/\/dashboard\/hosts\/([^/]+)\/detail$/);
+      if (m) hostDetail.push(decodeURIComponent(m[1]));
       return HttpResponse.json({
         ok: true, items: [], devices: [], hosts: [], groups: [], rows: [],
         summary: {}, total: 0, count: 0, permissions: ["assets_view"],
@@ -86,5 +91,15 @@ describe("Assets — enlaces viejos a Windows GPOs / Coverage (fundidas en Windo
     expect(await screen.findByRole("tab", { name: /windows domain/i, selected: true })).toBeTruthy();
     expect(await screen.findByText(/computers active directory knows about/i)).toBeTruthy();
     expect(screen.queryByText(/devices reporting/i)).toBeNull();
+  });
+});
+
+describe("Assets — enlace a UN equipo (?device=)", () => {
+  it("⭐ ?device=<id> abre la ficha de ese equipo en el Dashboard", async () => {
+    mount("&device=a-2");
+    expect(await screen.findByRole("tab", { name: /dashboard/i, selected: true })).toBeTruthy();
+    await waitFor(() => expect(hostDetail).toContain("a-2"));
+    // El enlace se consume: recargar no vuelve a abrirlo.
+    expect(new URLSearchParams(window.location.search).get("device")).toBeNull();
   });
 });

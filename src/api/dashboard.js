@@ -6,6 +6,10 @@ export const dashboardApi = {
   // quién lleva demasiado callado y quién no reportó nunca. Complementa al
   // descubrimiento de AD, que cuenta los equipos del dominio SIN agente.
   getSignalCoverage: () => httpGetJson("/api/v1/dashboard/signal-coverage"),
+  // Quiénes son los equipos del hueco de UNA señal (never/stale), para que
+  // "5 silent for over 3 days" tenga nombres.
+  getSignalGapDevices: (signal) =>
+    httpGetJson(`/api/v1/dashboard/signal-coverage/${encodeURIComponent(signal)}/devices`),
   getHosts: () => httpGetJson("/api/v1/dashboard/hosts"),
   // Map view. Unpaginated by design — see fetchHostLocations in the backend.
   getHostLocations: () => httpGetJson("/api/v1/dashboard/hosts/locations"),
