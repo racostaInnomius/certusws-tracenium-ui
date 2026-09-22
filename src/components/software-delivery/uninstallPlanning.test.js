@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { batchesByTarget, describeBlocked, uninstallRequestBody } from "./uninstallPlanning";
+import { batchesByTarget, describeBlocked, perUserCount, uninstallRequestBody } from "./uninstallPlanning";
 
 const blocked = (reason) => ({ ok: false, reason, detail: "detalle en español del backend" });
 
@@ -116,5 +116,39 @@ describe("uninstallRequestBody", () => {
       appName: "Dropbox",
       deviceIds: ["d1"],
     });
+  });
+});
+
+describe("Windows por usuario", () => {
+  it("un agente viejo se explica como «actualiza el agente»", () => {
+    expect(describeBlocked(blocked("agent_too_old"), { source: "win32-registry" })).toMatch(/update the agent/);
+  });
+
+  it("sin desinstalador silencioso dice por qué no se lanza", () => {
+    expect(describeBlocked(blocked("no_silent_uninstall"), { source: "win32-registry" })).toMatch(/pop a window/);
+  });
+
+  // El mismo motivo significa cosas distintas en cada plataforma.
+  it("per_user_install: en Windows es «no habilitado», en Mac es la carpeta del usuario", () => {
+    expect(describeBlocked(blocked("per_user_install"), { source: "win32-registry" })).toMatch(/not enabled/);
+    expect(describeBlocked(blocked("per_user_install"), { source: "macos-app-bundle" })).toMatch(/Applications folder/);
+  });
+
+  it("de máquina y por usuario van en envíos distintos, máquina primero", () => {
+    const row = (deviceId, target) => ({ deviceId, plan: { ok: true, target } });
+    expect(batchesByTarget([row("u1", "windows_user"), row("m1", "windows")])).toEqual([
+      { target: "windows", deviceIds: ["m1"] },
+      { target: "windows_user", deviceIds: ["u1"] },
+    ]);
+  });
+
+  it("perUserCount cuenta sólo los accionables por usuario", () => {
+    expect(
+      perUserCount([
+        { deviceId: "a", plan: { ok: true, target: "windows_user" } },
+        { deviceId: "b", plan: { ok: true, target: "windows" } },
+      ])
+    ).toBe(1);
+    expect(perUserCount(undefined)).toBe(0);
   });
 });

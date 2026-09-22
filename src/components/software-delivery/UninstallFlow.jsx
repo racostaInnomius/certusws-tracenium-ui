@@ -59,6 +59,7 @@ import {
   TARGET_LABEL,
   batchesByTarget,
   describeBlocked,
+  perUserCount,
   uninstallRequestBody,
 } from "./uninstallPlanning";
 
@@ -474,6 +475,17 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               </Typography>
               {/* Con varios tipos de equipo se dice que van en despliegues
                   separados: el operador verá N filas en Deployments, no una. */}
+              {/* ⚠️ Por usuario el resultado depende de algo que la vista previa
+                  no puede saber: que esa persona tenga sesión abierta cuando
+                  llegue el job. Se dice ANTES, para que un «user not signed in»
+                  no se lea como un fallo. */}
+              {perUserCount(preview.actionable) > 0 ? (
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  {perUserCount(preview.actionable)} device(s) have it installed for a single user. It is
+                  removed with that user's own session: if they are not signed in when the job arrives,
+                  nothing runs and the device reports "user not signed in" — retry later.
+                </Alert>
+              ) : null}
               {batches.length > 1 ? (
                 <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 0.5 }}>
                   Sent as {batches.length} deployments, one per device type:{" "}

@@ -17,10 +17,11 @@
 //     20 Windows y 3 Macs juntos lo rechaza el backend entero.
 
 /** Orden estable de envío y etiquetas para la pantalla. */
-export const TARGET_ORDER = ["windows", "macos", "deb", "rpm"];
+export const TARGET_ORDER = ["windows", "windows_user", "macos", "deb", "rpm"];
 
 export const TARGET_LABEL = {
   windows: "Windows",
+  windows_user: "Windows (per user)",
   macos: "macOS",
   deb: "Linux (deb)",
   rpm: "Linux (rpm)",
@@ -62,13 +63,23 @@ export function describeBlocked(plan, app) {
     case "unsupported_location":
       return "Not in /Applications — only apps installed for the whole Mac can be removed.";
     case "per_user_install":
-      return "Installed for a single user, not for the device — the agent cannot remove it on that person's behalf.";
+      // Dos cosas distintas con el mismo motivo: en un Mac, una app en las
+      // Aplicaciones de un usuario; en Windows, una app de perfil mientras la
+      // desinstalación por usuario no esté habilitada en el servidor.
+      return source === "macos-app-bundle"
+        ? "In one user's own Applications folder — only apps installed for the whole Mac can be removed."
+        : "Installed for a single user — per-user uninstall is not enabled on this server yet.";
     case "no_identity":
       return source === "macos-app-bundle"
         ? "The app has no bundle id in the inventory, so there is no exact way to find it."
         : source === "dpkg" || source === "rpm"
           ? "The inventory has no package name for it."
           : "No uninstall command was recorded.";
+    case "agent_too_old":
+      // El detalle del servidor trae las dos versiones; la frase es la acción.
+      return "The agent on this device is too old to uninstall per-user apps — update the agent first.";
+    case "no_silent_uninstall":
+      return "No silent uninstaller registered: running it as the user would pop a window on their desktop.";
     case "name_not_expressible":
       return "The name contains % or _ and there is no ProductCode to identify it by.";
     default:
@@ -108,4 +119,9 @@ export function uninstallRequestBody(appName, batch) {
   return batch.target
     ? { appName, deviceIds: batch.deviceIds, target: batch.target }
     : { appName, deviceIds: batch.deviceIds };
+}
+
+/** Cuántos equipos accionables van por usuario (necesitan la sesión de esa persona). */
+export function perUserCount(actionable) {
+  return (Array.isArray(actionable) ? actionable : []).filter((r) => r?.plan?.target === "windows_user").length;
 }

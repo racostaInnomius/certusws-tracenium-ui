@@ -381,3 +381,49 @@ describe("macOS y Linux — un despliegue por tipo de equipo", () => {
     expect(await screen.findByText(/an Apple app that is part of macOS/)).toBeTruthy();
   });
 });
+
+describe("Windows por usuario (paso 4)", () => {
+  // Por usuario el resultado depende de que esa persona tenga sesión cuando
+  // llegue el job. Se avisa ANTES: un «user not signed in» no es un fallo.
+  it("⭐ avisa de que hace falta la sesión del usuario y lo manda como windows_user", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [
+        { deviceId: "d1", hostname: "T111-VENTAS", plan: { ok: true, target: "windows", preview: "C:\\u.exe /S" } },
+        { deviceId: "d2", hostname: "T111-ALMACEN", plan: { ok: true, target: "windows_user", preview: "\"C:\\Users\\ana\\...\" /S" } },
+      ],
+      blocked: [],
+      notInstalled: [],
+    });
+    sdpApi.uninstallDetected.mockResolvedValue({ deployment: { id: 50 } });
+
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(/1 device\(s\) have it installed for a single user/)).toBeTruthy();
+    expect(screen.getByText(/Windows 1 · Windows \(per user\) 1/)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Uninstall on 2 device(s)" }));
+    await waitFor(() => expect(sdpApi.uninstallDetected).toHaveBeenCalledTimes(2));
+    expect(sdpApi.uninstallDetected.mock.calls[1][0]).toEqual({
+      appName: "Dropbox",
+      deviceIds: ["d2"],
+      target: "windows_user",
+    });
+  });
+
+  it("sin nada por usuario no hay aviso", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [{ deviceId: "d1", hostname: "T111-VENTAS", plan: { ok: true, target: "windows", preview: "x" } }],
+      blocked: [],
+      notInstalled: [],
+    });
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByRole("button", { name: "Uninstall on 1 device(s)" });
+    expect(screen.queryByText(/installed for a single user/)).toBeNull();
+  });
+});
