@@ -35,8 +35,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -78,6 +76,7 @@ import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import { ReadinessStrip, QuantumSunburst } from "../components/CryptoDiscovery/CdpQuantumExposure";
 import CdpCatalystStrip from "../components/CryptoDiscovery/CdpCatalystStrip";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -153,16 +152,6 @@ const TAB = {
   // todo lo que se configura (conectores, import de CBOM, matriz de
   // aprobación, enlace a la policy del agente). Mismo índice.
   settings: 6
-};
-
-// Mismo estilo de pestaña que Asset Management (Assets.jsx), para ir
-// homologando: icono delante, sin mayúsculas forzadas, indicador teal.
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark }
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -1729,37 +1718,27 @@ export default function CryptoDiscovery({ onNavigate }) {
         etiqueta dentro de un panel, indicador teal). `scrollable`: siete
         pestañas no caben en un portátil de 13".
       */}
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={tab}
-          onChange={(_e, v) => setTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-          aria-label="Crypto Discovery sections"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal }
-          }}
-        >
-          <Tab icon={<DashboardOutlinedIcon fontSize="small" />} iconPosition="start" label="Dashboard" {...tabA11y(TAB.dashboard)} sx={TAB_SX} />
-          <Tab icon={<RouteOutlinedIcon fontSize="small" />} iconPosition="start" label="Roadmap" {...tabA11y(TAB.roadmap)} sx={TAB_SX} />
-          <Tab icon={<ExploreOutlinedIcon fontSize="small" />} iconPosition="start" label="Explore" {...tabA11y(TAB.explore)} sx={TAB_SX} />
-          <Tab icon={<ListAltOutlinedIcon fontSize="small" />} iconPosition="start" label="Inventory" {...tabA11y(TAB.inventory)} sx={TAB_SX} />
-          <Tab icon={<VerifiedUserOutlinedIcon fontSize="small" />} iconPosition="start" label="Trust anchors" {...tabA11y(TAB.anchors)} sx={TAB_SX} />
-          {/*
-            ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
-            una huérfana es un ítem del inventario, y el punto de la
-            decisión es que se mire, no que esté.
-          */}
-          <Tab icon={<KeyOffOutlinedIcon fontSize="small" />} iconPosition="start" label="Orphan keys" {...tabA11y(TAB.orphans)} sx={TAB_SX} />
-          {/* Settings: conectores, import de CBOM, matriz de aprobación
-              (ADR-0009: una matriz, filas cdp.*) y enlace a la policy del
-              agente. Aquí se configura; en las otras pestañas se mira. */}
-          <Tab icon={<SettingsOutlinedIcon fontSize="small" />} iconPosition="start" label="Settings" {...tabA11y(TAB.settings)} sx={TAB_SX} />
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={tab}
+        onChange={(_e, v) => setTab(v)}
+        allowScrollButtonsMobile
+        aria-label="Crypto Discovery sections"
+        items={[
+          { value: TAB.dashboard, label: "Dashboard", icon: <DashboardOutlinedIcon />, ...tabA11y(TAB.dashboard) },
+          { value: TAB.roadmap, label: "Roadmap", icon: <RouteOutlinedIcon />, ...tabA11y(TAB.roadmap) },
+          { value: TAB.explore, label: "Explore", icon: <ExploreOutlinedIcon />, ...tabA11y(TAB.explore) },
+          { value: TAB.inventory, label: "Inventory", icon: <ListAltOutlinedIcon />, ...tabA11y(TAB.inventory) },
+          { value: TAB.anchors, label: "Trust anchors", icon: <VerifiedUserOutlinedIcon />, ...tabA11y(TAB.anchors) },
+          // ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
+          // una huérfana es un ítem del inventario, y el punto de la
+          // decisión es que se mire, no que esté.
+          { value: TAB.orphans, label: "Orphan keys", icon: <KeyOffOutlinedIcon />, ...tabA11y(TAB.orphans) },
+          // Settings: conectores, import de CBOM, matriz de aprobación
+          // (ADR-0009: una matriz, filas cdp.*) y enlace a la policy del
+          // agente. Aquí se configura; en las otras pestañas se mira.
+          { value: TAB.settings, label: "Settings", icon: <SettingsOutlinedIcon />, ...tabA11y(TAB.settings) }
+        ]}
+      />
 
       <TabPanel value={tab} index={TAB.dashboard}>
         <CdpDashboard

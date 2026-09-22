@@ -38,7 +38,6 @@ import {
   Select,
   Snackbar,
   Stack,
-  Tab,
   Table,
   TableBody,
   TableCell,
@@ -46,7 +45,6 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Tabs,
   TextField,
   Tooltip,
   Typography
@@ -102,6 +100,7 @@ import GoToReportButton from "../components/common/GoToReportButton";
 // pasando por el motor queda su fila en `report_runs`.
 const COMPLIANCE_EVIDENCE_KEY = "scp.compliance-evidence";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import ExceptionRequestsPanel from "../components/Compliance/ExceptionRequestsPanel";
 import RemediationHubPanel from "../components/Compliance/RemediationHubPanel";
 import SlaPanel from "../components/Compliance/SlaPanel";
@@ -318,23 +317,8 @@ const SecurityBaselines = React.lazy(() => import("./SecurityBaselines"));
 //
 // ⚠️ Una pestaña que no esté en esta lista NO es alcanzable: ni por URL ni por
 // `setTab`, porque el efecto de abajo reescribe `?scpTab=` y al recargar
-// volvería a "posture". Añadir un <Tab> sin tocar esto lo deja muerto.
+// volvería a "posture". Añadir una pestaña a `PageTabs` sin tocar esto la deja muerta.
 const SCP_TABS = ["posture", "fix", "baselines", "exceptions", "catalog", "settings"];
-
-/**
- * Estilo de pestaña, el mismo que Asset Management (`Assets.jsx`).
- *
- * Duplicado y no importado a propósito: son dos páginas independientes y
- * `Assets.jsx` no exporta el suyo. Si aparece una tercera, el sitio de esto es
- * `theme/brand.js`, no un import cruzado entre páginas.
- */
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
-};
 
 export default function SecurityCompliance({ initialTab, onNavigate }) {
   // ADR-0011 Phase 3 — gate on the "security_compliance" capability
@@ -1207,98 +1191,45 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           Mismo formato que Asset Management —envueltos en SectionPaper, sin
           padding, scrollable— para que las dos páginas con pestañas se vean
           igual. Antes eran unos Tabs sueltos con su propio borde inferior. */}
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={effectiveTab}
-          onChange={(_e, next) => setTab(next)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal,
-            },
-          }}
-        >
-          <Tab
-            // La etiqueta cambia; el `value` NO: `?scpTab=posture` vive en
-            // enlaces guardados y en la barra de direcciones de la gente.
-            //
-            // Y no se llama "Status" a secas porque esta misma pantalla ya tiene
-            // un filtro "Status" (el de los equipos): dos cosas distintas con el
-            // mismo nombre a un palmo de distancia es justo el tipo de ruido que
-            // esta pasada viene a quitar.
-            value="posture"
-            label="Fleet status"
-            icon={<GppGoodOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            sx={TAB_SX}
-          />
-          {canManage ? (
-            <Tab
-              value="baselines"
-              label="Baselines"
-              icon={<ShieldOutlinedIcon fontSize="small" />}
-              iconPosition="start"
-              sx={TAB_SX}
-            />
-          ) : null}
-          {/* El hub de remediación. Va aquí, pegado a Posture, porque es el
-              paso siguiente a mirar la postura: de "qué está mal" a "qué hago".
-              NO se gatea con `canManage`: ver qué habría que arreglar es parte
-              del diagnóstico; lo que exige permiso (y PMP) es pulsar. */}
-          <Tab
-            value="fix"
-            label="Fix"
-            icon={<BuildOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            sx={TAB_SX}
-          />
-          {/* P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
-              deciden aquí. Sólo quien gestiona compliance las ve. */}
-          {canManage ? (
-            <Tab
-              value="exceptions"
-              label="Exceptions"
-              icon={<GppMaybeOutlinedIcon fontSize="small" />}
-              iconPosition="start"
-              sx={TAB_SX}
-            />
-          ) : null}
-          <Tab
-            value="catalog"
-            label="Catalog"
-            icon={<MenuBookOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            sx={TAB_SX}
-          />
-          {/* Era un engrane en la fila de filtros. Los umbrales y los
-              frameworks que sigues gobiernan el titular, la tabla de
-              frameworks y lo que llevan los exports — eso no es un ajuste
-              lateral, es una de las caras de la página. Detrás de un icono
-              había que descubrirlo.
-
-              Va la ÚLTIMA a propósito: es lo que se toca de vez en cuando,
-              no el trabajo diario. */}
-          {canManage ? (
-            <Tab
-              value="settings"
-              // La etiqueta dice "Compliance Settings" aunque el `value` sea
-              // `settings`: el value es la clave de `?scpTab=` y va corta; la
-              // etiqueta es lo que lee el operador y ahí "Settings" a secas se
-              // confundiría con los ajustes del tenant, que están en otra
-              // página del menú.
-              label="Compliance Settings"
-              icon={<SettingsOutlinedIcon fontSize="small" />}
-              iconPosition="start"
-              sx={TAB_SX}
-            />
-          ) : null}
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={effectiveTab}
+        onChange={(_e, next) => setTab(next)}
+        items={[
+          // La etiqueta cambia; el `value` NO: `?scpTab=posture` vive en
+          // enlaces guardados y en la barra de direcciones de la gente.
+          //
+          // Y no se llama "Status" a secas porque esta misma pantalla ya tiene
+          // un filtro "Status" (el de los equipos): dos cosas distintas con el
+          // mismo nombre a un palmo de distancia es justo el tipo de ruido que
+          // esta pasada viene a quitar.
+          { value: "posture", label: "Fleet status", icon: <GppGoodOutlinedIcon /> },
+          canManage ? { value: "baselines", label: "Baselines", icon: <ShieldOutlinedIcon /> } : null,
+          // El hub de remediación. Va aquí, pegado a Posture, porque es el
+          // paso siguiente a mirar la postura: de "qué está mal" a "qué hago".
+          // NO se gatea con `canManage`: ver qué habría que arreglar es parte
+          // del diagnóstico; lo que exige permiso (y PMP) es pulsar.
+          { value: "fix", label: "Fix", icon: <BuildOutlinedIcon /> },
+          // P1-7 — solicitudes de excepción: se piden desde el hallazgo y se
+          // deciden aquí. Sólo quien gestiona compliance las ve.
+          canManage ? { value: "exceptions", label: "Exceptions", icon: <GppMaybeOutlinedIcon /> } : null,
+          { value: "catalog", label: "Catalog", icon: <MenuBookOutlinedIcon /> },
+          // Era un engrane en la fila de filtros. Los umbrales y los
+          // frameworks que sigues gobiernan el titular, la tabla de
+          // frameworks y lo que llevan los exports — eso no es un ajuste
+          // lateral, es una de las caras de la página. Detrás de un icono
+          // había que descubrirlo.
+          //
+          // Va la ÚLTIMA a propósito: es lo que se toca de vez en cuando,
+          // no el trabajo diario.
+          //
+          // La etiqueta dice "Compliance Settings" aunque el `value` sea
+          // `settings`: el value es la clave de `?scpTab=` y va corta; la
+          // etiqueta es lo que lee el operador y ahí "Settings" a secas se
+          // confundiría con los ajustes del tenant, que están en otra
+          // página del menú.
+          canManage ? { value: "settings", label: "Compliance Settings", icon: <SettingsOutlinedIcon /> } : null,
+        ]}
+      />
 
       {effectiveTab === "baselines" ? (
         <React.Suspense

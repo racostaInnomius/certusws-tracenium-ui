@@ -1,9 +1,5 @@
 import * as React from "react";
-import {
-  Box,
-  Tabs,
-  Tab,
-} from "@mui/material";
+import { Box } from "@mui/material";
 
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
@@ -42,11 +38,10 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 // part of the enrollment flow, which is where new operators expect to
 // find it.
 
-import { BRAND } from "../theme/brand";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
-// las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
+// las que alguien enlaza hoy; el índice es el `value` de su pestaña en `PageTabs`, abajo.
 //
 // `gpos` y `coverage` eran pestañas propias antes de fundirse en
 // "Windows Domain" — un enlace o marcador viejo con esa clave sigue
@@ -60,7 +55,7 @@ const WINDOWS_SECTION_FROM_URL = { gpos: "gpos", coverage: "coverage" };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
-import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 import { useAuthContext } from "../auth/AuthContext";
@@ -93,17 +88,6 @@ function a11yProps(index) {
     "aria-controls": `assets-tabpanel-${index}`,
   };
 }
-
-// Shared sx for the four Tab labels. Keeping it in one place so the
-// selected-state color and the hover treatment stay uniform — the
-// previous file repeated the same object four times.
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
-};
 
 export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOverlay = false, onNavigate }) {
   // El Overview enlaza su dona de composición a Hardware Inventory, que es
@@ -246,119 +230,42 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         }
       />
 
-      <SectionPaper
-        variant="panel"
-        sx={{
-          mb: 2,
-          // Zero padding on the wrapper — the Tabs component brings
-          // its own min-height and we want the bottom border of the
-          // Tabs to line up with the Paper's edge.
-          p: 0,
-          overflow: "hidden",
-        }}
-      >
-        <Tabs
-          value={visibleTab}
-          onChange={handleChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal,
-            },
-          }}
-        >
-          {/* Tab order is intentional: Dashboard (overview) → Asset
-              Groups (organizational layer over the fleet) → the two
-              inventory drilldowns. The Dashboard label replaced the
-              previous "Asset Management" tab because the page itself
-              is already named "Asset Management" — the duplicated label
-              read as redundant in the tab bar. */}
-          <Tab
-            icon={<DashboardOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Dashboard"
-            {...a11yProps(0)}
-            sx={TAB_SX}
-          />
-
-          <Tab
-            icon={<GroupWorkOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Asset Groups"
-            {...a11yProps(1)}
-            sx={TAB_SX}
-          />
-
-          <Tab
-            icon={<MemoryOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Hardware Inventory"
-            {...a11yProps(2)}
-            sx={TAB_SX}
-          />
-
-          {/* UNA pestaña, tres secciones dentro (Geofences, Location history,
-              Recent transitions): son la misma funcionalidad sobre la misma
-              evidencia, no tres cosas que compitan por sitio en esta barra. */}
-          <Tab
-            icon={<HistoryOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Location"
-            {...a11yProps(3)}
-            sx={TAB_SX}
-          />
-
-          {/* Las impresoras de la FLOTA agrupadas en colas; las de un equipo
-              siguen en su detalle. */}
-          <Tab
-            icon={<PrintOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Printers"
-            {...a11yProps(4)}
-            sx={TAB_SX}
-          />
-
-          <Tab
-            icon={<AppsOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Software Inventory"
-            {...a11yProps(5)}
-            sx={TAB_SX}
-          />
-
-          {/* Lo que sabemos del dominio Windows — GPOs aplicadas y qué falta
-              incorporar. Ninguna de las dos se le pregunta nunca a un Mac o
-              un Linux, así que van juntas y no como dimensiones de inventario
-              multiplataforma. Dos secciones dentro (ver WindowsDomainPanel),
-              mismo formato que Patch Management → Configure. */}
-          <Tab
-            icon={<DomainOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Windows Domain"
-            {...a11yProps(WINDOWS_TAB)}
-            sx={TAB_SX}
-          />
-
-          {/* ADR-0029 — preguntar AHORA a los equipos conectados. Aquí y no en
-              la barra lateral: hoy son seis preguntas fijas sobre el estado
-              del equipo, no una pregunta libre. Al final: la última pestaña,
-              así su presencia condicional no mueve los índices de las demás. */}
-          {canLiveQuery ? (
-            <Tab
-              icon={<ManageSearchOutlinedIcon fontSize="small" />}
-              iconPosition="start"
-              label="Live Query"
-              {...a11yProps(LIVE_QUERY_TAB)}
-              sx={TAB_SX}
-            />
-          ) : null}
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={visibleTab}
+        onChange={handleChange}
+        items={[
+          // Tab order is intentional: Dashboard (overview) → Asset
+          // Groups (organizational layer over the fleet) → the two
+          // inventory drilldowns. The Dashboard label replaced the
+          // previous "Asset Management" tab because the page itself
+          // is already named "Asset Management" — the duplicated label
+          // read as redundant in the tab bar.
+          { value: 0, label: "Dashboard", icon: <DashboardOutlinedIcon />, ...a11yProps(0) },
+          { value: 1, label: "Asset Groups", icon: <GroupWorkOutlinedIcon />, ...a11yProps(1) },
+          { value: 2, label: "Hardware Inventory", icon: <MemoryOutlinedIcon />, ...a11yProps(2) },
+          // UNA pestaña, tres secciones dentro (Geofences, Location history,
+          // Recent transitions): son la misma funcionalidad sobre la misma
+          // evidencia, no tres cosas que compitan por sitio en esta barra.
+          { value: 3, label: "Location", icon: <HistoryOutlinedIcon />, ...a11yProps(3) },
+          // Las impresoras de la FLOTA agrupadas en colas; las de un equipo
+          // siguen en su detalle.
+          { value: 4, label: "Printers", icon: <PrintOutlinedIcon />, ...a11yProps(4) },
+          { value: 5, label: "Software Inventory", icon: <AppsOutlinedIcon />, ...a11yProps(5) },
+          // Lo que sabemos del dominio Windows — GPOs aplicadas y qué falta
+          // incorporar. Ninguna de las dos se le pregunta nunca a un Mac o
+          // un Linux, así que van juntas y no como dimensiones de inventario
+          // multiplataforma. Dos secciones dentro (ver WindowsDomainPanel),
+          // mismo formato que Patch Management → Configure.
+          { value: WINDOWS_TAB, label: "Windows Domain", icon: <DomainOutlinedIcon />, ...a11yProps(WINDOWS_TAB) },
+          // ADR-0029 — preguntar AHORA a los equipos conectados. Aquí y no en
+          // la barra lateral: hoy son seis preguntas fijas sobre el estado
+          // del equipo, no una pregunta libre. Al final: la última pestaña,
+          // así su presencia condicional no mueve los índices de las demás.
+          canLiveQuery
+            ? { value: LIVE_QUERY_TAB, label: "Live Query", icon: <ManageSearchOutlinedIcon />, ...a11yProps(LIVE_QUERY_TAB) }
+            : null,
+        ]}
+      />
 
       {/* "Blind spots" vivía aquí; se fue al Overview repartido por bloques
           (ver components/Overview/signalCoverageModel.js): tres de sus cuatro

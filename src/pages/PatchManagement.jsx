@@ -17,8 +17,6 @@ import {
   FormControlLabel,
   IconButton,
   Switch,
-  Tab,
-  Tabs,
   TextField,
   InputAdornment,
   Tooltip,
@@ -91,6 +89,7 @@ import { DataGrid } from "@mui/x-data-grid";
 import PageHeader from "../components/common/PageHeader";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import SummaryCard from "../components/common/SummaryCard";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
@@ -137,16 +136,6 @@ import OnlineDot from "../components/common/OnlineDot";
  * so anything the catalog adds later surfaces here instead of vanishing.
  */
 const OTHER_EXCLUDES = "crypto,cryptography,network_sharing";
-
-// Estilo de cada pestaña: el mismo que Assets.jsx y SecurityCompliance.jsx,
-// para que las páginas con pestañas se vean iguales.
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
-};
 
 const CATEGORIES = [
   {
@@ -1616,40 +1605,12 @@ export default function PatchManagement({ onNavigate }) {
           contenido: las tarjetas de flota, «Start here» y la tabla de equipos
           viven DENTRO de Patches, no sueltas sobre toda la página, porque no
           dicen nada sobre third-party ni sobre vulnerabilidades. */}
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={tab}
-          onChange={(_e, next) => setTab(next)}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-          // Mismo estilo que Asset Management y Security Compliance: fila limpia
-          // sobre el blanco del panel, 62 px, indicador redondeado. Antes era
-          // una barra tintada de 48 px con la pestaña activa en teal, y al
-          // pasar de una página a otra la navegación cambiaba de aspecto.
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal,
-            },
-          }}
-        >
-          {CATEGORIES.map((c) => (
-            <Tab
-              key={c.key}
-              value={c.key}
-              label={c.label}
-              // Iconos pequeños, como en las otras dos páginas.
-              icon={React.cloneElement(c.icon, { fontSize: "small" })}
-              iconPosition="start"
-              sx={TAB_SX}
-            />
-          ))}
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={tab}
+        onChange={(_e, next) => setTab(next)}
+        allowScrollButtonsMobile
+        items={CATEGORIES.map((c) => ({ value: c.key, label: c.label, icon: c.icon }))}
+      />
 
       {/* El contenido de la pestaña, en su propio panel debajo — el mismo
           reparto que Security Compliance: la navegación no comparte caja con

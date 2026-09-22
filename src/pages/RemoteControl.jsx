@@ -35,8 +35,6 @@ import {
   DialogContent,
   DialogTitle,
   Drawer,
-  Tab,
-  Tabs,
   TextField,
   Tooltip,
   Typography
@@ -60,7 +58,7 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 // este botón prestaba Fleet Health, que de Remote Control sólo cuenta cuántas
 // sesiones hubo. La clave tiene que existir en `REPORT_REGISTRY`.
 const RCP_REPORT_KEY = "rcp.access-audit";
-import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import { invalidateCachePrefix } from "../hooks/useCachedFetch";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { BRAND, TEXT_MUTED } from "../theme/brand";
@@ -94,14 +92,6 @@ const TAB_CONNECT = 0;
 const TAB_SESSIONS = 1;
 const TAB_TRANSFERS = 2;
 const TAB_ACCESS = 3;
-
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 58,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark }
-};
 
 function SessionLoading() {
   return (
@@ -494,56 +484,41 @@ export default function RemoteControl({ onNavigate }) {
       {/* Above the tabs on purpose — see the header note. */}
       <ApprovalQueue refreshNonce={refreshNonce} notify={notify} />
 
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_e, v) => setActiveTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 58,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal
-            }
-          }}
-        >
-          <Tab
-            icon={<PlayCircleOutlineOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Connect"
-            id="remote-control-tab-0"
-            aria-controls="remote-control-tabpanel-0"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<HistoryOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Sessions"
-            id="remote-control-tab-1"
-            aria-controls="remote-control-tabpanel-1"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<SwapVertOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="File transfers"
-            id="remote-control-tab-2"
-            aria-controls="remote-control-tabpanel-2"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<VerifiedUserOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Access"
-            id="remote-control-tab-3"
-            aria-controls="remote-control-tabpanel-3"
-            sx={TAB_SX}
-          />
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={activeTab}
+        onChange={(_e, v) => setActiveTab(v)}
+        height={58}
+        items={[
+          {
+            value: TAB_CONNECT,
+            label: "Connect",
+            icon: <PlayCircleOutlineOutlinedIcon />,
+            id: "remote-control-tab-0",
+            "aria-controls": "remote-control-tabpanel-0"
+          },
+          {
+            value: TAB_SESSIONS,
+            label: "Sessions",
+            icon: <HistoryOutlinedIcon />,
+            id: "remote-control-tab-1",
+            "aria-controls": "remote-control-tabpanel-1"
+          },
+          {
+            value: TAB_TRANSFERS,
+            label: "File transfers",
+            icon: <SwapVertOutlinedIcon />,
+            id: "remote-control-tab-2",
+            "aria-controls": "remote-control-tabpanel-2"
+          },
+          {
+            value: TAB_ACCESS,
+            label: "Access",
+            icon: <VerifiedUserOutlinedIcon />,
+            id: "remote-control-tab-3",
+            "aria-controls": "remote-control-tabpanel-3"
+          }
+        ]}
+      />
 
       <TabPanel value={activeTab} index={TAB_CONNECT}>
         <ConnectTab

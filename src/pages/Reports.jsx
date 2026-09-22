@@ -28,7 +28,7 @@
 // de refresco— justo cuando pasó a ser el destino de once páginas.
 
 import * as React from "react";
-import { Box, Button, Chip, IconButton, Menu, MenuItem, Stack, Tab, Tabs, TextField, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Chip, IconButton, Menu, MenuItem, Stack, TextField, Tooltip, Typography } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
@@ -41,6 +41,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useConfirm } from "../components/common/ConfirmDialog";
 import EmailReportDialog from "../components/Reports/EmailReportDialog";
@@ -105,14 +106,6 @@ const NAME_BY_TAB = ["catalog", "schedules", "history", "settings"];
 function a11yProps(index) {
   return { id: `reports-tab-${index}`, "aria-controls": `reports-tabpanel-${index}` };
 }
-
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
-};
 
 export default function Reports() {
   const confirm = useConfirm();
@@ -829,26 +822,18 @@ export default function Reports() {
         }
       />
 
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal },
-          }}
-        >
-          {/* El orden es el del recorrido: qué puedo sacar → qué sale solo →
-              qué salió → por dónde sale hacia fuera. */}
-          <Tab icon={<ListAltOutlinedIcon fontSize="small" />} iconPosition="start" label="Catalog" {...a11yProps(TAB.catalog)} sx={TAB_SX} />
-          <Tab icon={<EventRepeatOutlinedIcon fontSize="small" />} iconPosition="start" label="Schedules" {...a11yProps(TAB.schedules)} sx={TAB_SX} />
-          <Tab icon={<HistoryOutlinedIcon fontSize="small" />} iconPosition="start" label="History" {...a11yProps(TAB.history)} sx={TAB_SX} />
-          <Tab icon={<SettingsOutlinedIcon fontSize="small" />} iconPosition="start" label="Settings" {...a11yProps(TAB.settings)} sx={TAB_SX} />
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={activeTab}
+        onChange={handleTabChange}
+        items={[
+          // El orden es el del recorrido: qué puedo sacar → qué sale solo →
+          // qué salió → por dónde sale hacia fuera.
+          { value: TAB.catalog, label: "Catalog", icon: <ListAltOutlinedIcon />, ...a11yProps(TAB.catalog) },
+          { value: TAB.schedules, label: "Schedules", icon: <EventRepeatOutlinedIcon />, ...a11yProps(TAB.schedules) },
+          { value: TAB.history, label: "History", icon: <HistoryOutlinedIcon />, ...a11yProps(TAB.history) },
+          { value: TAB.settings, label: "Settings", icon: <SettingsOutlinedIcon />, ...a11yProps(TAB.settings) },
+        ]}
+      />
 
       {activeTab === TAB.catalog ? (
         <SectionPaper variant="panel" sx={{ p: 2 }} role="tabpanel" id={`reports-tabpanel-${TAB.catalog}`} aria-labelledby={`reports-tab-${TAB.catalog}`}>

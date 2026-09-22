@@ -9,7 +9,7 @@
 // other three tabs were already extracted.
 
 import * as React from "react";
-import { Box, Tabs, Tab, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
@@ -21,6 +21,7 @@ import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useAuthContext } from "../auth/AuthContext";
 import { getMyCapabilities } from "../api/roles";
@@ -51,14 +52,6 @@ const TAB_INDEX = {
   // se encontraba. Va al final, que es donde sigue el orden alfabetico tras
   // Overview: Catalog · Deployments · Distribution · Uninstall.
   uninstall: 4,
-};
-
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 56,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
 };
 
 // ── Page shell ────────────────────────────────────────────────────
@@ -282,54 +275,18 @@ export default function SoftwareDelivery({ onNavigate }) {
         </SectionPaper>
       ) : null}
 
-      <SectionPaper variant="panel" sx={{ mb: 2, p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_e, v) => setActiveTab(v)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 56,
-            "& .MuiTabs-indicator": {
-              height: 3,
-              borderRadius: 999,
-              backgroundColor: BRAND.teal,
-            },
-          }}
-        >
-          <Tab
-            icon={<SpaceDashboardOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Dashboard"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<InventoryOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Catalog"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<LocalShippingOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Deployments"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<HubOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Distribution"
-            sx={TAB_SX}
-          />
-          <Tab
-            icon={<DeleteSweepOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Uninstall"
-            sx={TAB_SX}
-          />
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={activeTab}
+        onChange={(_e, v) => setActiveTab(v)}
+        height={56}
+        items={[
+          { value: TAB_INDEX.overview, label: "Dashboard", icon: <SpaceDashboardOutlinedIcon /> },
+          { value: TAB_INDEX.catalog, label: "Catalog", icon: <InventoryOutlinedIcon /> },
+          { value: TAB_INDEX.deployments, label: "Deployments", icon: <LocalShippingOutlinedIcon /> },
+          { value: TAB_INDEX.distribution, label: "Distribution", icon: <HubOutlinedIcon /> },
+          { value: TAB_INDEX.uninstall, label: "Uninstall", icon: <DeleteSweepOutlinedIcon /> },
+        ]}
+      />
 
       {activeTab === 0 ? (
         <OverviewTab

@@ -25,14 +25,12 @@ import {
   Paper,
   Select,
   Stack,
-  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Tabs,
   TextField,
   Typography
 } from "@mui/material";
@@ -80,6 +78,7 @@ import {
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
+import PageTabs from "../components/common/PageTabs";
 import { listFrom } from "../api/shape";
 import { SOURCE_LABEL } from "../components/Alerts/alertSources";
 import SiemDestinationsDrawer from "../components/Alerts/SiemDestinationsDrawer";
@@ -235,16 +234,6 @@ const DEFAULT_WINDOW_HOURS = 24 * 7; // product decision: 7 days default
 
 const ALERTS_TABS = ["alerts", "rules", "profiles", "destinations"];
 const MANAGE_ONLY_TABS = ["profiles", "destinations"];
-
-// Mismo estilo que Patch Management, Security Compliance, Crypto Discovery y
-// Reports (cada una tiene su copia de TAB_SX; ver la deuda anotada allí).
-const TAB_SX = {
-  textTransform: "none",
-  fontWeight: 700,
-  minHeight: 62,
-  color: "text.secondary",
-  "&.Mui-selected": { color: BRAND.dark },
-};
 
 /**
  * A refused switch-on says WHY: the plugin is not in the plan (402) or it is
@@ -499,36 +488,26 @@ export default function Alerts({ onNavigate }) {
 
       {/* Tab bar — su propio panel, como en las otras páginas: la navegación
           no comparte caja con lo que navega. ------------------------------ */}
-      <SectionPaper variant="panel" sx={{ p: 0, overflow: "hidden" }}>
-        <Tabs
-          value={tab}
-          onChange={(_e, next) => setTab(next)}
-          variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-          aria-label="Alerts sections"
-          sx={{
-            px: { xs: 1, sm: 2 },
-            minHeight: 62,
-            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal },
-          }}
-        >
-          <Tab value="alerts" label="Alerts" icon={<NotificationsOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
-          <Tab value="rules" label="Rules" icon={<TuneOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
-          {canManage ? (
-            <Tab
-              value="profiles"
-              label={np.profiles?.length ? `Notification profiles (${np.profiles.length})` : "Notification profiles"}
-              icon={<GroupsOutlinedIcon fontSize="small" />}
-              iconPosition="start"
-              sx={TAB_SX}
-            />
-          ) : null}
-          {canManage ? (
-            <Tab value="destinations" label="Destinations" icon={<HubOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
-          ) : null}
-        </Tabs>
-      </SectionPaper>
+      <PageTabs
+        value={tab}
+        onChange={(_e, next) => setTab(next)}
+        allowScrollButtonsMobile
+        aria-label="Alerts sections"
+        // Sin `mb`: la página ya separa sus bloques con `gap`.
+        sx={{ mb: 0 }}
+        items={[
+          { value: "alerts", label: "Alerts", icon: <NotificationsOutlinedIcon /> },
+          { value: "rules", label: "Rules", icon: <TuneOutlinedIcon /> },
+          canManage
+            ? {
+                value: "profiles",
+                label: np.profiles?.length ? `Notification profiles (${np.profiles.length})` : "Notification profiles",
+                icon: <GroupsOutlinedIcon />,
+              }
+            : null,
+          canManage ? { value: "destinations", label: "Destinations", icon: <HubOutlinedIcon /> } : null,
+        ]}
+      />
 
       {/* Alerts tab: filter bar + feed ---------------------------------- */}
       {tab === "alerts" ? (
