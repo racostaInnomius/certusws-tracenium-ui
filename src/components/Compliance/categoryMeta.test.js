@@ -7,7 +7,7 @@
 // tooltip opens onto nothing.
 
 import { describe, it, expect } from "vitest";
-import CATEGORY_META, { categoryLabel, categoryDescription } from "./categoryMeta";
+import CATEGORY_META, { categoryLabel, categoryDescription, compareCategoryLabels } from "./categoryMeta";
 
 // Every category that exists in the control-DB catalog as of
 // 2026-09-01, after 20260827 (crypto → cryptography) and
@@ -55,8 +55,20 @@ describe("categoryMeta", () => {
   it("falls back to the key rather than blanking an unknown category", () => {
     // A category seeded in the catalog before this map learns about it
     // must still render its row.
-    expect(categoryLabel("supply_chain")).toBe("supply chain");
+    // Sentence case, like the mapped labels: in prod six categories fall
+    // back (access, audit, hardening, identity, network, services) and
+    // they rendered in lowercase next to "Identity policy".
+    expect(categoryLabel("supply_chain")).toBe("Supply chain");
+    expect(categoryLabel("audit")).toBe("Audit");
     expect(categoryDescription("supply_chain")).toBeNull();
+  });
+
+  it("sorts by the label the operator reads, not by the key", () => {
+    // Mapped and fallback labels mixed, in the order they appear on screen.
+    const keys = ["services", "identity_policy", "access", "cryptography", "disk_encryption", "identity", "network"];
+    expect([...keys].sort(compareCategoryLabels).map(categoryLabel)).toEqual([
+      "Access", "Cryptography", "Disk encryption", "Identity", "Identity policy", "Network", "Services"
+    ]);
   });
 
   it("labels an empty category rather than rendering nothing", () => {

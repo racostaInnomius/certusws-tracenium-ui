@@ -86,13 +86,27 @@ const CATEGORY_META = {
 
 /**
  * Display name for a category key. Falls back to the key with
- * underscores turned into spaces, which is what both call sites did
- * before this file existed.
+ * underscores turned into spaces and a capital first letter — the same
+ * sentence case as the labels above ("Identity policy"), so a category
+ * the map doesn't know yet doesn't stand out in lowercase next to the
+ * ones it does. In prod that is access, audit, hardening, identity,
+ * network and services (22-sep-2026).
  */
 export function categoryLabel(key) {
   const k = String(key || "").trim();
   if (!k) return "Uncategorized";
-  return CATEGORY_META[k]?.label ?? k.replace(/_/g, " ");
+  const known = CATEGORY_META[k]?.label;
+  if (known) return known;
+  const words = k.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * Sort comparator for category keys by what the operator reads: the
+ * label, alphabetically, ignoring case and accents.
+ */
+export function compareCategoryLabels(a, b) {
+  return categoryLabel(a).localeCompare(categoryLabel(b), "en", { sensitivity: "base" });
 }
 
 /**

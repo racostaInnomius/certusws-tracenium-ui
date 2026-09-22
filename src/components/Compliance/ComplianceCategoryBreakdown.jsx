@@ -34,7 +34,7 @@ import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getCategorySummary, getCategoryDevices } from "../../api/compliance";
 import { listFrom } from "../../api/shape";
-import { categoryLabel, categoryDescription } from "./categoryMeta";
+import { categoryLabel, categoryDescription, compareCategoryLabels } from "./categoryMeta";
 
 // Sprint 2 item 1 — pass rates use the SAME tenant-configured bands as
 // scores (both are "percent of checks passing"). This was one of the
@@ -311,7 +311,9 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
     setErr(null);
     getCategorySummary()
       .then((res) => {
-        if (!cancelled) setRows(listFrom(res, { context: "categoryRows" }));
+        // Alphabetical by the label on screen, not the API's order: with 18
+        // categories a fixed order is how you find one again.
+        if (!cancelled) setRows([...listFrom(res, { context: "categoryRows" })].sort((a, b) => compareCategoryLabels(a.category, b.category)));
       })
       .catch((e) => {
         if (!cancelled) setErr(e?.body?.message || e?.message || "Failed to load category posture");

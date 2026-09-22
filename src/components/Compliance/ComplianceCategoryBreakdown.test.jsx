@@ -46,6 +46,22 @@ afterEach(() => {
 });
 
 describe("ComplianceCategoryBreakdown", () => {
+  it("lists categories alphabetically by label, all with a capital first letter", async () => {
+    // The API answers in its own order (worst first); the table does not.
+    // `audit` and `services` have no entry in categoryMeta and used to
+    // render in lowercase next to "Firewall".
+    const row = (category) => ({ ...ITEMS.items[0], category });
+    getCategorySummary.mockResolvedValue({ ok: true, items: [row("services"), row("network_sharing"), row("audit"), row("firewall")] });
+    render(<ComplianceCategoryBreakdown />);
+
+    await screen.findByText("Firewall");
+    // The exact labels (capitalised) exist, and each one renders before the next.
+    const labels = ["Audit", "Firewall", "Network sharing", "Services"].map((t) => screen.getByText(t));
+    for (let i = 0; i < labels.length - 1; i++) {
+      expect(labels[i].compareDocumentPosition(labels[i + 1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it("renders a row per category with prettified names and pass rates", async () => {
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown />);
