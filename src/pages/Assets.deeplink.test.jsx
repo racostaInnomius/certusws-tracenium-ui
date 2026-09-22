@@ -71,3 +71,20 @@ describe("Assets — enlace a Hardware Inventory", () => {
     expect(await screen.findByRole("tab", { name: /dashboard/i, selected: true })).toBeTruthy();
   });
 });
+
+describe("Assets — enlaces viejos a Windows GPOs / Coverage (fundidas en Windows Domain)", () => {
+  it("⭐ ?assetsTab=gpos abre Windows Domain con Group Policy seleccionado (no Coverage)", async () => {
+    mount("&assetsTab=gpos");
+    expect(await screen.findByRole("tab", { name: /windows domain/i, selected: true })).toBeTruthy();
+    // "Devices reporting" es del KPI de WindowsGpos; el texto de Coverage no está montado.
+    expect(await screen.findByText(/devices reporting/i)).toBeTruthy();
+    expect(screen.queryByText(/computers active directory knows about/i)).toBeNull();
+  });
+
+  it("⭐ ?assetsTab=coverage abre Windows Domain con Coverage seleccionado (no Group Policy)", async () => {
+    mount("&assetsTab=coverage");
+    expect(await screen.findByRole("tab", { name: /windows domain/i, selected: true })).toBeTruthy();
+    expect(await screen.findByText(/computers active directory knows about/i)).toBeTruthy();
+    expect(screen.queryByText(/devices reporting/i)).toBeNull();
+  });
+});

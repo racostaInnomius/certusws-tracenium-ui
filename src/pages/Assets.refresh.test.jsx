@@ -71,7 +71,7 @@ const PESTANAS = [
   /^location$/i,
   /^printers$/i,
   /software/i,
-  /gpo/i,
+  /windows domain/i,
 ];
 
 describe("Asset Management — refrescar funciona en todas las pestañas", () => {

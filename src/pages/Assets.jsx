@@ -9,11 +9,10 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import AppsOutlinedIcon from "@mui/icons-material/AppsOutlined";
 import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
-import TravelExploreOutlinedIcon from "@mui/icons-material/TravelExploreOutlined";
+import DomainOutlinedIcon from "@mui/icons-material/DomainOutlined";
 import AssetsDashboard from "./AssetsDashboard";
 import SignalCoverageCard from "../components/Assets/SignalCoverageCard";
 
@@ -24,12 +23,13 @@ import HardwareInventory from "./HardwareInventory";
 const LocationWorkbench = React.lazy(() =>
   import("../components/AssetsDashboard/LocationWorkbench")
 );
-import WindowsGpos from "./WindowsGpos";
 import Printers from "./Printers";
 import AssetGroups from "./AssetGroups";
-// Qué equipos EXISTEN frente a los que gestionamos. Perezosa: quien no la abra
-// no paga su chunk, y su API sólo responde con la migración de Cobertura.
-const CoveragePanel = React.lazy(() => import("../components/discovery/CoveragePanel"));
+// GPOs + Coverage: lo que sabemos del dominio Windows, ninguna de las dos
+// preguntada nunca a un Mac o un Linux. Perezosa: quien no abra la pestaña no
+// paga su chunk (Coverage además sólo responde con la migración de Cobertura;
+// se queda perezosa un nivel más adentro — ver WindowsDomainPanel).
+const WindowsDomainPanel = React.lazy(() => import("../components/AssetsDashboard/WindowsDomainPanel"));
 // ADR-0029 — consulta en vivo. Perezosa por lo mismo; sólo se pinta con el
 // permiso `live_query`.
 const LiveQueryPanel = React.lazy(() => import("../components/liveQuery/LiveQueryPanel"));
@@ -48,8 +48,16 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
 // las que alguien enlaza hoy; el índice es el orden de los <Tab> de abajo.
-const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, gpos: 6, coverage: 7, "live-query": 8 };
-const LIVE_QUERY_TAB = 8;
+//
+// `gpos` y `coverage` eran pestañas propias antes de fundirse en
+// "Windows Domain" — un enlace o marcador viejo con esa clave sigue
+// resolviendo aquí (ver WINDOWS_TAB y el estado inicial de más abajo), sólo
+// que ahora selecciona la SECCIÓN dentro de la pestaña, no la pestaña misma.
+const WINDOWS_TAB = 6;
+const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, windows: WINDOWS_TAB, gpos: WINDOWS_TAB, coverage: WINDOWS_TAB, "live-query": 7 };
+const LIVE_QUERY_TAB = 7;
+// Las claves viejas, además de abrir la pestaña, eligen su sección.
+const WINDOWS_SECTION_FROM_URL = { gpos: "gpos", coverage: "coverage" };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
 const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
 import PageHeader from "../components/common/PageHeader";
@@ -108,6 +116,12 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     const key = getSearchParam("hwFleet", "");
     return HW_FLEET_KEYS.has(key) ? key : "";
   });
+  // Which section opens inside Windows Domain — read once, same as the
+  // fleet filter above. Undefined (not "gpos") when the link didn't ask for
+  // one, so WindowsDomainPanel falls back to its own default section.
+  const [windowsSection, setWindowsSection] = React.useState(
+    () => WINDOWS_SECTION_FROM_URL[getSearchParam("assetsTab", "")]
+  );
   // Set right before jumping to the Hardware Inventory tab from a
   // Dashboard "OS versions" row click, so that tab's search box opens
   // pre-filtered to just that OS. Cleared on any DIRECT tab click (see
@@ -318,22 +332,16 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
             sx={TAB_SX}
           />
 
+          {/* Lo que sabemos del dominio Windows — GPOs aplicadas y qué falta
+              incorporar. Ninguna de las dos se le pregunta nunca a un Mac o
+              un Linux, así que van juntas y no como dimensiones de inventario
+              multiplataforma. Dos secciones dentro (ver WindowsDomainPanel),
+              mismo formato que Patch Management → Configure. */}
           <Tab
-            icon={<PolicyOutlinedIcon fontSize="small" />}
+            icon={<DomainOutlinedIcon fontSize="small" />}
             iconPosition="start"
-            label="Windows GPOs"
-            {...a11yProps(6)}
-            sx={TAB_SX}
-          />
-
-          {/* La otra mitad del inventario: lo que existe y NO tenemos. Al final
-              de la barra a propósito — se mira al incorporar un cliente o al
-              cuadrar la facturación, no todos los días. */}
-          <Tab
-            icon={<TravelExploreOutlinedIcon fontSize="small" />}
-            iconPosition="start"
-            label="Coverage"
-            {...a11yProps(7)}
+            label="Windows Domain"
+            {...a11yProps(WINDOWS_TAB)}
             sx={TAB_SX}
           />
 
@@ -396,13 +404,15 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         <SoftwareInventory refreshNonce={refreshNonce} />
       </TabPanel>
 
-      <TabPanel value={visibleTab} index={6}>
-        <WindowsGpos refreshNonce={refreshNonce} />
-      </TabPanel>
-
-      <TabPanel value={visibleTab} index={7}>
+      <TabPanel value={visibleTab} index={WINDOWS_TAB}>
         <React.Suspense fallback={null}>
-          <CoveragePanel refreshNonce={refreshNonce} canManage={canReport} onNavigate={onNavigate} />
+          <WindowsDomainPanel
+            refreshNonce={refreshNonce}
+            canManage={canReport}
+            onNavigate={onNavigate}
+            section={windowsSection}
+            onSectionChange={setWindowsSection}
+          />
         </React.Suspense>
       </TabPanel>
 
