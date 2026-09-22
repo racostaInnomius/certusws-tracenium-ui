@@ -1,6 +1,6 @@
 // src/components/liveQuery/liveQueryModel.test.js
 import { describe, expect, it } from "vitest";
-import { answerKeyLabel, answerSummary, paramsForRequest, paramsProblem, questionSummary, STATUS_LABEL, targetSummary } from "./liveQueryModel";
+import { answerKeyLabel, answerSummary, deviceReason, paramsForRequest, paramsProblem, questionSummary, STATUS_LABEL, targetSummary } from "./liveQueryModel";
 
 describe("liveQueryModel", () => {
   it("comprobación de cortesía antes de mandar (el servidor decide)", () => {
@@ -28,5 +28,20 @@ describe("liveQueryModel", () => {
     expect(answerSummary("port", { listening: true, process: "svchost.exe", address: "0.0.0.0" })).toBe("Listening · svchost.exe · on 0.0.0.0");
     expect(STATUS_LABEL.offline).toBe("Offline — not asked");
     expect(STATUS_LABEL.error).toBe("Could not check");
+  });
+});
+
+describe("deviceReason — por qué un equipo no contestó", () => {
+  it("⭐ agente sin consulta en vivo (1.1.78, 22-sep): dice qué versión hace falta", () => {
+    expect(deviceReason("unsupported", "agent_update_required:1.1.79:1.1.78", "windows")).toBe(
+      "Needs agent 1.1.79 or later — this device runs 1.1.78"
+    );
+    expect(deviceReason("unsupported", "agent_rejected_job:runJob rejected: unsupported jobType live_query", "windows")).toMatch(/update the agent/);
+  });
+
+  it("móvil sin motivo guardado, y un error normal se enseña tal cual", () => {
+    expect(deviceReason("unsupported", null, "ios")).toMatch(/mobile/);
+    expect(deviceReason("error", "timeout reading registry", "windows")).toBe("timeout reading registry");
+    expect(deviceReason("pending", null, "windows")).toBe("");
   });
 });

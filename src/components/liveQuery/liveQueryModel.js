@@ -174,3 +174,24 @@ export const STATUS_META = [
   { key: "error", label: "Could not check", sev: "high" },
 ];
 export const STATUS_LABEL = Object.fromEntries(STATUS_META.map((s) => [s.key, s.label]));
+
+/**
+ * Por qué un equipo no pudo contestar, en palabras de operador. El backend
+ * guarda el motivo en `error` también para `unsupported`:
+ *   · agent_update_required:<mínima>:<la suya> — agente sin la consulta en vivo
+ *     (22-sep: los 1.1.78 rechazaban el job y salían como «No answer»)
+ *   · agent_rejected_job:<mensaje> — el agente rechazó el job por no conocerlo
+ *   · null en un móvil — iOS/Android no tienen sondas
+ */
+export function deviceReason(status, error, platform) {
+  const e = String(error ?? "");
+  const tooOld = /^agent_update_required:([^:]+):(.*)$/.exec(e);
+  if (tooOld) return `Needs agent ${tooOld[1]} or later — this device runs ${tooOld[2] || "an older version"}`;
+  if (e.startsWith("agent_rejected_job:")) return "This device's agent does not support live queries yet — update the agent";
+  if (status === "unsupported") {
+    const p = String(platform ?? "").toLowerCase();
+    return p === "ios" || p === "android" ? "Live queries are not available on mobile devices" : e;
+  }
+  if (status === "error") return e;
+  return "";
+}

@@ -49,6 +49,7 @@ import {
   STATUS_META,
   answerKeyLabel,
   answerSummary,
+  deviceReason,
   emptyParams,
   paramsForRequest,
   paramsProblem,
@@ -216,7 +217,7 @@ function QueryResult({ queryId, groups = [] }) {
                   <TableCell sx={{ fontSize: TEXT.sm }}>{d.hostname || d.deviceId}</TableCell>
                   <TableCell sx={{ fontSize: TEXT.sm, whiteSpace: "nowrap" }}>{STATUS_LABEL[d.status] ?? d.status}</TableCell>
                   <TableCell sx={{ fontSize: TEXT.sm, ...(q.probe === "registry" || q.probe === "file" ? MONO : {}), wordBreak: "break-all" }}>
-                    {d.status === "answered" ? answerSummary(q.probe, d.answer) : d.status === "error" ? d.error : ""}
+                    {d.status === "answered" ? answerSummary(q.probe, d.answer) : deviceReason(d.status, d.error, d.platform)}
                   </TableCell>
                   <TableCell sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, whiteSpace: "nowrap" }}>{d.answeredAt ? formatRelative(d.answeredAt) : ""}</TableCell>
                 </TableRow>
