@@ -14,7 +14,6 @@ import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
 import DomainOutlinedIcon from "@mui/icons-material/DomainOutlined";
 import AssetsDashboard from "./AssetsDashboard";
-import SignalCoverageCard from "../components/Assets/SignalCoverageCard";
 
 import SoftwareInventory from "./SoftwareInventory";
 import HardwareInventory from "./HardwareInventory";
@@ -361,13 +360,10 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         </Tabs>
       </SectionPaper>
 
-      {/* La ausencia como hallazgo: de los equipos que SÍ gestionamos, de
-          cuáles no sabemos nada. Va sobre el dashboard de assets porque es la
-          advertencia que hay que leer ANTES de creerse los números de abajo. */}
+      {/* "Blind spots" vivía aquí; se fue al Overview repartido por bloques
+          (ver components/Overview/signalCoverageModel.js): tres de sus cuatro
+          señales no eran de Asset Management. */}
       <TabPanel value={visibleTab} index={0}>
-        <Box sx={{ mb: 2 }}>
-          <SignalCoverageCard refreshNonce={refreshNonce} />
-        </Box>
         <AssetsDashboard
           onAssetsEmptyStateChange={onAssetsEmptyStateChange}
           refreshNonce={refreshNonce}

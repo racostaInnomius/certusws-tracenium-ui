@@ -20,6 +20,10 @@ vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({ auth }),
 }));
 
+vi.mock("../api/dashboard", () => ({
+  dashboardApi: { getSignalCoverage: vi.fn() },
+}));
+
 vi.mock("../api/overview", () => ({
   fetchOverviewCore: vi.fn(),
   fetchOverviewSecurity: vi.fn(),
@@ -44,6 +48,7 @@ import {
   fetchOverviewOperations,
   fetchOverviewSecurity,
 } from "../api/overview";
+import { dashboardApi } from "../api/dashboard";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 import Overview from "./Overview";
 
@@ -52,7 +57,19 @@ const ok = (value) => ({ status: "fulfilled", value });
 const STARTER = ["amp", "sdp"];
 const ENTERPRISE = ["amp", "sdp", "scp", "rcp", "pmp", "cdp"];
 
+const COVERAGE = {
+  fleet: 68,
+  devicesWithAnyGap: 20,
+  signals: [
+    { key: "inventory", label: "Hardware & OS inventory", plugin: "amp", entitled: true, staleAfterDays: 3, reporting: 64, stale: 3, never: 1, blind: 4, blindPct: 5.9 },
+    { key: "compliance", label: "Compliance posture", plugin: "scp", entitled: true, staleAfterDays: 3, reporting: 59, stale: 9, never: 0, blind: 9, blindPct: 13.2 },
+    { key: "patches", label: "Missing patches", plugin: "pmp", entitled: true, staleAfterDays: 14, reporting: 52, stale: 0, never: 16, blind: 16, blindPct: 23.5 },
+    { key: "certificates", label: "Certificates", plugin: "cdp", entitled: true, staleAfterDays: 14, reporting: 68, stale: 0, never: 0, blind: 0, blindPct: 0 },
+  ],
+};
+
 beforeEach(() => {
+  dashboardApi.getSignalCoverage.mockResolvedValue(COVERAGE);
   fetchOverviewCore.mockResolvedValue({
     dashboardSummary: ok({ fleetDevices: 12, totalHosts: 12, inactiveAssets7d: 2 }),
     alertEvents: ok({ items: [] }),
@@ -170,5 +187,40 @@ describe("Overview por plan", () => {
     const params = new URLSearchParams(window.location.search);
     expect(params.get("page")).toBe("alerts");
     for (const stale of ["status", "score-band", "since"]) expect(params.has(stale)).toBe(false);
+  });
+});
+
+describe("Overview — quién reporta cada señal (antes «Blind spots» en Asset Management)", () => {
+  const blockOf = (name) => screen.getByRole("heading", { name }).closest("section");
+
+  it("⭐ el titular en la cabecera y una franja por bloque, con SUS señales", async () => {
+    renderWith(ENTERPRISE);
+    expect(await screen.findByTestId("coverage-headline")).toHaveTextContent("20 of 68 devices are missing at least one signal");
+
+    await screen.findByRole("heading", { name: "Patching & crypto" });
+    await waitFor(() => expect(screen.getAllByTestId("signal-coverage-strip")).toHaveLength(3));
+    expect(within(blockOf("Fleet & operations")).getByText("Hardware & OS inventory")).toBeTruthy();
+    expect(within(blockOf("Fleet & operations")).queryByText("Compliance posture")).toBeNull();
+    expect(within(blockOf("Security & access")).getByText("Compliance posture")).toBeTruthy();
+    expect(within(blockOf("Patching & crypto")).getByText("Missing patches")).toBeTruthy();
+    expect(within(blockOf("Patching & crypto")).getByText("Certificates")).toBeTruthy();
+    expect(within(blockOf("Patching & crypto")).getByText("16 never reported")).toBeTruthy();
+  });
+
+  it("⚠️ Starter: sólo la franja de inventario; compliance/parches/certificados no aparecen", async () => {
+    renderWith(STARTER);
+    await waitFor(() => expect(screen.getAllByTestId("signal-coverage-strip")).toHaveLength(1));
+    expect(screen.getByText("Hardware & OS inventory")).toBeTruthy();
+    expect(screen.queryByText("Compliance posture")).toBeNull();
+    expect(screen.queryByText("Missing patches")).toBeNull();
+  });
+
+  it("sin permiso assets_view (403) la página sigue entera, sin franjas ni titular", async () => {
+    dashboardApi.getSignalCoverage.mockRejectedValue(Object.assign(new Error("forbidden"), { status: 403 }));
+    renderWith(ENTERPRISE);
+    expect(await screen.findByRole("heading", { name: "Security & access" })).toBeTruthy();
+    await waitFor(() => expect(dashboardApi.getSignalCoverage).toHaveBeenCalled());
+    expect(screen.queryByTestId("signal-coverage-strip")).toBeNull();
+    expect(screen.queryByTestId("coverage-headline")).toBeNull();
   });
 });

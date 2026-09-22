@@ -34,6 +34,7 @@ import GoToReportButton from "../components/common/GoToReportButton";
 const FLEET_HEALTH_KEY = "global.fleet-health";
 import { Box, Grid, Stack, Typography } from "@mui/material";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import {
   fetchOverviewCore,
   fetchOverviewOperations,
@@ -55,6 +56,9 @@ import {
 } from "../components/Overview/PluginSummaryCards";
 import { OverviewBlock, PlanScopeNotice } from "../components/Overview/OverviewBlock";
 import { resolveOverviewPlan } from "../components/Overview/overviewPlan";
+import SignalCoverageStrip from "../components/Overview/SignalCoverageStrip";
+import { headline as coverageHeadline } from "../components/Overview/signalCoverageModel";
+import { dashboardApi } from "../api/dashboard";
 // ── Recharts, off the first paint ────────────────────────────────────
 //
 // Overview is the landing page, so its chunk is what stands between login
@@ -91,7 +95,7 @@ import PageHeader from "../components/common/PageHeader";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { searchForPage } from "../utils/browserState";
-import { BRAND } from "../theme/brand";
+import { BRAND, ICON } from "../theme/brand";
 
 function navigateWithQuery(page, extraQuery = {}) {
   // Mirrors the AppShell query-param routing pattern. Setting page=
@@ -143,6 +147,7 @@ function ChartSlot({ height = 280 }) {
 // entry was always evicted by the time anyone came back. Painting a stale
 // slice is only honest because the header stamps the capture time.
 const CACHE_OPTIONS = { storageMaxAgeMs: 24 * 60 * 60 * 1000 };
+const loadSignalCoverage = () => dashboardApi.getSignalCoverage();
 
 export default function Overview({ onNavigate } = {}) {
   // ── Plan ──────────────────────────────────────────────────────────
@@ -184,18 +189,28 @@ export default function Overview({ onNavigate } = {}) {
     { ...CACHE_OPTIONS, enabled: Boolean(operations) }
   );
 
+  // Quién reporta cada señal (lo que era "Blind spots" de Asset Management),
+  // repartido por bloques. Una sola petición para la página. Exige
+  // `assets_view`: sin él responde 403 y simplemente no hay franjas.
+  const coverageFetch = useCachedFetch("overview:signal-coverage", loadSignalCoverage, CACHE_OPTIONS);
+
   const coreRefetch = coreFetch.refetch;
   const securityRefetch = securityFetch.refetch;
   const operationsRefetch = operationsFetch.refetch;
+  const coverageRefetch = coverageFetch.refetch;
   const refetchAll = useCallback(
     () =>
       Promise.all([
         coreRefetch?.(),
+        coverageRefetch?.(),
         security ? securityRefetch?.() : null,
         operations ? operationsRefetch?.() : null,
       ]),
-    [coreRefetch, securityRefetch, operationsRefetch, security, operations]
+    [coreRefetch, coverageRefetch, securityRefetch, operationsRefetch, security, operations]
   );
+
+  const coverage = coverageFetch.error ? null : coverageFetch.data;
+  const coverageTitle = coverageHeadline(coverage);
 
   const results = coreFetch.data;
   const loading = coreFetch.loading;
@@ -230,7 +245,27 @@ export default function Overview({ onNavigate } = {}) {
         title="Overview"
         icon={<DashboardOutlinedIcon />}
         chips={
-          errorMsg ? (
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+          {/* El titular de lo que el resto de la página NO puede afirmar:
+              equipos callados en al menos una señal del plan (deduplicado en
+              el backend; el detalle va en la franja de cada bloque). */}
+          {coverageTitle ? (
+            <Typography
+              data-testid="coverage-headline"
+              variant="caption"
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.5,
+                fontWeight: 700,
+                color: coverageTitle.tone === "warning" ? BRAND.alert.warningText : "text.secondary",
+              }}
+            >
+              {coverageTitle.tone === "warning" ? <VisibilityOffOutlinedIcon sx={{ fontSize: ICON.md }} /> : null}
+              {coverageTitle.text}
+            </Typography>
+          ) : null}
+          {errorMsg ? (
             <Typography variant="caption" sx={{ color: BRAND.alert.errorText }}>
               {errorMsg}
             </Typography>
@@ -240,7 +275,8 @@ export default function Overview({ onNavigate } = {}) {
                 ? `Last refresh ${refreshedAt.toLocaleTimeString()} · updating…`
                 : `Last refresh ${refreshedAt.toLocaleTimeString()}`}
             </Typography>
-          ) : null
+          ) : null}
+          </Stack>
         }
         actions={
           <Stack direction="row" spacing={1} alignItems="center">
@@ -263,6 +299,7 @@ export default function Overview({ onNavigate } = {}) {
 
       {/* ── Block 1 · Fleet & operations — every plan ─────────────── */}
       <OverviewBlock block={core}>
+        <SignalCoverageStrip coverage={coverage} block={core} />
         <HeroKpis results={results} loading={loading} onNavigate={navigateWithQuery} hasSdp={hasSdp} />
 
         {/* The one number here that can eventually stop enrollment. Renders
@@ -322,6 +359,7 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 2 · Security & access — Professional ─────────────── */}
       {security ? (
         <OverviewBlock block={security}>
+          <SignalCoverageStrip coverage={coverage} block={security} />
           <SecurityKpis
             results={securityFetch.data}
             loading={securityFetch.loading}
@@ -367,6 +405,7 @@ export default function Overview({ onNavigate } = {}) {
       {/* ── Block 3 · Patching & crypto — Business ─────────────────── */}
       {operations ? (
         <OverviewBlock block={operations}>
+          <SignalCoverageStrip coverage={coverage} block={operations} />
           <Grid container spacing={2} alignItems="stretch">
             {hasPmp ? (
               <Grid size={{ xs: 12, md: hasCdp ? 6 : 12 }}>
