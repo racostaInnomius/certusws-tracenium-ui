@@ -154,3 +154,21 @@ export function projectionLabel(projection) {
   const sev = projection.severities.length === 1 ? projection.severities[0] : projection.severities.join(" and ");
   return `Fix the ${projection.fixes} ${sev} ${projection.fixes === 1 ? "finding" : "findings"}`;
 }
+
+/**
+ * Una línea de la evidencia. Los indicadores de permisos y de dueño no traen
+ * DN sueltos sino quién es y qué alcanza: enseñar sólo el nombre tiraba el dato
+ * que decide la acción («D\helpdesk» no dice nada; «D\helpdesk — 7 objects»
+ * sí).
+ */
+export function evidenceLine(entry) {
+  if (typeof entry === "string") return entry;
+  if (!entry || typeof entry !== "object") return String(entry ?? "");
+  const who = entry.name || entry.sid || "(unresolved)";
+  const parts = [];
+  if (entry.rights) parts.push(String(entry.rights));
+  if (Number.isFinite(entry.objects)) parts.push(`${entry.objects} ${entry.objects === 1 ? "object" : "objects"}`);
+  const detail = parts.length > 0 ? ` — ${parts.join(" · ")}` : "";
+  const example = entry.exampleDn ? ` (e.g. ${entry.exampleDn})` : "";
+  return `${who}${detail}${example}`;
+}

@@ -44,6 +44,7 @@ import {
   VERDICT,
   coverageText,
   effectiveTarget,
+  evidenceLine,
   notAssessedReason,
   openBySeverity,
   scheduleText,
@@ -133,7 +134,7 @@ function FindingRow({ finding, canEdit, onException }) {
                   </Typography>
                   <Box component="ul" sx={{ m: 0, pl: 3, fontSize: TEXT.xs, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", maxHeight: 160, overflow: "auto" }}>
                     {sample.slice(0, 50).map((s, i) => (
-                      <li key={i}>{typeof s === "string" ? s : s?.name || s?.sid || JSON.stringify(s)}</li>
+                      <li key={i}>{evidenceLine(s)}</li>
                     ))}
                   </Box>
                 </Box>

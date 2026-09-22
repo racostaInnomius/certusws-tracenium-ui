@@ -1,7 +1,7 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { coverageText, describeRunNow, effectiveTarget, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
+import { coverageText, describeRunNow, effectiveTarget, evidenceLine, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
 describe("assessmentModel", () => {
@@ -99,5 +99,23 @@ describe("Agent Settings · sección asp (policyTransforms)", () => {
   it("sin el plugin no se escribe nada de asp", () => {
     const form = readFormFromPolicy({ plugins: { enabled: ["amp"] }, asp: { evidenceLimit: 50 } }, catalog);
     expect(formToPolicy({ ...form, plugins: { amp: true, asp: false } }, catalog).asp).toBeUndefined();
+  });
+});
+
+describe("evidenceLine — permisos y dueños, no sólo el nombre", () => {
+  it("un DN suelto se enseña tal cual", () => {
+    expect(evidenceLine("CN=svc,OU=IT,DC=m")).toBe("CN=svc,OU=IT,DC=m");
+  });
+
+  it("⭐ un dueño dice cuántos objetos posee y un ejemplo", () => {
+    expect(evidenceLine({ sid: "S-1-5-21-1-1105", name: "D\\helpdesk", objects: 7, exampleDn: "CN=svc,DC=m" })).toBe(
+      "D\\helpdesk — 7 objects (e.g. CN=svc,DC=m)"
+    );
+    expect(evidenceLine({ sid: "S-1-5-21-1-1105", name: "D\\helpdesk", objects: 1 })).toBe("D\\helpdesk — 1 object");
+  });
+
+  it("un trustee dice su derecho, y sin nombre cae al SID", () => {
+    expect(evidenceLine({ sid: "S-1-5-21-1-1106", rights: "WriteDacl", objects: 3 })).toBe("S-1-5-21-1-1106 — WriteDacl · 3 objects");
+    expect(evidenceLine({ sid: null, name: null, rights: "GenericAll" })).toBe("(unresolved) — GenericAll");
   });
 });
