@@ -464,7 +464,7 @@ export default function FindingCard({
                 botón reaparece. */}
             {!readOnly && onRemediate && finding.agentRemediable && finding.status === "fail" && !awaitingVerification ? (
               <Tooltip
-                title="Run the agent's remediation handler for this check on this device (apply mode)"
+                title="Dry-run the agent's fix on this device first; apply only if it says something would change"
                 arrow
               >
                 <Button

@@ -24,13 +24,12 @@ import {
   Alert, Box, Button, Chip, CircularProgress, Stack, Table, TableBody, TableCell,
   TableHead, TableRow, Tooltip, Typography,
 } from "@mui/material";
-import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
 import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
 import SectionPaper from "../common/SectionPaper";
 import { getRemediationHub } from "../../api/compliance";
-import { remediate } from "../../api/patchManagement";
+import FindingDetailDrawer from "../patch-management/FindingDetailDrawer";
 
 const SEVERITY_COLOR = {
   critical: "error",
@@ -73,7 +72,7 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
-  const [busyKey, setBusyKey] = React.useState(null);
+  const [openAction, setOpenAction] = React.useState(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -89,27 +88,23 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
 
   React.useEffect(() => { load(); }, [load, reloadKey]);
 
-  // Simular primero, aplicar después: son dos pulsaciones distintas a
-  // propósito. `dry_run` lee el estado y dice qué cambiaría sin tocar nada —
-  // con handlers que nunca se han ejercido aquí, es la diferencia entre
-  // descubrirlo en un equipo y descubrirlo en doce.
-  const run = async (action, mode) => {
-    setBusyKey(`${action.key}:${mode}`);
-    try {
-      const res = await remediate({ checkId: action.checkIds[0], mode });
-      onToast?.(
-        mode === "dry_run"
-          ? `Simulation queued for ${action.title} — nothing changed yet.`
-          : `Remediation queued for ${action.title}.`,
-        "success"
-      );
-      return res;
-    } catch (e) {
-      onToast?.(e?.body?.error || e?.message || "Could not queue the job", "error");
-    } finally {
-      setBusyKey(null);
-    }
-  };
+  // Simular primero, aplicar después, y aplicar SÓLO donde la simulación
+  // dijo que cambiaría algo. Todo eso vive en el drawer de la rejilla PMP,
+  // que ya carga los equipos, lanza el dry-run y enseña el resultado por
+  // equipo; aquí sólo se abre.
+  //
+  // ⚠️ Antes esta pestaña llamaba a `remediate({ checkId, mode })` sin
+  // equipos, y el backend exige `deviceIds` o `assetGroupId`: los dos botones
+  // respondían 400 siempre. Y «Apply» no pedía simular antes.
+  const fixFinding = openAction
+    ? {
+        checkId: openAction.checkIds[0],
+        title: openAction.title,
+        severity: openAction.severity,
+        remediationSummary: openAction.remediationSummary,
+        agentRemediable: openAction.kind === "agent",
+      }
+    : null;
 
   if (loading && !data) {
     return (
@@ -249,28 +244,16 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<ScienceOutlinedIcon />}
-                        disabled={!a.canApply || !canManage || busyKey === `${a.key}:dry_run`}
-                        onClick={() => run(a, "dry_run")}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Simulate
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<PlayArrowOutlinedIcon />}
-                        disabled={!a.canApply || !canManage || busyKey === `${a.key}:apply`}
-                        onClick={() => run(a, "apply")}
-                        sx={{ textTransform: "none", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
-                      >
-                        Apply
-                      </Button>
-                    </Stack>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<ScienceOutlinedIcon />}
+                      disabled={!a.canApply || !canManage}
+                      onClick={() => setOpenAction(a)}
+                      sx={{ textTransform: "none", whiteSpace: "nowrap", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+                    >
+                      Simulate, then fix
+                    </Button>
                   </TableCell>
                 </TableRow>
               );
@@ -278,6 +261,16 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
           </TableBody>
         </Table>
       </SectionPaper>
+
+      <FindingDetailDrawer
+        open={Boolean(openAction)}
+        finding={fixFinding}
+        checkIds={openAction?.checkIds ?? null}
+        canManage={canManage && Boolean(openAction?.canApply)}
+        notify={(severity, message) => onToast?.(message, severity)}
+        onClose={() => setOpenAction(null)}
+        onChanged={load}
+      />
     </Stack>
   );
 }

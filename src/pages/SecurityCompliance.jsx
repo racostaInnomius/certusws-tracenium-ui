@@ -85,7 +85,8 @@ import { useConfirm } from "../components/common/ConfirmDialog";
 // policy domain without leaving the Posture tab.
 import { getTenantPolicy, patchTenantPolicyDomain } from "../api/policies";
 // Sprint 4 — one-click fix from the finding card (crosswalk-gated).
-import { remediate as remediateFinding, getDevicesAffectedByCheck, downloadRemediationArtifact } from "../api/patchManagement";
+import { downloadRemediationArtifact } from "../api/patchManagement";
+import FindingDetailDrawer from "../components/patch-management/FindingDetailDrawer";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -678,6 +679,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const [toast, setToast] = React.useState(null);
   const showToast = React.useCallback((t) => setToast(t), []);
   const hideToast = React.useCallback(() => setToast(null), []);
+  // El drawer de remediación (simular → aplicar) para los dos «Fix» de esta
+  // página: el de flota y el de un equipo.
+  const [fixTarget, setFixTarget] = React.useState(null);
 
   // "Fix N" desde "What to fix first": remedia el control en TODOS los equipos
   // que lo incumplen, que es la acción que hoy está enterrada a dos clics
@@ -686,48 +690,24 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // Los device ids no se adivinan: se piden al backend, que es quien sabe
   // quién falla ese control ahora mismo. Enviar una lista obsoleta remediaría
   // equipos que ya están bien.
+  // ⚠️ Antes esto aplicaba en TODOS los equipos que fallan tras un único
+  // «¿seguro?», sin simular — y en toda la flota aunque la vista estuviera
+  // filtrada por un grupo. Ahora abre el drawer de remediación: lista los
+  // equipos (quitables), simula, y sólo entonces aplica, y sólo donde la
+  // simulación dijo que cambiaría algo.
   const handleRemediateCheck = React.useCallback(
-    async (row) => {
+    (row) => {
       if (!canRemediate || !row?.checkId) return;
-      const ok = await confirmDialog({
-        title: `Fix this on ${row.deviceCount} ${row.deviceCount === 1 ? "device" : "devices"}?`,
-        body:
-          `The agent will apply its fix for "${row.title || row.checkId}" on every device ` +
-          "that currently fails it. Some fixes need a reboot to fully take effect; each " +
-          "finding is marked remediated once its agent confirms, and the next scan verifies it.",
-        confirmText: `Fix ${row.deviceCount}`,
-        danger: true,
+      setFixTarget({
+        finding: { checkId: row.checkId, title: row.title, severity: row.severity, agentRemediable: true },
+        initialDeviceIds: null,
+        // El aviso de «esta lista es toda la flota» se monta al pintar: la
+        // etiqueta del grupo se calcula más abajo en el componente.
+        fleetWide: true,
+        notice: null,
       });
-      if (!ok) return;
-      try {
-        const affected = await getDevicesAffectedByCheck(row.checkId);
-        const deviceIds = (Array.isArray(affected?.devices) ? affected.devices : [])
-          .map((d) => d.agentId || d.agent_id)
-          .filter(Boolean);
-        if (deviceIds.length === 0) {
-          showToast({
-            severity: "info",
-            message: "No devices are failing this control any more — nothing to do.",
-          });
-          return;
-        }
-        const res = await remediateFinding({ checkId: row.checkId, mode: "apply", deviceIds });
-        const id = res?.remediation?.id;
-        showToast({
-          severity: "success",
-          message: id
-            ? `Remediation #${id} queued for ${deviceIds.length} devices.`
-            : `Remediation queued for ${deviceIds.length} devices.`,
-        });
-        setRefreshToken((n) => n + 1);
-      } catch (e) {
-        showToast({
-          severity: "error",
-          message: e?.body?.message || e?.message || "Could not queue the remediation.",
-        });
-      }
     },
-    [canRemediate, confirmDialog, showToast]
+    [canRemediate]
   );
 
   // Fase C — "Set to auto-remediate" from a category row. Re-reads the
@@ -790,59 +770,28 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     [canRemediate, tenantId, securityForm, confirmDialog, showToast, capabilityAuto]
   );
 
-  // Sprint 4 — one-click remediation on the open device. Delegates to
-  // the same POST /patch-management/remediate the PM grid uses (mode
-  // apply, single device); the backend translates the catalog id to the
-  // agent's handler id and, on a successful ACK, writes the outcome
-  // back onto this very finding (remediation_status → remediated). The
-  // drawer refetch shows that transition without a page reload.
+  // Sprint 4 — remediation on the open device. Opens the same drawer the PM
+  // grid uses, preselected to this device: dry-run first, apply only if it
+  // says something would change. The backend translates the catalog id to
+  // the agent's handler id and, on a successful ACK, writes the outcome back
+  // onto this very finding (remediation_status → remediated).
   const handleRemediateFinding = React.useCallback(
-    async (finding) => {
+    (finding) => {
       if (!canManage || !drawerAgentId || !finding?.checkId) return;
       // Unido a dominio y clave bajo Policies: se aplica igual (nuestro
       // valor prevalece hasta que una GPO escriba esa clave), pero se dice.
-      const domainNote =
-        finding.remediationPlan?.gpoManaged && drawerData?.device?.partOfDomain === true
-          ? " This device is domain-joined and the key lives under Group Policy: the fix holds until a GPO that manages the same key refreshes it. For a lasting fix, export the GPO script."
-          : "";
-      const ok = await confirmDialog({
-        title: "Remediate on this device?",
-        body:
-          `The agent will run its fix for "${finding.title || finding.checkId}" on this ` +
-          "device now (apply mode). Some fixes need a reboot to fully take effect; the " +
-          "finding is marked remediated once the agent confirms, and the next scan " +
-          "verifies it." + domainNote,
-        confirmText: "Fix now",
-        danger: true,
+      const gpo = finding.remediationPlan?.gpoManaged && drawerData?.device?.partOfDomain === true;
+      setFixTarget({
+        finding: { ...finding, agentRemediable: true },
+        initialDeviceIds: [drawerAgentId],
+        notice: gpo ? (
+          <Alert severity="warning" variant="outlined">
+            This device is domain-joined and the key lives under Group Policy: the fix holds until a GPO that manages the same key refreshes it. For a lasting fix, export the GPO script.
+          </Alert>
+        ) : null,
       });
-      if (!ok) return;
-      try {
-        const res = await remediateFinding({
-          checkId: finding.checkId,
-          mode: "apply",
-          deviceIds: [drawerAgentId],
-        });
-        const id = res?.remediation?.id;
-        showToast({
-          severity: "success",
-          message: id
-            ? `Remediation #${id} queued for this device. The finding updates when the agent reports back.`
-            : "Remediation queued for this device.",
-        });
-        // The remediation row exists now; the finding flips when the ACK
-        // lands. Refetch once so a fast agent is reflected immediately.
-        setTimeout(() => { refetchDrawer(); }, 4000);
-      } catch (e) {
-        showToast({
-          severity: "error",
-          message:
-            e?.status === 403
-              ? "Patch Management plugin is not enabled for this tenant."
-              : e?.body?.message || e?.message || "Failed to queue the remediation.",
-        });
-      }
     },
-    [canManage, drawerAgentId, drawerData, confirmDialog, showToast, refetchDrawer]
+    [canManage, drawerAgentId, drawerData]
   );
 
   // El fix como fichero: .reg / .inf de secedit / script de GPO con el
@@ -2103,6 +2052,30 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           4 s on success, 6 s on warning/error so the operator has
           time to read the structured backend message
           (INVALID_TRANSITION etc.). */}
+      <FindingDetailDrawer
+        open={Boolean(fixTarget)}
+        finding={fixTarget?.finding ?? null}
+        initialDeviceIds={fixTarget?.initialDeviceIds ?? null}
+        notice={
+          !canRemediate ? (
+            <Alert severity="info" variant="outlined">
+              Running the fix needs Patch Management, which is not in this tenant's plan. You can still export it as a file from the finding.
+            </Alert>
+          ) : fixTarget?.fleetWide && assetGroupId ? (
+            <Alert severity="info" variant="outlined">
+              This list is every device failing the control, not only {assetGroupLabel || "the selected group"}. Untick the ones you do not want to touch.
+            </Alert>
+          ) : (fixTarget?.notice ?? null)
+        }
+        canManage={canRemediate}
+        notify={(severity, message) => showToast({ severity, message })}
+        onClose={() => setFixTarget(null)}
+        onChanged={() => {
+          setRefreshToken((n) => n + 1);
+          refetchDrawer();
+        }}
+      />
+
       <Snackbar
         open={Boolean(toast)}
         autoHideDuration={toast?.severity === "success" ? 4000 : 6000}

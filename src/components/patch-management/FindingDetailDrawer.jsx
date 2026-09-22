@@ -7,12 +7,12 @@
 // the parent — keeps the panel reload logic simple):
 //
 //   1. SELECT  — list of devices affected, checkbox-selectable.
-//                Buttons: [Run dry-run on N] / [Apply on N].
-//                Apply only enabled when the catalog flagged this
-//                finding as agentRemediable.
+//                Button: [Dry-run on N] only — enabled when the catalog
+//                flagged this finding as agentRemediable. There is no
+//                Apply here on purpose (see dryRunGate.js).
 //
-//   2. PROGRESS — after the operator clicks one of the action
-//                 buttons, we POST /remediate, get back a
+//   2. PROGRESS — after the dry-run (and, once every device has
+//                 answered, [Apply on the N that would change]), we POST /remediate, get back a
 //                 deployment-style row with `counts.pending=N`,
 //                 then poll `/remediations/:id/results` every 5s
 //                 until everything is in a terminal state. Each
@@ -54,6 +54,7 @@ import {
   cancelRemediation,
 } from "../../api/patchManagement";
 import { listFrom } from "../../api/shape";
+import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -128,9 +129,16 @@ export default function FindingDetailDrawer({
   notify,
   onClose,
   onChanged,      // called after a successful remediate / cancel — parent reloads
+  // Opcionales, para los otros caminos que llegan aquí (hub «Fix», «Fix now»
+  // de un equipo y «Fix N» de flota en Security Compliance):
+  checkIds = null,         // acción agrupada: los equipos son la UNIÓN de sus checks
+  initialDeviceIds = null, // preseleccionar sólo éstos (p. ej. el equipo abierto)
+  notice = null,           // aviso propio del llamante, encima del botón
 }) {
   // Mode: select (default) or progress (after remediate)
   const [mode, setMode] = React.useState("select");
+  const checkIdsKey = (checkIds ?? []).join(",");
+  const initialKey = (initialDeviceIds ?? []).join(",");
 
   // SELECT-mode state
   const [devices, setDevices] = React.useState([]);
@@ -157,25 +165,41 @@ export default function FindingDetailDrawer({
     setSelectedDeviceIds(new Set());
     setActiveRemediationId(null);
     setResults([]);
-  }, [open, finding?.checkId]);
+  }, [open, finding?.checkId, checkIdsKey, initialKey]);
 
   // ── SELECT-mode: load devices affected ──────────────────────────
+  // `notify` suele llegar como flecha nueva en cada render del padre: por ref,
+  // para que no rehaga loadDevices/loadResults (recargar equipos o relanzar el sondeo) a cada pintado.
+  const notifyRef = React.useRef(notify);
+  notifyRef.current = notify;
+  const resultsRef = React.useRef(results);
+  resultsRef.current = results;
+
   const loadDevices = React.useCallback(async () => {
     if (!finding?.checkId) return;
     setDevicesLoading(true);
     try {
-      const res = await getDevicesAffectedByCheck(finding.checkId);
-      const items = listFrom(res, { context: "findingDetail" });
+      // Una acción agrupada (tres perfiles de firewall, un handler) toca la
+      // UNIÓN de equipos de sus checks: con sólo el primero se quedaría fuera
+      // el equipo que falla el segundo y no el primero.
+      const ids = checkIdsKey ? checkIdsKey.split(",") : [finding.checkId];
+      const lists = await Promise.all(
+        ids.map(async (id) => listFrom(await getDevicesAffectedByCheck(id), { context: "findingDetail" }))
+      );
+      const byId = new Map();
+      for (const list of lists) for (const d of list) if (d?.agentId && !byId.has(d.agentId)) byId.set(d.agentId, d);
+      const items = Array.from(byId.values());
       setDevices(items);
-      // Default selection: all. Operator can deselect specific
-      // ones before firing.
-      setSelectedDeviceIds(new Set(items.map((d) => d.agentId)));
+      // Selección por defecto: todos, o sólo los que pidió el llamante (el
+      // equipo abierto). Se puede cambiar antes de simular.
+      const wanted = initialKey ? new Set(initialKey.split(",")) : null;
+      setSelectedDeviceIds(new Set(items.map((d) => d.agentId).filter((id) => !wanted || wanted.has(id))));
     } catch (err) {
-      notify?.("error", err?.body?.message || err?.message || "Failed to load affected devices");
+      notifyRef.current?.("error", err?.body?.message || err?.message || "Failed to load affected devices");
     } finally {
       setDevicesLoading(false);
     }
-  }, [finding?.checkId, notify]);
+  }, [finding?.checkId, checkIdsKey, initialKey]);
 
   React.useEffect(() => {
     if (open && mode === "select" && finding?.checkId) {
@@ -191,11 +215,11 @@ export default function FindingDetailDrawer({
       const res = await getRemediationResults(activeRemediationId);
       setResults(listFrom(res, { context: "findingDetailResults" }));
     } catch (err) {
-      notify?.("error", err?.body?.message || err?.message || "Failed to load remediation results");
+      notifyRef.current?.("error", err?.body?.message || err?.message || "Failed to load remediation results");
     } finally {
       setResultsLoading(false);
     }
-  }, [activeRemediationId, notify]);
+  }, [activeRemediationId]);
 
   React.useEffect(() => {
     if (mode !== "progress" || !activeRemediationId) return undefined;
@@ -204,20 +228,28 @@ export default function FindingDetailDrawer({
     // interval as soon as that's true to avoid hammering once the
     // remediation finishes — but the operator can also Refresh
     // manually.
+    //
+    // ⚠️ `results` se lee por ref. Con `results` en las dependencias, cada
+    // respuesta relanzaba el efecto y éste pedía otra vez EN EL ACTO: una
+    // petición detrás de otra, no un sondeo cada 5 s.
     const id = setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      const allTerminal = results.length > 0
-        && results.every((r) => TERMINAL_OUTCOMES.has(r.outcome));
+      const current = resultsRef.current;
+      const allTerminal = current.length > 0
+        && current.every((r) => TERMINAL_OUTCOMES.has(r.outcome));
       if (allTerminal) return;
       loadResults();
     }, 5000);
     return () => clearInterval(id);
-  }, [mode, activeRemediationId, loadResults, results]);
+  }, [mode, activeRemediationId, loadResults]);
 
   // ── Actions ─────────────────────────────────────────────────────
-  const fire = async (theMode) => {
+  const fire = async (theMode, targetIds = null) => {
     if (!finding?.checkId || !canManage) return;
-    if (selectedDeviceIds.size === 0) {
+    // `apply` sólo sale con los equipos que la simulación marcó; nunca con
+    // la selección a secas.
+    if (theMode === "apply" && !(Array.isArray(targetIds) && targetIds.length > 0)) return;
+    if (theMode !== "apply" && selectedDeviceIds.size === 0) {
       notify?.("info", "Select at least one device first");
       return;
     }
@@ -226,7 +258,7 @@ export default function FindingDetailDrawer({
       const res = await remediate({
         checkId: finding.checkId,
         mode: theMode,
-        deviceIds: Array.from(selectedDeviceIds),
+        deviceIds: theMode === "apply" ? targetIds : Array.from(selectedDeviceIds),
       });
       const id = res?.remediation?.id;
       if (!id) {
@@ -289,6 +321,9 @@ export default function FindingDetailDrawer({
   const isAgentRemediable = finding?.agentRemediable === true;
   const allTerminal = results.length > 0
     && results.every((r) => TERMINAL_OUTCOMES.has(r.outcome));
+  const dryRunDone = activeMode === "dry_run" && dryRunFinished(results);
+  const applyTargets = dryRunDone ? devicesToApplyAfterDryRun(results) : [];
+  const leftOut = dryRunDone ? dryRunLeftOut(results) : null;
 
   // Aggregated counts for the progress header chip strip.
   const counts = React.useMemo(() => {
@@ -578,14 +613,17 @@ export default function FindingDetailDrawer({
                 <ActionOutlookNotice deviceIds={Array.from(selectedDeviceIds)} />
               </Box>
 
-              {/* Action bar */}
-              <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
+              {notice ? <Box sx={{ pt: 1 }}>{notice}</Box> : null}
+
+              {/* Action bar — sólo simular. «Apply» aparece DESPUÉS, con los
+                  equipos que la simulación dice que cambiarían. */}
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ pt: 1 }}>
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   size="medium"
                   startIcon={
                     submitting && activeMode === "dry_run"
-                      ? <CircularProgress size={14} sx={{ color: BRAND.teal }} />
+                      ? <CircularProgress size={14} sx={{ color: BRAND.surface }} />
                       : <VisibilityOutlinedIcon />
                   }
                   onClick={() => fire("dry_run")}
@@ -594,33 +632,15 @@ export default function FindingDetailDrawer({
                     || selectedDeviceIds.size === 0
                   }
                   sx={{
-                    textTransform: "none", fontWeight: 700,
-                    borderColor: BRAND.teal, color: BRAND.tealText,
-                    "&:hover": { bgcolor: BRAND.tealSoft, borderColor: BRAND.tealHover },
+                    textTransform: "none", fontWeight: 700, flexShrink: 0,
+                    bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover },
                   }}
                 >
                   Dry-run on {selectedDeviceIds.size}
                 </Button>
-                <Button
-                  variant="contained"
-                  size="medium"
-                  startIcon={
-                    submitting && activeMode === "apply"
-                      ? <CircularProgress size={14} sx={{ color: "#fff" }} />
-                      : <PlayCircleOutlineOutlinedIcon />
-                  }
-                  onClick={() => fire("apply")}
-                  disabled={
-                    submitting || !canManage || !isAgentRemediable
-                    || selectedDeviceIds.size === 0
-                  }
-                  sx={{
-                    textTransform: "none", fontWeight: 700,
-                    bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover },
-                  }}
-                >
-                  Apply on {selectedDeviceIds.size}
-                </Button>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                  Nothing changes yet. Apply comes next, only on the devices the dry-run says would change.
+                </Typography>
               </Stack>
             </>
           ) : null}
@@ -644,6 +664,37 @@ export default function FindingDetailDrawer({
                   ))}
                 </Stack>
               </Box>
+
+              {activeMode === "dry_run" ? (
+                <Box
+                  sx={{ p: 1.5, borderRadius: 1, border: `1px solid ${BRAND.border}`, bgcolor: BRAND.surfaceMuted }}
+                  data-testid="apply-after-dry-run"
+                >
+                  {!dryRunDone ? (
+                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                      Waiting for every device to report its dry-run. Apply unlocks when they have.
+                    </Typography>
+                  ) : (
+                    <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                      <Button
+                        variant="contained"
+                        size="medium"
+                        startIcon={<PlayCircleOutlineOutlinedIcon />}
+                        onClick={() => fire("apply", applyTargets)}
+                        disabled={submitting || !canManage || applyTargets.length === 0}
+                        sx={{ textTransform: "none", fontWeight: 700, bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
+                      >
+                        Apply on {applyTargets.length} {applyTargets.length === 1 ? "device" : "devices"} that would change
+                      </Button>
+                      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                        {applyTargets.length === 0 ? "Nothing to apply. " : ""}
+                        {leftOut.compliant > 0 ? `${leftOut.compliant} already compliant. ` : ""}
+                        {leftOut.failed > 0 ? `${leftOut.failed} failed or did not answer the dry-run — left out; check them below.` : ""}
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
+              ) : null}
 
               <Box sx={{ flex: 1, minHeight: 0 }}>
                 {resultsLoading && results.length === 0 ? (

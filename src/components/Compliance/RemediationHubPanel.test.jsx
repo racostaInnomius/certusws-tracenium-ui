@@ -16,6 +16,14 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-li
 
 vi.mock("../../api/compliance", () => ({ getRemediationHub: vi.fn() }));
 vi.mock("../../api/patchManagement", () => ({ remediate: vi.fn() }));
+// El drawer se prueba aparte; aquí sólo importa QUÉ se le pasa.
+const drawerProps = { current: null };
+vi.mock("../patch-management/FindingDetailDrawer", () => ({
+  default: (props) => {
+    drawerProps.current = props;
+    return props.open ? <div data-testid="fix-drawer" /> : null;
+  },
+}))
 
 import { getRemediationHub } from "../../api/compliance";
 import { remediate } from "../../api/patchManagement";
@@ -111,8 +119,7 @@ describe("sin poder ejecutar, se explica por qué", () => {
 
     expect(await screen.findByText(/does not include Patch Management/i)).toBeInTheDocument();
     expect(screen.getByText(/needs Patch Management, which is not in this tenant/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /simulate/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
   });
 
   it("acción manual: se ve, se explica, y no ofrece un botón que no hace nada", async () => {
@@ -123,39 +130,40 @@ describe("sin poder ejecutar, se explica por qué", () => {
 
     expect(await screen.findByText("SIP enabled")).toBeInTheDocument();
     expect(screen.getByText(/remediated by hand/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
   });
 
   it("quien sólo lee ve el hub completo, pero no lanza nada", async () => {
     render(<RemediationHubPanel canManage={false} />);
     await screen.findByText("firewall (3 checks)");
-    expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /simulate/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
   });
 });
 
 describe("lanzar", () => {
-  it("Simulate manda dry_run y dice que no se ha cambiado nada", async () => {
-    const onToast = vi.fn();
-    render(<RemediationHubPanel canManage onToast={onToast} />);
-    fireEvent.click(await screen.findByRole("button", { name: /simulate/i }));
-
-    await waitFor(() => expect(remediate).toHaveBeenCalledWith({ checkId: "a", mode: "dry_run" }));
-    expect(onToast.mock.calls[0][0]).toMatch(/nothing changed/i);
-  });
-
-  it("Apply manda apply", async () => {
+  it("⭐ no llama a remediate directamente: abre el drawer (simular → aplicar)", async () => {
     render(<RemediationHubPanel canManage onToast={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: /apply/i }));
-    await waitFor(() => expect(remediate).toHaveBeenCalledWith({ checkId: "a", mode: "apply" }));
+    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    expect(await screen.findByTestId("fix-drawer")).toBeInTheDocument();
+    expect(remediate).not.toHaveBeenCalled();
   });
 
-  it("un fallo del backend se cuenta, no se traga", async () => {
+  it("⭐ el drawer recibe TODOS los checks de la acción (la unión de equipos)", async () => {
+    render(<RemediationHubPanel canManage onToast={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    await screen.findByTestId("fix-drawer");
+    expect(drawerProps.current.checkIds).toEqual(["a", "b", "c"]);
+    expect(drawerProps.current.finding).toMatchObject({ checkId: "a", agentRemediable: true });
+    expect(drawerProps.current.canManage).toBe(true);
+  });
+
+  it("los avisos del drawer llegan al toast del hub con el orden de argumentos del hub", async () => {
     const onToast = vi.fn();
-    remediate.mockRejectedValue({ body: { error: "PMP_PLUGIN_DISABLED" } });
     render(<RemediationHubPanel canManage onToast={onToast} />);
-    fireEvent.click(await screen.findByRole("button", { name: /apply/i }));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith("PMP_PLUGIN_DISABLED", "error"));
+    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    await screen.findByTestId("fix-drawer");
+    drawerProps.current.notify("error", "PMP_PLUGIN_DISABLED");
+    expect(onToast).toHaveBeenCalledWith("PMP_PLUGIN_DISABLED", "error");
   });
 });
 
