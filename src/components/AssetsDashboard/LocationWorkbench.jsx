@@ -1,12 +1,13 @@
 // Ubicación: las tres preguntas que comparten la misma evidencia.
 //
 // Una sola pestaña de Asset Management con tres secciones, y no tres pestañas,
-// porque son una funcionalidad:
+// porque son una funcionalidad. Las secciones van en el nav lateral de
+// SideSectionLayout (mismo formato que Patch Management → Configure):
 //
 //   * Geofences          — qué sitios se vigilan y con qué radio.
 //   * Location history   — dónde estuvo un equipo, o quién estuvo en un sitio,
 //                          en una fecha.
-//   * Recent transitions — qué veredictos han cambiado.
+//   * Fence activity     — qué veredictos han cambiado.
 //
 // ⚠️ UNA sola carga para las tres. `listGeofences` devuelve sitios Y
 // transiciones en la misma llamada, así que pedirlas por sección consultaría
@@ -19,18 +20,23 @@
 // sería afirmar algo sobre la flota que nadie ha comprobado.
 
 import * as React from "react";
-import { Box, Tab, Tabs } from "@mui/material";
+import { Box } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import SideSectionLayout from "../common/SideSectionLayout";
 import GeofencePanel from "./GeofencePanel";
 import LocationExplorer from "./LocationExplorer";
 import RecentTransitions from "./RecentTransitions";
 
 // «Fence activity» y no «Recent transitions»: el rótulo viejo describía la
 // tabla de la base, no la pregunta que trae aquí a un operador.
-const SECCIONES = ["Geofences", "Location history", "Fence activity"];
+const LOCATION_SECTIONS = [
+  { key: "geofences", label: "Geofences", blurb: "The sites you watch, and the radius of each." },
+  { key: "history", label: "Location history", blurb: "Where a device was, or who was at a site, on a date." },
+  { key: "activity", label: "Fence activity", blurb: "Which devices arrived at or left a site." },
+];
 
 export default function LocationWorkbench({ refreshNonce = 0 }) {
-  const [seccion, setSeccion] = React.useState(0);
+  const [seccion, setSeccion] = React.useState("geofences");
 
   const [overview, setOverview] = React.useState(null);
   const [overviewError, setOverviewError] = React.useState(null);
@@ -72,7 +78,7 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
   // que se piden cuando esa sección se abre por primera vez. La lista es la NO
   // paginada: la de la tabla trae sólo la página visible y un selector
   // alimentado con eso escondería equipos sin decirlo.
-  const necesitaEquipos = seccion === 1;
+  const necesitaEquipos = seccion === "history";
   React.useEffect(() => {
     if (!necesitaEquipos) return undefined;
     let cancelado = false;
@@ -121,32 +127,13 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
   const sites = overview?.sites ?? null;
 
   return (
-    <Box>
-      <Tabs
-        value={seccion}
-        onChange={(_, v) => setSeccion(v)}
-        aria-label="Location sections"
-        variant="scrollable"
-        scrollButtons="auto"
-        sx={{
-          mb: 2,
-          minHeight: 40,
-          borderBottom: `1px solid ${BRAND.border}`,
-          "& .MuiTab-root": {
-            textTransform: "none",
-            fontWeight: 700,
-            fontSize: TEXT.md,
-            minHeight: 40,
-          },
-          "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
-        }}
-      >
-        {SECCIONES.map((s) => (
-          <Tab key={s} label={s} />
-        ))}
-      </Tabs>
-
-      {seccion === 0 ? (
+    <SideSectionLayout
+      sections={LOCATION_SECTIONS}
+      active={seccion}
+      onSelect={setSeccion}
+      ariaLabel="Location sections"
+    >
+      {seccion === "geofences" ? (
         overviewError ? (
           <Box sx={{ fontSize: TEXT.sm, color: BRAND.alert.errorText }}>
             Geofences could not be loaded.
@@ -163,7 +150,7 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
         )
       ) : null}
 
-      {seccion === 1 ? (
+      {seccion === "history" ? (
         <LocationExplorer
           devices={devices}
           devicesLoading={devices === null && !devicesError}
@@ -175,7 +162,7 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
         />
       ) : null}
 
-      {seccion === 2 ? (
+      {seccion === "activity" ? (
         <RecentTransitions
           events={overview?.events ?? null}
           // ⚠️ El ESTADO por cerca sale de `sites`, no de los eventos: los
@@ -189,6 +176,6 @@ export default function LocationWorkbench({ refreshNonce = 0 }) {
           onDaysChange={setDiasActividad}
         />
       ) : null}
-    </Box>
+    </SideSectionLayout>
   );
 }

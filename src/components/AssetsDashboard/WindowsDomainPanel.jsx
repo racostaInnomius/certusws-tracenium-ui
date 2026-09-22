@@ -13,8 +13,7 @@
 // CoveragePanel is rewritten; this is only where they now live.
 
 import * as React from "react";
-import { Box, List, ListItemButton, ListItemText } from "@mui/material";
-import { BRAND, TEXT } from "../../theme/brand";
+import SideSectionLayout from "../common/SideSectionLayout";
 import WindowsGpos from "../../pages/WindowsGpos";
 // Coverage's own API call only answers once the discovery migration is
 // applied; kept lazy so opening the GPO section (the default) never pays for
@@ -52,67 +51,19 @@ export default function WindowsDomainPanel({
   };
 
   return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "248px 1fr" },
-        gap: { xs: 2, md: 3 },
-        alignItems: "start",
-      }}
+    <SideSectionLayout
+      sections={WINDOWS_DOMAIN_SECTIONS}
+      active={active}
+      onSelect={select}
+      ariaLabel="Windows domain"
     >
-      <Box
-        component="nav"
-        aria-label="Windows domain"
-        sx={{
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 1,
-          overflow: "hidden",
-          bgcolor: BRAND.surface,
-        }}
-      >
-        <List disablePadding>
-          {WINDOWS_DOMAIN_SECTIONS.map((s) => {
-            const selected = s.key === active;
-            return (
-              <ListItemButton
-                key={s.key}
-                selected={selected}
-                onClick={() => select(s.key)}
-                sx={{
-                  alignItems: "flex-start",
-                  py: 1.25,
-                  borderLeft: `3px solid ${selected ? BRAND.teal : "transparent"}`,
-                  "&.Mui-selected": {
-                    bgcolor: BRAND.tealSoft,
-                    "&:hover": { bgcolor: BRAND.tealSoft },
-                  },
-                }}
-              >
-                <ListItemText
-                  primary={s.label}
-                  secondary={s.blurb}
-                  primaryTypographyProps={{
-                    fontSize: TEXT.sm,
-                    fontWeight: 700,
-                    color: selected ? BRAND.tealText : BRAND.dark,
-                  }}
-                  secondaryTypographyProps={{ fontSize: TEXT.xs }}
-                />
-              </ListItemButton>
-            );
-          })}
-        </List>
-      </Box>
-
-      <Box sx={{ minWidth: 0 }}>
-        {active === "gpos" ? (
-          <WindowsGpos refreshNonce={refreshNonce} />
-        ) : active === "coverage" ? (
-          <React.Suspense fallback={null}>
-            <CoveragePanel refreshNonce={refreshNonce} canManage={canManage} onNavigate={onNavigate} />
-          </React.Suspense>
-        ) : null}
-      </Box>
-    </Box>
+      {active === "gpos" ? (
+        <WindowsGpos refreshNonce={refreshNonce} />
+      ) : active === "coverage" ? (
+        <React.Suspense fallback={null}>
+          <CoveragePanel refreshNonce={refreshNonce} canManage={canManage} onNavigate={onNavigate} />
+        </React.Suspense>
+      ) : null}
+    </SideSectionLayout>
   );
 }

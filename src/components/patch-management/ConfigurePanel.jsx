@@ -15,8 +15,9 @@
 // this is only where they now live.
 
 import * as React from "react";
-import { Box, List, ListItemButton, ListItemText, Typography } from "@mui/material";
+import { Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import SideSectionLayout from "../common/SideSectionLayout";
 import MaintenanceWindowsPanel from "./MaintenanceWindowsPanel";
 import GatewayPanel from "./gateway/GatewayPanel";
 import ThirdPartyCatalogManager from "./ThirdPartyCatalogManager";
@@ -72,75 +73,27 @@ export default function ConfigurePanel({
   };
 
   return (
-    <Box
-      sx={{
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "248px 1fr" },
-        gap: { xs: 2, md: 3 },
-        alignItems: "start",
-      }}
+    <SideSectionLayout
+      sections={CONFIG_SECTIONS}
+      active={active}
+      onSelect={select}
+      ariaLabel="Patch management settings"
     >
-      <Box
-        component="nav"
-        aria-label="Patch management settings"
-        sx={{
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 1,
-          overflow: "hidden",
-          bgcolor: BRAND.surface,
-        }}
-      >
-        <List disablePadding>
-          {CONFIG_SECTIONS.map((s) => {
-            const selected = s.key === active;
-            return (
-              <ListItemButton
-                key={s.key}
-                selected={selected}
-                onClick={() => select(s.key)}
-                sx={{
-                  alignItems: "flex-start",
-                  py: 1.25,
-                  borderLeft: `3px solid ${selected ? BRAND.teal : "transparent"}`,
-                  "&.Mui-selected": {
-                    bgcolor: BRAND.tealSoft,
-                    "&:hover": { bgcolor: BRAND.tealSoft },
-                  },
-                }}
-              >
-                <ListItemText
-                  primary={s.label}
-                  secondary={s.blurb}
-                  primaryTypographyProps={{
-                    fontSize: TEXT.sm,
-                    fontWeight: 700,
-                    color: selected ? BRAND.tealText : BRAND.dark,
-                  }}
-                  secondaryTypographyProps={{ fontSize: TEXT.xs }}
-                />
-              </ListItemButton>
-            );
-          })}
-        </List>
-      </Box>
-
-      <Box sx={{ minWidth: 0 }}>
-        {active === "maintenance" ? (
-          <MaintenanceWindowsPanel canManage={canManage} notify={notify} />
-        ) : active === "gateway" ? (
-          <GatewayPanel canManage={canManage} devices={devices} notify={notify} />
-        ) : active === "third-party-catalog" ? (
-          <ThirdPartyCatalogManager canManage={canManage} notify={notify} />
-        ) : active === "cve-catalog" ? (
-          <CveCatalogManager canManage={canManage} notify={notify} />
-        ) : active === "remediation-matrix" ? (
-          <RemediationMatrixPanel canManage={canManage} devices={devices} notify={notify} />
-        ) : (
-          <Typography sx={{ color: BRAND.gray, fontSize: TEXT.sm }}>
-            Pick a setting on the left.
-          </Typography>
-        )}
-      </Box>
-    </Box>
+      {active === "maintenance" ? (
+        <MaintenanceWindowsPanel canManage={canManage} notify={notify} />
+      ) : active === "gateway" ? (
+        <GatewayPanel canManage={canManage} devices={devices} notify={notify} />
+      ) : active === "third-party-catalog" ? (
+        <ThirdPartyCatalogManager canManage={canManage} notify={notify} />
+      ) : active === "cve-catalog" ? (
+        <CveCatalogManager canManage={canManage} notify={notify} />
+      ) : active === "remediation-matrix" ? (
+        <RemediationMatrixPanel canManage={canManage} devices={devices} notify={notify} />
+      ) : (
+        <Typography sx={{ color: BRAND.gray, fontSize: TEXT.sm }}>
+          Pick a setting on the left.
+        </Typography>
+      )}
+    </SideSectionLayout>
   );
 }

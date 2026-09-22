@@ -6,7 +6,7 @@
 // mismo tab discrepasen sobre el estado de una cerca.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LocationWorkbench from "./LocationWorkbench";
 
@@ -47,16 +47,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("LocationWorkbench", () => {
-  it("ofrece las tres secciones de la misma funcionalidad", async () => {
+  it("ofrece las tres secciones en el nav lateral (formato Configure)", async () => {
     render(<LocationWorkbench />);
-    for (const s of ["Geofences", "Location history", "Fence activity"]) {
-      expect(await screen.findByRole("tab", { name: s })).toBeInTheDocument();
+    const nav = await screen.findByRole("navigation", { name: "Location sections" });
+    for (const s of [/^Geofences/, /^Location history/, /^Fence activity/]) {
+      expect(within(nav).getByRole("button", { name: s })).toBeInTheDocument();
     }
   });
 
   it("abre en Geofences", async () => {
     render(<LocationWorkbench />);
     expect(await screen.findByText("City Towers Black")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Geofences/ })).toHaveAttribute("aria-current", "true");
   });
 
   it("⚠️ las tres secciones comparten UNA sola carga", async () => {
@@ -65,7 +67,7 @@ describe("LocationWorkbench", () => {
     await screen.findByText("City Towers Black");
     expect(listGeofences).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("tab", { name: "Fence activity" }));
+    await user.click(screen.getByRole("button", { name: /^Fence activity/ }));
     await screen.findByText(/Inside now/i);
     // Cambiar de sección NO vuelve a preguntar: es el mismo dato.
     expect(listGeofences).toHaveBeenCalledTimes(1);
@@ -78,7 +80,7 @@ describe("LocationWorkbench", () => {
     const user = userEvent.setup();
     render(<LocationWorkbench />);
     await screen.findByText("City Towers Black");
-    await user.click(screen.getByRole("tab", { name: "Fence activity" }));
+    await user.click(screen.getByRole("button", { name: /^Fence activity/ }));
 
     expect(
       await screen.findByText(/device was first confirmed away from City Towers Black/i)
@@ -95,7 +97,7 @@ describe("LocationWorkbench", () => {
     await screen.findByText("City Towers Black");
     expect(getHostLocations).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("tab", { name: "Location history" }));
+    await user.click(screen.getByRole("button", { name: /^Location history/ }));
     await waitFor(() => expect(getHostLocations).toHaveBeenCalledTimes(1));
   });
 
