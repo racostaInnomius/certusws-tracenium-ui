@@ -612,10 +612,10 @@ export default function Audit({ onNavigate }) {
       //
       // `actor_email` lo resuelve el backend contra TenantMember;
       // `actor_subject` es el identificador durable y sobrevive a que esa
-      // persona deje de ser miembro. Cuando no hay actor la respuesta es
-      // "—", y es la respuesta correcta: un evento de máquina no tiene
-      // persona detrás, y las 172.406 filas históricas nunca la
-      // registraron.
+      // persona deje de ser miembro. Cuando no hay persona, `actor_kind`
+      // del backend dice QUÉ lo hizo —Agent, System, Ops script, Device
+      // user— o «Not recorded» si debía haberla y no se guardó (ver
+      // utils/auditActor.js). Antes todo eso era «—».
       //
       // ⚠️ NO cae de vuelta a `peer`. Esa columna mezcla sujetos OIDC,
       // etiquetas de scripts de operaciones y direcciones de red; es
@@ -628,7 +628,7 @@ export default function Audit({ onNavigate }) {
       sortable: false,
       valueGetter: (_v, row) => resolveActor(row).label,
       renderCell: (params) => {
-        const { known, subject } = resolveActor(params.row);
+        const { known, subject, hint } = resolveActor(params.row);
         return (
           <Tooltip
             title={
@@ -636,7 +636,9 @@ export default function Audit({ onNavigate }) {
                 ? subject
                   ? `subject ${subject}`
                   : ""
-                : "Sin actor registrado. Los eventos de máquina no tienen persona detrás, y las filas anteriores al 27-ago-2026 nunca lo guardaron."
+                : subject
+                  ? `${hint} (${subject})`
+                  : hint
             }
             placement="top"
             arrow

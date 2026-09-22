@@ -14,17 +14,17 @@ const PEER_REALES = [
 describe("resolveActor", () => {
   it("prefiere el email cuando el backend lo resolvió", () => {
     const a = resolveActor({ actor_email: "javier.pacheco@certusitm.com", actor_subject: "35" });
-    expect(a).toEqual({ label: "javier.pacheco@certusitm.com", subject: "35", known: true });
+    expect(a).toMatchObject({ label: "javier.pacheco@certusitm.com", subject: "35", known: true, kind: "person" });
   });
 
   it("cae al subject cuando esa persona ya no es miembro del tenant", () => {
     // El email deja de resolver; el subject es el identificador durable y
     // sigue siendo lo citable en un ticket.
     expect(resolveActor({ actor_email: null, actor_subject: "35" }))
-      .toEqual({ label: "35", subject: "35", known: true });
+      .toMatchObject({ label: "35", subject: "35", known: true, kind: "person" });
   });
 
-  it("un evento de máquina no tiene actor, y eso se dice", () => {
+  it("sin actor_kind (backend anterior) un evento sin actor sigue saliendo «—»", () => {
     const a = resolveActor({ actor_email: null, actor_subject: null, device_id: "d-1" });
     expect(a.label).toBe(NO_ACTOR);
     expect(a.known).toBe(false);
@@ -58,5 +58,51 @@ describe("resolveActor", () => {
   it("tolera una fila ausente", () => {
     expect(resolveActor(undefined).label).toBe(NO_ACTOR);
     expect(resolveActor(null).known).toBe(false);
+  });
+});
+
+// «Who» vacío en casi todas las filas (21-sep): el backend manda ahora
+// `actor_kind`, y la columna dice QUÉ lo hizo cuando no fue una persona. Sin
+// eso, «—» se leía igual para «lo emitió el agente» que para «no se guardó
+// quién fue».
+describe("resolveActor con actor_kind", () => {
+  it.each([
+    ["agent", "Agent"],
+    ["system", "System"],
+    ["device_user", "Device user"],
+    ["unrecorded", "Not recorded"],
+  ])("sin actor, %s → «%s», sin contarlo como persona", (kind, label) => {
+    const a = resolveActor({ actor_subject: null, actor_kind: kind, device_id: "d-1" });
+    expect(a.label).toBe(label);
+    expect(a.known).toBe(false);
+    expect(a.kind).toBe(kind);
+    expect(a.hint).toBeTruthy();
+  });
+
+  it("una etiqueta `system:*` sale «System» y el sujeto queda en el detalle", () => {
+    const a = resolveActor({ actor_subject: "system:device-purge-scheduler", actor_kind: "system" });
+    expect(a.label).toBe("System");
+    expect(a.subject).toBe("system:device-purge-scheduler");
+    expect(a.known).toBe(false);
+  });
+
+  it("un script de operaciones no se presenta como una persona", () => {
+    const a = resolveActor({ actor_subject: "ops:restore-t111-policy-20260903", actor_kind: "script" });
+    expect(a.label).toBe("Ops script");
+    expect(a.subject).toBe("ops:restore-t111-policy-20260903");
+  });
+
+  it("una persona sigue saliendo con su email aunque llegue actor_kind", () => {
+    const a = resolveActor({ actor_email: "a@b.c", actor_subject: "35", actor_kind: "person" });
+    expect(a).toMatchObject({ label: "a@b.c", known: true, kind: "person" });
+  });
+
+  it("un actor_kind desconocido no inventa nada: «—»", () => {
+    expect(resolveActor({ actor_subject: null, actor_kind: "martian" }).label).toBe(NO_ACTOR);
+  });
+
+  it("⚠️ tampoco con actor_kind usa `peer`", () => {
+    const a = resolveActor({ peer: "189.203.174.69:28574", actor_subject: null, actor_kind: "unrecorded" });
+    expect(a.label).toBe("Not recorded");
   });
 });
