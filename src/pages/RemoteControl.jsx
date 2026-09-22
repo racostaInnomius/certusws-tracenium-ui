@@ -487,7 +487,6 @@ export default function RemoteControl({ onNavigate }) {
       <PageTabs
         value={activeTab}
         onChange={(_e, v) => setActiveTab(v)}
-        height={58}
         items={[
           {
             value: TAB_CONNECT,

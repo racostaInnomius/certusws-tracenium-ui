@@ -1721,7 +1721,6 @@ export default function CryptoDiscovery({ onNavigate }) {
       <PageTabs
         value={tab}
         onChange={(_e, v) => setTab(v)}
-        allowScrollButtonsMobile
         aria-label="Crypto Discovery sections"
         items={[
           { value: TAB.dashboard, label: "Dashboard", icon: <DashboardOutlinedIcon />, ...tabA11y(TAB.dashboard) },

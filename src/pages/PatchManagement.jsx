@@ -1608,7 +1608,6 @@ export default function PatchManagement({ onNavigate }) {
       <PageTabs
         value={tab}
         onChange={(_e, next) => setTab(next)}
-        allowScrollButtonsMobile
         items={CATEGORIES.map((c) => ({ value: c.key, label: c.label, icon: c.icon }))}
       />
 

@@ -278,7 +278,6 @@ export default function SoftwareDelivery({ onNavigate }) {
       <PageTabs
         value={activeTab}
         onChange={(_e, v) => setActiveTab(v)}
-        height={56}
         items={[
           { value: TAB_INDEX.overview, label: "Dashboard", icon: <SpaceDashboardOutlinedIcon /> },
           { value: TAB_INDEX.catalog, label: "Catalog", icon: <InventoryOutlinedIcon /> },

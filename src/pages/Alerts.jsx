@@ -491,7 +491,6 @@ export default function Alerts({ onNavigate }) {
       <PageTabs
         value={tab}
         onChange={(_e, next) => setTab(next)}
-        allowScrollButtonsMobile
         aria-label="Alerts sections"
         // Sin `mb`: la página ya separa sus bloques con `gap`.
         sx={{ mb: 0 }}
