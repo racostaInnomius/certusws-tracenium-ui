@@ -11,7 +11,9 @@
 //                   your devices (imports, connectors).
 //   Inventory     : the fleet list — by certificate (deduped by
 //                   fingerprint) or by device — with facets and CSV export.
-//   Trust anchors, Orphan keys and Access policy complete the set.
+//   Risk          : certificates by risk score, each row with the factors
+//                   behind its points (ola 1.6).
+//   Trust anchors, Orphan keys and Settings complete the set.
 //
 // This page reads the CDP inventory (certs discovered ON devices).
 // The PKI page covers the agent's own mTLS identity certs — different
@@ -72,6 +74,7 @@ import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import KeyOffOutlinedIcon from "@mui/icons-material/KeyOffOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
+import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 
 import PageHeader from "../components/common/PageHeader";
 import SummaryCard from "../components/common/SummaryCard";
@@ -79,6 +82,8 @@ import SectionPaper from "../components/common/SectionPaper";
 import PageTabs from "../components/common/PageTabs";
 import { ReadinessStrip, QuantumSunburst } from "../components/CryptoDiscovery/CdpQuantumExposure";
 import CdpCatalystStrip from "../components/CryptoDiscovery/CdpCatalystStrip";
+import CdpRiskStrip from "../components/CryptoDiscovery/CdpRiskStrip";
+import CdpRiskPanel from "../components/CryptoDiscovery/CdpRiskPanel";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -151,7 +156,11 @@ const TAB = {
   // Repaso UI 2026-09-05: «Access policy» pasa a «Settings» y concentra
   // todo lo que se configura (conectores, import de CBOM, matriz de
   // aprobación, enlace a la policy del agente). Mismo índice.
-  settings: 6
+  settings: 6,
+  // Ola 1.6 (22-sep): el índice 7 aunque en la barra vaya detrás de
+  // Inventory. Renumerar habría roto todo enlace guardado con `cdpTab=4..6`;
+  // el orden visual lo decide la lista de `items`, no el número.
+  risk: 7
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -247,7 +256,7 @@ function TabPanel({ value, index, children }) {
 // Repaso UI 2026-09-05: el Dashboard es un OVERVIEW. Cifras y gráficos
 // que llevan a su pestaña; la prosa (modo «explicar») vive en Explore y
 // Roadmap, donde se mira con calma.
-function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices, onOpenTab }) {
+function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices, onOpenTab, onOpenRisk }) {
   const [summary, setSummary] = React.useState(null);
   const [dashboard, setDashboard] = React.useState(null);
   const [error, setError] = React.useState(null);
@@ -472,6 +481,12 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
           </Grid>
         ))}
       </Grid>
+
+      {/* Ola 1.6: cuántos certificados hay en cada banda de riesgo. Debajo de
+          los KPI operativos porque responde lo mismo que ellos —qué hay que
+          arreglar hoy—, ordenado por cifra. Pide su propio resumen: si cae,
+          cae sola. */}
+      <CdpRiskStrip refreshNonce={refreshNonce} onOpenBand={onOpenRisk} />
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
@@ -1727,6 +1742,7 @@ export default function CryptoDiscovery({ onNavigate }) {
           { value: TAB.roadmap, label: "Roadmap", icon: <RouteOutlinedIcon />, ...tabA11y(TAB.roadmap) },
           { value: TAB.explore, label: "Explore", icon: <ExploreOutlinedIcon />, ...tabA11y(TAB.explore) },
           { value: TAB.inventory, label: "Inventory", icon: <ListAltOutlinedIcon />, ...tabA11y(TAB.inventory) },
+          { value: TAB.risk, label: "Risk", icon: <GppMaybeOutlinedIcon />, ...tabA11y(TAB.risk) },
           { value: TAB.anchors, label: "Trust anchors", icon: <VerifiedUserOutlinedIcon />, ...tabA11y(TAB.anchors) },
           // ADR-0011 decisión 9.d. Pestaña propia y no una tarjeta suelta:
           // una huérfana es un ítem del inventario, y el punto de la
@@ -1748,6 +1764,9 @@ export default function CryptoDiscovery({ onNavigate }) {
             replaceFilter({ tab: TAB.inventory, view: "devices", ...(row?.host || row?.agentId ? { search: row.host || row.agentId } : {}) })
           }
           onOpenTab={setTab}
+          // La banda se pone y se quita entera: abrir «todas» desde el botón
+          // no debe heredar la banda de una visita anterior.
+          onOpenRisk={(band) => patchFilter({ tab: TAB.risk, riskBand: band ?? "" })}
         />
       </TabPanel>
       <TabPanel value={tab} index={TAB.roadmap}>
@@ -1766,6 +1785,9 @@ export default function CryptoDiscovery({ onNavigate }) {
       </TabPanel>
       <TabPanel value={tab} index={TAB.inventory}>
         <CdpInventoryTab refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={TAB.risk}>
+        <CdpRiskPanel refreshNonce={refreshNonce} onOpenCertificate={setPageCert} />
       </TabPanel>
       <TabPanel value={tab} index={TAB.anchors}>
         <CdpTrustAnchorsTab refreshNonce={refreshNonce} />

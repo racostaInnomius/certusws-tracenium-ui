@@ -71,7 +71,13 @@ export const CDP_URL_KEYS = {
   assetSource: "asset",
   assetOrigin: "aorigin",
   // El dominio elegido en «Public domain certificates» (con aorigin=ct).
-  assetDomain: "adomain"
+  assetDomain: "adomain",
+  // Pestaña Risk (ola 1.6): la banda mínima que se lista (critical | high |
+  // medium | low) y su lente. Claves PROPIAS y no `class`: la lente de
+  // Inventory es otra decisión, y compartirla haría que cambiar una tocara
+  // la otra al pasar de pestaña.
+  riskBand: "rband",
+  riskClass: "rclass"
 };
 
 const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst"]);

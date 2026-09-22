@@ -271,3 +271,37 @@ export async function listCdpAdcsSources() {
 export async function listCdpProbeCandidates(params = {}) {
   return httpGetJson(`${BASE}/probe-candidates${buildQuery(params)}`);
 }
+
+// ── Ola 1.6: riesgo por certificado y política criptográfica ────────
+//
+// La cifra se calcula en un BARRIDO del backend, no en la ingesta: un
+// certificado recién llegado —o un tenant sin la migración aplicada— sale
+// en la banda `unscored`, que NO es lo mismo que `none` (puntuado y sin
+// factores). Los pesos y los umbrales viajan con el resumen para que la UI
+// los enseñe sin copiarlos.
+
+/** Certificados por banda + factores más comunes + pesos y umbrales. */
+export async function getCdpRiskSummary({ certClass } = {}) {
+  return httpGetJson(`${BASE}/risk/summary${buildQuery({ certClass })}`);
+}
+
+/** Los certificados con más riesgo, con su desglose de factores. */
+export async function listCdpRiskTop({ limit, certClass, minBand } = {}) {
+  return httpGetJson(`${BASE}/risk/top${buildQuery({ limit, certClass, minBand })}`);
+}
+
+export async function getCdpCryptoPolicy() {
+  return httpGetJson(`${BASE}/crypto-policy`);
+}
+
+/**
+ * Reemplazo COMPLETO de la política (no un parche): lo que no va en
+ * `rules` deja de evaluarse. `{}` = sin reglas. El backend vuelve a
+ * puntuar el tenant en el acto y devuelve `rescored`.
+ *
+ * 400 `{ error: "<CAMPO>_INVALID" }` y 503 `SCHEMA_NOT_MIGRATED` llegan
+ * como error con `code`; quien llama los traduce.
+ */
+export async function putCdpCryptoPolicy(rules = {}) {
+  return httpPutJson(`${BASE}/crypto-policy`, { rules });
+}

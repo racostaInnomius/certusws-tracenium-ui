@@ -32,6 +32,12 @@ vi.mock("../api/cdp", async (importOriginal) => {
   const real = await importOriginal();
   return {
     ...real,
+    // Ola 1.6 — riesgo y política criptográfica. Mockeados aunque esta prueba
+    // no vaya de eso: la tira del Dashboard y Settings los piden al montar, y
+    // una petición sin handler es un fallo de la prueba, no del código.
+    getCdpRiskSummary: vi.fn(async () => ({ ok: true, bands: {}, factors: [], weights: {}, bandThresholds: [] })),
+    listCdpRiskTop: vi.fn(async () => ({ ok: true, items: [] })),
+    getCdpCryptoPolicy: vi.fn(async () => ({ ok: true, rules: {} })),
     getCdpSummary: vi.fn(async () => ({})),
     getCdpDashboard: vi.fn(async () => ({})),
     getCdpFacets: vi.fn(async () => ({ rows: [] })),

@@ -23,9 +23,12 @@ import { CDP_URL_KEYS } from "../../hooks/useCdpFilter";
  *   assetSource  — origen elegido en «Outside your devices» (Explore). Lo
  *   assetOrigin    que vive ahí no tiene fila en el inventario: propagarlo
  *                  a estas facetas no acotaría nada, lo dejaría a cero.
+ *   riskBand     — banda y lente de la pestaña Risk (ola 1.6). Son de ESA
+ *   riskClass      lista (/risk/top), no del inventario: la lista de
+ *                  Inventory no las lee, así que las facetas tampoco.
  * Cualquier otra ES un filtro y tiene que viajar a las facetas.
  */
-const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain"]);
+const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain", "riskBand", "riskClass"]);
 
 const VALOR_DE_MUESTRA = {
   search: "msig",
