@@ -139,13 +139,17 @@ describe("fijar los objetivos", () => {
     expect(screen.queryByRole("button", { name: /targets/i })).not.toBeInTheDocument();
   });
 
+  // El toast de la página pinta `toast.message`: el aviso viaja como objeto,
+  // no como dos argumentos sueltos (si no, el Alert sale en blanco).
   it("un fallo al guardar se cuenta", async () => {
     const onToast = vi.fn();
     updateComplianceSettings.mockRejectedValue({ body: { error: "INVALID" } });
     render(<SlaPanel canManage onToast={onToast} />);
     fireEvent.click(await screen.findByRole("button", { name: /edit targets/i }));
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    await waitFor(() => expect(onToast).toHaveBeenCalledWith("INVALID", "error"));
+    await waitFor(() =>
+      expect(onToast).toHaveBeenCalledWith({ severity: "error", message: "INVALID" })
+    );
   });
 });
 

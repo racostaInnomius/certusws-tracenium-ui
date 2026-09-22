@@ -12,7 +12,7 @@
 //     tocar doce equipos creyendo que estabas probando.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 vi.mock("../../api/compliance", () => ({ getRemediationHub: vi.fn() }));
 vi.mock("../../api/patchManagement", () => ({ remediate: vi.fn() }));
@@ -157,13 +157,17 @@ describe("lanzar", () => {
     expect(drawerProps.current.canManage).toBe(true);
   });
 
-  it("los avisos del drawer llegan al toast del hub con el orden de argumentos del hub", async () => {
+  // ⚠️ El aviso del drawer tiene que LEERSE. `showToast` (SecurityCompliance)
+  // hace `setToast(t)` y pinta `toast.message` / `toast.severity`: si se le
+  // pasan dos argumentos sueltos, el Alert sale vacío. Así se perdió el 400 de
+  // «Simulate» — el error llegaba a la página y no se veía nada.
+  it("⭐ el aviso del drawer llega al toast de la página con su forma: {severity, message}", async () => {
     const onToast = vi.fn();
     render(<RemediationHubPanel canManage onToast={onToast} />);
     fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
     await screen.findByTestId("fix-drawer");
     drawerProps.current.notify("error", "PMP_PLUGIN_DISABLED");
-    expect(onToast).toHaveBeenCalledWith("PMP_PLUGIN_DISABLED", "error");
+    expect(onToast).toHaveBeenCalledWith({ severity: "error", message: "PMP_PLUGIN_DISABLED" });
   });
 });
 

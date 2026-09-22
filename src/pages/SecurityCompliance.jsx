@@ -2090,6 +2090,16 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         }}
       />
 
+      </>
+      )}
+
+      {/* ⚠️ FUERA del bloque de Posture. Desde que la página se partió en
+          pestañas (f4731cc), todo esto quedó dentro de
+          `effectiveTab !== "posture" ? null : (…)` — y con ello el ÚNICO
+          sitio donde se pintan los avisos. En Fix, Exceptions, Catalog y
+          Settings los paneles llamaban a `showToast` y no salía nada: así se
+          perdió el 400 de «Simulate» el 22-sep. El aviso es de la página
+          entera, así que vive donde vive la página. */}
       <Snackbar
         open={Boolean(toast)}
         autoHideDuration={toast?.severity === "success" ? 4000 : 6000}
@@ -2107,9 +2117,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           </Alert>
         ) : undefined}
       </Snackbar>
-
-      </>
-      )}
     </Box>
   );
 }

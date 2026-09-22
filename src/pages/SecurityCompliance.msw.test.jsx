@@ -795,3 +795,53 @@ describe("SecurityCompliance — familias de frameworks", () => {
     expect(within(ubu).getByText("CIS Ubuntu 24")).toBeInTheDocument();
   });
 });
+
+// ── La pestaña «Fix» y su aviso ───────────────────────────────────────
+//
+// El 22-sep el operador pulsó «Simulate» dos veces y no vio NADA: ni una
+// remediación en la base (cero `dry_run` desde el 17-sep) ni un mensaje en
+// pantalla. Eran tres defectos encadenados: la llamada iba sin equipos y el
+// backend la rechazaba con 400; el aviso de ese 400 viajaba como dos
+// argumentos sueltos donde `showToast` espera `{severity, message}`; y el
+// Snackbar de la página estaba DENTRO del bloque que sólo se pinta en
+// «Posture», así que en Fix no había ni dónde pintarlo.
+//
+// El primero se arregla donde se lanza el fix; esto fija los otros dos por
+// donde se ven: el texto del error tiene que estar EN PANTALLA, estando en la
+// pestaña Fix. Se prueba con el panel de objetivos, que avisa por ese mismo
+// camino.
+describe("SecurityCompliance — el aviso de la pestaña Fix se lee", () => {
+  const SLA = {
+    configured: true,
+    targets: { critical: 7, high: 30, medium: 90, low: null },
+    measured: 4, onTime: 1, atRisk: 1, breached: 2, compliancePct: 50,
+    noTarget: 1, excluded: 1,
+    bySeverity: [
+      { severity: "critical", targetDays: 7, onTime: 1, atRisk: 1, breached: 1, excluded: 1, oldestOpenDays: 10 },
+      { severity: "high", targetDays: 30, onTime: 0, atRisk: 0, breached: 1, excluded: 0, oldestOpenDays: null },
+      { severity: "medium", targetDays: 90, onTime: 0, atRisk: 0, breached: 0, excluded: 0, oldestOpenDays: null },
+      { severity: "low", targetDays: null, onTime: 0, atRisk: 0, breached: 0, excluded: 0, oldestOpenDays: null },
+    ],
+    worst: [],
+    generatedAt: "2026-09-22T12:00:00.000Z",
+  };
+
+  it("⭐ un fallo al guardar se LEE en el toast, no sale un aviso en blanco", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    respond("get", `${BASE}/sla`, SLA);
+    respond("get", `${BASE}/remediation-hub`, { ok: true, actions: [], totals: { actions: 0, devices: 0, findings: 0 } });
+    const putCalls = respond("put", `${BASE}/settings`, { ok: false, error: "COMPLIANCE_TARGET_INVALID" }, { status: 400 });
+    await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("tab", { name: /^Fix/ }));
+    await screen.findByText("Remediation targets");
+    fireEvent.click(await screen.findByRole("button", { name: /edit targets/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() => expect(putCalls.length).toBe(1));
+    // El mensaje del backend, EN PANTALLA. Antes ni siquiera había Snackbar
+    // en esta pestaña: el aviso se llamaba y se perdía.
+    expect(await screen.findByText("COMPLIANCE_TARGET_INVALID")).toBeInTheDocument();
+  });
+});

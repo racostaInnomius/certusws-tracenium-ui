@@ -267,7 +267,11 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
         finding={fixFinding}
         checkIds={openAction?.checkIds ?? null}
         canManage={canManage && Boolean(openAction?.canApply)}
-        notify={(severity, message) => onToast?.(message, severity)}
+        // El toast de la página (`showToast` en SecurityCompliance.jsx) recibe
+        // UN objeto `{severity, message}`; el drawer avisa con dos argumentos.
+        // Pasarlos sueltos dejaba `toast.message` en undefined y el aviso salía
+        // en blanco: el 400 de «Simulate» no se veía por ninguna parte.
+        notify={(severity, message) => onToast?.({ severity, message })}
         onClose={() => setOpenAction(null)}
         onChanged={load}
       />

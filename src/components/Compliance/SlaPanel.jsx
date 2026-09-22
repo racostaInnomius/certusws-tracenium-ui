@@ -102,10 +102,14 @@ export default function SlaPanel({ reloadKey, canManage = false, onToast }) {
       }
       await updateComplianceSettings(patch);
       setDraft(null);
-      onToast?.("Remediation targets saved", "success");
+      // `{severity, message}`: es la forma que espera el toast de la página.
+      onToast?.({ severity: "success", message: "Remediation targets saved" });
       await load();
     } catch (e) {
-      onToast?.(e?.body?.error || e?.message || "Could not save the targets", "error");
+      onToast?.({
+        severity: "error",
+        message: e?.body?.error || e?.message || "Could not save the targets",
+      });
     } finally {
       setSaving(false);
     }
