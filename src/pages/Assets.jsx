@@ -41,7 +41,8 @@ import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 // Pestañas que se pueden abrir desde un enlace (`?assetsTab=hardware`). Sólo
-// las que alguien enlaza hoy; el índice es el `value` de su pestaña en `PageTabs`, abajo.
+// las que alguien enlaza hoy; el índice es el `value` de su pestaña en `PageTabs`,
+// abajo — NO su posición en la barra (que es alfabética tras Dashboard).
 //
 // `gpos` y `coverage` eran pestañas propias antes de fundirse en
 // "Windows Domain" — un enlace o marcador viejo con esa clave sigue
@@ -234,18 +235,23 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
         value={visibleTab}
         onChange={handleChange}
         items={[
-          // Tab order is intentional: Dashboard (overview) → Asset
-          // Groups (organizational layer over the fleet) → the two
-          // inventory drilldowns. The Dashboard label replaced the
-          // previous "Asset Management" tab because the page itself
-          // is already named "Asset Management" — the duplicated label
-          // read as redundant in the tab bar.
+          // Orden: Dashboard primero (la página ya se llama "Asset
+          // Management", por eso no repite ese nombre) y el resto
+          // ALFABÉTICO — lo pidió el usuario el 22-sep-2026. El orden de la
+          // barra es sólo de presentación: cada pestaña conserva su `value`,
+          // que es lo que usan los enlaces (?assetsTab=) y los TabPanel, así
+          // que reordenar aquí no mueve nada más.
           { value: 0, label: "Dashboard", icon: <DashboardOutlinedIcon />, ...a11yProps(0) },
           { value: 1, label: "Asset Groups", icon: <GroupWorkOutlinedIcon />, ...a11yProps(1) },
           { value: 2, label: "Hardware Inventory", icon: <MemoryOutlinedIcon />, ...a11yProps(2) },
+          // ADR-0029 — preguntar AHORA a los equipos conectados. Aquí y no en
+          // la barra lateral: hoy son seis preguntas fijas sobre el estado
+          // del equipo, no una pregunta libre. Sólo con el permiso.
+          canLiveQuery
+            ? { value: LIVE_QUERY_TAB, label: "Live Query", icon: <ManageSearchOutlinedIcon />, ...a11yProps(LIVE_QUERY_TAB) }
+            : null,
           // UNA pestaña, tres secciones dentro (Geofences, Location history,
-          // Recent transitions): son la misma funcionalidad sobre la misma
-          // evidencia, no tres cosas que compitan por sitio en esta barra.
+          // Fence activity): la misma funcionalidad sobre la misma evidencia.
           { value: 3, label: "Location", icon: <HistoryOutlinedIcon />, ...a11yProps(3) },
           // Las impresoras de la FLOTA agrupadas en colas; las de un equipo
           // siguen en su detalle.
@@ -254,16 +260,8 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
           // Lo que sabemos del dominio Windows — GPOs aplicadas y qué falta
           // incorporar. Ninguna de las dos se le pregunta nunca a un Mac o
           // un Linux, así que van juntas y no como dimensiones de inventario
-          // multiplataforma. Dos secciones dentro (ver WindowsDomainPanel),
-          // mismo formato que Patch Management → Configure.
+          // multiplataforma. Dos secciones dentro (ver WindowsDomainPanel).
           { value: WINDOWS_TAB, label: "Windows Domain", icon: <DomainOutlinedIcon />, ...a11yProps(WINDOWS_TAB) },
-          // ADR-0029 — preguntar AHORA a los equipos conectados. Aquí y no en
-          // la barra lateral: hoy son seis preguntas fijas sobre el estado
-          // del equipo, no una pregunta libre. Al final: la última pestaña,
-          // así su presencia condicional no mueve los índices de las demás.
-          canLiveQuery
-            ? { value: LIVE_QUERY_TAB, label: "Live Query", icon: <ManageSearchOutlinedIcon />, ...a11yProps(LIVE_QUERY_TAB) }
-            : null,
         ]}
       />
 
