@@ -36,7 +36,8 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount(onNavigate = vi.fn()) {
+function mount(opts = {}) {
+  const onNavigate = typeof opts === "function" ? opts : (opts.onNavigate ?? vi.fn());
   const calls = [];
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
@@ -48,7 +49,7 @@ function mount(onNavigate = vi.fn()) {
       });
     })
   );
-  window.history.replaceState({}, "", "/?page=alerts");
+  if (!opts.keepUrl) window.history.replaceState({}, "", "/?page=alerts");
   render(<Alerts onNavigate={onNavigate} />);
   return calls;
 }
@@ -68,14 +69,31 @@ describe("Alerts — cabecera", () => {
     expect(params.get("reportFormat")).toBe("pdf");
   });
 
-  it("va a la misma altura que los otros dos botones de la fila", async () => {
+  it("Report y Refresh van a la misma altura", async () => {
     mount();
-    const rules = await screen.findByRole("button", { name: /manage rules/i });
-    const report = screen.getByRole("button", { name: /^report$/i });
+    const report = await screen.findByRole("button", { name: /^report$/i });
     const refresh = screen.getByRole("button", { name: /^refresh$/i });
-    for (const b of [rules, report, refresh]) {
+    for (const b of [report, refresh]) {
       expect(b.className).not.toMatch(/sizeSmall/);
     }
+  });
+
+  it("⭐ la configuración son pestañas, como en las otras páginas — ya no botones que abren drawers", async () => {
+    mount();
+    expect(await screen.findByRole("tab", { name: /^alerts$/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /^rules$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /manage rules/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^destinations$/i })).not.toBeInTheDocument();
+  });
+
+  it("la pestaña va en la URL (?alertsTab=) y se puede enlazar", async () => {
+    window.history.replaceState({}, "", "/?page=alerts&alertsTab=rules");
+    const calls = mount({ keepUrl: true });
+    expect(await screen.findByRole("tab", { name: /^rules$/i })).toHaveAttribute("aria-selected", "true");
+    void calls;
+    await userEvent.click(screen.getByRole("tab", { name: /^alerts$/i }));
+    // La pestaña por defecto no ensucia la URL.
+    expect(new URL(window.location.href).searchParams.get("alertsTab")).toBeNull();
   });
 });
 

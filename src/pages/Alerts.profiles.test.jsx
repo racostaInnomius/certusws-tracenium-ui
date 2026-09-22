@@ -1,6 +1,7 @@
 // src/pages/Alerts.profiles.test.jsx
 //
-// ADR-0025 F2 — perfiles de notificaciones en el drawer "Manage rules".
+// ADR-0025 F2 — perfiles de notificaciones, en su pestaña de Alerts
+// (antes vivían en el drawer "Manage rules", que ya no existe).
 //
 // Lo caro aquí es silencioso o ruidoso a destiempo:
 //   * pedir /notify-profiles o /members sin la capacidad dispara el aviso
@@ -127,10 +128,11 @@ function mount({ permissions = ["alerts", "tenant_members"], deleteResponse, rul
   return { calls, bodies };
 }
 
+/** La pestaña Rules; las de perfiles y destinos se abren con su nombre. */
 async function openDrawer() {
-  await userEvent.click(await screen.findByRole("button", { name: /manage rules/i }));
-  return screen.findByText("Manage alert rules");
+  await userEvent.click(await screen.findByRole("tab", { name: /^rules$/i }));
 }
+const profilesTab = () => screen.findByRole("tab", { name: /notification profiles/i });
 
 describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
   it("⚠️ sin la capacidad `alerts` no hay pestaña, y NO se pide nada que devuelva 403", async () => {
@@ -138,7 +140,9 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
     await openDrawer();
     await waitFor(() => expect(calls.some((c) => c.endsWith("/roles/me/capabilities"))).toBe(true));
 
-    expect(screen.queryByRole("tab", { name: /profiles/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /notification profiles/i })).not.toBeInTheDocument();
+    // Destinations (SIEM) exige la misma capacidad: tampoco aparece.
+    expect(screen.queryByRole("tab", { name: /destinations/i })).not.toBeInTheDocument();
     expect(calls.some((c) => c.includes("/notify-profiles"))).toBe(false);
     expect(calls.some((c) => c.includes("/notify-roles"))).toBe(false);
     expect(calls.some((c) => c.includes("/members"))).toBe(false);
@@ -148,7 +152,7 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
   it("con `alerts` enseña los perfiles, con su audiencia y cuántas reglas los usan", async () => {
     mount();
     await openDrawer();
-    await userEvent.click(await screen.findByRole("tab", { name: /profiles \(1\)/i }));
+    await userEvent.click(await screen.findByRole("tab", { name: /notification profiles \(1\)/i }));
 
     expect(await screen.findByText("IT on-call")).toBeInTheDocument();
     expect(screen.getByText(/ADMIN · 1 address/)).toBeInTheDocument();
@@ -158,7 +162,7 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
   it("crear un perfil con una persona envía su subject", async () => {
     const { bodies } = mount();
     await openDrawer();
-    await userEvent.click(await screen.findByRole("tab", { name: /profiles/i }));
+    await userEvent.click(await profilesTab());
     await userEvent.click(screen.getByRole("button", { name: /new profile/i }));
 
     await userEvent.type(screen.getByRole("textbox", { name: "Profile name" }), "Security");
@@ -179,7 +183,7 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
     // Mandar `members: []` en un PATCH borraría a las personas del perfil.
     const { calls, bodies } = mount({ permissions: ["alerts"] });
     await openDrawer();
-    await userEvent.click(await screen.findByRole("tab", { name: /profiles/i }));
+    await userEvent.click(await profilesTab());
     await userEvent.click(screen.getByRole("button", { name: /new profile/i }));
 
     expect(screen.getByText(/You can't list tenant members/)).toBeInTheDocument();
@@ -200,7 +204,7 @@ describe("Alerts — perfiles de notificaciones (ADR-0025)", () => {
       ),
     });
     await openDrawer();
-    await userEvent.click(await screen.findByRole("tab", { name: /profiles/i }));
+    await userEvent.click(await profilesTab());
     await userEvent.click(await screen.findByRole("button", { name: "Delete IT on-call" }));
     const dialog = await screen.findByRole("dialog", { name: /delete "it on-call"/i });
     await userEvent.click(within(dialog).getByRole("button", { name: /delete profile/i }));

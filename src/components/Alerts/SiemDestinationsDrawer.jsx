@@ -210,7 +210,11 @@ function DestinationForm({ initial, editing, onCancel, onSaved, notify, canExpor
   );
 }
 
-export default function SiemDestinationsDrawer({ onClose, notify = () => {} }) {
+/**
+ * `embedded` — rendered inside the Destinations tab of Alerts instead of a
+ * drawer: no header (the tab names it) and no close button.
+ */
+export default function SiemDestinationsDrawer({ onClose, notify = () => {}, embedded = false }) {
   const [items, setItems] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [form, setForm] = React.useState(null); // { initial, editing }
@@ -247,7 +251,11 @@ export default function SiemDestinationsDrawer({ onClose, notify = () => {} }) {
   };
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }} data-testid="siem-destinations-drawer">
+    <Box
+      sx={embedded ? undefined : { display: "flex", flexDirection: "column", height: "100%" }}
+      data-testid="siem-destinations-drawer"
+    >
+      {embedded ? null : (
       <Stack direction="row" alignItems="center" sx={{ p: 2, borderBottom: `1px solid ${BRAND.border}` }}>
         <HubOutlinedIcon sx={{ color: BRAND.teal, mr: 1 }} />
         <Box sx={{ flex: 1 }}>
@@ -258,8 +266,9 @@ export default function SiemDestinationsDrawer({ onClose, notify = () => {} }) {
           <CloseOutlinedIcon fontSize="small" />
         </IconButton>
       </Stack>
+      )}
 
-      <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
+      <Box sx={embedded ? undefined : { flex: 1, overflowY: "auto", p: 2 }}>
         <Alert severity="info" sx={{ mb: 2 }}>
           Each alert is sent when it appears and, if you choose, when it is resolved — not again every hour it stays
           open. Delivery is at least once and in order; every event carries a stable id to deduplicate. A new

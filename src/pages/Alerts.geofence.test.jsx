@@ -70,9 +70,9 @@ function montar({ rules = [] } = {}) {
 }
 
 describe("Alerts — geocercas", () => {
-  it("⭐ la plantilla sale en Manage alert rules y su interruptor la crea", async () => {
+  it("⭐ la plantilla sale en la pestaña Rules y su interruptor la crea", async () => {
     const posts = montar();
-    await userEvent.click(await screen.findByRole("button", { name: /manage rules/i }));
+    await userEvent.click(await screen.findByRole("tab", { name: /^rules$/i }));
 
     expect(await screen.findByText("Device left a geofence")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("checkbox", { name: /Device left a geofence/i }));
@@ -98,7 +98,7 @@ describe("Alerts — geocercas", () => {
         criteria: { directions: ["left"] }, notify: {},
       }],
     });
-    await userEvent.click(await screen.findByRole("button", { name: /manage rules/i }));
+    await userEvent.click(await screen.findByRole("tab", { name: /^rules$/i }));
 
     const etiquetas = [...document.querySelectorAll(".MuiChip-label")].map((c) => c.textContent);
     expect(etiquetas).toContain("Geofence");

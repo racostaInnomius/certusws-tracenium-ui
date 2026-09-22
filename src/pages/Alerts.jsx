@@ -11,7 +11,7 @@
 // composes it on demand from the enabled rules. See
 // /api/v1/alerts/events in alerts.service.ts.
 
-import { searchForPage } from "../utils/browserState";
+import { searchForPage, getSearchParam, updateSearchParams } from "../utils/browserState";
 import * as React from "react";
 import {
   Box,
@@ -19,14 +19,12 @@ import {
   Chip,
   CircularProgress,
   Drawer,
-  FormControlLabel,
   Grid,
   IconButton,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Switch,
   Tab,
   Table,
   TableBody,
@@ -36,10 +34,8 @@ import {
   TableRow,
   Tabs,
   TextField,
-  Tooltip,
   Typography
 } from "@mui/material";
-import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -56,6 +52,8 @@ import BrandSnackbar from "../components/common/BrandSnackbar";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
@@ -66,8 +64,9 @@ import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined
 import { BRAND, ROLE, TEXT } from "../theme/brand";
 import { formatOpenFor } from "../utils/alertAge";
 import { severityMeta } from "../theme/severity";
-import RuleNotifyEditor, { NotifyBadge } from "../components/Alerts/RuleNotifyEditor";
 import NotifyProfilesPanel from "../components/Alerts/NotifyProfilesPanel";
+import AlertRulesPanel from "../components/Alerts/AlertRulesPanel";
+import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useNotifyProfiles } from "../components/Alerts/useNotifyProfiles";
 import { describeTargets, describeNotifyError, hasAnyTarget } from "../components/Alerts/notifyHelpers";
 import {
@@ -234,15 +233,62 @@ const TIME_WINDOWS = [
 
 const DEFAULT_WINDOW_HOURS = 24 * 7; // product decision: 7 days default
 
+const ALERTS_TABS = ["alerts", "rules", "profiles", "destinations"];
+const MANAGE_ONLY_TABS = ["profiles", "destinations"];
+
+// Mismo estilo que Patch Management, Security Compliance, Crypto Discovery y
+// Reports (cada una tiene su copia de TAB_SX; ver la deuda anotada allí).
+const TAB_SX = {
+  textTransform: "none",
+  fontWeight: 700,
+  minHeight: 62,
+  color: "text.secondary",
+  "&.Mui-selected": { color: BRAND.dark },
+};
+
+/**
+ * A refused switch-on says WHY: the plugin is not in the plan (402) or it is
+ * turned off in Agent Settings (403 PLUGIN_DISABLED). The Rules tab already
+ * locks those switches; this covers a stale screen after a plan change.
+ */
+function describeRuleError(err, fallback) {
+  const code = String(err?.body?.error || err?.code || "").toUpperCase();
+  const plugin = String(err?.body?.plugin || "").toUpperCase();
+  if (code === "PLUGIN_NOT_ENTITLED") {
+    const tier = err?.body?.tierRequired;
+    return `${plugin || "This plugin"} is not in your plan${tier ? ` — it requires the ${tier} plan` : ""}.`;
+  }
+  if (code === "PLUGIN_DISABLED") return `${plugin || "This plugin"} is turned off in Agent Settings.`;
+  return fallback;
+}
+
 export default function Alerts({ onNavigate }) {
   const [windowHours, setWindowHours] = React.useState(DEFAULT_WINDOW_HOURS);
   const [minSeverity, setMinSeverity] = React.useState(""); // "" = all
   const [sourceFilter, setSourceFilter] = React.useState(""); // "" = all
   const [searchText, setSearchText] = React.useState("");
 
-  const [rulesDrawerOpen, setRulesDrawerOpen] = React.useState(false);
-  // ADR-0028 — a dónde salen las alertas (SIEM del cliente o de su MSP).
-  const [destinationsOpen, setDestinationsOpen] = React.useState(false);
+  // Pestañas, como el resto de páginas grandes: la configuración ya no vive
+  // en dos drawers. Enlazable con ?alertsTab= (mismo patrón que ?pmTab=).
+  const [tab, setTab] = React.useState(() => {
+    const wanted = getSearchParam("alertsTab", "");
+    return ALERTS_TABS.includes(wanted) ? wanted : "alerts";
+  });
+  React.useEffect(() => {
+    updateSearchParams({ alertsTab: tab === "alerts" ? null : tab });
+  }, [tab]);
+  // Perfiles y destinos exigen la capacidad `alerts` (lectura incluida);
+  // sin ella sus pestañas no existen y no se pide nada que dé 403.
+  const np = useNotifyProfiles();
+  const canManage = Boolean(np.access?.canManage);
+  const visibleTabs = ALERTS_TABS.filter((k) => canManage || !MANAGE_ONLY_TABS.includes(k));
+  // Una URL que pide una pestaña que este usuario no puede ver cae al feed —
+  // pero sólo cuando ya se SABE que no puede: mientras cargan los permisos,
+  // no se le cambia la pestaña a nadie.
+  React.useEffect(() => {
+    if (np.access && !visibleTabs.includes(tab)) setTab("alerts");
+  }, [np.access, tab, visibleTabs]);
+  const { catalog: pluginCatalog } = usePluginCatalog();
   const [detailEvent, setDetailEvent] = React.useState(null);
   const [snackbar, setSnackbar] = React.useState({ open: false, message: "", severity: "info" });
 
@@ -293,6 +339,9 @@ export default function Alerts({ onNavigate }) {
     return {
       rules: Array.isArray(res?.rules) ? res.rules : [],
       templates: Array.isArray(res?.templates) ? res.templates : [],
+      // null = el backend no pudo saberlo (o es anterior al gate): no se bloquea nada.
+      pluginAvailability:
+        res?.pluginAvailability && typeof res.pluginAvailability === "object" ? res.pluginAvailability : null,
     };
   }, []);
 
@@ -356,7 +405,10 @@ export default function Alerts({ onNavigate }) {
 
   const lastMatchAt = events.length > 0 ? events[0].occurredAt : null;
 
-  const activeRuleCount = rules.filter((r) => r.enabled).length;
+  // Una regla pausada (su plugin no está disponible) NO está activa: el
+  // backend no la evalúa. Contarla aquí sería decir que avisa cuando no.
+  const activeRuleCount = rules.filter((r) => r.enabled && !r.paused).length;
+  const pausedRuleCount = rules.filter((r) => r.paused).length;
 
   /**
    * ⚠️ Se cuenta por la EDAD (`firstSeenAt`), no por `occurredAt`.
@@ -390,21 +442,6 @@ export default function Alerts({ onNavigate }) {
         icon={<NotificationsOutlinedIcon />}
         actions={
           <>
-            <Button
-              variant="outlined"
-              startIcon={<TuneOutlinedIcon />}
-              onClick={() => setRulesDrawerOpen(true)}
-              sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
-            >
-              Manage rules
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => setDestinationsOpen(true)}
-              sx={{ borderColor: BRAND.border, color: BRAND.dark, "&:hover": { borderColor: BRAND.teal, bgcolor: BRAND.tealSoft } }}
-            >
-              Destinations
-            </Button>
             <GoToReportButton
               onNavigate={onNavigate}
               reportKey={ALERTS_REPORT_KEY}
@@ -437,7 +474,7 @@ export default function Alerts({ onNavigate }) {
             title="Active rules"
             value={activeRuleCount}
             icon={<RuleOutlinedIcon />}
-            subtext={`${rules.length} total`}
+            subtext={pausedRuleCount ? `${rules.length} total · ${pausedRuleCount} paused` : `${rules.length} total`}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -460,7 +497,41 @@ export default function Alerts({ onNavigate }) {
         </Grid>
       </Grid>
 
-      {/* Filter bar + feed --------------------------------------------- */}
+      {/* Tab bar — su propio panel, como en las otras páginas: la navegación
+          no comparte caja con lo que navega. ------------------------------ */}
+      <SectionPaper variant="panel" sx={{ p: 0, overflow: "hidden" }}>
+        <Tabs
+          value={tab}
+          onChange={(_e, next) => setTab(next)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+          aria-label="Alerts sections"
+          sx={{
+            px: { xs: 1, sm: 2 },
+            minHeight: 62,
+            "& .MuiTabs-indicator": { height: 3, borderRadius: 999, backgroundColor: BRAND.teal },
+          }}
+        >
+          <Tab value="alerts" label="Alerts" icon={<NotificationsOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
+          <Tab value="rules" label="Rules" icon={<TuneOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
+          {canManage ? (
+            <Tab
+              value="profiles"
+              label={np.profiles?.length ? `Notification profiles (${np.profiles.length})` : "Notification profiles"}
+              icon={<GroupsOutlinedIcon fontSize="small" />}
+              iconPosition="start"
+              sx={TAB_SX}
+            />
+          ) : null}
+          {canManage ? (
+            <Tab value="destinations" label="Destinations" icon={<HubOutlinedIcon fontSize="small" />} iconPosition="start" sx={TAB_SX} />
+          ) : null}
+        </Tabs>
+      </SectionPaper>
+
+      {/* Alerts tab: filter bar + feed ---------------------------------- */}
+      {tab === "alerts" ? (
       <SectionPaper variant="panel" sx={{ p: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ mb: 1.5, alignItems: { md: "center" } }}>
           <TextField
@@ -628,93 +699,113 @@ export default function Alerts({ onNavigate }) {
         </Stack>
       </SectionPaper>
 
-      {/* ADR-0028 — destinos SIEM -------------------------------------- */}
-      <Drawer
-        anchor="right"
-        open={destinationsOpen}
-        onClose={() => setDestinationsOpen(false)}
-        PaperProps={{ sx: { width: { xs: "100%", sm: 560, md: 640 }, maxWidth: "100%" } }}
-      >
-        {destinationsOpen ? <SiemDestinationsDrawer onClose={() => setDestinationsOpen(false)} notify={notify} /> : null}
-      </Drawer>
+      ) : null}
 
-      {/* Manage Rules drawer ------------------------------------------- */}
-      <Drawer
-        anchor="right"
-        open={rulesDrawerOpen}
-        onClose={() => setRulesDrawerOpen(false)}
-        PaperProps={{
-          sx: { width: { xs: "100%", sm: 520, md: 600 }, maxWidth: "100%" }
-        }}
-      >
-        <ManageRulesDrawer
-          templates={templates}
-          rules={rules}
-          loading={loadingRules}
-          onClose={() => setRulesDrawerOpen(false)}
-          onRefresh={refetchRules}
-          onToggle={async (rule, enabled) => {
-            try {
-              await patchAlertRule(rule.id, { enabled });
-              notify("success", `${rule.name} ${enabled ? "enabled" : "disabled"}`);
+      {/* Rules tab — el catálogo agrupado por plugin ----------------------- */}
+      {tab === "rules" ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }}>
+          <AlertRulesPanel
+            templates={templates}
+            rules={rules}
+            availability={rulesData?.pluginAvailability ?? null}
+            catalog={pluginCatalog}
+            loading={loadingRules}
+            onNavigate={onNavigate}
+            renderSeverity={(severity) => <SeverityChip severity={severity} />}
+            profileNames={np.profileNames}
+            editorProps={{
+              profiles: np.profiles,
+              onManageProfiles: () => setTab("profiles"),
+              roleOptions: np.roleOptions,
+            }}
+            onToggle={async (rule, enabled) => {
+              try {
+                await patchAlertRule(rule.id, { enabled });
+                notify("success", `${rule.name} ${enabled ? "enabled" : "disabled"}`);
+                refetchRules();
+              } catch (err) {
+                console.error(err);
+                notify("error", describeRuleError(err, "Rule toggle failed"));
+              }
+            }}
+            onEnableTemplate={async (template) => {
+              try {
+                await createAlertRule({
+                  templateId: template.templateId,
+                  name: template.name,
+                  severity: template.defaultSeverity,
+                  source: template.source,
+                  criteria: template.defaultCriteria ?? {},
+                  enabled: true
+                });
+                notify("success", `${template.name} enabled`);
+                refetchRules();
+                refetchFeed();
+              } catch (err) {
+                console.error(err);
+                notify("error", describeRuleError(err, "Could not enable template"));
+              }
+            }}
+            onSaveNotify={async (rule, notifyConfig) => {
+              try {
+                await patchAlertRule(rule.id, { notify: notifyConfig });
+                // Cuenta todas las vías, no sólo `email`: una regla que avisa
+                // a un perfil decía «email delivery off».
+                notify(
+                  "success",
+                  hasAnyTarget(notifyConfig)
+                    ? `${rule.name}: delivery saved — ${describeTargets(notifyConfig)}`
+                    : `${rule.name}: email delivery off`
+                );
+                refetchRules();
+              } catch (err) {
+                console.error(err);
+                // The backend rejects bad recipients by name — show it, so a
+                // typo is fixed instead of saving "successfully" and never
+                // delivering.
+                notify("error", describeNotifyError(err, "Could not save email delivery — check the recipients"));
+              }
+            }}
+            onDeleteRule={async (rule) => {
+              try {
+                await deleteAlertRule(rule.id);
+                notify("success", `${rule.name} removed`);
+                refetchRules();
+                refetchFeed();
+              } catch (err) {
+                console.error(err);
+                notify("error", "Delete failed");
+              }
+            }}
+          />
+        </SectionPaper>
+      ) : null}
+
+      {/* Notification profiles tab (ADR-0025) ------------------------------ */}
+      {tab === "profiles" && canManage ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }}>
+          <NotifyProfilesPanel
+            profiles={np.profiles ?? []}
+            loading={np.loadingProfiles && !np.profiles}
+            members={np.members}
+            canListMembers={Boolean(np.access?.canListMembers)}
+            roleOptions={np.roleOptions}
+            notify={notify}
+            onChanged={() => {
+              np.reload();
+              // Borrar o renombrar un perfil cambia los badges de las reglas.
               refetchRules();
-            } catch (err) {
-              console.error(err);
-              notify("error", "Rule toggle failed");
-            }
-          }}
-          onEnableTemplate={async (template) => {
-            try {
-              await createAlertRule({
-                templateId: template.templateId,
-                name: template.name,
-                severity: template.defaultSeverity,
-                source: template.source,
-                criteria: template.defaultCriteria ?? {},
-                enabled: true
-              });
-              notify("success", `${template.name} enabled`);
-              refetchRules();
-              refetchFeed();
-            } catch (err) {
-              console.error(err);
-              notify("error", "Could not enable template");
-            }
-          }}
-          notify={notify}
-          onSaveNotify={async (rule, notifyConfig) => {
-            try {
-              await patchAlertRule(rule.id, { notify: notifyConfig });
-              // Cuenta todas las vías, no sólo `email`: una regla que avisa
-              // a un perfil decía «email delivery off».
-              notify(
-                "success",
-                hasAnyTarget(notifyConfig)
-                  ? `${rule.name}: delivery saved — ${describeTargets(notifyConfig)}`
-                  : `${rule.name}: email delivery off`
-              );
-              refetchRules();
-            } catch (err) {
-              console.error(err);
-              // The backend rejects bad recipients by name — show it, so a
-              // typo is fixed instead of saving "successfully" and never
-              // delivering.
-              notify("error", describeNotifyError(err, "Could not save email delivery — check the recipients"));
-            }
-          }}
-          onDeleteRule={async (rule) => {
-            try {
-              await deleteAlertRule(rule.id);
-              notify("success", `${rule.name} removed`);
-              refetchRules();
-              refetchFeed();
-            } catch (err) {
-              console.error(err);
-              notify("error", "Delete failed");
-            }
-          }}
-        />
-      </Drawer>
+            }}
+          />
+        </SectionPaper>
+      ) : null}
+
+      {/* Destinations tab — ADR-0028, SIEM del cliente o de su MSP ---------- */}
+      {tab === "destinations" && canManage ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }}>
+          <SiemDestinationsDrawer embedded notify={notify} />
+        </SectionPaper>
+      ) : null}
 
       {/* Event detail drawer ------------------------------------------- */}
       <Drawer
@@ -732,298 +823,6 @@ export default function Alerts({ onNavigate }) {
         message={snackbar.message}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
       />
-    </Box>
-  );
-}
-
-// ---------- Manage Rules drawer body ----------------------------------------
-
-function ManageRulesDrawer({
-  templates,
-  rules,
-  loading,
-  onClose,
-  onRefresh,
-  onToggle,
-  onEnableTemplate,
-  onDeleteRule,
-  onSaveNotify,
-  notify
-}) {
-  // Which rule has its delivery editor open. One at a time — the drawer
-  // is narrow and the editor is two full-width fields.
-  const [notifyOpenFor, setNotifyOpenFor] = React.useState(null);
-  // ADR-0025 — "rules" | "profiles". The Profiles tab only exists for users
-  // who can manage them; everyone else sees the drawer exactly as before.
-  const [tab, setTab] = React.useState("rules");
-  const np = useNotifyProfiles();
-  const showProfiles = Boolean(np.access?.canManage);
-  const editorProfileProps = {
-    profiles: np.profiles,
-    onManageProfiles: () => setTab("profiles"),
-    roleOptions: np.roleOptions,
-  };
-  // Group: which templates already have a tenant rule, which don't.
-  // A template may have multiple instances (future-proof) so we look up
-  // by templateId → count.
-  const ruleByTemplate = React.useMemo(() => {
-    const map = new Map();
-    for (const r of rules) {
-      if (!r.templateId) continue;
-      if (!map.has(r.templateId)) map.set(r.templateId, []);
-      map.get(r.templateId).push(r);
-    }
-    return map;
-  }, [rules]);
-
-  // Rules without a template are "custom".
-  const customRules = React.useMemo(
-    () => rules.filter((r) => !r.templateId),
-    [rules]
-  );
-
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <Stack direction="row" alignItems="center" sx={{ p: 2, borderBottom: `1px solid ${BRAND.border}` }}>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" sx={{ fontWeight: 800, color: BRAND.dark }}>
-            Manage alert rules
-          </Typography>
-          <Typography variant="caption" sx={{ color: BRAND.gray }}>
-            {tab === "profiles"
-              ? "Named audiences your rules can notify."
-              : "Catalog is global. Toggle a template to create an instance for this tenant."}
-          </Typography>
-        </Box>
-        <IconButton
-          aria-label="Refresh alerts"
-          onClick={() => {
-            onRefresh();
-            if (showProfiles) np.reload();
-          }}
-          size="small"
-          sx={{ mr: 0.5 }}
-        >
-          <RefreshOutlinedIcon fontSize="small" />
-        </IconButton>
-        <IconButton aria-label="Close" onClick={onClose} size="small">
-          <CloseOutlinedIcon fontSize="small" />
-        </IconButton>
-      </Stack>
-
-      {showProfiles ? (
-        <Tabs
-          value={tab}
-          onChange={(_e, v) => setTab(v)}
-          sx={{ px: 2, borderBottom: `1px solid ${BRAND.border}`, minHeight: 40 }}
-        >
-          <Tab value="rules" label="Rules" sx={{ textTransform: "none", minHeight: 40 }} />
-          <Tab
-            value="profiles"
-            label={np.profiles?.length ? `Profiles (${np.profiles.length})` : "Profiles"}
-            sx={{ textTransform: "none", minHeight: 40 }}
-          />
-        </Tabs>
-      ) : null}
-
-      {showProfiles && tab === "profiles" ? (
-        <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
-          <NotifyProfilesPanel
-            profiles={np.profiles ?? []}
-            loading={np.loadingProfiles && !np.profiles}
-            members={np.members}
-            canListMembers={Boolean(np.access?.canListMembers)}
-            roleOptions={np.roleOptions}
-            notify={notify}
-            onChanged={() => {
-              np.reload();
-              // Borrar o renombrar un perfil cambia los badges de las reglas.
-              onRefresh();
-            }}
-          />
-        </Box>
-      ) : (
-      <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
-        {loading ? (
-          <Stack alignItems="center" sx={{ py: 4 }}>
-            <CircularProgress size={20} sx={{ color: BRAND.teal }} />
-          </Stack>
-        ) : null}
-
-        <Typography
-          variant="caption"
-          sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 1 }}
-        >
-          Catalog
-        </Typography>
-
-        <Stack spacing={1.25}>
-          {templates.map((t) => {
-            const instances = ruleByTemplate.get(t.templateId) || [];
-            const primary = instances[0];
-            const enabled = Boolean(primary?.enabled);
-
-            return (
-              <Paper
-                key={t.templateId}
-                elevation={0}
-                sx={{
-                  p: 1.5,
-                  borderRadius: 2,
-                  border: `1px solid ${BRAND.border}`,
-                  opacity: t.deprecated ? 0.5 : 1
-                }}
-              >
-                <Stack direction="row" alignItems="flex-start" spacing={1.25}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5, flexWrap: "wrap" }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BRAND.dark }}>
-                        {t.name}
-                      </Typography>
-                      <SeverityChip severity={primary?.severity || t.defaultSeverity} />
-                      <Chip
-                        size="small"
-                        label={SOURCE_LABEL[t.source] || t.source}
-                        sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.tealText }}
-                      />
-                    </Stack>
-                    <Typography variant="body2" sx={{ color: BRAND.gray, fontSize: TEXT.md }}>
-                      {t.description}
-                    </Typography>
-                    {/* Delivery config only exists once the template has a
-                        tenant rule to hang it off. */}
-                    {primary ? (
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                        <NotifyBadge notify={primary.notify} profileNames={np.profileNames} />
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            setNotifyOpenFor(notifyOpenFor === primary.id ? null : primary.id)
-                          }
-                          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
-                        >
-                          {notifyOpenFor === primary.id ? "Hide" : "Email…"}
-                        </Button>
-                      </Stack>
-                    ) : null}
-                  </Box>
-                  <Tooltip title={primary ? (enabled ? "Disable" : "Enable") : "Enable for this tenant"}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={enabled}
-                          onChange={(e) => {
-                            if (primary) {
-                              onToggle(primary, e.target.checked);
-                            } else if (e.target.checked) {
-                              onEnableTemplate(t);
-                            }
-                          }}
-                          // MUI 7: el aria-label del input va por slotProps. Sin
-                          // él, una fila de interruptores sin nombre suena igual
-                          // en un lector de pantalla — y aquí cada uno enciende
-                          // una alerta distinta.
-                          slotProps={{ input: { "aria-label": t.name } }}
-                        />
-                      }
-                      label=""
-                      sx={{ m: 0 }}
-                    />
-                  </Tooltip>
-                </Stack>
-
-                {primary && notifyOpenFor === primary.id ? (
-                  <RuleNotifyEditor
-                    rule={primary}
-                    onSave={(notify) => onSaveNotify(primary, notify)}
-                    {...editorProfileProps}
-                  />
-                ) : null}
-              </Paper>
-            );
-          })}
-        </Stack>
-
-        {customRules.length > 0 ? (
-          <>
-            <Typography
-              variant="caption"
-              sx={{
-                color: BRAND.gray,
-                fontWeight: 700,
-                textTransform: "uppercase",
-                display: "block",
-                mt: 3,
-                mb: 1
-              }}
-            >
-              Custom rules
-            </Typography>
-            <Stack spacing={1.25}>
-              {customRules.map((r) => (
-                <Paper
-                  key={r.id}
-                  elevation={0}
-                  sx={{ p: 1.5, borderRadius: 2, border: `1px solid ${BRAND.border}` }}
-                >
-                  <Stack direction="row" alignItems="flex-start" spacing={1.25}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: BRAND.dark }}>
-                          {r.name}
-                        </Typography>
-                        <SeverityChip severity={r.severity} />
-                        <Chip
-                          size="small"
-                          label={SOURCE_LABEL[r.source] || r.source}
-                          sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.tealText }}
-                        />
-                      </Stack>
-                      <Typography
-                        variant="caption"
-                        sx={{ color: BRAND.gray, fontFamily: "monospace" }}
-                      >
-                        {JSON.stringify(r.criteria)}
-                      </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                        <NotifyBadge notify={r.notify} profileNames={np.profileNames} />
-                        <Button
-                          size="small"
-                          onClick={() => setNotifyOpenFor(notifyOpenFor === r.id ? null : r.id)}
-                          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
-                        >
-                          {notifyOpenFor === r.id ? "Hide" : "Email…"}
-                        </Button>
-                      </Stack>
-                    </Box>
-                    <Switch
-                      checked={r.enabled}
-                      onChange={(e) => onToggle(r, e.target.checked)}
-                    />
-                    <Tooltip title="Delete custom rule">
-                      <IconButton aria-label="Delete rule" size="small" onClick={() => onDeleteRule(r)}>
-                        <CloseOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-
-                  {notifyOpenFor === r.id ? (
-                    <RuleNotifyEditor rule={r} onSave={(notify) => onSaveNotify(r, notify)} {...editorProfileProps} />
-                  ) : null}
-                </Paper>
-              ))}
-            </Stack>
-          </>
-        ) : null}
-
-        <Typography
-          variant="caption"
-          sx={{ display: "block", color: BRAND.gray, mt: 3, fontStyle: "italic" }}
-        >
-          Custom rule builder lands in Phase 2. For now, enable templates from the catalog above.
-        </Typography>
-      </Box>
-      )}
     </Box>
   );
 }
