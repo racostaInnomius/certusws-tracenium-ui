@@ -305,3 +305,28 @@ export async function getCdpCryptoPolicy() {
 export async function putCdpCryptoPolicy(rules = {}) {
   return httpPutJson(`${BASE}/crypto-policy`, { rules });
 }
+
+// ── Ola 1.4 / 1.5: claves SSH de usuario y librerías por proceso ────
+
+/**
+ * La MISMA clave pública autorizada en varios equipos.
+ *
+ * Es el hallazgo de la pestaña: cuando esa clave se retira hay que tocar N
+ * máquinas, y una sola persona (o un solo portátil robado) las abre todas.
+ * `minDevices` es 2 por defecto en el servidor; por debajo de 2 no hay nada
+ * que contar.
+ */
+export async function listCdpSharedAuthorizedKeys({ minDevices = 2, limit = 100 } = {}) {
+  return httpGetJson(`${BASE}/ssh/shared-authorized-keys${buildQuery({ minDevices, limit })}`);
+}
+
+/**
+ * Qué librería criptográfica carga cada servicio que sirve TLS.
+ *
+ * Es lo que convierte «actualiza OpenSSL» en «actualiza estos tres
+ * servicios»: un paquete instalado no dice cuál de los 40 procesos de la
+ * máquina lo tiene cargado.
+ */
+export async function listCdpProcessLibraries({ limit } = {}) {
+  return httpGetJson(`${BASE}/process-libraries${buildQuery({ limit })}`);
+}

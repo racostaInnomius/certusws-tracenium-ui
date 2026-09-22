@@ -72,6 +72,7 @@ import ExploreOutlinedIcon from "@mui/icons-material/ExploreOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import VerifiedUserOutlinedIcon from "@mui/icons-material/VerifiedUserOutlined";
 import KeyOffOutlinedIcon from "@mui/icons-material/KeyOffOutlined";
+import VpnKeyOutlinedIcon from "@mui/icons-material/VpnKeyOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
@@ -107,6 +108,7 @@ import { TrustAnchorsPanel } from "../components/CryptoDiscovery/PqcReadinessPan
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
+import SshUserKeysPanel from "../components/CryptoDiscovery/SshUserKeysPanel";
 import CdpRoadmapPanel from "../components/CryptoDiscovery/CdpRoadmapPanel";
 import CdpCertFacets from "../components/CryptoDiscovery/CdpCertFacets";
 import CbomAssetsPanel from "../components/CryptoDiscovery/CbomAssetsPanel";
@@ -160,7 +162,11 @@ const TAB = {
   // Ola 1.6 (22-sep): el índice 7 aunque en la barra vaya detrás de
   // Inventory. Renumerar habría roto todo enlace guardado con `cdpTab=4..6`;
   // el orden visual lo decide la lista de `items`, no el número.
-  risk: 7
+  risk: 7,
+  // Ola 1.4 — claves SSH de usuario. Mismo criterio: número nuevo al final,
+  // posición visual junto a «Orphan keys» (las dos hablan de material de
+  // clave, no de certificados).
+  sshKeys: 8
 };
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -1748,6 +1754,12 @@ export default function CryptoDiscovery({ onNavigate }) {
           // una huérfana es un ítem del inventario, y el punto de la
           // decisión es que se mire, no que esté.
           { value: TAB.orphans, label: "Orphan keys", icon: <KeyOffOutlinedIcon />, ...tabA11y(TAB.orphans) },
+          // Ola 1.4. Pestaña propia y no una fila del inventario: una
+          // concesión SSH no tiene emisor, no caduca, nadie la revoca y no
+          // se deduplica por huella —la misma clave en dos cuentas son dos
+          // concesiones—, así que media tabla de certificados quedaría
+          // vacía. Y la pregunta es otra: no «qué tengo» sino «quién entra».
+          { value: TAB.sshKeys, label: "SSH keys", icon: <VpnKeyOutlinedIcon />, ...tabA11y(TAB.sshKeys) },
           // Settings: conectores, import de CBOM, matriz de aprobación
           // (ADR-0009: una matriz, filas cdp.*) y enlace a la policy del
           // agente. Aquí se configura; en las otras pestañas se mira.
@@ -1794,6 +1806,9 @@ export default function CryptoDiscovery({ onNavigate }) {
       </TabPanel>
       <TabPanel value={tab} index={TAB.orphans}>
         <OrphanKeysPanel refreshNonce={refreshNonce} />
+      </TabPanel>
+      <TabPanel value={tab} index={TAB.sshKeys}>
+        <SshUserKeysPanel refreshNonce={refreshNonce} />
       </TabPanel>
       {/*
         ⚠️ Índice 6, no 5. Al añadir «Orphan keys» se dejó este panel
