@@ -64,6 +64,7 @@ import { DEFAULT_DOMAIN, PATCHING_CATEGORY } from "../components/patch-managemen
 import PriorityQueue from "../components/patch-management/PriorityQueue";
 import PatchStatusDonut from "../components/patch-management/PatchStatusDonut";
 import MissingBySeverityChart from "../components/patch-management/MissingBySeverityChart";
+import RollbackPointsPanel from "../components/patch-management/RollbackPointsPanel";
 import { filterPatchDevices, DEVICE_STATUS_LABEL } from "../components/patch-management/deviceSearch";
 import { explainScanFailure } from "../components/patch-management/scanFailure";
 import {
@@ -1624,6 +1625,10 @@ export default function PatchManagement({ onNavigate }) {
             {fleetTotals}
             {startHere}
             {devicesPanel}
+            {/* Snapshots pre-parche vivos: los que esperan una decisión y los
+                que se pueden ampliar para validar con el uso real. Sólo aparece
+                si hay alguno. */}
+            {pmpEnabled ? <RollbackPointsPanel canManage={canManage} notify={notify} refreshNonce={refreshNonce} /> : null}
             {/* The v1 action catalog still runs the fleet-wide install and
                 scan, so it stays until those have a home in the findings
                 shape — dropping working buttons is not a refactor.

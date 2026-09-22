@@ -34,5 +34,8 @@ export const SOURCE_LABEL = {
   // Cobertura: un equipo que aparece en Active Directory sin agente.
   discovery_gap:      "Computer without agent",
   // ADR-0027: un fichero vigilado apareció, se borró o cambió.
-  file_integrity:     "File integrity"
+  file_integrity:     "File integrity",
+  // Un snapshot pre-parche que espera una decisión (parche fallido, servidor
+  // sin reiniciar) o que alguien amplió y está a punto de borrarse solo.
+  snapshot_retention: "Rollback point"
 };

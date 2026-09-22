@@ -359,6 +359,24 @@ export async function listDeploymentSnapshots(deploymentId) {
 }
 
 /** Operator-initiated rollback. Requires the exact snapshot record. */
+// ── Puntos de restauración (P0 de retención, 22-sep-2026) ─────────────
+// Los snapshots pre-parche vivos del tenant (PMP y SDP) y las dos decisiones
+// que faltaban: liberar y ampliar. Antes sólo se podía revertir, y los de
+// parches de SO ni siquiera se veían en ninguna pantalla.
+export async function listRollbackPoints() {
+  return httpGetJson(`${BASE}/snapshots`);
+}
+
+/** reason: "validated" | "accepted_failure" | "not_needed". */
+export async function releaseRollbackPoint(snapshotResultId, { reason, note } = {}) {
+  return httpPostJson(`${BASE}/snapshots/${encodeURIComponent(snapshotResultId)}/release`, { reason, note });
+}
+
+/** `untilIso` con zona (toISOString): sin ella el backend la rechaza. */
+export async function extendRollbackPoint(snapshotResultId, untilIso) {
+  return httpPostJson(`${BASE}/snapshots/${encodeURIComponent(snapshotResultId)}/extend`, { until: untilIso });
+}
+
 export async function revertSnapshot(snapshotResultId) {
   return httpPostJson(`${BASE}/snapshots/revert`, { snapshotResultId });
 }

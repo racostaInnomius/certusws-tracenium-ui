@@ -125,3 +125,28 @@ describe("GatewayDialog — datastore floors", () => {
     });
   });
 });
+
+// 22-sep-2026: el tope de retención. 72 h por defecto, 7 días como máximo.
+describe("Max hold (hours)", () => {
+  it("un gateway sin tope guardado viaja con 72 h", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<GatewayDialog open onClose={() => {}} onSave={onSave} gateway={GATEWAY} />);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].snapshot.maxHoldHours).toBe(72);
+  });
+
+  it("⭐ se puede subir a 7 días y el valor viaja", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<GatewayDialog open onClose={() => {}} onSave={onSave} gateway={GATEWAY} />);
+    const field = screen.getByLabelText(/Max hold \(hours\)/);
+    await user.clear(field);
+    await user.type(field, "168");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].snapshot.maxHoldHours).toBe(168);
+  });
+});
+

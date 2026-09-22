@@ -37,6 +37,7 @@ const DEFAULTS = {
   quiesce: true,
   memory: false,
   retentionHours: 24,
+  maxHoldHours: 72,
   maxConcurrent: 5,
   perVmTimeoutSec: 900,
   minFreePercent: FLOOR_DEFAULTS.minFreePercent,
@@ -70,6 +71,7 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
             quiesce: gateway.snapshot?.quiesce !== false,
             memory: gateway.snapshot?.memory === true,
             retentionHours: gateway.snapshot?.retentionHours ?? 24,
+            maxHoldHours: gateway.snapshot?.maxHoldHours ?? 72,
             maxConcurrent: gateway.snapshot?.maxConcurrent ?? 5,
             perVmTimeoutSec: gateway.snapshot?.perVmTimeoutSec ?? 900,
             // ?? not ||: 0 is a legitimate value here and means "floor off".
@@ -115,6 +117,8 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
           quiesce: form.quiesce,
           memory: form.memory,
           retentionHours: Number(form.retentionHours) || 24,
+          // El backend lo recorta a 24–168 y hace que la retención no lo supere.
+          maxHoldHours: Number(form.maxHoldHours) || 72,
           maxConcurrent: Number(form.maxConcurrent) || 5,
           perVmTimeoutSec: Number(form.perVmTimeoutSec) || 900,
           // clampFloor, not `|| default`: `0` is falsy and must survive.
@@ -235,6 +239,21 @@ export default function GatewayDialog({ open, gateway, devices = [], onClose, on
                 onChange={set("retentionHours")}
                 fullWidth
                 helperText="After a successful patch"
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              {/* El tope de AMPLIAR un punto de restauración, desde que se tomó.
+                  72 h es lo que recomienda Broadcom; 7 días, lo más que se
+                  permite: más allá un snapshot es un backup disfrazado que
+                  degrada el datastore. */}
+              <TextField
+                label="Max hold (hours)"
+                type="number"
+                value={form.maxHoldHours}
+                onChange={set("maxHoldHours")}
+                fullWidth
+                inputProps={{ min: 24, max: 168 }}
+                helperText="Longest a snapshot can be kept on request: 24–168 (7 days)"
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
