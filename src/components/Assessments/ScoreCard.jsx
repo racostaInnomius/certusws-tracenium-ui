@@ -26,7 +26,7 @@ import { formatDate } from "../../utils/format";
 import { setAssessmentTarget } from "../../api/assessments";
 import SectionPaper from "../common/SectionPaper";
 import ScoreGauge from "./ScoreGauge";
-import { effectiveTarget, projectionLabel, scoreDelta, targetGapText } from "./assessmentModel";
+import { adjustedScoreText, effectiveTarget, liveExceptionCount, projectionLabel, scoreDelta, targetGapText } from "./assessmentModel";
 
 function TargetDialog({ open, instance, bands, onClose, onSaved }) {
   const [value, setValue] = React.useState("");
@@ -118,6 +118,10 @@ export default function ScoreCard({ detail, bands, open, canEdit, onChanged }) {
   const coverage = detail.coverage;
   const partial = coverage && Number.isFinite(coverage.total) && coverage.assessable < coverage.total;
   const projections = (detail.projections || []).filter((p) => Number.isFinite(p.score) && score !== null && p.score > score);
+  // El gauge y el trend son el score BRUTO — es el hecho histórico y lo que
+  // compara la cartera MSP entre clientes. El ajustado se dice al lado, para que
+  // aceptar un riesgo deje de ser un trámite sin efecto visible.
+  const adjusted = adjustedScoreText(score, inst.scoreAdjusted, liveExceptionCount(detail.findings));
 
   const DeltaIcon = !delta ? null : delta.delta > 0 ? TrendingUpRoundedIcon : delta.delta < 0 ? TrendingDownRoundedIcon : TrendingFlatRoundedIcon;
   const deltaColor = !delta || delta.delta === 0 ? TEXT_MUTED : delta.delta > 0 ? BRAND.alert.successText : BRAND.alert.errorText;
@@ -154,6 +158,9 @@ export default function ScoreCard({ detail, bands, open, canEdit, onChanged }) {
             <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>
               {detail.lastScore?.scoredAt ? `Scored ${formatDate(detail.lastScore.scoredAt)}` : "No complete run yet"}
             </Typography>
+            {adjusted ? (
+              <Typography sx={{ fontSize: TEXT.sm, color: BRAND.tealText, fontWeight: 700, mt: 0.25 }}>{adjusted}</Typography>
+            ) : null}
           </Box>
         </Box>
 

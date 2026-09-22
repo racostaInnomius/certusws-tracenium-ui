@@ -1,7 +1,7 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { coverageText, describeRunNow, effectiveTarget, evidenceLine, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
+import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
 describe("assessmentModel", () => {
@@ -117,5 +117,29 @@ describe("evidenceLine — permisos y dueños, no sólo el nombre", () => {
   it("un trustee dice su derecho, y sin nombre cae al SID", () => {
     expect(evidenceLine({ sid: "S-1-5-21-1-1106", rights: "WriteDacl", objects: 3 })).toBe("S-1-5-21-1-1106 — WriteDacl · 3 objects");
     expect(evidenceLine({ sid: null, name: null, rights: "GenericAll" })).toBe("(unresolved) — GenericAll");
+  });
+});
+
+describe("score ajustado por excepciones", () => {
+  it("cuenta sólo las excepciones VIVAS", () => {
+    expect(liveExceptionCount([
+      { exception: { active: true } },
+      { exception: { active: false } },
+      { exception: null },
+      {}
+    ])).toBe(1);
+    expect(liveExceptionCount(null)).toBe(0);
+  });
+
+  it("⭐ lo dice con cuántas excepciones se ha llegado a ese número", () => {
+    expect(adjustedScoreText(51, 58, 1)).toBe("58 with 1 accepted exception");
+    expect(adjustedScoreText(51, 72, 3)).toBe("72 with 3 accepted exceptions");
+  });
+
+  it("⚠️ callado cuando no hay nada que decir: sin excepciones, o si coincide con el bruto", () => {
+    expect(adjustedScoreText(51, 51, 0)).toBeNull();
+    expect(adjustedScoreText(51, 51, 2)).toBeNull(); // p.ej. la excepción era sobre un pass
+    expect(adjustedScoreText(51, null, 2)).toBeNull();
+    expect(adjustedScoreText(null, 58, 2)).toBeNull();
   });
 });

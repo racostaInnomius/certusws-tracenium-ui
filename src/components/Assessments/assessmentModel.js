@@ -172,3 +172,20 @@ export function evidenceLine(entry) {
   const example = entry.exampleDn ? ` (e.g. ${entry.exampleDn})` : "";
   return `${who}${detail}${example}`;
 }
+
+/** Cuántos hallazgos tienen una excepción VIVA (el backend marca `active`). */
+export function liveExceptionCount(findings) {
+  return (Array.isArray(findings) ? findings : []).filter((f) => f?.exception?.active === true).length;
+}
+
+/**
+ * La lectura del score ajustado, o null si no hay nada que decir: sin
+ * excepciones vivas el ajustado es el bruto, y repetir el mismo número dos
+ * veces sólo confunde.
+ */
+export function adjustedScoreText(score, scoreAdjusted, liveExceptions) {
+  if (!Number.isFinite(scoreAdjusted) || !Number.isFinite(score)) return null;
+  if (liveExceptions <= 0 || scoreAdjusted === score) return null;
+  const n = liveExceptions === 1 ? "1 accepted exception" : `${liveExceptions} accepted exceptions`;
+  return `${scoreAdjusted} with ${n}`;
+}

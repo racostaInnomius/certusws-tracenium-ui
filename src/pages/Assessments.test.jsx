@@ -58,7 +58,7 @@ const LIST = {
 };
 
 const DETAIL = {
-  instance: { ...LIST.instances[0], targetScore: null },
+  instance: { ...LIST.instances[0], targetScore: null, scoreAdjusted: 71 },
   lastScore: LIST.instances[0].lastScore,
   coverage: { assessable: 29, total: 30 },
   projections: [
@@ -67,7 +67,7 @@ const DETAIL = {
   ],
   findings: [
     { controlId: "ASP-AD-CFG-007", title: "Fine-grained password policies allow passwords shorter than 14 characters", section: "Domain configuration", status: "not_assessed", severity: "medium", requires: "privileged", reason: "requires_privileged_read:0x8007200A", affectedCount: null, remediation: { summary: "Raise it", steps: ["Do it"], risk: "Some" }, references: [] },
-    { controlId: "ASP-AD-ACC-001", title: "Enabled user accounts have a password that never expires", section: "Accounts", status: "fail", severity: "medium", affectedCount: 38, evidence: { count: 38, sample: ["CN=svc,DC=m"] }, remediation: { summary: "Fix", steps: ["Step"], risk: "Risk" }, references: [] },
+    { controlId: "ASP-AD-ACC-001", title: "Enabled user accounts have a password that never expires", section: "Accounts", status: "fail", severity: "medium", affectedCount: 38, evidence: { count: 38, sample: ["CN=svc,DC=m"] }, exception: { reason: "Cuentas de servicio con rotación por bóveda", author: "admin", expiresAt: "2026-12-01T00:00:00Z", active: true }, remediation: { summary: "Fix", steps: ["Step"], risk: "Risk" }, references: [] },
     { controlId: "ASP-AD-KRB-001", title: "The krbtgt account password has not been reset in the last 180 days", section: "Kerberos", status: "fail", severity: "critical", affectedCount: null, remediation: { summary: "Reset twice", steps: ["Reset"], risk: "Tickets" }, references: [{ source: "MITRE ATT&CK", id: "T1558.001", title: "Golden Ticket", url: "https://attack.mitre.org/techniques/T1558/001/" }] },
     { controlId: "ASP-AD-PRV-006", title: "Non-default principals hold replication rights on the domain (DCSync)", section: "Privileged access", status: "not_assessed", severity: "critical", requires: "member", reason: "collector_error:0x80131501", affectedCount: null, evidence: { collectorError: { hresult: "0x80131501", type: "RuntimeException", message: "You cannot call a method on a null-valued expression." } }, references: [] },
     { controlId: "ASP-AD-KRB-003", title: "Enabled accounts do not require Kerberos pre-authentication", section: "Kerberos", status: "pass", severity: "high", affectedCount: 0, references: [] },
@@ -207,6 +207,16 @@ describe("Assessment Suite — detalle", () => {
     expect(screen.getByText("29 of 30")).toBeTruthy();
     expect(screen.getByText(/left out of the score, never counted as passing/)).toBeTruthy();
     expect(screen.getByText("Open findings")).toBeTruthy();
+  });
+
+  it("⭐ el score ajustado por excepciones se dice al lado del bruto, sin sustituirlo", async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    // El gauge sigue siendo el BRUTO (58): es el hecho histórico y lo que compara la cartera MSP.
+    expect(await screen.findByRole("img", { name: "Score 58 of 100, target 85" })).toBeTruthy();
+    // Y al lado, lo que queda tras honrar lo aceptado.
+    expect(screen.getByText("71 with 1 accepted exception")).toBeTruthy();
   });
 
   it("⭐ Set target guarda el objetivo de la instancia", async () => {
