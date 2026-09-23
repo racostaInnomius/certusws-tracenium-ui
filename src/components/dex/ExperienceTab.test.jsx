@@ -62,6 +62,17 @@ describe("ExperienceTab", () => {
     expect(screen.queryByText(/No crashes, hangs or system failures recorded/)).toBeNull();
   });
 
+  it("⚠️ mientras carga ocupa el mismo alto: entrar en la pestaña no mueve la página", async () => {
+    let resolve;
+    getDeviceExperience.mockReturnValue(new Promise((r) => { resolve = r; }));
+    const { container } = render(<ExperienceTab agentId="pc-1" />);
+    expect(screen.getByText("Loading experience data…")).toBeInTheDocument();
+    expect(container.firstChild).toHaveStyle({ minHeight: "420px" });
+    resolve({ ok: true, device: device() });
+    await screen.findByTestId("dex-experience");
+    expect(screen.getByTestId("dex-experience")).toHaveStyle({ minHeight: "420px" });
+  });
+
   it("un equipo que aún no informa dice «sin datos», no «todo bien»", async () => {
     getDeviceExperience.mockResolvedValue({ ok: true, device: { agentId: "pc-2", available: false, signals: [], windows: [], events: [] } });
     render(<ExperienceTab agentId="pc-2" />);

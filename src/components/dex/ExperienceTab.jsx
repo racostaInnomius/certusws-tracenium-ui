@@ -35,6 +35,13 @@ function Stat({ label, value, helper }) {
   );
 }
 
+/** El alto de la pestaña con datos, para que entrar y salir no mueva la página. */
+const MIN_HEIGHT = 420;
+
+function Frame({ children }) {
+  return <Box sx={{ minHeight: MIN_HEIGHT }}>{children}</Box>;
+}
+
 export default function ExperienceTab({ agentId }) {
   const [days, setDays] = React.useState(7);
   const [data, setData] = React.useState(null);
@@ -55,13 +62,27 @@ export default function ExperienceTab({ agentId }) {
     };
   }, [agentId, days]);
 
-  if (error) return <Alert severity="error">{error}</Alert>;
-  if (!data) return <CircularProgress size={22} sx={{ color: BRAND.teal }} />;
+  // ⚠️ Altura mínima estable en los tres estados cortos (cargando, error, sin
+  // datos). Sin ella el panel se encoge al entrar en la pestaña y crece al
+  // llegar la respuesta, y el salto se lee como si la página se recargara.
+  if (error) return <Frame><Alert severity="error">{error}</Alert></Frame>;
+  if (!data) {
+    return (
+      <Frame>
+        <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ py: 6 }}>
+          <CircularProgress size={28} sx={{ color: BRAND.teal }} />
+          <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>Loading experience data…</Typography>
+        </Stack>
+      </Frame>
+    );
+  }
   if (!data.available) {
     return (
-      <Alert severity="info" data-testid="dex-unavailable">
-        No experience data from this device yet. Devices with the current agent report CPU, memory, crashes, boot time and battery once an hour.
-      </Alert>
+      <Frame>
+        <Alert severity="info" data-testid="dex-unavailable">
+          No experience data from this device yet. Devices with the current agent report CPU, memory, crashes, boot time and battery once an hour.
+        </Alert>
+      </Frame>
     );
   }
 
@@ -74,7 +95,7 @@ export default function ExperienceTab({ agentId }) {
   const notes = ["events", "boot", "battery"].map((k) => SCOPE_NOTE[k]?.[scope[k]]).filter(Boolean);
 
   return (
-    <Stack spacing={2} data-testid="dex-experience">
+    <Stack spacing={2} sx={{ minHeight: MIN_HEIGHT }} data-testid="dex-experience">
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
           Last report {formatRelative(status.lastReportAt)} · devices report once an hour

@@ -1105,12 +1105,19 @@ export default function AssetsDashboard({
   }, [handleAgentSelect]);
 
   // ADR-0030 — desde la tarjeta de flota: abre el equipo ya en Experience.
+  //
+  // ⚠️ Con la FILA de la tabla cuando está cargada, no con un equipo inventado
+  // a partir del id. La cabecera de la ficha lee de esa fila lo que el detalle
+  // no devuelve —la versión del agente, entre otras—, así que entrando por
+  // aquí con `{agent_id, hostname}` a secas la misma ficha salía incompleta:
+  // dos vistas distintas del mismo equipo según por dónde se llegara.
   const openDeviceExperience = React.useCallback(
     (agentId, hostname) => {
-      handleAgentSelect({ agent_id: agentId, agentId, hostname });
+      const row = hosts.find((h) => String(getHostDeviceId(h)) === String(agentId));
+      handleAgentSelect(row ?? { agent_id: agentId, agentId, hostname });
       setAgentDetailTab(EXPERIENCE_TAB);
     },
-    [handleAgentSelect]
+    [handleAgentSelect, hosts]
   );
 
   const handleCloseAgentDetail = React.useCallback(() => {
