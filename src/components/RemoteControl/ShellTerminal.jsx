@@ -28,7 +28,8 @@
 //   - signaling timeout → render error + close DC + close WS
 //   - peer "failed" state → render error
 //   - explicit close from agent (peer dispose, shell exit) → render
-//     "session ended" message
+//     "session ended" message; un `exit` además cierra el panel solo
+//     tras una cuenta atrás (ver AUTO_CLOSE_SECONDS)
 //
 // Performance:
 //   - xterm.js local echo is on by default; we don't enable any
@@ -39,7 +40,7 @@
 //     doesn't fan out per character on paste.
 
 import * as React from "react";
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Button, IconButton, Tooltip, Typography } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
 import { Terminal } from "@xterm/xterm";
@@ -62,12 +63,32 @@ const STATE = Object.freeze({
 });
 
 /**
+ * Segundos que el panel sigue abierto tras un `exit`.
+ *
+ * ⚠️ Aquí antes no se cerraba nada: escribir `exit` terminaba la sesión y
+ * dejaba el panel puesto para que el operador leyera la última salida. Es un
+ * motivo real —la última pantalla de una shell de diagnóstico es justo la que
+ * importa— pero dejaba la ventana cerrándose a mano SIEMPRE, incluido el caso
+ * normal en que uno ya terminó y lo sabe.
+ *
+ * La cuenta atrás resuelve las dos: se cierra solo, y quien quiera mirar tiene
+ * cinco segundos y un botón para quedarse. Cinco porque es lo que tarda en
+ * leerse una línea y no tanto como para tener que esperar a que se vaya.
+ *
+ * Sólo se aplica al `exit` —lo que el operador PIDIÓ—. Un final que no pidió
+ * (el DataChannel se cae, el agente cierra, un error) deja el panel quieto:
+ * ahí el mensaje es la única explicación que va a recibir.
+ */
+const AUTO_CLOSE_SECONDS = 5;
+
+/**
  * Props:
  *   - session: { sessionId, signalingUrl, turnConfig } from
  *     POST /sessions.
  *   - device:  { deviceId, hostname, platform } for display.
- *   - onClose: invoked when the operator clicks the close button
- *     OR the session terminates. Parent removes the component.
+ *   - onClose: invoked when the operator clicks the close button, y ahora
+ *     también unos segundos después de un `exit`. Parent removes the
+ *     component.
  */
 export default function ShellTerminal({ session, device, onClose }) {
   const containerRef = React.useRef(null);
@@ -92,6 +113,17 @@ export default function ShellTerminal({ session, device, onClose }) {
   const cleanupReconnectRef = React.useRef(null);
   const [state, setState] = React.useState(STATE.CONNECTING);
   const [statusMsg, setStatusMsg] = React.useState("Establishing connection…");
+  // Segundos que quedan para cerrar solo, o null si no hay cuenta atrás.
+  const [closingIn, setClosingIn] = React.useState(null);
+
+  // ⚠️ `onClose` cambia de identidad en cada render del padre
+  // (`closeSession(setShellSession)` devuelve una función nueva cada vez), así
+  // que un temporizador que lo capturara se quedaría con el de hace cinco
+  // segundos. Por la ref siempre se llama al vigente.
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // ── 1. Mount xterm into the container ───────────────────────────
   React.useEffect(() => {
@@ -281,11 +313,12 @@ export default function ShellTerminal({ session, device, onClose }) {
           term.write(parsed.data);
         } else if (parsed.type === "exit") {
           setState(STATE.ENDED);
-          setStatusMsg(
-            `Shell exited (code ${parsed.code ?? "?"}). Connection closed.`
-          );
-          // Don't auto-close the UI — let the operator see the
-          // final output. They click the X to dismiss.
+          setStatusMsg(`Shell exited (code ${parsed.code ?? "?"}).`);
+          // El operador escribió `exit`: el panel se va solo. La cuenta atrás
+          // —y el botón para quedarse— es lo que conserva el motivo por el que
+          // antes no se cerraba: poder leer la última salida. Ver
+          // AUTO_CLOSE_SECONDS.
+          setClosingIn(AUTO_CLOSE_SECONDS);
         }
       };
 
@@ -543,6 +576,27 @@ export default function ShellTerminal({ session, device, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
+  // ── La cuenta atrás tras un `exit` ──────────────────────────────
+  //
+  // Un tick por segundo; al llegar a 0 se cierra el panel. Vive en su propio
+  // efecto para que el `clearTimeout` del desmontaje sea el mismo camino que
+  // el de cancelar: si el operador cierra con la X mientras corre, no queda un
+  // temporizador llamando a `onClose` sobre un panel que ya no existe.
+  React.useEffect(() => {
+    if (closingIn == null) return undefined;
+    if (closingIn <= 0) {
+      onCloseRef.current?.();
+      return undefined;
+    }
+    const t = setTimeout(() => setClosingIn((n) => (n == null ? null : n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [closingIn]);
+
+  const stayOpen = React.useCallback(() => {
+    setClosingIn(null);
+    setStatusMsg((m) => `${m} Connection closed.`);
+  }, []);
+
   const statusColor =
     state === STATE.RUNNING
       ? BRAND.teal
@@ -596,7 +650,24 @@ export default function ShellTerminal({ session, device, onClose }) {
           }}
         >
           {device?.hostname || device?.deviceId} · {statusMsg}
+          {closingIn != null ? ` Closing in ${closingIn} s…` : ""}
         </Typography>
+        {closingIn != null ? (
+          <Button
+            size="small"
+            onClick={stayOpen}
+            sx={{
+              color: NEUTRAL[100],
+              fontSize: TEXT.xs,
+              textTransform: "none",
+              minWidth: 0,
+              px: 1,
+              flexShrink: 0
+            }}
+          >
+            Keep open
+          </Button>
+        ) : null}
         <Tooltip title="Close session" arrow placement="left">
           <IconButton
             aria-label="Close terminal"

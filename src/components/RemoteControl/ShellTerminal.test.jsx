@@ -321,10 +321,20 @@ describe("ShellTerminal — CONNECTING → RUNNING (happy path)", () => {
 });
 
 describe("ShellTerminal — ENDED transitions", () => {
-  it("shell exit frame → 'Shell exited' status, stays mounted", async () => {
-    const { dc } = await connect();
-    await dc.fireMessage({ type: "exit", code: 0 });
+  it("shell exit frame → 'Shell exited' status, sin cerrar de golpe", async () => {
+    // El cierre automático que viene detrás, y los cinco segundos de cortesía,
+    // se prueban en ShellTerminal.autoClose.test.jsx con el reloj parado.
+    const onClose = vi.fn();
+    renderTerminal({ onClose });
+    const ws = sockets[0];
+    const pc = peers[0];
+    await ws.fireOpen();
+    await ws.fireMessage({ type: "answer", sdp: "v=0-fake-answer" });
+    await pc.dc.fireOpen();
+
+    await pc.dc.fireMessage({ type: "exit", code: 0 });
     expect(await screen.findByText(/Shell exited \(code 0\)/i)).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("WS 'close' control frame → the reason in words, not the raw token", async () => {
