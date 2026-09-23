@@ -37,5 +37,8 @@ export const SOURCE_LABEL = {
   file_integrity:     "File integrity",
   // Un snapshot pre-parche que espera una decisión (parche fallido, servidor
   // sin reiniciar) o que alguien amplió y está a punto de borrarse solo.
-  snapshot_retention: "Rollback point"
+  snapshot_retention: "Rollback point",
+  // ADR-0031 F3: un ajuste de seguridad cambió sin acción nuestra. El rótulo
+  // dice lo que consta —que el cambio no salió de aquí— y no quién lo hizo.
+  security_setting_drift: "Setting changed outside Tracenium"
 };
