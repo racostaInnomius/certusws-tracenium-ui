@@ -69,6 +69,40 @@ function Kpi({ label, value, tone, onClick, active, hint }) {
   );
 }
 
+/**
+ * La OU del equipo, de la rama general a la concreta.
+ *
+ * ⚠️ Tres estados, como en la columna de dominio. Vacío NO es «sin OU»: el
+ * agente que la reporta se publica aparte, y hasta entonces la columna está en
+ * blanco para todos. Un blanco sin explicar se lee como una avería nuestra.
+ */
+function OuCell({ row }) {
+  const segmentos = row?.ouSegments ?? [];
+  if (segmentos.length === 0) {
+    // `ouReported` lo dice el backend: el equipo mandó su ubicación aunque no
+    // cuelgue de ninguna OU (contenedor `Computers`). Sin ese campo, las dos
+    // cosas serían el mismo hueco.
+    return (
+      <Typography sx={{ fontSize: TEXT.md, color: "text.disabled" }} noWrap>
+        {row?.ouReported ? "No OU" : "Not reported"}
+      </Typography>
+    );
+  }
+  // El último segmento es donde vive el equipo; los de delante, su camino.
+  const hoja = segmentos[segmentos.length - 1];
+  const camino = segmentos.join(" › ");
+  return (
+    <Typography sx={{ fontSize: TEXT.md }} title={camino} noWrap>
+      {segmentos.length > 1 ? (
+        <Box component="span" sx={{ color: "text.secondary" }}>
+          {segmentos.slice(0, -1).join(" › ")} ›{" "}
+        </Box>
+      ) : null}
+      {hoja}
+    </Typography>
+  );
+}
+
 function GpoChips({ names }) {
   // ⚠️ "Ninguna" y "no se pudo leer" son cosas distintas y se ven distintas.
   // Que se vieran igual es lo que hizo pasar por equipo sin directivas a uno
@@ -161,8 +195,22 @@ export default function WindowsGpos({ refreshNonce }) {
       renderCell: (p) => {
         const enDominio = p.value;
         if (enDominio === true) {
+          const rol = p.row?.domainRole;
           return (
-            <Typography sx={{ fontSize: TEXT.md }}>{p.row?.domain || "Joined"}</Typography>
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: TEXT.md }} noWrap>{p.row?.domain || "Joined"}</Typography>
+              {/* ⚠️ Sólo se marca el controlador de dominio. Poner una etiqueta
+                  a cada estación sería ruido; lo que cambia la lectura de esta
+                  fila es que sus directivas no son las de un equipo normal. */}
+              {rol?.isDomainController ? (
+                <Chip
+                  size="small"
+                  label="DC"
+                  title={rol.label}
+                  sx={{ height: 18, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.tealSoft, color: BRAND.tealText }}
+                />
+              ) : null}
+            </Stack>
           );
         }
         if (enDominio === false) {
@@ -174,6 +222,16 @@ export default function WindowsGpos({ refreshNonce }) {
           <Typography sx={{ fontSize: TEXT.md, color: "text.disabled" }}>Not reported</Typography>
         );
       },
+    },
+    {
+      // ADR-0012 (addendum) — la OU es lo que explica por qué a un equipo le
+      // aplican las directivas de la columna siguiente.
+      field: "ou",
+      headerName: "Organizational Unit",
+      minWidth: 220,
+      flex: 0.9,
+      sortable: true,
+      renderCell: (p) => <OuCell row={p.row} />,
     },
     {
       field: "computerGpos",

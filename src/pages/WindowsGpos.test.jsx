@@ -245,3 +245,101 @@ describe("WindowsGpos — una lectura que fallo", () => {
   });
 });
 
+// ── ADR-0012 (addendum): la OU y el papel en el dominio ──────────────────
+//
+// ⚠️ La columna nueva tiene TRES estados y ninguno puede taparse con otro:
+// una ruta, «sin OU» (el equipo cuelga del contenedor Computers) y «no
+// reportado» (el agente que la manda aún no está desplegado).
+
+const conOu = {
+  summary: {
+    devicesReporting: 3,
+    withComputerGpos: 3,
+    withUserGpos: 0,
+    withoutAnyGpos: 0,
+    domainJoinedWithoutGpos: 0,
+    notDomainJoinedWithoutGpos: 0,
+    unknownDomainWithoutGpos: 0,
+    distinctGpos: 1,
+    withOu: 2,
+    domainControllers: 1,
+  },
+  gpos: [{ name: "Default Domain Policy", computer: 3, user: 0, devices: 3 }],
+  devices: [
+    {
+      agentId: "a-1",
+      hostname: "Castico-PV",
+      osFullVersion: "Windows 11 Pro",
+      computerGpos: ["Default Domain Policy"],
+      userGpos: [],
+      partOfDomain: true,
+      domain: "mountainside-investment.com",
+      domainRole: { code: 1, label: "Workstation", isDomainController: false },
+      ou: "OU=Workstations,OU=CASTICO,DC=mountainside-investment,DC=com",
+      ouSegments: ["CASTICO", "Workstations"],
+      ouReported: true,
+      collectedAt: "2026-09-22T20:27:08.000Z",
+    },
+    {
+      agentId: "a-2",
+      hostname: "MSIG-DOMAIN01",
+      osFullVersion: "Windows Server 2022",
+      computerGpos: ["Default Domain Policy"],
+      userGpos: [],
+      partOfDomain: true,
+      domain: "mountainside-investment.com",
+      domainRole: { code: 5, label: "Primary domain controller", isDomainController: true },
+      ou: null,
+      ouSegments: [],
+      ouReported: true,
+      collectedAt: "2026-09-22T20:27:08.000Z",
+    },
+    {
+      agentId: "a-3",
+      hostname: "SIN-AGENTE-NUEVO",
+      osFullVersion: "Windows 10 Pro",
+      computerGpos: ["Default Domain Policy"],
+      userGpos: [],
+      partOfDomain: true,
+      domain: "mountainside-investment.com",
+      domainRole: null,
+      ou: null,
+      ouSegments: [],
+      ouReported: false,
+      collectedAt: "2026-09-22T20:27:08.000Z",
+    },
+  ],
+};
+
+describe("WindowsGpos — OU y rol", () => {
+  it("⭐ la OU se lee de la rama general a la concreta", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conOu);
+    render(<WindowsGpos />);
+    expect(await screen.findByText("Workstations")).toBeInTheDocument();
+    expect(screen.getByText(/CASTICO ›/)).toBeInTheDocument();
+  });
+
+  it("⚠️ «sin OU» y «no reportado» NO son lo mismo", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conOu);
+    render(<WindowsGpos />);
+    // El controlador cuelga del contenedor Computers: reportó, no tiene OU.
+    expect(await screen.findByText("No OU")).toBeInTheDocument();
+    // El tercero aún no manda el dato: la columna vacía no es culpa suya.
+    expect(screen.getByText("Not reported")).toBeInTheDocument();
+  });
+
+  it("⭐ un controlador de dominio se marca: sus directivas no son las de una estación", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conOu);
+    render(<WindowsGpos />);
+    expect(await screen.findByText("DC")).toBeInTheDocument();
+  });
+
+  it("⚠️ una estación NO se etiqueta: sería ruido en toda la tabla", async () => {
+    getWindowsGpoInventory.mockResolvedValue(conOu);
+    render(<WindowsGpos />);
+    await screen.findByText("Workstations");
+    expect(screen.queryByText("Workstation")).not.toBeInTheDocument();
+  });
+});
+
+
