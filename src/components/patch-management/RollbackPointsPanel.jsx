@@ -183,6 +183,18 @@ export default function RollbackPointsPanel({ canManage, notify, refreshNonce = 
                   {p.deploymentId ? (
                     <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>Software deployment #{p.deploymentId}</Typography>
                   ) : null}
+                  {/* ⚠️ UN SNAPSHOT, UNA FILA. Cuando un parche falla y se
+                      relanza, el reintento comparte este punto de retorno: son
+                      varios trabajos sobre el MISMO snapshot de vCenter. Antes
+                      cada intento salía como una fila propia, así que el panel
+                      enseñaba dos veces el mismo punto —con la fecha del
+                      segundo, que no era la de la toma— y liberar uno borraba
+                      el otro. */}
+                  {p.protectedJobs > 1 ? (
+                    <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary" }}>
+                      Protects {p.protectedJobs} patch runs — one snapshot, one decision
+                    </Typography>
+                  ) : null}
                 </TableCell>
                 <TableCell sx={{ fontSize: TEXT.sm }}>{formatDate(p.takenAt)}</TableCell>
                 <TableCell>
@@ -243,6 +255,9 @@ export default function RollbackPointsPanel({ canManage, notify, refreshNonce = 
                   <Typography sx={{ fontSize: TEXT.base, color: BRAND.dark, mb: 1.5 }}>
                     The snapshot is removed on the next retention pass and there is no way back to it. Say why — it goes
                     to the audit log.
+                    {dialog.point.protectedJobs > 1
+                      ? ` This is the only rollback point for ${dialog.point.protectedJobs} patch runs on this server, including the earliest one.`
+                      : ""}
                   </Typography>
                   <RadioGroup value={reason} onChange={(e) => setReason(e.target.value)}>
                     {RELEASE_REASONS.map((r) => (

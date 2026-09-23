@@ -45,6 +45,28 @@ describe("RollbackPointsPanel", () => {
     expect(screen.getByText(/Kept 1 h past its date|Kept \d+ h past its date/)).toBeInTheDocument();
   });
 
+  it("⭐ un punto COMPARTIDO por varios intentos lo dice, y lo dice al liberar", async () => {
+    // El caso de FTP-SPS (19/20-sep): el parche falló, se relanzó, y el
+    // reintento reutilizó el mismo snapshot de vCenter. Es UNA fila —antes
+    // salían dos, la segunda con una fecha de toma que no era la del
+    // snapshot— y liberarla afecta a los dos intentos.
+    api.listRollbackPoints.mockResolvedValue({ points: [point({ hostname: "FTP-SPS", protectedJobs: 2 })] });
+    render(<RollbackPointsPanel canManage />);
+    expect(await screen.findByText("FTP-SPS")).toBeInTheDocument();
+    expect(screen.getByText(/Protects 2 patch runs/)).toBeInTheDocument();
+    expect(screen.getAllByText("FTP-SPS")).toHaveLength(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Release" }));
+    expect(await screen.findByText(/only rollback point for 2 patch runs/)).toBeInTheDocument();
+  });
+
+  it("con un solo intento no se menciona nada de compartir", async () => {
+    api.listRollbackPoints.mockResolvedValue({ points: [point({ protectedJobs: 1 })] });
+    render(<RollbackPointsPanel canManage />);
+    await screen.findByText("MSIG-QBOOKS");
+    expect(screen.queryByText(/Protects/)).toBeNull();
+  });
+
   it("⭐ liberar pide el porqué y lo manda con la nota", async () => {
     const user = userEvent.setup({ delay: null });
     const notify = vi.fn();
