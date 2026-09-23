@@ -18,7 +18,11 @@ vi.mock("../../api/cdp", () => ({
   putCdpRoadmapPlan: (...a) => putCdpRoadmapPlan(...a),
   getCdpReadinessHistory: (...a) => getCdpReadinessHistory(...a),
   postCdpReadinessSnapshot: vi.fn(async () => ({ ok: true })),
-  getCdpPqcReadiness: vi.fn(async () => ({ ok: true, pqc: null }))
+  getCdpPqcReadiness: vi.fn(async () => ({ ok: true, pqc: null })),
+  // Ola 1.5: el desglose de librerías por proceso se monta bajo los
+  // bloqueos y pide su propia ruta. Una petición sin handler es un fallo
+  // de la prueba, no del código.
+  listCdpProcessLibraries: vi.fn(async () => ({ ok: true, items: [] }))
 }));
 
 import CdpRoadmapPanel, { WaveChip, PlanDialog, ReadinessTrend } from "./CdpRoadmapPanel";
