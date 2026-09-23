@@ -126,3 +126,14 @@ describe("RollbackPointsPanel", () => {
     expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
   });
 });
+
+describe("RollbackPointsPanel — «verifying»", () => {
+  it("⚠️ un punto que se está verificando NO cuenta como «waiting for a decision»", async () => {
+    api.listRollbackPoints.mockResolvedValue({
+      points: [point({ id: 1, hostname: "MSIG-QBOOKS", state: "verifying", keepReason: "awaiting_verification" })],
+    });
+    render(<RollbackPointsPanel canManage />);
+    expect(await screen.findByText("Checking the result")).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for a decision/)).toBeNull();
+  });
+});

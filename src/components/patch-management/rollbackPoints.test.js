@@ -113,3 +113,19 @@ describe("defaultReleaseReason", () => {
     expect(defaultReleaseReason("auto_release")).toBe("validated");
   });
 });
+
+describe("«verifying» — un corte nuestro esperando al escaneo (23-sep-2026)", () => {
+  it("⭐ tiene su propia etiqueta y NO es el rojo de «decide tú»", () => {
+    const m = stateMeta("verifying");
+    expect(m.label).toBe("Checking the result");
+    expect(m.tone).not.toBe("critical");
+    // Lo que explica: Windows pudo terminar aunque nosotros dejáramos de esperar.
+    expect(m.hint).toMatch(/Windows may have finished it anyway/);
+  });
+
+  it("se puede liberar y ampliar como cualquier punto no liberado", () => {
+    const p = { state: "verifying", deadline: new Date(Date.now() + 3600e3).toISOString(), maxUntil: new Date(Date.now() + 48 * 3600e3).toISOString() };
+    expect(canRelease(p)).toBe(true);
+    expect(canExtend(p)).toBe(true);
+  });
+});

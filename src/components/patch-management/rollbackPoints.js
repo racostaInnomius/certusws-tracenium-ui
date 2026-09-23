@@ -31,6 +31,16 @@ export const STATE_META = Object.freeze({
     tone: "info",
     hint: "Kept while the patch runs. It cannot be released until the patch finishes.",
   },
+  // ⚠️ NO es un fallo (23-sep-2026). El agente dejó de esperar a Windows Update
+  // —o venció el plazo del job— y Windows siguió instalando por su cuenta: en
+  // campo, esos parches acabaron entrando. Hasta que un escaneo lo confirme no
+  // hay nada que decidir; antes esto salía como «Needs your decision» sobre
+  // parches que ya estaban instalados.
+  verifying: {
+    label: "Checking the result",
+    tone: "info",
+    hint: "The install ran past our time limit and Windows may have finished it anyway. Kept until a scan shows whether the patch landed — no decision needed yet.",
+  },
   auto_release: {
     label: "Removed automatically",
     tone: "neutral",
