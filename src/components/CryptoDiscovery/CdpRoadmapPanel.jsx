@@ -57,6 +57,7 @@ import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessH
 // «Trust anchors to replace» vive en la pestaña Trust anchors desde el
 // repaso UI 2026-09-06: una lista de anclas es cosa de esa pestaña.
 import { AgilityBlockersPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
+import ProcessLibrariesPanel from "./ProcessLibrariesPanel";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -650,6 +651,15 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
           />
         </>
       ) : null}
+
+      {/*
+        Ola 1.5. Debajo de los bloqueos y no en una pestaña propia porque es
+        su desglose, no otra pregunta: arriba está CUÁNTOS equipos y por qué
+        causa, aquí QUÉ SE REINICIA en cada uno. Carga aparte de /cdp/pqc —
+        su propia ruta, su propio error— para que un fallo suyo no deje sin
+        bloqueos la pantalla, ni al revés.
+      */}
+      <ProcessLibrariesPanel refreshNonce={refreshNonce} />
 
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setSelected(null)}>
         <SystemDrawer

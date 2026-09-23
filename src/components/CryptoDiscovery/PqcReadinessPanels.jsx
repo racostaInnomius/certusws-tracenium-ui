@@ -143,12 +143,21 @@ export function TrustAnchorsPanel({ pqc, onSelect }) {
 const RUNTIME_LABEL = {
   jvm: (a) => `Java below ${a?.jvmMinMajor ?? 24}`,
   openssl: (a) => `OpenSSL below ${a?.opensslMinVersion ?? "3.5"}`,
-  "os-tls": (a) => `OS TLS stack below the threshold (Windows build ${a?.windowsMinBuild ?? 26100} / macOS ${a?.macosMinMajor ?? 26})`
+  "os-tls": (a) => `OS TLS stack below the threshold (Windows build ${a?.windowsMinBuild ?? 26100} / macOS ${a?.macosMinMajor ?? 26})`,
+  // Ola 1.5. Sin esta entrada la fila decía literalmente «process-library»
+  // —el fallback es la clave cruda—, que no es una causa que nadie pueda
+  // leer. El umbral es el mismo que el de `openssl` porque el backend sólo
+  // juzga OpenSSL aquí, pero la CAUSA es distinta y por eso es otra fila:
+  // una la ve el inventario de software, la otra sólo se ve mirando qué
+  // tiene cargado cada proceso.
+  "process-library": (a) => `A running service has OpenSSL below ${a?.opensslMinVersion ?? "3.5"} loaded`
 };
 const RUNTIME_HINT = {
   jvm: "ML-KEM and ML-DSA arrived in that JDK; older JVMs cannot negotiate post-quantum TLS.",
   openssl: "OpenSSL gained X25519MLKEM768 in 3.5; anything linked against an older one stays classical.",
-  "os-tls": "Everything that uses the system stack — on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a software inventory. Windows builds that have the ML-KEM groups but keep them turned off are not listed here: they can migrate, and appear under «Devices that can migrate — need a fix»."
+  "os-tls": "Everything that uses the system stack — on Windows that is IIS, RDP, WinRM, LDAPS and SMB, none of which appear in a software inventory. Windows builds that have the ML-KEM groups but keep them turned off are not listed here: they can migrate, and appear under «Devices that can migrate — need a fix».",
+  "process-library":
+    "Not the installed package — the library a live process has mapped in. A machine can carry an upgraded OpenSSL and still run nginx against the old one until it is restarted, and only this reading catches that. Which service to restart on each device is listed under «What each service actually loads» below. ⚠️ Some of these versions are inferred from the library's file name rather than read from it, and libssl.so.3 covers both sides of the 3.5 threshold — that panel marks which ones."
 };
 
 /**
@@ -270,7 +279,16 @@ export function AgilityBlockersPanel({ pqc, onSelectDevice }) {
           items={items}
           labelOf={(cause) => (RUNTIME_LABEL[cause] || (() => cause))(agility)}
           hintOf={(cause) => RUNTIME_HINT[cause]}
-          chipHintOf={(cause, d) => `${cause} ${d.versions.filter(Boolean).join(", ")} — open in Inventory`}
+          chipHintOf={(cause, d) =>
+            // Ola 1.5: en un bloqueo por librería cargada, la versión sola
+            // no dice nada accionable —hay que saber QUÉ servicio—, y eso
+            // sólo viaja en `detected`. El chip es uno por EQUIPO, así que
+            // con varios servicios bloqueados sólo se nombra el primero; el
+            // desglose completo está en el panel de abajo, y se dice.
+            cause === "process-library" && d.item?.detected
+              ? `${d.item.detected}${d.versions.filter(Boolean).length > 1 ? " (and other services on this device)" : ""} — open in Inventory`
+              : `${cause} ${d.versions.filter(Boolean).join(", ")} — open in Inventory`
+          }
           barColor={BRAND.alert.high}
           onSelectDevice={onSelectDevice}
         />

@@ -58,6 +58,54 @@ describe("PqcReadinessPanels — drill-down", () => {
   });
 });
 
+// Ola 1.5 — el bloqueo por librería CARGADA en un proceso. Es un `runtime`
+// nuevo del backend, y sin entrada en la tabla de etiquetas el fallback
+// pintaba la clave cruda («process-library») como causa.
+describe("⭐ bloqueo por librería cargada (ola 1.5)", () => {
+  const conBlockers = (blockers) => ({ ...PQC, agility: { ...PQC.agility, blockers } });
+  const b = (over = {}) => ({
+    agentId: "a9",
+    host: "web-prod-01",
+    runtime: "process-library",
+    detected: "nginx.service → /usr/lib/x86_64-linux-gnu/libssl.so.3",
+    version: "3.0.2",
+    majorVersion: 3,
+    requiredMajor: 3,
+    requiredVersion: "3.5",
+    reason: "nginx.service (puertos 443) carga openssl 3.0.2, anterior a ML-KEM",
+    source: "process-library",
+    ...over
+  });
+
+  it("se nombra en inglés y con su umbral, no con la clave cruda del backend", () => {
+    render(<AgilityBlockersPanel pqc={conBlockers([b()])} />);
+    expect(screen.getByRole("button", { name: /A running service has OpenSSL below 3\.5 loaded: 1 device/i })).toBeInTheDocument();
+    expect(screen.queryByText(/^process-library/)).not.toBeInTheDocument();
+  });
+
+  it("⭐ es una causa DISTINTA de «openssl»: el inventario de software no ve lo que un proceso tiene mapeado", () => {
+    // El mismo equipo con las dos causas cuenta una vez arriba y una por
+    // fila. Fundirlas escondería el caso que motiva la ola: paquete
+    // actualizado, servicio sin reiniciar.
+    render(<AgilityBlockersPanel pqc={conBlockers([b({ agentId: "a1", host: "SRV-01" }), { agentId: "a1", host: "SRV-01", runtime: "openssl", version: "1.1.1" }])} />);
+    expect(screen.getByText(/Devices that cannot migrate yet \(1\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /A running service has OpenSSL below 3\.5 loaded: 1 device/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^OpenSSL below 3\.5: 1 device/i })).toBeInTheDocument();
+  });
+
+  it("⚠️ la explicación avisa de que algunas versiones no se leyeron y remite al desglose", () => {
+    render(<AgilityBlockersPanel pqc={conBlockers([b()])} />);
+    // La explicación de la causa: dice que NO es el paquete instalado, y
+    // arrastra el aviso de la soname para que nadie cierre un ticket con
+    // una versión que nadie leyó.
+    const hint = screen.getByLabelText(/Not the installed package/i);
+    expect(hint.getAttribute("aria-label")).toMatch(/still run nginx against the old one until it is restarted/i);
+    expect(hint.getAttribute("aria-label")).toMatch(/inferred from the library's file name/i);
+    expect(hint.getAttribute("aria-label")).toMatch(/libssl\.so\.3 covers both sides of the 3\.5 threshold/i);
+    expect(screen.getByText(/seen: 3\.0\.2/)).toBeInTheDocument();
+  });
+});
+
 
 // ADR-0024 F2 — «pueden migrar, pero requieren el fix», complemento de «cannot
 // migrate yet». Los estados vienen de `agility.fixable[].state` (backend 411e2fd).
