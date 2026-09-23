@@ -41,6 +41,13 @@ export const CDP_URL_KEYS = {
   // certificado: son propiedades de DÓNDE contesta, no de qué es.
   discoveredBy: "disc",
   sni: "sni",
+  // Ola 1.1 — la profundidad del inventario: si la clave privada puede
+  // salir del equipo (`true`/`false` como TEXTO, que es lo que el servidor
+  // compara), dónde vive (software|tpm|smartcard|unknown) y qué se sabe de
+  // la cadena en el almacén (untrusted|incomplete|bad_signature).
+  keyExportable: "kexp",
+  keyStorage: "kstore",
+  chain: "chain",
   // Sólo los certificados que llevan una firma ALTERNATIVA post-cuántica
   // (catalyst, ADR-0015). No se puede llegar a ellos por `family`: un
   // catalyst es `quantum_broken` a propósito, porque lo que valida hoy es

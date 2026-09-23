@@ -193,6 +193,68 @@ describe("Inventory: cómo se descubrió y con qué SNI", () => {
   });
 });
 
+// Ola 1.1 — la profundidad del inventario.
+describe("Inventory: dónde vive la clave y qué se sabe de la cadena", () => {
+  it("la clave por almacén y por exportabilidad llegan al backend con su chip", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&kstore=tpm&kexp=false");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ keyStorage: "tpm", keyExportable: "false" })
+    );
+    expect(await screen.findByText(/Key storage: TPM/)).toBeInTheDocument();
+    expect(screen.getByText(/Private key: non-exportable/)).toBeInTheDocument();
+  });
+
+  it("⭐ «no llega a una raíz de confianza» se anuncia como lente, no como hallazgo", async () => {
+    // En Windows el almacén de raíces se rellena bajo demanda: el mismo
+    // certificado se lee «confiable» mañana. El aviso va PEGADO al filtro
+    // porque quien llegue por un enlace tiene que leerlo antes que la lista.
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&chain=untrusted");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ chain: "untrusted" }));
+    const nota = await screen.findByText(/root store is populated on demand/i);
+    expect(nota.textContent).toMatch(/^Not a finding\./);
+    expect(nota.textContent).toMatch(/no flag for it and nothing turns red/i);
+  });
+
+  it("⚠️ la lente «issuer missing» avisa de que NO casa con la bandera del mismo nombre", async () => {
+    // `chain=incomplete` mira `chain_info` directamente y por eso pilla
+    // también CAs, autofirmados y raíces del sistema, donde que falte el
+    // emisor es normal. La bandera excluye justo eso.
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&chain=incomplete");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    const nota = await screen.findByText(/also catches CAs, self-signed leaves and system roots/i);
+    expect(nota.textContent).toMatch(/Filter by that flag instead to match what the badge shows/i);
+  });
+
+  it("⭐ las dos banderas de cadena del almacén son filtrables y se explican en una frase", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&flag=store_chain_bad_signature");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ flag: "store_chain_bad_signature" }));
+    expect(await screen.findByText(/Flag: The signature does not match the issuer it claims/)).toBeInTheDocument();
+  });
+});
+
 
 // ADR-0024 F2: la columna ML-KEM usa el MISMO estado que el roadmap. Un
 // Windows con el grupo apagado no es «No hybrid» en rojo: está a un ajuste.

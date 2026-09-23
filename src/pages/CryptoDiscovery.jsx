@@ -106,6 +106,7 @@ import {
 import CdpSettingsTab from "../components/CryptoDiscovery/CdpSettingsTab";
 import { TrustAnchorsPanel } from "../components/CryptoDiscovery/PqcReadinessPanels";
 import CertificateDetailDrawer from "../components/CryptoDiscovery/CertificateDetailDrawer";
+import { CHAIN_FILTER_LABELS, KEY_STORAGE, STORE_CHAIN_FLAG_LABELS } from "../components/CryptoDiscovery/certKeyStorage";
 import CertIssuanceDialog from "../components/CryptoDiscovery/CertIssuanceDialog";
 import OrphanKeysPanel from "../components/CryptoDiscovery/OrphanKeysPanel";
 import SshUserKeysPanel from "../components/CryptoDiscovery/SshUserKeysPanel";
@@ -227,6 +228,12 @@ const FLAG_LABELS = {
   chain_incomplete:
     "Incomplete chain — served without intermediates; clients without them will fail",
   chain_untrusted: "Untrusted chain — the device's own trust store rejects it",
+  // Ola 1.1 — las dos banderas de cadena del ALMACÉN (no del handshake).
+  // ⚠️ No hay una tercera para «no llega a una raíz de confianza», y es
+  // deliberado: en Windows el almacén de raíces se rellena bajo demanda, así
+  // que eso cambia solo y no es un hallazgo. Se puede mirar con el filtro
+  // «Chain», nunca acusar.
+  ...STORE_CHAIN_FLAG_LABELS,
 };
 
 function FlagChips({ flags }) {
@@ -721,6 +728,11 @@ function CdpInventoryTab({ refreshNonce }) {
   // no está actuando.
   const discoveredBy = ["sweep", "named"].includes(filter.discoveredBy) ? filter.discoveredBy : "";
   const sni = ["with", "without"].includes(filter.sni) ? filter.sni : "";
+  // Ola 1.1 — la profundidad del inventario. Misma regla: el servidor
+  // descarta en silencio lo que no esté en su lista blanca.
+  const keyExportable = ["true", "false"].includes(filter.keyExportable) ? filter.keyExportable : "";
+  const keyStorage = ["software", "tpm", "smartcard", "unknown"].includes(filter.keyStorage) ? filter.keyStorage : "";
+  const chain = ["untrusted", "incomplete", "bad_signature"].includes(filter.chain) ? filter.chain : "";
   const catalyst = filter.catalyst === true;
   // Lente. Sin control propio: la eligen los paneles que cuentan sin ella
   // (el sunburst), y se ve y se borra como chip. Un valor desconocido no
@@ -760,6 +772,9 @@ function CdpInventoryTab({ refreshNonce }) {
     kem: kem || undefined,
     discoveredBy: discoveredBy || undefined,
     sni: sni || undefined,
+    keyExportable: keyExportable || undefined,
+    keyStorage: keyStorage || undefined,
+    chain: chain || undefined,
     certClass: certClass || undefined,
     // ⚠️ El catalyst abre la lente a propósito. La tarjeta de la portada
     // cuenta TAMBIÉN las anclas —que la cadena de confianza sea híbrida es
@@ -778,6 +793,9 @@ function CdpInventoryTab({ refreshNonce }) {
     kem ? { key: "kem", label: `Key exchange: ${KEM_LABELS[kem]}` } : null,
     discoveredBy ? { key: "discoveredBy", label: `Discovery: ${DISCOVERED_BY_LABELS[discoveredBy]}` } : null,
     sni ? { key: "sni", label: `SNI: ${SNI_LABELS[sni]}` } : null,
+    keyExportable ? { key: "keyExportable", label: `Private key: ${keyExportable === "true" ? "exportable" : "non-exportable"}` } : null,
+    keyStorage ? { key: "keyStorage", label: `Key storage: ${KEY_STORAGE[keyStorage]?.label ?? keyStorage}` } : null,
+    chain ? { key: "chain", label: `Chain: ${CHAIN_FILTER_LABELS[chain]}` } : null,
     certClass ? { key: "certClass", label: `Showing: ${CERT_CLASS_LABELS[certClass]}` } : null,
     catalyst ? { key: "catalyst", label: "Post-quantum alternative signature" } : null,
     issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
@@ -852,7 +870,7 @@ function CdpInventoryTab({ refreshNonce }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, discoveredBy, sni, catalyst, navKey, sortKey, refreshNonce]);
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, discoveredBy, sni, keyExportable, keyStorage, chain, catalyst, navKey, sortKey, refreshNonce]);
 
   const certColumns = [
     {
@@ -1069,6 +1087,30 @@ function CdpInventoryTab({ refreshNonce }) {
             <MenuItem value="with">{SNI_LABELS.with}</MenuItem>
             <MenuItem value="without">{SNI_LABELS.without}</MenuItem>
           </TextField>
+          {/* Ola 1.1 — dónde vive la clave privada y si puede salir de ahí.
+              Sólo tiene sentido sobre los que la tienen, y el backend ya
+              impone ese `has_private_key IS TRUE` en los dos filtros. */}
+          <TextField size="small" select label="Key storage" value={keyStorage} onChange={(e) => setAndReset({ keyStorage: e.target.value })} sx={{ minWidth: 180 }}>
+            <MenuItem value="">Any storage</MenuItem>
+            <MenuItem value="tpm">{KEY_STORAGE.tpm.label}</MenuItem>
+            <MenuItem value="smartcard">{KEY_STORAGE.smartcard.label}</MenuItem>
+            <MenuItem value="software">{KEY_STORAGE.software.label}</MenuItem>
+            <MenuItem value="unknown">{KEY_STORAGE.unknown.label}</MenuItem>
+          </TextField>
+          <TextField size="small" select label="Private key" value={keyExportable} onChange={(e) => setAndReset({ keyExportable: e.target.value })} sx={{ minWidth: 180 }}>
+            <MenuItem value="">Any</MenuItem>
+            <MenuItem value="true">Exportable</MenuItem>
+            <MenuItem value="false">Non-exportable</MenuItem>
+          </TextField>
+          {/* ⚠️ «No trusted root reached» vive AQUÍ y no entre las banderas:
+              en Windows el almacén de raíces se rellena bajo demanda, así que
+              es una lente para mirar, nunca una acusación. */}
+          <TextField size="small" select label="Chain" value={chain} onChange={(e) => setAndReset({ chain: e.target.value })} sx={{ minWidth: 240 }}>
+            <MenuItem value="">Any chain state</MenuItem>
+            <MenuItem value="incomplete">{CHAIN_FILTER_LABELS.incomplete}</MenuItem>
+            <MenuItem value="bad_signature">{CHAIN_FILTER_LABELS.bad_signature}</MenuItem>
+            <MenuItem value="untrusted">{CHAIN_FILTER_LABELS.untrusted}</MenuItem>
+          </TextField>
           <TextField size="small" label="Issuer" value={issuer} onChange={(e) => setAndReset({ issuer: e.target.value })} sx={{ minWidth: 170 }} />
           <FormControlLabel
             control={<Switch size="small" checked={hasPrivateKey} onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })} />}
@@ -1106,6 +1148,22 @@ function CdpInventoryTab({ refreshNonce }) {
             {sni === "without"
               ? "Certificates the server returns when no hostname is requested — what the bare IP answers with. That is a measured fact, not a gap in the data, and it is usually the certificate nobody remembers configuring. Local listeners are always in here: a listener cannot report an SNI."
               : "Certificates returned for a hostname that was actually sent in the handshake. Only probes can produce these."}
+          </Typography>
+        ) : null}
+        {chain === "untrusted" ? (
+          // ⚠️ El aviso va con el filtro y no en un tooltip: quien llegue
+          // aquí desde un enlace tiene que leerlo antes que la lista.
+          <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            Not a finding. On Windows the root store is populated on demand, so a legitimate root the machine has not
+            needed yet is simply absent and the same certificate reads as trusted tomorrow. This is here to look
+            through, not to act on — which is why there is no flag for it and nothing turns red.
+          </Typography>
+        ) : null}
+        {chain === "incomplete" || chain === "bad_signature" ? (
+          <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            {chain === "incomplete"
+              ? "Certificates whose issuer is not present on the device. ⚠️ This lens reads the stored chain directly, so unlike the store_chain_incomplete flag it also catches CAs, self-signed leaves and system roots — where a missing issuer is normal. Filter by that flag instead to match what the badge shows."
+              : "Certificates whose signature does not verify against the issuer they name. The two do not belong together; this is not a configuration gap."}
           </Typography>
         ) : null}
         {activeChips.length > 0 ? (

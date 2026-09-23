@@ -25,6 +25,7 @@ import {
   readEndpoints,
   summarizeEndpoints
 } from "./certEndpoints";
+import { chainFacts, chainNotAsserted, keyExportableState, keyStorageState } from "./certKeyStorage";
 
 const FAMILY_LABEL = {
   quantum_broken: { text: "Quantum-broken", tone: "warn" },
@@ -275,6 +276,81 @@ function EndpointsSection({ endpoints }) {
         </>
       )}
     </>
+  );
+}
+
+/** Relleno por tono. ROLE.* rellena; BRAND.alert.*Text escribe. */
+const FACT_TONE = {
+  good: { bg: BRAND.alert.successSoft, fg: BRAND.alert.successText },
+  warn: { bg: BRAND.alert.warningSoft, fg: BRAND.alert.warningText },
+  bad: { bg: BRAND.alert.errorSoft, fg: BRAND.alert.errorText },
+  // Lo no afirmado en gris: ni verde («bien») ni rojo («hallazgo»).
+  neutral: { bg: BRAND.surfaceMuted, fg: TEXT_MUTED }
+};
+
+function FactChip({ tone = "neutral", label, hint, bold }) {
+  const t = FACT_TONE[tone] ?? FACT_TONE.neutral;
+  return (
+    <Tooltip arrow title={hint ?? ""}>
+      <Chip
+        size="small"
+        label={label}
+        sx={{ height: 20, fontSize: TEXT.xs, fontWeight: bold ? 700 : 400, bgcolor: t.bg, color: t.fg }}
+      />
+    </Tooltip>
+  );
+}
+
+/**
+ * Ola 1.1 — dónde vive la clave privada de este equipo y si puede salir.
+ *
+ * Sólo cuando hay clave privada: sin ella el backend ni siquiera escribe
+ * los campos, y preguntarlo no significa nada.
+ */
+function KeyHoldingChips({ device }) {
+  if (device?.hasPrivateKey !== true) return null;
+  const exportable = keyExportableState(device.keyExportable);
+  const storage = keyStorageState(device.keyStorage);
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.5 }}>
+      <FactChip tone={storage.tone} label={storage.label} hint={storage.hint} />
+      <FactChip tone={exportable.tone} label={exportable.label} hint={exportable.hint} />
+    </Stack>
+  );
+}
+
+/**
+ * Ola 1.1 — lo que se sabe de la cadena en el ALMACÉN de este equipo (no
+ * en el handshake: eso es `ChainSummary`).
+ *
+ * ⚠️ «No llega a una raíz de confianza» NO se pinta como hallazgo. En
+ * Windows el almacén de raíces se rellena bajo demanda y eso se arregla
+ * solo; el backend tampoco emite bandera para ello. Aquí va en gris, con la
+ * explicación al lado.
+ */
+function StoredChainFacts({ chain }) {
+  const facts = chainFacts(chain);
+  // Sin `chain` no se pinta nada: un extremo de red nunca lo trae, y una
+  // fila vacía se leería como «se miró y no hay nada que decir».
+  if (!facts || facts.length === 0) return null;
+  const notAsserted = chainNotAsserted(chain);
+  return (
+    <Box sx={{ mt: 0.75 }}>
+      <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+        {facts.map((f) => (
+          <FactChip key={f.key} tone={f.tone} label={f.label} hint={f.hint} bold={f.tone === "bad"} />
+        ))}
+      </Stack>
+      {notAsserted.length > 0 ? (
+        // ⚠️ `signatureValid`/`trusted` son claves OPCIONALES: ausentes
+        // significa que el agente no se pronunció. Callarlo dejaría creer
+        // que lo que no se ve es que está bien.
+        <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5 }}>
+          The agent did not report {notAsserted.join(" or ")} for this store — not asserted, which is not the same as
+          a negative answer.
+        </Typography>
+      ) : null}
+    </Box>
   );
 }
 
@@ -529,6 +605,9 @@ export default function CertificateDetailDrawer({
                 </Tooltip>
               ))}
             </Stack>
+
+            <KeyHoldingChips device={device} />
+            <StoredChainFacts chain={device.chain} />
 
             <ChainSummary tls={device.tls} />
 
