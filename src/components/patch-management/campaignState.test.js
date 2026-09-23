@@ -191,3 +191,58 @@ describe("lastPatchJobCell", () => {
     expect(lastPatchJobCell(undefined)).toMatchObject({ label: "—", empty: true, title: "" });
   });
 });
+
+describe("🔴 lastPatchJobCell — un corte NUESTRO no se cuenta como si el agente hubiera contestado (23-sep)", () => {
+  // FTP-SPS y MSIG-QBOOKS: cortados a los 90 min, sin ACK, parcheados igual.
+  const cortado = (over = {}) => ({
+    jobId: "b57bb94d",
+    status: "failed",
+    startedAt: "2026-09-20T00:03:38Z",
+    finishedAt: "2026-09-20T01:33:40Z",
+    lastError: "patch_install failed: Windows Update install exceeded 90min. Process was killed.",
+    rebootRequested: true,
+    rebootRequired: null,
+    returnedFromReboot: true,
+    requestedCount: 2,
+    installedCount: null, // un corte no deja ACK
+    stillMissing: [],
+    othersPending: 0,
+    verifiedAt: "2026-09-22T09:00:00Z",
+    interruptedBy: "agent_timeout",
+    ...over,
+  });
+
+  it("🔴 «Not applied» NO dice que el agente informó de éxito: no informó de nada", () => {
+    const c = lastPatchJobCell({ state: "not_applied", patch: cortado({ stillMissing: ["KB5122882"] }) });
+    expect(c.title).not.toMatch(/reported success/);
+    expect(c.title).toMatch(/stopped waiting for Windows Update/);
+    expect(c.title).toMatch(/KB5122882/);
+  });
+
+  it("⭐ «Verifying» no afirma «Installed»: dice que Windows pudo terminar y que se espera al escaneo", () => {
+    const c = lastPatchJobCell({ state: "verifying", patch: cortado({ verifiedAt: null }) });
+    expect(c.title).not.toMatch(/^Installed/);
+    expect(c.title).toMatch(/Windows may have finished the install anyway/);
+  });
+
+  it("«Installed» explica que lo terminó Windows y lo confirmó el escaneo", () => {
+    const c = lastPatchJobCell({ state: "installed", patch: cortado() });
+    expect(c.title).toMatch(/but Windows finished the install/);
+    expect(c.title).toMatch(/confirmed by the scan/);
+  });
+
+  it("el plazo del job y el IPC se nombran por lo que son", () => {
+    expect(lastPatchJobCell({ state: "verifying", patch: cortado({ interruptedBy: "backend_timeout", verifiedAt: null }) }).title)
+      .toMatch(/deadline passed/);
+    expect(lastPatchJobCell({ state: "verifying", patch: cortado({ interruptedBy: "ipc_timeout", verifiedAt: null }) }).title)
+      .toMatch(/privileged service/);
+  });
+
+  it("sin corte, los textos de siempre", () => {
+    const c = lastPatchJobCell({
+      state: "not_applied",
+      patch: cortado({ interruptedBy: null, status: "completed", lastError: null, stillMissing: ["KB1"] }),
+    });
+    expect(c.title).toMatch(/reported success/);
+  });
+});

@@ -52,6 +52,27 @@ export function shortDate(iso, locale = "en-US") {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 /**
+ * Quién cortó la instalación cuando el resultado NO es del parche
+ * (`patch.interruptedBy` del backend, ver install-interrupted.ts).
+ *
+ * ⚠️ POR QUÉ IMPORTA (23-sep-2026). Con un corte nuestro la columna ya da el
+ * estado bueno —lo decide el escaneo—, pero los textos seguían siendo los de un
+ * job que contestó: «The agent reported success, but the scan still lists…»
+ * cuando el agente no informó de nada, o «Installed on…» mientras se verificaba
+ * algo que no sabíamos. FTP-SPS y MSIG-QBOOKS se cortaron a los 90 min y los dos
+ * acabaron parcheados: Windows sigue instalando aunque dejemos de esperar.
+ */
+export const INTERRUPTION_TEXT = {
+  agent_timeout: "The agent stopped waiting for Windows Update after its time limit",
+  backend_timeout: "The job's deadline passed with no answer from the device",
+  ipc_timeout: "The agent's privileged service did not answer in time",
+};
+
+export function interruptionText(kind) {
+  return INTERRUPTION_TEXT[kind] || null;
+}
+
+/**
  * La celda «Last patch job» de un equipo: `{label, tone, title, empty}`.
  * `empty: true` → no es un estado sino su ausencia; se pinta como «—».
  *
@@ -79,6 +100,9 @@ export function lastPatchJobCell(campaign) {
     ? `${plural(p.installedCount, "update", "updates")} installed`
     : "Installed";
   const error = describePatchError(p.lastError);
+  // El comienzo de la frase cuando lo cortamos nosotros: «X on Sep 20».
+  const cut = interruptionText(p.interruptedBy);
+  const cutPart = cut ? `${cut}${when ? ` on ${when}` : ""}` : null;
 
   switch (state) {
     case "installed":
@@ -88,7 +112,9 @@ export function lastPatchJobCell(campaign) {
         label: others > 0 ? `Installed · ${others} other${others === 1 ? "" : "s"} pending` : dated("Installed"),
         tone: "positive",
         title: [
-          `${installedPart}${when ? ` on ${when}` : ""}`,
+          cutPart
+            ? `${cutPart}, but Windows finished the install`
+            : `${installedPart}${when ? ` on ${when}` : ""}`,
           p.verifiedAt ? `confirmed by the scan of ${shortDate(p.verifiedAt)}` : null,
           others > 0
             ? `${plural(others, "other update", "other updates")} still pending — not part of this job`
@@ -104,9 +130,13 @@ export function lastPatchJobCell(campaign) {
       return {
         label: `Not applied${of}`,
         tone: "critical",
-        title: `The agent reported success${when ? ` on ${when}` : ""}, but the scan${
-          p.verifiedAt ? ` of ${shortDate(p.verifiedAt)}` : ""
-        } still lists: ${still.join(", ") || "the requested updates"}`,
+        title: cutPart
+          ? `${cutPart}, and the scan${p.verifiedAt ? ` of ${shortDate(p.verifiedAt)}` : ""} still lists: ${
+              still.join(", ") || "the requested updates"
+            }`
+          : `The agent reported success${when ? ` on ${when}` : ""}, but the scan${
+              p.verifiedAt ? ` of ${shortDate(p.verifiedAt)}` : ""
+            } still lists: ${still.join(", ") || "the requested updates"}`,
       };
     }
     case "verifying":
@@ -115,15 +145,23 @@ export function lastPatchJobCell(campaign) {
         tone: "neutral",
         // Un escaneo fallido llega con 0 pendientes: sin decirlo, «Verifying»
         // junto a «0 missing» parecería un éxito a punto de confirmarse.
-        title: p.latestScanFailed
-          ? `${installedPart}${when ? ` on ${when}` : ""} — the latest scan failed, so it cannot confirm it yet; another scan is requested automatically`
-          : `${installedPart}${when ? ` on ${when}` : ""} — waiting for a scan to confirm it`,
+        title: cutPart
+          ? `${cutPart}. Windows may have finished the install anyway — ${
+              p.latestScanFailed
+                ? "the latest scan failed, so it cannot tell yet; another scan is requested automatically"
+                : "waiting for a scan to tell whether it landed"
+            }`
+          : p.latestScanFailed
+            ? `${installedPart}${when ? ` on ${when}` : ""} — the latest scan failed, so it cannot confirm it yet; another scan is requested automatically`
+            : `${installedPart}${when ? ` on ${when}` : ""} — waiting for a scan to confirm it`,
       };
     case "awaiting_reboot":
       return {
         label: when ? `Restart needed · since ${when}` : "Restart needed",
         tone: "caution",
-        title: `${installedPart}${when ? ` on ${when}` : ""}. The system needs a restart before the update takes effect.`,
+        title: cutPart
+          ? `${cutPart}. The device has not restarted since; a scan after the restart will tell whether the update landed.`
+          : `${installedPart}${when ? ` on ${when}` : ""}. The system needs a restart before the update takes effect.`,
       };
     case "awaiting_window":
       return { label: base.label, tone: base.tone, title: error || "Held until the maintenance window opens" };
