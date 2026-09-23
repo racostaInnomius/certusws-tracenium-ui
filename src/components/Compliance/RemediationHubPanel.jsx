@@ -15,7 +15,9 @@
 //     cuenta tres veces el mismo portátil.
 //   · «nunca ejercido aquí» — 10 de los 12 handlers no se han ejecutado jamás
 //     en esta instalación. Ofrecerlos sin decirlo sería vender una promesa que
-//     nadie ha comprobado; por eso el primer paso es simular.
+//     nadie ha comprobado. Simular sigue siendo lo recomendado, pero desde el
+//     22-sep NO es obligatorio: el aviso viaja al cajón (`neverExercised`) y
+//     quien conoce el fix aplica directo sin dar dos vueltas.
 //   · el motivo cuando NO se puede pulsar: sin PMP no hay brazo ejecutor, y el
 //     operador tiene que leer eso, no encontrarse una columna vacía.
 
@@ -252,7 +254,7 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
                       onClick={() => setOpenAction(a)}
                       sx={{ textTransform: "none", whiteSpace: "nowrap", bgcolor: BRAND.teal, "&:hover": { bgcolor: BRAND.tealHover } }}
                     >
-                      Simulate, then fix
+                      Fix…
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -267,6 +269,9 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
         finding={fixFinding}
         checkIds={openAction?.checkIds ?? null}
         canManage={canManage && Boolean(openAction?.canApply)}
+        // El hub sabe si este fix no se ha ejercido nunca aquí; el cajón lo
+        // dice al lado de los botones, pero no lo impone.
+        neverExercised={Boolean(openAction) && !openAction?.verifiedAt}
         // El toast de la página (`showToast` en SecurityCompliance.jsx) recibe
         // UN objeto `{severity, message}`; el drawer avisa con dos argumentos.
         // Pasarlos sueltos dejaba `toast.message` en undefined y el aviso salía

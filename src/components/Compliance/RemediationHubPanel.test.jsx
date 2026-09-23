@@ -119,7 +119,7 @@ describe("sin poder ejecutar, se explica por qué", () => {
 
     expect(await screen.findByText(/does not include Patch Management/i)).toBeInTheDocument();
     expect(screen.getByText(/needs Patch Management, which is not in this tenant/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^fix…$/i })).toBeDisabled();
   });
 
   it("acción manual: se ve, se explica, y no ofrece un botón que no hace nada", async () => {
@@ -130,31 +130,41 @@ describe("sin poder ejecutar, se explica por qué", () => {
 
     expect(await screen.findByText("SIP enabled")).toBeInTheDocument();
     expect(screen.getByText(/remediated by hand/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^fix…$/i })).toBeDisabled();
   });
 
   it("quien sólo lee ve el hub completo, pero no lanza nada", async () => {
     render(<RemediationHubPanel canManage={false} />);
     await screen.findByText("firewall (3 checks)");
-    expect(screen.getByRole("button", { name: /simulate, then fix/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^fix…$/i })).toBeDisabled();
   });
 });
 
 describe("lanzar", () => {
   it("⭐ no llama a remediate directamente: abre el drawer (simular → aplicar)", async () => {
     render(<RemediationHubPanel canManage onToast={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^fix…$/i }));
     expect(await screen.findByTestId("fix-drawer")).toBeInTheDocument();
     expect(remediate).not.toHaveBeenCalled();
   });
 
   it("⭐ el drawer recibe TODOS los checks de la acción (la unión de equipos)", async () => {
     render(<RemediationHubPanel canManage onToast={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^fix…$/i }));
     await screen.findByTestId("fix-drawer");
     expect(drawerProps.current.checkIds).toEqual(["a", "b", "c"]);
     expect(drawerProps.current.finding).toMatchObject({ checkId: "a", agentRemediable: true });
     expect(drawerProps.current.canManage).toBe(true);
+  });
+
+  it("⭐ el cajón se entera de si el fix no se ha ejercido nunca aquí", async () => {
+    // Simular dejó de ser obligatorio, así que el aviso pasa a ser lo único
+    // que separa «aplico esto conociéndolo» de «lo estreno en doce equipos».
+    getRemediationHub.mockResolvedValue(hub([action({ verifiedAt: null })]));
+    render(<RemediationHubPanel canManage onToast={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /^fix…$/i }));
+    await screen.findByTestId("fix-drawer");
+    expect(drawerProps.current.neverExercised).toBe(true);
   });
 
   // ⚠️ El aviso del drawer tiene que LEERSE. `showToast` (SecurityCompliance)
@@ -164,7 +174,7 @@ describe("lanzar", () => {
   it("⭐ el aviso del drawer llega al toast de la página con su forma: {severity, message}", async () => {
     const onToast = vi.fn();
     render(<RemediationHubPanel canManage onToast={onToast} />);
-    fireEvent.click(await screen.findByRole("button", { name: /simulate, then fix/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^fix…$/i }));
     await screen.findByTestId("fix-drawer");
     drawerProps.current.notify("error", "PMP_PLUGIN_DISABLED");
     expect(onToast).toHaveBeenCalledWith({ severity: "error", message: "PMP_PLUGIN_DISABLED" });

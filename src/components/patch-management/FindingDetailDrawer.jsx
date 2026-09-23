@@ -52,7 +52,9 @@ import {
   remediate,
   getRemediationResults,
   cancelRemediation,
+  listRemediations,
 } from "../../api/patchManagement";
+import { formatRelativeTime } from "../Compliance/PatchLevel";
 import { listFrom } from "../../api/shape";
 import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
 
@@ -134,6 +136,7 @@ export default function FindingDetailDrawer({
   checkIds = null,         // acción agrupada: los equipos son la UNIÓN de sus checks
   initialDeviceIds = null, // preseleccionar sólo éstos (p. ej. el equipo abierto)
   notice = null,           // aviso propio del llamante, encima del botón
+  neverExercised = false,  // el hub sabe si este fix no se ha ejercido nunca aquí
 }) {
   // Mode: select (default) or progress (after remediate)
   const [mode, setMode] = React.useState("select");
@@ -151,6 +154,10 @@ export default function FindingDetailDrawer({
   const [results, setResults] = React.useState([]);
   const [resultsLoading, setResultsLoading] = React.useState(false);
   const [activeMode, setActiveMode] = React.useState("apply"); // 'apply' | 'dry_run'
+  // La última simulación de ESTE check, si la hay. El cajón se abre en blanco
+  // cada vez, así que sin esto una simulación ya hecha se perdía de vista y
+  // había que repetirla para llegar al Apply acotado.
+  const [lastDryRun, setLastDryRun] = React.useState(null);
 
   // Reset whenever the drawer opens with a different finding.
   React.useEffect(() => {
@@ -207,6 +214,28 @@ export default function FindingDetailDrawer({
     }
   }, [open, mode, finding?.checkId, loadDevices]);
 
+  // ¿Hay ya una simulación de este check? Se busca al abrir para poder volver
+  // a su resultado en vez de repetirla — que es lo que pasaba al entrar de
+  // nuevo desde Security Compliance.
+  React.useEffect(() => {
+    if (!open || !finding?.checkId) { setLastDryRun(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await listRemediations({ checkId: finding.checkId, limit: 10 });
+        const prev = listFrom(res, { context: "findingDetailHistory" })
+          .filter((r) => r?.mode === "dry_run" && r?.id)
+          .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))[0] ?? null;
+        if (!cancelled) setLastDryRun(prev);
+      } catch {
+        // El historial es una comodidad: si no carga, el cajón sigue
+        // funcionando como si no hubiera simulación previa.
+        if (!cancelled) setLastDryRun(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, finding?.checkId]);
+
   // ── PROGRESS-mode: poll results until terminal ──────────────────
   const loadResults = React.useCallback(async () => {
     if (!activeRemediationId) return;
@@ -246,10 +275,13 @@ export default function FindingDetailDrawer({
   // ── Actions ─────────────────────────────────────────────────────
   const fire = async (theMode, targetIds = null) => {
     if (!finding?.checkId || !canManage) return;
-    // `apply` sólo sale con los equipos que la simulación marcó; nunca con
-    // la selección a secas.
-    if (theMode === "apply" && !(Array.isArray(targetIds) && targetIds.length > 0)) return;
-    if (theMode !== "apply" && selectedDeviceIds.size === 0) {
+    // Tras una simulación, `apply` va a los equipos que ELLA marcó. Sin
+    // simulación previa va a la selección: simular primero se recomienda, no
+    // se impone — quien conoce el fix no tiene por qué dar dos vueltas.
+    const targets = Array.isArray(targetIds) && targetIds.length > 0
+      ? targetIds
+      : Array.from(selectedDeviceIds);
+    if (targets.length === 0) {
       notify?.("info", "Select at least one device first");
       return;
     }
@@ -258,7 +290,7 @@ export default function FindingDetailDrawer({
       const res = await remediate({
         checkId: finding.checkId,
         mode: theMode,
-        deviceIds: theMode === "apply" ? targetIds : Array.from(selectedDeviceIds),
+        deviceIds: targets,
       });
       const id = res?.remediation?.id;
       if (!id) {
@@ -615,9 +647,40 @@ export default function FindingDetailDrawer({
 
               {notice ? <Box sx={{ pt: 1 }}>{notice}</Box> : null}
 
-              {/* Action bar — sólo simular. «Apply» aparece DESPUÉS, con los
-                  equipos que la simulación dice que cambiarían. */}
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ pt: 1 }}>
+              {/* La simulación que ya se hizo. Sin esto, volver a entrar aquí
+                  desde Security Compliance obligaba a repetirla para llegar al
+                  «Apply en los que cambiarían». */}
+              {lastDryRun ? (
+                <Stack
+                  direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap
+                  data-testid="last-dry-run"
+                  sx={{ pt: 1 }}
+                >
+                  <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+                    Already dry-run {formatRelativeTime(lastDryRun.createdAt)} (#{lastDryRun.id}, {lastDryRun.status}).
+                  </Typography>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setActiveMode("dry_run");
+                      setActiveRemediationId(lastDryRun.id);
+                      setResults([]);
+                      setMode("progress");
+                    }}
+                    sx={{ textTransform: "none", fontWeight: 700 }}
+                  >
+                    Open its result
+                  </Button>
+                </Stack>
+              ) : null}
+
+              {/* Action bar — dos caminos, y el operador elige. Simular sigue
+                  siendo lo recomendado (queda primero y resaltado), pero
+                  aplicar directo está aquí: obligar a simular convertía cada
+                  fix conocido en dos vueltas, y al volver a entrar el cajón
+                  empezaba otra vez por la simulación aunque ya estuviera
+                  hecha. */}
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ pt: 1 }} flexWrap="wrap" useFlexGap>
                 <Button
                   variant="contained"
                   size="medium"
@@ -638,8 +701,27 @@ export default function FindingDetailDrawer({
                 >
                   Dry-run on {selectedDeviceIds.size}
                 </Button>
-                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                  Nothing changes yet. Apply comes next, only on the devices the dry-run says would change.
+                <Button
+                  variant="outlined"
+                  size="medium"
+                  startIcon={
+                    submitting && activeMode === "apply"
+                      ? <CircularProgress size={14} />
+                      : <PlayCircleOutlineOutlinedIcon />
+                  }
+                  onClick={() => fire("apply")}
+                  disabled={
+                    submitting || !canManage || !isAgentRemediable
+                    || selectedDeviceIds.size === 0
+                  }
+                  sx={{ textTransform: "none", fontWeight: 700, flexShrink: 0 }}
+                >
+                  Apply on {selectedDeviceIds.size}
+                </Button>
+                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, flex: "1 1 240px" }}>
+                  {neverExercised
+                    ? "This fix has never run on this installation — the dry-run changes nothing and tells you which devices it would touch."
+                    : "The dry-run changes nothing: apply then goes only to the devices it says would change."}
                 </Typography>
               </Stack>
             </>
