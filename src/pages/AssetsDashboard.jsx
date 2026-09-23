@@ -117,7 +117,11 @@ import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
 
 // Índice de la pestaña Experience (ADR-0030) en el detalle del equipo.
 const EXPERIENCE_TAB = 4;
+// Índice de la pestaña Activity (ADR-0031): lo que se le envió al equipo y lo
+// que se observó en él.
+const ACTIVITY_TAB = 5;
 import HardwareChangesPanel from "../components/AssetsDashboard/HardwareChangesPanel";
+import ActivityTab from "../components/AssetsDashboard/ActivityTab";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -259,6 +263,7 @@ function AgentDetailWorkbench({
           <Tab label="Software" />
           <Tab label="Printers" />
           <Tab label="Experience" />
+          <Tab label="Activity" />
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -310,6 +315,11 @@ function AgentDetailWorkbench({
           {/* ADR-0030 — el id CRUDO, como HardwareChangesPanel. */}
           {!loading && tab === EXPERIENCE_TAB ? (
             <ExperienceTab agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
+          ) : null}
+
+          {/* ADR-0031 — también con el id CRUDO, no el formateado para mostrar. */}
+          {!loading && tab === ACTIVITY_TAB ? (
+            <ActivityTab agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
           ) : null}
         </Box>
       </Paper>
