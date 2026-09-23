@@ -132,11 +132,9 @@ import OnlineDot from "../components/common/OnlineDot";
 //    each compliance check has a matching remediation action here. When
 //    the PMP plugin lands, each remediation maps to a tenant-level
 //    automation (e.g. "apply baseline" or "install KB").
-/**
- * Categories another tab already shows. "Other" is defined as the complement,
- * so anything the catalog adds later surfaces here instead of vanishing.
- */
-const OTHER_EXCLUDES = "crypto,cryptography,network_sharing";
+// (Aquí vivía `OTHER_EXCLUDES`, el complemento que alimentaba el cajón
+// «Everything else». Ese botón ya no existe —cada dominio se nombra— y la
+// constante quedó sin uso.)
 
 const CATEGORIES = [
   {
@@ -1111,7 +1109,11 @@ export default function PatchManagement({ onNavigate }) {
         //   positive (green)  → healthy
         //   teal              → in-flight states (installing, scan_pending)
         //   caution (amber)   → updates available
-        //   critical (red)    → reboot pending or error
+        //   attention (orange)→ reboot pending
+        //   critical (red)    → error
+        // ⚠️ «Reboot pending» NO comparte el rojo del error: el parche entró y
+        // sólo falta reiniciar. En rojo, la tabla decía que 5 equipos estaban
+        // rotos cuando lo que estaban era a medio terminar.
         //   neutral grey      → idle / inventory_only / unknown
         // `inventory_only` is intentionally neutral: the scan ran
         // and found 0 pending patches — that's a calm "OK" state,
@@ -1126,7 +1128,7 @@ export default function PatchManagement({ onNavigate }) {
           scan_pending:      { label: L.scan_pending,      fg: BRAND.tealText, bg: BRAND.tealSoft     },
           updates_available: { label: L.updates_available, fg: BRAND.alert.warningText,   bg: ROLE.cautionSoft   },
           installing:        { label: L.installing,        fg: BRAND.tealText, bg: BRAND.tealSoft     },
-          reboot_required:   { label: L.reboot_required,   fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft  },
+          reboot_required:   { label: L.reboot_required,   fg: BRAND.alert.high,       bg: BRAND.alert.highSoft },
           healthy:           { label: L.healthy,           fg: BRAND.alert.successText,  bg: ROLE.positiveSoft  },
           error:             { label: L.error,             fg: BRAND.alert.errorText,  bg: ROLE.criticalSoft  },
           unknown:           { label: L.unknown,           fg: BRAND.gray,     bg: BRAND.surfaceMuted },
@@ -1328,8 +1330,9 @@ export default function PatchManagement({ onNavigate }) {
             title="Reboot pending"
             value={kpis.rebootDevices}
             icon={<RestartAltOutlinedIcon />}
-            accent={kpis.rebootDevices > 0 ? ROLE.critical : BRAND.dark}
-            tint={kpis.rebootDevices > 0 ? ROLE.criticalSoft : BRAND.darkSoft}
+            // Naranja, no rojo: hay trabajo pendiente (reiniciar), no una avería.
+            accent={kpis.rebootDevices > 0 ? ROLE.attention : BRAND.dark}
+            tint={kpis.rebootDevices > 0 ? ROLE.attentionSoft : BRAND.darkSoft}
             onClick={() => handleCardFilter("reboot")}
             selected={cardFilter === "reboot"}
           />

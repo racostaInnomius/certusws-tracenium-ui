@@ -12,11 +12,37 @@
 // only ever shipped an inventory, and one still waiting for its restart. Those
 // three are «not known to be patched», and they get their own band.
 
+import { BRAND, ROLE } from "../../theme/brand";
+
+/**
+ * El color de cada tono. Vive aquí, junto a las bandas, y no en el componente:
+ * un tono sin relleno se pinta gris sin avisar, y el sitio donde se comprueba
+ * que no falta ninguno es el mismo donde se declaran.
+ *
+ * ⚠️ El relleno `critical` es `errorText` (#B23A33) y no el rojo suave, por lo
+ * que documenta InstallsOverTimeChart: el rojo suave contra el verde se separa
+ * ΔE 3,1 para un deuteranope, que es no separarse. `attention` (naranja) y
+ * `caution` (ámbar) se distinguen del rojo y entre sí por CLARIDAD.
+ */
+export const BAND_FILL = Object.freeze({
+  positive: ROLE.positive,
+  caution: ROLE.caution,
+  attention: ROLE.attention,
+  critical: BRAND.alert.errorText,
+  info: BRAND.teal,
+  muted: BRAND.gray,
+});
+
 /** Same order and meaning as the Status chip in the devices table. */
 export const PATCH_STATUS_BANDS = Object.freeze([
   { key: "healthy", label: "Fully patched", tone: "positive" },
   { key: "updates_available", label: "Updates available", tone: "caution" },
-  { key: "reboot_required", label: "Reboot pending", tone: "critical" },
+  // ⚠️ «Reboot pending» NO es un fallo: el parche se instaló y sólo falta el
+  // reinicio. Compartía el rojo de «Scan failed», así que la banda se leía como
+  // una avería. Va en el naranja de «pide una acción» — por encima de «Updates
+  // available», por debajo de lo que sí ha fallado. El resto del producto ya lo
+  // trata así (en SDP, `reboot_required` cuenta como despliegue con éxito).
+  { key: "reboot_required", label: "Reboot pending", tone: "attention" },
   { key: "installing", label: "Installing", tone: "info" },
   { key: "scan_pending", label: "Scan pending", tone: "info" },
   { key: "error", label: "Scan failed", tone: "critical" },

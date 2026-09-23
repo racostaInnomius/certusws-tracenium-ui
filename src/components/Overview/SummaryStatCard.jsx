@@ -20,6 +20,8 @@ import { BRAND, TEXT } from "../../theme/brand";
 
 const TONE_COLOR = {
   critical: BRAND.alert.errorText,
+  // «Pide una acción, pero nada ha fallado» — el naranja de la severidad High.
+  attention: BRAND.alert.high,
   caution: BRAND.alert.warningText,
   positive: BRAND.alert.successText,
   neutral: BRAND.dark,

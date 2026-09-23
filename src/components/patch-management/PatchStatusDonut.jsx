@@ -23,21 +23,18 @@
 // hues. The critical fill is `errorText` (#B23A33) rather than the soft red for
 // the reason InstallsOverTimeChart documents: soft red against the positive
 // green separates by ΔE 3.1 for a deuteranope, which is no separation at all.
+// «Reboot pending» carries `attention` (orange) and not the same red: three
+// bands — amber, orange, red — that separate by LIGHTNESS, so the order still
+// reads for any colour vision.
 
 import * as React from "react";
 import { Box, Stack, Tooltip, Typography } from "@mui/material";
 import SectionPaper from "../common/SectionPaper";
 import { Cell, Pie, PieChart } from "recharts";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
-import { patchStatusChartData } from "./patchStatusChart";
+import { BRAND, TEXT } from "../../theme/brand";
+import { patchStatusChartData, BAND_FILL } from "./patchStatusChart";
 
-const FILL = {
-  positive: ROLE.positive,
-  caution: ROLE.caution,
-  critical: BRAND.alert.errorText,
-  info: BRAND.teal,
-  muted: BRAND.gray,
-};
+const FILL = BAND_FILL;
 
 export default function PatchStatusDonut({ statusBreakdown, size = 168, selectedStatus = null, onSelectStatus }) {
   const data = React.useMemo(() => patchStatusChartData(statusBreakdown), [statusBreakdown]);

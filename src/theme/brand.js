@@ -49,6 +49,12 @@ export const BRAND = {
     // the ordered severity scale (see theme/severity.js) reads at a glance.
     high: "#8b5418",
     highSoft: "rgba(199,121,43,0.16)",
+    // El naranja de esa familia como RELLENO (barras, bandas de donut, acentos
+    // de tarjeta). `high` es su tono de TEXTO: como relleno queda en luminancia
+    // ~0,12, la misma que `errorText` (#B23A33), y para un deuteranope los dos
+    // son el mismo marrón. Éste es el pigmento que ya vivía dentro de
+    // `highSoft`, y se separa del ámbar y del rojo por CLARIDAD, no por matiz.
+    highFill: "#C7792B",
     warning: "#F4D37D",
     warningSoft: "rgba(244,211,125,0.30)",
     // Darker amber for text on warningSoft (contrast).
@@ -204,6 +210,10 @@ export const ROLE = {
   cautionSoft: BRAND.alert.warningSoft,
   critical: BRAND.alert.error,
   criticalSoft: BRAND.alert.errorSoft,
+  // «Pide una acción, pero nada ha fallado» — el escalón naranja entre
+  // `caution` y `critical`, el mismo que usa la severidad «High».
+  attention: BRAND.alert.highFill,
+  attentionSoft: BRAND.alert.highSoft,
   neutral: BRAND.teal,
   neutralSoft: BRAND.tealSoft,
   accent: BRAND.cyan,

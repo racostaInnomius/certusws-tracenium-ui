@@ -1,7 +1,28 @@
 // src/components/patch-management/patchStatusChart.test.js
 
 import { describe, it, expect } from "vitest";
-import { patchStatusChartData } from "./patchStatusChart";
+import { patchStatusChartData, PATCH_STATUS_BANDS, BAND_FILL } from "./patchStatusChart";
+
+describe("PATCH_STATUS_BANDS", () => {
+  const toneOf = (key) => PATCH_STATUS_BANDS.find((b) => b.key === key)?.tone;
+  const fillOf = (key) => BAND_FILL[toneOf(key)];
+
+  it("⭐ «Reboot pending» NO se pinta como «Scan failed»: el parche entró, sólo falta reiniciar", () => {
+    expect(toneOf("reboot_required")).not.toBe(toneOf("error"));
+    expect(fillOf("reboot_required")).not.toBe(fillOf("error"));
+    expect(toneOf("error")).toBe("critical");
+  });
+
+  it("y tampoco se confunde con «Updates available», que es la banda de al lado", () => {
+    expect(fillOf("reboot_required")).not.toBe(fillOf("updates_available"));
+  });
+
+  it("⚠️ todo tono de una banda tiene relleno: uno que falte se pinta gris SIN avisar", () => {
+    for (const band of PATCH_STATUS_BANDS) {
+      expect(BAND_FILL[band.tone], `la banda «${band.label}» usa el tono «${band.tone}»`).toBeTruthy();
+    }
+  });
+});
 
 describe("patchStatusChartData", () => {
   it("⭐ cuenta la misma columna Status que la tabla, y ordena por gravedad de lectura", () => {

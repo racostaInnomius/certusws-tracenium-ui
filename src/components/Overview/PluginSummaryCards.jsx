@@ -186,7 +186,9 @@ export function PatchManagementCard({ results, loading, onNavigate }) {
       }
       stats={[
         { label: "Devices with updates available", value: n(status.updates_available), tone: toneIf(n(status.updates_available), "caution") },
-        { label: "Reboot required", value: n(status.reboot_required), tone: toneIf(n(status.reboot_required), "critical") },
+        // Naranja, no rojo: el parche entró, falta reiniciar. El rojo de esta
+        // tarjeta es para lo que ha fallado de verdad («Scan or install errors»).
+        { label: "Reboot required", value: n(status.reboot_required), tone: toneIf(n(status.reboot_required), "attention") },
         { label: "Critical + important patches missing", value: criticalish, tone: toneIf(criticalish, "critical"), hint: "count of patches across the fleet, not devices" },
         { label: "Devices up to date", value: n(status.healthy), tone: toneIf(n(status.healthy), "positive") },
         { label: "Scan or install errors", value: n(status.error), tone: toneIf(n(status.error), "critical") },
