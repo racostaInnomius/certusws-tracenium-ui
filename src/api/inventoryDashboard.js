@@ -65,6 +65,13 @@ export async function getWindowsGpoInventory() {
   return httpGetJson(`${BASE}/windows-gpos`);
 }
 
+// El historial: qué directiva entró o salió de cada equipo, y cuándo. La foto
+// de arriba dice qué hay hoy; esto dice qué cambió, que es la pregunta que
+// trae a alguien a esta pantalla.
+export async function getWindowsGpoChanges(days = 30) {
+  return httpGetJson(`${BASE}/windows-gpos/changes?days=${encodeURIComponent(days)}`, { cache: "no-store" });
+}
+
 // Impresoras de la flota agrupadas en colas, con impresoras físicas por
 // dirección y la cobertura de lectura. Pestaña Asset Management → Printers.
 export async function getPrinterFleet() {

@@ -5,9 +5,14 @@
 // T1 con 8 equipos reportando y ni una sola directiva.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-vi.mock("../api/inventoryDashboard", () => ({ getWindowsGpoInventory: vi.fn() }));
+vi.mock("../api/inventoryDashboard", () => ({
+  getWindowsGpoInventory: vi.fn(),
+  // El panel de cambios vive dentro de esta página y hace su propia
+  // llamada: sin este doble, cada test de la tabla fallaría por la red.
+  getWindowsGpoChanges: vi.fn().mockResolvedValue({ groups: [], changes: [], windowDays: 30, devicesWithSingleReading: 0 }),
+}));
 vi.mock("../hooks/useCachedFetch", () => ({
   useCachedFetch: (_k, fn) => {
     const [data, setData] = React.useState(null);
@@ -21,6 +26,7 @@ vi.mock("../hooks/useCachedFetch", () => ({
 import * as React from "react";
 import { getWindowsGpoInventory } from "../api/inventoryDashboard";
 import WindowsGpos from "./WindowsGpos";
+import { getWindowsGpoChanges } from "../api/inventoryDashboard";
 
 afterEach(() => {
   cleanup();
@@ -186,8 +192,14 @@ describe("WindowsGpos — los equipos sin ninguna directiva", () => {
       devices: [conDominio.devices[0]],
     });
     render(<WindowsGpos />);
-    await screen.findByText("Without any GPO");
-    const marcadas = screen.queryAllByRole("button").filter((el) => el.getAttribute("aria-pressed") !== null);
+    const rotulo = await screen.findByText("Without any GPO");
+    // ⚠️ Acotado a la TARJETA, no a la página: abajo hay un selector de
+    // periodo con sus propios `aria-pressed` que no tiene nada que ver con
+    // este filtro, y contarlo aquí mediría otra cosa.
+    const tarjeta = rotulo.closest("div")?.parentElement ?? document.body;
+    const marcadas = within(tarjeta)
+      .queryAllByRole("button")
+      .filter((el) => el.getAttribute("aria-pressed") !== null);
     expect(marcadas).toHaveLength(0);
   });
 });
@@ -343,3 +355,95 @@ describe("WindowsGpos — OU y rol", () => {
 });
 
 
+
+// ── ADR-0012 (addendum): mirar UNA directiva ─────────────────────────────
+//
+// ⚠️ La pregunta es «aplica a 42 de 52, ¿por qué esos diez no?». Lo delicado
+// es quién cuenta como «no la tiene»: un equipo de workgroup NO es una brecha
+// (no le aplica) y una lectura fallida tampoco (no es una ausencia).
+
+const paraFoco = {
+  summary: {
+    devicesReporting: 4,
+    withComputerGpos: 2,
+    withUserGpos: 0,
+    withoutAnyGpos: 1,
+    domainJoinedWithoutGpos: 1,
+    notDomainJoinedWithoutGpos: 0,
+    unknownDomainWithoutGpos: 0,
+    domainUnknown: 0,
+    distinctGpos: 1,
+    withOu: 0,
+    domainControllers: 0,
+  },
+  gpos: [{ name: "ADC-SecurityFix", computer: 2, user: 0, devices: 2 }],
+  devices: [
+    { agentId: "a-1", hostname: "CON-1", osFullVersion: "Win11", computerGpos: ["ADC-SecurityFix"], userGpos: [], partOfDomain: true, domain: "d", domainRole: null, ou: null, ouSegments: [], ouReported: false, collectedAt: "2026-09-22T20:00:00.000Z" },
+    { agentId: "a-2", hostname: "CON-2", osFullVersion: "Win11", computerGpos: ["ADC-SecurityFix"], userGpos: [], partOfDomain: true, domain: "d", domainRole: null, ou: null, ouSegments: [], ouReported: false, collectedAt: "2026-09-22T20:00:00.000Z" },
+    { agentId: "a-3", hostname: "SIN-ELLA", osFullVersion: "Win11", computerGpos: ["Default Domain Policy"], userGpos: [], partOfDomain: true, domain: "d", domainRole: null, ou: null, ouSegments: [], ouReported: false, collectedAt: "2026-09-22T20:00:00.000Z" },
+    { agentId: "a-4", hostname: "WORKGROUP-1", osFullVersion: "Win10", computerGpos: [], userGpos: [], partOfDomain: false, domain: null, domainRole: null, ou: null, ouSegments: [], ouReported: false, collectedAt: "2026-09-22T20:00:00.000Z" },
+    { agentId: "a-5", hostname: "NO-LEIDO", osFullVersion: "Win10", computerGpos: null, userGpos: null, partOfDomain: true, domain: "d", domainRole: null, ou: null, ouSegments: [], ouReported: false, collectedAt: "2026-09-22T20:00:00.000Z" },
+  ],
+};
+
+const unGrupoDeCambio = {
+  groups: [
+    {
+      gpo: "ADC-SecurityFix",
+      direction: "added",
+      day: "2026-09-22",
+      devices: [{ agentId: "a-1", hostname: "CON-1", at: "2026-09-22T20:00:00.000Z" }],
+      firstAt: "2026-09-22T20:00:00.000Z",
+      lastAt: "2026-09-22T20:00:00.000Z",
+    },
+  ],
+  changes: [],
+  windowDays: 30,
+  devicesWithSingleReading: 0,
+};
+
+describe("WindowsGpos — enfocar una directiva", () => {
+  async function enfocar() {
+    getWindowsGpoInventory.mockResolvedValue(paraFoco);
+    getWindowsGpoChanges.mockResolvedValue(unGrupoDeCambio);
+    render(<WindowsGpos />);
+    // El nombre sale en dos sitios: la barra del ranking y el historial. Se
+    // pincha el del HISTORIAL, que va al final de la página y es el camino
+    // que más se usa («esto cambió — ¿a quién más le pasó?»).
+    const apariciones = await screen.findAllByText("ADC-SecurityFix");
+    fireEvent.click(apariciones[apariciones.length - 1]);
+  }
+
+  it("⭐ dice a cuántos equipos del dominio alcanza, que es la pregunta de los diez", async () => {
+    await enfocar();
+    expect(await screen.findByText(/Applies to 2 of 4 domain devices/i)).toBeInTheDocument();
+  });
+
+  it("⭐ y deja ver a los que NO la tienen", async () => {
+    await enfocar();
+    const boton = await screen.findByRole("button", { name: /Not applied \(1\)/i });
+    fireEvent.click(boton);
+    expect(await screen.findByText("SIN-ELLA")).toBeInTheDocument();
+    expect(screen.getByText(/a different Organizational Unit, or a security or WMI filter/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ un equipo de WORKGROUP no es una brecha: no le aplica", async () => {
+    await enfocar();
+    fireEvent.click(await screen.findByRole("button", { name: /Not applied/i }));
+    expect(screen.queryByText("WORKGROUP-1")).not.toBeInTheDocument();
+  });
+
+  it("⚠️ una lectura FALLIDA tampoco: no es una ausencia", async () => {
+    await enfocar();
+    fireEvent.click(await screen.findByRole("button", { name: /Not applied/i }));
+    expect(screen.queryByText("NO-LEIDO")).not.toBeInTheDocument();
+    // Y por eso el total de «no la tienen» es 1, no 2.
+    expect(screen.getByRole("button", { name: /Not applied \(1\)/i })).toBeInTheDocument();
+  });
+
+  it("se puede quitar el foco y volver a la flota entera", async () => {
+    await enfocar();
+    fireEvent.click(await screen.findByText("Clear"));
+    expect(screen.queryByText(/Applies to 2 of 4/i)).not.toBeInTheDocument();
+  });
+});

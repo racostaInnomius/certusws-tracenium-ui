@@ -17,13 +17,14 @@
 // razones opuestas.
 
 import * as React from "react";
-import { Alert, Box, Chip, Paper, Stack, Typography } from "@mui/material";
+import { Alert, Box, Chip, Paper, Stack, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { getWindowsGpoInventory } from "../api/inventoryDashboard";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import CompositionBars from "../components/common/CompositionBars";
+import GpoChangesPanel from "../components/AssetsDashboard/GpoChangesPanel";
 import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import { describeWithoutGpos } from "../utils/gpoDomainSummary";
@@ -156,9 +157,32 @@ export default function WindowsGpos({ refreshNonce }) {
   // Ver solo los equipos sin ninguna directiva. Se apaga volviendo a pulsar.
   const [soloSinGpo, setSoloSinGpo] = React.useState(false);
 
+  // ADR-0012 (addendum) — mirar UNA directiva: quién la tiene y, sobre todo,
+  // quién NO. `foco` es {gpo, modo}; `modo` es "with" o "without".
+  const [foco, setFoco] = React.useState(null);
+
+  // Los equipos del dominio, que son contra los que se mide una directiva: un
+  // equipo de workgroup que no la tiene no es una anomalía, es que no aplica.
+  const enDominio = React.useMemo(() => todos.filter((d) => d.partOfDomain === true), [todos]);
+  const aplican = React.useMemo(
+    () => (foco ? enDominio.filter((d) => (d.computerGpos ?? []).includes(foco.gpo)) : []),
+    [enDominio, foco]
+  );
+  // ⚠️ Sólo cuenta como «no la tiene» el equipo cuya lectura SÍ funcionó: una
+  // lectura fallida no es una ausencia, y meterla aquí inventaría una brecha.
+  const noAplican = React.useMemo(
+    () =>
+      foco
+        ? enDominio.filter((d) => Array.isArray(d.computerGpos) && !d.computerGpos.includes(foco.gpo))
+        : [],
+    [enDominio, foco]
+  );
+
   const devices = React.useMemo(
     () =>
-      soloSinGpo
+      foco
+        ? (foco.modo === "with" ? aplican : noAplican)
+        : soloSinGpo
         ? todos.filter(
             (d) =>
               // ⚠️ Mismo criterio que el conteo del backend (gpo-domain.ts):
@@ -168,7 +192,7 @@ export default function WindowsGpos({ refreshNonce }) {
               (d.userGpos?.length ?? 0) === 0
           )
         : todos,
-    [todos, soloSinGpo]
+    [todos, soloSinGpo, foco, aplican, noAplican]
   );
 
   const gpoRows = React.useMemo(
@@ -339,6 +363,46 @@ export default function WindowsGpos({ refreshNonce }) {
         </Alert>
       ) : null}
 
+      {/* ⚠️ La pregunta que la pantalla no contestaba: una directiva aplica a
+          42 de 52 equipos del dominio — ¿por qué esos diez no? Aquí se puede
+          mirar a los que la tienen y, lo que importa, a los que no. Un equipo
+          de workgroup no cuenta: no es que le falte, es que no le aplica. */}
+      {foco ? (
+        <Paper
+          elevation={0}
+          sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${BRAND.tealText}`, bgcolor: BRAND.tealSoft }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+            <Typography sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.dark, wordBreak: "break-word" }}>
+              {foco.gpo}
+            </Typography>
+            <Chip
+              size="small"
+              label={`Applies to ${aplican.length} of ${enDominio.length} domain devices`}
+              sx={{ height: 22, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.surface, color: BRAND.tealText }}
+            />
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={foco.modo}
+              onChange={(_, v) => v && setFoco({ ...foco, modo: v })}
+              aria-label="Focus"
+            >
+              <ToggleButton value="with">Applied ({aplican.length})</ToggleButton>
+              <ToggleButton value="without">Not applied ({noAplican.length})</ToggleButton>
+            </ToggleButtonGroup>
+            <Chip size="small" label="Clear" onClick={() => setFoco(null)} sx={{ height: 22, fontSize: TEXT.xs }} />
+          </Stack>
+          {foco.modo === "without" && noAplican.length > 0 ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
+              These devices are domain-joined and read their policies fine, so the policy simply does not reach
+              them — a different Organizational Unit, or a security or WMI filter. Devices whose read failed are
+              not listed here: a failed read is not an absence.
+            </Typography>
+          ) : null}
+        </Paper>
+      ) : null}
+
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
@@ -349,6 +413,13 @@ export default function WindowsGpos({ refreshNonce }) {
               emptyLabel="No GPOs reported"
               minHeight={320}
               maxItems={10}
+              // Un ranking que no lleva a ninguna parte ordena barras; lo que
+              // hace falta saber es QUIÉNES son esos equipos — y quiénes no.
+              onItemClick={(item) => {
+                setSoloSinGpo(false);
+                setFoco({ gpo: item?.label ?? item?.name, modo: "with" });
+              }}
+              actionLabel="See devices"
             />
           </Box>
         </Grid>
@@ -404,6 +475,15 @@ export default function WindowsGpos({ refreshNonce }) {
           </Paper>
         </Grid>
       </Grid>
+      {/* El historial, debajo de la foto: qué directiva entró o salió y
+          dónde. Pinchar en su nombre enfoca esa directiva arriba. */}
+      <Paper
+        elevation={0}
+        sx={{ p: 2, mt: 2, borderRadius: 3, border: `1px solid ${BRAND.border}`, boxShadow: BRAND.shadow }}
+      >
+        <GpoChangesPanel onPickGpo={(gpo) => { setSoloSinGpo(false); setFoco({ gpo, modo: "with" }); }} />
+      </Paper>
+
     </Box>
   );
 }
