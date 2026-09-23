@@ -320,10 +320,6 @@ export default function Overview({ onNavigate } = {}) {
           onOpenGapDevices={setGapSignal}
         />
 
-        {/* The one number here that can eventually stop enrollment. Renders
-            nothing for tenants the license rule doesn't apply to. */}
-        <LicenseUsageCard result={results?.dashboardSummary} loading={loading} onNavigate={navigateWithQuery} />
-
         <Grid container spacing={2} alignItems="stretch">
           <Grid size={{ xs: 12, md: hasSdp ? 7 : 12 }}>
             <Suspense fallback={<ChartSlot height={360} />}>
@@ -336,6 +332,12 @@ export default function Overview({ onNavigate } = {}) {
             </Grid>
           ) : null}
         </Grid>
+
+        {/* The one number here that can eventually stop enrollment. Renders
+            nothing for tenants the license rule doesn't apply to. Under the
+            fleet composition, not over it: se lee al final de lo que describe
+            el parque, no antes (petición del usuario, 22-sep-2026). */}
+        <LicenseUsageCard result={results?.dashboardSummary} loading={loading} onNavigate={navigateWithQuery} />
 
         {/* What needs a person, side by side. "Latest alerts" was here and
             left (the unread bell in the top bar already says it), and the

@@ -8,7 +8,8 @@
 // son de SCP, PMP y CDP. En el Overview cada señal va al bloque de SU plugin
 // —la misma regla que cualquier card de la página—, junto a los números que
 // pone en duda:
-//   · Fleet & operations → card "Blind spots" (inventario) en la fila de cards
+//   · Fleet & operations → KPI "Blind spots" (inventario), en el sitio que
+//     tenía "Unread alerts"
 //   · Security & access  → quinto KPI "Compliance reporting"
 //   · Patching & crypto  → una pieza sobre cada card (parches | certificados)
 // Y cada hueco abre la lista de ESOS equipos (SignalGapDrawer).
