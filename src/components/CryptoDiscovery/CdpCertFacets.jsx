@@ -40,7 +40,10 @@ export function facetFilterOf(filter) {
   // `certClass` entra por lo mismo (17-sep): el sunburst abre la lista con
   // la lente abierta, y sin propagarla la faceta contaría sólo entidades
   // finales al lado de una tabla que enseña también las CA.
-  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "certClass", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
+  // `discoveredBy` y `sni` entran por lo mismo (ola 1.2): los dos acotan la
+  // tabla vía `cdp_tls_endpoints`, y sin propagarlos la columna de facetas
+  // seguiría contando el inventario entero al lado de una tabla recortada.
+  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "discoveredBy", "sni", "certClass", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
     if (f[k] != null && f[k] !== "" && f[k] !== false) out[k] = f[k];
   }
   for (const k of ["hasPrivateKey", "hasFlags", "includeRoots"]) {

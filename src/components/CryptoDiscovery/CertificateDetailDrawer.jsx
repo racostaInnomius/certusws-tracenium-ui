@@ -18,6 +18,13 @@ import { Box, Chip, CircularProgress, Divider, Stack, Tooltip, Typography } from
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCdpCertificateDetail } from "../../api/cdp";
+import {
+  ENDPOINT_SOURCE,
+  endpointAddress,
+  endpointSourceLabel,
+  readEndpoints,
+  summarizeEndpoints
+} from "./certEndpoints";
 
 const FAMILY_LABEL = {
   quantum_broken: { text: "Quantum-broken", tone: "warn" },
@@ -149,6 +156,125 @@ function ChainSummary({ tls }) {
         </Typography>
       )}
     </Box>
+  );
+}
+
+/**
+ * Ola 1.2 — dónde se sirve este certificado, extremo a extremo.
+ *
+ * No es lo mismo que «en N equipos»: eso es dónde ESTÁ GUARDADO. Esto es
+ * dónde CONTESTA, que es la pregunta que se hace quien lo va a reemplazar.
+ *
+ * ⚠️ Dos cosas que la vista no puede confundir, y que por eso decide
+ * `certEndpoints.js` y no este componente:
+ *   · un extremo sin SNI no es un hueco: es lo que sirve la IP desnuda;
+ *   · `kemHybrid: null` es «no se determinó», nunca «clásico».
+ */
+function EndpointsSection({ endpoints }) {
+  const rows = React.useMemo(() => readEndpoints(endpoints), [endpoints]);
+  // Sin el campo (backend anterior a la ola 1.2, o un tenant sin la
+  // migración 20261023) la sección no se pinta: un «0 extremos» se leería
+  // como «no se sirve en ninguna parte», que es lo contrario de no saberlo.
+  if (!Array.isArray(endpoints)) return null;
+  const summary = summarizeEndpoints(rows);
+
+  return (
+    <>
+      <SectionHeading>Served at {summary.total} endpoint(s)</SectionHeading>
+      {rows.length === 0 ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
+          No live endpoint serves this certificate. It is in a store, but nothing was caught answering with it.
+        </Typography>
+      ) : (
+        <>
+          {summary.swept > 0 || summary.defaultSni > 0 ? (
+            <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mb: 0.5 }}>
+              {summary.swept > 0 ? `${summary.swept} found by a range sweep — nobody listed those hosts. ` : ""}
+              {summary.defaultSni > 0 ? `${summary.defaultSni} served with no SNI: that is what the bare address answers with.` : ""}
+            </Typography>
+          ) : null}
+          <Stack divider={<Divider />} spacing={0}>
+            {rows.map((e, i) => (
+              <Box key={`${e.agentId}-${e.targetHost}-${e.port}-${i}`} sx={{ py: 1.25 }}>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", flexWrap: "wrap", gap: 0.5 }}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, wordBreak: "break-all" }}>
+                    {endpointAddress(e)}
+                  </Typography>
+                  <Tooltip arrow title={ENDPOINT_SOURCE[e.source]?.hint ?? ""}>
+                    <Chip
+                      size="small"
+                      label={endpointSourceLabel(e.source)}
+                      sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: TEXT_MUTED }}
+                    />
+                  </Tooltip>
+                  <Tooltip arrow title={e.discovery.hint}>
+                    <Chip
+                      size="small"
+                      label={e.discovery.label}
+                      sx={{
+                        height: 20,
+                        fontSize: TEXT.xs,
+                        fontWeight: e.discovery.state === "sweep" ? 700 : 400,
+                        // Lo que apareció solo se destaca; no es un fallo, así
+                        // que ámbar de aviso y no rojo.
+                        bgcolor: e.discovery.state === "sweep" ? BRAND.alert.warningSoft : BRAND.surfaceMuted,
+                        color: e.discovery.state === "sweep" ? BRAND.alert.warningText : TEXT_MUTED
+                      }}
+                    />
+                  </Tooltip>
+                </Stack>
+
+                <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
+                  <Tooltip arrow title={e.sni.hint}>
+                    <Chip
+                      size="small"
+                      label={`SNI: ${e.sni.label}`}
+                      sx={{
+                        height: 20,
+                        fontSize: TEXT.xs,
+                        fontFamily: e.sni.state === "named" ? "ui-monospace, Menlo, monospace" : undefined,
+                        // «Sin SNI» se distingue de un nombre pedido, pero no
+                        // se pinta como un problema: es un hecho medido.
+                        bgcolor: e.sni.state === "named" ? BRAND.tealSoft : BRAND.surfaceMuted,
+                        color: e.sni.state === "named" ? BRAND.tealText : TEXT_MUTED,
+                        fontStyle: e.sni.state === "named" ? undefined : "italic"
+                      }}
+                    />
+                  </Tooltip>
+                  <Tooltip arrow title={e.kem.hint}>
+                    <Chip
+                      size="small"
+                      label={e.kem.label}
+                      sx={{
+                        height: 20,
+                        fontSize: TEXT.xs,
+                        bgcolor:
+                          e.kem.tone === "good"
+                            ? BRAND.alert.successSoft
+                            : e.kem.tone === "warn"
+                              ? BRAND.alert.warningSoft
+                              : BRAND.surfaceMuted,
+                        color:
+                          e.kem.tone === "good"
+                            ? BRAND.alert.successText
+                            : e.kem.tone === "warn"
+                              ? BRAND.alert.warningText
+                              : TEXT_MUTED
+                      }}
+                    />
+                  </Tooltip>
+                </Stack>
+
+                <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED, mt: 0.5, wordBreak: "break-all" }}>
+                  {[e.protocol, e.cipher, e.kexGroup].filter(Boolean).join(" · ") || "handshake details not recorded"}
+                  {e.lastSeen ? ` · last seen ${formatDate(e.lastSeen)}` : ""}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        </>
+      )}
+    </>
   );
 }
 
@@ -365,6 +491,8 @@ export default function CertificateDetailDrawer({
           )}
         </>
       )}
+
+      <EndpointsSection endpoints={detail.endpoints} />
 
       <SectionHeading>On {detail.devices?.length ?? 0} device(s)</SectionHeading>
       <Stack divider={<Divider />} spacing={0}>

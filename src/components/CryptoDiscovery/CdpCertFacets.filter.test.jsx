@@ -39,6 +39,8 @@ const VALOR_DE_MUESTRA = {
   hasFlags: true,
   eku: "clientAuth",
   kem: "hybrid",
+  discoveredBy: "sweep",
+  sni: "without",
   catalyst: true,
   includeRoots: true,
   certClass: "all",

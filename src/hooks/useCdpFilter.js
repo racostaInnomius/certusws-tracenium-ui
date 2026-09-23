@@ -35,6 +35,12 @@ export const CDP_URL_KEYS = {
   // Intercambio de claves negociado por el servicio que sirve el
   // certificado: hybrid | classical | unknown (09-sep).
   kem: "kem",
+  // Ola 1.2 — cómo llegó a verse el certificado (`sweep` | `named`) y si el
+  // extremo que lo sirve respondió a un nombre pedido (`with` | `without`).
+  // Los dos acotan la lista por `cdp_tls_endpoints`, no por una columna del
+  // certificado: son propiedades de DÓNDE contesta, no de qué es.
+  discoveredBy: "disc",
+  sni: "sni",
   // Sólo los certificados que llevan una firma ALTERNATIVA post-cuántica
   // (catalyst, ADR-0015). No se puede llegar a ellos por `family`: un
   // catalyst es `quantum_broken` a propósito, porque lo que valida hoy es

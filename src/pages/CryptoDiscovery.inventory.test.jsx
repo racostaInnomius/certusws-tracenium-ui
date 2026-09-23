@@ -139,6 +139,60 @@ describe("Inventory: una lista, dos agrupaciones", () => {
   });
 });
 
+// Ola 1.2 — los dos filtros que acotan por `cdp_tls_endpoints` y no por una
+// columna del certificado. El servidor IGNORA EN SILENCIO un valor fuera de
+// su lista blanca, así que un filtro mal escrito no falla: devuelve la lista
+// entera con un chip puesto, que es mentir.
+describe("Inventory: cómo se descubrió y con qué SNI", () => {
+  it("⭐ disc=sweep en la URL: se pide al backend y se explica que nadie dio de alta esos hosts", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&disc=sweep");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ discoveredBy: "sweep" }));
+    expect(await screen.findByText(/Discovery: Found by a range sweep/)).toBeInTheDocument();
+    expect(screen.getByText(/Nobody listed these hosts/i)).toBeInTheDocument();
+    // Es un EXISTS por extremo: uno servido de las dos formas cae en los dos.
+    expect(screen.getByText(/A certificate served both ways matches either value/i)).toBeInTheDocument();
+  });
+
+  it("⭐ sni=without se explica como un hecho medido, no como un dato que falte", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&sni=without");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0]).toEqual(expect.objectContaining({ sni: "without" }));
+    const nota = await screen.findByText(/what the bare IP answers with/i);
+    expect(nota.textContent).toMatch(/measured fact, not a gap in the data/i);
+    // Y se advierte de por qué los listeners locales están todos aquí: no
+    // pueden traer SNI, así que no son un hallazgo.
+    expect(nota.textContent).toMatch(/a listener cannot report an SNI/i);
+  });
+
+  it("⚠️ un valor que el servidor ignoraría no se manda ni pinta chip", async () => {
+    // `disc=barrido` no está en la lista blanca del backend: lo convertiría
+    // en null y devolvería TODO. Un chip encima de una lista sin filtrar es
+    // el fallo que este caso existe para cazar.
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=3&disc=barrido&sni=maybe");
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    await waitFor(() => expect(listCdpCertificates).toHaveBeenCalled(), { timeout: 4000 });
+    expect(listCdpCertificates.mock.calls[0][0].discoveredBy).toBeUndefined();
+    expect(listCdpCertificates.mock.calls[0][0].sni).toBeUndefined();
+    expect(screen.queryByText(/Discovery:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/SNI:/)).not.toBeInTheDocument();
+  });
+});
+
 
 // ADR-0024 F2: la columna ML-KEM usa el MISMO estado que el roadmap. Un
 // Windows con el grupo apagado no es «No hybrid» en rojo: está a un ajuste.

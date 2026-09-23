@@ -174,6 +174,24 @@ const TAB = {
 /** Intercambio de claves negociado por el servicio TLS que sirve el certificado. */
 const MONO = "ui-monospace, Menlo, monospace";
 const KEM_LABELS = { hybrid: "Hybrid ML-KEM", classical: "Classical only", unknown: "Not determined" };
+/**
+ * Ola 1.2 — cómo llegó a verse el certificado.
+ *
+ * `sweep`: lo encontró un barrido de un rango de `cdp.probeRanges`. Es el
+ * que importa, porque es el que NADIE dio de alta: nadie escribió ese host
+ * en ninguna parte y aun así sirve TLS.
+ * `named`: alguien nombró el objetivo (`cdp.probeTargets`) o lo sirve un
+ * listener local. Estaba en el mapa.
+ */
+const DISCOVERED_BY_LABELS = { sweep: "Found by a range sweep", named: "A named target or a local listener" };
+/**
+ * ⚠️ Con SNI / sin SNI NO es «con dato / sin dato».
+ *
+ * Un extremo sin SNI es lo que esa IP sirve cuando NO se le pide un nombre:
+ * el certificado por defecto del servidor, que suele ser el olvidado. Es un
+ * hecho medido, no un hueco, y por eso se puede filtrar por él.
+ */
+const SNI_LABELS = { with: "Served for a requested hostname", without: "Served by the bare IP (no SNI)" };
 /** Lente de la lista. Por defecto el servidor enseña sólo entidades finales. */
 const CERT_CLASS_LABELS = { "end-entity": "End-entity certificates", ca: "CA certificates", all: "Every certificate, CAs included" };
 
@@ -697,6 +715,12 @@ function CdpInventoryTab({ refreshNonce }) {
   const hasFlags = filter.hasFlags === true;
   const eku = filter.eku ?? "";
   const kem = ["hybrid", "classical", "unknown"].includes(filter.kem) ? filter.kem : "";
+  // Ola 1.2. Un valor desconocido se ignora aquí igual que en el servidor
+  // —su lista blanca lo convierte en `null` EN SILENCIO y devuelve la lista
+  // sin filtrar—, así que dejarlo pasar pintaría un chip de un filtro que
+  // no está actuando.
+  const discoveredBy = ["sweep", "named"].includes(filter.discoveredBy) ? filter.discoveredBy : "";
+  const sni = ["with", "without"].includes(filter.sni) ? filter.sni : "";
   const catalyst = filter.catalyst === true;
   // Lente. Sin control propio: la eligen los paneles que cuentan sin ella
   // (el sunburst), y se ve y se borra como chip. Un valor desconocido no
@@ -734,6 +758,8 @@ function CdpInventoryTab({ refreshNonce }) {
     hasFlags: hasFlags || undefined,
     eku: eku || undefined,
     kem: kem || undefined,
+    discoveredBy: discoveredBy || undefined,
+    sni: sni || undefined,
     certClass: certClass || undefined,
     // ⚠️ El catalyst abre la lente a propósito. La tarjeta de la portada
     // cuenta TAMBIÉN las anclas —que la cadena de confianza sea híbrida es
@@ -750,6 +776,8 @@ function CdpInventoryTab({ refreshNonce }) {
     flag ? { key: "flag", label: `Flag: ${FLAG_LABELS[flag] ? FLAG_LABELS[flag].split(" — ")[0].split(" (")[0] : flag}` } : null,
     eku ? { key: "eku", label: `Purpose: ${eku}` } : null,
     kem ? { key: "kem", label: `Key exchange: ${KEM_LABELS[kem]}` } : null,
+    discoveredBy ? { key: "discoveredBy", label: `Discovery: ${DISCOVERED_BY_LABELS[discoveredBy]}` } : null,
+    sni ? { key: "sni", label: `SNI: ${SNI_LABELS[sni]}` } : null,
     certClass ? { key: "certClass", label: `Showing: ${CERT_CLASS_LABELS[certClass]}` } : null,
     catalyst ? { key: "catalyst", label: "Post-quantum alternative signature" } : null,
     issuer ? { key: "issuer", label: `Issuer: ${issuer}` } : null,
@@ -824,7 +852,7 @@ function CdpInventoryTab({ refreshNonce }) {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, catalyst, navKey, sortKey, refreshNonce]);
+  }, [paginationModel, view, search, status, flag, issuer, includeRoots, hasPrivateKey, hasFlags, eku, kem, discoveredBy, sni, catalyst, navKey, sortKey, refreshNonce]);
 
   const certColumns = [
     {
@@ -1028,6 +1056,19 @@ function CdpInventoryTab({ refreshNonce }) {
             <MenuItem value="classical">{KEM_LABELS.classical}</MenuItem>
             <MenuItem value="unknown">{KEM_LABELS.unknown}</MenuItem>
           </TextField>
+          {/* Ola 1.2. «Lo encontró un barrido» es la lente que separa lo que
+              alguien dio de alta de lo que apareció solo, y hasta ahora sólo
+              existía en el detalle de cada certificado. */}
+          <TextField size="small" select label="Discovery" value={discoveredBy} onChange={(e) => setAndReset({ discoveredBy: e.target.value })} sx={{ minWidth: 200 }}>
+            <MenuItem value="">Any</MenuItem>
+            <MenuItem value="sweep">{DISCOVERED_BY_LABELS.sweep}</MenuItem>
+            <MenuItem value="named">{DISCOVERED_BY_LABELS.named}</MenuItem>
+          </TextField>
+          <TextField size="small" select label="SNI" value={sni} onChange={(e) => setAndReset({ sni: e.target.value })} sx={{ minWidth: 220 }}>
+            <MenuItem value="">Any</MenuItem>
+            <MenuItem value="with">{SNI_LABELS.with}</MenuItem>
+            <MenuItem value="without">{SNI_LABELS.without}</MenuItem>
+          </TextField>
           <TextField size="small" label="Issuer" value={issuer} onChange={(e) => setAndReset({ issuer: e.target.value })} sx={{ minWidth: 170 }} />
           <FormControlLabel
             control={<Switch size="small" checked={hasPrivateKey} onChange={(e) => setAndReset({ hasPrivateKey: e.target.checked })} />}
@@ -1047,6 +1088,24 @@ function CdpInventoryTab({ refreshNonce }) {
           <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
             Certificates served by at least one TLS service whose handshake negotiated {KEM_LABELS[kem].toLowerCase()} key exchange.
             The exposure block counts services, so the two numbers can differ.
+          </Typography>
+        ) : null}
+        {discoveredBy ? (
+          <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            {discoveredBy === "sweep"
+              ? "Certificates served by at least one endpoint a range sweep found. Nobody listed these hosts — they answered TLS on an address inside a configured range, which is how forgotten services turn up."
+              : "Certificates served by at least one endpoint that was named: a probe target someone wrote down, or a listener on the device itself."}{" "}
+            {/* ⚠️ Es un EXISTS por extremo, no una propiedad del certificado:
+                uno servido de las dos formas cae en los dos filtros. Decirlo
+                evita que alguien reste una cifra de la otra. */}
+            A certificate served both ways matches either value, so the two counts overlap.
+          </Typography>
+        ) : null}
+        {sni ? (
+          <Typography sx={{ mt: 1, fontSize: TEXT.xs, color: TEXT_MUTED }}>
+            {sni === "without"
+              ? "Certificates the server returns when no hostname is requested — what the bare IP answers with. That is a measured fact, not a gap in the data, and it is usually the certificate nobody remembers configuring. Local listeners are always in here: a listener cannot report an SNI."
+              : "Certificates returned for a hostname that was actually sent in the handshake. Only probes can produce these."}
           </Typography>
         ) : null}
         {activeChips.length > 0 ? (
