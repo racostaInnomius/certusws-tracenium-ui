@@ -141,20 +141,24 @@ describe("OverviewTab", () => {
     });
   });
 
-  // El panel dejó de hablar en porcentajes: el titular son los BYTES que no
-  // cruzaron la WAN, porque un 90% no dice si son 2 GB o 200.
-  it("enseña el ahorro de ancho de banda cuando hay descargas servidas por LAN", async () => {
-    const GB = 1024 ** 3;
-    seed({
-      tiers: {
-        lan: { downloads: 90, bytes: 90 * GB },
-        wan: { downloads: 10, bytes: 10 * GB },
-        dps: 1,
-      },
-    });
+  // ⚠️ El ahorro de LAN ya NO está aquí: se mudó a la pestaña de distribución
+  // el 24-sep, donde están los DP que lo producen. Ocupaba 161 px del sitio
+  // donde se pregunta qué hay que atender ahora, y es una pregunta mensual.
+  it("⭐ el ahorro de LAN ya no ocupa sitio en el Dashboard", async () => {
+    seed({});
     render(<OverviewTab />);
-    await waitFor(() => expect(screen.getByText(/≈ 90/)).toBeInTheDocument());
-    expect(screen.getByText("90 of 100 downloads")).toBeInTheDocument();
+    await screen.findByText("Catalog coverage");
+    expect(screen.queryByText(/Bandwidth saved/i)).toBeNull();
+  });
+
+  it("⭐ ni el calendario de actividad ni el desglose por desenlace", async () => {
+    // Los dos contestan «¿cada cuánto entregamos y cómo salió?», que es
+    // historia. Viven debajo de la lista de despliegues.
+    seed({ deployments: [{ id: 1, status: "completed", counts: counts({ success: 9 }) }] });
+    render(<OverviewTab />);
+    await screen.findByText("Catalog coverage");
+    expect(screen.queryByText("When installs happened")).toBeNull();
+    expect(screen.queryByText("Install outcomes")).toBeNull();
   });
 
   it("renders without crashing when every endpoint fails", async () => {

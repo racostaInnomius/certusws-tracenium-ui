@@ -136,8 +136,11 @@ describe("CatalogCoveragePanel", () => {
 
     expect(await screen.findByText("30/56")).toBeInTheDocument();
     expect(screen.getByText("26 without it")).toBeInTheDocument();
-    expect(screen.getByText(/3 versions in the fleet/)).toBeInTheDocument();
     expect(screen.getByText("56 devices reporting inventory")).toBeInTheDocument();
+    // ⚠️ La deriva de versiones SALIÓ de la fila el 24-sep: costaba un renglón
+    // por título (90 px cada uno, 451 px el bloque) para un detalle que se lee
+    // cuando ya has abierto el título. Vive en el cajón.
+    expect(screen.queryByText(/3 versions in the fleet/)).toBeNull();
   });
 
   it("⭐ un título con dos plataformas es UNA fila", async () => {

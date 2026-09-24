@@ -162,7 +162,6 @@ function pressable(onPress, label) {
 
 function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
   const segments = coverageSegments(item, totalDevices);
-  const summary = versionSummary(item);
   const installed = Number(item.installedDevices ?? 0);
   const eligible = eligibleOf(item, totalDevices);
   const percent = eligible > 0 ? Math.round((installed / eligible) * 100) : 0;
@@ -176,7 +175,7 @@ function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
         gridTemplateColumns: { xs: "1fr", sm: "minmax(150px, 1.1fr) 2fr auto" },
         gap: 1.5,
         alignItems: "center",
-        py: 1.25,
+        py: 0.75,
         borderBottom: `1px solid ${BRAND.border}`,
         "&:last-of-type": { borderBottom: 0 },
       }}
@@ -265,16 +264,17 @@ function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
           ))}
         </Stack>
 
-        {summary ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }} noWrap>
-            {summary}
-            {catalogLagsFleet(item) ? " · nobody is on the published version" : ""}
+        {/* ⚠️ LA DISPERSIÓN DE VERSIONES SE FUE AL CAJÓN (24-sep). «3 versions
+            in the fleet · most common 153.0.8010.53 (21)» es detalle, no
+            decisión: costaba un renglón en CADA fila —90 px por título, 451 px
+            el bloque— y se lee cuando ya has abierto el título. Lo que SÍ se
+            queda es el aviso raro: que el paquete publicado esté viejo cambia
+            qué hay que hacer, y no aparece casi nunca. */}
+        {catalogLagsFleet(item) ? (
+          <Typography sx={{ fontSize: TEXT.sm, color: ROLE.caution, mt: 0.25 }} noWrap>
+            Nobody is on the published version
           </Typography>
-        ) : (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }}>
-            Not installed anywhere in the fleet
-          </Typography>
-        )}
+        ) : null}
       </Box>
 
       <Box sx={{ textAlign: { xs: "left", sm: "right" }, whiteSpace: "nowrap" }}>

@@ -72,9 +72,9 @@ describe("InFlightDeployments", () => {
     render(<InFlightDeployments deployments={[deployment()]} formatTime={formatTime} />);
 
     expect(await screen.findByText("#44 · Microsoft Edge 152.0.4191.66")).toBeInTheDocument();
-    expect(screen.getByText("1/3 reported")).toBeInTheDocument();
-    expect(screen.getByText("1 done")).toBeInTheDocument();
-    expect(screen.getByText("1 not started")).toBeInTheDocument();
+    // ⚠️ El reparto va en UNA línea desde el 24-sep: la fila medía 83 px para
+    // decir tres cosas, y con tres despliegues eran 377 px de página.
+    expect(screen.getByText(/1\/3 reported · 1 done · 1 installing · 1 not started/)).toBeInTheDocument();
   });
 
   it("⚠️ el retenido explica la espera en la propia fila", async () => {

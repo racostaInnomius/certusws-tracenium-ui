@@ -45,6 +45,14 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.listSites.mockResolvedValue({ items: [SITE] });
   api.listDistributionPoints.mockResolvedValue({ items: [DP] });
+  // El ahorro de LAN se mudó del Dashboard a esta pestaña (24-sep).
+  api.getLanSavings.mockResolvedValue({
+    windowDays: 30,
+    lan: { downloads: 90, bytes: 90 * 1024 ** 3 },
+    wan: { downloads: 10, bytes: 10 * 1024 ** 3 },
+    unpricedDownloads: 0,
+    activeDistributionPoints: 1,
+  });
 });
 
 describe("DistributionTab reachability warning", () => {

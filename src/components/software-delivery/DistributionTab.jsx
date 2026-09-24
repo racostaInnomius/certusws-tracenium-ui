@@ -41,8 +41,10 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import SummaryCard from "../common/SummaryCard";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import LanSavingsPanel from "./LanSavingsPanel";
 import {
   listSites,
+  getLanSavings,
   getDistributionReachability,
   createSite,
   updateSite,
@@ -224,20 +226,30 @@ export default function DistributionTab({ canManage, notify, refreshNonce = 0 })
   const [siteDialog, setSiteDialog] = React.useState({ open: false, site: null });
   const [dpDialogOpen, setDpDialogOpen] = React.useState(false);
   const [reachability, setReachability] = React.useState([]);
+  const [savings, setSavings] = React.useState(null);
+  const [savingsFailed, setSavingsFailed] = React.useState(false);
 
   const reload = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [s, d, r] = await Promise.all([
+      const [s, d, r, lan] = await Promise.all([
         listSites(),
         listDistributionPoints(),
         // Advisory only: if this call fails the tab still works, it just
         // loses the warning. Never let it break the page.
         getDistributionReachability().catch(() => ({ items: [] })),
+        // ⚠️ El ahorro de LAN se mudó aquí desde el Dashboard (24-sep): es una
+        // pregunta MENSUAL de infraestructura —«¿los DP se están ganando el
+        // sueldo?»— y ocupaba 161 px del sitio donde se pregunta qué atender
+        // ahora. Aquí está al lado de los DP que lo producen. Se marca si
+        // falla en vez de esfumarse, como el resto.
+        getLanSavings("30d").then((v) => ({ ok: true, v })).catch(() => ({ ok: false, v: null })),
       ]);
       setSites(Array.isArray(s?.items) ? s.items : []);
       setDps(Array.isArray(d?.items) ? d.items : []);
       setReachability(Array.isArray(r?.items) ? r.items : []);
+      setSavings(lan.v);
+      setSavingsFailed(!lan.ok);
     } catch (err) {
       notify?.("error", err?.body?.message || err?.message || "Failed to load distribution config");
     } finally {
@@ -545,6 +557,8 @@ export default function DistributionTab({ canManage, notify, refreshNonce = 0 })
         }}
         notify={notify}
       />
+
+      <LanSavingsPanel loading={loading} savings={savings} failed={savingsFailed} />
     </Stack>
   );
 }

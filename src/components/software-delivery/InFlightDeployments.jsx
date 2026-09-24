@@ -51,6 +51,23 @@ export const SUCCESS_OUTCOMES = ["success", "already_installed", "reboot_require
 export const FAILURE_OUTCOMES = ["failed", "rejected", "signature_invalid", "timed_out"];
 
 /**
+ * Suma un conjunto de desenlaces sobre varios despliegues.
+ *
+ * ⚠️ VIVE CON LAS LISTAS DE DESENLACES, no con quien las usa. Lo comparten el
+ * titular de fallos del Dashboard y el desglose de la pestaña de despliegues; si
+ * cada uno la reimplementara, dos pantallas contarían distinto el mismo dato y
+ * las dos parecerían correctas — que es exactamente lo que pasó cuando
+ * `IN_FLIGHT_STATUSES` estaba copiado en dos sitios.
+ */
+export function sumOutcomes(deployments, outcomes) {
+  let total = 0;
+  for (const dep of Array.isArray(deployments) ? deployments : []) {
+    for (const key of outcomes) total += Number(dep?.counts?.[key] ?? 0);
+  }
+  return total;
+}
+
+/**
  * El reparto de equipos de un despliegue: hecho / fallado / en marcha / sin
  * empezar, y el total que cuenta para la barra.
  *
@@ -130,7 +147,7 @@ function DeploymentRow({ deployment, formatTime, onOpen }) {
           : undefined
       }
       sx={{
-        py: 1.25,
+        py: 0.75,
         borderBottom: `1px solid ${BRAND.border}`,
         cursor: onOpen ? "pointer" : "default",
         "&:last-of-type": { borderBottom: 0 },
@@ -138,57 +155,60 @@ function DeploymentRow({ deployment, formatTime, onOpen }) {
         "&:focus-visible": { outline: `2px solid ${BRAND.teal}`, outlineOffset: -2 },
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="baseline" flexWrap="wrap">
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-          #{deployment.id} · {titleOf(deployment)}
-        </Typography>
-        {deployment.mode && deployment.mode !== "install" ? (
-          <Chip
-            size="small"
-            label={deployment.mode}
-            sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
-          />
-        ) : null}
-        <Box sx={{ flex: 1 }} />
-        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-          {funnel.settled}/{funnel.total} reported
-        </Typography>
-      </Stack>
-
+      {/* ⚠️ UNA LÍNEA, NO CUATRO (24-sep). Esta fila medía 83 px para decir
+          «#52, Chrome, 7 de 9»: título, barra, conteos y aire, cada cosa en su
+          renglón. Con tres despliegues eran 377 px —el bloque más alto de la
+          página— para tres hechos. Nombre, barra y reparto caben en la misma
+          línea; lo único que se queda en un renglón propio es el aviso de
+          retención, que es la excepción que hay que leer. */}
       <Box
         sx={{
-          display: "flex",
-          height: 14,
-          mt: 0.75,
-          borderRadius: 0.5,
-          overflow: "hidden",
-          bgcolor: BRAND.surfaceMuted,
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1.2fr) 150px minmax(0, 1fr)" },
+          alignItems: "center",
+          gap: 1.5,
         }}
       >
-        {segments.map((seg) => (
-          <Tooltip key={seg.key} title={`${seg.label}: ${seg.devices}`}>
-            <Box
-              sx={{
-                width: `${(seg.devices / Math.max(1, funnel.total)) * 100}%`,
-                bgcolor: seg.color,
-              }}
+        <Stack direction="row" spacing={1} alignItems="baseline" sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap>
+            #{deployment.id} · {titleOf(deployment)}
+          </Typography>
+          {deployment.mode && deployment.mode !== "install" ? (
+            <Chip
+              size="small"
+              label={deployment.mode}
+              sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.darkSoft, color: BRAND.dark }}
             />
-          </Tooltip>
-        ))}
-      </Box>
+          ) : null}
+        </Stack>
 
-      <Stack direction="row" spacing={1.5} sx={{ mt: 0.5, flexWrap: "wrap", rowGap: 0.25 }}>
-        {segments.map((seg) => (
-          <Typography key={seg.key} sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-            {seg.devices} {seg.label.toLowerCase()}
-          </Typography>
-        ))}
-        {funnel.cancelled > 0 ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-            {funnel.cancelled} cancelled
-          </Typography>
-        ) : null}
-      </Stack>
+        <Box
+          sx={{
+            display: "flex",
+            height: 10,
+            borderRadius: 0.5,
+            overflow: "hidden",
+            bgcolor: BRAND.surfaceMuted,
+          }}
+        >
+          {segments.map((seg) => (
+            <Tooltip key={seg.key} title={`${seg.label}: ${seg.devices}`}>
+              <Box
+                sx={{
+                  width: `${(seg.devices / Math.max(1, funnel.total)) * 100}%`,
+                  bgcolor: seg.color,
+                }}
+              />
+            </Tooltip>
+          ))}
+        </Box>
+
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} noWrap>
+          {funnel.settled}/{funnel.total} reported
+          {segments.map((seg) => ` · ${seg.devices} ${seg.label.toLowerCase()}`).join("")}
+          {funnel.cancelled > 0 ? ` · ${funnel.cancelled} cancelled` : ""}
+        </Typography>
+      </Box>
 
       {waiting ? (
         <Typography
@@ -198,8 +218,8 @@ function DeploymentRow({ deployment, formatTime, onOpen }) {
             bgcolor: BRAND.alert.warningSoft,
             borderRadius: 0.5,
             px: 1,
-            py: 0.5,
-            mt: 0.75,
+            py: 0.25,
+            mt: 0.5,
             display: "inline-block",
           }}
         >

@@ -168,6 +168,10 @@ export default function CoverageDevicesDrawer({
   titleKey,
   name,
   state,
+  /** La dispersión de versiones del título. Vivía en la fila del panel y
+   *  costaba un renglón por título; se lee aquí, que es donde el operador ya
+   *  ha decidido mirar este título en concreto. */
+  summary,
   canManage,
   onClose,
   onDeploy,
@@ -251,6 +255,9 @@ export default function CoverageDevicesDrawer({
 
       {copy.help ? (
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1.5 }}>{copy.help}</Typography>
+      ) : null}
+      {summary ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.5 }}>{summary}</Typography>
       ) : null}
 
       {loading ? (

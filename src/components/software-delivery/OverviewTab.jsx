@@ -12,31 +12,19 @@
 // era una barra sola al 100 %. Una barra sola no es una gráfica.
 
 import * as React from "react";
-import {
-  Box,
-  Grid,
-  Skeleton,
-  Stack,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
+import { Stack } from "@mui/material";
 
-import SectionPaper from "../common/SectionPaper";
 import CoverageDevicesDrawer from "./CoverageDevicesDrawer";
 import DeployWizardDialog from "./DeployWizardDialog";
 import InstallFailuresPanel from "./InstallFailuresPanel";
-import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
-import CatalogCoveragePanel from "./CatalogCoveragePanel";
+import CatalogCoveragePanel, { versionSummary } from "./CatalogCoveragePanel";
 import InFlightDeployments, {
   FAILURE_OUTCOMES,
   IN_FLIGHT_STATUSES,
   SUCCESS_OUTCOMES,
+  sumOutcomes,
 } from "./InFlightDeployments";
-import CompositionBars from "../common/CompositionBars";
-import InstallActivityCalendar from "./InstallActivityCalendar";
-import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
   deployPackage,
   listPackages,
@@ -45,7 +33,6 @@ import {
   listSites,
   listDistributionPoints,
   getDeploymentTimeseries,
-  getLanSavings,
   getGlobalCatalog,
   getCatalogCoverage,
 } from "../../api/softwareDelivery";
@@ -72,7 +59,6 @@ const SOURCE_KEYS = [
   "sites",
   "dps",
   "buckets",
-  "savings",
   "globalCatalog",
   "coverage",
 ];
@@ -97,14 +83,6 @@ export function countCatalogUpdates(entries) {
   return conNovedad.size;
 }
 
-function sumOutcomes(deployments, outcomes) {
-  let total = 0;
-  for (const dep of deployments) {
-    for (const key of outcomes) total += Number(dep?.counts?.[key] ?? 0);
-  }
-  return total;
-}
-
 // Los datos siguen degradando a una tarjeta vacía cuando fallan; lo que ya NO
 // es de sólo lectura es la cobertura: desde el 24-sep un tramo de su barra
 // abre sus equipos y permite mandarles el paquete. Por eso esta pestaña recibe
@@ -117,7 +95,6 @@ export default function OverviewTab({
   onDeployFire,
 }) {
   const [loading, setLoading] = React.useState(true);
-  const [windowKey, setWindowKey] = React.useState("30d");
   const [data, setData] = React.useState({
     packages: [],
     deployments: [],
@@ -125,7 +102,6 @@ export default function OverviewTab({
     sites: [],
     dps: [],
     buckets: [],
-    savings: null,
     globalCatalog: [],
     coverage: null,
     failures: new Set(),
@@ -153,8 +129,10 @@ export default function OverviewTab({
       listIntakes({ limit: 200 }),
       listSites(),
       listDistributionPoints(),
-      getDeploymentTimeseries(windowKey),
-      getLanSavings(windowKey),
+      // Ventana fija: el calendario se fue a la pestaña de despliegues y
+      // aquí sólo queda el titular «sin actividad desde hace N días», que
+      // no necesita selector.
+      getDeploymentTimeseries("30d"),
       getGlobalCatalog(),
       // Sin ventana: es una foto del parque, no actividad (ver el cliente).
       getCatalogCoverage(),
@@ -177,9 +155,8 @@ export default function OverviewTab({
           sites: listFrom(val(3)),
           dps: listFrom(val(4)),
           buckets: Array.isArray(val(5)?.buckets) ? val(5).buckets : [],
-          savings: val(6) ?? null,
-          globalCatalog: val(7)?.entries ?? [],
-          coverage: val(8) ?? null,
+          globalCatalog: val(6)?.entries ?? [],
+          coverage: val(7) ?? null,
           failures,
         });
       })
@@ -189,7 +166,7 @@ export default function OverviewTab({
     return () => {
       cancelled = true;
     };
-  }, [windowKey, refreshNonce]);
+  }, [refreshNonce]);
 
   const stats = React.useMemo(() => {
     const { deployments, intakes, sites, dps } = data;
@@ -227,25 +204,9 @@ export default function OverviewTab({
       coveredSites,
       totalActiveSites: activeSites.length,
       uncoveredSites: activeSites.length - coveredSites,
-      outcomeItems: [
-        { label: "Succeeded", value: sumOutcomes(deployments, ["success"]), color: ROLE.positive },
-        { label: "Already installed", value: sumOutcomes(deployments, ["already_installed"]), color: BRAND.teal },
-        { label: "Reboot required", value: sumOutcomes(deployments, ["reboot_required"]), color: ROLE.caution },
-        { label: "Failed", value: sumOutcomes(deployments, ["failed"]), color: ROLE.critical },
-        { label: "Rejected", value: sumOutcomes(deployments, ["rejected"]), color: BRAND.gray },
-        { label: "Timed out", value: sumOutcomes(deployments, ["timed_out"]), color: BRAND.gray },
-        { label: "Signature invalid", value: sumOutcomes(deployments, ["signature_invalid"]), color: ROLE.critical },
-      ].filter((i) => i.value > 0),
     };
   }, [data]);
 
-  // ⚠️ El calendario recibe los buckets CRUDOS: necesita el día completo
-  // (YYYY-MM-DD) para rotular los extremos de la ventana, y recortarlo a
-  // "MM-DD" para un eje —lo que hacía la gráfica que esto sustituye— dejaba
-  // una fecha que no se puede leer como fecha.
-  const hasChartData = data.buckets.some(
-    (b) => Number(b?.succeeded ?? 0) > 0 || Number(b?.failed ?? 0) > 0
-  );
   const catalogUpdates = React.useMemo(
     () => countCatalogUpdates(data.globalCatalog),
     [data.globalCatalog]
@@ -351,83 +312,11 @@ export default function OverviewTab({
         failed={data.failures.has("coverage")}
         onNavigateTab={onNavigateTab}
         onOpenCell={(item, state) =>
-          setCell({ titleKey: item.titleKey, name: item.name, state })
+          // El resumen de versiones viaja con la celda: salió de la fila para
+          // no costar un renglón por título, y se lee aquí, que es donde el
+          // operador ya ha decidido mirar ESTE título.
+          setCell({ titleKey: item.titleKey, name: item.name, state, summary: versionSummary(item) })
         }
-      />
-
-      {/* ── Trend + outcomes ────────────────────────────────────── */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 7 }}>
-          <SectionPaper variant="card" sx={{ p: 2 }}>
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              sx={{ mb: 1 }}
-              flexWrap="wrap"
-              gap={1}
-            >
-              <Box>
-                <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-                  When installs happened
-                </Typography>
-                <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                  One square per day in the window
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" gap={1}>
-                <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={windowKey}
-                onChange={(_e, v) => v && setWindowKey(v)}
-              >
-                <ToggleButton value="7d" sx={{ textTransform: "none", px: 1.5 }}>7d</ToggleButton>
-                <ToggleButton value="30d" sx={{ textTransform: "none", px: 1.5 }}>30d</ToggleButton>
-                <ToggleButton value="90d" sx={{ textTransform: "none", px: 1.5 }}>90d</ToggleButton>
-                </ToggleButtonGroup>
-              </Stack>
-            </Stack>
-
-            <Box>
-              {loading ? (
-                <Skeleton variant="rounded" height={140} />
-              ) : (
-                // ⚠️ El calendario se pinta TAMBIÉN sin actividad: los días
-                // vacíos son la respuesta a «¿cada cuánto entregamos?», y un
-                // cartel de "no installs" ocupa el mismo sitio diciendo menos.
-                <>
-                  <InstallActivityCalendar buckets={data.buckets} />
-                  {!hasChartData ? (
-                    <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1 }}>
-                      Nothing was installed in this window.
-                    </Typography>
-                  ) : null}
-                </>
-              )}
-            </Box>
-          </SectionPaper>
-        </Grid>
-
-        {/* El desglose por desenlace dice lo que el calendario no: siete
-            categorías (ya instalado, pendiente de reinicio, firma inválida…)
-            no caben en una leyenda de colores. */}
-        <Grid size={{ xs: 12, md: 5 }}>
-          <CompositionBars
-            title="Install outcomes"
-            items={stats.outcomeItems}
-            totalLabel="installs"
-            emptyLabel="No install results yet"
-            minHeight={220}
-          />
-        </Grid>
-      </Grid>
-
-      {/* ── De dónde se sirvieron las descargas ─────────────────── */}
-      <LanSavingsPanel
-        loading={loading}
-        savings={data.savings}
-        failed={data.failures.has("savings")}
       />
 
       <CoverageDevicesDrawer
@@ -435,6 +324,7 @@ export default function OverviewTab({
         titleKey={cell?.titleKey}
         name={cell?.name}
         state={cell?.state}
+        summary={cell?.summary}
         canManage={canManage}
         onClose={() => setCell(null)}
         onDeploy={handleDeployFromCell}

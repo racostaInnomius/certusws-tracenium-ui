@@ -26,6 +26,7 @@ import { listDeployments } from "../../api/softwareDelivery";
 import { listFrom } from "../../api/shape";
 
 import DeploymentDetailDrawer from "./DeploymentDetailDrawer";
+import InstallActivitySection from "./InstallActivitySection";
 
 export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId, onConsumedAutoOpen, refreshNonce = 0 }) {
   const [items, setItems] = React.useState([]);
@@ -280,6 +281,12 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
           }}
         />
       )}
+
+      {/* ⚠️ EL RETROSPECTIVO VIVE AQUÍ desde el 24-sep. Estaba en el
+          Dashboard, donde ocupaba 271 px contestando otra pregunta: un
+          calendario de 90 días no cambia lo que haces hoy. Debajo de la lista
+          sí, porque describe exactamente lo que se acaba de leer. */}
+      <InstallActivitySection deployments={items} refreshNonce={refreshNonce} />
 
       <DeploymentDetailDrawer
         open={drawerOpen}

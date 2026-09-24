@@ -59,6 +59,9 @@ afterEach(() => cleanup());
 
 function show(items) {
   sdpApi.listDeployments.mockResolvedValue({ items });
+  // ⚠️ La pestaña monta el retrospectivo desde el 24-sep: sin su stub, el
+  // fichero entero revienta con «Cannot read properties of undefined».
+  sdpApi.getDeploymentTimeseries.mockResolvedValue({ buckets: [] });
   render(<DeploymentsTab canManage notify={() => {}} />);
 }
 
