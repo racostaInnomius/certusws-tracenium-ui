@@ -86,6 +86,14 @@ describe("Alerts — cabecera", () => {
     expect(screen.queryByRole("button", { name: /^destinations$/i })).not.toBeInTheDocument();
   });
 
+  it("⭐ las pestañas van ENCIMA de las tarjetas: primero se elige la sección", async () => {
+    mount();
+    const tabs = (await screen.findByRole("tab", { name: /^alerts$/i })).closest("[role=tablist]");
+    const card = screen.getByText("Active rules");
+    // compareDocumentPosition: FOLLOWING (4) = la tarjeta va después.
+    expect(tabs.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("la pestaña va en la URL (?alertsTab=) y se puede enlazar", async () => {
     window.history.replaceState({}, "", "/?page=alerts&alertsTab=rules");
     const calls = mount({ keepUrl: true });

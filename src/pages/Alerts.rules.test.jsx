@@ -109,6 +109,9 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     await userEvent.click(within(cdp).getByRole("button", { name: /expand crypto discovery/i }));
 
     expect(within(cdp).getByText("Paused — plugin not available")).toBeInTheDocument();
+    // Pausada sigue siendo configurable: lo guardado se conserva para cuando
+    // el plugin vuelva.
+    expect(within(cdp).getByRole("button", { name: /email…/i })).toBeInTheDocument();
     const sw = within(cdp).getByRole("checkbox", { name: "Endpoint certificate expiring" });
     expect(sw).toBeEnabled();
     await userEvent.click(sw);
@@ -134,6 +137,19 @@ describe("Alerts — reglas agrupadas por plugin", () => {
       "Security Compliance alert rules",
       "Crypto Discovery alert rules",
     ]);
+  });
+
+  it("⭐ toda regla encendida tiene su control de entrega — y la plantilla apagada dice cómo tenerlo", async () => {
+    mount();
+    const platform = await group("Platform");
+    // La regla existe: su entrega se puede configurar aquí mismo.
+    expect(within(platform).getByRole("button", { name: /email…/i })).toBeInTheDocument();
+
+    const amp = await group("Asset Management");
+    // La plantilla sin regla no puede tener entrega (no hay a qué colgarla),
+    // y lo dice en vez de callar.
+    expect(within(amp).queryByRole("button", { name: /email…/i })).not.toBeInTheDocument();
+    expect(within(amp).getByText("Switch it on to choose who is emailed.")).toBeInTheDocument();
   });
 
   it("el KPI 'Active rules' no cuenta la pausada: el backend no la evalúa", async () => {

@@ -66,11 +66,19 @@ export function groupRules({ templates = [], rules = [], catalog = [], availabil
     if (!groups.has(key)) groups.set(key, { key, items: [], custom: [] });
     return groups.get(key);
   };
+  const attached = new Set();
   for (const t of templates) {
-    ensure(groupKeyOf(t)).items.push({ template: t, primary: byTemplate.get(t.templateId)?.[0] ?? null });
+    const instances = byTemplate.get(t.templateId) ?? [];
+    if (instances[0]) attached.add(instances[0]);
+    ensure(groupKeyOf(t)).items.push({ template: t, primary: instances[0] ?? null });
   }
+  // ⚠️ TODA regla tiene que salir en alguna tarjeta, o su entrega no se puede
+  // configurar: sin tarjeta no hay botón. Van por su cuenta las que no tienen
+  // plantilla, la SEGUNDA instancia de una plantilla (sólo la primera se
+  // dibuja junto a ella) y la que apunta a una plantilla retirada del
+  // catálogo — estas dos últimas eran invisibles.
   for (const r of rules) {
-    if (!r?.templateId) ensure(groupKeyOf(r)).custom.push(r);
+    if (!attached.has(r)) ensure(groupKeyOf(r)).custom.push(r);
   }
 
   // Platform first, then the catalog's own order, then anything unknown.

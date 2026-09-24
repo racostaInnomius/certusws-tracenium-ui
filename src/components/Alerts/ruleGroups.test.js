@@ -52,6 +52,23 @@ describe("groupRules", () => {
     expect(cdp.custom.map((r) => r.id)).toEqual(["r2"]);
   });
 
+  it("⭐ TODA regla sale en alguna tarjeta: sin tarjeta no hay cómo configurar su entrega", () => {
+    const rules = [
+      { id: "r1", templateId: "cdp.cert", enabled: true, plugin: "cdp" },
+      // Segunda instancia de la MISMA plantilla: sólo la primera se dibuja
+      // junto a ella, así que ésta iba por su cuenta o era invisible.
+      { id: "r2", templateId: "cdp.cert", enabled: true, plugin: "cdp" },
+      // Plantilla retirada del catálogo: tampoco tenía dónde salir.
+      { id: "r3", templateId: "cdp.retirada", enabled: true, plugin: "cdp" },
+      { id: "r4", templateId: null, enabled: true, plugin: "cdp" },
+    ];
+    const [cdp] = groupRules({ templates: [t("cdp.cert", "cdp")], rules, catalog: CATALOG });
+    expect(cdp.items[0].primary.id).toBe("r1");
+    expect(cdp.custom.map((r) => r.id)).toEqual(["r2", "r3", "r4"]);
+    const pintadas = [...cdp.items.map((i) => i.primary).filter(Boolean), ...cdp.custom].map((r) => r.id);
+    expect(pintadas.sort()).toEqual(["r1", "r2", "r3", "r4"]);
+  });
+
   it("sin `plugin` en la fila (backend anterior) va a 'Other', nunca se inventa que es de plataforma", () => {
     const [g] = groupRules({ templates: [{ templateId: "x", source: "x" }], rules: [], catalog: CATALOG });
     expect(g).toMatchObject({ key: OTHER_GROUP, title: "Other", available: true });

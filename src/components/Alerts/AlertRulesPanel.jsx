@@ -201,7 +201,14 @@ export default function AlertRulesPanel({
                               onToggleOpen={() => toggleNotify(primary.id)}
                               profileNames={profileNames}
                             />
-                          ) : null}
+                          ) : (
+                            // Sin regla no hay a qué colgar la entrega. Decirlo
+                            // es mejor que una fila que aparece de la nada al
+                            // encender el interruptor.
+                            <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1 }}>
+                              Switch it on to choose who is emailed.
+                            </Typography>
+                          )}
                         </Box>
                         <Tooltip
                           title={
@@ -251,7 +258,11 @@ export default function AlertRulesPanel({
                             label={SOURCE_LABEL[r.source] || r.source}
                             sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.tealText }}
                           />
-                          <Chip size="small" label="Custom" sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray }} />
+                          <Chip
+                            size="small"
+                            label={r.templateId ? "Extra instance" : "Custom"}
+                            sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
+                          />
                         </Stack>
                         <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "monospace" }}>
                           {JSON.stringify(r.criteria)}

@@ -446,6 +446,28 @@ export default function Alerts({ onNavigate }) {
         }
       />
 
+      {/* Tab bar — su propio panel, como en las otras páginas: la navegación
+          no comparte caja con lo que navega. ------------------------------ */}
+      <PageTabs
+        value={tab}
+        onChange={(_e, next) => setTab(next)}
+        aria-label="Alerts sections"
+        // Sin `mb`: la página ya separa sus bloques con `gap`.
+        sx={{ mb: 0 }}
+        items={[
+          { value: "alerts", label: "Alerts", icon: <NotificationsOutlinedIcon /> },
+          { value: "rules", label: "Rules", icon: <TuneOutlinedIcon /> },
+          canManage
+            ? {
+                value: "profiles",
+                label: np.profiles?.length ? `Notification profiles (${np.profiles.length})` : "Notification profiles",
+                icon: <GroupsOutlinedIcon />,
+              }
+            : null,
+          canManage ? { value: "destinations", label: "Destinations", icon: <HubOutlinedIcon /> } : null,
+        ]}
+      />
+
       {/* Hero KPIs ----------------------------------------------------- */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>
@@ -485,28 +507,6 @@ export default function Alerts({ onNavigate }) {
           />
         </Grid>
       </Grid>
-
-      {/* Tab bar — su propio panel, como en las otras páginas: la navegación
-          no comparte caja con lo que navega. ------------------------------ */}
-      <PageTabs
-        value={tab}
-        onChange={(_e, next) => setTab(next)}
-        aria-label="Alerts sections"
-        // Sin `mb`: la página ya separa sus bloques con `gap`.
-        sx={{ mb: 0 }}
-        items={[
-          { value: "alerts", label: "Alerts", icon: <NotificationsOutlinedIcon /> },
-          { value: "rules", label: "Rules", icon: <TuneOutlinedIcon /> },
-          canManage
-            ? {
-                value: "profiles",
-                label: np.profiles?.length ? `Notification profiles (${np.profiles.length})` : "Notification profiles",
-                icon: <GroupsOutlinedIcon />,
-              }
-            : null,
-          canManage ? { value: "destinations", label: "Destinations", icon: <HubOutlinedIcon /> } : null,
-        ]}
-      />
 
       {/* Alerts tab: filter bar + feed ---------------------------------- */}
       {tab === "alerts" ? (
