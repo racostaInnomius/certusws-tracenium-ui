@@ -22,24 +22,24 @@ vi.mock("./DeviceLocationHistoryMap", () => ({
   ),
 }));
 
-import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "./AgentDetailTabs";
+import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "./AgentDetailTabs";
 
 afterEach(cleanup);
 
-describe("AgentTab", () => {
-  const base = {
-    hostname: "host-1",
-    agentId: "agent-1",
-    platform: "windows",
-    agentVersion: "1.2.3",
-    profile: { lastLogonUser: "jdoe", localIp: "10.0.0.5" },
-    hardware: {},
-    connected: true,
-    isMobileDevice: false,
-    commandDeviceId: "dev-uuid",
-    platformKey: "windows",
-  };
+const base = {
+  hostname: "host-1",
+  agentId: "agent-1",
+  platform: "windows",
+  agentVersion: "1.2.3",
+  profile: { lastLogonUser: "jdoe", localIp: "10.0.0.5" },
+  hardware: {},
+  connected: true,
+  isMobileDevice: false,
+  commandDeviceId: "dev-uuid",
+  platformKey: "windows",
+};
 
+describe("AgentTab", () => {
   it("renders the identity fields and online status", () => {
     render(<AgentTab {...base} />);
     expect(screen.getByText("host-1")).toBeInTheDocument();
@@ -59,9 +59,56 @@ describe("AgentTab", () => {
     expect(screen.queryByTestId("mobile-commands")).not.toBeInTheDocument();
   });
 
-  it("shows the derived location, preferring the mapped site name", () => {
+  it("⭐ enseña lo que antes eran las tarjetas de la cabecera: versión, serie y apps", () => {
+    render(<AgentTab {...base} hardware={{ serial: "SN-42" }} softwareCount={214} />);
+    expect(screen.getByText("1.2.3")).toBeInTheDocument();
+    expect(screen.getByText("SN-42")).toBeInTheDocument();
+    expect(screen.getByText("214 apps")).toBeInTheDocument();
+  });
+
+  it("la tarjeta de software abre la pestaña Software", () => {
+    const onOpenTab = vi.fn();
+    render(<AgentTab {...base} softwareCount={3} onOpenTab={onOpenTab} />);
+    fireEvent.click(screen.getByRole("button", { name: /open the software tab/i }));
+    expect(onOpenTab).toHaveBeenCalledWith("software");
+  });
+
+  it("dice si el agente va por detrás de la última versión", () => {
+    render(<AgentTab {...base} versionBucket="one_behind" latestVersion="1.2.5" />);
+    expect(screen.getByText("Update available · 1.2.5")).toBeInTheDocument();
+  });
+
+  it("sin última versión conocida no opina", () => {
+    render(<AgentTab {...base} versionBucket="unknown" />);
+    expect(screen.queryByText(/up to date|update available/i)).not.toBeInTheDocument();
+  });
+
+  it("la ubicación ya no vive aquí (tiene su pestaña)", () => {
+    render(<AgentTab {...base} profile={{ ...base.profile, locationSite: "Oficina CDMX" }} />);
+    expect(screen.queryByText("Oficina CDMX")).not.toBeInTheDocument();
+    expect(screen.queryByText("Location")).not.toBeInTheDocument();
+  });
+
+  it("shows the managed-device panel + commands for mobile devices", () => {
     render(
       <AgentTab
+        {...base}
+        isMobileDevice
+        platformKey="ios"
+        profile={{ ...base.profile, operatingMode: "mdmMam", storageHealth: "ok" }}
+      />
+    );
+    expect(screen.getByText("Managed device")).toBeInTheDocument();
+    expect(screen.getByText(/fully managed/i)).toBeInTheDocument();
+    expect(screen.getByText("ok")).toBeInTheDocument();
+    expect(screen.getByTestId("mobile-commands")).toHaveTextContent("dev-uuid");
+  });
+});
+
+describe("LocationTab", () => {
+  it("shows the derived location, preferring the mapped site name", () => {
+    render(
+      <LocationTab
         {...base}
         profile={{ ...base.profile, locationSite: "Oficina CDMX", locationSubnet: "10.20.30.0/24" }}
       />
@@ -70,13 +117,13 @@ describe("AgentTab", () => {
   });
 
   it("falls back to the raw subnet when no site mapping exists yet", () => {
-    render(<AgentTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
+    render(<LocationTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
     expect(screen.getByText("10.20.30.0/24")).toBeInTheDocument();
   });
 
   it("hides location history for a device that has never moved", () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -91,7 +138,7 @@ describe("AgentTab", () => {
 
   it("shows location history once the device has been at more than one site", () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -113,7 +160,7 @@ describe("AgentTab", () => {
     // Era el fallo original: las filas que SI traen posicion se pintaban como
     // un guion, que se lee como "no sabemos donde estuvo".
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -140,7 +187,7 @@ describe("AgentTab", () => {
 
   it("dice cuando el nombre del sitio vino de la cercania y no del rango", () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -159,7 +206,7 @@ describe("AgentTab", () => {
     // hitCount cuenta TICKS, no visitas, y los rangos SE SOLAPAN entre filas.
     // Una flecha se lee como una estancia continua que nadie ha medido.
     const { container } = render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -176,7 +223,7 @@ describe("AgentTab", () => {
 
   it("el mapa del historial no se monta hasta que se pide", async () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -195,7 +242,7 @@ describe("AgentTab", () => {
   it("⚠️ ofrece mapear solo las posiciones que TIENEN coordenadas", async () => {
     // El mapa es siempre un subconjunto: subnet y public_ip no tienen ninguna.
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -213,7 +260,7 @@ describe("AgentTab", () => {
 
   it("no ofrece mapa cuando ninguna posicion tiene coordenadas", () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -232,7 +279,7 @@ describe("AgentTab", () => {
     // El acoplamiento en los dos sentidos es lo que resuelve "cual es cual" sin
     // numerar diez pines encima del mapa.
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -264,7 +311,7 @@ describe("AgentTab", () => {
     // las posiciones que hubo, que los numeros sean visitas, y que las filas
     // en columna sean una secuencia.
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -287,7 +334,7 @@ describe("AgentTab", () => {
     // Dice literalmente "esto no es una línea de tiempo". Pintarla debajo de
     // una línea de tiempo contradice lo que el operador está viendo.
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         timeline={{
           retentionDays: 30,
@@ -313,7 +360,7 @@ describe("AgentTab", () => {
 
   it("el contador dice que cuenta reportes, no visitas", async () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -332,7 +379,7 @@ describe("AgentTab", () => {
 
   it("shows coordinates for a mobile GPS fix", () => {
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         isMobileDevice
         platformKey="ios"
@@ -343,7 +390,7 @@ describe("AgentTab", () => {
   });
 
   it("omits the Coordinates field entirely on desktop", () => {
-    render(<AgentTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
+    render(<LocationTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
     expect(screen.queryByText("Coordinates")).not.toBeInTheDocument();
   });
 
@@ -351,7 +398,7 @@ describe("AgentTab", () => {
     // REGRESSION: the API sends locationLat/Lon as null for every desktop
     // device, and Number(null) is 0 — the drawer showed "0.00000, 0.00000".
     render(
-      <AgentTab
+      <LocationTab
         {...base}
         profile={{
           ...base.profile,
@@ -366,19 +413,29 @@ describe("AgentTab", () => {
     expect(screen.queryByText(/0\.00000/)).not.toBeInTheDocument();
   });
 
-  it("shows the managed-device panel + commands for mobile devices", () => {
+  it("⭐ pinta la línea de tiempo que le pasa la ficha", () => {
+    // La ficha recibía `timeline` y no lo pasaba a ninguna pestaña: la línea de
+    // tiempo de ubicación no se pintó nunca.
     render(
-      <AgentTab
+      <LocationTab
         {...base}
-        isMobileDevice
-        platformKey="ios"
-        profile={{ ...base.profile, operatingMode: "mdmMam", storageHealth: "ok" }}
+        timeline={{
+          retentionDays: 30,
+          episodes: [
+            { id: "1", siteName: "Oficina", tickCount: 3,
+              firstSeenAt: "2026-09-01T09:00:00Z", lastSeenAt: "2026-09-02T18:00:00Z", endedAt: null },
+          ],
+        }}
+        profile={{
+          ...base.profile,
+          locationHistory: [
+            { locationKey: "a", subnetCidr: "10.0.0.0/24", hitCount: 25 },
+            { locationKey: "b", subnetCidr: "10.0.1.0/24", hitCount: 2 },
+          ],
+        }}
       />
     );
-    expect(screen.getByText("Managed device")).toBeInTheDocument();
-    expect(screen.getByText(/fully managed/i)).toBeInTheDocument();
-    expect(screen.getByText("ok")).toBeInTheDocument();
-    expect(screen.getByTestId("mobile-commands")).toHaveTextContent("dev-uuid");
+    expect(screen.getByText(/^confirmed /i)).toBeInTheDocument();
   });
 });
 
@@ -390,9 +447,26 @@ describe("HardwareTab", () => {
     expect(screen.getByText("42.3%")).toBeInTheDocument();
   });
 
-  it("falls back to em-dashes when hardware is missing", () => {
+  it("sin inventario lo dice, en vez de una rejilla de guiones", () => {
     render(<HardwareTab hardware={null} />);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getByText(/no hardware inventory reported/i)).toBeInTheDocument();
+  });
+
+  it("⭐ el disco lleva medidor y contexto: usado, total y libre", () => {
+    const GB = 1024 ** 3;
+    render(
+      <HardwareTab
+        hardware={{ diskUsagePct: 90, diskUsedBytes: 450 * GB, diskTotalBytes: 500 * GB }}
+      />
+    );
+    expect(screen.getByRole("meter", { name: "Disk usage" })).toHaveAttribute("aria-valuenow", "90");
+    expect(screen.getByText("450.0 GB of 500.0 GB used · 50.0 GB free")).toBeInTheDocument();
+  });
+
+  it("sin batería no pinta 0 %: dice que no la hay", () => {
+    render(<HardwareTab hardware={{ manufacturer: "Dell", batteryPercent: null }} />);
+    expect(screen.getByText("No battery reported")).toBeInTheDocument();
+    expect(screen.queryByRole("meter", { name: "Battery charge" })).not.toBeInTheDocument();
   });
 });
 

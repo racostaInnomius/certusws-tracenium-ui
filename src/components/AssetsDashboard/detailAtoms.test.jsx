@@ -1,23 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import { DetailStatCard, DetailField, FieldGrid } from "./detailAtoms";
+import { DetailField, FieldGrid } from "./detailAtoms";
 
 afterEach(cleanup);
-
-describe("DetailStatCard", () => {
-  it("renders title, value and optional helper", () => {
-    render(<DetailStatCard title="CPU" value="Ryzen 7" helper="8 cores" icon={<span>i</span>} />);
-    expect(screen.getByText("CPU")).toBeInTheDocument();
-    expect(screen.getByText("Ryzen 7")).toBeInTheDocument();
-    expect(screen.getByText("8 cores")).toBeInTheDocument();
-  });
-
-  it("falls back to an em-dash and omits the helper when absent", () => {
-    render(<DetailStatCard title="RAM" value="" icon={<span>i</span>} />);
-    expect(screen.getByText("—")).toBeInTheDocument();
-    expect(screen.queryByText("8 cores")).not.toBeInTheDocument();
-  });
-});
 
 describe("DetailField", () => {
   it("renders the label/value pair", () => {

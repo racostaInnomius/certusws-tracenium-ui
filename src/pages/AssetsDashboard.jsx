@@ -46,14 +46,11 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import AppsRoundedIcon from "@mui/icons-material/AppsRounded";
-import ComputerRoundedIcon from "@mui/icons-material/ComputerRounded";
 import DevicesOtherOutlinedIcon from "@mui/icons-material/DevicesOtherOutlined";
 import WifiTetheringOutlinedIcon from "@mui/icons-material/WifiTetheringOutlined";
 import SystemUpdateAltOutlinedIcon from "@mui/icons-material/SystemUpdateAltOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
-import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 
 import { dashboardApi } from "../api/dashboard";
 import { httpGetJson } from "../api/http";
@@ -70,7 +67,6 @@ import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
 import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
 import { groupOsVersionsByPlatform } from "../utils/osVersionGrouping";
-import { formatBytesToGb } from "../utils/format";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 import { listFrom } from "../api/shape";
 
@@ -92,7 +88,6 @@ import {
   getOsVersionDisplayTitle,
   getOsLifecycle,
   formatDetailValue,
-  formatDetailPercent,
   coalesceValue,
   normalizeHostRow,
   buildHostsQuery,
@@ -110,16 +105,14 @@ import DeviceDecommissionConfirmDialog from "../components/AssetsDashboard/Devic
 const FleetLocationMap = React.lazy(() =>
   import("../components/AssetsDashboard/FleetLocationMap")
 );
-import { DetailStatCard } from "../components/AssetsDashboard/detailAtoms";
-import { AgentTab, HardwareTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import { DEVICE_DETAIL_TABS } from "../components/AssetsDashboard/deviceVisuals";
 import ExperienceTab from "../components/dex/ExperienceTab";
 import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
 
-// Índice de la pestaña Experience (ADR-0030) en el detalle del equipo.
-const EXPERIENCE_TAB = 4;
-// Índice de la pestaña Activity (ADR-0031): lo que se le envió al equipo y lo
-// que se observó en él.
-const ACTIVITY_TAB = 5;
+// Pestaña Experience (ADR-0030) del detalle del equipo; la tarjeta de flota
+// abre la ficha directamente en ella.
+const EXPERIENCE_TAB = "experience";
 import HardwareChangesPanel from "../components/AssetsDashboard/HardwareChangesPanel";
 import ActivityTab from "../components/AssetsDashboard/ActivityTab";
 
@@ -140,7 +133,9 @@ function AgentDetailWorkbench({
   loading,
   error,
   profile,
+  timeline = null,
   hardware,
+  latestVersion = null,
   softwareRows,
   softwareTotal,
   softwareLoading = false,
@@ -156,7 +151,13 @@ function AgentDetailWorkbench({
   const hostname = formatDetailValue(profile?.hostname || selectedHost?.hostname || selectedHost?.agent_id, "Unknown host");
   const agentId = formatDetailValue(profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId);
   const platform = formatDetailValue(profile?.platform || hardware?.platform);
-  const agentVersion = formatDetailValue(profile?.agentVersion || selectedHost?.agent_version);
+  const rawAgentVersion = profile?.agentVersion || selectedHost?.agent_version || null;
+  const agentVersion = formatDetailValue(rawAgentVersion);
+  // Mismo cubo que la tabla de equipos y la dona de versiones.
+  const versionBucket = bucketOfVersion(rawAgentVersion, latestVersion);
+  // El id CRUDO para las pestañas que consultan por equipo: `agentId` de
+  // arriba está formateado para mostrar.
+  const rawAgentId = profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null;
   const softwareCount = Number.isFinite(Number(softwareTotal)) ? Number(softwareTotal) : softwareRows.length;
   const softwarePage = Number(softwarePaginationModel?.page || 0);
   const softwarePageSize = Number(softwarePaginationModel?.pageSize || 8);
@@ -212,7 +213,6 @@ function AgentDetailWorkbench({
                   fontWeight: 800,
                 }}
               />
-              <Chip size="small" label={platform} sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }} />
             </Stack>
             <Typography sx={{ mt: 0.5, fontSize: TEXT.sm, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
               {agentId}
@@ -230,21 +230,6 @@ function AgentDetailWorkbench({
         </Paper>
       ) : null}
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <DetailStatCard title="Agent version" value={agentVersion} icon={<SystemUpdateAltOutlinedIcon fontSize="small" />} />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <DetailStatCard title="Serial" value={formatDetailValue(hardware?.serial)} icon={<ComputerRoundedIcon fontSize="small" />} accent={BRAND.tealText} />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <DetailStatCard title="Software apps" value={softwareCount} icon={<AppsRoundedIcon fontSize="small" />} accent={ROLE.positive} />
-        </Grid>
-        <Grid size={{ xs: 12, sm: 6, lg: 3 }}>
-          <DetailStatCard title="Disk usage" value={formatDetailPercent(hardware?.diskUsagePct)} icon={<StorageRoundedIcon fontSize="small" />} accent={ROLE.critical} helper={formatBytesToGb(hardware?.diskUsedBytes)} />
-        </Grid>
-      </Grid>
-
       <Paper elevation={0} sx={{ borderRadius: 3, border: `1px solid ${BRAND.border}`, overflow: "hidden", bgcolor: BRAND.surface }}>
         <Tabs
           value={tab}
@@ -258,12 +243,9 @@ function AgentDetailWorkbench({
             "& .MuiTabs-indicator": { bgcolor: BRAND.teal, height: 3, borderRadius: 999 },
           }}
         >
-          <Tab label="Agent" />
-          <Tab label="Hardware" />
-          <Tab label="Software" />
-          <Tab label="Printers" />
-          <Tab label="Experience" />
-          <Tab label="Activity" />
+          {DEVICE_DETAIL_TABS.map((t) => (
+            <Tab key={t.value} value={t.value} label={t.label} />
+          ))}
         </Tabs>
 
         <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
@@ -274,30 +256,38 @@ function AgentDetailWorkbench({
             </Stack>
           ) : null}
 
-          {!loading && tab === 0 ? (
+          {!loading && tab === "agent" ? (
             <AgentTab
               hostname={hostname}
               agentId={agentId}
               platform={platform}
               agentVersion={agentVersion}
+              versionBucket={versionBucket}
+              latestVersion={latestVersion}
               profile={profile}
               hardware={hardware}
               connected={connected}
               isMobileDevice={isMobileDevice}
               commandDeviceId={commandDeviceId}
               platformKey={platformKey}
+              softwareCount={softwareCount}
+              onOpenTab={(next) => onTabChange?.(null, next)}
             />
           ) : null}
 
-          {!loading && tab === 1 ? (
+          {!loading && tab === "hardware" ? (
             <>
-              <HardwareTab hardware={hardware} />
-              {/* El id CRUDO: `agentId` de arriba está formateado para mostrar. */}
-              <HardwareChangesPanel agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
+              <HardwareTab hardware={hardware} profile={profile} platformKey={platformKey} />
+              <HardwareChangesPanel agentId={rawAgentId} />
             </>
           ) : null}
 
-          {!loading && tab === 2 ? (
+          {/* ⚠️ `timeline` llegaba a esta ficha y no se pasaba a ninguna
+              pestaña: la línea de tiempo de ubicación (ADR-0018) nunca se
+              pintó. */}
+          {!loading && tab === "location" ? <LocationTab profile={profile} timeline={timeline} /> : null}
+
+          {!loading && tab === "software" ? (
             <SoftwareTab
               softwareRows={softwareRows}
               softwareLoading={softwareLoading}
@@ -308,19 +298,15 @@ function AgentDetailWorkbench({
             />
           ) : null}
 
-          {!loading && tab === 3 ? (
+          {!loading && tab === "printers" ? (
             <PrintersTab printerRows={printerRows} printersLoading={printersLoading} printerScan={printerScan} />
           ) : null}
 
-          {/* ADR-0030 — el id CRUDO, como HardwareChangesPanel. */}
-          {!loading && tab === EXPERIENCE_TAB ? (
-            <ExperienceTab agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
-          ) : null}
+          {/* ADR-0030 */}
+          {!loading && tab === EXPERIENCE_TAB ? <ExperienceTab agentId={rawAgentId} /> : null}
 
-          {/* ADR-0031 — también con el id CRUDO, no el formateado para mostrar. */}
-          {!loading && tab === ACTIVITY_TAB ? (
-            <ActivityTab agentId={profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId || null} />
-          ) : null}
+          {/* ADR-0031 — lo que se le envió al equipo y lo que se observó en él. */}
+          {!loading && tab === "activity" ? <ActivityTab agentId={rawAgentId} /> : null}
         </Box>
       </Paper>
     </Box>
@@ -503,7 +489,7 @@ export default function AssetsDashboard({
   ]);
 
   const [selectedAgent, setSelectedAgent] = React.useState(null);
-  const [agentDetailTab, setAgentDetailTab] = React.useState(0);
+  const [agentDetailTab, setAgentDetailTab] = React.useState("agent");
   const [agentDetailLoading, setAgentDetailLoading] = React.useState(false);
   const [agentDetailError, setAgentDetailError] = React.useState("");
   const [agentProfile, setAgentProfile] = React.useState(null);
@@ -1098,7 +1084,7 @@ export default function AssetsDashboard({
 
   const handleAgentSelect = React.useCallback((host) => {
     setSelectedAgent(host || null);
-    setAgentDetailTab(0);
+    setAgentDetailTab("agent");
     setAgentDetailError("");
     setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
@@ -1132,7 +1118,7 @@ export default function AssetsDashboard({
 
   const handleCloseAgentDetail = React.useCallback(() => {
     setSelectedAgent(null);
-    setAgentDetailTab(0);
+    setAgentDetailTab("agent");
     setAgentDetailError("");
     setAgentProfile(null);
     setAgentHardware(null);
@@ -1693,6 +1679,7 @@ const osVersionItems = React.useMemo(() => {
                 profile={agentProfile}
                 timeline={agentTimeline}
                 hardware={agentHardware}
+                latestVersion={canonicalLatest}
                 softwareRows={agentSoftwareRows}
                 softwareTotal={agentSoftwareTotal}
                 softwareLoading={agentSoftwareLoading}
