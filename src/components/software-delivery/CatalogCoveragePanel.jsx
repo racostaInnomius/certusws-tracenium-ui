@@ -29,6 +29,17 @@
 // ⚠️ «Sin instalar» se dibuja con trama y no con relleno: no es una parte de lo
 // instalado, es el hueco. Con relleno sólido compite visualmente con los
 // estados y la fila se lee como si todo el mundo tuviera el título.
+//
+// ⚠️ UNA FILA ES UN TÍTULO, NO UN PAQUETE (24-sep). Un tenant publica Chrome
+// dos veces —Windows y macOS— y la pantalla enseñaba las dos filas con los
+// MISMOS números, porque el servidor casaba sólo por nombre y ninguna miraba la
+// plataforma del equipo. En T111, que no tiene ni un Mac, la fila de macOS
+// decía «30 equipos» y los 30 eran PCs. Ahora el servidor agrupa por título y
+// cada plataforma es una variante con sus propios números.
+//
+// ⚠️ Y EL DENOMINADOR DE LA BARRA ES `eligibleDevices`, los equipos donde ese
+// título SE PUEDE desplegar. Un título sólo de Windows no deja «sin Chrome» a
+// los Macs de la casa: los deja fuera de la pregunta.
 
 import * as React from "react";
 import { Box, Skeleton, Stack, Tooltip, Typography } from "@mui/material";
@@ -44,15 +55,55 @@ const STATES = [
   { key: "unknown", label: "Version not comparable", color: BRAND.gray },
 ];
 
+/** Nombres de plataforma como los lee un operador. */
+const PLATFORM_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" };
+
+/** Los equipos a los que este título se puede desplegar. */
+export function eligibleOf(item, totalDevices) {
+  // ⚠️ El respaldo es para una respuesta ANTERIOR al 24-sep, que no traía
+  // `eligibleDevices` porque medía todo contra la flota entera. Durante un
+  // despliegue escalonado la UI puede recibirla, y una barra vacía se leería
+  // como «nadie lo tiene».
+  const eligible = item?.eligibleDevices;
+  return Number(eligible ?? totalDevices) || 0;
+}
+
 /**
- * Los tramos de la barra de una fila, en porcentaje sobre la FLOTA.
+ * La línea de debajo del nombre: qué versión se publicó, y para qué.
+ *
+ * ⚠️ NO SE ELIGE UNA VERSIÓN CUANDO LAS PLATAFORMAS PUBLICAN DISTINTO. Enseñar
+ * «catalog 154» cuando en macOS se publicó la 153 sería inventar la mitad del
+ * dato; el servidor manda `catalogVersion: null` justo para eso.
+ */
+export function catalogLine(item) {
+  const versions = Array.isArray(item?.catalogVersions) ? item.catalogVersions : [];
+  const platforms = (Array.isArray(item?.platforms) ? item.platforms : [])
+    .map((p) => PLATFORM_NAMES[p] ?? p)
+    .filter(Boolean);
+
+  if (item?.catalogVersion) {
+    const where = platforms.length > 0 ? ` · ${platforms.join(" · ")}` : "";
+    return `catalog ${item.catalogVersion}${where}`;
+  }
+  if (versions.length > 0) {
+    return `catalog ${versions
+      .map((v) => `${v.version} (${PLATFORM_NAMES[v.platform] ?? (v.platform || "?")})`)
+      .join(" · ")}`;
+  }
+  return "catalog —";
+}
+
+/**
+ * Los tramos de la barra de una fila, en porcentaje sobre los equipos DONDE SE
+ * PUEDE DESPLEGAR.
  *
  * Puro y exportado porque es donde se puede equivocar el cálculo sin que se
- * note: el denominador es la flota entera (no lo instalado), o la fila mentiría
- * sobre la cobertura — una barra llena para un título que tiene 1 de 56.
+ * note: el denominador nunca es lo instalado —una barra llena para un título
+ * que tiene 1 de 56— y tampoco la flota entera, o un título sólo de Windows
+ * saldría medio vacío en una casa con Macs que no pueden tenerlo.
  */
 export function coverageSegments(item, totalDevices) {
-  const total = Number(totalDevices) || 0;
+  const total = eligibleOf(item, totalDevices);
   if (total <= 0) return [];
   const pct = (n) => (Number(n) || 0) / total * 100;
   const segments = STATES.map((s) => ({
@@ -96,7 +147,8 @@ function CoverageRow({ item, totalDevices, onOpen }) {
   const segments = coverageSegments(item, totalDevices);
   const summary = versionSummary(item);
   const installed = Number(item.installedDevices ?? 0);
-  const percent = totalDevices > 0 ? Math.round((installed / totalDevices) * 100) : 0;
+  const eligible = eligibleOf(item, totalDevices);
+  const percent = eligible > 0 ? Math.round((installed / eligible) * 100) : 0;
   const interactive = typeof onOpen === "function";
 
   return (
@@ -106,7 +158,7 @@ function CoverageRow({ item, totalDevices, onOpen }) {
       tabIndex={interactive ? 0 : undefined}
       aria-label={
         interactive
-          ? `${item.name}: installed on ${installed} of ${totalDevices} devices`
+          ? `${item.name}: installed on ${installed} of ${eligible} devices`
           : undefined
       }
       onKeyDown={
@@ -137,7 +189,7 @@ function CoverageRow({ item, totalDevices, onOpen }) {
           {item.name}
         </Typography>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} noWrap>
-          catalog {item.catalogVersion || "—"}
+          {catalogLine(item)}
         </Typography>
       </Box>
 
@@ -185,7 +237,7 @@ function CoverageRow({ item, totalDevices, onOpen }) {
 
       <Box sx={{ textAlign: { xs: "left", sm: "right" }, whiteSpace: "nowrap" }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-          {installed}/{totalDevices}
+          {installed}/{eligible}
         </Typography>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
           {item.missingDevices > 0 ? `${item.missingDevices} without it` : `${percent}%`}
@@ -244,7 +296,10 @@ export default function CatalogCoveragePanel({ loading, coverage, failed, onNavi
         <>
           {items.map((item) => (
             <CoverageRow
-              key={item.packageId}
+              // La fila es el TÍTULO: Chrome para Windows y para macOS son una
+              // cosa que el operador mantiene, no dos. `packageId` es el
+              // respaldo para una respuesta anterior al 24-sep.
+              key={item.titleKey ?? item.packageId}
               item={item}
               totalDevices={totalDevices}
               onOpen={onNavigateTab ? () => onNavigateTab("catalog") : undefined}

@@ -13,7 +13,9 @@ import userEvent from "@testing-library/user-event";
 
 import CatalogCoveragePanel, {
   catalogLagsFleet,
+  catalogLine,
   coverageSegments,
+  eligibleOf,
   versionSummary,
 } from "./CatalogCoveragePanel";
 
@@ -21,9 +23,12 @@ afterEach(cleanup);
 
 /** La forma real de Chrome en T111: 30 de 56, casi todos auto-actualizados. */
 const chrome = {
-  packageId: 9,
+  titleKey: "google-chrome",
   name: "Google Chrome",
   catalogVersion: "152.0.7977.83",
+  catalogVersions: [{ platform: "windows", version: "152.0.7977.83" }],
+  platforms: ["windows"],
+  eligibleDevices: 56,
   installedDevices: 30,
   missingDevices: 26,
   current: 2,
@@ -38,13 +43,23 @@ const chrome = {
 };
 
 describe("coverageSegments", () => {
-  it("⭐ el denominador es la FLOTA, no lo instalado", () => {
+  it("⭐ el denominador son los equipos DONDE SE PUEDE DESPLEGAR, no lo instalado", () => {
     // Con el instalado como denominador, un título que tiene 30 de 56 pintaría
     // la barra llena y la fila diría lo contrario de lo que pasa.
     const segs = coverageSegments(chrome, 56);
     const total = segs.reduce((n, s) => n + s.pct, 0);
     expect(Math.round(total)).toBe(100);
     expect(Math.round(segs.find((s) => s.key === "missing").pct)).toBe(46);
+  });
+
+  it("⭐ un título sólo de Windows no se mide contra los Macs de la casa", () => {
+    // La flota son 56, pero sólo 40 pueden tenerlo. Midiendo contra 56, la
+    // barra dejaría un hueco de 16 equipos que NO están sin instalar: están
+    // fuera de la pregunta, y ese hueco invita a un despliegue imposible.
+    const soloWindows = { ...chrome, eligibleDevices: 40, installedDevices: 30, missingDevices: 10 };
+    const segs = coverageSegments(soloWindows, 56);
+    expect(Math.round(segs.find((s) => s.key === "missing").pct)).toBe(25);
+    expect(Math.round(segs.reduce((n, s) => n + s.pct, 0))).toBe(100);
   });
 
   it("el hueco «sin instalar» va al final y sin color de estado", () => {
@@ -58,8 +73,40 @@ describe("coverageSegments", () => {
     expect(segs.some((s) => s.devices === 0)).toBe(false);
   });
 
-  it("sin flota no hay barra que dibujar", () => {
-    expect(coverageSegments(chrome, 0)).toEqual([]);
+  it("sin equipos donde desplegar no hay barra que dibujar", () => {
+    expect(coverageSegments({ ...chrome, eligibleDevices: 0 }, 56)).toEqual([]);
+  });
+});
+
+describe("eligibleOf y catalogLine", () => {
+  it("⚠️ una respuesta ANTERIOR al cambio se mide contra la flota, no contra cero", () => {
+    // Durante un despliegue escalonado la UI puede recibir la forma vieja, que
+    // no traía `eligibleDevices`. Un 0 pintaría la fila vacía: «nadie lo tiene».
+    const { eligibleDevices, ...viejo } = chrome;
+    expect(eligibleDevices).toBe(56);
+    expect(eligibleOf(viejo, 56)).toBe(56);
+  });
+
+  it("dice la versión publicada y para qué plataformas", () => {
+    expect(catalogLine(chrome)).toBe("catalog 152.0.7977.83 · Windows");
+  });
+
+  it("⚠️ con versiones distintas por plataforma NO elige una", () => {
+    // Enseñar «catalog 154» cuando en macOS se publicó la 153 sería inventar la
+    // mitad del dato.
+    expect(
+      catalogLine({
+        catalogVersion: null,
+        catalogVersions: [
+          { platform: "windows", version: "154.0.8037.58" },
+          { platform: "macos", version: "153.0.1" },
+        ],
+      })
+    ).toBe("catalog 154.0.8037.58 (Windows) · 153.0.1 (macOS)");
+  });
+
+  it("sin nada publicado no inventa una versión", () => {
+    expect(catalogLine({})).toBe("catalog —");
   });
 });
 
@@ -91,6 +138,48 @@ describe("CatalogCoveragePanel", () => {
     expect(screen.getByText("26 without it")).toBeInTheDocument();
     expect(screen.getByText(/3 versions in the fleet/)).toBeInTheDocument();
     expect(screen.getByText("56 devices reporting inventory")).toBeInTheDocument();
+  });
+
+  it("⭐ un título con dos plataformas es UNA fila", async () => {
+    // La queja de campo: Chrome y Edge salían duplicados porque hay un paquete
+    // por plataforma, y las dos filas enseñaban los mismos números.
+    render(
+      <CatalogCoveragePanel
+        coverage={{
+          totalDevices: 56,
+          items: [
+            {
+              ...chrome,
+              platforms: ["windows", "macos"],
+              catalogVersions: [
+                { platform: "windows", version: "152.0.7977.83" },
+                { platform: "macos", version: "152.0.7977.83" },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(await screen.findAllByText("Google Chrome")).toHaveLength(1);
+    expect(screen.getByText("catalog 152.0.7977.83 · Windows · macOS")).toBeInTheDocument();
+  });
+
+  it("⚠️ un título en TODOS los equipos donde cabe es el 100 %, no una fracción de la flota", async () => {
+    // El porcentaje sólo se pinta cuando no falta nadie. Midiéndolo contra la
+    // flota entera, un título instalado en los 40 Windows de una casa de 56
+    // diría «71%» justo cuando está completo.
+    render(
+      <CatalogCoveragePanel
+        coverage={{
+          totalDevices: 56,
+          items: [{ ...chrome, eligibleDevices: 40, installedDevices: 40, missingDevices: 0 }],
+        }}
+      />
+    );
+
+    expect(await screen.findByText("40/40")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
   });
 
   it("⚠️ si la llamada falla lo DICE, no desaparece", async () => {
