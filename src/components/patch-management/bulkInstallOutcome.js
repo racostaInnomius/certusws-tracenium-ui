@@ -93,3 +93,29 @@ export function describeRebootChoice(enabled) {
     ? "Each device restarts about a minute after its patch finishes — including devices where only some patches installed, because what did install is not applied until the restart. Devices that installed nothing are left alone."
     : "Devices stay up. A Windows patch is not applied until the machine restarts, so they will report as pending reboot until someone restarts them.";
 }
+
+/**
+ * Cuánto conservar el punto de retorno, elegido al lanzar el parche (P1,
+ * 23-sep-2026). Sólo aplica a las VMs detrás de un Infrastructure Gateway:
+ * es su snapshot de vCenter lo que se conserva.
+ *
+ * El backend guarda la elección en la fila del snapshot. Sin ella usa la
+ * retención del gateway (24 h por defecto), que para un servidor con estado
+ * —QuickBooks, un FTP, un controlador de dominio— se acaba antes de que nadie
+ * haya usado la aplicación de verdad.
+ */
+export const VALIDATION_HOLD_HOURS = 72;
+
+/**
+ * El campo que viaja con el envío, o `undefined` si no se pidió nada: así un
+ * backend anterior no recibe un campo que no conoce y lo pasaría al agente.
+ */
+export function snapshotHoldField(keepUntilValidated) {
+  return keepUntilValidated ? { snapshotHold: "until_validated" } : {};
+}
+
+export function describeSnapshotHold(keepUntilValidated) {
+  return keepUntilValidated
+    ? `The snapshot stays until you release it as validated, for up to ${VALIDATION_HOLD_HOURS} h after it is taken (less if the gateway's limit is lower). You are warned before it is removed. A failed patch or a server waiting for its restart is kept for a decision either way.`
+    : "The snapshot follows the gateway's retention and is removed automatically once the patch has gone fine. You can still extend it from Rollback points.";
+}

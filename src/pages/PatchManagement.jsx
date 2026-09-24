@@ -73,7 +73,13 @@ import {
   canConfirmRestart,
   describeRestartOutcome,
 } from "../components/patch-management/restartRequest";
-import { summarizeBulkInstall, goingOutNow, describeRebootChoice } from "../components/patch-management/bulkInstallOutcome";
+import {
+  summarizeBulkInstall,
+  goingOutNow,
+  describeRebootChoice,
+  snapshotHoldField
+} from "../components/patch-management/bulkInstallOutcome";
+import SnapshotHoldChoice from "../components/patch-management/SnapshotHoldChoice";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 
@@ -794,6 +800,9 @@ export default function PatchManagement({ onNavigate }) {
   // Reinicio bajo demanda: { when, typedName }. Ver restartRequest.js.
   const [restartDialog, setRestartDialog] = React.useState(null);
   const [drawerReboot, setDrawerReboot] = React.useState(false);
+  // Conservar el snapshot hasta validar (P1). Como el reinicio: se elige en
+  // cada envío, nunca se hereda del anterior.
+  const [drawerHold, setDrawerHold] = React.useState(false);
   const [dispatching, setDispatching] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
 
@@ -829,6 +838,7 @@ export default function PatchManagement({ onNavigate }) {
   // Restart after patching. Opt-in and reset on every dialog open — a choice
   // this consequential must be made for THIS run, never inherited from the last.
   const [bulkReboot, setBulkReboot] = React.useState(false);
+  const [bulkHold, setBulkHold] = React.useState(false);
 
   const handleRunCategoryAction = React.useCallback(async (action) => {
     const cfg = BULK_ACTION_MAP[action.id];
@@ -860,6 +870,7 @@ export default function PatchManagement({ onNavigate }) {
 
     // bulk-install: dry-run first to show preview, then real dispatch on confirm.
     setBulkReboot(false); // never inherited from the previous run
+    setBulkHold(false);
     setBulkDialog({ action, cfg, plan: null, loading: true, dispatching: false });
     try {
       const res = await bulkInstall({
@@ -883,7 +894,8 @@ export default function PatchManagement({ onNavigate }) {
         severity: bulkDialog.cfg.severity,
         mode: "install",
         dryRun: false,
-        rebootIfRequired: bulkReboot
+        rebootIfRequired: bulkReboot,
+        ...snapshotHoldField(bulkHold)
       });
       // A patch install now passes the maintenance-window and vCenter-snapshot
       // gates, so "dispatched" no longer means "on its way". Only follow the
@@ -907,7 +919,7 @@ export default function PatchManagement({ onNavigate }) {
       notify("error", `Dispatch failed: ${err?.message || "unknown error"}`);
       setBulkDialog((prev) => prev ? { ...prev, dispatching: false } : null);
     }
-  }, [bulkDialog, bulkReboot, notify]);
+  }, [bulkDialog, bulkReboot, bulkHold, notify]);
 
   const openDrawer = React.useCallback(async (device) => {
     setDrawerDevice(device);
@@ -1010,6 +1022,7 @@ export default function PatchManagement({ onNavigate }) {
   const openInstallConfirm = React.useCallback((kbArticleIds, label) => {
     if (!kbArticleIds.length) return;
     setDrawerReboot(false);
+    setDrawerHold(false);
     setInstallConfirm({ kbArticleIds, label });
   }, []);
 
@@ -1035,10 +1048,10 @@ export default function PatchManagement({ onNavigate }) {
     setInstallConfirm(null);
     dispatchJob(
       "patch_install",
-      { mode: "install", kbArticleIds, rebootIfRequired: drawerReboot },
+      { mode: "install", kbArticleIds, rebootIfRequired: drawerReboot, ...snapshotHoldField(drawerHold) },
       label
     );
-  }, [installConfirm, drawerReboot, dispatchJob]);
+  }, [installConfirm, drawerReboot, drawerHold, dispatchJob]);
 
   const handleRunScan = React.useCallback(() => {
     dispatchJob("patch_scan", {}, "Patch scan");
@@ -2029,6 +2042,8 @@ export default function PatchManagement({ onNavigate }) {
                       {describeRebootChoice(bulkReboot)}
                     </Typography>
                   </Box>
+
+                  <SnapshotHoldChoice checked={bulkHold} onChange={setBulkHold} />
                 </>
               ) : (
                 <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
@@ -2094,6 +2109,7 @@ export default function PatchManagement({ onNavigate }) {
               {describeRebootChoice(drawerReboot)}
             </Typography>
           </Box>
+          <SnapshotHoldChoice checked={drawerHold} onChange={setDrawerHold} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setInstallConfirm(null)} sx={{ textTransform: "none" }}>

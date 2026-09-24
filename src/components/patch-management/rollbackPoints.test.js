@@ -129,3 +129,23 @@ describe("«verifying» — un corte nuestro esperando al escaneo (23-sep-2026)"
     expect(canExtend(p)).toBe(true);
   });
 });
+
+describe("«Waiting for your validation» (P1, elegido al lanzar)", () => {
+  const now = Date.parse("2026-09-23T12:00:00Z");
+  const p = { state: "awaiting_validation", deadline: "2026-09-25T12:00:00Z", maxUntil: "2026-09-25T12:00:00Z" };
+
+  it("⭐ tiene nombre propio y dice qué hacer", () => {
+    expect(stateMeta("awaiting_validation").label).toBe("Waiting for your validation");
+    expect(stateMeta("awaiting_validation").hint).toMatch(/Release it as Validated/);
+  });
+
+  it("dice cuándo se borra solo, como uno que va bien", () => {
+    expect(deadlineText(p, now)).toBe("Removed automatically in 2 days");
+  });
+
+  it("se libera y se revierte, pero no se amplía más allá del tope", () => {
+    expect(canRelease(p)).toBe(true);
+    expect(canRevert(p)).toBe(true);
+    expect(canExtend(p, now)).toBe(false);
+  });
+});

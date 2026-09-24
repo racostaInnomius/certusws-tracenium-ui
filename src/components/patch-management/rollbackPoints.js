@@ -41,6 +41,14 @@ export const STATE_META = Object.freeze({
     tone: "info",
     hint: "The install ran past our time limit and Windows may have finished it anyway. Kept until a scan shows whether the patch landed — no decision needed yet.",
   },
+  // Pedido al LANZAR el parche (P1, 23-sep-2026): nada ha ido mal, falta que
+  // alguien valide la aplicación. No es «decide tú» —no hay fallo que decidir—
+  // pero tampoco «se borrará solo» sin más: se pidió conservarlo.
+  awaiting_validation: {
+    label: "Waiting for your validation",
+    tone: "info",
+    hint: "Kept because the patch was launched with “keep until validated”. Release it as Validated once the application checks out; otherwise it is removed automatically at its limit, with a warning first.",
+  },
   auto_release: {
     label: "Removed automatically",
     tone: "neutral",
@@ -75,7 +83,7 @@ export function deadlineText(point, now = Date.now()) {
   const left = deadline - now;
 
   if (point.state === "released") return "Removal queued";
-  if (point.state === "auto_release") {
+  if (point.state === "auto_release" || point.state === "awaiting_validation") {
     return left > 0 ? `Removed automatically in ${humanDuration(left)}` : "Removal due now";
   }
   // Retenido esperando algo: su fecha ya no dice cuándo se va.

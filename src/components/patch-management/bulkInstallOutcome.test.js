@@ -1,7 +1,14 @@
 // src/components/patch-management/bulkInstallOutcome.test.js
 
 import { describe, it, expect } from "vitest";
-import { summarizeBulkInstall, goingOutNow, groupSkipReasons, describeRebootChoice } from "./bulkInstallOutcome";
+import {
+  summarizeBulkInstall,
+  goingOutNow,
+  groupSkipReasons,
+  describeRebootChoice,
+  snapshotHoldField,
+  describeSnapshotHold,
+} from "./bulkInstallOutcome";
 
 const dev = (agentId, status) => ({ agentId, hostname: agentId, jobId: `job-${agentId}`, kbCount: 2, status });
 
@@ -86,5 +93,18 @@ describe("describeRebootChoice", () => {
 
   it("the two are never the same text", () => {
     expect(describeRebootChoice(true)).not.toBe(describeRebootChoice(false));
+  });
+});
+
+describe("conservar el punto de retorno hasta validar (P1)", () => {
+  it("⭐ sólo viaja el campo si se pidió: un backend anterior no lo recibe", () => {
+    expect(snapshotHoldField(true)).toEqual({ snapshotHold: "until_validated" });
+    expect(snapshotHoldField(false)).toEqual({});
+  });
+
+  it("las dos posturas dicen qué pasa con el snapshot, y la de validar dice el tope", () => {
+    expect(describeSnapshotHold(true)).toMatch(/up to 72 h/);
+    expect(describeSnapshotHold(true)).toMatch(/warned before it is removed/);
+    expect(describeSnapshotHold(false)).toMatch(/gateway's retention/);
   });
 });

@@ -137,3 +137,25 @@ describe("RollbackPointsPanel — «verifying»", () => {
     expect(screen.queryByText(/waiting for a decision/)).toBeNull();
   });
 });
+
+describe("RollbackPointsPanel — «awaiting_validation» (P1)", () => {
+  it("⭐ un punto pedido «hasta validar» se nombra así, y no cuenta como «waiting for a decision»", async () => {
+    api.listRollbackPoints.mockResolvedValue({
+      points: [point({ id: 3, hostname: "FTP-SPS", state: "awaiting_validation", keepReason: null, holdMode: "until_validated", deadline: iso(40) })],
+    });
+    render(<RollbackPointsPanel canManage />);
+    expect(await screen.findByText("Waiting for your validation")).toBeInTheDocument();
+    expect(screen.getByText(/Removed automatically in 1 day|Removed automatically in \d+ h/)).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for a decision/)).toBeNull();
+  });
+
+  it("liberarlo abre con «Validated» ya elegido", async () => {
+    const user = userEvent.setup({ delay: null });
+    api.listRollbackPoints.mockResolvedValue({
+      points: [point({ state: "awaiting_validation", keepReason: null, holdMode: "until_validated", deadline: iso(40) })],
+    });
+    render(<RollbackPointsPanel canManage />);
+    await user.click(await screen.findByRole("button", { name: "Release" }));
+    expect(screen.getByRole("radio", { name: /Validated/ })).toBeChecked();
+  });
+});

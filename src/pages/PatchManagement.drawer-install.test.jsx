@@ -124,6 +124,25 @@ describe("Patch Management — instalar desde el panel lateral", () => {
     expect(posted[0].payload.rebootIfRequired).toBe(true);
   });
 
+  it("⭐ «conservar hasta validar» viaja sólo si se pide, y no se hereda del envío anterior", async () => {
+    mount({ jobResponse: HELD });
+    let dialog = await openDrawerAndInstallAll();
+    expect(within(dialog).getByText(/gateway's retention/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByLabelText(/Keep the snapshot until I validate/i));
+    expect(within(dialog).getByText(/up to 72 h/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Install$/ }));
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].payload.snapshotHold).toBe("until_validated");
+
+    // El siguiente envío empieza otra vez en la retención del gateway.
+    // ⚠️ Primero, que el diálogo anterior termine de cerrarse: mientras dura su
+    // transición sigue en el DOM, y `findByRole("dialog")` podía devolver ése.
+    await waitFor(() => expect(screen.queryByLabelText(/Keep the snapshot until I validate/i)).toBeNull());
+    dialog = await openDrawerAndInstallAll();
+    expect(within(dialog).getByLabelText(/Keep the snapshot until I validate/i)).not.toBeChecked();
+  }, 15_000);
+
   it("🔴 MSIG-DOMAIN fuera de ventana: la UI dice RETENIDO, no «queued»", async () => {
     mount({ jobResponse: HELD });
     const dialog = await openDrawerAndInstallAll();
