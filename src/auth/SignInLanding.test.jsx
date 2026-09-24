@@ -117,7 +117,13 @@ describe("AuthGate sin sesión", () => {
     );
 
     expect(await screen.findByRole("button", { name: /sign in with safecertus/i })).toBeInTheDocument();
-    expect(screen.getByText(/Endpoint Intelligence & Compliance Platform/i)).toBeInTheDocument();
+    // El eslogan llega partido porque el «&» va en el cian de la marca, igual
+    // que en el Topbar: se comprueba el texto completo y ese color.
+    const tagline = screen.getByText(/Endpoint Intelligence/i).closest("span");
+    expect(tagline.textContent.replace(/\s+/g, " ").trim()).toBe(
+      "Endpoint Intelligence & Compliance Platform"
+    );
+    expect(getComputedStyle(screen.getByText("&")).color).toBe("rgb(128, 255, 246)");
     // Lo que se arregla: ningún rebote automático, y la consola sin montar.
     expect(assigned).toEqual([]);
     expect(screen.queryByText("console")).not.toBeInTheDocument();

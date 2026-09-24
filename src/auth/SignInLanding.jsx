@@ -21,6 +21,7 @@ import * as React from "react";
 import { Box, Button, Typography } from "@mui/material";
 
 import AuthShell from "./AuthShell";
+import PlatformTagline from "../components/common/PlatformTagline";
 import { BRAND, TEXT } from "../theme/brand";
 
 const TONE = {
@@ -35,7 +36,9 @@ export default function SignInLanding({ notice = null, onSignIn }) {
   // titular ES el motivo — enterarse de por qué no entraste importa más que
   // volver a leer el nombre del portal.
   const title = notice?.title ?? "Tracenium";
-  const description = notice?.description ?? "Endpoint Intelligence & Compliance Platform";
+  // Sin aviso, el subtítulo es el eslogan del producto, con su «&» en cian —
+  // el mismo componente que pinta el Topbar.
+  const description = notice?.description ?? <PlatformTagline />;
   const canSignIn = notice ? notice.retry !== false : true;
 
   return (

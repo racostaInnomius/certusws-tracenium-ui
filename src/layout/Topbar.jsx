@@ -1,4 +1,5 @@
 import * as React from "react";
+import PlatformTagline from "../components/common/PlatformTagline";
 import { Box, IconButton, Typography, Badge, Tooltip } from "@mui/material";
 import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
@@ -202,14 +203,7 @@ export default function Topbar({ onMenuClick }) {
             >
               |
             </Box>
-            Endpoint Intelligence{" "}
-            <Box
-              component="span"
-              sx={{ color: BRAND.accentBright, fontWeight: 900, px: 0.25 }}
-            >
-              &
-            </Box>{" "}
-            Compliance Platform
+            <PlatformTagline />
           </Box>
         </Typography>
       </Box>
