@@ -13,6 +13,8 @@ vi.mock("../api/http", () => ({
   clearApiCache: vi.fn(),
   setApiCacheSessionScope: vi.fn(),
   getActiveTenantId: () => null,
+  // AuthGate atiende este evento para apagar el salto de seguridad de http.js.
+  AUTH_REQUIRED_EVENT: "tracenium:auth-required",
 }));
 vi.mock("../hooks/useCachedFetch", () => ({
   clearCachedFetch: vi.fn(),

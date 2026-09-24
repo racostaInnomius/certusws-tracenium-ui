@@ -16,12 +16,14 @@ export const API = {
   HEALTH: "/api/v1/health",
   LOGIN: "/auth/login",
 };
-import Logo from "../assets/T.png";
 import { useAuthContext } from "./AuthContext";
 import { clearApiCache, setApiCacheSessionScope, getActiveTenantId } from "../api/http";
 import { clearCachedFetch, setCachedFetchSessionScope } from "../hooks/useCachedFetch";
 import { BRAND, NEUTRAL, TEXT } from "../theme/brand";
-import { consumeSsoError, ssoErrorCopy } from "./ssoError";
+import AuthShell from "./AuthShell";
+import SignInLanding from "./SignInLanding";
+import { consumeSignedOut, consumeSsoError, landingNotice, markSignedOut } from "./ssoError";
+import { AUTH_REQUIRED_EVENT } from "../api/http";
 
 const BOOTSTRAP_TIMEOUT_MS = 12_000;
 const BOOTSTRAP_RETRY_DELAY_MS = 3_000;
@@ -178,106 +180,6 @@ async function checkBackendHealth(signal) {
   }
 }
 
-function AuthShell({
-  title,
-  description,
-  children,
-  maxWidth = 420,
-  minHeight = 390,
-}) {
-  return (
-    <Box
-      sx={{
-        minHeight: "100dvh",
-        width: "100%",
-        display: "grid",
-        placeItems: "center",
-        px: 2,
-        background:
-          "radial-gradient(circle at top, #1d4d54 0, #020617 55%, #000 100%)",
-        backgroundSize: "200% 200%",
-        animation: "bgShift 12s ease infinite",
-        "@keyframes bgShift": {
-          "0%": { backgroundPosition: "0% 50%" },
-          "50%": { backgroundPosition: "100% 50%" },
-          "100%": { backgroundPosition: "0% 50%" },
-        },
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          width: "100%",
-          maxWidth,
-          minHeight,
-          px: { xs: 4, sm: 4 },
-          py: { xs: 4, sm: 4 },
-          borderRadius: "16px",
-          border: "1px solid rgba(116,249,253,0.4)",
-          background: "rgba(255,255,255,0.05)",
-          boxShadow: "0 0 25px rgba(116,249,253,0.18)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-        }}
-      >
-        <Box
-          sx={{
-            width: 84,
-            height: 84,
-            mb: 2.5,
-            borderRadius: "50%",
-            display: "grid",
-            placeItems: "center",
-          }}
-        >
-          <Box
-            component="img"
-            src={Logo}
-            alt="Tracenium"
-            sx={{
-              width: { xs: 92, sm: 96 },
-              height: "auto",
-              objectFit: "contain",
-              filter: "drop-shadow(0 0 10px rgba(116,249,253,0.35))",
-            }}
-          />
-        </Box>
-
-        <Typography
-          sx={{
-            color: BRAND.surface,
-            fontWeight: 600,
-            fontSize: { xs: 28, sm: 30 },
-            lineHeight: 1.2,
-            mb: 1.5,
-          }}
-        >
-          {title}
-        </Typography>
-
-        <Typography
-          sx={{
-            color: NEUTRAL[200],
-            fontSize: TEXT.base,
-            lineHeight: 1.6,
-            maxWidth: 320,
-            mb: 3,
-          }}
-        >
-          {description}
-        </Typography>
-
-        {children}
-      </Paper>
-    </Box>
-  );
-}
-
 function RetryProgress({ attempt }) {
   const progress = Math.min(
     100,
@@ -355,16 +257,40 @@ export default function AuthGate({ children }) {
   const [attempt, setAttempt] = React.useState(1);
   const [retryNonce, setRetryNonce] = React.useState(0);
   const [isRetryingNow, setIsRetryingNow] = React.useState(false);
-  const redirectedRef = React.useRef(false); // evita doble redirect en dev (StrictMode)
   // ⚠️ SE LEE EN EL PRIMER RENDER, ANTES DEL BOOTSTRAP.
   // El IdP denegó el acceso y el backend nos mandó aquí con ?auth_error=...:
   // no hay token, así que bootstrap daría 401 y su rama manda a /auth/login,
   // que es justo el bucle que este cambio corta. El parámetro se consume (se
   // borra de la URL) para que recargar no repita el mensaje.
   const [ssoError] = React.useState(() => consumeSsoError());
+  // La marca que dejó «Cerrar sesión» antes de irse al IdP. Se consume en el
+  // primer render para que recargar no repita el aviso.
+  const [signedOut] = React.useState(() => consumeSignedOut());
+  const [sessionExpired, setSessionExpired] = React.useState(false);
+  // Lo que el listener de abajo necesita saber sin volver a suscribirse:
+  // ¿había sesión? Una primera visita NO es una sesión caducada.
+  const wasAuthedRef = React.useRef(false);
   const { refreshAuth } = useAuthContext();
 
+  // ⚠️ EL OTRO CAMINO AL IdP. Cualquier 401 de la API emite este evento, y
+  // `http.js` tiene un salto de seguridad a /auth/login 50 ms después si nadie
+  // lo atiende. Sin este listener la entrada se pintaba y el navegador se iba
+  // igual al IdP medio segundo más tarde — se vio en pantalla, no en los tests.
+  // Atenderlo (preventDefault) apaga ese salto y trae a la persona aquí.
+  React.useEffect(() => {
+    const onAuthRequired = (event) => {
+      event?.preventDefault?.();
+      // «Caducó» sólo si llegó a haber sesión; en la primera visita la entrada
+      // se presenta sin avisos, que es lo que la persona espera leer.
+      setSessionExpired(wasAuthedRef.current);
+      setStatus("signedOut");
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, []);
+
   const handleLogout = async () => {
+    markSignedOut();
     clearApiCache();
     clearCachedFetch();
     setApiCacheSessionScope("signed-out");
@@ -394,7 +320,7 @@ export default function AuthGate({ children }) {
 
   React.useEffect(() => {
     // Con un error del IdP no hay nada que arrancar: la pantalla es terminal.
-    if (ssoError) return undefined;
+    if (ssoError || signedOut) return undefined;
 
     let cancelled = false;
     const loopController = new AbortController();
@@ -438,11 +364,12 @@ export default function AuthGate({ children }) {
           return { done: true };
         }
 
+        // ⚠️ SIN SESIÓN NO SE REBOTA AL IdP. Esto hacía que la primera
+        // pantalla de Tracenium fuera la de SafeCertus, y que cerrar sesión
+        // acabara en el mismo sitio. Ahora se enseña la entrada y el salto lo
+        // decide la persona.
         if (isUnauthenticatedError(res.status, text)) {
-          if (!redirectedRef.current) {
-            redirectedRef.current = true;
-            window.location.href = `${API.BASE}${API.LOGIN}`;
-          }
+          setStatus("signedOut");
           return { done: true };
         }
 
@@ -469,6 +396,7 @@ export default function AuthGate({ children }) {
           return { done: true };
         }
 
+        wasAuthedRef.current = true;
         setStatus("authed");
         return { done: true };
       } catch (e) {
@@ -553,7 +481,7 @@ export default function AuthGate({ children }) {
       cancelled = true;
       loopController.abort();
     };
-  }, [retryNonce, refreshAuth, ssoError]);
+  }, [retryNonce, refreshAuth, ssoError, signedOut]);
 
   const retryNow = () => {
     setIsRetryingNow(true);
@@ -667,54 +595,19 @@ export default function AuthGate({ children }) {
     );
   }
 
-  if (ssoError) {
-    const copy = ssoErrorCopy(ssoError);
-
+  // La entrada: sin sesión, tras cerrar sesión, o con una negativa del IdP.
+  // Una sola pantalla para los cuatro casos.
+  if (ssoError || signedOut || status === "signedOut") {
     return (
-      <AuthShell title={copy.title} description={copy.description} maxWidth={500} minHeight={420}>
-        <Box
-          sx={{
-            width: "100%",
-            maxWidth: 380,
-            mb: 2.5,
-            px: 2,
-            py: 1.5,
-            borderRadius: "14px",
-            border: "1px solid rgba(248, 181, 52, 0.45)",
-            background: "rgba(248, 181, 52, 0.10)",
-            textAlign: "left",
-          }}
-        >
-          <Typography
-            sx={{ color: BRAND.alert.warningOnDark, fontWeight: 700, fontSize: TEXT.md }}
-          >
-            {ssoError}
-          </Typography>
-        </Box>
-
-        {/* Reintentar sólo donde puede cambiar algo: volver a /auth/login es
-            una acción deliberada del usuario, no el rebote automático. */}
-        {copy.retry ? (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={() => {
-              window.location.href = `${API.BASE}${API.LOGIN}`;
-            }}
-            sx={{
-              maxWidth: 380,
-              textTransform: "none",
-              fontWeight: 700,
-              borderRadius: "12px",
-              py: 1.25,
-              background: "rgb(70,157,159)",
-              "&:hover": { background: "rgb(60,140,142)" },
-            }}
-          >
-            Try again
-          </Button>
-        ) : null}
-      </AuthShell>
+      <SignInLanding
+        notice={landingNotice({ ssoError, signedOut, sessionExpired })}
+        onSignIn={() => {
+          // El destino se conserva: un enlace profundo sin sesión aterriza
+          // aquí, y sin returnTo toda URL compartida acabaría en el Overview.
+          const returnTo = encodeURIComponent(window.location.href);
+          window.location.href = `${API.BASE}${API.LOGIN}?returnTo=${returnTo}`;
+        }}
+      />
     );
   }
 

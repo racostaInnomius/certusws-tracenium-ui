@@ -73,3 +73,82 @@ export function consumeSsoError(loc = typeof window !== "undefined" ? window.loc
 export function ssoErrorCopy(code) {
   return SSO_ERRORS[code] || SSO_ERRORS[FALLBACK];
 }
+
+// ── Cerrar sesión ────────────────────────────────────────────────────────
+//
+// ⚠️ NO viaja por la URL. El IdP valida el `post_logout_redirect_uri` contra
+// una lista blanca, así que añadirle un parámetro se arriesga a que SafeCertus
+// rechace el retorno y el usuario acabe mirando un JSON. La marca la deja el
+// portal antes de irse y la recoge la entrada al volver.
+const SIGNED_OUT_KEY = "tr_signed_out";
+
+export function markSignedOut(store = safeStore()) {
+  try {
+    store?.setItem(SIGNED_OUT_KEY, "1");
+  } catch {
+    // Sin almacenamiento el aviso se pierde; cerrar sesión funciona igual.
+  }
+}
+
+export function consumeSignedOut(store = safeStore()) {
+  try {
+    if (store?.getItem(SIGNED_OUT_KEY) !== "1") return false;
+    store.removeItem(SIGNED_OUT_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeStore() {
+  try {
+    return typeof window !== "undefined" ? window.localStorage : null;
+  } catch {
+    // Ventana privada o almacenamiento bloqueado: el acceso ya lanza aquí.
+    return null;
+  }
+}
+
+const SIGNED_OUT_NOTICE = {
+  tone: "info",
+  code: "Signed out",
+  title: "You have signed out",
+  description:
+    "Your Tracenium session is closed, and so is your SafeCertus session on this browser.",
+  cta: "Sign in again",
+  retry: true,
+};
+
+const SESSION_EXPIRED_NOTICE = {
+  tone: "warning",
+  code: "Session expired",
+  title: "Your session expired",
+  description: "For your security the session was closed. Sign in again to pick up where you left off.",
+  cta: "Sign in again",
+  retry: true,
+};
+
+/**
+ * El aviso que pinta la entrada, o null cuando no hay nada que contar y la
+ * pantalla es sólo la presentación del portal.
+ *
+ * El error del IdP manda sobre la marca de cierre de sesión: si alguien cerró
+ * sesión y al volver a entrar el IdP le negó el acceso, lo que necesita leer
+ * es la negativa.
+ */
+export function landingNotice({ ssoError = null, signedOut = false, sessionExpired = false } = {}) {
+  if (ssoError) {
+    const copy = ssoErrorCopy(ssoError);
+    return {
+      tone: ssoError === "no_service_access" ? "error" : "warning",
+      code: ssoError,
+      title: copy.title,
+      description: copy.description,
+      cta: "Try again",
+      retry: copy.retry,
+    };
+  }
+  if (signedOut) return SIGNED_OUT_NOTICE;
+  if (sessionExpired) return SESSION_EXPIRED_NOTICE;
+  return null;
+}

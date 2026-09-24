@@ -1046,11 +1046,10 @@ export default function AppShell() {
       clearApiCache();
       clearCachedFetch();
 
-      try {
-        window.location.assign(getLoginUrl());
-      } catch {
-        window.location.href = getLoginUrl();
-      }
+      // Ya no se salta al IdP desde aquí: AuthGate atiende el mismo evento y
+      // enseña la entrada de Tracenium con el aviso de sesión caducada. Irse
+      // al IdP sin decir nada era lo que hacía que el portal desapareciera a
+      // media tarea.
     };
 
     window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
