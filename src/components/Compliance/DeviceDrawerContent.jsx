@@ -29,6 +29,7 @@ import {
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
+import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
@@ -47,6 +48,8 @@ import FileIntegritySection from "./FileIntegritySection";
 import FleetRankingLine from "./FleetRankingLine";
 import FrameworkControlsPanel from "./FrameworkControlsPanel";
 import BulkFindingToolbar from "./BulkFindingToolbar";
+import BulkFixDialog from "./BulkFixDialog";
+import { bulkFixPlan } from "./bulkFixPlan";
 import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
@@ -240,6 +243,16 @@ export default function DeviceDrawerContent({
   // falla, no por la tabla entera.
   const [controlsFramework, setControlsFramework] = React.useState("");
   React.useEffect(() => { setControlsFramework(""); }, [agentId]);
+
+  // «Apply fixes (N)»: arreglar lo marcado sin salir de la ficha. El reparto
+  // se calcula AQUÍ, no dentro del diálogo, porque el propio menú dice cuántos
+  // de los marcados se pueden aplicar de verdad — y se apaga si no hay ninguno.
+  const [bulkFixOpen, setBulkFixOpen] = React.useState(false);
+  const selectedFindings = React.useMemo(
+    () => visibleFindings.filter((f) => selectedIds.has(f.id)),
+    [visibleFindings, selectedIds]
+  );
+  const selectedFixPlan = React.useMemo(() => bulkFixPlan(selectedFindings), [selectedFindings]);
 
   if (!agentId) return null;
 
@@ -519,6 +532,20 @@ export default function DeviceDrawerContent({
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
+            {/* Arreglar va ARRIBA: es lo que el operador vino a hacer; lo de
+                abajo es documentar. El rótulo dice cuántos de los marcados se
+                pueden aplicar de verdad, y se apaga cuando no hay ninguno. */}
+            <MenuItem
+              onClick={() => { setBulkMenuAnchor(null); setBulkFixOpen(true); }}
+              disabled={selectedFixPlan.checkIds.length === 0}
+            >
+              <BuildOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
+              <Typography variant="body2">
+                {selectedFixPlan.checkIds.length > 0
+                  ? `Apply fixes (${selectedFixPlan.checkIds.length})…`
+                  : "No selected finding can be fixed from here"}
+              </Typography>
+            </MenuItem>
             <MenuItem onClick={handleBulkRequestException}>
               <GppMaybeOutlinedIcon sx={{ fontSize: ICON.md, mr: 1 }} />
               <Typography variant="body2">Request exception for selected…</Typography>
@@ -633,6 +660,18 @@ export default function DeviceDrawerContent({
           findingTitle={exceptionDialog.finding?.title ?? null}
           onSubmit={submitExceptionRequest}
           onCancel={() => setExceptionDialog(null)}
+        />
+      ) : null}
+      {bulkFixOpen ? (
+        <BulkFixDialog
+          open
+          findings={selectedFindings}
+          deviceId={agentId}
+          hostname={device?.hostname ?? null}
+          canManage={canManage}
+          notify={onToast}
+          onChanged={onRequestRefetch}
+          onClose={() => setBulkFixOpen(false)}
         />
       ) : null}
       {bulkExceptionOpen ? (

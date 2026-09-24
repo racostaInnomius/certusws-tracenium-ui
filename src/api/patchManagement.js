@@ -104,6 +104,20 @@ export async function downloadRemediationArtifact({ checkIds, format = "reg", gp
   return filename;
 }
 
+// Varios checks sobre los MISMOS equipos, en una decisión: el «Apply fixes (N)»
+// de la ficha de un equipo. Devuelve las remediaciones creadas y, aparte, los
+// checks que no se pudieron lanzar con su motivo.
+export async function remediateBatch(payload) {
+  return httpPostJson(`${BASE}/remediate/batch`, payload);
+}
+
+// El progreso del lote entero en una llamada, en vez de una por remediación
+// en cada vuelta del sondeo.
+export async function getRemediationsBatch(ids = []) {
+  const list = (Array.isArray(ids) ? ids : [ids]).filter((n) => Number.isFinite(Number(n)));
+  return httpGetJson(`${BASE}/remediations/batch${buildQuery({ ids: list.join(",") })}`);
+}
+
 export async function listRemediations(params = {}) {
   return httpGetJson(`${BASE}/remediations${buildQuery(params)}`);
 }
