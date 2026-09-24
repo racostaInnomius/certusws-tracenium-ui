@@ -438,6 +438,11 @@ export default function OverviewTab({
         canManage={canManage}
         onClose={() => setCell(null)}
         onDeploy={handleDeployFromCell}
+        onOpenDeployment={(deploymentId) => {
+          // Lo que ya va en camino se mira donde vive, no aquí.
+          setCell(null);
+          onNavigateTab?.("deployments", { deploymentId });
+        }}
       />
 
       <DeployWizardDialog

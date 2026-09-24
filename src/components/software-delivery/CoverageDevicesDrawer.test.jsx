@@ -28,6 +28,9 @@ const device = (over = {}) => ({
   packageId: 9,
   catalogVersion: "152.0.7977.83",
   state: "behind",
+  openDeployment: null,
+  lastInstall: null,
+  inventoryLastSeen: null,
   ...over,
 });
 
@@ -140,6 +143,100 @@ describe("CoverageDevicesDrawer", () => {
     await screen.findByText("PC-1");
     const botones = screen.getAllByRole("button", { name: /on 1 device/i });
     expect(botones).toHaveLength(2);
+  });
+
+  it("🔴 el equipo con un job del mismo paquete en vuelo NO entra en el envío", async () => {
+    // El caso de campo: #52 mandó Edge a 8 equipos, 2 se quedaron en `pending`
+    // y 20 h después el botón mandaba el MISMO paquete otra vez. El segundo job
+    // se encola detrás del primero.
+    seed([
+      device({ agentId: "libre", hostname: "PC-LIBRE" }),
+      device({
+        agentId: "camino",
+        hostname: "PC-CAMINO",
+        openDeployment: { deploymentId: 52, version: "152.0.7977.83", outcome: "pending", createdAt: "2026-09-24T01:28:00Z" },
+      }),
+    ]);
+    const onDeploy = vi.fn();
+    open({ onDeploy });
+
+    // El botón principal cuenta UNO, no dos.
+    await userEvent.click(await screen.findByRole("button", { name: /Update 152\.0\.7977\.83 on 1 device$/i }));
+    expect(onDeploy).toHaveBeenCalledWith(expect.objectContaining({ deviceIds: ["libre"] }));
+
+    // Y el otro se enseña, con su motivo. No desaparece.
+    expect(screen.getByText(/Already on the way \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText("PC-CAMINO")).toBeInTheDocument();
+  });
+
+  it("⚠️ pero se puede reenviar a propósito: no se bloquea", async () => {
+    // A veces se reenvía justo PORQUE el job se atascó.
+    seed([
+      device({
+        agentId: "camino",
+        openDeployment: { deploymentId: 52, version: "152.0.7977.83", outcome: "pending", createdAt: "2026-09-24T01:28:00Z" },
+      }),
+    ]);
+    const onDeploy = vi.fn();
+    open({ onDeploy });
+
+    await userEvent.click(await screen.findByRole("button", { name: /Update anyway on 1 device/i }));
+    expect(onDeploy).toHaveBeenCalledWith(expect.objectContaining({ deviceIds: ["camino"] }));
+  });
+
+  it("y desde ahí se puede abrir el despliegue que ya va en camino", async () => {
+    seed([
+      device({
+        agentId: "camino",
+        openDeployment: { deploymentId: 52, version: "152.0.7977.83", outcome: "pending", createdAt: "2026-09-24T01:28:00Z" },
+      }),
+    ]);
+    const onOpenDeployment = vi.fn();
+    open({ onOpenDeployment });
+
+    await userEvent.click(await screen.findByText(/open deployment #52/i));
+    expect(onOpenDeployment).toHaveBeenCalledWith(52);
+  });
+
+  it("⭐ el que instaló DESPUÉS de la última lectura tampoco entra", async () => {
+    // La lectura es más vieja que el install: no puede reflejarlo. Reenviar
+    // ahí sólo produce un `already_installed`.
+    seed([
+      device({ agentId: "libre" }),
+      device({
+        agentId: "dudoso",
+        hostname: "PC-DUDOSO",
+        lastInstall: { deploymentId: 40, outcome: "success", finishedAt: "2026-09-24T02:00:00Z", reportedVersion: "152.0.7977.83" },
+        inventoryLastSeen: "2026-09-24T01:00:00Z",
+      }),
+    ]);
+    const onDeploy = vi.fn();
+    open({ onDeploy });
+
+    await userEvent.click(await screen.findByRole("button", { name: /Update 152\.0\.7977\.83 on 1 device$/i }));
+    expect(onDeploy).toHaveBeenCalledWith(expect.objectContaining({ deviceIds: ["libre"] }));
+    expect(screen.getByText(/Installed after this reading \(1\)/)).toBeInTheDocument();
+  });
+
+  it("⭐ una lectura vieja se dice en la fila", async () => {
+    // Los dos equipos del caso llevaban 220 h y 151 h sin reportar, y se veían
+    // igual que el que reportó hace diez minutos.
+    vi.setSystemTime(new Date("2026-09-24T12:00:00Z"));
+    seed([device({ inventoryLastSeen: "2026-09-15T08:00:00Z" })]);
+    open();
+
+    expect(await screen.findByText(/last reported 9 days ago/i)).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("una lectura fresca no ensucia la fila", async () => {
+    vi.setSystemTime(new Date("2026-09-24T12:00:00Z"));
+    seed([device({ inventoryLastSeen: "2026-09-24T11:00:00Z" })]);
+    open();
+
+    await screen.findByText("PC-ANA");
+    expect(screen.queryByText(/last reported/i)).toBeNull();
+    vi.useRealTimers();
   });
 
   it("pide la celda al servidor con su título y su estado", async () => {

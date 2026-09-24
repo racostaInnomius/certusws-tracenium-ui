@@ -45,11 +45,29 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import { getCoverageDevices } from "../../api/softwareDelivery";
-import { cellCopy, deployGroups, hostnamesOf } from "./coverageCells";
+import {
+  STALE_AFTER_HOURS,
+  cellCopy,
+  deployGroups,
+  hostnamesOf,
+  inventoryAgeHours,
+  splitCell,
+} from "./coverageCells";
 
 const PLATFORM_NAMES = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
+/** «hace 9 días», «hace 20 h», «hace 40 min». */
+function ago(hours) {
+  if (hours == null) return null;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min ago`;
+  if (hours < 48) return `${Math.round(hours)} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
 function DeviceRow({ device }) {
+  const age = inventoryAgeHours(device);
+  const stale = age != null && age > STALE_AFTER_HOURS;
+
   return (
     <Box
       sx={{
@@ -62,17 +80,85 @@ function DeviceRow({ device }) {
         "&:last-of-type": { borderBottom: 0 },
       }}
     >
-      <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, fontWeight: 600 }} noWrap>
-        {/* Sin hostname se enseña el id: es feo, pero es lo único que
-            identifica al equipo, y esconderlo dejaría una fila anónima. */}
-        {device.hostname || device.agentId}
-      </Typography>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark, fontWeight: 600 }} noWrap>
+          {/* Sin hostname se enseña el id: es feo, pero es lo único que
+              identifica al equipo, y esconderlo dejaría una fila anónima. */}
+          {device.hostname || device.agentId}
+        </Typography>
+        {/* ⚠️ LA EDAD DE LA RESPUESTA. Sin esto el equipo que lleva nueve días
+            callado se ve igual que el que reportó hace diez minutos, y para los
+            dos se propone lo mismo. Sólo se dice cuando es vieja: en la mayoría
+            de las filas sería ruido. */}
+        {stale ? (
+          <Typography sx={{ fontSize: TEXT.xs, color: ROLE.caution }} noWrap>
+            last reported {ago(age)}
+          </Typography>
+        ) : null}
+      </Box>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} noWrap>
         {PLATFORM_NAMES[device.platform] ?? device.platform ?? "—"}
       </Typography>
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, textAlign: "right" }} noWrap>
         {device.installedVersion ?? "not installed"}
       </Typography>
+    </Box>
+  );
+}
+
+/**
+ * Un grupo que NO va en el envío por defecto, con su motivo y su salida.
+ *
+ * ⚠️ SE ENSEÑA ENTERO. Un objetivo que desaparece en silencio es la forma de
+ * creer que apuntaste a 29 cuando apuntaste a 27 — la misma lección que la
+ * vista previa de desinstalar.
+ */
+function HeldBack({ title, detail, devices, action, onSend, onOpenDeployment }) {
+  if (devices.length === 0) return null;
+  return (
+    <Box sx={{ mb: 2.5 }}>
+      <Typography sx={{ fontSize: TEXT.md, fontWeight: 800, color: BRAND.dark }}>
+        {title} ({devices.length})
+      </Typography>
+      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>{detail}</Typography>
+
+      <Box sx={{ border: `1px solid ${BRAND.border}`, borderRadius: 1, px: 1.5, mb: 1 }}>
+        {devices.map((d) => (
+          <Box key={d.agentId}>
+            <DeviceRow device={d} />
+            {d.openDeployment && onOpenDeployment ? (
+              <Typography
+                role="button"
+                tabIndex={0}
+                onClick={() => onOpenDeployment(d.openDeployment.deploymentId)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpenDeployment(d.openDeployment.deploymentId);
+                  }
+                }}
+                sx={{
+                  fontSize: TEXT.xs,
+                  color: BRAND.teal,
+                  cursor: "pointer",
+                  pb: 0.75,
+                  "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
+                }}
+              >
+                open deployment #{d.openDeployment.deploymentId}
+              </Typography>
+            ) : null}
+          </Box>
+        ))}
+      </Box>
+
+      {/* ⚠️ NO SE BLOQUEA EL REENVÍO: a veces se reenvía justo PORQUE el job se
+          atascó. Lo que cambia es que deje de ser el camino por defecto. */}
+      {onSend ? (
+        <Button size="small" variant="outlined" sx={{ textTransform: "none" }} onClick={onSend}>
+          {action} anyway on {devices.length} device{devices.length === 1 ? "" : "s"}
+        </Button>
+      ) : null}
     </Box>
   );
 }
@@ -85,6 +171,7 @@ export default function CoverageDevicesDrawer({
   canManage,
   onClose,
   onDeploy,
+  onOpenDeployment,
 }) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -116,7 +203,21 @@ export default function CoverageDevicesDrawer({
   }, [open, titleKey, state]);
 
   const copy = cellCopy(state);
-  const groups = React.useMemo(() => deployGroups(devices), [devices]);
+  // ⚠️ La celda se parte ANTES de agrupar por paquete: el botón principal
+  // cuenta sólo lo que de verdad hay que mandar, y lo que queda fuera se
+  // enseña con su motivo en vez de desaparecer.
+  const split = React.useMemo(() => splitCell(devices), [devices]);
+  const groups = React.useMemo(() => deployGroups(split.actionable), [split.actionable]);
+
+  const send = React.useCallback(
+    (rows) =>
+      onDeploy?.({
+        packageId: rows[0]?.packageId,
+        deviceIds: rows.map((d) => d.agentId),
+        hostnames: hostnamesOf(rows),
+      }),
+    [onDeploy]
+  );
 
   return (
     <Drawer
@@ -164,6 +265,26 @@ export default function CoverageDevicesDrawer({
         </Typography>
       ) : (
         <Box sx={{ mt: 2 }}>
+          {copy.deployable ? (
+            <>
+              <HeldBack
+                title="Already on the way"
+                detail="A deployment of this same title has not finished on these devices yet. Sending again queues a second install behind the first one."
+                devices={split.onTheWay}
+                action={copy.action}
+                onSend={canManage && split.onTheWay.length > 0 ? () => send(split.onTheWay) : undefined}
+                onOpenDeployment={onOpenDeployment}
+              />
+              <HeldBack
+                title="Installed after this reading"
+                detail="These devices installed it after the last inventory scan, so this view cannot show it yet. They are most likely already up to date."
+                devices={split.unconfirmed}
+                action={copy.action}
+                onSend={canManage && split.unconfirmed.length > 0 ? () => send(split.unconfirmed) : undefined}
+              />
+            </>
+          ) : null}
+
           {groups.map((group) => (
             <Box key={group.packageId} sx={{ mb: 2.5 }}>
               {groups.length > 1 ? (
