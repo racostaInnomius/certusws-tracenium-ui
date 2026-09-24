@@ -205,6 +205,47 @@ describe("CatalogCoveragePanel", () => {
     expect(await screen.findByText(/these counts are a floor/)).toBeInTheDocument();
   });
 
+  it("⭐ cada tramo lleva a SUS equipos", async () => {
+    // La queja de campo: «Behind» tenía que llevar a un listado de esos
+    // equipos. Antes la fila entera iba a la pestaña Catalog, que no contesta
+    // nada — el operador ya sabe que publicó Chrome.
+    const onOpenCell = vi.fn();
+    render(<CatalogCoveragePanel coverage={coverage} onOpenCell={onOpenCell} />);
+
+    await userEvent.click(await screen.findByText("3 behind"));
+    expect(onOpenCell).toHaveBeenCalledWith(expect.objectContaining({ name: "Google Chrome" }), "behind");
+
+    await userEvent.click(screen.getByText("26 not installed"));
+    expect(onOpenCell).toHaveBeenLastCalledWith(expect.anything(), "missing");
+  });
+
+  it("⚠️ los contadores son pulsables porque un tramo del 1 % no lo es", async () => {
+    // «2 por detrás» de 56 equipos mide dos píxeles en la barra: pulsable en
+    // teoría, inalcanzable con el ratón. Y es justo el tramo que lleva a la
+    // acción, así que el número tiene que ser un control de verdad.
+    const onOpenCell = vi.fn();
+    render(
+      <CatalogCoveragePanel
+        coverage={{
+          totalDevices: 56,
+          items: [{ ...chrome, current: 54, ahead: 0, behind: 2, missingDevices: 0, installedDevices: 56, eligibleDevices: 56 }],
+        }}
+        onOpenCell={onOpenCell}
+      />
+    );
+
+    const contador = await screen.findByRole("button", { name: /Google Chrome, Behind: 2 devices/i });
+    contador.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onOpenCell).toHaveBeenCalledWith(expect.anything(), "behind");
+  });
+
+  it("sin manejador de celda los tramos no fingen ser botones", async () => {
+    render(<CatalogCoveragePanel coverage={coverage} />);
+    await screen.findByText("3 behind");
+    expect(screen.queryByRole("button", { name: /Behind: 3 devices/i })).toBeNull();
+  });
+
   it("la fila navega al catálogo, y es alcanzable con el teclado", async () => {
     const onNavigateTab = vi.fn();
     render(<CatalogCoveragePanel coverage={coverage} onNavigateTab={onNavigateTab} />);

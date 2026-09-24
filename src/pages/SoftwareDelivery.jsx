@@ -290,6 +290,12 @@ export default function SoftwareDelivery({ onNavigate }) {
       {activeTab === 0 ? (
         <OverviewTab
           refreshNonce={refreshNonce}
+          // Desde que un tramo de la cobertura despliega, esta pestaña deja de
+          // ser de sólo lectura: necesita el mismo permiso y el mismo aviso que
+          // el catálogo.
+          canManage={canManage}
+          notify={notify}
+          onDeployFire={handleDeployFired}
           onNavigateTab={(key, opts) => {
             setActiveTab(TAB_INDEX[key] ?? 0);
             if (opts?.reviewQueue) setOpenReviewQueue(true);

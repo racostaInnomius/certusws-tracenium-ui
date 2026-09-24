@@ -23,6 +23,8 @@ import {
 } from "@mui/material";
 
 import SectionPaper from "../common/SectionPaper";
+import CoverageDevicesDrawer from "./CoverageDevicesDrawer";
+import DeployWizardDialog from "./DeployWizardDialog";
 import InstallFailuresPanel from "./InstallFailuresPanel";
 import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
@@ -36,6 +38,7 @@ import CompositionBars from "../common/CompositionBars";
 import InstallActivityCalendar from "./InstallActivityCalendar";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
+  deployPackage,
   listPackages,
   listDeployments,
   listIntakes,
@@ -102,9 +105,17 @@ function sumOutcomes(deployments, outcomes) {
   return total;
 }
 
-// Read-only surface: every call degrades to an empty card on failure, so
-// there is nothing to raise to the page-level snackbar.
-export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
+// Los datos siguen degradando a una tarjeta vacía cuando fallan; lo que ya NO
+// es de sólo lectura es la cobertura: desde el 24-sep un tramo de su barra
+// abre sus equipos y permite mandarles el paquete. Por eso esta pestaña recibe
+// ahora `canManage` y `notify` — un despliegue sí tiene que poder gritar.
+export default function OverviewTab({
+  onNavigateTab,
+  refreshNonce = 0,
+  canManage = false,
+  notify,
+  onDeployFire,
+}) {
   const [loading, setLoading] = React.useState(true);
   const [windowKey, setWindowKey] = React.useState("30d");
   const [data, setData] = React.useState({
@@ -240,6 +251,43 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
     [data.globalCatalog]
   );
 
+  // ── De la gráfica al despliegue ───────────────────────────────
+  //
+  // Dos estados y no uno: el cajón enseña QUIÉN está en ese tramo, y el wizard
+  // decide CÓMO se les manda. Fundirlos haría que pulsar una barra empezara un
+  // despliegue, que es justo lo que no puede pasar.
+  const [cell, setCell] = React.useState(null);
+  const [deploy, setDeploy] = React.useState(null);
+
+  const handleDeployFromCell = React.useCallback(
+    ({ packageId, deviceIds, hostnames }) => {
+      const pkg = data.packages.find((p) => String(p.id) === String(packageId));
+      if (!pkg) {
+        // Puede pasar si el catálogo cambió mientras el cajón estaba abierto.
+        // Decirlo es mejor que abrir un wizard sin paquete.
+        notify?.("error", "That package is no longer in the catalog. Refresh and try again.");
+        return;
+      }
+      setCell(null);
+      setDeploy({ pkg, preset: { deviceIds, hostnames } });
+    },
+    [data.packages, notify]
+  );
+
+  const handleDeployConfirm = React.useCallback(
+    async (body) => {
+      if (!deploy?.pkg) return;
+      const res = await deployPackage(deploy.pkg.id, body);
+      notify?.(
+        "success",
+        `Deployment #${res?.deployment?.id} created — ${res?.deployment?.counts?.pending ?? 0} job(s) queued`
+      );
+      setDeploy(null);
+      onDeployFire?.(res?.deployment?.id);
+    },
+    [deploy, notify, onDeployFire]
+  );
+
   return (
     <Stack spacing={2}>
       {/* ── Lo que hay que atender, antes que nada ──────────────── */}
@@ -286,6 +334,9 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
         coverage={data.coverage}
         failed={data.failures.has("coverage")}
         onNavigateTab={onNavigateTab}
+        onOpenCell={(item, state) =>
+          setCell({ titleKey: item.titleKey, name: item.name, state })
+        }
       />
 
       {/* ── Lo que está pasando ahora, y por qué no avanza ──────
@@ -376,6 +427,24 @@ export default function OverviewTab({ onNavigateTab, refreshNonce = 0 }) {
         failed={data.failures.has("savings")}
       />
 
+      <CoverageDevicesDrawer
+        open={Boolean(cell)}
+        titleKey={cell?.titleKey}
+        name={cell?.name}
+        state={cell?.state}
+        canManage={canManage}
+        onClose={() => setCell(null)}
+        onDeploy={handleDeployFromCell}
+      />
+
+      <DeployWizardDialog
+        open={Boolean(deploy)}
+        pkg={deploy?.pkg}
+        preset={deploy?.preset}
+        onClose={() => setDeploy(null)}
+        onConfirm={handleDeployConfirm}
+        notify={notify}
+      />
     </Stack>
   );
 }

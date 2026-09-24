@@ -302,6 +302,72 @@ describe("cobertura del catálogo", () => {
   });
 });
 
+describe("de la cobertura al despliegue", () => {
+  // El cableado de la fase 2: la gráfica dejó de ser una foto. Lo que se fija
+  // aquí es el CAMINO —tramo → equipos → wizard—; la decisión de sobre qué
+  // tramos se ofrece el botón vive en coverageCells.test.js, y la lista en
+  // CoverageDevicesDrawer.test.jsx.
+  const CHROME = {
+    titleKey: "google-chrome",
+    name: "Google Chrome",
+    catalogVersion: "152.0.7977.83",
+    catalogVersions: [{ platform: "windows", version: "152.0.7977.83" }],
+    platforms: ["windows"],
+    eligibleDevices: 3,
+    installedDevices: 3,
+    missingDevices: 0,
+    current: 1,
+    ahead: 0,
+    behind: 2,
+    unknown: 0,
+    versions: [{ version: "151.0.0.1", devices: 2, state: "behind" }],
+  };
+
+  function seedCell(devices) {
+    // Después del handler de la cobertura: MSW se queda con el último.
+    return respond("get", /\/analytics\/catalog-coverage\/[^/]+\/devices.*/, {
+      ok: true,
+      titleKey: "google-chrome",
+      name: "Google Chrome",
+      state: "behind",
+      devices,
+    });
+  }
+
+  it("⭐ pulsar «2 behind» abre ESOS equipos", async () => {
+    seed({ coverage: { totalDevices: 3, items: [CHROME] } });
+    seedCell([
+      { agentId: "a", hostname: "PC-ANA", platform: "windows", installedVersion: "151.0.0.1", packageId: 9, catalogVersion: "152.0.7977.83", state: "behind" },
+      { agentId: "b", hostname: "PC-BETO", platform: "windows", installedVersion: "151.0.0.1", packageId: 9, catalogVersion: "152.0.7977.83", state: "behind" },
+    ]);
+
+    render(<OverviewTab canManage />);
+
+    await userEvent.click(await screen.findByText("2 behind"));
+
+    expect(await screen.findByText("PC-ANA")).toBeInTheDocument();
+    expect(screen.getByText("PC-BETO")).toBeInTheDocument();
+  });
+
+  it("⭐ y desde ahí el wizard abre con esos equipos y ESE paquete", async () => {
+    seed({
+      packages: [{ id: 9, name: "Google Chrome", version: "152.0.7977.83", platform: "windows", arch: "x64", format: "msi", isActive: true }],
+      coverage: { totalDevices: 3, items: [CHROME] },
+    });
+    seedCell([
+      { agentId: "a", hostname: "PC-ANA", platform: "windows", installedVersion: "151.0.0.1", packageId: 9, catalogVersion: "152.0.7977.83", state: "behind" },
+    ]);
+
+    render(<OverviewTab canManage notify={() => {}} />);
+
+    await userEvent.click(await screen.findByText("2 behind"));
+    await userEvent.click(await screen.findByRole("button", { name: /Update 152\.0\.7977\.83 on 1 device/i }));
+
+    // El wizard, no un disparo: sigue habiendo revisión antes de mandar nada.
+    expect(await screen.findByRole("radio", { name: /manual device list/i })).toBeChecked();
+  });
+});
+
 describe("despliegues en vuelo", () => {
   // El cableado: que el Overview pase SUS despliegues al panel y que abrir una
   // fila lleve a ESE despliegue, no a la lista. La lectura del reparto vive en

@@ -143,34 +143,34 @@ export function catalogLagsFleet(item) {
     Number(item?.ahead ?? 0) === Number(item?.installedDevices ?? 0);
 }
 
-function CoverageRow({ item, totalDevices, onOpen }) {
+/** Un control de verdad: foco, Enter y Espacio. No un `div` con `onClick`. */
+function pressable(onPress, label) {
+  if (typeof onPress !== "function") return {};
+  return {
+    onClick: onPress,
+    role: "button",
+    tabIndex: 0,
+    "aria-label": label,
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onPress();
+      }
+    },
+  };
+}
+
+function CoverageRow({ item, totalDevices, onOpen, onOpenCell }) {
   const segments = coverageSegments(item, totalDevices);
   const summary = versionSummary(item);
   const installed = Number(item.installedDevices ?? 0);
   const eligible = eligibleOf(item, totalDevices);
   const percent = eligible > 0 ? Math.round((installed / eligible) * 100) : 0;
-  const interactive = typeof onOpen === "function";
+  const cell = (key) =>
+    typeof onOpenCell === "function" ? () => onOpenCell(item, key) : undefined;
 
   return (
     <Box
-      onClick={interactive ? onOpen : undefined}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      aria-label={
-        interactive
-          ? `${item.name}: installed on ${installed} of ${eligible} devices`
-          : undefined
-      }
-      onKeyDown={
-        interactive
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onOpen();
-              }
-            }
-          : undefined
-      }
       sx={{
         display: "grid",
         gridTemplateColumns: { xs: "1fr", sm: "minmax(150px, 1.1fr) 2fr auto" },
@@ -178,14 +178,24 @@ function CoverageRow({ item, totalDevices, onOpen }) {
         alignItems: "center",
         py: 1.25,
         borderBottom: `1px solid ${BRAND.border}`,
-        cursor: interactive ? "pointer" : "default",
         "&:last-of-type": { borderBottom: 0 },
-        "&:hover": interactive ? { bgcolor: BRAND.rowHover } : undefined,
-        "&:focus-visible": { outline: `2px solid ${BRAND.teal}`, outlineOffset: -2 },
       }}
     >
-      <Box sx={{ minWidth: 0 }}>
-        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap>
+      {/* ⚠️ La navegación al catálogo vive AQUÍ y no en la fila entera: desde
+          que los tramos se pueden pulsar, una fila-botón los dejaría anidados
+          dentro de otro botón —inválido para un lector de pantalla— y cada clic
+          en un tramo dispararía además la navegación. */}
+      <Box
+        {...pressable(onOpen, `${item.name}: installed on ${installed} of ${eligible} devices`)}
+        sx={{
+          minWidth: 0,
+          borderRadius: 1,
+          cursor: onOpen ? "pointer" : "default",
+          "&:hover": onOpen ? { "& .n": { color: BRAND.teal } } : undefined,
+          "&:focus-visible": { outline: `2px solid ${BRAND.teal}`, outlineOffset: 2 },
+        }}
+      >
+        <Typography className="n" sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap>
           {item.name}
         </Typography>
         <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }} noWrap>
@@ -207,7 +217,13 @@ function CoverageRow({ item, totalDevices, onOpen }) {
         >
           {segments.map((seg) => (
             <Tooltip key={seg.key} title={`${seg.label}: ${seg.devices}`}>
+              {/* ⚠️ ATAJO DE RATÓN, NO UN CONTROL. El tramo no lleva rol ni
+                  foco a propósito: el contador de debajo hace exactamente lo
+                  mismo y SÍ es alcanzable con el teclado. Con los dos como
+                  botones, un lector de pantalla leería cada celda dos veces y
+                  la fila tendría ocho paradas de tabulación en vez de cuatro. */}
               <Box
+                onClick={cell(seg.key)}
                 sx={{
                   width: `${seg.pct}%`,
                   bgcolor: seg.color ?? "transparent",
@@ -216,6 +232,7 @@ function CoverageRow({ item, totalDevices, onOpen }) {
                   color: seg.key === "behind" ? BRAND.alert.warningText : BRAND.surface,
                   fontSize: TEXT.xs,
                   fontWeight: 700,
+                  cursor: onOpenCell ? "pointer" : "default",
                 }}
               >
                 {seg.pct >= 12 ? seg.devices : ""}
@@ -223,13 +240,38 @@ function CoverageRow({ item, totalDevices, onOpen }) {
             </Tooltip>
           ))}
         </Box>
+
+        {/* ⚠️ LOS CONTADORES SON EL BOTÓN DE VERDAD. Un tramo del 1 % mide dos
+            píxeles: pulsable en teoría, inalcanzable con el ratón. Y son justo
+            los pequeños —«2 por detrás»— los que llevan a la acción. */}
+        <Stack direction="row" spacing={1.5} sx={{ mt: 0.5, flexWrap: "wrap", rowGap: 0.25 }}>
+          {segments.map((seg) => (
+            <Typography
+              key={seg.key}
+              {...pressable(cell(seg.key), `${item.name}, ${seg.label}: ${seg.devices} devices`)}
+              sx={{
+                fontSize: TEXT.sm,
+                color: BRAND.gray,
+                borderRadius: 0.5,
+                cursor: onOpenCell ? "pointer" : "default",
+                textDecoration: onOpenCell ? "underline dotted" : "none",
+                textUnderlineOffset: 3,
+                "&:hover": onOpenCell ? { color: BRAND.teal } : undefined,
+                "&:focus-visible": { outline: `2px solid ${BRAND.teal}`, outlineOffset: 2 },
+              }}
+            >
+              {seg.devices} {seg.label.toLowerCase()}
+            </Typography>
+          ))}
+        </Stack>
+
         {summary ? (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.5 }} noWrap>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }} noWrap>
             {summary}
             {catalogLagsFleet(item) ? " · nobody is on the published version" : ""}
           </Typography>
         ) : (
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.5 }}>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 0.25 }}>
             Not installed anywhere in the fleet
           </Typography>
         )}
@@ -247,7 +289,13 @@ function CoverageRow({ item, totalDevices, onOpen }) {
   );
 }
 
-export default function CatalogCoveragePanel({ loading, coverage, failed, onNavigateTab }) {
+export default function CatalogCoveragePanel({
+  loading,
+  coverage,
+  failed,
+  onNavigateTab,
+  onOpenCell,
+}) {
   const totalDevices = Number(coverage?.totalDevices ?? 0);
   const items = Array.isArray(coverage?.items) ? coverage.items : [];
 
@@ -303,6 +351,7 @@ export default function CatalogCoveragePanel({ loading, coverage, failed, onNavi
               item={item}
               totalDevices={totalDevices}
               onOpen={onNavigateTab ? () => onNavigateTab("catalog") : undefined}
+              onOpenCell={onOpenCell}
             />
           ))}
 

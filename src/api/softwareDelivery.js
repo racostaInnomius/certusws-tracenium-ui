@@ -184,6 +184,18 @@ export async function getCatalogCoverage() {
   return httpGetJson(`${BASE}/analytics/catalog-coverage`);
 }
 
+/**
+ * Los equipos detrás de UNA celda de la cobertura («esos 29 por detrás»).
+ *
+ * El servidor los resuelve con la MISMA clasificación que pinta la barra, así
+ * que la lista y el número no pueden separarse.
+ */
+export async function getCoverageDevices(titleKey, state) {
+  return httpGetJson(
+    `${BASE}/analytics/catalog-coverage/${encodeURIComponent(titleKey)}/devices${buildQuery({ state })}`
+  );
+}
+
 // ── Distribution (Phase B) — sites + distribution points ──────────
 
 export async function listSites() {

@@ -95,6 +95,13 @@ export default function DeployWizardDialog({
   onClose,
   onConfirm,     // async (deployBody) → handled by parent
   notify,
+  // Selección que trae quien abre el wizard: los equipos de una celda de la
+  // cobertura («esos 29 por detrás»). `{ deviceIds: [], hostnames: {id: name} }`.
+  //
+  // ⚠️ RELLENA EL PASO DE OBJETIVO, NO LO SALTA. El operador tiene que poder
+  // ver a quién va y quitar equipos antes de disparar; un atajo que mandara
+  // directo convertiría un clic en una gráfica en un despliegue.
+  preset,
 }) {
   const [activeStep, setActiveStep] = React.useState(0);
 
@@ -197,17 +204,28 @@ export default function DeployWizardDialog({
 
   const [submitting, setSubmitting] = React.useState(false);
 
+  // ⚠️ El preset se lee por REFERENCIA: si entrara en las dependencias del
+  // efecto, un objeto nuevo creado por el padre en cada render reiniciaría el
+  // wizard mientras el operador lo está rellenando.
+  const presetRef = React.useRef(preset);
+  presetRef.current = preset;
+
   // Reset whenever the dialog opens
   React.useEffect(() => {
     if (!open) return;
+    const initial = presetRef.current;
+    const presetIds = Array.isArray(initial?.deviceIds) ? initial.deviceIds.filter(Boolean) : [];
+
     setActiveStep(0);
     setMode("install");
     setRolloutPreset("fast");
-    setTargetMode("asset_group");
+    // Con una selección de entrada el objetivo es ESA lista, no un grupo: el
+    // operador ya eligió a quién al pulsar el tramo de la gráfica.
+    setTargetMode(presetIds.length > 0 ? "device_list" : "asset_group");
     setGroupId("");
     setDeviceIdsRaw("");
-    setPickedIds(new Set());
-    setHostnameById(new Map());
+    setPickedIds(new Set(presetIds));
+    setHostnameById(new Map(Object.entries(initial?.hostnames ?? {})));
     setManualMode("picker");
     setUnknownPastedIds([]);
     setSubmitting(false);
