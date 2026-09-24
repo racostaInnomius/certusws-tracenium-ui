@@ -677,6 +677,15 @@ export default function ScreenShareViewer({ session, device, onClose }) {
             if (destroyed) return;
             setErrorMsg("WebRTC connection lost — retries exhausted.");
             setState(STATE.ERROR);
+          },
+          // ⚠️ ICE nunca conectó: no es una caída, es que no hubo camino.
+          // El texto de `ice_failed` es el que manda mirar el cortafuegos, y
+          // era justo lo que faltaba cuando MSIG-DOMAIN (T111) no conectaba
+          // mientras otros servidores sí (24-sep).
+          onUnestablished: () => {
+            if (destroyed) return;
+            setErrorMsg(describeCloseReason("ice_failed").detail);
+            setState(STATE.ERROR);
           }
         });
         cleanupFns.push(detachIceRestart);

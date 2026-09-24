@@ -81,7 +81,13 @@ export function attachIceRestart({
   maxAttempts = 2,
   disconnectedGraceMs = 4000,
   onFinalFailure,
-  onRestartAttempt
+  onRestartAttempt,
+  /**
+   * ICE falló SIN haber conectado nunca: no hay nada que reiniciar. Si el
+   * llamador no lo trae, se cae en `onFinalFailure` — peor mensaje, pero
+   * nunca un silencio.
+   */
+  onUnestablished
 } = {}) {
   if (!pc || !ws || !sessionId) {
     // Misconfigured call — fail loud in dev, no-op in prod.
@@ -95,6 +101,23 @@ export function attachIceRestart({
   let disposed = false;
   let pendingGraceTimer = null;
   let restartInFlight = false;
+  // ⚠️ ¿Llegó a haber conexión alguna vez?
+  //
+  // Reiniciar ICE es recuperar una conexión ROTA. Una que nunca se estableció
+  // no está rota: no llegó a existir, y reiniciarla no arregla nada — vuelve a
+  // fallar por lo mismo, que casi siempre es un cortafuegos o UDP cerrado en
+  // un extremo.
+  //
+  // Y hace algo peor que no servir: MIENTE. El agente ve credenciales ICE
+  // nuevas, y como una shell o un gestor de ficheros no se pueden reconstruir
+  // sin tirar el PTY o la transferencia, cierra con `ice_restart_unsupported`
+  // — cuyo texto dice «la red cambió a mitad de sesión». El operador se va a
+  // buscar un cambio de red que no hubo, con una sesión que nunca conectó.
+  //
+  // Pasó en campo: T111, equipo MSIG-DOMAIN, 24-sep. La auditoría lo remataba
+  // enseñando `connected` un segundo antes, porque ese evento se escribe
+  // cuando el agente MANDA SU ANSWER, no cuando hay camino.
+  let everConnected = false;
 
   const clearGrace = () => {
     if (pendingGraceTimer) {
@@ -137,12 +160,38 @@ export function attachIceRestart({
     }
   };
 
+  /**
+   * ICE falló sin haber conectado nunca. Se dice tal cual y se cierra con
+   * `ice_failed`, cuyo texto ya explica lo que hay que mirar: «no encontraron
+   * un camino de red, ni siquiera por el relay; lo normal es un cortafuegos
+   * restrictivo en alguno de los dos lados».
+   *
+   * El cierre lo manda este helper y no el llamador para que el motivo llegue
+   * a la auditoría aunque el panel se desmonte: el backend escribe el PRIMER
+   * cierre que recibe (`WHERE status IN ('pending','active')`), así que este
+   * gana al `user_closed` de la limpieza.
+   */
+  const reportUnestablished = () => {
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "close", sessionId, reason: "ice_failed" }));
+      }
+    } catch {
+      /* el socket ya se fue; el motivo lo pondrá el barrido */
+    }
+    (onUnestablished || onFinalFailure)?.();
+  };
+
   const handler = () => {
     if (disposed) return;
     const state = pc.iceConnectionState;
     if (state === "failed") {
       // Terminal. Don't wait — go straight to restart.
       clearGrace();
+      if (!everConnected) {
+        reportUnestablished();
+        return;
+      }
       tryRestart();
     } else if (state === "disconnected") {
       // Transient blip. Schedule a delayed restart; if iceState recovers
@@ -154,12 +203,17 @@ export function attachIceRestart({
         if (disposed) return;
         if (pc.iceConnectionState === "disconnected" ||
             pc.iceConnectionState === "failed") {
+          if (!everConnected) {
+            reportUnestablished();
+            return;
+          }
           tryRestart();
         }
       }, disconnectedGraceMs);
     } else if (state === "connected" || state === "completed") {
       clearGrace();
       attempts = 0;
+      everConnected = true;
     }
   };
 

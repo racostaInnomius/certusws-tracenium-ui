@@ -480,14 +480,32 @@ describe("ShellTerminal — ERROR transitions", () => {
   });
 
   it("ICE restart exhausts its retries → WebRTC connection lost / ERROR", async () => {
-    // Drive onFinalFailure deterministically: with the signaling WS not open,
-    // the first restart attempt can't deliver the offer and gives up.
+    // ⚠️ Hay que CONECTAR primero, y no es un detalle del arnés.
+    //
+    // Antes bastaba con tirar ICE a `failed`: el helper pedía un reinicio
+    // aunque no hubiera habido conexión nunca. Eso es justo lo que se arregló
+    // el 24-sep (ver iceRestart.unestablished.test.js) — un ICE que nunca
+    // conectó ya no se "reinicia", se dice que no hubo camino. Este test
+    // cubre la otra mitad: la conexión que SÍ existió y se rompe.
     renderTerminal();
     const pc = peers[0];
     const ws = sockets[0];
+    await pc.fireIceConnectionState("connected");
     ws.readyState = FakeWebSocket.CLOSED; // offer can't be sent → final failure
     await pc.fireIceConnectionState("failed");
     expect(await screen.findByText(/WebRTC connection lost|retries exhausted/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ ICE que nunca conectó → se dice que no hubo camino, no que se cayó", async () => {
+    // Lo que leyó el operador de T111 con MSIG-DOMAIN: tres frases diciendo
+    // que la sesión se había caído, sobre una que nunca llegó a abrirse.
+    renderTerminal();
+    const pc = peers[0];
+    await pc.fireIceConnectionState("failed");
+    expect(
+      await screen.findByText(/could not find a network path/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/retries exhausted/i)).not.toBeInTheDocument();
   });
 });
 
