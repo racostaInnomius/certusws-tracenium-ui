@@ -60,6 +60,7 @@ import {
   batchesByTarget,
   describeBlocked,
   perUserCount,
+  predictedSilentCount,
   uninstallRequestBody,
 } from "./uninstallPlanning";
 
@@ -475,6 +476,18 @@ export default function UninstallFlow({ onDone, notify, refreshNonce = 0 }) {
               </Typography>
               {/* Con varios tipos de equipo se dice que van en despliegues
                   separados: el operador verá N filas en Deployments, no una. */}
+              {/* ⚠️ El modo silencioso de estos NO está confirmado: el servidor
+                  lo deduce del nombre del desinstalador y el EQUIPO lee la firma
+                  del binario antes de ejecutar. Decirlo evita dos lecturas
+                  falsas: que un «no se ejecutó nada» parezca un fallo nuestro, y
+                  que el operador crea que ya está comprobado. */}
+              {predictedSilentCount(preview.actionable) > 0 ? (
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  On {predictedSilentCount(preview.actionable)} device(s) the silent switch is a guess from
+                  the uninstaller's name. Each device checks the binary first: if it does not support
+                  silent uninstall, nothing runs there and it reports "no silent uninstaller".
+                </Alert>
+              ) : null}
               {/* ⚠️ Por usuario el resultado depende de algo que la vista previa
                   no puede saber: que esa persona tenga sesión abierta cuando
                   llegue el job. Se dice ANTES, para que un «user not signed in»

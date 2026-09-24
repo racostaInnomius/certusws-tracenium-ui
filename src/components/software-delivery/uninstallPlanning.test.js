@@ -5,7 +5,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { batchesByTarget, describeBlocked, perUserCount, uninstallRequestBody } from "./uninstallPlanning";
+import {
+  batchesByTarget,
+  describeBlocked,
+  perUserCount,
+  predictedSilentCount,
+  uninstallRequestBody,
+} from "./uninstallPlanning";
 
 const blocked = (reason) => ({ ok: false, reason, detail: "detalle en español del backend" });
 
@@ -150,5 +156,19 @@ describe("Windows por usuario", () => {
       ])
     ).toBe(1);
     expect(perUserCount(undefined)).toBe(0);
+  });
+});
+
+describe("predictedSilentCount", () => {
+  // El modo silencioso previsto NO es un hecho: lo verifica el equipo leyendo
+  // la firma del binario. La pantalla tiene que distinguirlo.
+  it("cuenta sólo los accionables marcados como predicción", () => {
+    expect(
+      predictedSilentCount([
+        { deviceId: "a", plan: { ok: true, silentPredicted: true } },
+        { deviceId: "b", plan: { ok: true } },
+      ])
+    ).toBe(1);
+    expect(predictedSilentCount(undefined)).toBe(0);
   });
 });

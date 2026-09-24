@@ -125,3 +125,8 @@ export function uninstallRequestBody(appName, batch) {
 export function perUserCount(actionable) {
   return (Array.isArray(actionable) ? actionable : []).filter((r) => r?.plan?.target === "windows_user").length;
 }
+
+/** Cuántos accionables llevan un modo silencioso PREVISTO, no confirmado. */
+export function predictedSilentCount(actionable) {
+  return (Array.isArray(actionable) ? actionable : []).filter((r) => r?.plan?.silentPredicted).length;
+}

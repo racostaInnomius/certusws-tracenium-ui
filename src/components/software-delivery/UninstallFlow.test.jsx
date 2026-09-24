@@ -427,3 +427,40 @@ describe("Windows por usuario (paso 4)", () => {
     expect(screen.queryByText(/installed for a single user/)).toBeNull();
   });
 });
+
+describe("modo silencioso PREVISTO (NSIS)", () => {
+  it("⭐ avisa de que lo verifica el equipo y de qué pasa si no", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [
+        {
+          deviceId: "d1",
+          hostname: "T111-VENTAS",
+          plan: { ok: true, target: "windows", preview: "C:\\Program Files\\VLC\\uninstall.exe /S", silentPredicted: true },
+        },
+      ],
+      blocked: [],
+      notInstalled: [],
+    });
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(/silent switch is a guess from the uninstaller/)).toBeTruthy();
+    expect(screen.getByText(/nothing runs there/)).toBeTruthy();
+  });
+
+  it("con silencioso confirmado no hay aviso", async () => {
+    const user = userEvent.setup();
+    sdpApi.previewUninstall.mockResolvedValue({
+      actionable: [{ deviceId: "d1", hostname: "T111-VENTAS", plan: { ok: true, target: "windows", preview: "x /S" } }],
+      blocked: [],
+      notInstalled: [],
+    });
+    open();
+    await searchAndPick(user);
+    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByRole("button", { name: "Uninstall on 1 device(s)" });
+    expect(screen.queryByText(/is a guess/)).toBeNull();
+  });
+});
