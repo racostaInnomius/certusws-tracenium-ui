@@ -75,6 +75,7 @@ import {
 } from "../api/assetGroups";
 import { listAllKnownDevices, listJobTypes } from "../api/jobs";
 import { formatDate } from "../utils/format";
+import { isLaunchableHere } from "../utils/jobForm";
 import {
   KindChip,
 } from "../components/AssetGroups/coverageDisplay";
@@ -628,7 +629,6 @@ export function RenameGroupDialog({ open, group, onClose, onUpdated }) {
 // devices through the existing Jobs page.
 
 const FACT_TYPES = ["inventory", "compliance", "patch", "cdp", "all"];
-const PATCH_INSTALL_MODES = ["install", "download"];
 
 function defaultPayloadFor(jobType) {
   switch (jobType) {
@@ -638,8 +638,6 @@ function defaultPayloadFor(jobType) {
       return { version: "" };
     case "patch_scan":
       return {};
-    case "patch_install":
-      return { mode: "install", kbArticleIds: [] };
     default:
       return {};
   }
@@ -653,8 +651,6 @@ function payloadFieldsValid(jobType, payload) {
       return typeof payload.version === "string" && payload.version.trim().length > 0;
     case "patch_scan":
       return true;
-    case "patch_install":
-      return PATCH_INSTALL_MODES.includes(payload.mode);
     default:
       // Unknown job types: backend will reject — don't pre-block.
       return true;
@@ -709,8 +705,12 @@ export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }
   // `creatable !== false` y no `=== true`: un backend anterior a la bandera no
   // manda la clave, y tratar «ausente» como no-creable dejaría el desplegable
   // vacío contra él.
+  //
+  // Y patch_install, aunque un backend anterior lo marque creable: es
+  // exclusivo de Patch Management (24-sep-2026). Aquí se ofrecía con un campo
+  // de KBs «Leave blank to install all pending» — sobre un GRUPO entero.
   const creatableTypes = React.useMemo(
-    () => jobTypes.filter((t) => t.creatable !== false),
+    () => jobTypes.filter((t) => isLaunchableHere(t)),
     [jobTypes]
   );
   const notCreatable = React.useMemo(
@@ -733,23 +733,7 @@ export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      // Normalize patch_install kb list (comma-separated string in UI →
-      // string[] on the wire). Trim + drop empties so blank "KB123, ,
-      // KB456" doesn't reach the backend.
-      let outboundPayload = payload;
-      if (jobType === "patch_install" && typeof payload.kbArticleIdsRaw === "string") {
-        outboundPayload = {
-          mode: payload.mode,
-          kbArticleIds: payload.kbArticleIdsRaw
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        };
-      }
-      const res = await dispatchAssetGroupJob(group.id, {
-        jobType,
-        payload: outboundPayload,
-      });
+      const res = await dispatchAssetGroupJob(group.id, { jobType, payload });
       notify?.(
         "success",
         `Dispatched ${res?.count ?? 0} job(s) to "${res?.groupName || group.name}"`
@@ -840,34 +824,6 @@ export function DispatchJobDialog({ open, group, onClose, onDispatched, notify }
               onChange={(e) => setPayload({ version: e.target.value })}
               helperText="The agent fetches the matching binary for its platform/arch."
             />
-          ) : null}
-
-          {jobType === "patch_install" ? (
-            <>
-              <TextField
-                select
-                size="small"
-                fullWidth
-                label="Mode"
-                value={payload.mode || ""}
-                onChange={(e) => setPayload({ ...payload, mode: e.target.value })}
-              >
-                {PATCH_INSTALL_MODES.map((v) => (
-                  <MenuItem key={v} value={v}>{v}</MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                size="small"
-                fullWidth
-                label="KB article IDs (optional)"
-                placeholder="KB5034123, KB5034439"
-                value={payload.kbArticleIdsRaw || ""}
-                onChange={(e) =>
-                  setPayload({ ...payload, kbArticleIdsRaw: e.target.value })
-                }
-                helperText="Comma-separated. Leave blank to install all pending."
-              />
-            </>
           ) : null}
 
           {jobType === "patch_scan" ? (

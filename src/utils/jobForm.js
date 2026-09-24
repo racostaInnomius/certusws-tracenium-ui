@@ -12,13 +12,32 @@
 // it into building an invalid payload for a non-creatable type.
 
 /**
+ * Tipos que el catálogo puede seguir marcando como creables en un backend
+ * anterior, pero que NO se lanzan desde aquí.
+ *
+ * patch_install es exclusivo de Patch Management (decisión del usuario,
+ * 24-sep-2026): allí se ve qué falta en cada equipo, se manda la lista
+ * explícita y se eligen el reinicio y la retención del snapshot. Este
+ * formulario ofrecía un campo de KBs «opcional» —vacío era «instala TODO»— y
+ * ninguna de las otras dos decisiones. El backend ya lo marca
+ * `creatable: false`; esto cubre una UI desplegada antes que él.
+ */
+const LAUNCHED_ELSEWHERE = new Set(["patch_install"]);
+
+/** ¿Se ofrece este tipo en el formulario de Jobs? */
+export function isLaunchableHere(type) {
+  // Un backend anterior no manda `creatable`: sin el campo, se ofrece.
+  return type?.creatable !== false && !LAUNCHED_ELSEWHERE.has(type?.jobType);
+}
+
+/**
  * Build the payload for a job of `jobType` from the form fields.
  *
  * Returns {} for any type the form does not build. Callers guarantee
- * jobType is one of the creatable four; the {} fallthrough is a safety
+ * jobType is one of the creatable three; the {} fallthrough is a safety
  * net, not a supported path (the backend would reject it).
  */
-export function buildJobPayload(jobType, factType, version, patchMode, kbArticleIds) {
+export function buildJobPayload(jobType, factType, version) {
   if (jobType === "agent_update") {
     return { version: String(version || "").trim() };
   }
@@ -29,23 +48,6 @@ export function buildJobPayload(jobType, factType, version, patchMode, kbArticle
 
   if (jobType === "patch_scan") {
     return {};
-  }
-
-  if (jobType === "patch_install") {
-    const normalizedKbArticleIds = String(kbArticleIds || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const payload = {
-      mode: String(patchMode || "install").trim() || "install",
-    };
-
-    if (normalizedKbArticleIds.length > 0) {
-      payload.kbArticleIds = normalizedKbArticleIds;
-    }
-
-    return payload;
   }
 
   return {};

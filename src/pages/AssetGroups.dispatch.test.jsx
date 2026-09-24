@@ -125,4 +125,29 @@ describe("DispatchJobDialog — tipos ofrecidos", () => {
     expect(labels).toEqual(["Facts Snapshot", "Patch Scan"]);
     expect(screen.queryByText(/not dispatchable from here/i)).toBeNull();
   });
+
+  it("⭐ Patch Install no se ofrece: es exclusivo de Patch Management", async () => {
+    // Ni con un backend anterior que aún lo marque creable. Aquí se ofrecía
+    // con «Leave blank to install all pending», sobre un grupo entero.
+    renderDialog([...CATALOG, { jobType: "patch_install", label: "Patch Install", creatable: true }]);
+    await waitFor(() => expect(listJobTypes).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole("combobox", { name: /job type/i }));
+    const labels = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(labels).not.toContain("Patch Install");
+  });
+
+  it("con el backend nuevo dice dónde se lanza", async () => {
+    renderDialog([
+      ...CATALOG,
+      {
+        jobType: "patch_install",
+        label: "Patch Install",
+        creatable: false,
+        reason: "Launched from Patch Management, with the explicit patch list, the restart choice and the snapshot retention.",
+      },
+    ]);
+    await waitFor(() => expect(listJobTypes).toHaveBeenCalled());
+    expect(await screen.findByText(/Launched from Patch Management/i)).toBeInTheDocument();
+  });
 });

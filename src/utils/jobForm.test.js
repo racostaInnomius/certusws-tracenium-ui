@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "./jobForm";
+import {
+  alternarSeleccionVisible,
+  buildJobPayload,
+  isLaunchableHere,
+  validateNumericField,
+  resolveTypeFilter,
+} from "./jobForm";
 
-describe("buildJobPayload — the four creatable types", () => {
+describe("buildJobPayload — the three creatable types", () => {
   it("agent_update carries a trimmed version", () => {
     expect(buildJobPayload("agent_update", null, "  1.1.70  ")).toEqual({ version: "1.1.70" });
   });
@@ -13,15 +19,20 @@ describe("buildJobPayload — the four creatable types", () => {
   it("patch_scan is an empty payload", () => {
     expect(buildJobPayload("patch_scan")).toEqual({});
   });
+});
 
-  it("patch_install defaults the mode and omits KB list when empty", () => {
-    expect(buildJobPayload("patch_install", null, null, "", "")).toEqual({ mode: "install" });
+describe("isLaunchableHere — lo que ofrece el formulario de Jobs", () => {
+  it("⭐ patch_install NO, aunque un backend anterior lo marque creable", () => {
+    // Exclusivo de Patch Management: lista explícita, reinicio y retención
+    // del snapshot. Aquí un campo de KBs vacío era «instala TODO».
+    expect(isLaunchableHere({ jobType: "patch_install", creatable: true })).toBe(false);
+    expect(isLaunchableHere({ jobType: "patch_install" })).toBe(false);
   });
 
-  it("patch_install splits, trims and filters the KB list", () => {
-    expect(
-      buildJobPayload("patch_install", null, null, "download", " KB5034123 , ,KB5034439 ")
-    ).toEqual({ mode: "download", kbArticleIds: ["KB5034123", "KB5034439"] });
+  it("los creables sí; los marcados no creables, no", () => {
+    expect(isLaunchableHere({ jobType: "patch_scan", creatable: true })).toBe(true);
+    expect(isLaunchableHere({ jobType: "agent_update" })).toBe(true);
+    expect(isLaunchableHere({ jobType: "software_install", creatable: false })).toBe(false);
   });
 });
 
@@ -32,8 +43,8 @@ describe("buildJobPayload — cannot build a non-creatable type", () => {
     // software_install needs a package snapshot the form has no way to
     // produce, so {} (which the backend rejects) is the only honest
     // answer, not a half-built payload that looks valid.
-    for (const t of ["software_install", "patch_remediate", "software_dp_prefetch", "reset_baseline"]) {
-      expect(buildJobPayload(t, "inventory", "1.0", "install", "KB1"), t).toEqual({});
+    for (const t of ["software_install", "patch_remediate", "software_dp_prefetch", "reset_baseline", "patch_install"]) {
+      expect(buildJobPayload(t, "inventory", "1.0"), t).toEqual({});
     }
   });
 });

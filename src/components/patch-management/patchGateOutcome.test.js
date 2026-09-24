@@ -4,7 +4,6 @@ import { describe, it, expect } from "vitest";
 import {
   describeGateOutcome,
   describeBlockedError,
-  summarizeGatedBatch,
   pendingKbIds,
   formatOpensAt,
 } from "./patchGateOutcome";
@@ -52,30 +51,6 @@ describe("describeBlockedError", () => {
     expect(describeBlockedError({ status: 409, body: { error: "otra_cosa" } })).toBeNull();
     expect(describeBlockedError({ status: 500 })).toBeNull();
     expect(describeBlockedError(new Error("x"))).toBeNull();
-  });
-});
-
-describe("summarizeGatedBatch", () => {
-  it("resume un lote por estado, con el bloqueado como aviso", () => {
-    const out = summarizeGatedBatch({
-      created: {
-        jobs: [{ status: "pending" }, { status: "awaiting_window" }, { status: "awaiting_window" }, { status: "awaiting_snapshot" }],
-        blocked: [{ deviceId: "x", reason: "no_gateway" }],
-      },
-    });
-    expect(out.severity).toBe("warning");
-    expect(out.message).toBe(
-      "Patch install: 1 queued · 2 held until the maintenance window · 1 waiting for a snapshot · 1 blocked"
-    );
-  });
-
-  it("forma del despacho por grupo (sin `created`)", () => {
-    expect(summarizeGatedBatch({ jobs: [{ status: "awaiting_window" }], blocked: [] })).toMatchObject({ severity: "info" });
-  });
-
-  it("⚠️ una respuesta de otro tipo de job devuelve null: el llamador usa su mensaje", () => {
-    expect(summarizeGatedBatch({ created: { count: 3, batchId: "b", jobs: [{ jobId: "a" }] } })).toBeNull();
-    expect(summarizeGatedBatch({ jobId: "a", status: "queued" })).toBeNull();
   });
 });
 

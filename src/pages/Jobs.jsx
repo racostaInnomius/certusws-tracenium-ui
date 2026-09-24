@@ -78,15 +78,16 @@ import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
 import { buildBatchRow } from "../utils/jobBatches";
 import { describeJobOrigin, jobOriginText } from "../utils/jobOrigin";
-import { alternarSeleccionVisible, buildJobPayload, validateNumericField, resolveTypeFilter } from "../utils/jobForm";
+import {
+  alternarSeleccionVisible,
+  buildJobPayload,
+  isLaunchableHere,
+  validateNumericField,
+  resolveTypeFilter,
+} from "../utils/jobForm";
 import { deriveTriage, groupFailingDevices, groupFailureCauses } from "../utils/jobInsights";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
-import {
-  describeGateOutcome,
-  describeBlockedError,
-  summarizeGatedBatch,
-} from "../components/patch-management/patchGateOutcome";
 
 const FACT_TYPE_OPTIONS = [
   { value: "inventory", label: "Inventory" },
@@ -94,11 +95,6 @@ const FACT_TYPE_OPTIONS = [
   { value: "patch", label: "Patch" },
   { value: "cdp", label: "Certificates" },
   { value: "all", label: "All" },
-];
-
-const PATCH_INSTALL_MODE_OPTIONS = [
-  { value: "install", label: "Install" },
-  { value: "download", label: "Download Only" },
 ];
 
 const TARGET_OPTIONS = [
@@ -695,7 +691,7 @@ export default function Jobs({ onNavigate }) {
   // predate the flag and sent no creatable key at all — treat a missing
   // flag as creatable so the form doesn't go empty against them.
   const creatableJobTypeOptions = React.useMemo(
-    () => jobTypeOptions.filter((t) => t.creatable !== false),
+    () => jobTypeOptions.filter((t) => isLaunchableHere(t)),
     [jobTypeOptions]
   );
   // job_type -> label, for the history table's Type column. Falls back to
@@ -805,9 +801,7 @@ export default function Jobs({ onNavigate }) {
   const [availableVersions, setAvailableVersions] = React.useState([]);
   const [loadingVersions, setLoadingVersions] = React.useState(false);
   const [versionsError, setVersionsError] = React.useState("");
-  const [patchMode, setPatchMode] = React.useState("install");
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [kbArticleIds, setKbArticleIds] = React.useState("");
   const [timeoutSeconds, setTimeoutSeconds] = React.useState("");
   const [maxAttempts, setMaxAttempts] = React.useState("");
 
@@ -1679,7 +1673,7 @@ export default function Jobs({ onNavigate }) {
 
     const payload = {
       jobType,
-      payload: buildJobPayload(jobType, factType, version, patchMode, kbArticleIds),
+      payload: buildJobPayload(jobType, factType, version),
       timeoutSeconds: timeoutSeconds ? Number(timeoutSeconds) : undefined,
       maxAttempts: maxAttempts ? Number(maxAttempts) : undefined,
     };
@@ -1691,18 +1685,6 @@ export default function Jobs({ onNavigate }) {
         severity: "error",
       });
       return;
-    }
-
-    if (jobType === "patch_install") {
-      const normalizedMode = String(patchMode || "").trim();
-      if (!PATCH_INSTALL_MODE_OPTIONS.some((opt) => opt.value === normalizedMode)) {
-        setSnackbar({
-          open: true,
-          message: "Patch install mode must be install or download",
-          severity: "error",
-        });
-        return;
-      }
     }
 
     if (targetMode === "device" && selectedDeviceIds.length === 0) {
@@ -1777,42 +1759,30 @@ export default function Jobs({ onNavigate }) {
           ...payload,
         });
         newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
-
-        // Un patch_install ya no sale «queued» sin más: la puerta puede
-        // retenerlo (ventana/snapshot) o bloquearlo. Si la respuesta lo dice,
-        // se enseña eso; si no (otros tipos), el mensaje de siempre.
-        const gated = summarizeGatedBatch(response);
         setSnackbar({
           open: true,
-          message: gated?.message ?? `Tenant job queued for ${response?.created?.count ?? connectedDeviceIds.length} devices`,
-          severity: gated?.severity ?? "success",
+          message: `Tenant job queued for ${response?.created?.count ?? connectedDeviceIds.length} devices`,
+          severity: "success",
         });
       } else if (targetMode === "group") {
         if (groupTargetMode === "entire") {
           const response = await dispatchAssetGroupJob(selectedGroupId, payload);
           newRowId = response?.batchId ? `batch:${response.batchId}` : "";
-          const gated = summarizeGatedBatch(response);
           setSnackbar({
             open: true,
-            message: gated
-              ? `${gated.message} — "${response?.groupName || selectedGroupObj?.name || selectedGroupId}"`
-              : `Dispatched ${response?.count ?? 0} job(s) to "${
-                  response?.groupName || selectedGroupObj?.name || selectedGroupId
-                }"`,
-            severity: gated?.severity ?? "success",
+            message: `Dispatched ${response?.count ?? 0} job(s) to "${
+              response?.groupName || selectedGroupObj?.name || selectedGroupId
+            }"`,
+            severity: "success",
           });
         } else if (groupDeviceIds.length === 1) {
           const response = await createDeviceJob(groupDeviceIds[0], payload);
           newRowId = response?.jobId || "";
           setSelectedJobId(response?.jobId || "");
-          // Con `gate` (patch_install): retenido o en cola, dicho tal cual.
-          const outcome = response?.gate ? describeGateOutcome(response) : null;
           setSnackbar({
             open: true,
-            message: outcome
-              ? `Patch install: ${outcome.message} (${response?.jobId || "created"})`
-              : `Job queued successfully (${response?.jobId || "created"})`,
-            severity: outcome?.severity ?? "success",
+            message: `Job queued successfully (${response?.jobId || "created"})`,
+            severity: "success",
           });
         } else {
           const response = await createTenantJobs(tenantId, {
@@ -1820,26 +1790,22 @@ export default function Jobs({ onNavigate }) {
             ...payload,
           });
           newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
-          const gated = summarizeGatedBatch(response);
           setSnackbar({
             open: true,
-            message: gated?.message ?? `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
-            severity: gated?.severity ?? "success",
+            message: `Job queued for ${response?.created?.count ?? groupDeviceIds.length} device(s)`,
+            severity: "success",
           });
         }
       } else if (selectedDeviceIds.length === 1) {
         const response = await createDeviceJob(selectedDeviceIds[0], payload);
         newRowId = response?.jobId || "";
         setSelectedJobId(response?.jobId || "");
-        const outcome = response?.gate ? describeGateOutcome(response) : null;
         setSnackbar({
           open: true,
-          message: outcome
-            ? `Patch install: ${outcome.message} (${response?.jobId || "created"})`
-            : selectedDeviceObjs[0]?.connected
-              ? `Job queued successfully (${response?.jobId || "created"})`
-              : `Job queued offline for ${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${response?.jobId || "created"})`,
-          severity: outcome?.severity ?? "success",
+          message: selectedDeviceObjs[0]?.connected
+            ? `Job queued successfully (${response?.jobId || "created"})`
+            : `Job queued offline for ${selectedDeviceObjs[0]?.hostname || selectedDeviceIds[0]} (${response?.jobId || "created"})`,
+          severity: "success",
         });
       } else {
         const response = await createTenantJobs(tenantId, {
@@ -1847,11 +1813,10 @@ export default function Jobs({ onNavigate }) {
           ...payload,
         });
         newRowId = response?.created?.batchId ? `batch:${response.created.batchId}` : "";
-        const gated = summarizeGatedBatch(response);
         setSnackbar({
           open: true,
-          message: gated?.message ?? `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
-          severity: gated?.severity ?? "success",
+          message: `Job queued for ${response?.created?.count ?? selectedDeviceIds.length} device(s)`,
+          severity: "success",
         });
       }
 
@@ -1859,11 +1824,9 @@ export default function Jobs({ onNavigate }) {
       flashAndScrollToRow(newRowId);
     } catch (e) {
       console.error(e);
-      // La puerta de parches puede bloquear el envío (409, fail-closed): decir
-      // el motivo en vez de un «Failed» genérico que invita a reintentar.
       setSnackbar({
         open: true,
-        message: describeBlockedError(e) || "Failed to create job",
+        message: "Failed to create job",
         severity: "error",
       });
     } finally {
@@ -2494,21 +2457,6 @@ export default function Jobs({ onNavigate }) {
                 ))
               )}
             </TextField>
-          ) : jobType === "patch_install" ? (
-            <TextField
-              select
-              label="Patch Mode"
-              size="small"
-              value={patchMode}
-              onChange={(e) => setPatchMode(e.target.value)}
-              fullWidth
-            >
-              {PATCH_INSTALL_MODE_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </MenuItem>
-              ))}
-            </TextField>
           ) : (
             <TextField
               label="Execution"
@@ -2518,19 +2466,6 @@ export default function Jobs({ onNavigate }) {
               fullWidth
             />
           )}
-
-          {jobType === "patch_install" ? (
-            <TextField
-              label="KB Article IDs"
-              size="small"
-              value={kbArticleIds}
-              onChange={(e) => setKbArticleIds(e.target.value)}
-              placeholder="KB5034123, KB5034439"
-              helperText="Optional. Leave empty to let the agent decide the applicable patch set."
-              fullWidth
-              sx={{ gridColumn: { sm: "1 / -1" } }}
-            />
-          ) : null}
         </Box>
 
         {/* ── Advanced (collapsible) ────────────────────────────────── */}

@@ -69,30 +69,3 @@ export function describeBlockedError(err) {
   const reason = err?.body?.reason ? String(err.body.reason).replace(/_/g, " ") : "blocked by the patch gate";
   return `Not dispatched — ${reason}`;
 }
-
-/**
- * Un lote (por equipos o por grupo) → resumen. Acepta `{jobs, blocked}` o
- * `{created: {jobs, blocked}}`. `null` si la respuesta no trae estados de puerta
- * (otros tipos de job), para que el llamador use su mensaje de siempre.
- */
-export function summarizeGatedBatch(res) {
-  const src = res?.created && Array.isArray(res.created.jobs) ? res.created : res;
-  const jobs = Array.isArray(src?.jobs) ? src.jobs : null;
-  const blocked = Array.isArray(src?.blocked) ? src.blocked : null;
-  if (!jobs || !blocked) return null;
-  if (!jobs.some((j) => j && typeof j.status === "string") && blocked.length === 0) return null;
-
-  const count = (s) => jobs.filter((j) => j?.status === s).length;
-  const parts = [];
-  const queued = count("pending");
-  const window = count("awaiting_window");
-  const snapshot = count("awaiting_snapshot");
-  if (queued) parts.push(`${queued} queued`);
-  if (window) parts.push(`${window} held until the maintenance window`);
-  if (snapshot) parts.push(`${snapshot} waiting for a snapshot`);
-  if (blocked.length) parts.push(`${blocked.length} blocked`);
-  return {
-    severity: blocked.length ? "warning" : window || snapshot ? "info" : "success",
-    message: `Patch install: ${parts.join(" · ") || "nothing dispatched"}`,
-  };
-}
