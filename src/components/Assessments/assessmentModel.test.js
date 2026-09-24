@@ -1,7 +1,8 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText } from "./assessmentModel";
+import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText, exceptionHistoryLine, EXCEPTION_STATUS
+} from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
 describe("assessmentModel", () => {
@@ -141,5 +142,37 @@ describe("score ajustado por excepciones", () => {
     expect(adjustedScoreText(51, 51, 2)).toBeNull(); // p.ej. la excepción era sobre un pass
     expect(adjustedScoreText(51, null, 2)).toBeNull();
     expect(adjustedScoreText(null, 58, 2)).toBeNull();
+  });
+});
+
+describe("historial de excepciones", () => {
+  it("una línea dice quién, desde cuándo y hasta cuándo", () => {
+    expect(exceptionHistoryLine({
+      author: "ana", createdAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T23:59:59Z", status: "expired", closedAt: null
+    })).toBe("ana · 2026-09-24 → 2026-12-23");
+  });
+
+  it("⭐ la que se cortó antes dice quién la cortó; la que se cumplió no lo dice", () => {
+    const base = { author: "ana", createdAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T23:59:59Z" };
+    expect(exceptionHistoryLine({ ...base, status: "revoked", closedAt: "2026-10-01T09:00:00Z", closedBy: "bruno" }))
+      .toBe("ana · 2026-09-24 → 2026-12-23 · revoked by bruno on 2026-10-01");
+    expect(exceptionHistoryLine({ ...base, status: "superseded", closedAt: "2026-10-01T09:00:00Z", closedBy: "bruno" }))
+      .toBe("ana · 2026-09-24 → 2026-12-23 · replaced by bruno on 2026-10-01");
+    // Caducada: se cumplió tal cual se concedió, así que no hay nadie a quien señalar.
+    expect(exceptionHistoryLine({ ...base, status: "expired", closedAt: "2026-10-01T09:00:00Z", closedBy: "bruno" }))
+      .toBe("ana · 2026-09-24 → 2026-12-23");
+  });
+
+  it("⚠️ «caducada» y «revocada» NO se leen igual: es la diferencia que mira el auditor", () => {
+    expect(EXCEPTION_STATUS.expired.label).toBe("Expired");
+    expect(EXCEPTION_STATUS.revoked.label).toBe("Revoked");
+    expect(EXCEPTION_STATUS.expired.label).not.toBe(EXCEPTION_STATUS.revoked.label);
+  });
+
+  it("sin autor no se inventa uno, y una entrada rota no rompe la lista", () => {
+    expect(exceptionHistoryLine({ author: null, createdAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T00:00:00Z", status: "expired" }))
+      .toBe("(unknown) · 2026-09-24 → 2026-12-23");
+    expect(exceptionHistoryLine(null)).toBe("");
+    expect(exceptionHistoryLine({ author: "ana", createdAt: "no-es-fecha", expiresAt: "tampoco", status: "expired" })).toBe("ana");
   });
 });

@@ -189,3 +189,44 @@ export function adjustedScoreText(score, scoreAdjusted, liveExceptions) {
   const n = liveExceptions === 1 ? "1 accepted exception" : `${liveExceptions} accepted exceptions`;
   return `${scoreAdjusted} with ${n}`;
 }
+
+/**
+ * Cómo se lee una excepción del historial.
+ *
+ * Los cuatro estados no son cuatro adornos: `expired` se cumplió tal como se
+ * concedió y `revoked` se cortó antes, y para un auditor esa diferencia es el
+ * dato. Por eso el backend NO cierra la caducada, y por eso aquí tampoco se
+ * juntan las dos bajo un «ya no está».
+ */
+export const EXCEPTION_STATUS = {
+  active: { label: "In force", tone: "caution" },
+  expired: { label: "Expired", tone: "muted" },
+  revoked: { label: "Revoked", tone: "muted" },
+  superseded: { label: "Replaced", tone: "muted" },
+};
+
+function day(iso) {
+  if (!iso) return null;
+  const t = new Date(iso);
+  return Number.isNaN(t.getTime()) ? null : t.toISOString().slice(0, 10);
+}
+
+/**
+ * "ana · 2026-09-24 → 2026-12-23 · revoked by bruno on 2026-10-01".
+ * Una sola línea por excepción: quién, desde cuándo, hasta cuándo y, si
+ * terminó antes de tiempo, quién la cortó y cuándo.
+ */
+export function exceptionHistoryLine(entry) {
+  if (!entry || typeof entry !== "object") return "";
+  const parts = [entry.author || "(unknown)"];
+  const from = day(entry.createdAt);
+  const to = day(entry.expiresAt);
+  if (from && to) parts.push(`${from} → ${to}`);
+  else if (to) parts.push(`until ${to}`);
+  const closed = day(entry.closedAt);
+  if (closed && (entry.status === "revoked" || entry.status === "superseded")) {
+    const verb = entry.status === "revoked" ? "revoked" : "replaced";
+    parts.push(entry.closedBy ? `${verb} by ${entry.closedBy} on ${closed}` : `${verb} on ${closed}`);
+  }
+  return parts.join(" · ");
+}

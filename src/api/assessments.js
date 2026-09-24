@@ -50,6 +50,15 @@ export async function removeFindingException(id, controlId) {
   return httpDeleteJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception`);
 }
 
+/**
+ * Historial de excepciones de UN hallazgo (concedidas, revocadas, caducadas).
+ * Endpoint aparte del detalle: el detalle trae hasta 500 hallazgos y la
+ * historia sólo interesa del que se abre.
+ */
+export async function listFindingExceptions(id, controlId) {
+  return httpGetJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exceptions`, { cache: "reload" });
+}
+
 /** Score objetivo de la instancia (1-100); `null` vuelve al umbral On track del tenant. */
 export async function setAssessmentTarget(id, targetScore) {
   return httpPutJson(`${BASE}/instances/${encodeURIComponent(id)}/target`, { targetScore });

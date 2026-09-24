@@ -219,6 +219,37 @@ describe("Assessment Suite — detalle", () => {
     expect(screen.getByText("71 with 1 accepted exception")).toBeTruthy();
   });
 
+  it("⭐ el diálogo de excepción enseña las anteriores, y la caducada no se lee como revocada", async () => {
+    const user = userEvent.setup();
+    mount({
+      handlers: [
+        http.get(/.*\/api\/v1\/asp\/instances\/7\/findings\/ASP-AD-ACC-001\/exceptions$/, () =>
+          HttpResponse.json({
+            controlId: "ASP-AD-ACC-001",
+            exceptions: [
+              { reason: "Cuentas de servicio con rotación por bóveda", author: "admin", createdAt: "2026-09-20T10:00:00Z", expiresAt: "2026-12-01T00:00:00Z", closedAt: null, closedBy: null, status: "active" },
+              { reason: "Mientras dura la migración", author: "ana", createdAt: "2026-06-01T10:00:00Z", expiresAt: "2026-09-01T00:00:00Z", closedAt: null, closedBy: null, status: "expired" },
+              { reason: "Primera valoración", author: "bruno", createdAt: "2026-03-01T10:00:00Z", expiresAt: "2026-09-01T00:00:00Z", closedAt: "2026-06-01T10:00:00Z", closedBy: "ana", status: "superseded" },
+            ],
+          })
+        ),
+      ],
+    });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await user.click(await screen.findByRole("button", { name: "Edit exception" }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(await within(dialog).findByText("Previously accepted")).toBeTruthy();
+    // La que se cumplió y la que se sustituyó se distinguen.
+    expect(within(dialog).getByText("Mientras dura la migración")).toBeTruthy();
+    expect(within(dialog).getByText("Expired")).toBeTruthy();
+    expect(within(dialog).getByText("ana · 2026-06-01 → 2026-09-01")).toBeTruthy();
+    expect(within(dialog).getByText("bruno · 2026-03-01 → 2026-09-01 · replaced by ana on 2026-06-01")).toBeTruthy();
+    // ⚠️ La VIGENTE no se repite abajo: ya está en el formulario de arriba.
+    expect(within(dialog).queryByText("In force")).toBeNull();
+    expect(within(dialog).getByLabelText("Reason").value).toBe("Cuentas de servicio con rotación por bóveda");
+  });
+
   it("⭐ Set target guarda el objetivo de la instancia", async () => {
     const user = userEvent.setup();
     const calls = mount();
