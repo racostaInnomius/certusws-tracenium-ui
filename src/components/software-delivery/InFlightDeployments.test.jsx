@@ -1,4 +1,4 @@
-// src/components/software-delivery/InFlightDeploymentsPanel.test.jsx
+// src/components/software-delivery/InFlightDeployments.test.jsx
 //
 // El bloque de «lo que está pasando ahora».
 //
@@ -11,10 +11,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import InFlightDeploymentsPanel, {
+import InFlightDeployments, {
   deviceFunnel,
   inFlightDeployments,
-} from "./InFlightDeploymentsPanel";
+} from "./InFlightDeployments";
 
 afterEach(cleanup);
 
@@ -67,9 +67,9 @@ describe("inFlightDeployments", () => {
   });
 });
 
-describe("InFlightDeploymentsPanel", () => {
+describe("InFlightDeployments", () => {
   it("⭐ enseña el reparto por equipo de cada despliegue vivo", async () => {
-    render(<InFlightDeploymentsPanel deployments={[deployment()]} formatTime={formatTime} />);
+    render(<InFlightDeployments deployments={[deployment()]} formatTime={formatTime} />);
 
     expect(await screen.findByText("#44 · Microsoft Edge 152.0.4191.66")).toBeInTheDocument();
     expect(screen.getByText("1/3 reported")).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("InFlightDeploymentsPanel", () => {
 
   it("⚠️ el retenido explica la espera en la propia fila", async () => {
     render(
-      <InFlightDeploymentsPanel
+      <InFlightDeployments
         deployments={[deployment({ status: "scheduled", scheduledAt: "2026-09-19T03:00:00Z", counts: { pending: 3 } })]}
         formatTime={formatTime}
       />
@@ -92,14 +92,14 @@ describe("InFlightDeploymentsPanel", () => {
     // el estado normal es que no haya nada corriendo, y eso ya lo dice la
     // franja de arriba en una línea.
     const { container } = render(
-      <InFlightDeploymentsPanel deployments={[deployment({ status: "completed" })]} formatTime={formatTime} />
+      <InFlightDeployments deployments={[deployment({ status: "completed" })]} formatTime={formatTime} />
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it("una desinstalación se marca, y no finge una versión de catálogo", async () => {
     render(
-      <InFlightDeploymentsPanel
+      <InFlightDeployments
         deployments={[
           deployment({
             mode: "uninstall",
@@ -116,7 +116,7 @@ describe("InFlightDeploymentsPanel", () => {
   it("la fila abre ESE despliegue, con teclado", async () => {
     const onOpenDeployment = vi.fn();
     render(
-      <InFlightDeploymentsPanel
+      <InFlightDeployments
         deployments={[deployment()]}
         formatTime={formatTime}
         onOpenDeployment={onOpenDeployment}

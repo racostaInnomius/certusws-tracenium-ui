@@ -19,6 +19,12 @@
 // ⚠️ Y «Catalog by platform: Windows 100%» era una barra sola. Una barra al
 // 100 % no es una gráfica, es una frase con más tinta. La mezcla de
 // plataformas cabe al lado del número de paquetes, que es donde se pregunta.
+//
+// ⚠️ Y AQUÍ DENTRO VIVEN LAS FILAS DE LO QUE ESTÁ EN VUELO (24-sep). Estaban en
+// su propia tarjeta —«In flight now»— media pantalla más abajo, encabezada por
+// «3 deployments in flight»… que es palabra por palabra el titular de esta
+// franja. Dos bloques contestando lo mismo, con la respuesta partida en dos
+// sitios. El titular resume y las filas detallan; eso es UNA tarjeta.
 
 import * as React from "react";
 import { Box, Stack, Tooltip, Typography } from "@mui/material";
@@ -169,6 +175,10 @@ export default function OverviewStatusBand({
   totalActiveSites,
   uncoveredSites,
   onNavigateTab,
+  // Las filas de lo que está en vuelo, que antes eran su propia tarjeta. Entra
+  // como hijo y no como prop de datos: esta franja no sabe —ni tiene por qué—
+  // cómo se reparte un despliegue por equipo.
+  children,
 }) {
   const status = React.useMemo(
     () => headlineFor({ inFlightCount, devicesInFlight, buckets }),
@@ -273,6 +283,8 @@ export default function OverviewStatusBand({
           />
         ) : null}
       </Stack>
+
+      {children}
     </SectionPaper>
   );
 }

@@ -1,4 +1,4 @@
-// src/components/software-delivery/InFlightDeploymentsPanel.jsx
+// src/components/software-delivery/InFlightDeployments.jsx
 //
 // Lo que está pasando AHORA: cada despliegue en vuelo, equipo a equipo.
 //
@@ -9,6 +9,13 @@
 // vienen después: en qué despliegue están esos equipos, y por qué no se ha
 // movido nada.
 //
+// ⚠️ ESTO YA NO ES UNA TARJETA APARTE (24-sep). Era `InFlightDeploymentsPanel`,
+// con su propio título «In flight now», debajo de la cobertura — y decía lo
+// mismo que el titular de la franja de arriba: «3 deployments in flight». Dos
+// bloques para una pregunta, separados por media pantalla. Ahora son las filas
+// que la franja enseña DEBAJO de su titular, en la misma tarjeta: el titular
+// resume y las filas detallan, que es lo que ya hacían, pero juntos.
+//
 // ⚠️ LA SEGUNDA ES LA QUE NOS COSTÓ UN SUSTO. El despliegue #44 de T111 estuvo
 // horas en `scheduled` sin que la UI dijera por qué; la única lectura posible
 // era «se colgó». Lo retenía la ventana de mantenimiento y el dato de CUÁNDO
@@ -18,10 +25,10 @@
 //
 // ── Decisiones ───────────────────────────────────────────────────────────
 //
-// ⚠️ EL PANEL DESAPARECE CUANDO NO HAY NADA EN VUELO. Una tarjeta «0 en vuelo»
-// es exactamente el tipo de hueco que hacía que esta página se sintiera vacía:
-// el estado normal de una herramienta de entrega es que no haya nada corriendo,
-// y ese estado ya lo cuenta la franja de arriba en una línea.
+// ⚠️ NO SE PINTA NADA CUANDO NO HAY NADA EN VUELO. Un «0 en vuelo» es
+// exactamente el tipo de hueco que hacía que esta página se sintiera vacía: el
+// estado normal de una herramienta de entrega es que no haya nada corriendo, y
+// ese estado ya lo cuenta el titular de la franja en una línea.
 //
 // ⚠️ LOS CANCELADOS NO SON NI ÉXITO NI FALLO, y tampoco «pendiente»: son
 // equipos que salieron del reparto. Contarlos como pendientes dejaría una barra
@@ -30,7 +37,6 @@
 import * as React from "react";
 import { Box, Chip, Stack, Tooltip, Typography } from "@mui/material";
 
-import SectionPaper from "../common/SectionPaper";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
 // La frase vive en un módulo propio: la comparten este panel y el cajón de
 // detalle, y decir dos cosas distintas del mismo despliegue sería peor que no
@@ -204,22 +210,18 @@ function DeploymentRow({ deployment, formatTime, onOpen }) {
   );
 }
 
-export default function InFlightDeploymentsPanel({ deployments, formatTime, onOpenDeployment }) {
+/**
+ * Las filas de lo que está en vuelo. SIN tarjeta ni título: vive dentro de la
+ * franja de estado, debajo del titular que las resume.
+ */
+export default function InFlightDeployments({ deployments, formatTime, onOpenDeployment }) {
   const rows = React.useMemo(() => inFlightDeployments(deployments), [deployments]);
 
-  // Nada en vuelo es el estado NORMAL: la franja de arriba ya lo dice en una
-  // línea y una tarjeta vacía aquí sería el hueco de siempre.
+  // Nada en vuelo es el estado NORMAL: el titular ya lo dice en una línea.
   if (rows.length === 0) return null;
 
   return (
-    <SectionPaper variant="card" sx={{ p: 2 }}>
-      <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-        In flight now
-      </Typography>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 0.5 }}>
-        Per-device progress of everything still running
-      </Typography>
-
+    <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
       {rows.map((deployment) => (
         <DeploymentRow
           key={deployment.id}
@@ -228,6 +230,6 @@ export default function InFlightDeploymentsPanel({ deployments, formatTime, onOp
           onOpen={onOpenDeployment ? () => onOpenDeployment(deployment) : undefined}
         />
       ))}
-    </SectionPaper>
+    </Box>
   );
 }

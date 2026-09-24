@@ -369,9 +369,27 @@ describe("de la cobertura al despliegue", () => {
 });
 
 describe("despliegues en vuelo", () => {
-  // El cableado: que el Overview pase SUS despliegues al panel y que abrir una
-  // fila lleve a ESE despliegue, no a la lista. La lectura del reparto vive en
-  // InFlightDeploymentsPanel.test.jsx.
+  // El cableado: que el Overview pase SUS despliegues a la franja y que abrir
+  // una fila lleve a ESE despliegue, no a la lista. La lectura del reparto vive
+  // en InFlightDeployments.test.jsx.
+  it("⭐ las filas viven DENTRO de la franja, no en una tarjeta aparte", async () => {
+    // La duplicación que esto cierra: «3 deployments in flight» arriba y «In
+    // flight now» media pantalla más abajo, encabezando exactamente lo mismo.
+    seed({
+      deployments: [
+        { id: 44, status: "running", packageSnapshot: { name: "Microsoft Edge", version: "152.0.4191.66" }, counts: counts({ running: 3 }) },
+      ],
+    });
+
+    render(<OverviewTab />);
+
+    const titular = await screen.findByText(/1 deployment in flight/i);
+    const franja = titular.closest(".MuiPaper-root");
+    expect(within(franja).getByText(/#44 · Microsoft Edge/)).toBeInTheDocument();
+    // Y el encabezado que repetía el titular ya no existe.
+    expect(screen.queryByText("In flight now")).toBeNull();
+  });
+
   it("⭐ enseña el retenido con su motivo, y la fila abre ese despliegue", async () => {
     const onNavigateTab = vi.fn();
     seed({
@@ -389,19 +407,18 @@ describe("despliegues en vuelo", () => {
 
     render(<OverviewTab onNavigateTab={onNavigateTab} />);
 
-    expect(await screen.findByText("In flight now")).toBeInTheDocument();
-    expect(screen.getByText(/Waiting for the maintenance window/)).toBeInTheDocument();
+    expect(await screen.findByText(/Waiting for the maintenance window/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /Deployment 44/i }));
     expect(onNavigateTab).toHaveBeenCalledWith("deployments", { deploymentId: 44 });
   });
 
-  it("sin nada en vuelo el bloque no ocupa sitio", async () => {
+  it("sin nada en vuelo la franja no crece", async () => {
     seed({ deployments: [{ id: 9, status: "completed", counts: counts({ success: 2 }) }] });
 
     render(<OverviewTab />);
 
     await screen.findByText("Catalog coverage");
-    expect(screen.queryByText("In flight now")).toBeNull();
+    expect(screen.queryByText(/#9 ·/)).toBeNull();
   });
 });

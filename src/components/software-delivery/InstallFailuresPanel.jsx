@@ -79,71 +79,86 @@ export default function InstallFailuresPanel({ deployments, failed, settled, onO
       variant="card"
       sx={{ p: 2, borderLeft: `4px solid ${ROLE.critical}` }}
     >
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
-        <ErrorOutlineIcon fontSize="small" sx={{ color: ROLE.critical }} />
-        <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
-          {/* El titular es el hecho, no el porcentaje: "8 de 9" se entiende sin
-              hacer la cuenta, y un 11% suelto no dice cuántos equipos son. */}
-          {settled
-            ? `${failed} of ${settled} installs failed`
-            : `${failed} installs failed`}
-        </Typography>
-      </Stack>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1.5 }}>
-        Grouped by cause. Open a deployment to see which devices.
-      </Typography>
+      {/* ⚠️ EN UNA FILA, NO EN TRES BLOQUES (24-sep). Las causas eran tarjetas
+          de ancho completo, apiladas: en T111 eso son dos renglones de «5
+          Failed» y «1 Timed out» ocupando media pantalla de alto con toda la
+          mitad derecha en blanco. Son dos o tres causas, y caben al lado del
+          titular. Lo que NO cambia es que cada una siga siendo un control con
+          su destino: el ahorro de sitio no puede costar el clic. */}
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={2}
+        sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between" }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <ErrorOutlineIcon fontSize="small" sx={{ color: ROLE.critical }} />
+            <Typography sx={{ fontWeight: 800, color: BRAND.dark, fontSize: TEXT.base }}>
+              {/* El titular es el hecho, no el porcentaje: "8 de 9" se entiende
+                  sin hacer la cuenta, y un 11% suelto no dice cuántos equipos
+                  son. */}
+              {settled
+                ? `${failed} of ${settled} installs failed`
+                : `${failed} installs failed`}
+            </Typography>
+          </Stack>
+          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+            Grouped by cause. Open a deployment to see which devices.
+          </Typography>
+        </Box>
 
-      <Stack spacing={0.5}>
-        {causes.map((cause) => {
-          // Con un solo despliegue detrás se puede abrir ESE; con varios, la
-          // lista. Prometer más que eso sería llevar al operador a un sitio que
-          // no contesta su pregunta.
-          const single = cause.deployments.length === 1 ? cause.deployments[0] : null;
-          return (
-            <Box
-              key={cause.key}
-              role="button"
-              tabIndex={0}
-              aria-label={`${cause.count} ${cause.label}`}
-              onClick={() => onOpen?.(cause, single)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onOpen?.(cause, single);
-                }
-              }}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1.5,
-                px: 1.5,
-                py: 1,
-                borderRadius: 2,
-                cursor: "pointer",
-                border: `1px solid ${BRAND.border}`,
-                "&:hover": { bgcolor: BRAND.darkSoft },
-                "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
-              }}
-            >
-              <Typography
-                sx={{ fontSize: TEXT.xl, fontWeight: 800, color: BRAND.alert.errorText, minWidth: 36 }}
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
+          {causes.map((cause) => {
+            // Con un solo despliegue detrás se puede abrir ESE; con varios, la
+            // lista. Prometer más que eso sería llevar al operador a un sitio
+            // que no contesta su pregunta.
+            const single = cause.deployments.length === 1 ? cause.deployments[0] : null;
+            return (
+              <Box
+                key={cause.key}
+                role="button"
+                tabIndex={0}
+                aria-label={`${cause.count} ${cause.label}`}
+                onClick={() => onOpen?.(cause, single)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpen?.(cause, single);
+                  }
+                }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  px: 1.25,
+                  py: 0.75,
+                  borderRadius: 2,
+                  cursor: "pointer",
+                  border: `1px solid ${BRAND.border}`,
+                  "&:hover": { bgcolor: BRAND.darkSoft },
+                  "&:focus-visible": { outline: `2px solid ${BRAND.teal}` },
+                }}
               >
-                {cause.count}
-              </Typography>
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-                  {cause.label}
+                <Typography
+                  sx={{ fontSize: TEXT.lg, fontWeight: 800, color: BRAND.alert.errorText }}
+                >
+                  {cause.count}
                 </Typography>
-                <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
-                  {single
-                    ? `in ${single.packageName || single.package || `deployment #${single.id}`}`
-                    : `across ${cause.deployments.length} deployments`}
-                </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }} noWrap>
+                    {cause.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }} noWrap>
+                    {single
+                      ? `in ${single.packageName || single.package || `deployment #${single.id}`}`
+                      : `across ${cause.deployments.length} deployments`}
+                  </Typography>
+                </Box>
+                <ChevronRightIcon fontSize="small" sx={{ color: BRAND.gray }} />
               </Box>
-              <ChevronRightIcon fontSize="small" sx={{ color: BRAND.gray }} />
-            </Box>
-          );
-        })}
+            );
+          })}
+        </Stack>
       </Stack>
     </SectionPaper>
   );

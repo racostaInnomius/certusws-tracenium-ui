@@ -29,11 +29,11 @@ import InstallFailuresPanel from "./InstallFailuresPanel";
 import LanSavingsPanel from "./LanSavingsPanel";
 import OverviewStatusBand from "./OverviewStatusBand";
 import CatalogCoveragePanel from "./CatalogCoveragePanel";
-import InFlightDeploymentsPanel, {
+import InFlightDeployments, {
   FAILURE_OUTCOMES,
   IN_FLIGHT_STATUSES,
   SUCCESS_OUTCOMES,
-} from "./InFlightDeploymentsPanel";
+} from "./InFlightDeployments";
 import CompositionBars from "../common/CompositionBars";
 import InstallActivityCalendar from "./InstallActivityCalendar";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
@@ -290,21 +290,11 @@ export default function OverviewTab({
 
   return (
     <Stack spacing={2}>
-      {/* ── Lo que hay que atender, antes que nada ──────────────── */}
-      {!loading ? (
-        <InstallFailuresPanel
-          deployments={data.deployments}
-          failed={stats.failed}
-          settled={stats.settled}
-          onOpen={(_cause, single) =>
-            // Con un solo despliegue detrás se abre ESE, reutilizando la
-            // fontanería que la página ya tiene para el deploy recién lanzado.
-            onNavigateTab?.("deployments", single ? { deploymentId: single.id } : undefined)
-          }
-        />
-      ) : null}
-
-      {/* ── La franja contesta, no inventaria ─────────────────── */}
+      {/* ── La franja contesta, no inventaria ─────────────────────
+          Va PEGADA a las pestañas desde el 24-sep. Es lo primero que se mira
+          —«¿hay algo en marcha?»— y ahora trae dentro el detalle por
+          despliegue, que hasta entonces repetía este mismo titular en otra
+          tarjeta media pantalla más abajo. */}
       <OverviewStatusBand
         loading={loading}
         packages={data.packages}
@@ -323,7 +313,33 @@ export default function OverviewTab({
         totalActiveSites={stats.totalActiveSites}
         uncoveredSites={stats.uncoveredSites}
         onNavigateTab={onNavigateTab}
-      />
+      >
+        {!loading ? (
+          <InFlightDeployments
+            deployments={data.deployments}
+            formatTime={formatDate}
+            onOpenDeployment={(deployment) =>
+              onNavigateTab?.("deployments", { deploymentId: deployment.id })
+            }
+          />
+        ) : null}
+      </OverviewStatusBand>
+
+      {/* ── Lo que hay que atender ───────────────────────────────
+          Debajo de la franja y en una sola línea: son dos o tres causas, y
+          ocupaban tres bloques de ancho completo con la mitad derecha vacía. */}
+      {!loading ? (
+        <InstallFailuresPanel
+          deployments={data.deployments}
+          failed={stats.failed}
+          settled={stats.settled}
+          onOpen={(_cause, single) =>
+            // Con un solo despliegue detrás se abre ESE, reutilizando la
+            // fontanería que la página ya tiene para el deploy recién lanzado.
+            onNavigateTab?.("deployments", single ? { deploymentId: single.id } : undefined)
+          }
+        />
+      ) : null}
 
       {/* ── El estado del parque, antes que la actividad ─────────
           La actividad de la herramienta es escasa por naturaleza (28
@@ -338,19 +354,6 @@ export default function OverviewTab({
           setCell({ titleKey: item.titleKey, name: item.name, state })
         }
       />
-
-      {/* ── Lo que está pasando ahora, y por qué no avanza ──────
-          Va entre el estado del parque y la actividad histórica: es el único
-          bloque con caducidad. Desaparece cuando no hay nada en vuelo. */}
-      {!loading ? (
-        <InFlightDeploymentsPanel
-          deployments={data.deployments}
-          formatTime={formatDate}
-          onOpenDeployment={(deployment) =>
-            onNavigateTab?.("deployments", { deploymentId: deployment.id })
-          }
-        />
-      ) : null}
 
       {/* ── Trend + outcomes ────────────────────────────────────── */}
       <Grid container spacing={2}>
