@@ -476,6 +476,23 @@ describe("SoftwareTab", () => {
     { id: 2, name: "Slack", publisher: "Salesforce", source: "exe" },
   ];
 
+  it("⭐ enseña el día de instalación que mandó el equipo, y — si no lo sabe", () => {
+    render(
+      <SoftwareTab
+        softwareRows={[
+          { id: 1, name: "7-Zip", source: "win32-registry", installedOn: "2024-03-15" },
+          { id: 2, name: "Viejo", source: "win32-registry" },
+        ]}
+        softwareLoading={false}
+        softwareCount={2}
+        softwarePage={0}
+        softwarePageSize={8}
+      />
+    );
+    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(screen.getByText("Mar 15, 2024")).toBeInTheDocument();
+  });
+
   it("renders the app rows and the detected-count chip", () => {
     render(
       <SoftwareTab

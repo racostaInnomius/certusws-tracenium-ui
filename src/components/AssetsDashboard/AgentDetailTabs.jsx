@@ -50,7 +50,7 @@ import StorageRoundedIcon from "@mui/icons-material/StorageRounded";
 import SystemUpdateAltRoundedIcon from "@mui/icons-material/SystemUpdateAltRounded";
 import TerminalRoundedIcon from "@mui/icons-material/TerminalRounded";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
-import { formatBytesToGb } from "../../utils/format";
+import { formatBytesToGb, formatCalendarDay } from "../../utils/format";
 import { platformColor, platformLabel } from "../../utils/platform";
 import {
   formatDetailValue,
@@ -696,7 +696,20 @@ export function SoftwareTab({
                         <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Application</TableCell>
                         <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Publisher</TableCell>
                         <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Source</TableCell>
-                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>Detected</TableCell>
+                        {/* Dos fechas distintas: cuándo se instaló (lo dice el
+                            equipo) y cuándo lo vimos nosotros por primera vez.
+                            Para todo lo que ya estaba al enrolar, la segunda es
+                            la fecha del enrolamiento. */}
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>
+                          <Tooltip title="Date the current version was installed, as reported by the device">
+                            <span>Installed</span>
+                          </Tooltip>
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 800, bgcolor: BRAND.surfaceMuted }}>
+                          <Tooltip title="When Tracenium first saw this app on the device">
+                            <span>Detected</span>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -705,12 +718,13 @@ export function SoftwareTab({
                           <TableCell sx={{ fontWeight: 700, color: BRAND.dark }}>{formatDetailValue(app.name)}</TableCell>
                           <TableCell>{formatDetailValue(app.publisher)}</TableCell>
                           <TableCell>{formatDetailValue(app.source)}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap" }}>{formatCalendarDay(app.installedOn)}</TableCell>
                           <TableCell>{formatDetailDate(app.detectedAtUtc || app.detected_at_utc)}</TableCell>
                         </TableRow>
                       ))}
                       {softwareRows.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={4} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
+                          <TableCell colSpan={5} sx={{ color: "text.secondary", py: 3, textAlign: "center" }}>
                             {softwareLoading ? "Loading software inventory…" : "No software inventory found for this device."}
                           </TableCell>
                         </TableRow>

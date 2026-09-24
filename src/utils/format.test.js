@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatBytes, formatBytesToGb, formatDate, formatRelative, EMPTY } from "./format";
+import { formatBytes, formatBytesToGb, formatCalendarDay, formatDate, formatRelative, EMPTY } from "./format";
 
 describe("formatBytes", () => {
   it("auto-scales units", () => {
@@ -56,5 +56,18 @@ describe("formatRelative", () => {
     expect(formatRelative(new Date(now.getTime() - 5 * 60 * 1000).toISOString())).toBe("5m ago");
     expect(formatRelative(new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString())).toBe("3h ago");
     expect(formatRelative(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString())).toBe("2d ago");
+  });
+});
+
+describe("formatCalendarDay", () => {
+  it("⭐ pinta el día que mandó el equipo, sin correrlo por la zona horaria", () => {
+    // new Date("2024-03-15") es medianoche UTC: en México saldría el 14.
+    expect(formatCalendarDay("2024-03-15")).toBe("Mar 15, 2024");
+    expect(formatCalendarDay("2024-01-01")).toBe("Jan 01, 2024");
+  });
+  it("vacío o inválido → EMPTY", () => {
+    expect(formatCalendarDay(null)).toBe(EMPTY);
+    expect(formatCalendarDay("2024-02-31")).toBe(EMPTY);
+    expect(formatCalendarDay("2024-03-15T00:00:00Z")).toBe(EMPTY);
   });
 });

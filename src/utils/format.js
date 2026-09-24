@@ -58,6 +58,23 @@ export function formatDate(value, options) {
 }
 
 /**
+ * Un día de calendario "YYYY-MM-DD" (sin hora), p. ej. la fecha de instalación
+ * de una app → "Mar 15, 2024". Inválido/vacío → "—".
+ *
+ * ⚠️ NO pasa por `new Date("2024-03-15")`: esa forma se lee como medianoche
+ * UTC, y al pintarla en hora local cualquier zona al oeste de Greenwich —todo
+ * México— ve el día ANTERIOR. Se construye la fecha local a partir de las
+ * partes, así que el día que se ve es el que mandó el equipo.
+ */
+export function formatCalendarDay(value) {
+  const m = typeof value === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  if (!m) return EMPTY;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (d.getMonth() !== Number(m[2]) - 1) return EMPTY;
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
+}
+
+/**
  * Coarse relative time ("just now", "5m ago", "3h ago", "2d ago"), else an
  * absolute date. Invalid/empty → "—".
  */

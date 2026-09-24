@@ -46,7 +46,7 @@ import CompositionBars from "../components/common/CompositionBars";
 import DistributionHistogram from "../components/AssetManagement/DistributionHistogram";
 import BrowserInventoryPanel from "../components/inventory/BrowserInventoryPanel";
 import BrowserExtensionsPanel from "../components/inventory/BrowserExtensionsPanel";
-import { formatDate } from "../utils/format";
+import { formatCalendarDay, formatDate } from "../utils/format";
 import { rankingSubtitle } from "../utils/rankingSubtitle";
 import { SOFTWARE_ACCENTS } from "../theme/chartPalette";
 
@@ -602,6 +602,15 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
     { field: "source", headerName: "Source", minWidth: 120, flex: 0.45 },
     { field: "installLocation", headerName: "Install Location", minWidth: 220, flex: 1 },
     { field: "packageFamilyName", headerName: "Package Family", minWidth: 180, flex: 0.7 },
+    {
+      // El día en que se instaló la versión actual, según el equipo. "—"
+      // hasta que el equipo corra un agente que lo mande, o si no lo sabe.
+      field: "installedOn",
+      headerName: "Installed",
+      minWidth: 120,
+      flex: 0.45,
+      renderCell: (params) => formatCalendarDay(params.value),
+    },
     {
       field: "detectedAtUtc",
       headerName: "Detected At",
