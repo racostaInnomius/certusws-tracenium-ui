@@ -70,6 +70,7 @@ describe("la línea de tiempo", () => {
       detailWith({
         timeline: [
           { occurredAt: "2026-09-09T10:00:00Z", event: "requested", actor: "javier@example.com", actorIp: "203.0.113.5", source: "operator", detail: null },
+          { occurredAt: "2026-09-09T10:00:01Z", event: "answered", actor: null, actorIp: null, source: "agent", detail: null },
           { occurredAt: "2026-09-09T10:00:02Z", event: "connected", actor: null, actorIp: null, source: "agent", detail: null },
           { occurredAt: "2026-09-09T10:05:00Z", event: "closed", actor: null, actorIp: null, source: "system", detail: null }
         ]
@@ -78,7 +79,9 @@ describe("la línea de tiempo", () => {
     render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText("Session requested")).toBeInTheDocument());
-    expect(screen.getByText("Connected")).toBeInTheDocument();
+    // Los dos pasos, separados a propósito: contestar no es conectar.
+    expect(screen.getByText("Device answered")).toBeInTheDocument();
+    expect(screen.getByText("Channel open")).toBeInTheDocument();
     expect(screen.getByText("Closed")).toBeInTheDocument();
     // Quién y desde dónde, juntos: es la pareja que responde la pregunta.
     expect(screen.getByText(/javier@example\.com · 203\.0\.113\.5/)).toBeInTheDocument();
@@ -193,5 +196,27 @@ describe("la IP del operador", () => {
     render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
     await waitFor(() => expect(screen.getByText("From")).toBeInTheDocument());
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+describe("⚠️ contestar no es conectar", () => {
+  it("una sesión que contestó y no abrió camino no dice que conectó", async () => {
+    // El expediente de MSIG-DOMAIN (T111, 24-sep): el agente contestó, ICE no
+    // encontró camino, la sesión murió. Antes esto salía como «Connected» un
+    // segundo antes del cierre y mandaba a buscar una caída que no hubo.
+    getSessionDetail.mockResolvedValue(
+      detailWith({
+        timeline: [
+          { occurredAt: "2026-09-24T19:46:33Z", event: "requested", actor: "op@cliente.com", actorIp: null, source: "operator", detail: null },
+          { occurredAt: "2026-09-24T19:46:34Z", event: "answered", actor: null, actorIp: null, source: "agent", detail: null },
+          { occurredAt: "2026-09-24T19:46:53Z", event: "closed", actor: null, actorIp: null, source: "system", detail: { reason: "ice_failed" } }
+        ]
+      })
+    );
+    render(<SessionDetailDrawer session={SESSION} onClose={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText("Device answered")).toBeInTheDocument());
+    expect(screen.queryByText("Channel open")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
   });
 });

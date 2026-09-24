@@ -56,7 +56,20 @@ const EVENT_LABEL = {
   approved: "Approved",
   denied: "Approval refused",
   break_glass: "⚠️ Break-glass override",
-  connected: "Connected",
+  // ⚠️ Los dos pasos que antes eran uno, y la diferencia importa.
+  //
+  // `connected` lo escribía la ANSWER del agente, que sólo dice «recibí la
+  // oferta». Entre eso y que haya camino está toda la negociación ICE, que
+  // es donde se quedan los equipos con UDP cerrado. Una sesión que nunca
+  // llegó a abrirse salía aquí como «Connected» un segundo antes de morir,
+  // y mandaba a quien leyera el expediente a buscar una caída que no hubo
+  // (T111, MSIG-DOMAIN, 24-sep-2026).
+  //
+  // Ahora `answered` es ese acuse y `connected` lo manda el agente al abrir
+  // el canal. Una sesión con `answered` y sin `connected` es exactamente
+  // una que no llegó a conectar.
+  answered: "Device answered",
+  connected: "Channel open",
   // El aviso del equipo (ADR-0012). Se dice en pasiva y sin culpar a nadie:
   // la persona ejerció un derecho que el producto le dio a propósito, y
   // "declined" en rojo junto a su nombre lo convertiría en una falta.
