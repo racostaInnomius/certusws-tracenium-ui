@@ -18,10 +18,10 @@
 // sin sesión; sin `returnTo` toda URL compartida acabaría en el Overview.
 
 import * as React from "react";
-import { Box, Button, Link, Stack, Typography } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 
 import AuthShell from "./AuthShell";
-import { BRAND, NEUTRAL, TEXT } from "../theme/brand";
+import { BRAND, TEXT } from "../theme/brand";
 
 const TONE = {
   info: { border: "rgba(143, 253, 255, 0.35)", bg: "rgba(143, 253, 255, 0.08)", fg: "rgb(143, 253, 255)" },
@@ -51,7 +51,7 @@ export default function SignInLanding({ notice = null, onSignIn }) {
             borderRadius: "14px",
             border: `1px solid ${tone.border}`,
             background: tone.bg,
-            textAlign: "left",
+            textAlign: "center",
           }}
         >
           <Typography sx={{ color: tone.fg, fontWeight: 700, fontSize: TEXT.md }}>
@@ -97,35 +97,6 @@ export default function SignInLanding({ notice = null, onSignIn }) {
         </Button>
       )}
 
-      {canSignIn ? (
-        <Typography
-          sx={{ color: NEUTRAL[500], fontSize: TEXT.sm, lineHeight: 1.6, maxWidth: 340, mt: 2 }}
-        >
-          Your organization manages access. You will come back here after signing in.
-        </Typography>
-      ) : null}
-
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ mt: 3, flexWrap: "wrap", justifyContent: "center", rowGap: 1 }}
-      >
-        <Typography sx={{ color: NEUTRAL[500], fontSize: TEXT.xs }}>© 2026 CERTUS ITM LLC</Typography>
-        <Link
-          href="https://tracenium.com"
-          underline="hover"
-          sx={{ color: NEUTRAL[400], fontSize: TEXT.xs }}
-        >
-          tracenium.com
-        </Link>
-        <Link
-          href="https://tracenium.com/privacy/"
-          underline="hover"
-          sx={{ color: NEUTRAL[400], fontSize: TEXT.xs }}
-        >
-          App privacy notice
-        </Link>
-      </Stack>
     </AuthShell>
   );
 }
