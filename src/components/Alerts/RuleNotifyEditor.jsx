@@ -38,6 +38,7 @@ import {
   profileIdsOf,
   buildNotifyPayload,
   summarizeRecipients,
+  describeDeliveryGap,
 } from "./notifyHelpers";
 import { getAlertRuleRecipients } from "../../api/alerts";
 import RoleChips from "./RoleChips";
@@ -204,6 +205,15 @@ export default function RuleNotifyEditor({
     );
   };
 
+  // Cuenta TODOS los destinos, incluidos los `members` que este editor no
+  // enseña pero conserva: si los hay, la regla apunta a alguien.
+  const targetCount =
+    unique.length +
+    selectedRoles.length +
+    selectedProfiles.length +
+    (Array.isArray(rule?.notify?.members) ? rule.notify.members.length : 0);
+  const gap = describeDeliveryGap({ targetCount, mailSeverities });
+
   const reachColor = { ok: BRAND.tealText, warning: BRAND.alert.warningText, error: BRAND.alert.errorText, muted: BRAND.gray };
 
   return (
@@ -352,6 +362,15 @@ export default function RuleNotifyEditor({
           sx={{ flex: 1, minWidth: 0, "& textarea": { fontSize: TEXT.sm } }}
         />
       </Stack>
+
+      {gap ? (
+        <Typography
+          role="alert"
+          sx={{ fontSize: TEXT.sm, color: BRAND.alert.warningText, mt: 1, overflowWrap: "anywhere" }}
+        >
+          ⚠ {gap.text}
+        </Typography>
+      ) : null}
 
       {canPreview && reach ? (
         <Typography

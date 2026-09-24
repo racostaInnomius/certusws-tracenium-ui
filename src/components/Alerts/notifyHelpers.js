@@ -175,6 +175,37 @@ export function buildNotifyPayload({ current, emails, roles, profiles, matrix, m
 }
 
 /**
+ * El desajuste entre a QUIÉN se avisa y POR DÓNDE, que es invisible mirando
+ * cualquiera de los dos controles por separado.
+ *
+ * ⚠️ El caso que motiva esto: la matriz por defecto de 10 de las 23 fuentes
+ * es «sólo consola» (higiene ruidosa, ADR-0007 gate 3). Añadir destinatarios
+ * a una de ellas parece configurarla y no envía nada — en producción, 15 de
+ * 16 reglas encendidas estaban así de calladas.
+ *
+ * @returns {{ tone: "warning", text: string }|null}
+ */
+export function describeDeliveryGap({ targetCount, mailSeverities }) {
+  const targets = Number(targetCount) || 0;
+  const severities = Array.isArray(mailSeverities) ? mailSeverities.length : 0;
+  if (targets > 0 && severities === 0) {
+    return {
+      tone: "warning",
+      text:
+        `These ${plural(targets, "recipient gets", "recipients get")} nothing: no severity is routed to email. ` +
+        "Turn Email on for at least one severity above.",
+    };
+  }
+  if (targets === 0 && severities > 0) {
+    return {
+      tone: "warning",
+      text: "Email is on for some severities, but nobody is listed — add a profile, a role or an address.",
+    };
+  }
+  return null;
+}
+
+/**
  * One line for "who does this reach today", from a /recipients response.
  * `tone` drives the colour: a rule that reaches nobody, or lost people to
  * the cap, must not look like a healthy one.

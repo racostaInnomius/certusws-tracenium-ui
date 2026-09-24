@@ -11,6 +11,7 @@ import {
   buildNotifyPayload,
   summarizeRecipients,
   describeNotifyError,
+  describeDeliveryGap,
   roleChoices,
   hasRole,
   toggleRole,
@@ -288,5 +289,25 @@ describe("roleChoices — el menú de roles", () => {
     expect(hasRole(["IT Support"], "it SUPPORT")).toBe(true);
     expect(toggleRole(["it support", "OWNER"], "IT Support")).toEqual(["OWNER"]);
     expect(toggleRole(["OWNER"], "IT Support")).toEqual(["OWNER", "IT Support"]);
+  });
+});
+
+describe("describeDeliveryGap — destinatarios y canal tienen que casar", () => {
+  it("⚠️ con destinatarios y sin correo en ninguna severidad, avisa", () => {
+    // Es el estado de 15 de las 16 reglas de producción: parecen
+    // configuradas y no envían nada.
+    const g = describeDeliveryGap({ targetCount: 2, mailSeverities: [] });
+    expect(g.tone).toBe("warning");
+    expect(g.text).toMatch(/2 recipients get nothing/);
+  });
+
+  it("y al revés: correo encendido sin nadie a quien mandarlo", () => {
+    expect(describeDeliveryGap({ targetCount: 0, mailSeverities: ["critical"] }).text).toMatch(/nobody is listed/);
+  });
+
+  it("callado cuando casan, y cuando no hay nada configurado", () => {
+    expect(describeDeliveryGap({ targetCount: 1, mailSeverities: ["high"] })).toBeNull();
+    // Una regla sin configurar es «sólo consola» a propósito, no un error.
+    expect(describeDeliveryGap({ targetCount: 0, mailSeverities: [] })).toBeNull();
   });
 });

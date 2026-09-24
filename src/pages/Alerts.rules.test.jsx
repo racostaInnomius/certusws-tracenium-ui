@@ -40,8 +40,15 @@ const RULES = [
   // Encendida antes de perder CDP: el backend la marca pausada.
   { id: "r-cert", templateId: "cert", name: "Endpoint certificate expiring", enabled: true, paused: true,
     plugin: "cdp", source: "cdp_cert_expiry", severity: "high", notify: {} },
+  // Destinatario puesto, pero la matriz sólo manda a consola: parece
+  // configurada y no envía nada.
   { id: "r-off", templateId: "offline", name: "Device offline", enabled: true, paused: false,
-    plugin: null, source: "device_offline", severity: "high", notify: {} },
+    plugin: null, source: "device_offline", severity: "high",
+    notify: {
+      email: ["ops@cliente.com"],
+      minSeverity: "low",
+      channels: { low: ["console"], medium: ["console"], high: ["console"], critical: ["console"] },
+    } },
 ];
 const AVAILABILITY = {
   amp: { available: true, reason: null, tierRequired: null },
@@ -150,6 +157,16 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     // y lo dice en vez de callar.
     expect(within(amp).queryByRole("button", { name: /email…/i })).not.toBeInTheDocument();
     expect(within(amp).getByText("Switch it on to choose who is emailed.")).toBeInTheDocument();
+  });
+
+  it("⭐ avisa cuando hay destinatarios pero la matriz no manda nada por correo", async () => {
+    mount();
+    const platform = await group("Platform");
+    await userEvent.click(within(platform).getByRole("button", { name: /email…/i }));
+
+    const aviso = await within(platform).findByRole("alert");
+    expect(aviso).toHaveTextContent("1 recipient gets nothing");
+    expect(aviso).toHaveTextContent("Turn Email on for at least one severity");
   });
 
   it("el KPI 'Active rules' no cuenta la pausada: el backend no la evalúa", async () => {
