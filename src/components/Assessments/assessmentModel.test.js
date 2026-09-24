@@ -1,7 +1,7 @@
 // src/components/Assessments/assessmentModel.test.js
 
 import { describe, expect, it } from "vitest";
-import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText, exceptionHistoryLine, EXCEPTION_STATUS
+import { adjustedScoreText, coverageText, describeRunNow, effectiveTarget, evidenceLine, liveExceptionCount, notAssessedReason, openBySeverity, projectionLabel, scheduleText, scoreDelta, sortFindings, targetGapText, exceptionHistoryLine, EXCEPTION_STATUS, exceptionGate, pendingRequestLine
 } from "./assessmentModel";
 import { formToPolicy, readFormFromPolicy } from "../Policies/policyTransforms";
 
@@ -174,5 +174,42 @@ describe("historial de excepciones", () => {
       .toBe("(unknown) · 2026-09-24 → 2026-12-23");
     expect(exceptionHistoryLine(null)).toBe("");
     expect(exceptionHistoryLine({ author: "ana", createdAt: "no-es-fecha", expiresAt: "tampoco", status: "expired" })).toBe("ana");
+  });
+});
+
+describe("aprobación de segunda persona", () => {
+  const pending = { id: 1, reason: "acepto el riesgo", riskOwner: "ciso@acme.com", requestedBy: "ana", requestedAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T00:00:00Z" };
+
+  it("🔴 quien la pidió NO puede aprobarla, aunque sea OWNER", () => {
+    const g = exceptionGate({ pendingException: pending }, { subject: "ana", role: "OWNER" });
+    expect(g.mode).toBe("pending");
+    expect(g.canDecide).toBe(false);
+    expect(g.blockedReason).toMatch(/Someone else has to approve it/);
+    // Pero sí puede retirarla.
+    expect(g.canCancel).toBe(true);
+  });
+
+  it("⭐ otro OWNER/ADMIN sí decide, y sin excusa que enseñar", () => {
+    const g = exceptionGate({ pendingException: pending }, { subject: "bruno", role: "ADMIN" });
+    expect(g.canDecide).toBe(true);
+    expect(g.blockedReason).toBeNull();
+  });
+
+  it("⚠️ un rol sin aprobación ve por qué no hay botón, no un hueco mudo", () => {
+    const g = exceptionGate({ pendingException: pending }, { subject: "carla", role: "MEMBER" });
+    expect(g.canDecide).toBe(false);
+    expect(g.blockedReason).toMatch(/owner or admin/i);
+  });
+
+  it("⚠️ una pendiente NO es una excepción concedida: el modo lo distingue", () => {
+    expect(exceptionGate({ pendingException: pending, exception: null }, { subject: "b", role: "OWNER" }).mode).toBe("pending");
+    expect(exceptionGate({ exception: { active: true, reason: "r" } }, { subject: "b", role: "OWNER" }).mode).toBe("granted");
+    expect(exceptionGate({ exception: { active: false } }, { subject: "b", role: "OWNER" }).mode).toBe("none");
+    expect(exceptionGate(null, null).mode).toBe("none");
+  });
+
+  it("la línea de la solicitud dice quién, cuándo, el dueño del riesgo y hasta cuándo duraría", () => {
+    expect(pendingRequestLine(pending)).toBe("asked by ana on 2026-09-24 · risk owner ciso@acme.com · would expire 2026-12-23");
+    expect(pendingRequestLine(null)).toBe("");
   });
 });

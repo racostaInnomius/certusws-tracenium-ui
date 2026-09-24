@@ -230,3 +230,53 @@ export function exceptionHistoryLine(entry) {
   }
   return parts.join(" · ");
 }
+
+/**
+ * Qué puede hacer QUIEN MIRA con la excepción de un hallazgo.
+ *
+ * ⚠️ Esto es una comodidad de la interfaz, no la seguridad: el backend vuelve a
+ * comprobarlo y devuelve 403. Se calcula aquí para no enseñar un botón
+ * «Approve» que va a fallar, que es peor que no enseñarlo.
+ *
+ * La regla es la de SCP: decide un OWNER/ADMIN activo DISTINTO de quien la
+ * pidió. Por eso `mine` no es un detalle — es la mitad de la regla.
+ */
+export function exceptionGate(finding, viewer) {
+  const pending = finding?.pendingException || null;
+  const active = finding?.exception?.active === true ? finding.exception : null;
+  const me = String(viewer?.subject || viewer?.email || "");
+  const isApprover = viewer?.role === "OWNER" || viewer?.role === "ADMIN";
+  if (pending) {
+    // Sin identidad del que mira no se puede demostrar que NO la pidió él, así
+    // que se enseña el botón y decide el backend. La alternativa —esconderlo—
+    // dejaría sin aprobar a cualquiera cuyo auth no traiga subject ni email.
+    const mine = !!me && String(pending.requestedBy || "") === me;
+    return {
+      mode: "pending",
+      pending,
+      active,
+      canDecide: isApprover && !mine,
+      canCancel: mine || isApprover,
+      // Lo que explica por qué no hay botón, en vez de una ausencia muda.
+      blockedReason: mine
+        ? "You asked for this exception. Someone else has to approve it."
+        : isApprover
+          ? null
+          : "Only an owner or admin of this tenant can approve an exception.",
+    };
+  }
+  return { mode: active ? "granted" : "none", pending: null, active, canDecide: false, canCancel: false, blockedReason: null };
+}
+
+/** "Waiting for approval · asked by ana on 2026-09-24 · risk owner ciso@acme.com" */
+export function pendingRequestLine(pending) {
+  if (!pending) return "";
+  const parts = [];
+  const who = pending.requestedBy || "(unknown)";
+  const when = day(pending.requestedAt);
+  parts.push(when ? `asked by ${who} on ${when}` : `asked by ${who}`);
+  if (pending.riskOwner) parts.push(`risk owner ${pending.riskOwner}`);
+  const to = day(pending.expiresAt);
+  if (to) parts.push(`would expire ${to}`);
+  return parts.join(" · ");
+}

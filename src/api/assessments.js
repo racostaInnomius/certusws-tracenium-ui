@@ -42,10 +42,20 @@ export async function getAssessmentRun(id, runId) {
   return httpGetJson(`${BASE}/instances/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, { cache: "reload" });
 }
 
-export async function setFindingException(id, controlId, { reason, expiresAt }) {
-  return httpPutJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception`, { reason, expiresAt });
+/**
+ * PIDE una excepción. No la concede: hasta que otra persona la aprueba, el
+ * hallazgo sigue contando como fallo y el score no se mueve.
+ */
+export async function requestFindingException(id, controlId, { reason, riskOwner, expiresAt }) {
+  return httpPutJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception`, { reason, riskOwner, expiresAt });
 }
 
+/** La segunda persona: `decision` es "approve" o "reject". */
+export async function decideFindingException(id, controlId, { decision, note }) {
+  return httpPostJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception/decision`, { decision, note });
+}
+
+/** Cancela la pendiente o revoca la vigente, según lo que haya. */
 export async function removeFindingException(id, controlId) {
   return httpDeleteJson(`${BASE}/instances/${encodeURIComponent(id)}/findings/${encodeURIComponent(controlId)}/exception`);
 }

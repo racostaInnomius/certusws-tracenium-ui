@@ -20,7 +20,7 @@ import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
 vi.mock("../auth/AuthContext", () => ({
   useAuthContext: () => ({
-    auth: { tenantId: 111, tenantMember: { role: "ADMIN", isActive: true, tenantId: 111 } },
+    auth: { tenantId: 111, subject: "auth0|admin", email: "admin@t111.example", tenantMember: { role: "ADMIN", isActive: true, tenantId: 111 } },
     loading: false,
     refreshAuth: vi.fn(),
   }),
@@ -248,6 +248,92 @@ describe("Assessment Suite — detalle", () => {
     // ⚠️ La VIGENTE no se repite abajo: ya está en el formulario de arriba.
     expect(within(dialog).queryByText("In force")).toBeNull();
     expect(within(dialog).getByLabelText("Reason").value).toBe("Cuentas de servicio con rotación por bóveda");
+  });
+
+  it("🔴 una excepción pendiente NO es una excepción: se dice, y quien la pidió no puede aprobarla", async () => {
+    const pedidaPorMi = {
+      ...DETAIL,
+      findings: DETAIL.findings.map((f) =>
+        f.controlId === "ASP-AD-KRB-001"
+          ? { ...f, pendingException: { id: 5, reason: "acepto el riesgo hasta el cierre", riskOwner: "ciso@t111.example", requestedBy: "auth0|admin", requestedAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T00:00:00Z" } }
+          : f
+      ),
+    };
+    const user = userEvent.setup();
+    mount({ detail: pedidaPorMi });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+
+    // En la tabla se lee que está esperando, no que está exceptuado.
+    expect(await screen.findByText("Awaiting approval")).toBeTruthy();
+    await user.click(await screen.findByRole("button", { name: "Review request" }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(within(dialog).getByText(/still counts as a failure and the score does not move/)).toBeTruthy();
+    // 🔴 La pedí yo: no hay botón de aprobar, y se dice por qué.
+    expect(within(dialog).getByText(/Someone else has to approve it/)).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Cancel request" })).toBeTruthy();
+  });
+
+  it("⭐ la pide otro y yo la apruebo: se manda la decisión", async () => {
+    const pedidaPorOtro = {
+      ...DETAIL,
+      findings: DETAIL.findings.map((f) =>
+        f.controlId === "ASP-AD-KRB-001"
+          ? { ...f, pendingException: { id: 5, reason: "acepto el riesgo hasta el cierre", riskOwner: "ciso@t111.example", requestedBy: "auth0|ana", requestedAt: "2026-09-24T10:00:00Z", expiresAt: "2026-12-23T00:00:00Z" } }
+          : f
+      ),
+    };
+    const user = userEvent.setup();
+    const calls = mount({
+      detail: pedidaPorOtro,
+      handlers: [
+        http.post(/.*\/api\/v1\/asp\/instances\/7\/findings\/ASP-AD-KRB-001\/exception\/decision$/, async ({ request }) => {
+          calls.push({ decision: await request.json() });
+          return HttpResponse.json({ controlId: "ASP-AD-KRB-001", decision: "approve", scoreAdjusted: 71 });
+        }),
+      ],
+    });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await user.click(await screen.findByRole("button", { name: "Review request" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/asked by auth0\|ana on 2026-09-24 · risk owner ciso@t111.example/)).toBeTruthy();
+    // El motivo llega en solo lectura: quien aprueba no reescribe lo que firmó otro.
+    expect(within(dialog).getByLabelText("Reason (as requested)")).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Approve" }));
+    await waitFor(() => expect(calls.some((c) => c.decision?.decision === "approve")).toBe(true));
+  });
+
+  it("⚠️ pedir una excepción exige dueño del riesgo y un motivo que se pueda leer", async () => {
+    const sinExcepcion = { ...DETAIL, findings: DETAIL.findings.filter((f) => f.controlId === "ASP-AD-KRB-001") };
+    const user = userEvent.setup();
+    const calls = mount({
+      detail: sinExcepcion,
+      handlers: [
+        http.put(/.*\/api\/v1\/asp\/instances\/7\/findings\/ASP-AD-KRB-001\/exception$/, async ({ request }) => {
+          calls.push({ request: await request.json() });
+          return HttpResponse.json({ controlId: "ASP-AD-KRB-001", request: { status: "pending" } });
+        }),
+      ],
+    });
+    await user.click(await screen.findByText("mountainside-investment.com"));
+    await user.click(await screen.findByRole("button", { name: "Exception…" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // El botón dice PEDIR, no guardar: no concede nada.
+    const submit = within(dialog).getByRole("button", { name: "Request exception" });
+    expect(submit).toBeDisabled();
+    await user.type(within(dialog).getByLabelText("Reason"), "corto");
+    expect(submit).toBeDisabled(); // menos de 20 caracteres
+    await user.clear(within(dialog).getByLabelText("Reason"));
+    await user.type(within(dialog).getByLabelText("Reason"), "Rotacion planificada en el cierre de trimestre");
+    expect(submit).toBeDisabled(); // sigue sin dueño del riesgo
+    await user.type(within(dialog).getByLabelText("Risk owner"), "ciso@t111.example");
+    expect(submit).not.toBeDisabled();
+
+    await user.click(submit);
+    await waitFor(() => expect(calls.some((c) => c.request?.riskOwner === "ciso@t111.example")).toBe(true));
   });
 
   it("⭐ Set target guarda el objetivo de la instancia", async () => {

@@ -78,6 +78,12 @@ export default function Assessments({ onNavigate }) {
   const { auth } = useAuthContext();
   const role = String(auth?.tenantMember?.role || "");
   const canEdit = role === "OWNER" || role === "ADMIN";
+  // Quién mira, para no ofrecer «Approve» a quien pidió la excepción. Es una
+  // comodidad: el backend vuelve a comprobarlo y responde 403.
+  const viewer = React.useMemo(
+    () => ({ subject: auth?.subject || null, email: auth?.email || null, role }),
+    [auth?.subject, auth?.email, role]
+  );
   const canDelete = role === "OWNER";
   const confirm = useConfirm();
 
@@ -219,6 +225,7 @@ export default function Assessments({ onNavigate }) {
           <InstanceDetail
             detail={detail}
             canEdit={canEdit}
+            viewer={viewer}
             canDelete={canDelete}
             onBack={backToList}
             onRunNow={runNow}

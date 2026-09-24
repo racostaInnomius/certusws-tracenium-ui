@@ -63,6 +63,9 @@ function SeverityChip({ severity }) {
 function FindingRow({ finding, canEdit, onException }) {
   const [open, setOpen] = React.useState(false);
   const ex = finding.exception;
+  // ⚠️ Una pendiente NO es una excepción: se dice aparte y en tono de aviso,
+  // porque el hallazgo sigue contando como fallo mientras espera.
+  const pending = finding.pendingException || null;
   const sample = Array.isArray(finding.evidence?.sample) ? finding.evidence.sample : [];
   return (
     <>
@@ -80,7 +83,13 @@ function FindingRow({ finding, canEdit, onException }) {
         </TableCell>
         <TableCell align="right">{finding.affectedCount ?? "—"}</TableCell>
         <TableCell>
-          {ex ? (
+          {pending ? (
+            <Tooltip title={`${pending.reason} — requested by ${pending.requestedBy || "unknown"}`} arrow>
+              <Typography component="span" sx={{ fontSize: TEXT.xs, fontWeight: 700, color: BRAND.alert.warningText }}>
+                Awaiting approval
+              </Typography>
+            </Tooltip>
+          ) : ex ? (
             <Tooltip title={`${ex.reason} — ${ex.author || "unknown"}`} arrow>
               <Typography component="span" sx={{ fontSize: TEXT.xs, fontWeight: 700, color: ex.active ? BRAND.tealText : BRAND.alert.errorText }}>
                 {ex.active ? `Excepted until ${formatDate(ex.expiresAt)}` : `Exception expired ${formatDate(ex.expiresAt)}`}
@@ -91,9 +100,9 @@ function FindingRow({ finding, canEdit, onException }) {
           )}
         </TableCell>
         <TableCell align="right">
-          {canEdit && (finding.status === "fail" || finding.status === "needs_review" || ex) ? (
-            <Button size="small" onClick={() => onException(finding)} sx={{ textTransform: "none", color: BRAND.tealText }}>
-              {ex ? "Edit exception" : "Exception…"}
+          {canEdit && (finding.status === "fail" || finding.status === "needs_review" || ex || pending) ? (
+            <Button size="small" onClick={() => onException(finding)} sx={{ textTransform: "none", color: pending ? BRAND.alert.warningText : BRAND.tealText }}>
+              {pending ? "Review request" : ex ? "Edit exception" : "Exception…"}
             </Button>
           ) : null}
         </TableCell>
@@ -164,7 +173,7 @@ function FindingRow({ finding, canEdit, onException }) {
   );
 }
 
-export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onRunNow, runNowBusy, onChangeCollector, onDeactivate, onDelete, onChanged }) {
+export default function InstanceDetail({ detail, canEdit, canDelete, viewer, onBack, onRunNow, runNowBusy, onChangeCollector, onDeactivate, onDelete, onChanged }) {
   const [exceptionFor, setExceptionFor] = React.useState(null);
   const bands = useComplianceBands();
   const inst = detail?.instance;
@@ -321,6 +330,7 @@ export default function InstanceDetail({ detail, canEdit, canDelete, onBack, onR
         open={Boolean(exceptionFor)}
         instanceId={inst.id}
         finding={exceptionFor}
+        viewer={viewer}
         onClose={() => setExceptionFor(null)}
         onSaved={() => {
           setExceptionFor(null);
