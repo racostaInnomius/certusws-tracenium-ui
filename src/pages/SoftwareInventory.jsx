@@ -930,7 +930,18 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
           <Grid size={{ xs: 12, sm: 6, lg: 3 }} sx={{ display: "flex" }}>
             <SummaryCard
               title="Publishers"
-              value={loadingSummary ? "..." : Number(summary?.publishers || 0)}
+              // ⚠️ La cifra del ranking, no la del resumen. El resumen cuenta
+              // la columna cruda `publisher`; el ranking fusiona variantes
+              // ("Microsoft Corporation" = "Microsoft") y deduce el editor del
+              // bundle id cuando falta. T1, 24-sep: tarjeta 107, «View all»
+              // «top 25 of 164» — dos cifras para la misma pregunta.
+              value={
+                rankings?.topPublishersDistinct != null
+                  ? Number(rankings.topPublishersDistinct)
+                  : loadingSummary
+                  ? "..."
+                  : Number(summary?.publishers || 0)
+              }
               accent={SOFTWARE_ACCENTS.publishers}
               subtitle={
                 loadingSummary
