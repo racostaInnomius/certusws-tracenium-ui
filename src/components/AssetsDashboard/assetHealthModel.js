@@ -84,15 +84,6 @@ export function attentionRows(attention) {
       unknownLabel: "OS not in the lifecycle catalog",
       tone: "caution",
     },
-    {
-      key: "boot",
-      label: `No restart in ${n(attention.staleBootDays) || 30}+ days`,
-      count: n(attention.staleBoot),
-      unknown: n(attention.bootUnknown),
-      unknownLabel: "last boot unknown",
-      tone: "caution",
-      hint: "Only devices seen this week — an offline device is counted under Last check-in instead.",
-    },
   ];
   return rows.map((r) => ({ ...r, percent: devices > 0 ? (r.count / devices) * 100 : 0 }));
 }

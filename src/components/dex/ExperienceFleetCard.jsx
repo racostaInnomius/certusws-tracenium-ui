@@ -16,7 +16,10 @@ import { BRAND, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { getFleetExperience } from "../../api/dex";
 
-const COLLAPSED = 6;
+// Cuatro, y una línea por equipo: la tarjeta comparte fila con «Needs
+// attention» (cuatro filas) y tienen que medir lo mismo. El resto, con
+// «Show all».
+const COLLAPSED = 4;
 
 export default function ExperienceFleetCard({ refreshNonce = 0, onOpenDevice }) {
   const [fleet, setFleet] = React.useState(null);
@@ -47,7 +50,7 @@ export default function ExperienceFleetCard({ refreshNonce = 0, onOpenDevice }) 
   const warn = severityMeta("medium");
 
   return (
-    <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }} data-testid="dex-fleet-card">
+    <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, height: "100%" }} data-testid="dex-fleet-card">
       <Stack spacing={1.25}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <SpeedOutlinedIcon sx={{ color: BRAND.teal }} />
@@ -75,19 +78,28 @@ export default function ExperienceFleetCard({ refreshNonce = 0, onOpenDevice }) 
           <Typography sx={{ fontSize: TEXT.sm, color: BRAND.alert.successText }}>No device shows experience signals.</Typography>
         ) : (
           <Stack spacing={0.5} data-testid="dex-fleet-devices">
-            {shown.map((d) => (
-              <Box
-                key={d.agentId}
-                role="button"
-                tabIndex={0}
-                onClick={() => onOpenDevice?.(d.agentId, d.hostname)}
-                onKeyDown={(e) => (e.key === "Enter" ? onOpenDevice?.(d.agentId, d.hostname) : null)}
-                sx={{ display: "flex", gap: 1, alignItems: "baseline", flexWrap: "wrap", px: 1, py: 0.5, borderRadius: 1, cursor: "pointer", "&:hover": { bgcolor: BRAND.tealSoft } }}
-              >
-                <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, minWidth: 140 }}>{d.hostname || d.agentId}</Typography>
-                <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>{d.signals.map((s) => `${s.label}: ${s.evidence}`).join(" · ")}</Typography>
-              </Box>
-            ))}
+            {shown.map((d) => {
+              // Una línea: la evidencia completa va en el título y en la ficha
+              // del equipo, que es donde lleva el clic.
+              const evidence = d.signals.map((s) => `${s.label}: ${s.evidence}`).join(" · ");
+              return (
+                <Box
+                  key={d.agentId}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpenDevice?.(d.agentId, d.hostname)}
+                  onKeyDown={(e) => (e.key === "Enter" ? onOpenDevice?.(d.agentId, d.hostname) : null)}
+                  sx={{ display: "flex", gap: 1, alignItems: "baseline", px: 1, py: 0.5, borderRadius: 1, cursor: "pointer", minWidth: 0, "&:hover": { bgcolor: BRAND.tealSoft } }}
+                >
+                  <Typography sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark, minWidth: 140, flexShrink: 0 }} noWrap>
+                    {d.hostname || d.agentId}
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED, minWidth: 0, flex: 1 }} noWrap title={evidence}>
+                    {evidence}
+                  </Typography>
+                </Box>
+              );
+            })}
             {devices.length > COLLAPSED ? (
               <Box>
                 <Button size="small" onClick={() => setExpanded((v) => !v)} sx={{ textTransform: "none" }}>

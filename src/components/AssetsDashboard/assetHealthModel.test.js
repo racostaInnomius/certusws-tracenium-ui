@@ -37,14 +37,13 @@ describe("attentionRows", () => {
 
   it("disco y memoria llevan a su filtro de Hardware Inventory; el resto no inventa uno", () => {
     const byKey = Object.fromEntries(attentionRows(A).map((r) => [r.key, r.fleetFilter]));
-    expect(byKey).toEqual({ disk: "disk_high", memory: "low_memory", os_unsupported: undefined, os_ending: undefined, boot: undefined });
+    expect(byKey).toEqual({ disk: "disk_high", memory: "low_memory", os_unsupported: undefined, os_ending: undefined });
   });
 
   it("los umbrales vienen del backend", () => {
     const rows = attentionRows({ ...A, diskThresholdPct: 90, memoryFloorGb: 4, staleBootDays: 14 });
     expect(rows.map((r) => r.label)).toContain("Disk ≥ 90% full");
     expect(rows.map((r) => r.label)).toContain("Memory ≤ 4 GB");
-    expect(rows.map((r) => r.label)).toContain("No restart in 14+ days");
   });
 });
 

@@ -4,7 +4,7 @@
 // experience. Mismo formato que OS versions (fila, cifra, barra) para que la
 // columna se lea igual de arriba abajo.
 //
-// Las cinco filas salen SIEMPRE, también a cero: "0 equipos sin soporte" es
+// Las cuatro filas salen SIEMPRE, también a cero: "0 equipos sin soporte" es
 // una respuesta, y una tarjeta que cambia de forma según los datos obliga a
 // leerla de nuevo cada vez.
 

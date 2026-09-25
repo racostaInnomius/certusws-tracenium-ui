@@ -13,13 +13,13 @@ const A = {
 };
 
 describe("AssetAttentionCard", () => {
-  it("⭐ las cinco filas salen siempre, también a cero", () => {
+  it("⭐ las cuatro filas salen siempre, también a cero", () => {
     render(<AssetAttentionCard attention={A} />);
     expect(screen.getByText("Disk ≥ 85% full")).toBeInTheDocument();
     expect(screen.getByText("Memory ≤ 8 GB")).toBeInTheDocument();
     expect(screen.getByText("OS out of support")).toBeInTheDocument();
     expect(screen.getByText("OS support ending soon")).toBeInTheDocument();
-    expect(screen.getByText("No restart in 30+ days")).toBeInTheDocument();
+    expect(screen.queryByText(/No restart/)).not.toBeInTheDocument();
     expect(screen.getByText("17 devices")).toBeInTheDocument();
     expect(screen.getByText("+1 not reporting disk")).toBeInTheDocument();
   });
