@@ -164,7 +164,7 @@ export default function CbomAssetsPanel(props) {
   return <OutsideAssets {...props} />;
 }
 
-function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = false, onSourceChange, onSelect, onOpenSettings }) {
+function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = false, revoked = null, onSourceChange, onSelect, onOpenSettings }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
   const [error, setError] = React.useState(null);
@@ -179,7 +179,7 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = f
     let alive = true;
     setError(null);
     // `current`: sólo lo vigente, como lo cuenta el gajo que trajo aquí.
-    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, origin: origin || undefined, current: current || undefined, limit: 200 })])
+    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, origin: origin || undefined, current: current || undefined, revoked: typeof revoked === "boolean" ? revoked : undefined, limit: 200 })])
       .then(([s, l]) => {
         if (!alive) return;
         setSummary(s ?? null);
@@ -189,7 +189,7 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = f
     return () => {
       alive = false;
     };
-  }, [refreshNonce, source, origin, current]);
+  }, [refreshNonce, source, origin, current, revoked]);
   // El reloj se lee una vez al montar: leerlo en cada render lo haría impuro.
   const [now] = React.useState(() => Date.now());
 
@@ -238,7 +238,17 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = f
                 size="small"
                 label={`Valid only · ${fmt(items.length)}`}
                 title="Not expired — what the Dashboard counts. Remove to include the expired ones."
-                onDelete={() => pick({ sourceName: source, origin })}
+                // Quitar un chip no suelta el otro.
+                onDelete={() => pick({ sourceName: source, origin, ...(typeof revoked === "boolean" ? { revoked } : {}) })}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+              />
+            ) : null}
+            {typeof revoked === "boolean" ? (
+              <Chip
+                size="small"
+                label={revoked ? "Revoked only" : "Not revoked"}
+                title="Revoked by the issuer but not expired: still valid on paper, not something to migrate. Remove to see both."
+                onDelete={() => pick({ sourceName: source, origin, current })}
                 sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
               />
             ) : null}

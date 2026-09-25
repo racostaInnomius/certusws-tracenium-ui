@@ -86,6 +86,66 @@ describe("buildCertificatesTree", () => {
   });
 });
 
+describe("buildCertificatesTree — partido como las listas (25-sep)", () => {
+  // `sunburst_bucket`: con ownership+source el gajo contaba cada raíz una vez
+  // por fuente (246 donde la lista enseñaba 179) y las 5 raíces TUYAS se
+  // colaban en «Vendor roots».
+  const bucket = (b, algo, bits, n) => ({ keys: { sunburst_bucket: b, key_algorithm: algo }, stack: bits, certs: n, uniqueCerts: n, devices: 1 });
+  it("⭐ raíces del fabricante (sin clave), raíces tuyas (con clave) y lo demás por fuente, cada una con su lista exacta", () => {
+    const tree = buildCertificatesTree([bucket("vendor", "RSA", 2048, 179), bucket("own-roots", "RSA", 2048, 5), bucket("store", "RSA", 2048, 905), bucket("file", "RSA", 2048, 351)], []);
+    const onprem = tree[0];
+    const byName = Object.fromEntries(onprem.children.map((c) => [c.name, c]));
+    expect(Object.keys(byName)).toEqual(["Vendor roots", "Your roots in OS stores", "Certificate stores", "Certificate files"]);
+    expect(byName["Vendor roots"]).toMatchObject({ status: "other" });
+    expect(byName["Vendor roots"].drill).toEqual({ to: "inventory", certClass: "all", includeRoots: true, scope: "system-roots", hasPrivateKey: false });
+    expect(byName["Your roots in OS stores"].drill).toEqual({ to: "inventory", certClass: "all", includeRoots: true, scope: "system-roots", hasPrivateKey: true });
+    expect(byName["Your roots in OS stores"].children[0].s).toBe("broken");
+    expect(byName["Certificate stores"].drill).toEqual({ to: "inventory", certClass: "all", source: "store" });
+    expect(byName["Certificate stores"].children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "store", keyAlgorithm: "RSA", keySizeBits: 2048 });
+    expect(sumNode(byName["Vendor roots"])).toBe(179);
+  });
+});
+
+describe("revocados sin caducar (25-sep)", () => {
+  // Técnicamente vigentes —cuentan— y decir que no también sería falso: van
+  // en su propia hoja gris con su lista exacta; el resto abre lo no revocado.
+  it("⭐ la CA se parte en su algoritmo (no revocados) y «Revoked», cada hoja con su lista", () => {
+    const tree = buildCertificatesTree([], [{ sourceName: "adcs:CA", origin: "adcs", certificates: 27, revoked: 12 }], [
+      { sourceName: "adcs:CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", revoked: false, certificates: 15 },
+      { sourceName: "adcs:CA", origin: "adcs", algorithm: "RSA", bits: 2048, family: "quantum_broken", revoked: true, certificates: 12 }
+    ]);
+    const ca = tree.find((b) => b.key === "infra").children[0];
+    expect(sumNode(ca)).toBe(27);
+    expect(ca.children.map((l) => [l.name, l.v, l.s])).toEqual([["RSA-2048", 15, "broken"], ["Revoked", 12, "other"]]);
+    expect(ca.drill).toEqual({ to: "outside", sourceName: "adcs:CA", origin: "adcs", current: true });
+    expect(ca.children[0].drill).toEqual({ to: "outside", sourceName: "adcs:CA", origin: "adcs", current: true, revoked: false });
+    expect(ca.children[1].drill).toEqual({ to: "outside", sourceName: "adcs:CA", origin: "adcs", current: true, revoked: true });
+  });
+
+  it("sin desglose por algoritmo, bySource también aparta los revocados", () => {
+    const tree = buildCertificatesTree([], [{ sourceName: "vault:x", origin: "vault", certificates: 10, revoked: 3 }]);
+    const v = tree.find((b) => b.key === "external").children[0];
+    expect(v.children.map((l) => [l.name, l.v])).toEqual([["certificates", 7], ["Revoked", 3]]);
+  });
+
+  it("una fuente sin revocados no lleva el filtro", () => {
+    const tree = buildCertificatesTree([], [], [{ sourceName: "vcenter:v", origin: "vcenter", algorithm: "RSA", bits: 2048, family: "quantum_broken", revoked: false, certificates: 1 }]);
+    expect(tree.find((b) => b.key === "infra").children[0].children[0].drill).toEqual({ to: "outside", sourceName: "vcenter:v", origin: "vcenter", current: true });
+  });
+});
+
+describe("buildKeysTree — claves privadas sueltas (25-sep)", () => {
+  it("⭐ las «Loose private keys» de los agentes salen en Keys, en una hoja con su lista y el color de lo que se sabe", () => {
+    const tree = buildKeysTree([], { outsideBySource: [{ sourceName: "file-key", origin: "file-key", certificates: 0, keys: 17, keysBroken: 12 }, { sourceName: "ssh-user", origin: "ssh-user", certificates: 0, keys: 2, keysBroken: 2 }] });
+    const onprem = tree[0];
+    expect(onprem.children.map((c) => c.name)).toEqual(["Loose private keys"]);
+    const loose = onprem.children[0];
+    expect(loose.children.map((l) => [l.name, l.v, l.s])).toEqual([["keys", 17, "mixed"]]);
+    expect(loose.note).toBe("12 quantum-broken, 5 not classified");
+    expect(loose.children[0].drill).toEqual({ to: "outside", sourceName: "file-key", origin: "file-key", current: true });
+  });
+});
+
 describe("buildCertificatesTree — fuera de los equipos por algoritmo", () => {
   it("⭐ con exposure.outside.byAlgorithm, la CA se abre por algoritmo y el resumen por origen no se duplica", () => {
     const tree = buildCertificatesTree(

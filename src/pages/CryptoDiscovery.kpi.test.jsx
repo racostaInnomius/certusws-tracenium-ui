@@ -169,12 +169,13 @@ describe("KPI clicables", () => {
         <CryptoDiscovery />
       </ConfirmProvider>
     );
-    // 14-sep: el KPI «Hygiene flags» se fue; la tarjeta Hygiene abre la
-    // misma lista y sustituye el filtro igual.
-    (await screen.findByRole("button", { name: /^Open Hygiene$/i }, { timeout: 4000 })).click();
+    // 25-sep: la tarjeta Hygiene se fue (repetía lo que la tira de riesgo
+    // puntúa). Un KPI sustituye el filtro igual.
+    expect(screen.queryByRole("button", { name: /^Open Hygiene$/i })).not.toBeInTheDocument();
+    (await screen.findByText("Expired, with key", {}, { timeout: 4000 })).click();
     await waitFor(() => {
       const p = new URLSearchParams(window.location.search);
-      expect(p.get("flagged")).toBe("1");
+      expect(p.get("status")).toBe("expired");
       expect(p.has("q")).toBe(false);
       expect(p.has("flag")).toBe(false);
     });

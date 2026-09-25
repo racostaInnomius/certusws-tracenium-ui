@@ -88,6 +88,9 @@ export const CDP_URL_KEYS = {
   // Sólo lo vigente de fuera: lo que cuenta el sunburst. Sin esto el gajo
   // «CA · 27» abría una lista de 51 con los caducados (24-sep).
   assetCurrent: "acur",
+  // Revocados sin caducar (`yes`) o el resto (`no`): la hoja «Revoked» del
+  // sunburst y sus hermanas abren su lista exacta (25-sep).
+  assetRevoked: "arev",
   // Un sistema de la hoja de ruta (`process:svchost.exe`, `target:…`). En
   // Inventory filtra con la MISMA regla con que el roadmap agrupa; en Roadmap
   // abre su ficha. `systemFocus` acota esa ficha a sus servicios TLS

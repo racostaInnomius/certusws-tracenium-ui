@@ -37,6 +37,7 @@ const LEGEND = {
   keys: [
     { color: BRAND.alert.error, text: "Quantum-broken key" },
     { color: BRAND.alert.success, text: "Post-quantum key" },
+    { color: "#C7CBD1", text: "Revoked by its issuer, or not classified" },
     { color: "#E4E7EC", text: "Base with no source connected yet" }
   ],
   services: [
@@ -48,7 +49,7 @@ const LEGEND = {
   certs: [
     { color: BRAND.alert.error, text: "Quantum-broken certificate" },
     { color: BRAND.alert.success, text: "Post-quantum or hybrid certificate" },
-    { color: "#C7CBD1", text: "Vendor roots: not yours to migrate" },
+    { color: "#C7CBD1", text: "Vendor roots (not yours to migrate), or revoked by the issuer" },
     { color: "#E4E7EC", text: "Base with no source connected yet" }
   ]
 };
@@ -109,7 +110,14 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
     },
     {
       label: "Services on classical key exchange", value: kemC, total: measured, color: kemC > 0 ? BRAND.alert.errorText : BRAND.dark,
-      hint: "Traffic recorded today can be decrypted later.", onClick: () => onDrillDown?.({ kem: "classical" }, { replace: true })
+      hint: "Traffic recorded today can be decrypted later. Opens the certificates those services present.",
+      // La lista es de CERTIFICADOS: la cifra de debajo dice cuántos, para
+      // que «45» no aterrice en «33» sin explicación (25-sep). Lente entera,
+      // como la cuenta el servidor.
+      onClick: () => onDrillDown?.({ kem: "classical", certClass: "all", includeRoots: true }, { replace: true }),
+      sub: kemC > 0 && exposure?.kem?.classicalCerts != null ? `on ${fmt(exposure.kem.classicalCerts)} certificate${exposure.kem.classicalCerts === 1 ? "" : "s"}` : null,
+      subHint: "Several services can present the same certificate (one per device or port).",
+      subColor: TEXT_MUTED
     },
     {
       label: "Systems without a wave", value: systemsTotal == null ? null : systemsTotal - systemsPlanned, total: systemsTotal, color: BRAND.dark,
@@ -171,7 +179,7 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
               <Typography component="span" sx={{ fontSize: TEXT.md, color: TEXT_MUTED }}>/ {fmt(p.total)}</Typography>
             </Stack>
             {p.sub ? (
-              <Typography title={p.subHint} sx={{ fontSize: TEXT.xs, color: BRAND.tealText, fontWeight: 600, lineHeight: 1.2 }}>
+              <Typography title={p.subHint} sx={{ fontSize: TEXT.xs, color: p.subColor ?? BRAND.tealText, fontWeight: 600, lineHeight: 1.2 }}>
                 {p.sub}
               </Typography>
             ) : null}
@@ -202,7 +210,11 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
     setError(null);
     const load =
       mode === "certs"
-        ? getCdpFacets({ by: ["ownership", "source", "key_algorithm"], stack: "key_size_bits", limit: 1000 }).then((r) => r?.rows ?? [])
+        ? // `sunburst_bucket` parte el anillo como las listas (25-sep); un
+          // backend anterior la rechaza con 400 y se cae a la partición vieja.
+          getCdpFacets({ by: ["sunburst_bucket", "key_algorithm"], stack: "key_size_bits", limit: 1000 })
+            .catch(() => getCdpFacets({ by: ["ownership", "source", "key_algorithm"], stack: "key_size_bits", limit: 1000 }))
+            .then((r) => r?.rows ?? [])
         : mode === "keys"
           ? // Los ficheros, aparte y sin ruta: el mismo certificado copiado en
             // dos rutas es UNA clave (ver buildKeysTree). Si esa consulta cae,
@@ -413,7 +425,8 @@ export function CoverageGapLine({ gap, now }) {
   return (
     <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }} aria-label="Coverage gap">
       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.dark }}>
-        Your Windows CA issued <strong>{fmt(gap.caIssued)}</strong> certificates that are still valid. Tracenium knows
+        Your Windows CA issued <strong>{fmt(gap.caIssued)}</strong> certificates that have not expired
+        {gap.caRevoked > 0 ? <> — <strong>{fmt(gap.caRevoked)}</strong> of them revoked by the CA</> : null}. Tracenium knows
         where <strong>{fmt(gap.caOnDevices)}</strong> of them are — on the {fmt(gap.devicesWithAgent)} devices with an
         agent.{" "}
         {elsewhere > 0 ? (

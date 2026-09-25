@@ -61,7 +61,6 @@ import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
-import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
@@ -423,6 +422,7 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
 
   const ov = d.overview ?? {};
   const outside = exposure?.outside;
+  const outsideRevoked = (outside?.bySource ?? []).reduce((t, x) => t + Number(x.revoked ?? 0), 0);
 
   return (
     <Stack spacing={2}>
@@ -518,8 +518,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
           cae sola. */}
       <CdpRiskStrip refreshNonce={refreshNonce} onOpenBand={onOpenRisk} />
 
+      {/* Dos tarjetas (25-sep). «Hygiene» se fue: contaba las mismas banderas
+          (weak key, weak signature, self-signed…) que la tira «Certificate
+          risk» de justo encima puntúa y ordena, y abría la misma lista. */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <OverviewCard
             title="Outside your devices"
             icon={<CloudOutlinedIcon fontSize="small" />}
@@ -531,13 +534,16 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
                     { label: "sources", value: outside.sources },
                     { label: "certificates", value: outside.certificates },
                     { label: "quantum-broken", value: outside.quantumBroken, color: outside.quantumBroken ? BRAND.alert.high : undefined },
-                    { label: "in use", value: outside.inUse }
+                    // Sólo si dicen algo (25-sep): «0 in use» ocupaba sitio
+                    // sin decir nada. Los revocados, en cambio, se dicen.
+                    ...(outsideRevoked > 0 ? [{ label: "revoked", value: outsideRevoked }] : []),
+                    ...(outside.inUse > 0 ? [{ label: "in use", value: outside.inUse }] : [])
                   ]
                 : []
             }
           />
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <OverviewCard
             title="Trust anchors"
             icon={<VerifiedUserOutlinedIcon fontSize="small" />}
@@ -549,25 +555,6 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
                     { label: "anchors", value: ov.anchors.total },
                     { label: "distrusted", value: ov.anchors.distrusted, color: ov.anchors.distrusted ? BRAND.alert.errorText : undefined },
                     { label: "on a minority", value: ov.anchors.novel, color: ov.anchors.novel ? BRAND.alert.high : undefined }
-                  ]
-                : []
-            }
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
-          <OverviewCard
-            title="Hygiene"
-            icon={<ReportProblemOutlinedIcon fontSize="small" />}
-            onOpen={() => onDrillDown?.({ hasFlags: true }, { replace: true })}
-            hint="Server-side judgments on end-entity certificates: broken today, no quantum computer required. Opens the flagged list; pick a single flag there."
-            empty={panelsLoaded ? "No hygiene issues found." : "Loading…"}
-            metrics={
-              d.flags && Object.values(d.flags).some((n) => Number(n) > 0)
-                ? [
-                    { label: "weak key", value: d.flags.weak_key, color: d.flags.weak_key ? BRAND.alert.errorText : undefined },
-                    { label: "weak signature", value: d.flags.weak_sig, color: d.flags.weak_sig ? BRAND.alert.high : undefined },
-                    { label: "self-signed leaf", value: d.flags.self_signed_leaf },
-                    { label: "nonstandard root", value: d.flags.nonstandard_root }
                   ]
                 : []
             }
@@ -643,9 +630,10 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
       origin={filter.assetOrigin ?? ""}
       domain={filter.assetDomain ?? ""}
       current={filter.assetCurrent === true}
+      revoked={filter.assetRevoked === "yes" ? true : filter.assetRevoked === "no" ? false : null}
       // Elegir otra fuente (o quitar el chip «Valid only») suelta `current`:
       // sólo un gajo del sunburst lo pone.
-      onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "", assetDomain: next.domain ?? "", assetCurrent: next.current === true })}
+      onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "", assetDomain: next.domain ?? "", assetCurrent: next.current === true, assetRevoked: next.revoked === true ? "yes" : next.revoked === false ? "no" : "" })}
       onSelect={(f) => onDrillDown?.(f, { replace: true })}
       onOpenSettings={onOpenSettings}
     />
@@ -1804,7 +1792,8 @@ export default function CryptoDiscovery({ onNavigate }) {
           assetSource: target.sourceName ?? "",
           assetOrigin: target.sourceName ? "" : target.origin ?? "",
           assetDomain: "",
-          assetCurrent: target.current === true
+          assetCurrent: target.current === true,
+          assetRevoked: target.revoked === true ? "yes" : target.revoked === false ? "no" : ""
         });
       }
       if (target.to === "orphans") return replaceFilter({ tab: TAB.orphans });

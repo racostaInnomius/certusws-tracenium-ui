@@ -25,6 +25,7 @@ import { CDP_URL_KEYS } from "../../hooks/useCdpFilter";
  *                  a estas facetas no acotaría nada, lo dejaría a cero.
  *   assetDomain  — ídem: el dominio y «sólo vigentes» de ese panel.
  *   assetCurrent
+ *   assetRevoked
  *   systemFocus  — acota la FICHA del sistema en Roadmap (sus servicios TLS
  *                  o un KEM); el inventario lo recibe como `kem`, si acaso.
  *   riskBand     — banda y lente de la pestaña Risk (ola 1.6). Son de ESA
@@ -32,7 +33,7 @@ import { CDP_URL_KEYS } from "../../hooks/useCdpFilter";
  *                  Inventory no las lee, así que las facetas tampoco.
  * Cualquier otra ES un filtro y tiene que viajar a las facetas.
  */
-const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain", "assetCurrent", "systemFocus", "riskBand", "riskClass"]);
+const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain", "assetCurrent", "assetRevoked", "systemFocus", "riskBand", "riskClass"]);
 
 const VALOR_DE_MUESTRA = {
   search: "msig",

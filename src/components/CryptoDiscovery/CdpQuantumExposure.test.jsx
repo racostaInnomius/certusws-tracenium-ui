@@ -24,6 +24,8 @@ beforeEach(() => {
       ? { rows: [] }
       : hasPrivateKey
       ? { rows: [{ keys: { source: "store", store_name: "LocalMachine\\My", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }] }
+      : by.includes("sunburst_bucket")
+      ? { rows: [{ keys: { sunburst_bucket: "store", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }, { keys: { sunburst_bucket: "vendor", key_algorithm: "RSA" }, stack: 4096, certs: 51, uniqueCerts: 51, devices: 54 }] }
       : { rows: [{ keys: { ownership: "own_leaf", source: "store", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }, { keys: { ownership: "vendor", source: "store", key_algorithm: "RSA" }, stack: 4096, certs: 51, uniqueCerts: 51, devices: 54 }] }
   );
   getCdpRoadmap.mockResolvedValue({ ok: true, systems: [{ key: "process:svchost.exe", name: "Served by svchost.exe", factors: { kemHybrid: 14, kemClassical: 4, kemUnknown: 0 } }] });
@@ -68,7 +70,7 @@ describe("ReadinessStrip", () => {
     // La lente entera: «own» cuenta también las CA y raíces propias (229 → 223, 24-sep).
     expect(onDrillDown).toHaveBeenLastCalledWith({ hasPrivateKey: true, certClass: "all", includeRoots: true }, { replace: true });
     fireEvent.click(screen.getByText("Services on classical key exchange"));
-    expect(onDrillDown).toHaveBeenLastCalledWith({ kem: "classical" }, { replace: true });
+    expect(onDrillDown).toHaveBeenLastCalledWith({ kem: "classical", certClass: "all", includeRoots: true }, { replace: true });
     fireEvent.click(screen.getByText("Systems without a wave"));
     fireEvent.click(screen.getByText("Devices that cannot migrate yet"));
     expect(onOpenRoadmap).toHaveBeenCalledTimes(2);
@@ -96,13 +98,30 @@ describe("QuantumSunburst", () => {
   it("«Certificates» pide facetas por propiedad, fuente y algoritmo y suma lo de fuera en el centro; «Services / Resources» pide el roadmap", async () => {
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     fireEvent.click(screen.getByLabelText("Certificates"));
-    await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["ownership", "source", "key_algorithm"], stack: "key_size_bits" })));
+    // 25-sep: el anillo de origen se parte como las listas (`sunburst_bucket`).
+    await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["sunburst_bucket", "key_algorithm"], stack: "key_size_bits" })));
     // 1,043 únicos en equipos + 27 de la CA.
     expect(await screen.findByText("1,070")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Services / Resources"));
     await waitFor(() => expect(getCdpRoadmap).toHaveBeenCalled());
     expect(await screen.findByText("18")).toBeInTheDocument();
     expect(screen.getByText("services and resources")).toBeInTheDocument();
+  });
+
+  it("con un backend sin `sunburst_bucket`, «Certificates» cae a la partición vieja en vez de quedarse vacío", async () => {
+    getCdpFacets.mockImplementation(async ({ by }) => {
+      if (by.includes("sunburst_bucket")) throw new Error("UNKNOWN_DIMENSION_sunburst_bucket");
+      return { rows: [{ keys: { ownership: "own_leaf", source: "store", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }] };
+    });
+    render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("Certificates"));
+    await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["ownership", "source", "key_algorithm"] })));
+    expect(await screen.findByRole("button", { name: /^Certificate stores: 146 certificates/ })).toBeInTheDocument();
+  });
+
+  it("⭐ «Services on classical» dice sobre cuántos CERTIFICADOS abre, no sólo cuántos servicios (25-sep: 45 → 33)", () => {
+    render(<ReadinessStrip exposure={{ ...EXPOSURE, kem: { ...EXPOSURE.kem, classicalCerts: 33 } }} overview={OVERVIEW} devicesReporting={54} onDrillDown={vi.fn()} />);
+    expect(screen.getByText("on 33 certificates")).toBeInTheDocument();
   });
 
   it("⭐ un gajo de algoritmo abre Inventory con su filtro; una base vacía no navega", async () => {
@@ -176,12 +195,17 @@ describe("⭐ ADR-0026 · el número del agujero", () => {
   it("con los números de T111 del 21-sep: 27 vigentes, 17 a la vista — y dice dónde están los otros 10 sin acusar", () => {
     render(<CoverageGapLine gap={{ caIssued: 27, caOnDevices: 17, caLastRead: "2026-09-21T06:00:00Z", devicesWithAgent: 56 }} now={NOW} />);
     const line = screen.getByLabelText("Coverage gap");
-    expect(line).toHaveTextContent("Your Windows CA issued 27 certificates that are still valid. Tracenium knows where 17 of them are — on the 56 devices with an agent.");
+    expect(line).toHaveTextContent("Your Windows CA issued 27 certificates that have not expired. Tracenium knows where 17 of them are — on the 56 devices with an agent.");
     expect(line).toHaveTextContent("The other 10 are on machines without an agent");
     // No acusa: «sin agente», no «perdidos» ni «desconocidos».
     expect(line).not.toHaveTextContent(/lost|unknown|rogue/i);
     // Lectura reciente: sin aviso de fecha.
     expect(screen.queryByText(/As last read from the CA/)).toBeNull();
+  });
+
+  it("⭐ los revocados sin caducar se dicen aparte: técnicamente vigentes, y decir que no también sería falso (25-sep)", () => {
+    render(<CoverageGapLine gap={{ caIssued: 27, caRevoked: 12, caOnDevices: 17, caLastRead: "2026-09-21T06:00:00Z", devicesWithAgent: 56 }} now={NOW} />);
+    expect(screen.getByLabelText("Coverage gap")).toHaveTextContent("Your Windows CA issued 27 certificates that have not expired — 12 of them revoked by the CA. Tracenium knows where 17");
   });
 
   it("⭐ si la lectura de la CA es vieja (congelada o su lector paró), dice de cuándo es la foto", () => {

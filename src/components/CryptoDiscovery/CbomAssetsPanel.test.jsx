@@ -94,6 +94,17 @@ describe("CbomAssetsPanel", () => {
     expect(onSourceChange).toHaveBeenCalledWith({ sourceName: "adcs:MSIG-CA", origin: "" });
   });
 
+  it("⭐ «Revoked only» llega a la consulta como revoked=true y quitarlo conserva fuente y vigencia (25-sep)", async () => {
+    getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "adcs:MSIG-CA", assets: 51, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
+    listCryptoAssets.mockResolvedValue({ items: [] });
+    const onSourceChange = vi.fn();
+    render(<CbomAssetsPanel refreshNonce={0} sourceName="adcs:MSIG-CA" current revoked onSourceChange={onSourceChange} />);
+    await waitFor(() => expect(listCryptoAssets).toHaveBeenCalledWith(expect.objectContaining({ sourceName: "adcs:MSIG-CA", current: true, revoked: true })));
+    expect(await screen.findByText("Revoked only")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByTestId("CancelIcon")[1]);
+    expect(onSourceChange).toHaveBeenCalledWith({ sourceName: "adcs:MSIG-CA", origin: "", current: true });
+  });
+
   it("⭐ una emisión de la CA sin sujeto se nombra por su SAN, o por quién la pidió; y dice si está revocada o caducada", async () => {
     getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "adcs:MSIG-CA", assets: 2, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
     listCryptoAssets.mockResolvedValue({

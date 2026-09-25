@@ -130,7 +130,7 @@ function outsideSourceLabel(origin, sourceName) {
 // lista VACÍA, porque la lente por defecto excluye `system-roots` y el
 // filtro pedía justo ese ámbito.
 const inv = (f) => ({ to: "inventory", certClass: "all", ...f });
-const out = (sourceName, origin) => ({ to: "outside", sourceName: sourceName ?? null, origin: origin ?? null, current: true });
+const out = (sourceName, origin, extra = {}) => ({ to: "outside", sourceName: sourceName ?? null, origin: origin ?? null, current: true, ...extra });
 const sys = (system, focus) => ({ to: "system", system, focus });
 const ORPHANS = { to: "orphans" };
 
@@ -233,40 +233,66 @@ function addOutside(bases, outsideBySource, outsideByAlgorithm, { skip, leafName
   // El gajo y sus hojas llevan al MISMO sitio: «Outside your devices» filtra
   // por origen, no por algoritmo, así que una hoja no puede afinar más que
   // su fuente. El número exacto sigue en la etiqueta y en el tooltip.
+  // Revocados sin caducar (25-sep): técnicamente vigentes —cuentan— pero
+  // no son exposición a migrar ni están sanos, así que van en su PROPIA hoja
+  // gris, con su lista exacta (`revoked`), y el resto de hojas abren lo no
+  // revocado. Decir «27 vigentes» a secas escondía 12; quitarlos, mentía.
+  const withRevoked = new Set([
+    ...(outsideByAlgorithm ?? []).filter((a) => a.revoked === true).map((a) => a.sourceName),
+    ...(outsideBySource ?? []).filter((x) => Number(x.revoked ?? 0) > 0).map((x) => x.sourceName)
+  ]);
   const to = (origin, sourceName) => ({
     source: { note: sourceName, drill: out(sourceName, origin), ...(origin === "adcs" ? { group: "adcs" } : {}) },
-    drill: out(sourceName, origin)
+    drill: out(sourceName, origin, withRevoked.has(sourceName) ? { revoked: false } : {})
   });
+  const REVOKED_LEAF = (origin, sourceName) => ({ s: "other", note: "Revoked by the issuer but not expired yet", drill: out(sourceName, origin, { revoked: true }) });
   for (const a of outsideByAlgorithm ?? []) {
     const origin = a.origin ?? originOfSourceName(a.sourceName);
     if (skip.has(origin)) continue;
     const st = a.family === "pq_safe" || a.family === "hybrid" ? "ok" : "broken";
     const t = to(origin, a.sourceName);
-    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), algoLabel(a.algorithm, a.bits), algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
+    const revoked = a.revoked === true;
+    addLeaf(bases, baseOfSource(origin), `outside:${a.sourceName}`, outsideSourceLabel(origin, a.sourceName), revoked ? "revoked" : algoLabel(a.algorithm, a.bits), revoked ? "Revoked" : algoLabel(a.algorithm, a.bits), Number(a.certificates ?? 0), {
       source: t.source,
-      leaf: { s: st, drill: t.drill }
+      leaf: revoked ? REVOKED_LEAF(origin, a.sourceName) : { s: st, drill: t.drill }
     });
   }
   for (const s of outsideBySource ?? []) {
     const origin = s.origin ?? originOfSourceName(s.sourceName);
     if (skip.has(origin) || detailed.has(s.sourceName)) continue;
     const t = to(origin, s.sourceName);
-    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), leafName, leafName, Number(s.certificates ?? 0), {
+    const revoked = Math.max(0, Number(s.revoked ?? 0));
+    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), leafName, leafName, Number(s.certificates ?? 0) - revoked, {
       source: t.source,
       leaf: { s: "broken", drill: t.drill }
+    });
+    addLeaf(bases, baseOfSource(origin), `outside:${s.sourceName}`, outsideSourceLabel(origin, s.sourceName), "revoked", "Revoked", revoked, {
+      source: t.source,
+      leaf: REVOKED_LEAF(origin, s.sourceName)
     });
   }
 }
 
 /**
- * Vista «Certificates»: facetas by=ownership,source,key_algorithm con
+ * Vista «Certificates»: facetas by=sunburst_bucket,key_algorithm con
  * stack=key_size_bits (certificados únicos por celda), más los activos de
- * fuera de los equipos (exposure.outside.bySource, sin desglose de
- * algoritmo todavía: entran como una hoja «certificates» por origen).
+ * fuera de los equipos.
+ *
+ * `sunburst_bucket` (backend, 25-sep) parte el anillo EXACTAMENTE como las
+ * listas a las que lleva: raíces del fabricante (system-roots sin clave),
+ * raíces TUYAS en esos almacenes (con clave) y lo demás por fuente. Con
+ * ownership+source se contaba cada raíz una vez por fuente (246 donde la
+ * lista enseñaba 179). Las filas antiguas (`ownership`) se siguen leyendo:
+ * es el respaldo si el backend aún no tiene la dimensión.
  */
 export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgorithm = []) {
   const bases = skeleton();
   for (const r of facetRows ?? []) {
+    const bucket = r.keys?.sunburst_bucket;
+    if (bucket != null) {
+      addBucketLeaf(bases, bucket, r);
+      continue;
+    }
     const own = r.keys?.ownership ?? "foreign";
     const source = r.keys?.source ?? "store";
     const algo = r.keys?.key_algorithm ?? "unknown";
@@ -296,6 +322,31 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
   }
   addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: new Set(["ssh"]), leafName: "certificates" });
   return finish(bases);
+}
+
+function addBucketLeaf(bases, bucket, r) {
+  const algo = r.keys?.key_algorithm ?? "unknown";
+  const bits = r.stack ?? null;
+  const n = Number(r.uniqueCerts ?? r.certs ?? 0);
+  if (bucket === "vendor" || bucket === "own-roots") {
+    // Las dos mitades de los almacenes de raíces. La del fabricante no es
+    // del cliente (gris); las raíces con clave privada SÍ lo son, y hasta el
+    // 25-sep se colaban en «Vendor roots».
+    const vendor = bucket === "vendor";
+    const scoped = { includeRoots: true, scope: "system-roots", hasPrivateKey: !vendor };
+    addLeaf(bases, "onprem", bucket, vendor ? "Vendor roots" : "Your roots in OS stores", algoLabel(algo, bits), algoLabel(algo, bits), n, {
+      source: vendor
+        ? { status: "other", note: "Shipped with the OS and the JVM: not yours to migrate", drill: inv(scoped) }
+        : { note: "Root certificates you hold the private key for, in the OS trust stores", drill: inv(scoped) },
+      leaf: { ...(vendor ? {} : { s: statusOfAlgorithm(algo) }), drill: inv({ ...scoped, keyAlgorithm: algo, keySizeBits: bits }) }
+    });
+    return;
+  }
+  const source = bucket;
+  addLeaf(bases, baseOfSource(source), source, SOURCE_LABEL[source] ?? source, algoLabel(algo, bits), algoLabel(algo, bits), n, {
+    source: { drill: inv({ source }) },
+    leaf: { s: statusOfAlgorithm(algo), drill: inv({ source, keyAlgorithm: algo, keySizeBits: bits }) }
+  });
 }
 
 /**
@@ -345,6 +396,23 @@ export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outs
   // viven en cdp_crypto_assets con origen `ssh`, como el resto de lo de fuera.
   addLeaf(bases, "onprem", "ssh", "SSH host keys", "keys", "keys", Number(sshHostKeys), { source: { drill: out(null, "ssh") }, leaf: { s: "broken", drill: out(null, "ssh") } });
   addOutside(bases, outsideBySource, outsideByAlgorithm, { skip: KEYLESS_ORIGINS, leafName: "keys" });
+  // Las claves privadas sueltas que los agentes encuentran en disco (sin
+  // certificado): son literalmente claves privadas y esta vista no las
+  // enseñaba (25-sep, T111: 17). Una sola hoja —su lista no se parte por
+  // familia— con el color de lo que se sabe: roja si todas son
+  // quantum-broken, gris si ninguna está clasificada, teal si hay de las dos.
+  for (const s of outsideBySource ?? []) {
+    const origin = s.origin ?? originOfSourceName(s.sourceName);
+    const keys = Number(s.keys ?? 0);
+    if (origin !== "file-key" || !(keys > 0)) continue;
+    const broken = Math.min(Number(s.keysBroken ?? 0), keys);
+    const drill = out(s.sourceName, origin);
+    const st = broken === keys ? "broken" : broken === 0 ? "other" : "mixed";
+    addLeaf(bases, "onprem", `outside:${s.sourceName}`, "Loose private keys", "keys", "keys", keys, {
+      source: { drill, note: `${broken.toLocaleString()} quantum-broken, ${(keys - broken).toLocaleString()} not classified` },
+      leaf: { s: st, drill }
+    });
+  }
   return finish(bases);
 }
 

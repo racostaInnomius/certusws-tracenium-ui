@@ -21,7 +21,10 @@ const STATE = {
   // ADR-0026. Ni «failing» —no ha fallado nada— ni «not connected», que
   // borraría el trabajo que el cliente ya hizo: esto está configurado y
   // conserva lo que trajo; lo único que no ocurre es el refresco.
-  frozen: { text: "frozen · needs CDP Coverage", bg: "transparent", fg: TEXT_MUTED, dot: "#C7CBD1" }
+  // 25-sep: con el mismo punto gris que «not connected» y el estado sólo en
+  // el tooltip, en T111 vCenter, las sondas y la CA parecían no conectados
+  // mientras el sunburst enseñaba sus datos. Ahora lo dice la ficha.
+  frozen: { text: "frozen · needs CDP Coverage", bg: "transparent", fg: BRAND.dark, dot: BRAND.teal, suffix: "frozen" }
 };
 
 export function SourceChip({ source, onClick }) {
@@ -36,7 +39,7 @@ export function SourceChip({ source, onClick }) {
         role="button"
         aria-label={`${source.label}: ${st.text}`}
         icon={<Box component="span" sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: st.dot, border: source.state === "unavailable" ? `1px dashed ${TEXT_MUTED}` : "none", ml: "6px !important" }} />}
-        label={source.label}
+        label={st.suffix ? `${source.label} · ${st.suffix}` : source.label}
         variant={outlined ? "outlined" : "filled"}
         sx={{
           height: 24,
