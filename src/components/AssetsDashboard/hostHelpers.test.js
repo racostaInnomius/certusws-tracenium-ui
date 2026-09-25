@@ -188,6 +188,18 @@ describe("normalizeHostDetailPayload", () => {
     expect(out.hostname).toBe("fbhost");
     expect(out.os).toBe("22.04");
   });
+  it("⚠️ deja pasar el nombre del SO, su detalle y la batería (es un allowlist)", () => {
+    const out = normalizeHostDetailPayload({
+      osName: "Windows 11",
+      osNameDetail: "Version 25H2 · Build 26200",
+      lastSeenAt: "2026-09-25T04:26:00Z",
+      battery: { present: true, healthPct: 100, cycleCount: 3 },
+    });
+    expect(out.osName).toBe("Windows 11");
+    expect(out.osNameDetail).toBe("Version 25H2 · Build 26200");
+    expect(out.lastSeenAt).toBe("2026-09-25T04:26:00Z");
+    expect(out.battery).toEqual({ present: true, healthPct: 100, cycleCount: 3 });
+  });
   it("detects mobile devices from either the boolean or the 'true' string", () => {
     expect(normalizeHostDetailPayload({ mobile: true }).isMobile).toBe(true);
     expect(normalizeHostDetailPayload({ mobile: "true" }).isMobile).toBe(true);

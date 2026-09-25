@@ -87,6 +87,36 @@ describe("AgentTab", () => {
     expect(screen.queryByText(/up to date|update available/i)).not.toBeInTheDocument();
   });
 
+  it("⭐ el SO se lee con el nombre del catálogo, no con el build crudo", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{
+          ...base.profile,
+          os: "10.0.26200",
+          osName: "Windows 11",
+          osNameDetail: "Version 25H2 · Build 26200",
+          lifecycle_status: "supported",
+        }}
+      />
+    );
+    expect(screen.getByText("Windows 11")).toBeInTheDocument();
+    expect(screen.getByText("Version 25H2 · Build 26200")).toBeInTheDocument();
+    expect(screen.queryByText("10.0.26200")).not.toBeInTheDocument();
+  });
+
+  it("⭐ «Last seen» es el último contacto, no la hora del inventario", () => {
+    render(
+      <AgentTab
+        {...base}
+        profile={{ ...base.profile, lastSeenAt: "2026-09-25T04:26:00Z" }}
+        hardware={{ collectedAtUtc: "2026-09-25T00:26:00Z" }}
+      />
+    );
+    const status = screen.getByText("Online").closest(".MuiPaper-root, button");
+    expect(status.textContent).not.toMatch(/00:26|18:26/);
+  });
+
   it("la ubicación ya no vive aquí (tiene su pestaña)", () => {
     render(<AgentTab {...base} profile={{ ...base.profile, locationSite: "Oficina CDMX" }} />);
     expect(screen.queryByText("Oficina CDMX")).not.toBeInTheDocument();
@@ -501,6 +531,25 @@ describe("HardwareTab", () => {
     render(<HardwareTab hardware={{ manufacturer: "Dell", batteryPercent: null }} />);
     expect(screen.getByText("No battery reported")).toBeInTheDocument();
     expect(screen.queryByRole("meter", { name: "Battery charge" })).not.toBeInTheDocument();
+  });
+
+  it("⭐ sin carga pero con batería conocida por Experience, dice su salud — no «No battery»", () => {
+    // T1, 24-sep: ETE-3X5P8F4 decía «No battery reported» en Hardware y
+    // «100% health · 3 cycles» en Experience.
+    render(
+      <HardwareTab
+        hardware={{ manufacturer: "Dell", batteryPercent: null }}
+        profile={{ battery: { present: true, healthPct: 100, cycleCount: 3 } }}
+      />
+    );
+    expect(screen.getByText("100% health")).toBeInTheDocument();
+    expect(screen.getByText("3 cycles · charge not reported")).toBeInTheDocument();
+    expect(screen.queryByText("No battery reported")).not.toBeInTheDocument();
+  });
+
+  it("Experience dice que no hay batería: se afirma, no se deja en duda", () => {
+    render(<HardwareTab hardware={{ batteryPercent: null }} profile={{ battery: { present: false } }} />);
+    expect(screen.getByText("This device has no battery")).toBeInTheDocument();
   });
 });
 

@@ -344,6 +344,13 @@ export function normalizeHostDetailPayload(payload, fallbackHost = {}) {
     ),
     platform: coalesceValue(source.platform, source.os_platform, fallbackHost.os_platform),
     os: coalesceValue(source.distro, source.os, source.os_version, fallbackHost.os_version),
+    // El nombre que da el catálogo ("Windows 11") y su detalle ("Version 25H2
+    // · Build 26200"). ⚠️ Allowlist: sin estas líneas la ficha seguía leyendo
+    // el build crudo "10.0.26200".
+    osName: coalesceValue(source.osName, source.os_name),
+    osNameDetail: coalesceValue(source.osNameDetail, source.os_name_detail),
+    // { present, healthPct, cycleCount } de la experiencia, o null.
+    battery: source.battery && typeof source.battery === "object" ? source.battery : null,
     agentVersion: coalesceValue(source.agentVersion, source.agent_version, fallbackHost.agent_version),
     lastLogonUser: coalesceValue(source.lastLogonUser, source.last_logon_user, fallbackHost.last_logon_user),
     localIp: coalesceValue(source.localIp, source.local_ip, fallbackHost.local_ip),

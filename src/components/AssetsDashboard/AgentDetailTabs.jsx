@@ -183,9 +183,9 @@ export function AgentTab({
         <SummaryTile
           icon={<TerminalRoundedIcon />}
           label="Operating system"
-          value={formatDetailValue(profile?.os || hardware?.distro)}
+          value={formatDetailValue(profile?.osName || profile?.os || hardware?.distro)}
           tone={osHint ? lifecycleTone(lifecycle.tone) : "neutral"}
-          sub={osHint ? lifecycle.detail : ""}
+          sub={osHint ? lifecycle.detail : profile?.osName ? profile?.osNameDetail || "" : ""}
         />
         <SummaryTile
           icon={<AppsRoundedIcon />}
@@ -559,6 +559,10 @@ export function HardwareTab({ hardware, profile = null, platformKey = "" }) {
   const free = freeBytes(hardware.diskTotalBytes, hardware.diskUsedBytes);
   const batteryPct = meterValue(hardware.batteryPercent);
   const bTone = batteryTone(hardware.batteryPercent);
+  const dexBattery = profile?.battery ?? null;
+  // Mismo umbral que la señal «Worn battery» de la experiencia
+  // (DEX_RULES.wornBattery.maxHealthPct = 60 en el backend).
+  const healthTone = dexBattery?.healthPct != null && dexBattery.healthPct < 60 ? "caution" : "positive";
   const cores = Number(hardware.physicalCores);
 
   return (
@@ -642,14 +646,37 @@ export function HardwareTab({ hardware, profile = null, platformKey = "" }) {
                 }`
           }
         />
-        {/* Sin batería no es "0 %": un sobremesa o un servidor no la tienen. */}
+        {/* Sin batería no es "0 %": un sobremesa o un servidor no la tienen.
+            ⚠️ Sin carga no es "sin batería": la experiencia (ADR-0030) sabe si
+            la hay y su salud, y la ficha decía «No battery reported» de un
+            portátil al que Experience le veía «100% health». */}
         <ResourceCard
           icon={<Battery5BarRoundedIcon sx={{ fontSize: ICON.lg }} />}
           label="Battery"
-          tone={batteryPct === null ? "muted" : bTone}
-          value={batteryPct === null ? "—" : formatDetailPercent(hardware.batteryPercent)}
+          tone={batteryPct === null ? (dexBattery?.present ? healthTone : "muted") : bTone}
+          value={
+            batteryPct !== null
+              ? formatDetailPercent(hardware.batteryPercent)
+              : dexBattery?.present
+              ? dexBattery.healthPct == null
+                ? "Present"
+                : `${Math.round(dexBattery.healthPct)}% health`
+              : dexBattery?.present === false
+              ? "None"
+              : "—"
+          }
           meter={batteryPct === null ? null : <UsageMeter value={batteryPct} tone={bTone} label="Battery charge" />}
-          sub={batteryPct === null ? "No battery reported" : "Charge at last inventory"}
+          sub={
+            batteryPct !== null
+              ? "Charge at last inventory"
+              : dexBattery?.present
+              ? [dexBattery.cycleCount != null ? `${dexBattery.cycleCount} cycles` : null, "charge not reported"]
+                  .filter(Boolean)
+                  .join(" · ")
+              : dexBattery?.present === false
+              ? "This device has no battery"
+              : "No battery reported"
+          }
         />
       </TileRow>
 
