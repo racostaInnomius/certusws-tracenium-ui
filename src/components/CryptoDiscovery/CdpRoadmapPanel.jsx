@@ -58,6 +58,7 @@ import { getCdpRoadmap, getCdpRoadmapSystem, putCdpRoadmapPlan, getCdpReadinessH
 // repaso UI 2026-09-06: una lista de anclas es cosa de esa pestaña.
 import { AgilityBlockersPanel, OsTlsFixablePanel } from "./PqcReadinessPanels";
 import ProcessLibrariesPanel from "./ProcessLibrariesPanel";
+import useCdpFilter from "../../hooks/useCdpFilter";
 
 const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
 
@@ -249,6 +250,18 @@ export function PlanDialog({ system, waves, open, onClose, onSaved }) {
 /** Un sistema-origen vive fuera de los equipos: sus miembros están en Explore, no en Inventory. */
 const isSourceSystem = (system) => typeof system?.key === "string" && system.key.startsWith("source:");
 
+// Acotar la ficha a lo que contaba el gajo de «Services / Resources» que la
+// abrió (24-sep): sus servicios TLS, o los de un intercambio de claves. Son
+// exactamente las filas que suman hybrid + classical + unknown, así que la
+// cifra del gajo y la de la lista coinciden.
+const isTls = (m) => m.source === "listener" || m.source === "probe";
+export const MEMBER_FOCUS = {
+  tls: { label: "TLS services only", test: isTls },
+  hybrid: { label: "Hybrid ML-KEM only", test: (m) => m.kemHybrid === true, kem: "hybrid" },
+  classical: { label: "Classical key exchange only", test: (m) => m.kemHybrid === false, kem: "classical" },
+  unknown: { label: "Key exchange not determined", test: (m) => isTls(m) && m.kemHybrid == null, kem: "unknown" }
+};
+
 /** Etiqueta corta de un miembro: sujeto, o huella, o nombre — nunca `undefined.slice`. */
 function memberTitle(m) {
   if (m.subjectCN) return m.subjectCN;
@@ -260,7 +273,7 @@ function memberKey(m, i) {
   return `${m.agentId ?? "-"}:${m.fingerprint256 ?? m.name ?? i}:${m.port ?? ""}`;
 }
 
-function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown, onOpenCertificate }) {
+function SystemDrawer({ system, focus = "", waves, weights, onClose, onPlan, onDrillDown, onOpenCertificate, onClearFocus }) {
   const [members, setMembers] = React.useState(null);
   const [membersError, setMembersError] = React.useState(null);
   React.useEffect(() => {
@@ -290,6 +303,8 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown, on
   const recommendations = Array.isArray(system.recommendations) ? system.recommendations : [];
   const outside = isSourceSystem(system);
   const openLabel = outside ? "Open in Explore" : "Open in Inventory";
+  const focused = MEMBER_FOCUS[focus] ?? null;
+  const shown = focused && members ? members.filter(focused.test) : members;
   return (
     <Box sx={{ p: 2, width: { xs: "100%", sm: 520 } }}>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -347,13 +362,19 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown, on
       ) : null}
 
       <Typography sx={{ fontWeight: 700, fontSize: TEXT.md, mt: 2.5, mb: 0.5 }}>
-        Members {members && !membersError ? `(${members.length})` : ""}
-        <Button size="small" sx={{ ml: 1 }} onClick={() => onDrillDown?.(system)}>{openLabel}</Button>
+        Members {shown && !membersError ? `(${shown.length})` : ""}
+        <Button size="small" sx={{ ml: 1 }} onClick={() => onDrillDown?.(system, focus)}>{openLabel}</Button>
       </Typography>
+      {focused ? (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Chip size="small" label={focused.label} onDelete={onClearFocus} sx={{ height: 22, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }} />
+          {members ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>of {fmt(members.length)} members</Typography> : null}
+        </Stack>
+      ) : null}
       {members == null ? <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>Loading…</Typography> : null}
       {membersError ? <Alert severity="error" sx={{ mb: 1 }}>Couldn&apos;t load the members: {membersError}</Alert> : null}
       <Stack spacing={0.5}>
-        {(members || []).slice(0, 50).map((m, i) => {
+        {(shown || []).slice(0, 50).map((m, i) => {
           const where = m.host || m.agentId || m.storeName || "";
           const key = m.keyAlgorithm ? `${m.keyAlgorithm}${m.keySizeBits ? `-${m.keySizeBits}` : ""}` : null;
           const expires = typeof m.notAfter === "string" && m.notAfter ? m.notAfter.slice(0, 10) : null;
@@ -397,7 +418,7 @@ function SystemDrawer({ system, waves, weights, onClose, onPlan, onDrillDown, on
             </Box>
           );
         })}
-        {members && members.length > 50 ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>+{members.length - 50} more — {openLabel.toLowerCase()}</Typography> : null}
+        {shown && shown.length > 50 ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>+{shown.length - 50} more — {openLabel.toLowerCase()}</Typography> : null}
       </Stack>
     </Box>
   );
@@ -412,7 +433,12 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
   const [pqcError, setPqcError] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [nonce, setNonce] = React.useState(0);
-  const [selected, setSelected] = React.useState(null);
+  // La ficha abierta vive en la URL (`sys`, y `sysf` para acotarla): así un
+  // gajo del sunburst puede abrir SU sistema, y Atrás/compartir funcionan.
+  const [filter, patchFilter] = useCdpFilter();
+  const setSelected = React.useCallback((s) => patchFilter({ system: s?.key ?? "", systemFocus: "" }), [patchFilter]);
+  const selected = React.useMemo(() => (filter.system ? (data?.systems ?? []).find((s) => s.key === filter.system) ?? null : null), [data, filter.system]);
+  const missingSystem = Boolean(filter.system && data && !selected);
   const [planFor, setPlanFor] = React.useState(null);
   const [snapshotBusy, setSnapshotBusy] = React.useState(false);
   const [showExcluded, setShowExcluded] = React.useState(false);
@@ -473,20 +499,26 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
     }
   };
 
-  const drill = (s) => {
+  const drill = (s, focus) => {
     // Un sistema-origen no tiene filas en el inventario de equipos: sus
     // miembros están en «Outside your devices» (Explore).
     if (isSourceSystem(s)) return onOpenOutside ? onOpenOutside(s) : onDrillDown?.({ search: s.sampleSubject || "" });
-    // Al listado con el filtro que mejor identifica al sistema.
-    if (s.key.startsWith("issuer:")) return onDrillDown?.({ issuer: s.sampleIssuer, hasPrivateKey: true });
-    if (s.key.startsWith("target:")) return onDrillDown?.({ source: "probe" });
-    if (s.key.startsWith("process:")) return onDrillDown?.({ source: "listener", search: s.sampleSubject || "" });
-    return onDrillDown?.({ search: s.sampleSubject || "", hasPrivateKey: true });
+    // Al listado con el sistema EXACTO (`?system=`, la misma regla con que
+    // se agrupa). Antes: el sujeto de un certificado de muestra, el emisor
+    // de muestra o «todas las sondas». La lente entera porque el sistema no
+    // distingue CA de entidad final ni excluye las raíces propias.
+    const kem = MEMBER_FOCUS[focus]?.kem;
+    return onDrillDown?.({ system: s.key, certClass: "all", includeRoots: true, ...(kem ? { kem } : {}) });
   };
 
   return (
     <Stack spacing={2}>
       {error ? <Alert severity="error">{error}</Alert> : null}
+      {missingSystem ? (
+        <Alert severity="info" onClose={() => setSelected(null)}>
+          The system {filter.system} is no longer in the roadmap — nothing it grouped is reported any more.
+        </Alert>
+      ) : null}
 
       <ReadinessTrend snapshots={snapshots} onSnapshot={snapshotNow} snapshotBusy={snapshotBusy} />
 
@@ -664,14 +696,14 @@ export default function CdpRoadmapPanel({ refreshNonce, onDrillDown, onOpenOutsi
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setSelected(null)}>
         <SystemDrawer
           system={selected}
+          focus={filter.systemFocus ?? ""}
           waves={waves}
           weights={data?.weights}
           onClose={() => setSelected(null)}
+          onClearFocus={() => patchFilter({ systemFocus: "" })}
           onPlan={(s) => setPlanFor(s)}
-          onDrillDown={(s) => {
-            setSelected(null);
-            drill(s);
-          }}
+          // La navegación sustituye el filtro entero (y con él `sys`).
+          onDrillDown={(s, focus) => drill(s, focus)}
           onOpenCertificate={onOpenCertificate}
         />
       </Drawer>

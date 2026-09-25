@@ -10,11 +10,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 const getCdpRoadmap = vi.fn();
+const getCdpRoadmapSystem = vi.fn(async () => ({ ok: true, members: [] }));
 const getCdpReadinessHistory = vi.fn();
 const putCdpRoadmapPlan = vi.fn();
 vi.mock("../../api/cdp", () => ({
   getCdpRoadmap: (...a) => getCdpRoadmap(...a),
-  getCdpRoadmapSystem: vi.fn(async () => ({ ok: true, members: [] })),
+  getCdpRoadmapSystem: (...a) => getCdpRoadmapSystem(...a),
   putCdpRoadmapPlan: (...a) => putCdpRoadmapPlan(...a),
   getCdpReadinessHistory: (...a) => getCdpReadinessHistory(...a),
   postCdpReadinessSnapshot: vi.fn(async () => ({ ok: true })),
@@ -51,6 +52,8 @@ const SYSTEM = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  // La ficha abierta vive en la URL: que no pase de una prueba a otra.
+  window.history.replaceState({}, "", "/");
 });
 
 describe("WaveChip", () => {
@@ -123,5 +126,39 @@ describe("CdpRoadmapPanel", () => {
     fireEvent.click(screen.getByLabelText(/Show excluded/i));
     expect(await screen.findByText("Issued by AWS")).toBeInTheDocument();
     expect(screen.getByText("excluded")).toBeInTheDocument();
+  });
+
+  // 24-sep: un gajo de «Services / Resources» abre la ficha de SU sistema,
+  // acotada a lo que contaba. Antes era una búsqueda por el sujeto de un
+  // certificado de muestra (svchost: 19 servicios → 2 certificados).
+  it("⭐ la URL abre la ficha del sistema y el foco la acota; «Open in Inventory» pide el sistema EXACTO con su KEM", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=1&sys=process%3Asvchost.exe&sysf=hybrid");
+    getCdpRoadmap.mockResolvedValue({ ok: true, systems: [SYSTEM], waves: WAVES, weights: {} });
+    getCdpReadinessHistory.mockResolvedValue({ ok: true, snapshots: [] });
+    const m = (fp, kemHybrid) => ({ fingerprint256: fp, subjectCN: fp, source: "listener", processName: "svchost.exe", port: 3389, host: `H-${fp}`, kemHybrid });
+    getCdpRoadmapSystem.mockResolvedValue({ ok: true, members: [m("a", true), m("b", true), m("c", false), { ...m("d", null), source: "store" }] });
+    const onDrillDown = vi.fn();
+    render(<CdpRoadmapPanel refreshNonce={0} onDrillDown={onDrillDown} />);
+    expect(await screen.findByText(/Why this priority/i)).toBeInTheDocument();
+    expect(getCdpRoadmapSystem).toHaveBeenCalledWith("process:svchost.exe");
+    expect(await screen.findByText("Members (2)")).toBeInTheDocument();
+    expect(screen.getByText("Hybrid ML-KEM only")).toBeInTheDocument();
+    expect(screen.getByText("of 4 members")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open in Inventory" }));
+    expect(onDrillDown).toHaveBeenCalledWith({ system: "process:svchost.exe", certClass: "all", includeRoots: true, kem: "hybrid" });
+  });
+
+  it("el foco «tls» deja sólo los servicios; quitar el chip enseña todos y cerrar limpia la URL", async () => {
+    window.history.replaceState({}, "", "/?page=cdp&cdpTab=1&sys=process%3Asvchost.exe&sysf=tls");
+    getCdpRoadmap.mockResolvedValue({ ok: true, systems: [SYSTEM], waves: WAVES, weights: {} });
+    getCdpReadinessHistory.mockResolvedValue({ ok: true, snapshots: [] });
+    getCdpRoadmapSystem.mockResolvedValue({ ok: true, members: [{ fingerprint256: "a", source: "listener" }, { fingerprint256: "b", source: "probe" }, { fingerprint256: "c", source: "store" }] });
+    render(<CdpRoadmapPanel refreshNonce={0} onDrillDown={vi.fn()} />);
+    expect(await screen.findByText("Members (2)")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("CancelIcon"));
+    expect(await screen.findByText("Members (3)")).toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).get("sysf")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("sys")).toBeNull());
   });
 });

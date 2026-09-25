@@ -126,15 +126,15 @@ describe("TimelinePanel", () => {
       { bucket: "2030", year: 2030, own_leaf: 69, own_ca: 0, vendor: 0, foreign: 0, total: 69 }
     ],
     references: [
-      { date: "2027-01-01", year: 2027, label: "CNSA 2.0: obligatorio en producto nuevo", scope: "solo National Security Systems", source: "NSA CNSA 2.0" },
-      { date: "2030-01-01", year: 2030, label: "RSA/ECDSA deprecados", scope: "borrador", source: "NIST IR 8547 (ipd)" }
+      { date: "2027-01-01", year: 2027, label: "CNSA 2.0: required in new products", scope: "National Security Systems only", source: "NSA CNSA 2.0", draft: false },
+      { date: "2030-01-01", year: 2030, label: "RSA/ECDSA deprecated", scope: "draft", source: "NIST IR 8547 (ipd)", draft: true }
     ]
   };
 
   it("cita las referencias con su alcance", () => {
     render(<TimelinePanel timeline={TIMELINE} onSelect={() => {}} explain={false} />);
     expect(screen.getByText(/2027: CNSA 2.0/)).toBeInTheDocument();
-    expect(screen.getByText(/2030: RSA\/ECDSA deprecados/)).toBeInTheDocument();
+    expect(screen.getByText(/2030: RSA\/ECDSA deprecated/)).toBeInTheDocument();
   });
 
   it("la leyenda de propiedad está presente", () => {

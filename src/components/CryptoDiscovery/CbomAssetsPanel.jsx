@@ -28,6 +28,48 @@ const TYPE_LABEL = {
 };
 const FAMILY_LABEL = { quantum_broken: "quantum-broken", pq_safe: "post-quantum", hybrid: "hybrid", unknown: "unclassified" };
 
+// El nombre de una fuente para una persona. Los chips enseñaban el
+// identificador interno (`library`, `file-key`, `adcs:…`) (24-sep).
+const SOURCE_PREFIX = { adcs: "CA", vcenter: "vCenter", keyvault: "Azure Key Vault", vault: "HashiCorp Vault", acm: "AWS ACM", gcp: "Google Cloud", k8s: "Kubernetes", ssh: "SSH host keys", cbom: "CBOM" };
+const SOURCE_NAME = { library: "Crypto libraries", "file-key": "Loose private keys", "ssh-user": "SSH user keys", ssh: "SSH host keys" };
+export function sourceLabel(sourceName) {
+  const s = String(sourceName ?? "");
+  if (SOURCE_NAME[s]) return SOURCE_NAME[s];
+  const i = s.indexOf(":");
+  if (i > 0 && SOURCE_PREFIX[s.slice(0, i)]) return `${SOURCE_PREFIX[s.slice(0, i)]} · ${s.slice(i + 1)}`;
+  return s;
+}
+
+/**
+ * El nombre de una fila. Lo que emite una CA de Windows para un equipo o un
+ * usuario a menudo no lleva sujeto: 44 de las 51 filas de la CA de T111
+ * salían EN BLANCO (24-sep). El SAN dice para quién es; si no hay, quién
+ * lo pidió.
+ */
+export function assetTitle(a) {
+  const d = a?.detail ?? {};
+  const san = Array.isArray(d.san) ? d.san.find((x) => typeof x === "string" && x.trim()) : null;
+  return (
+    a?.name ||
+    a?.subjectName ||
+    (san ? san.replace(/^(DNS|IP|email|URI|UPN|otherName):/i, "") : null) ||
+    (typeof d.requester === "string" && d.requester ? `Requested by ${d.requester}` : null) ||
+    a?.bomRef ||
+    "(unnamed)"
+  );
+}
+
+/** La segunda línea: el sujeto si difiere, o lo que la CA sabe de la emisión. */
+function assetSubline(a) {
+  const d = a?.detail ?? {};
+  if (a?.subjectName && a.name !== a.subjectName) return a.subjectName;
+  const bits = [
+    typeof d.template === "string" && d.template ? `template ${d.template}` : null,
+    typeof d.requester === "string" && d.requester && !assetTitle(a).startsWith("Requested by") ? `requested by ${d.requester}` : null
+  ].filter(Boolean);
+  return bits.length ? bits.join(" · ") : null;
+}
+
 export function CbomImportForm({ onImported }) {
   const [sourceName, setSourceName] = React.useState("");
   const [file, setFile] = React.useState(null);
@@ -122,7 +164,7 @@ export default function CbomAssetsPanel(props) {
   return <OutsideAssets {...props} />;
 }
 
-function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceChange, onSelect, onOpenSettings }) {
+function OutsideAssets({ refreshNonce, sourceName = "", origin = "", current = false, onSourceChange, onSelect, onOpenSettings }) {
   const [summary, setSummary] = React.useState(null);
   const [items, setItems] = React.useState([]);
   const [error, setError] = React.useState(null);
@@ -136,7 +178,8 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceCha
   React.useEffect(() => {
     let alive = true;
     setError(null);
-    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, origin: origin || undefined, limit: 200 })])
+    // `current`: sólo lo vigente, como lo cuenta el gajo que trajo aquí.
+    Promise.all([getCryptoAssetsSummary(), listCryptoAssets({ sourceName: source || undefined, origin: origin || undefined, current: current || undefined, limit: 200 })])
       .then(([s, l]) => {
         if (!alive) return;
         setSummary(s ?? null);
@@ -146,7 +189,9 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceCha
     return () => {
       alive = false;
     };
-  }, [refreshNonce, source, origin]);
+  }, [refreshNonce, source, origin, current]);
+  // El reloj se lee una vez al montar: leerlo en cada render lo haría impuro.
+  const [now] = React.useState(() => Date.now());
 
   const total = (summary?.sources ?? []).reduce((s, x) => s + x.assets, 0);
   // Los de CT, en UN chip: son una sola cosa para el cliente («mis dominios»)
@@ -188,9 +233,18 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceCha
           <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: "wrap", rowGap: 1 }}>
             <Chip size="small" label={`All sources · ${fmt(total)}`} onClick={() => pick({})} variant={source || origin ? "outlined" : "filled"} />
             {origin ? <Chip size="small" label={`Origin: ${origin}`} onDelete={() => pick({})} variant="filled" /> : null}
+            {current ? (
+              <Chip
+                size="small"
+                label={`Valid only · ${fmt(items.length)}`}
+                title="Not expired — what the Dashboard counts. Remove to include the expired ones."
+                onDelete={() => pick({ sourceName: source, origin })}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 700 }}
+              />
+            ) : null}
             {ctAssets > 0 ? <Chip size="small" label={`Public domains · ${fmt(ctAssets)}`} onClick={() => pick({ origin: "ct" })} variant="outlined" /> : null}
             {otherSources.map((s) => (
-              <Chip key={s.sourceName} size="small" label={`${s.sourceName} · ${fmt(s.assets)}`} onClick={() => pick({ sourceName: s.sourceName })} variant={source === s.sourceName ? "filled" : "outlined"} />
+              <Chip key={s.sourceName} size="small" label={`${sourceLabel(s.sourceName)} · ${fmt(s.assets)}`} title={s.sourceName} onClick={() => pick({ sourceName: s.sourceName })} variant={source === s.sourceName ? "filled" : "outlined"} />
             ))}
           </Stack>
           <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.5 }}>
@@ -214,13 +268,17 @@ function OutsideAssets({ refreshNonce, sourceName = "", origin = "", onSourceCha
               {items.map((a) => (
                 <Box component="tr" key={a.assetId} sx={{ borderTop: `1px solid ${BRAND.border}` }}>
                   <Box component="td" sx={{ py: 0.5, pr: 1 }}>
-                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{a.name || a.subjectName || a.bomRef}</Typography>
-                    {a.subjectName && a.name !== a.subjectName ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{a.subjectName}</Typography> : null}
+                    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ flexWrap: "wrap" }}>
+                      <Typography sx={{ fontSize: TEXT.sm, fontWeight: 600 }}>{assetTitle(a)}</Typography>
+                      {a.detail?.revoked === true ? <Chip size="small" label="revoked" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.alert.errorSoft, color: BRAND.alert.errorText }} /> : null}
+                      {a.notAfter && Date.parse(a.notAfter) < now ? <Chip size="small" label="expired" sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: TEXT_MUTED }} /> : null}
+                    </Stack>
+                    {assetSubline(a) ? <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{assetSubline(a)}</Typography> : null}
                   </Box>
                   <Box component="td">{TYPE_LABEL[a.assetType] ?? a.assetType}</Box>
                   <Box component="td">{a.algorithmName ? `${a.algorithmName}${a.keySizeBits ? `-${a.keySizeBits}` : ""}` : a.protocolType ? `${a.protocolType} ${a.protocolVersion ?? ""}` : "—"}</Box>
                   <Box component="td">{a.family ? FAMILY_LABEL[a.family] ?? a.family : "—"}</Box>
-                  <Box component="td" sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>{a.sourceName}</Box>
+                  <Box component="td" sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }} title={a.sourceName}>{sourceLabel(a.sourceName)}</Box>
                   <Box component="td">
                     {a.inFleet ? (
                       <Chip size="small" label="seen by an agent" onClick={() => onSelect?.({ search: a.fingerprint256 })} sx={{ height: 20, fontSize: TEXT.xs, bgcolor: BRAND.tealSoft, color: BRAND.tealText }} />

@@ -9,7 +9,12 @@ export function getSearchParam(key, fallback = "") {
   return value == null ? fallback : value;
 }
 
-export function updateSearchParams(updates) {
+/**
+ * Cambia sólo las claves pasadas. Por defecto REEMPLAZA la entrada del
+ * historial; `push: true` la apila, para los cambios a los que Atrás debe
+ * poder volver (un cambio de pestaña).
+ */
+export function updateSearchParams(updates, { push = false } = {}) {
   if (typeof window === "undefined") return;
 
   const url = new URL(window.location.href);
@@ -24,7 +29,8 @@ export function updateSearchParams(updates) {
     url.searchParams.set(key, normalized);
   });
 
-  window.history.replaceState({}, "", url);
+  if (push) window.history.pushState({}, "", url);
+  else window.history.replaceState({}, "", url);
 }
 
 /**

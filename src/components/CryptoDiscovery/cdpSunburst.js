@@ -113,6 +113,15 @@ function outsideSourceLabel(origin, sourceName) {
 //               claves de host SSH). No tiene una sola fila en el
 //               inventario: su lista es «Outside your devices», en Explore.
 //   orphans   — la pestaña de claves huérfanas.
+//   system    — un sistema de la hoja de ruta (un proceso, un objetivo
+//               remoto, los autofirmados por equipo): su ficha en Roadmap,
+//               que lista SUS servicios TLS. Es lo que cuenta la vista
+//               «Services / Resources»; antes abría una búsqueda por el
+//               sujeto de un certificado de muestra y svchost.exe (19
+//               servicios) llevaba a 2 certificados (24-sep).
+//
+// Lo de fuera va con `current`: el sunburst cuenta lo VIGENTE y la lista,
+// sin él, enseñaba también lo caducado (la CA: 27 → 51).
 //
 // ⚠️ `certClass: "all"` no es decoración. Las facetas que alimentan este
 // sunburst se piden SIN lente (cuentan CA y raíces), y la lista de
@@ -121,7 +130,8 @@ function outsideSourceLabel(origin, sourceName) {
 // lista VACÍA, porque la lente por defecto excluye `system-roots` y el
 // filtro pedía justo ese ámbito.
 const inv = (f) => ({ to: "inventory", certClass: "all", ...f });
-const out = (sourceName, origin) => ({ to: "outside", sourceName: sourceName ?? null, origin: origin ?? null });
+const out = (sourceName, origin) => ({ to: "outside", sourceName: sourceName ?? null, origin: origin ?? null, current: true });
+const sys = (system, focus) => ({ to: "system", system, focus });
 const ORPHANS = { to: "orphans" };
 
 export const SHADES = {
@@ -310,8 +320,14 @@ export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outs
     const n = Number(r.uniqueCerts ?? r.certs ?? 0);
     // El almacén ya acota: por eso aquí sí van las raíces (una raíz propia
     // con clave privada vive en `system-roots` y es del cliente).
-    const scoped = { hasPrivateKey: true, includeRoots: true, source, storeName: r.keys?.store_name ?? undefined };
-    addLeaf(bases, baseOfSource(source), `${source}:${store}`, String(store).replace(/\s*\(S-1-5-[^)]*\)/, ""), algoLabel(algo, bits), algoLabel(algo, bits), n, {
+    // Los ficheros sueltos van en UN gajo: cada .pfx es su propio «almacén»
+    // y en T111 eran ~22 astillas de una clave, ilegibles, con la misma ruta
+    // repetida por mayúsculas (Dell/dell) (24-sep). La ruta sigue en la lista.
+    const perFile = source === "file";
+    const scoped = { hasPrivateKey: true, includeRoots: true, source, ...(perFile ? {} : { storeName: r.keys?.store_name ?? undefined }) };
+    const srcKey = perFile ? "file" : `${source}:${store}`;
+    const srcName = perFile ? SOURCE_LABEL.file : String(store).replace(/\s*\(S-1-5-[^)]*\)/, "");
+    addLeaf(bases, baseOfSource(source), srcKey, srcName, algoLabel(algo, bits), algoLabel(algo, bits), n, {
       source: { drill: inv(scoped) },
       leaf: { s: statusOfAlgorithm(algo), drill: inv({ ...scoped, keyAlgorithm: algo, keySizeBits: bits }) }
     });
@@ -342,20 +358,13 @@ export function buildServicesTree(systems) {
       const hybrid = Number(f.kemHybrid ?? 0), classical = Number(f.kemClassical ?? 0), unknown = Number(f.kemUnknown ?? 0);
       if (hybrid + classical + unknown === 0) continue;
       const srcKey = `svc:${key}`;
-      // El MISMO filtro que usa la hoja de ruta para un sistema (`drill`
-      // en CdpRoadmapPanel): el inventario no sabe de procesos, así que lo
-      // que identifica al servicio es su origen y el sujeto de su
-      // certificado. Sin él, «Hybrid» bajo svchost.exe abría TODOS los
-      // híbridos del parque, no los de ese proceso.
-      const sample = String(s.sampleSubject ?? "").trim();
-      const scoped = key.startsWith("target:")
-        ? { source: "probe", ...(sample ? { search: sample } : {}) }
-        : key.startsWith("process:")
-          ? { source: "listener", ...(sample ? { search: sample } : {}) }
-          : { hasPrivateKey: true, ...(sample ? { search: sample } : {}) };
-      addLeaf(bases, baseKey, srcKey, name, "hybrid", "Hybrid", hybrid, { source: { drill: inv(scoped) }, leaf: { s: "ok", drill: inv({ ...scoped, kem: "hybrid" }) } });
-      addLeaf(bases, baseKey, srcKey, name, "classical", "Classical", classical, { source: { drill: inv(scoped) }, leaf: { s: "broken", drill: inv({ ...scoped, kem: "classical" }) } });
-      addLeaf(bases, baseKey, srcKey, name, "unknown", "Unknown", unknown, { source: { drill: inv(scoped) }, leaf: { s: "other", drill: inv({ ...scoped, kem: "unknown" }) } });
+      // La ficha del sistema en Roadmap, acotada a sus servicios TLS: son
+      // exactamente las filas que suman hybrid + classical + unknown. Un
+      // certificado de muestra no identifica a un proceso (los siete de
+      // Veeam compartían muestra; lsass no tenía).
+      addLeaf(bases, baseKey, srcKey, name, "hybrid", "Hybrid", hybrid, { source: { drill: sys(key, "tls") }, leaf: { s: "ok", drill: sys(key, "hybrid") } });
+      addLeaf(bases, baseKey, srcKey, name, "classical", "Classical", classical, { source: { drill: sys(key, "tls") }, leaf: { s: "broken", drill: sys(key, "classical") } });
+      addLeaf(bases, baseKey, srcKey, name, "unknown", "Unknown", unknown, { source: { drill: sys(key, "tls") }, leaf: { s: "other", drill: sys(key, "unknown") } });
     } else if (key.startsWith("source:")) {
       const sourceName = key.slice("source:".length);
       const origin = originOfSourceName(sourceName);

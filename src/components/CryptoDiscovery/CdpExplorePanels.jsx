@@ -412,7 +412,8 @@ export function TimelinePanel({ timeline, onSelect, explain, ownOnly = false }) 
                 key={`${r.year}:${r.label}`}
                 x={String(r.year)}
                 stroke={BRAND.alert.high}
-                strokeDasharray={r.scope === "borrador" ? "4 4" : undefined}
+                // `draft` desde el 24-sep; «borrador» es el texto de un backend anterior.
+                strokeDasharray={r.draft === true || r.scope === "borrador" ? "4 4" : undefined}
                 label={{ value: String(r.year), position: "top", fontSize: TEXT.xs, fill: BRAND.alert.high }}
               />
             ))}

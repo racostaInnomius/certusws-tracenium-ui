@@ -43,7 +43,8 @@ export function facetFilterOf(filter) {
   // `discoveredBy` y `sni` entran por lo mismo (ola 1.2): los dos acotan la
   // tabla vía `cdp_tls_endpoints`, y sin propagarlos la columna de facetas
   // seguiría contando el inventario entero al lado de una tabla recortada.
-  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "discoveredBy", "sni", "keyExportable", "keyStorage", "chain", "certClass", "source", "scope", "storeName", "agentId", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
+  // `system` (24-sep): «Open in Inventory» desde un sistema de la hoja de ruta.
+  for (const k of ["search", "status", "flag", "issuer", "eku", "kem", "discoveredBy", "sni", "keyExportable", "keyStorage", "chain", "certClass", "source", "scope", "storeName", "agentId", "system", "keyAlgorithm", "keySizeBits", "family", "notAfterFrom", "notAfterTo"]) {
     if (f[k] != null && f[k] !== "" && f[k] !== false) out[k] = f[k];
   }
   for (const k of ["hasPrivateKey", "hasFlags", "includeRoots"]) {

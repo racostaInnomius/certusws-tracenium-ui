@@ -4,9 +4,9 @@
 //
 // Análisis de madurez 2026-09: los seis KPI eran inertes aunque
 // `SummaryCard` soporta `onClick` desde siempre y lo usa Overview. Un
-// número que no lleva a su lista es un adorno; y «With private key» es
-// justo el número que separa lo que el cliente posee de lo que le llega
-// con el sistema — el que ordena todo lo demás.
+// número que no lleva a su lista es un adorno; y «you own» es justo el
+// número que separa lo que el cliente posee de lo que le llega con el
+// sistema — el que ordena todo lo demás.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -81,20 +81,25 @@ afterEach(() => {
 });
 
 describe("KPI clicables", () => {
-  it("⭐ «With private key» abre Certificates con el filtro puesto, y la lista lo pide", async () => {
+  it("⭐ «you own» abre TODO lo que tiene clave —CA incluidas, como lo cuenta— y la lista lo pide", async () => {
     render(
       <ConfirmProvider>
         <CryptoDiscovery />
       </ConfirmProvider>
     );
-    const card = await screen.findByText("With private key", {}, { timeout: 4000 });
-    card.click();
+    const label = await screen.findByText("Quantum-broken certificates you own", {}, { timeout: 4000 });
+    // 24-sep: la tarjeta «With private key» (223) repetía esta cifra (229)
+    // con otra definición en la misma pantalla. Se fue.
+    expect(screen.queryByText("With private key")).not.toBeInTheDocument();
+    label.closest("[role=button]").click();
 
-    // La URL es la fuente de verdad: pestaña 2 y pk=1.
+    // La URL es la fuente de verdad: Inventory, pk=1 y la lente entera.
     await waitFor(() => {
       const p = new URLSearchParams(window.location.search);
       expect(p.get("cdpTab")).toBe("3");
       expect(p.get("pk")).toBe("1");
+      expect(p.get("class")).toBe("all");
+      expect(p.get("roots")).toBe("1");
       expect(p.get("page")).toBe("cdp");
     });
     // Y la pestaña lo enseña como control propio, no como chip huérfano.
@@ -102,8 +107,24 @@ describe("KPI clicables", () => {
     expect(sw).toBeChecked();
     // Y el backend recibe el filtro.
     await waitFor(() =>
-      expect(listCdpCertificates).toHaveBeenCalledWith(expect.objectContaining({ hasPrivateKey: true }))
+      expect(listCdpCertificates).toHaveBeenCalledWith(expect.objectContaining({ hasPrivateKey: true, certClass: "all", includeRoots: true }))
     );
+  });
+
+  it("⭐ Atrás desde la lista vuelve al Dashboard, no fuera de la app (24-sep)", async () => {
+    render(
+      <ConfirmProvider>
+        <CryptoDiscovery />
+      </ConfirmProvider>
+    );
+    const before = window.history.length;
+    (await screen.findByText("Expired, with key", {}, { timeout: 4000 })).click();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("cdpTab")).toBe("3"));
+    // El cambio de pestaña se APILA; un chip dentro de la pestaña no.
+    expect(window.history.length).toBe(before + 1);
+    window.history.back();
+    await waitFor(() => expect(screen.getByRole("tab", { name: /^dashboard$/i })).toHaveAttribute("aria-selected", "true"));
+    expect(new URLSearchParams(window.location.search).get("page")).toBe("cdp");
   });
 
   it("«Expired, with key» combina estado y clave", async () => {

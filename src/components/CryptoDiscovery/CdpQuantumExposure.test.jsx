@@ -62,7 +62,8 @@ describe("ReadinessStrip", () => {
     const onOpenRoadmap = vi.fn();
     render(<ReadinessStrip exposure={EXPOSURE} overview={OVERVIEW} devicesReporting={54} onDrillDown={onDrillDown} onOpenRoadmap={onOpenRoadmap} />);
     fireEvent.click(screen.getByText("Quantum-broken certificates you own"));
-    expect(onDrillDown).toHaveBeenLastCalledWith({ hasPrivateKey: true }, { replace: true });
+    // La lente entera: «own» cuenta también las CA y raíces propias (229 → 223, 24-sep).
+    expect(onDrillDown).toHaveBeenLastCalledWith({ hasPrivateKey: true, certClass: "all", includeRoots: true }, { replace: true });
     fireEvent.click(screen.getByText("Services on classical key exchange"));
     expect(onDrillDown).toHaveBeenLastCalledWith({ kem: "classical" }, { replace: true });
     fireEvent.click(screen.getByText("Systems without a wave"));
@@ -114,7 +115,7 @@ describe("QuantumSunburst", () => {
     const ca = await screen.findByRole("button", { name: /CA · MSIG-RADIUS-CA: 27 private keys/ });
     expect(ca).toHaveAccessibleName(/open in Explore/i);
     fireEvent.click(ca);
-    expect(onSelect).toHaveBeenCalledWith({ to: "outside", sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs" });
+    expect(onSelect).toHaveBeenCalledWith({ to: "outside", sourceName: "adcs:MSIG-RADIUS-CA", origin: "adcs", current: true });
   });
 
   it("⭐ una base no navega: amplía su sector y se puede volver", async () => {

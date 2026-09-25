@@ -383,13 +383,11 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
         (s.caCerts ?? 0).toLocaleString()
       }) are counted separately — you review those under Trust anchors, you don't renew them.`,
     },
-    {
-      title: "With private key",
-      value: s.withPrivateKey ?? "…",
-      filter: { hasPrivateKey: true },
-      icon: <KeyOutlinedIcon />,
-      hint: "Certificates the device holds a private key for — the ones the operator has to renew.",
-    },
+    // «With private key» se fue (24-sep): la tira de arriba ya cuenta lo
+    // que es tuyo («Quantum-broken certificates you own»), y dos cifras
+    // distintas del mismo concepto en la misma pantalla (229 y 223) se leían
+    // como un error. Lo que la tarjeta añadía —sólo entidades finales— es un
+    // filtro de la lista, no otra cifra de portada.
     {
       title: "Expiring ≤30d",
       value: s.expiring30d ?? "…",
@@ -479,14 +477,15 @@ function CdpDashboard({ refreshNonce, onDrillDown, onSelectSlice, onOpenDevices,
       {/* Una tarjeta por pestaña sin fila propia. Roadmap ya no la tiene:
           sus cifras (sistemas sin ola, equipos bloqueados) están en la tira
           y abren la pestaña desde allí. */}
-      {/* Cinco KPI operativos (14-sep: «Hygiene flags» se fue; la tarjeta
-          Hygiene de abajo dice más). 10 columnas en lg para una fila.
+      {/* Cuatro KPI operativos (14-sep: «Hygiene flags» se fue; la tarjeta
+          Hygiene de abajo dice más. 24-sep: «With private key» también, la
+          tira ya cuenta lo tuyo). 8 columnas en lg para una fila.
           Debajo del sunburst, no encima: con la tira y los KPI arriba el
           sunburst quedaba bajo el pliegue y su animación de carga se
           perdía; el preview post-cuántico es lo primero que se ve. */}
-      <Grid container spacing={2} columns={{ xs: 12, sm: 12, md: 12, lg: 10 }}>
+      <Grid container spacing={2} columns={{ xs: 12, sm: 12, md: 12, lg: 8 }}>
         {cards.map((card) => (
-          <Grid key={card.title} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
+          <Grid key={card.title} size={{ xs: 12, sm: 6, md: 6, lg: 2 }}>
             <SummaryCard
               title={card.title}
               value={card.value}
@@ -643,7 +642,10 @@ function CdpExploreTab({ refreshNonce, onDrillDown, onOpenSettings }) {
       sourceName={filter.assetSource ?? ""}
       origin={filter.assetOrigin ?? ""}
       domain={filter.assetDomain ?? ""}
-      onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "", assetDomain: next.domain ?? "" })}
+      current={filter.assetCurrent === true}
+      // Elegir otra fuente (o quitar el chip «Valid only») suelta `current`:
+      // sólo un gajo del sunburst lo pone.
+      onSourceChange={(next) => patchFilter({ assetSource: next.sourceName ?? "", assetOrigin: next.origin ?? "", assetDomain: next.domain ?? "", assetCurrent: next.current === true })}
       onSelect={(f) => onDrillDown?.(f, { replace: true })}
       onOpenSettings={onOpenSettings}
     />
@@ -749,6 +751,8 @@ function CdpInventoryTab({ refreshNonce }) {
     scope: filter.scope,
     storeName: filter.storeName,
     agentId: filter.agentId,
+    // Un sistema de la hoja de ruta: «Open in Inventory» desde su ficha.
+    system: filter.system,
     notAfterFrom: filter.notAfterFrom,
     notAfterTo: filter.notAfterTo
   };
@@ -810,6 +814,7 @@ function CdpInventoryTab({ refreshNonce }) {
       ["scope", "Scope"],
       ["storeName", "Store"],
       ["agentId", "Device"],
+      ["system", "System"],
       ["notAfterFrom", "Expires from"],
       ["notAfterTo", "Expires before"]
     ].map(([k, label]) => (nav[k] != null && nav[k] !== "" ? { key: k, label: `${label}: ${nav[k]}` } : null))
@@ -1798,10 +1803,14 @@ export default function CryptoDiscovery({ onNavigate }) {
           tab: TAB.explore,
           assetSource: target.sourceName ?? "",
           assetOrigin: target.sourceName ? "" : target.origin ?? "",
-          assetDomain: ""
+          assetDomain: "",
+          assetCurrent: target.current === true
         });
       }
       if (target.to === "orphans") return replaceFilter({ tab: TAB.orphans });
+      // Un sistema (proceso, objetivo, autofirmados por equipo): su ficha en
+      // Roadmap, acotada a lo que contaba el gajo.
+      if (target.to === "system") return replaceFilter({ tab: TAB.roadmap, system: target.system, systemFocus: target.focus ?? "" });
       const { to: _to, ...f } = target;
       return drillDown(f, { replace: true });
     },
@@ -1904,8 +1913,9 @@ export default function CryptoDiscovery({ onNavigate }) {
           onDrillDown={(f) => drillDown(f, { replace: true })}
           // Un sistema-origen (vault, nube, CA, CT) no tiene filas en el
           // inventario de equipos: sus miembros viven en «Outside your
-          // devices», en Explore.
-          onOpenOutside={() => setTab(TAB.explore)}
+          // devices», en Explore — los de ESE origen, y vigentes como los
+          // cuenta el sistema (antes abría Explore sin filtrar, 24-sep).
+          onOpenOutside={(s) => replaceFilter({ tab: TAB.explore, assetSource: String(s?.key ?? "").replace(/^source:/, ""), assetCurrent: true })}
           onOpenCertificate={setPageCert}
         />
       </TabPanel>

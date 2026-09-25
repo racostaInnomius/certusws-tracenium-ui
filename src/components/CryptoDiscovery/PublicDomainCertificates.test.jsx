@@ -115,7 +115,8 @@ describe("Outside your devices → dominios públicos", () => {
     fireEvent.click(await screen.findByText("Public domains · 20"));
     expect(onSourceChange).toHaveBeenCalledWith({ origin: "ct" });
     expect(screen.queryByText(/ct:tracenium\.com/)).toBeNull();
-    expect(screen.getByText("ssh:hosts · 4")).toBeInTheDocument();
+    // Con su nombre para personas, no el identificador interno (24-sep).
+    expect(screen.getByText("SSH host keys · hosts · 4")).toBeInTheDocument();
   });
 });
 

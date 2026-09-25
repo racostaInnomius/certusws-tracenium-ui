@@ -23,12 +23,16 @@ import { CDP_URL_KEYS } from "../../hooks/useCdpFilter";
  *   assetSource  — origen elegido en «Outside your devices» (Explore). Lo
  *   assetOrigin    que vive ahí no tiene fila en el inventario: propagarlo
  *                  a estas facetas no acotaría nada, lo dejaría a cero.
+ *   assetDomain  — ídem: el dominio y «sólo vigentes» de ese panel.
+ *   assetCurrent
+ *   systemFocus  — acota la FICHA del sistema en Roadmap (sus servicios TLS
+ *                  o un KEM); el inventario lo recibe como `kem`, si acaso.
  *   riskBand     — banda y lente de la pestaña Risk (ola 1.6). Son de ESA
  *   riskClass      lista (/risk/top), no del inventario: la lista de
  *                  Inventory no las lee, así que las facetas tampoco.
  * Cualquier otra ES un filtro y tiene que viajar a las facetas.
  */
-const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain", "riskBand", "riskClass"]);
+const NO_SON_FILTRO = new Set(["tab", "view", "assetSource", "assetOrigin", "assetDomain", "assetCurrent", "systemFocus", "riskBand", "riskClass"]);
 
 const VALOR_DE_MUESTRA = {
   search: "msig",
@@ -54,6 +58,7 @@ const VALOR_DE_MUESTRA = {
   scope: "machine",
   storeName: "LocalMachine\\My",
   agentId: "a-1",
+  system: "process:svchost.exe",
   notAfterFrom: "2026-01-01",
   notAfterTo: "2026-12-31"
 };

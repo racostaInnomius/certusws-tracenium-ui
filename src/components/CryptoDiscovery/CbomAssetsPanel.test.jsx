@@ -78,6 +78,37 @@ describe("CbomAssetsPanel", () => {
     fireEvent.click(screen.getByTestId("CancelIcon"));
     expect(onSourceChange).toHaveBeenCalledWith({});
   });
+
+  // 24-sep: el gajo «CA · 27» abría una lista de 51 (con los caducados), y 44
+  // de esas filas salían EN BLANCO: la CA emite sin sujeto para equipos.
+  it("⭐ «sólo vigentes» llega a la consulta, se ve como chip y quitarlo conserva la fuente", async () => {
+    getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "adcs:MSIG-CA", assets: 51, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
+    listCryptoAssets.mockResolvedValue({ items: [{ assetId: "x", sourceName: "adcs:MSIG-CA", assetType: "certificate", detail: {} }] });
+    const onSourceChange = vi.fn();
+    render(<CbomAssetsPanel refreshNonce={0} sourceName="adcs:MSIG-CA" current onSourceChange={onSourceChange} />);
+    await waitFor(() => expect(listCryptoAssets).toHaveBeenCalledWith(expect.objectContaining({ sourceName: "adcs:MSIG-CA", current: true })));
+    expect(await screen.findByText("Valid only · 1")).toBeInTheDocument();
+    // La fuente, con su nombre para personas.
+    expect(screen.getByText("CA · MSIG-CA · 51")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("CancelIcon"));
+    expect(onSourceChange).toHaveBeenCalledWith({ sourceName: "adcs:MSIG-CA", origin: "" });
+  });
+
+  it("⭐ una emisión de la CA sin sujeto se nombra por su SAN, o por quién la pidió; y dice si está revocada o caducada", async () => {
+    getCryptoAssetsSummary.mockResolvedValue({ sources: [{ sourceName: "adcs:MSIG-CA", assets: 2, lastSeen: null }], byType: [], matchedFleetCertificates: 0, imports: [] });
+    listCryptoAssets.mockResolvedValue({
+      items: [
+        { assetId: "a", sourceName: "adcs:MSIG-CA", assetType: "certificate", notAfter: "2020-01-01T00:00:00Z", detail: { san: ["DNS:MSIG-TSP.corp"], requester: "CORP\\MSIG-TSP$", template: "RDP_Template", revoked: true } },
+        { assetId: "b", sourceName: "adcs:MSIG-CA", assetType: "certificate", detail: { requester: "CORP\\jdoe" } }
+      ]
+    });
+    render(<CbomAssetsPanel refreshNonce={0} sourceName="adcs:MSIG-CA" onSourceChange={vi.fn()} />);
+    expect(await screen.findByText("MSIG-TSP.corp")).toBeInTheDocument();
+    expect(screen.getByText("template RDP_Template · requested by CORP\\MSIG-TSP$")).toBeInTheDocument();
+    expect(screen.getByText("revoked")).toBeInTheDocument();
+    expect(screen.getByText("expired")).toBeInTheDocument();
+    expect(screen.getByText("Requested by CORP\\jdoe")).toBeInTheDocument();
+  });
 });
 
 describe("CbomImportForm", () => {

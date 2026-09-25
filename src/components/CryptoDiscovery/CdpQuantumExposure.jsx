@@ -101,7 +101,11 @@ export function ReadinessStrip({ exposure, overview, devicesReporting, snapshotD
   const pairs = [
     {
       label: "Quantum-broken certificates you own", value: own - ownPq, total: own, color: own - ownPq > 0 ? BRAND.alert.errorText : BRAND.dark,
-      hint: "Private key on a device. What the migration is planned on.", onClick: () => onDrillDown?.({ hasPrivateKey: true }, { replace: true })
+      // `own` cuenta TODO lo que tiene clave, sus CA y raíces propias
+      // incluidas: la lista con la lente por defecto (sólo entidades finales)
+      // enseñaba 223 de 229 (24-sep).
+      hint: "Private key on a device, your own CAs included. What the migration is planned on.",
+      onClick: () => onDrillDown?.({ hasPrivateKey: true, certClass: "all", includeRoots: true }, { replace: true })
     },
     {
       label: "Services on classical key exchange", value: kemC, total: measured, color: kemC > 0 ? BRAND.alert.errorText : BRAND.dark,
@@ -246,7 +250,8 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
     if (a.base) return focus ? "click to go back to all bases" : "click to zoom into this base";
     if (!a.drill) return null;
     if (a.folded) return "the rest of this source, folded — opens the whole source";
-    return a.drill.to === "outside" ? "open in Explore → Outside your devices" : a.drill.to === "orphans" ? "open the Orphan keys tab" : "open in Inventory";
+    if (a.drill.to === "system") return "open this system's TLS services in Roadmap";
+    return a.drill.to === "outside" ? "open in Explore → Outside your devices (valid only)" : a.drill.to === "orphans" ? "open the Orphan keys tab" : "open in Inventory";
   };
 
   return (
@@ -263,8 +268,10 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
         "@media (prefers-reduced-motion: reduce)": { ".cdp-sunburst-arc, .cdp-sunburst-label": { animation: "none" } }
       }} />
       <Typography sx={{ fontSize: TEXT.xl, fontWeight: 700, color: BRAND.dark }}>Quantum exposure by base, source and algorithm</Typography>
+      {/* Una frase (24-sep): qué es cada base ya lo dicen su tooltip y la
+          leyenda, y el párrafo largo lo repetía dos veces más. */}
       <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-        Inside out: On-prem devices, Infra, Cloud or External key sources → the source it came from (On-prem is only what the agents collect on your endpoints; the Windows CA sits inside Infra, after the rest) → its algorithm or key exchange. Click a base to zoom into it; click any slice inside to open its list — in Inventory, or in Explore for what lives where there is no agent.
+        Click a base to zoom into it; click any slice inside to open the list it counts.
       </Typography>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: TEXT_MUTED }}>Group by:</Typography>
@@ -366,7 +373,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
             </Typography>
           ) : null}
           <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }}>
-            {BASES.map((b) => `${b.label}: ${b.note}`).join(" · ")}. A certificate found in two sources counts in both. Bases without a source stay on the chart so the map does not change when a connector is added in Settings.
+            On-prem is only what the agents collect; the Windows CA sits inside Infra. A certificate found in two sources counts in both, so the rings can add up to more than the centre.
           </Typography>
         </Stack>
       </Stack>

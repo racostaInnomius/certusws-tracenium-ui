@@ -85,6 +85,17 @@ export const CDP_URL_KEYS = {
   assetOrigin: "aorigin",
   // El dominio elegido en «Public domain certificates» (con aorigin=ct).
   assetDomain: "adomain",
+  // Sólo lo vigente de fuera: lo que cuenta el sunburst. Sin esto el gajo
+  // «CA · 27» abría una lista de 51 con los caducados (24-sep).
+  assetCurrent: "acur",
+  // Un sistema de la hoja de ruta (`process:svchost.exe`, `target:…`). En
+  // Inventory filtra con la MISMA regla con que el roadmap agrupa; en Roadmap
+  // abre su ficha. `systemFocus` acota esa ficha a sus servicios TLS
+  // (`tls`) o a un intercambio de claves (hybrid | classical | unknown): es
+  // el destino de los gajos de «Services / Resources» (24-sep; antes era una
+  // búsqueda por el sujeto de un certificado de muestra).
+  system: "sys",
+  systemFocus: "sysf",
   // Pestaña Risk (ola 1.6): la banda mínima que se lista (critical | high |
   // medium | low) y su lente. Claves PROPIAS y no `class`: la lente de
   // Inventory es otra decisión, y compartirla haría que cambiar una tocara
@@ -93,7 +104,7 @@ export const CDP_URL_KEYS = {
   riskClass: "rclass"
 };
 
-const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst"]);
+const BOOL_KEYS = new Set(["hasPrivateKey", "hasFlags", "includeRoots", "catalyst", "assetCurrent"]);
 
 export function readCdpFilter() {
   const p = readSearchParams();
@@ -113,7 +124,7 @@ export function readCdpFilter() {
   return out;
 }
 
-function writeCdpFilter(filter) {
+function writeCdpFilter(filter, { push = false } = {}) {
   const updates = {};
   for (const [name, key] of Object.entries(CDP_URL_KEYS)) {
     const v = filter[name];
@@ -121,7 +132,7 @@ function writeCdpFilter(filter) {
     else if (BOOL_KEYS.has(name)) updates[key] = "1";
     else updates[key] = String(v);
   }
-  updateSearchParams(updates);
+  updateSearchParams(updates, { push });
 }
 
 /**
@@ -131,10 +142,13 @@ function writeCdpFilter(filter) {
  * `replace` sustituye todo salvo la pestaña. Un valor `null`/`""`/`false`
  * en `patch` borra esa clave.
  *
- * Los cambios se aplican con `history.replaceState` —no se apilan en el
- * historial: retroceder debe salir de la página, no deshacer un chip—
- * y se propagan a todos los suscriptores del mismo documento por un
- * evento propio, porque `replaceState` no dispara `popstate`.
+ * Un cambio DENTRO de la pestaña (un chip, una búsqueda) se aplica con
+ * `history.replaceState`: retroceder no debe deshacer chip a chip. Un
+ * cambio de PESTAÑA se apila (`pushState`): quien abre un gajo del
+ * Dashboard y pulsa Atrás vuelve al Dashboard —antes salía de la app entera,
+ * al login (24-sep)—. Se propaga a los suscriptores del mismo documento por
+ * un evento propio, porque ni `replaceState` ni `pushState` disparan
+ * `popstate`; al retroceder, `popstate` resincroniza.
  */
 const EVENT = "cdp-filter-change";
 
@@ -152,7 +166,7 @@ export default function useCdpFilter() {
   }, []);
 
   const commit = React.useCallback((next) => {
-    writeCdpFilter(next);
+    writeCdpFilter(next, { push: (next.tab ?? 0) !== (readCdpFilter().tab ?? 0) });
     window.dispatchEvent(new Event(EVENT));
   }, []);
 

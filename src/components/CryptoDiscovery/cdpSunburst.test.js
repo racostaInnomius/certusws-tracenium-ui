@@ -77,10 +77,12 @@ describe("buildCertificatesTree", () => {
     // your devices», y la hoja lleva al mismo sitio que su fuente porque
     // ese panel filtra por origen, no por algoritmo.
     const ca = tree.find((b) => b.key === "infra").children.find((c) => c.name === "CA · MSIG-CA");
-    expect(ca.drill).toEqual({ to: "outside", sourceName: "adcs:MSIG-CA", origin: "adcs" });
+    // `current`: el gajo cuenta lo vigente y su lista también (24-sep: la CA
+    // decía 27 y abría 51, con los caducados).
+    expect(ca.drill).toEqual({ to: "outside", sourceName: "adcs:MSIG-CA", origin: "adcs", current: true });
     expect(ca.children[0].drill).toEqual(ca.drill);
     const vcenter = tree.find((b) => b.key === "infra").children[0];
-    expect(vcenter.drill).toEqual({ to: "outside", sourceName: "vcenter:vc.corp", origin: "vcenter" });
+    expect(vcenter.drill).toEqual({ to: "outside", sourceName: "vcenter:vc.corp", origin: "vcenter", current: true });
   });
 });
 
@@ -134,10 +136,26 @@ describe("buildKeysTree", () => {
     // Las claves de host SSH son varias fuentes (una por equipo): el
     // destino es el ORIGEN, no una `source_name` concreta.
     const ssh = onprem.children.find((c) => c.name === "SSH host keys");
-    expect(ssh.drill).toEqual({ to: "outside", sourceName: null, origin: "ssh" });
+    expect(ssh.drill).toEqual({ to: "outside", sourceName: null, origin: "ssh", current: true });
     // El almacén lleva a su lista con clave privada; las raíces entran
     // porque el almacén ya acota.
     expect(onprem.children[0].drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "store", storeName: "LocalMachine\\My" });
+  });
+
+  it("⭐ los ficheros sueltos van en UN gajo, no uno por ruta (24-sep: ~22 astillas de una clave)", () => {
+    const tree = buildKeysTree([
+      facet("own_leaf", "store", "RSA", 2048, 5, { store_name: "LocalMachine\\My" }),
+      facet("own_leaf", "file", "RSA", 2048, 1, { store_name: "C:\\ProgramData\\Dell\\a.pfx" }),
+      facet("own_leaf", "file", "RSA", 2048, 1, { store_name: "C:\\ProgramData\\dell\\a.pfx" }),
+      facet("own_leaf", "file", "RSA", 4096, 1, { store_name: "C:\\x\\b.pem" })
+    ]);
+    const onprem = tree[0];
+    expect(onprem.children.map((c) => c.name)).toEqual(["LocalMachine\\My", "Certificate files"]);
+    const files = onprem.children[1];
+    expect(files.children.map((l) => [l.name, l.v])).toEqual([["RSA-2048", 2], ["RSA-4096", 1]]);
+    // Sin ruta: la lista de ficheros con clave, de todas las rutas.
+    expect(files.drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "file" });
+    expect(files.children[0].drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "file", keyAlgorithm: "RSA", keySizeBits: 2048 });
   });
 });
 
@@ -158,7 +176,10 @@ describe("buildServicesTree", () => {
     expect(byKey.cloud.children).toEqual([]);
   });
 
-  it("⭐ «Hybrid» bajo un proceso abre SU lista, no todos los híbridos del parque; un recurso externo abre Explore", () => {
+  it("⭐ un proceso abre SU ficha en Roadmap acotada a sus servicios TLS, y «Hybrid» a los híbridos; un recurso externo abre Explore", () => {
+    // 24-sep: el destino era una búsqueda por el sujeto de un certificado de
+    // muestra. svchost.exe (19 servicios) abría 2 certificados, los siete de
+    // Veeam la misma lista y lsass —sin muestra— los 51 listeners.
     const tree = buildServicesTree([
       { key: "process:svchost.exe", name: "Served by svchost.exe", sampleSubject: "SRV-01.corp", factors: { kemHybrid: 14, kemClassical: 4, kemUnknown: 0 } },
       { key: "target:lb.corp:443", name: "lb.corp:443", sampleSubject: "lb.corp", factors: { kemHybrid: 0, kemClassical: 1, kemUnknown: 0 } },
@@ -166,17 +187,22 @@ describe("buildServicesTree", () => {
     ]);
     const byKey = Object.fromEntries(tree.map((b) => [b.key, b]));
     const proc = byKey.onprem.children[0];
-    // El mismo filtro con el que la hoja de ruta identifica ese sistema,
-    // más el KEM de la hoja: el inventario no sabe de procesos.
-    expect(proc.drill).toEqual({ to: "inventory", certClass: "all", source: "listener", search: "SRV-01.corp" });
-    expect(proc.children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "listener", search: "SRV-01.corp", kem: "hybrid" });
-    expect(byKey.infra.children[0].children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "probe", search: "lb.corp", kem: "classical" });
-    expect(byKey.external.children[0].drill).toEqual({ to: "outside", sourceName: "keyvault:kv-prod", origin: "keyvault" });
+    expect(proc.drill).toEqual({ to: "system", system: "process:svchost.exe", focus: "tls" });
+    expect(proc.children.map((l) => l.drill)).toEqual([
+      { to: "system", system: "process:svchost.exe", focus: "hybrid" },
+      { to: "system", system: "process:svchost.exe", focus: "classical" }
+    ]);
+    expect(byKey.infra.children[0].children[0].drill).toEqual({ to: "system", system: "target:lb.corp:443", focus: "classical" });
+    expect(byKey.external.children[0].drill).toEqual({ to: "outside", sourceName: "keyvault:kv-prod", origin: "keyvault", current: true });
   });
 
-  it("sin sujeto de muestra el filtro no inventa una búsqueda vacía", () => {
-    const tree = buildServicesTree([{ key: "process:java.exe", name: "java.exe", factors: { kemHybrid: 1, kemClassical: 0, kemUnknown: 0 } }]);
-    expect(tree[0].children[0].drill).toEqual({ to: "inventory", certClass: "all", source: "listener" });
+  it("el destino no depende del sujeto de muestra: dos procesos con la misma muestra abren sistemas distintos", () => {
+    const tree = buildServicesTree([
+      { key: "process:veeam.a.exe", name: "veeam.a.exe", sampleSubject: "VEEAM", factors: { kemHybrid: 0, kemClassical: 2, kemUnknown: 0 } },
+      { key: "process:veeam.b.exe", name: "veeam.b.exe", sampleSubject: "VEEAM", factors: { kemHybrid: 0, kemClassical: 2, kemUnknown: 0 } },
+      { key: "process:lsass.exe", name: "lsass.exe", factors: { kemHybrid: 2, kemClassical: 0, kemUnknown: 0 } }
+    ]);
+    expect(tree[0].children.map((c) => c.drill.system)).toEqual(["process:veeam.a.exe", "process:veeam.b.exe", "process:lsass.exe"]);
   });
 });
 
