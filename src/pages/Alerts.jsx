@@ -52,6 +52,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import RuleOutlinedIcon from "@mui/icons-material/RuleOutlined";
 import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
@@ -82,6 +83,10 @@ import PageTabs from "../components/common/PageTabs";
 import { listFrom } from "../api/shape";
 import { SOURCE_LABEL } from "../components/Alerts/alertSources";
 import SiemDestinationsDrawer from "../components/Alerts/SiemDestinationsDrawer";
+import PlaybooksTab from "../components/Alerts/PlaybooksTab";
+import AlertAutomationSection from "../components/Alerts/AlertAutomationSection";
+import { getMyCapabilities } from "../api/roles";
+import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 // ---------- presentational helpers ------------------------------------------
 
@@ -232,8 +237,8 @@ const TIME_WINDOWS = [
 
 const DEFAULT_WINDOW_HOURS = 24 * 7; // product decision: 7 days default
 
-const ALERTS_TABS = ["alerts", "rules", "profiles", "destinations"];
-const MANAGE_ONLY_TABS = ["profiles", "destinations"];
+const ALERTS_TABS = ["alerts", "rules", "profiles", "destinations", "playbooks"];
+const MANAGE_ONLY_TABS = ["profiles", "destinations", "playbooks"];
 
 /**
  * A refused switch-on says WHY: the plugin is not in the plan (402) or it is
@@ -270,6 +275,20 @@ export default function Alerts({ onNavigate }) {
   // sin ella sus pestañas no existen y no se pide nada que dé 403.
   const np = useNotifyProfiles();
   const canManage = Boolean(np.access?.canManage);
+  // ADR-0034 — la pestaña Playbooks sólo con su capacidad. Cerrado mientras se
+  // pregunta: no se ofrece una puerta que termina en un 403.
+  const playbooksTenantId = useEffectiveTenantId();
+  const [canPlaybooks, setCanPlaybooks] = React.useState(false);
+  React.useEffect(() => {
+    if (!playbooksTenantId) return undefined;
+    let alive = true;
+    getMyCapabilities(playbooksTenantId)
+      .then((r) => alive && setCanPlaybooks(Array.isArray(r?.permissions) && r.permissions.includes("playbooks")))
+      .catch(() => alive && setCanPlaybooks(false));
+    return () => {
+      alive = false;
+    };
+  }, [playbooksTenantId]);
   const visibleTabs = ALERTS_TABS.filter((k) => canManage || !MANAGE_ONLY_TABS.includes(k));
   // Una URL que pide una pestaña que este usuario no puede ver cae al feed —
   // pero sólo cuando ya se SABE que no puede: mientras cargan los permisos,
@@ -465,6 +484,7 @@ export default function Alerts({ onNavigate }) {
               }
             : null,
           canManage ? { value: "destinations", label: "Destinations", icon: <HubOutlinedIcon /> } : null,
+          canPlaybooks ? { value: "playbooks", label: "Playbooks", icon: <SmartToyOutlinedIcon /> } : null,
         ]}
       />
 
@@ -785,6 +805,13 @@ export default function Alerts({ onNavigate }) {
         </SectionPaper>
       ) : null}
 
+      {/* Playbooks tab — ADR-0034, responder a una alerta sin una persona -- */}
+      {tab === "playbooks" && canPlaybooks ? (
+        <SectionPaper variant="panel" sx={{ p: 2 }}>
+          <PlaybooksTab notify={notify} />
+        </SectionPaper>
+      ) : null}
+
       {/* Event detail drawer ------------------------------------------- */}
       <Drawer
         anchor="right"
@@ -865,6 +892,10 @@ function EventDetailDrawer({ event, onClose }) {
             <DetailRow label="Rule" value={event.rule?.name || "—"} />
           </Stack>
         </Paper>
+
+        {/* ADR-0034 — qué hizo la automatización con ESTA alerta, para que
+            nadie repita a mano un arreglo que ya se hizo. */}
+        <AlertAutomationSection sourceEventId={event.sourceEventId} />
 
         <CorrelationSection correlation={event.details?.correlation} />
 
