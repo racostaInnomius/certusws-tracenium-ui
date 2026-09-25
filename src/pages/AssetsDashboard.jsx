@@ -1097,6 +1097,17 @@ export default function AssetsDashboard({
     setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
   }, []);
 
+  // ⚠️ La ficha y las vistas de trabajo se abren en la sección de la tabla,
+  // que queda bajo el pliegue. Abiertas desde una tarjeta de arriba (Device
+  // experience, «Inactive assets») no se veía nada: parecía un clic muerto
+  // (prod, 24-sep). Se lleva la vista hasta ellas.
+  const devicesSectionRef = React.useRef(null);
+  const revealDevicesSection = React.useCallback(() => {
+    window.requestAnimationFrame(() =>
+      devicesSectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" })
+    );
+  }, []);
+
   // Enlace a un equipo: `?page=assets&device=<agentId>` abre su ficha. Lo usa
   // el Overview (lista de "Blind spots"); hasta ahora no había forma de
   // enlazar a UN equipo desde otra página. Se lee una vez y se consume, para
@@ -1106,7 +1117,8 @@ export default function AssetsDashboard({
     if (!deviceId) return;
     handleAgentSelect({ agent_id: deviceId, agentId: deviceId });
     updateSearchParams({ device: "" });
-  }, [handleAgentSelect]);
+    revealDevicesSection();
+  }, [handleAgentSelect, revealDevicesSection]);
 
   // ADR-0030 — desde la tarjeta de flota: abre el equipo ya en Experience.
   //
@@ -1120,8 +1132,9 @@ export default function AssetsDashboard({
       const row = hosts.find((h) => String(getHostDeviceId(h)) === String(agentId));
       handleAgentSelect(row ?? { agent_id: agentId, agentId, hostname });
       setAgentDetailTab(EXPERIENCE_TAB);
+      revealDevicesSection();
     },
-    [handleAgentSelect, hosts]
+    [handleAgentSelect, hosts, revealDevicesSection]
   );
 
   const handleCloseAgentDetail = React.useCallback(() => {
@@ -1139,12 +1152,14 @@ export default function AssetsDashboard({
   const openInactiveAssetsWorkbench = React.useCallback(() => {
     handleCloseAgentDetail();
     setAssetWorkbenchView("inactive-assets");
-  }, [handleCloseAgentDetail]);
+    revealDevicesSection();
+  }, [handleCloseAgentDetail, revealDevicesSection]);
 
   const openSilentEnrollmentsWorkbench = React.useCallback(() => {
     handleCloseAgentDetail();
     setAssetWorkbenchView("silent-enrollments");
-  }, [handleCloseAgentDetail]);
+    revealDevicesSection();
+  }, [handleCloseAgentDetail, revealDevicesSection]);
 
   const openDevicesWorkbench = React.useCallback(() => {
     handleCloseAgentDetail();
@@ -1704,7 +1719,8 @@ const osVersionItems = React.useMemo(() => {
       {/* Row 4 — Devices table. No more "Selected Host Detail"
           panel below — the table stands on its own. Deep-link
           filter chips render above when any filter is applied. */}
-      <Grid container spacing={2}>
+      {/* scrollMarginTop: que la barra superior fija no tape el título. */}
+      <Grid container spacing={2} ref={devicesSectionRef} sx={{ scrollMarginTop: 120 }}>
         <Grid size={{ xs: 12 }}>
           <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 } }}>
             {selectedAgent ? (

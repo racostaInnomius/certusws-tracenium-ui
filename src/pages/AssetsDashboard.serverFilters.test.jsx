@@ -131,6 +131,22 @@ describe("AssetsDashboard — filtros en servidor", () => {
     await waitFor(() => expect(kpi().textContent).toMatch(/Agent versions\s*3$/i));
   });
 
+  it("⭐ «Inactive assets» lleva la vista hasta lo que abre (queda bajo el pliegue)", async () => {
+    // Prod, 24-sep: la vista se abría abajo, sin scroll, y el clic parecía
+    // muerto. Lo mismo la ficha abierta desde Device experience.
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      mount("");
+      await waitFor(() => expect(shownLine()).toMatch(/shown/));
+      await userEvent.setup().click(screen.getByText(/^Inactive assets$/i));
+      await waitFor(() => expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: "start" })));
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
   it("platform y groupId viajan al servidor", async () => {
     const calls = mount("&platform=linux&groupId=7");
 
