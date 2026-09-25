@@ -111,24 +111,35 @@ export async function remediateBatch(payload) {
   return httpPostJson(`${BASE}/remediate/batch`, payload);
 }
 
+// ⚠️ Las lecturas de remediación son SONDEOS de progreso, y van sin caché.
+// httpGetJson guarda 60 s por defecto: el cajón de un fix y el diálogo del
+// lote preguntaban cada pocos segundos y recibían la primera respuesta
+// —«queued»— durante un minuto, con el equipo ya contestado. Visto en T111
+// el 25-sep (#189 `applied` en la base de datos, «running…» en pantalla); es
+// también por qué el 22-sep la simulación «no terminaba» en el cajón.
+const LIVE = { cache: "no-store" };
+
 // El progreso del lote entero en una llamada, en vez de una por remediación
 // en cada vuelta del sondeo.
 export async function getRemediationsBatch(ids = []) {
   const list = (Array.isArray(ids) ? ids : [ids]).filter((n) => Number.isFinite(Number(n)));
-  return httpGetJson(`${BASE}/remediations/batch${buildQuery({ ids: list.join(",") })}`);
+  return httpGetJson(`${BASE}/remediations/batch${buildQuery({ ids: list.join(",") })}`, LIVE);
 }
 
+// También en vivo: el cajón la usa para «último dry-run», y una simulación
+// recién terminada tiene que salir al reabrirlo, no un minuto después.
 export async function listRemediations(params = {}) {
-  return httpGetJson(`${BASE}/remediations${buildQuery(params)}`);
+  return httpGetJson(`${BASE}/remediations${buildQuery(params)}`, LIVE);
 }
 
 export async function getRemediation(id) {
-  return httpGetJson(`${BASE}/remediations/${encodeURIComponent(id)}`);
+  return httpGetJson(`${BASE}/remediations/${encodeURIComponent(id)}`, LIVE);
 }
 
 export async function getRemediationResults(id) {
   return httpGetJson(
-    `${BASE}/remediations/${encodeURIComponent(id)}/results`
+    `${BASE}/remediations/${encodeURIComponent(id)}/results`,
+    LIVE
   );
 }
 

@@ -16,6 +16,7 @@ import {
   getPatchSummary,
   getRemediation,
   getRemediationResults,
+  getRemediationsBatch,
   listRemediations,
   remediate,
   getThirdPartyFleetFindings,
@@ -131,6 +132,26 @@ describe("PMv2 findings & remediation", () => {
     expect(one[0].pathname).toBe(`${BASE}/remediations/rm1`);
     expect(results[0].pathname).toBe(`${BASE}/remediations/rm1/results`);
     expect(cancel[0].body).toEqual({});
+  });
+});
+
+// ⚠️ Estas lecturas son SONDEOS de progreso: el cajón de un fix y el diálogo
+// «Apply fixes (N)» las piden cada pocos segundos. Con la caché por defecto
+// de httpGetJson (60 s) cada vuelta devolvía la primera respuesta — «queued»
+// — durante un minuto aunque el equipo ya hubiera contestado. Visto en T111
+// el 25-sep: remediación #189 `applied` en la base de datos y el diálogo en
+// «running…».
+describe("las lecturas de progreso no se cachean", () => {
+  it.each([
+    ["getRemediationsBatch", `${BASE}/remediations/batch`, () => getRemediationsBatch([188, 189])],
+    ["getRemediation", `${BASE}/remediations/:id`, () => getRemediation("rm-live")],
+    ["getRemediationResults", `${BASE}/remediations/:id/results`, () => getRemediationResults("rm-live")],
+    ["listRemediations", `${BASE}/remediations`, () => listRemediations({ checkId: "c-live", limit: 10 })],
+  ])("%s: dos vueltas seguidas son dos peticiones", async (_name, route, read) => {
+    const calls = respond("get", route, { ok: true, items: [] });
+    await read();
+    await read();
+    expect(calls).toHaveLength(2);
   });
 });
 
