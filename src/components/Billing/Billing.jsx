@@ -35,10 +35,12 @@ import PaymentMethodCard from "./PaymentMethodCard";
 import SubscriptionSummary from "./SubscriptionSummary";
 import PlanPicker from "./PlanPicker";
 import ConfirmChangeDialog from "./ConfirmChangeDialog";
+import AddonOffers from "./AddonOffers";
 import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 import {
   LINES, INTERVALS, INTERVAL_LABELS,
   pricesFrom, currencyOf, estimateTotal, classifyChange, statusNotice,
+  addonsTotal, withAddons,
 } from "./billingModel";
 
 import { formatMoney } from "./money";
@@ -61,7 +63,10 @@ export default function Billing() {
   // "what's included" section and PlanPicker's per-tier detail. Named
   // distinctly from `catalog` above (Stripe's PRICE catalog) — same word,
   // two different backends.
-  const { catalog: pluginCatalog } = usePluginCatalog();
+  const { catalog: pluginCatalog, refetch: refetchPluginCatalog } = usePluginCatalog();
+  // ADR-0026 — complementos que se pueden contratar aquí (sólo los que tienen
+  // precio en Stripe; el backend no manda los demás).
+  const [addonCatalog, setAddonCatalog] = useState([]);
 
   const [tab, setTab] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -116,8 +121,10 @@ export default function Billing() {
       try {
         const c = await httpGetJson("/api/v1/billing/catalog");
         setCatalog(c?.prices ?? []);
+        setAddonCatalog(c?.addons ?? []);
       } catch {
         setCatalog([]);
+        setAddonCatalog([]);
       }
       try {
         const inv = await httpGetJson("/api/v1/billing/invoices");
@@ -171,8 +178,18 @@ export default function Billing() {
     [catalog, selection.interval]
   );
   const currency = currencyOf(catalog);
-  const beforeTotal = estimateTotal(catalog, current);
-  const afterTotal = estimateTotal(catalog, selection);
+  // ADR-0026 — los complementos contratados van en el total: el «próximo cargo»
+  // sin ellos es una cifra que la factura no va a confirmar. Cada lado con su
+  // periodicidad, porque cambiarla también cambia el precio del complemento.
+  const contractedAddons = sub?.addons ?? [];
+  const beforeTotal = withAddons(
+    estimateTotal(catalog, current),
+    addonsTotal(addonCatalog, contractedAddons, current?.interval ?? "monthly")
+  );
+  const afterTotal = withAddons(
+    estimateTotal(catalog, selection),
+    addonsTotal(addonCatalog, contractedAddons, selection.interval)
+  );
 
   const hasCard = Boolean(sub?.hasPaymentMethod);
   const setLine = (line, patch) => setSelection((s) => ({ ...s, [line]: patch }));
@@ -263,11 +280,18 @@ export default function Billing() {
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {saved && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSaved(null)}>
-          Subscription updated.
+          {saved.addon
+            ? `${saved.addon} ${saved.action === "add" ? "added to" : "removed from"} your subscription.`
+            : "Subscription updated."}
         </Alert>
       )}
 
-      <SubscriptionSummary sub={sub} estimate={beforeTotal} currency={currency} />
+      <SubscriptionSummary
+        sub={sub}
+        estimate={beforeTotal}
+        currency={currency}
+        addonTitles={contractedAddons.map((k) => addonCatalog.find((a) => a.key === k)?.title ?? k)}
+      />
 
       {/* ENTERPRISE: plan gestionado por Tracenium, fuera de Stripe. Se enseña
           lo contratado y nada más — ni tarjeta, ni periodicidad, ni planes que
@@ -335,6 +359,27 @@ export default function Billing() {
                   catalog={pluginCatalog}
                 />
               ))}
+
+              {/* ADR-0026 — va DESPUÉS de los planes: es un complemento de la
+                  misma suscripción, y sin plan no hay dónde cobrarlo. */}
+              <AddonOffers
+                sub={sub}
+                addons={addonCatalog}
+                pluginCatalog={pluginCatalog}
+                onChanged={async (addon, action) => {
+                  setSaved({ addon: addon.title, action });
+                  await load();
+                  // El derecho lo leen otras pantallas desde un catálogo que se
+                  // cachea 5 min: sin esto, CDP seguiría enseñando los conectores
+                  // congelados un rato después de haber pagado.
+                  // (El POST ya vació la caché de GETs; esto repuebla la del hook.)
+                  try {
+                    await refetchPluginCatalog();
+                  } catch {
+                    // el hook vuelve a intentarlo solo al quedar obsoleto
+                  }
+                }}
+              />
 
               {/* ⚠️ ESTO ERA UNA BARRA `position: sticky` Y SE QUITÓ.
                   Flotaba sobre el contenido y tapaba justo las tarjetas de plan que

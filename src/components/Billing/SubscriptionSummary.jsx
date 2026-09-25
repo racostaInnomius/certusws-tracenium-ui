@@ -73,7 +73,7 @@ function UsageBar({ used, quantity }) {
   );
 }
 
-export default function SubscriptionSummary({ sub, estimate, currency }) {
+export default function SubscriptionSummary({ sub, estimate, currency, addonTitles = [] }) {
   const { auth } = useAuthContext();
   const tenantId = auth?.tenantId;
 
@@ -158,6 +158,18 @@ export default function SubscriptionSummary({ sub, estimate, currency }) {
                     ) : null}
                   </Box>
                 ))}
+                {/* ADR-0026 — lo contratado aparte de las líneas. El importe ya va
+                    sumado a la derecha; aquí se dice QUÉ se paga. */}
+                {addonTitles.length > 0 && (
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      Add-ons
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {addonTitles.join(", ")}
+                    </Typography>
+                  </Box>
+                )}
               </Stack>
             )}
           </Box>

@@ -36,7 +36,7 @@ vi.mock("../../api/http", async (importOriginal) => {
       if (url.includes("summary")) return summary();
       // "catalog" alone is ambiguous — billing's price catalog and the
       // plugin catalog are two different endpoints that both match it.
-      if (url.includes("billing/catalog")) return { prices: CATALOG };
+      if (url.includes("billing/catalog")) return { prices: CATALOG, addons: addonsInCatalog };
       if (url.includes("plugins/catalog")) return { catalog: PLUGIN_CATALOG };
       if (url.includes("/policy")) return { policy: { policy_json: { plugins: { enabled: ["scp"] } } } };
       if (url.includes("plugin-coverage")) return { total: 10, byPlugin: [{ plugin: "scp", count: 7 }] };
@@ -56,6 +56,20 @@ vi.mock("./PaymentMethodCard", () => ({ default: () => null }));
 vi.mock("../../auth/AuthContext", () => ({
   useAuthContext: () => ({ auth: { tenantId: 7 } }),
 }));
+
+// ADR-0026 — complementos del catálogo de precios. Vacío por defecto: las
+// pruebas de planes no deben ver la tarjeta del complemento.
+let addonsInCatalog = [];
+const COVERAGE = {
+  key: "cdp_coverage",
+  title: "CDP Coverage",
+  plugin: "cdp",
+  description: "Crypto Discovery beyond the devices you license.",
+  prices: [
+    { interval: "monthly", unitAmount: 250000, currency: "usd" },
+    { interval: "yearly", unitAmount: 2500000, currency: "usd" },
+  ],
+};
 
 const CATALOG = [
   { line: "endpoint", tier: "starter", interval: "monthly", unitAmount: 200, currency: "usd" },
@@ -80,6 +94,7 @@ import Billing from "./Billing";
 
 beforeEach(() => {
   httpPostJson.mockClear();
+  addonsInCatalog = [];
   summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: SUB });
 });
 
@@ -370,5 +385,93 @@ describe("plan gestionado (Enterprise)", () => {
     expect(await screen.findByText("PMP — Patch Management")).toBeTruthy();
     expect(screen.getByText(/Not in your plan/)).toBeTruthy();
     expect(screen.queryByText(/Requires Business/)).toBeNull();
+  });
+});
+
+// ADR-0026 — CDP Coverage se contrata desde aquí.
+describe("complemento CDP Coverage", () => {
+  const STRIPE_SUB = {
+    ...SUB,
+    billedByStripe: true,
+    addons: [],
+    entitledPluginKeys: ["amp", "cdp", "scp"],
+    currentPeriodEnd: "2026-10-25T00:00:00Z",
+  };
+
+  it("⭐ contratar pasa por un diálogo que dice que se cobra YA, y sólo entonces llama al backend", async () => {
+    addonsInCatalog = [COVERAGE];
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: STRIPE_SUB });
+    render(<Billing />);
+    await ready();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add to subscription" }));
+    expect(httpPostJson).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/charged now to your card on file/)).toBeTruthy();
+    expect(within(dialog).getByText(/nothing is added/)).toBeTruthy();
+
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: { ...STRIPE_SUB, addons: ["cdp_coverage"] } });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Add and pay now" }));
+    await waitFor(() =>
+      expect(httpPostJson).toHaveBeenCalledWith("/api/v1/billing/addons", { addon: "cdp_coverage", enabled: true })
+    );
+    expect(await screen.findByText("CDP Coverage added to your subscription.")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Remove CDP Coverage" })).toBeTruthy();
+  });
+
+  it("retirar avisa de que no se devuelve el resto del periodo", async () => {
+    addonsInCatalog = [COVERAGE];
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: { ...STRIPE_SUB, addons: ["cdp_coverage"] } });
+    render(<Billing />);
+    await ready();
+
+    expect(await screen.findByText("Subscribed")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Remove CDP Coverage" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/not refunded/)).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove now" }));
+    await waitFor(() =>
+      expect(httpPostJson).toHaveBeenCalledWith("/api/v1/billing/addons", { addon: "cdp_coverage", enabled: false })
+    );
+  });
+
+  it("sin suscripción de Stripe no hay botón que acabe en 409: dice qué falta", async () => {
+    addonsInCatalog = [COVERAGE];
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: { ...STRIPE_SUB, billedByStripe: false } });
+    render(<Billing />);
+    await ready();
+
+    expect(await screen.findByText(/Subscribe to a plan first/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add to subscription" }).disabled).toBe(true);
+  });
+
+  it("un cargo rechazado se enseña con el mensaje de Stripe", async () => {
+    addonsInCatalog = [COVERAGE];
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: STRIPE_SUB });
+    httpPostJson.mockRejectedValueOnce(new Error("Your card was declined."));
+    render(<Billing />);
+    await ready();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add to subscription" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Add and pay now" }));
+    expect(await screen.findByText("Your card was declined.")).toBeTruthy();
+  });
+
+  it("⭐ «Your plan» suma el complemento contratado: el próximo cargo es el que dirá la factura", async () => {
+    addonsInCatalog = [COVERAGE];
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: { ...STRIPE_SUB, addons: ["cdp_coverage"] } });
+    render(<Billing />);
+    await ready();
+    // Professional × 50 a $6 = $300 + CDP Coverage mensual $2.500.
+    expect(await screen.findByText("$2,800.00")).toBeTruthy();
+    expect(screen.getByText("Add-ons")).toBeTruthy();
+  });
+
+  it("sin precio en Stripe no se ofrece", async () => {
+    summary.mockReturnValue({ configured: true, publishableKey: "pk_test", subscription: STRIPE_SUB });
+    render(<Billing />);
+    await ready();
+    await screen.findByText("Billing period");
+    expect(screen.queryByText("CDP Coverage")).toBeNull();
   });
 });

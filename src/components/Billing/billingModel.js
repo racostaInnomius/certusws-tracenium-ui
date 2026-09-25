@@ -359,3 +359,78 @@ export function statusNotice(sub, now = new Date()) {
 
   return null;
 }
+
+/** Estados en los que el backend deja AÑADIR un cargo (retirar se puede siempre). */
+const ADDON_ADDABLE_STATUSES = ["active", "trialing"];
+
+/**
+ * ADR-0026 — qué se puede hacer con un complemento desde Billing, y si no, POR QUÉ.
+ *
+ * `addon` es la entrada de `/billing/catalog` (`{ key, title, plugin, prices[] }`),
+ * `sub` el resumen y `pluginTier` el plan desde el que se incluye el plugin que
+ * amplía (del catálogo de plugins), para decir a qué plan hay que subir. Devuelve:
+ *
+ *   state    subscribed | trial | available
+ *   action   remove | add
+ *   blocked  null, o la frase que explica el obstáculo — se enseña donde está
+ *            el botón, en vez de deshabilitarlo sin decir nada
+ *   price    el precio en la periodicidad de la suscripción, o null
+ *
+ * ⚠️ «Incluido en tu prueba» NO es «contratado»: el trial concede todos los
+ * complementos sin que nadie los pague, y al acabar se congelan. Por eso el
+ * estado sale de `sub.addons` (lo que Stripe cobra), no de los derechos.
+ *
+ * Las mismas reglas que el backend (`setAddonBySelf`): esto sólo evita ofrecer
+ * un botón que acabaría en 409.
+ */
+export function addonOffer(sub, addon, { pluginTier = null } = {}) {
+  const interval = sub?.billingInterval ?? "monthly";
+  const price = (addon?.prices ?? []).find((p) => p.interval === interval) ?? null;
+  const contracted = (sub?.addons ?? []).includes(addon?.key);
+
+  if (contracted) return { state: "subscribed", action: "remove", blocked: null, price, interval };
+
+  const inTrial = Boolean(sub?.inTrial) && (sub?.entitledPluginKeys ?? []).includes(addon?.key);
+  // El plugin que el complemento amplía tiene que estar en el plan: CDP Coverage
+  // sin Crypto Discovery sería pagar por algo que no se puede usar.
+  const pluginMissing = addon?.plugin && Array.isArray(sub?.entitledPluginKeys) && !sub.entitledPluginKeys.includes(addon.plugin);
+  let blocked = null;
+  if (pluginMissing) blocked = `Needs ${String(addon.plugin).toUpperCase()} in your plan${pluginTier ? `, from ${tierLabel(pluginTier)}` : ""}. Upgrade the plan first.`;
+  else if (!sub?.billedByStripe) blocked = "Subscribe to a plan first: the add-on is billed on the same subscription.";
+  else if (!sub?.hasPaymentMethod) blocked = "Save a card first.";
+  else if (!ADDON_ADDABLE_STATUSES.includes(sub?.status))
+    blocked = `Your subscription is ${String(sub?.status ?? "inactive").replace("_", " ")}. Fix the payment before adding to it.`;
+  else if (!price) blocked = `There's no ${INTERVAL_LABELS[interval]?.toLowerCase() ?? interval} price for this add-on yet.`;
+
+  return { state: inTrial ? "trial" : "available", action: "add", blocked, price, interval };
+}
+
+/**
+ * ADR-0026 — lo que suman los complementos CONTRATADOS en una periodicidad.
+ *
+ * Existe porque «Your plan» enseñaba sólo las líneas: con CDP Coverage anual
+ * contratado decía $6.000 de próximo cargo cuando la factura iba a ser de
+ * $31.000. Es la cifra que el cliente compara contra su factura.
+ *
+ * Periodicidad del LADO que se valora: al pasar de mensual a anual el backend
+ * cambia también el item del complemento, así que el «después» lleva su precio
+ * anual. `null` si un complemento contratado no tiene precio en esa
+ * periodicidad: sin él el total no se sabe, y un total que no lo cuenta mentiría.
+ */
+export function addonsTotal(addonCatalog, contractedKeys, interval) {
+  let total = 0;
+  for (const key of contractedKeys ?? []) {
+    const entry = (addonCatalog ?? []).find((a) => a.key === key);
+    const price = entry?.prices?.find((p) => p.interval === interval);
+    if (!price || !Number.isFinite(price.unitAmount)) return null;
+    total += price.unitAmount;
+  }
+  return total;
+}
+
+/** Líneas + complementos. `null` si cualquiera de las dos partes no se sabe. */
+export function withAddons(linesTotal, addonTotal) {
+  if (linesTotal === null || linesTotal === undefined) return null;
+  if (addonTotal === null || addonTotal === undefined) return null;
+  return linesTotal + addonTotal;
+}

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  addonOffer,
+  addonsTotal,
+  withAddons,
   PACKAGE_TIERS,
   PAST_DUE_GRACE_DAYS,
   usageWarning,
@@ -303,5 +306,68 @@ describe("avisos de estado", () => {
 
   it("una suscripción al día no genera ruido", () => {
     expect(statusNotice({ status: "active", tier: "professional" }, NOW)).toBeNull();
+  });
+});
+
+describe("addonOffer (ADR-0026)", () => {
+  const COV = {
+    key: "cdp_coverage",
+    plugin: "cdp",
+    prices: [
+      { interval: "monthly", unitAmount: 250000, currency: "usd" },
+      { interval: "yearly", unitAmount: 2500000, currency: "usd" },
+    ],
+  };
+  const SUB = {
+    status: "active", billedByStripe: true, hasPaymentMethod: true, billingInterval: "yearly", addons: [],
+    entitledPluginKeys: ["amp", "cdp"],
+  };
+
+  it("ofrece contratarlo al precio de la periodicidad de la suscripción", () => {
+    const o = addonOffer(SUB, COV);
+    expect(o).toMatchObject({ state: "available", action: "add", blocked: null });
+    expect(o.price.unitAmount).toBe(2500000);
+  });
+
+  it("⭐ «incluido en tu prueba» no es «contratado»: sigue ofreciéndose contratarlo", () => {
+    const o = addonOffer({ ...SUB, inTrial: true, entitledPluginKeys: ["amp", "cdp_coverage"] }, COV);
+    expect(o).toMatchObject({ state: "trial", action: "add" });
+  });
+
+  it("contratado → se puede retirar, aunque la cuenta esté en impago", () => {
+    expect(addonOffer({ ...SUB, status: "past_due", addons: ["cdp_coverage"] }, COV)).toMatchObject({
+      state: "subscribed",
+      action: "remove",
+      blocked: null,
+    });
+  });
+
+  it("⭐ sin el plugin que amplía no se ofrece, y dice a qué plan subir", () => {
+    const o = addonOffer({ ...SUB, entitledPluginKeys: ["amp", "scp"] }, COV, { pluginTier: "business" });
+    expect(o.blocked).toBe("Needs CDP in your plan, from Business. Upgrade the plan first.");
+  });
+
+  it("cada obstáculo con su frase, en el orden en que hay que resolverlos", () => {
+    expect(addonOffer({ ...SUB, billedByStripe: false, hasPaymentMethod: false }, COV).blocked).toMatch(/plan first/);
+    expect(addonOffer({ ...SUB, hasPaymentMethod: false }, COV).blocked).toMatch(/card/);
+    expect(addonOffer({ ...SUB, status: "past_due" }, COV).blocked).toMatch(/past due/);
+    expect(addonOffer(SUB, { ...COV, prices: [COV.prices[0]] }).blocked).toMatch(/no yearly price/);
+  });
+});
+
+describe("addonsTotal (ADR-0026)", () => {
+  const CAT = [{ key: "cdp_coverage", prices: [{ interval: "monthly", unitAmount: 250000 }, { interval: "yearly", unitAmount: 2500000 }] }];
+
+  it("⭐ suma lo contratado al precio de la periodicidad que se valora", () => {
+    expect(addonsTotal(CAT, ["cdp_coverage"], "yearly")).toBe(2500000);
+    expect(addonsTotal(CAT, ["cdp_coverage"], "monthly")).toBe(250000);
+    expect(addonsTotal(CAT, [], "yearly")).toBe(0);
+  });
+
+  it("sin precio para un complemento contratado el total no se sabe: null, no una cifra que lo omite", () => {
+    expect(addonsTotal([], ["cdp_coverage"], "yearly")).toBeNull();
+    expect(withAddons(600000, null)).toBeNull();
+    expect(withAddons(null, 0)).toBeNull();
+    expect(withAddons(600000, 2500000)).toBe(3100000);
   });
 });
