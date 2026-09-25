@@ -96,7 +96,10 @@ export function baselineModeForCategory(
   category,
   isAutoAvailable = (cap) => Boolean(cap?.enforcer)
 ) {
-  const caps = capabilitiesForCategory(category);
+  return modeForCapabilities(securityForm, capabilitiesForCategory(category), isAutoAvailable);
+}
+
+function modeForCapabilities(securityForm, caps, isAutoAvailable) {
   if (!caps.length) return null;
 
   const entries = caps.map((cap) => ({
@@ -122,26 +125,45 @@ export function baselineModeForCategory(
   };
 }
 
-/**
- * Baselines-side lookup: aggregate the category-summary rows
- * ({category, passed, failed, highSeverityFails, devicesFailing,
- * devices}) into per-capability evidence. Sums are per mapped category;
- * devicesFailing is summed too (a device failing in two mapped
- * categories counts twice — documented trade-off, the API offers no
- * cross-category distinct count).
- */
-export function evidenceForCapability(categorySummaryItems, capabilityKey) {
-  const cats = new Set(categoriesForCapability(capabilityKey));
-  if (!cats.size) return null;
-  const rows = (categorySummaryItems || []).filter((r) => cats.has(String(r?.category)));
-  if (!rows.length) return null;
+/** "Windows" / "macOS" / "windows" / "macos" → "windows" / "macos". */
+function normPlatform(p) {
+  return String(p || "").trim().toLowerCase();
+}
 
-  const sum = (field) => rows.reduce((acc, r) => acc + (Number(r?.[field]) || 0), 0);
-  return {
-    failed: sum("failed"),
-    highSeverityFails: sum("highSeverityFails"),
-    devicesFailing: sum("devicesFailing"),
-    devices: Math.max(...rows.map((r) => Number(r?.devices) || 0)),
-    categories: rows.map((r) => String(r.category)),
-  };
+/**
+ * Las capabilities que gobiernan UN hallazgo de UN equipo.
+ *
+ * ⚠️ Por categoría a secas no sirve: la categoría mezcla plataformas y checks
+ * que ninguna capability toca. En prod, el Secure Boot de un Windows
+ * (categoría `integrity`) decía «Gatekeeper can remediate this automatically»
+ * — Gatekeeper es de macOS y no arregla Secure Boot (recorrido del 25-sep).
+ *
+ *   · `catalogChecksFor(capKey)` — la lista de checks que la matriz del
+ *     backend dice que gobierna esa capability (usePluginCatalog). Cuando
+ *     llega, manda: la capability es del hallazgo si su check está en ella.
+ *   · Si la matriz no llegó (backend anterior), cae a categoría + plataforma
+ *     del equipo: menos fino, pero nunca una capability de otro sistema.
+ */
+export function capabilitiesForFinding(finding, { platform = null, catalogChecksFor = null } = {}) {
+  const checkId = String(finding?.checkId || "");
+  const exact = catalogChecksFor
+    ? SECURITY_CAPABILITIES.map((cap) => ({ cap, checks: catalogChecksFor(cap.key) }))
+    : [];
+  if (exact.length && exact.every((e) => Array.isArray(e.checks))) {
+    return exact.filter((e) => checkId && e.checks.includes(checkId)).map((e) => e.cap);
+  }
+  const plat = normPlatform(platform);
+  return capabilitiesForCategory(finding?.category).filter(
+    (cap) => !plat || (cap.osTags ?? []).some((t) => normPlatform(t) === plat)
+  );
+}
+
+/** baselineModeForCategory, pero para un hallazgo concreto de un equipo. */
+export function baselineModeForFinding(
+  securityForm,
+  finding,
+  ctx = {},
+  isAutoAvailable = (cap) => Boolean(cap?.enforcer)
+) {
+  return modeForCapabilities(securityForm, capabilitiesForFinding(finding, ctx), isAutoAvailable);
 }

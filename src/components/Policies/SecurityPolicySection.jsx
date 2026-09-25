@@ -25,7 +25,7 @@ import { usePluginCatalog } from "../../hooks/usePluginCatalog";
 
 // Fase C — `evidenceByCapability` (optional): live posture evidence per
 // capability key, shape { failed, highSeverityFails, devicesFailing,
-// devices } from capabilityBridge.evidenceForCapability. When present,
+// devices } from GET /security/compliance/capability-evidence. When present,
 // each card shows what the fleet ACTUALLY looks like against this
 // capability right now; clicking the chip jumps to the evidence
 // (onShowEvidence). Absent → cards render exactly as before, so the

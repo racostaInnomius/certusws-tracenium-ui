@@ -92,7 +92,7 @@ import {
   securityFormToPolicy,
   extractPolicyEnvelope,
 } from "../components/Policies/policyTransforms";
-import { baselineModeForCategory } from "../components/Compliance/capabilityBridge";
+import { baselineModeForCategory, baselineModeForFinding } from "../components/Compliance/capabilityBridge";
 import PageHeader from "../components/common/PageHeader";
 import GoToReportButton from "../components/common/GoToReportButton";
 
@@ -363,7 +363,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   // sólo enseña el nivel de compliance. `isEntitled` responde `true` mientras
   // no se sepa, así que un backend viejo o un parpadeo NO esconde la acción a
   // quien sí pagó; el control de verdad es el 402 de la API.
-  const { isEntitled, capabilityAuto } = usePluginCatalog();
+  const { isEntitled, capabilityAuto, capabilityCatalogChecks } = usePluginCatalog();
   const canRemediate = canManage && isEntitled("pmp");
 
   // Sprint 2 item 1 — tenant-configured score bands (85/60 defaults).
@@ -2085,12 +2085,19 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onRequestRefetch={refetchDrawer}
           onToast={showToast}
           canManage={canManage}
-          // Fase C — "auto-fix available" hints on findings whose
-          // category maps to an enforceable capability not yet in auto.
-          baselineHintForCategory={
+          // Fase C — "auto-fix available" hints on findings whose CHECK is
+          // governed by an enforceable capability not yet in auto. Por
+          // hallazgo y con la plataforma del equipo: por categoría, el Secure
+          // Boot de un Windows decía «Gatekeeper can remediate this».
+          baselineHintForFinding={
             baselineBridge
-              ? (category) => {
-                  const info = modeForCategory(category);
+              ? (finding) => {
+                  const info = baselineModeForFinding(
+                    securityForm,
+                    finding,
+                    { platform: drawerData?.device?.platform ?? null, catalogChecksFor: capabilityCatalogChecks },
+                    (cap) => capabilityAuto(cap.key, cap.enforcer)
+                  );
                   if (!info || info.mode === "auto" || !info.autoUpgradable.length) return null;
                   return { mode: info.mode, capabilities: info.autoUpgradable.map((c) => c.label) };
                 }

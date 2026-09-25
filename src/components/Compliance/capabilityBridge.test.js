@@ -13,7 +13,8 @@ import {
   categoriesForCapability,
   resolveMode,
   baselineModeForCategory,
-  evidenceForCapability,
+  capabilitiesForFinding,
+  baselineModeForFinding,
 } from "./capabilityBridge";
 import { SECURITY_CAPABILITIES } from "../Policies/policyTransforms";
 
@@ -98,25 +99,44 @@ describe("baselineModeForCategory", () => {
   });
 });
 
-describe("evidenceForCapability", () => {
-  const items = [
-    { category: "identity_policy", failed: 5, highSeverityFails: 2, devicesFailing: 3, devices: 40 },
-    // 20260827 fusionó 'crypto' en 'cryptography': ya no hay dos cubos.
-    { category: "cryptography", failed: 1, highSeverityFails: 0, devicesFailing: 1, devices: 40 },
-    { category: "patching", failed: 9, highSeverityFails: 9, devicesFailing: 9, devices: 40 },
-  ];
+// Recorrido de prod, 25-sep: el Secure Boot de W11_JPR_LAB (Windows,
+// categoría `integrity`) decía «Gatekeeper can remediate this automatically».
+describe("capabilitiesForFinding", () => {
+  const SECURE_BOOT = { checkId: "windows.secureboot.enabled", category: "integrity" };
+  const GATEKEEPER = { checkId: "macos.gatekeeper.enabled", category: "integrity" };
+  const ROOT_CAS = { checkId: "cdp.no_nonstandard_root_cas", category: "cryptography" };
+  const LEGACY_TLS = { checkId: "windows.crypto.legacy_tls_disabled", category: "cryptography" };
+  const CHECKS = {
+    gatekeeper: ["macos.gatekeeper.enabled"],
+    sip: ["macos.sip.enabled"],
+    tls: ["windows.crypto.legacy_tls_disabled", "windows.crypto.weak_ciphers_disabled"],
+  };
+  const catalogChecksFor = (key) => CHECKS[key] ?? [];
 
-  it("aggregates across the capability's mapped categories only", () => {
-    const ev = evidenceForCapability(items, "ssh"); // identity_policy + cryptography
-    expect(ev.failed).toBe(6);
-    expect(ev.highSeverityFails).toBe(2);
-    expect(ev.devicesFailing).toBe(4);
-    expect(ev.devices).toBe(40);
-    expect(ev.categories).toEqual(expect.arrayContaining(["identity_policy", "cryptography"]));
+  it("⭐ con la matriz, un hallazgo es de la capability que gobierna SU check", () => {
+    expect(capabilitiesForFinding(SECURE_BOOT, { platform: "windows", catalogChecksFor })).toEqual([]);
+    expect(capabilitiesForFinding(GATEKEEPER, { platform: "macos", catalogChecksFor }).map((c) => c.key)).toEqual(["gatekeeper"]);
+    // Una CA raíz rara no la arregla deshabilitar TLS 1.0, aunque compartan categoría.
+    expect(capabilitiesForFinding(ROOT_CAS, { platform: "windows", catalogChecksFor })).toEqual([]);
+    expect(capabilitiesForFinding(LEGACY_TLS, { platform: "windows", catalogChecksFor }).map((c) => c.key)).toEqual(["tls"]);
   });
 
-  it("returns null when no mapped category reported", () => {
-    expect(evidenceForCapability(items, "firewall")).toBeNull();
-    expect(evidenceForCapability(items, "usb")).toBeNull();
+  it("sin la matriz, nunca una capability de otro sistema operativo", () => {
+    expect(capabilitiesForFinding(SECURE_BOOT, { platform: "windows" })).toEqual([]);
+    expect(capabilitiesForFinding(GATEKEEPER, { platform: "macos" }).map((c) => c.key)).toEqual(
+      expect.arrayContaining(["gatekeeper", "sip"])
+    );
+  });
+
+  it("una matriz a medias (backend anterior sin catalogChecks) cae al plan B, no a «nada»", () => {
+    const partial = (key) => (key === "tls" ? CHECKS.tls : null);
+    expect(capabilitiesForFinding(LEGACY_TLS, { platform: "windows", catalogChecksFor: partial }).map((c) => c.key)).toEqual(["tls"]);
+  });
+
+  it("baselineModeForFinding: sin capability no hay pista", () => {
+    expect(baselineModeForFinding(formWith({}), SECURE_BOOT, { platform: "windows", catalogChecksFor })).toBeNull();
+    const info = baselineModeForFinding(formWith({}), LEGACY_TLS, { platform: "windows", catalogChecksFor });
+    expect(info.mode).toBe("report-only");
+    expect(info.autoUpgradable.map((c) => c.key)).toEqual(["tls"]);
   });
 });

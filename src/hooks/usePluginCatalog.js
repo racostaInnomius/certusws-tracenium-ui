@@ -185,6 +185,19 @@ export function usePluginCatalog() {
     [remediation]
   );
 
+  /**
+   * Los checks del catálogo que gobierna la capability, o null si la matriz no
+   * los trae (backend anterior). Con ellos se decide si un hallazgo concreto
+   * es de una capability — ver capabilityBridge.capabilitiesForFinding.
+   */
+  const capabilityCatalogChecks = useCallback(
+    (key) => {
+      const checks = remediation?.capabilities?.[String(key)]?.catalogChecks;
+      return Array.isArray(checks) ? checks : null;
+    },
+    [remediation]
+  );
+
   return {
     catalog,
     addons,
@@ -193,6 +206,7 @@ export function usePluginCatalog() {
     remediation,
     capabilityAuto,
     capabilityPlatforms,
+    capabilityCatalogChecks,
     loading: Boolean(fetched?.loading),
     error: fetched?.error ?? null,
     refetch: fetched?.refetch ?? (async () => {}),

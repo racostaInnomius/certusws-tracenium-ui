@@ -44,6 +44,15 @@ export async function getCategorySummary() {
   return httpGetJson(`${BASE}/category-summary`);
 }
 
+// Baselines: por capability, los fallos y los equipos DISTINTOS que incumplen
+// los checks que esa capability gobierna — `{ ok, items: { [capKey]: {
+// failed, highSeverityFails, devicesFailing, devices } } }`. Sustituye a
+// deducirlo del resumen por categoría, que sumaba lo que no era suyo («30 of
+// 17 devices failing»).
+export async function getCapabilityEvidence() {
+  return httpGetJson(`${BASE}/capability-evidence`);
+}
+
 // El HUB de remediación: las ACCIONES pendientes, no los hallazgos. Donde
 // `getTopFailingChecks` responde "qué control incumple más gente", esto
 // responde "qué hago, y cuánto cierra": agrupa los checks que arregla un mismo

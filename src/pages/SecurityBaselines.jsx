@@ -36,8 +36,7 @@ import {
 } from "../api/policies";
 // Fase C — live evidence on each capability card + concrete blast
 // radius in the push confirm, both fed by the compliance API.
-import { getCategorySummary, getComplianceSummary } from "../api/compliance";
-import { CAPABILITY_TO_CATEGORIES, evidenceForCapability } from "../components/Compliance/capabilityBridge";
+import { getCapabilityEvidence, getComplianceSummary } from "../api/compliance";
 import {
   readSecurityFromPolicy,
   securityFormToPolicy,
@@ -119,7 +118,9 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
   // Fase C — posture evidence alongside the policy. Both compliance
   // calls are fail-soft: the editor must stay usable when the
   // compliance API is down (cards just render without badges).
-  const [categorySummary, setCategorySummary] = React.useState(null);
+  // Por capability, del backend (capability-evidence). null = no llegó: las
+  // cards se pintan sin chip de evidencia antes que con una cifra inventada.
+  const [evidenceByCapability, setEvidenceByCapability] = React.useState(null);
   const [fleetSummary, setFleetSummary] = React.useState(null);
 
   // ⚠️ Un refresco NO puede tragarse una edición a medias.
@@ -144,12 +145,12 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
     const conservarEdicion = dirtyRef.current;
     try {
       setLoading(true);
-      const [res, catSum, fleet] = await Promise.all([
+      const [res, capEvidence, fleet] = await Promise.all([
         getTenantPolicy(tenantId).then(
           (r) => { setLoadError(null); return r; },
           (err) => { setLoadError(err?.message || "Could not load the tenant policy."); return null; }
         ),
-        getCategorySummary().catch(() => null),
+        getCapabilityEvidence().catch(() => null),
         getComplianceSummary().catch(() => null),
       ]);
       if (!conservarEdicion) {
@@ -160,7 +161,9 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
         // Snapshot of what's on the server, for dirty-tracking.
         setLoadedSecurity(JSON.stringify(securityFormToPolicy(readSecurityFromPolicy(policy))));
       }
-      setCategorySummary(Array.isArray(catSum?.items) ? catSum.items : null);
+      setEvidenceByCapability(
+        capEvidence?.items && typeof capEvidence.items === "object" && !Array.isArray(capEvidence.items) ? capEvidence.items : null
+      );
       setFleetSummary(fleet?.summary ?? null);
     } catch (e) {
       console.error(e);
@@ -170,15 +173,6 @@ export default function SecurityBaselines({ onNavigate, embedded = false, reload
     }
   }, [canManage, tenantId, showSnack]);
 
-  const evidenceByCapability = React.useMemo(() => {
-    if (!categorySummary) return null;
-    const out = {};
-    for (const capKey of Object.keys(CAPABILITY_TO_CATEGORIES)) {
-      const ev = evidenceForCapability(categorySummary, capKey);
-      if (ev) out[capKey] = ev;
-    }
-    return out;
-  }, [categorySummary]);
 
   React.useEffect(() => {
     load();

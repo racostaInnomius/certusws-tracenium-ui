@@ -39,11 +39,12 @@ vi.mock("../api/policies", () => ({
   pushTenantPolicy: vi.fn(),
 }));
 vi.mock("../api/compliance", () => ({
-  getCategorySummary: vi.fn(async () => ({ items: [] })),
+  getCapabilityEvidence: vi.fn(async () => ({ ok: true, items: {} })),
   getComplianceSummary: vi.fn(async () => ({ summary: null })),
 }));
 
 import { getTenantPolicy } from "../api/policies";
+import { getCapabilityEvidence } from "../api/compliance";
 import SecurityBaselines from "./SecurityBaselines";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
 
@@ -115,5 +116,34 @@ describe("SecurityBaselines embebido en Security Compliance", () => {
     // formulario se queda como estaba.
     await waitFor(() => expect(getTenantPolicy).toHaveBeenCalledTimes(2));
     expect(guardar).toBeEnabled();
+  });
+});
+
+// Recorrido de prod, 25-sep: la evidencia se deducía de las categorías y las
+// cards decían «SSH hardening — 30 of 17 devices failing» y «Gatekeeper
+// (macOS) — 16 of 17» con 8 Macs. Ahora viene por capability del backend.
+describe("SecurityBaselines — evidencia por capability", () => {
+  it("⭐ cada card enseña los equipos de SUS checks, tal cual los cuenta el backend", async () => {
+    getCapabilityEvidence.mockResolvedValue({
+      ok: true,
+      items: {
+        ssh: { failed: 2, highSeverityFails: 2, devicesFailing: 2, devices: 2 },
+        gatekeeper: { failed: 0, highSeverityFails: 0, devicesFailing: 0, devices: 7 },
+      },
+    });
+    montar();
+
+    expect(await screen.findByText("2 of 2 devices failing · 2 high")).toBeInTheDocument();
+    expect(screen.getAllByText("No drift detected").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/of 17 devices failing/)).toBeNull();
+  });
+
+  it("si la evidencia no llega, ninguna card inventa una cifra", async () => {
+    getCapabilityEvidence.mockRejectedValue(new Error("404"));
+    montar();
+    await waitFor(() => expect(getTenantPolicy).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Save baseline/i });
+    expect(screen.queryByText(/devices? failing/)).toBeNull();
+    expect(screen.queryByText("No drift detected")).toBeNull();
   });
 });
