@@ -30,6 +30,7 @@
 //       { op: "keyDown",    code }                  // JS KeyboardEvent.code
 //       { op: "keyUp",      code }
 //       { op: "releaseAll" }
+//       { op: "controlReleased" }               // soltó el control (Esc / toggle)
 //
 // M3.S3 features:
 //   - RTT measured every 2s via pc.getStats() → footer chip
@@ -154,7 +155,11 @@ function rttColor(rttMs, theme) {
 // for bandwidth is dirty-rect capture, not a higher default.
 const MIN_FPS = 1;
 const MAX_FPS = 15;
-const DEFAULT_FPS = 5;
+// 8, medido en campo el 25-sep: es donde el cursor se sigue con la vista sin
+// saltos. A 5 el puntero "teletransporta" lo justo para que cueste apuntar a
+// un botón, y subir de 8 paga ancho de banda y CPU del equipo ajeno por una
+// fluidez que ya nadie nota.
+const DEFAULT_FPS = 8;
 
 // Operator-facing copy for the capture failures the agent can report. We
 // write these rather than showing the agent's own `message`, which is
@@ -539,6 +544,13 @@ export default function ScreenShareViewer({ session, device, onClose }) {
         e.stopPropagation();
         setControlEnabled(false);
         dcSend({ op: "releaseAll" });
+        // ⚠️ `releaseAll` NO sirve para avisar de esto: también se manda al
+        // perder el foco, cuando el control SIGUE puesto. Sin un mensaje
+        // propio, la franja del equipo se quedaba diciendo «viendo y
+        // controlando» después de soltar — la persona seguía creyendo que le
+        // manejaban el ratón, que es justo el miedo que la franja existe para
+        // calmar.
+        dcSend({ op: "controlReleased" });
         return;
       }
       e.preventDefault();
@@ -569,7 +581,10 @@ export default function ScreenShareViewer({ session, device, onClose }) {
   // Toggle off → release everything so we never leave a held key /
   // button on the remote when the operator gives up control.
   function toggleControl() {
-    if (controlEnabled) dcSend({ op: "releaseAll" });
+    if (controlEnabled) {
+      dcSend({ op: "releaseAll" });
+      dcSend({ op: "controlReleased" });
+    }
     setControlEnabled((v) => !v);
   }
 
