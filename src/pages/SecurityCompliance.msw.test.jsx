@@ -587,7 +587,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
 
     // The frameworks section is folded by default when no framework is
     // active, so open it before reaching for a row inside it.
-    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Posture by framework/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Show controls for CIS Win11" }));
 
     // El panel encabeza ahora con la cobertura contra el estándar, no
@@ -609,7 +609,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
     // La tabla de frameworks vive en un acordeón plegado por defecto.
-    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Posture by framework/ }));
 
     expect(await screen.findByText(/Covers 8 of 33 controls in the standard \(24%\)/)).toBeInTheDocument();
     // Y la cifra de nuestro catálogo sigue ahí, debajo, como detalle.
@@ -623,7 +623,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     const { fireEvent } = await import("@testing-library/react");
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Posture by framework/ }));
 
     await screen.findByText("CIS Win11");
     // Sólo SOC 2 lleva cifra verificada en el fixture; CIS y NIST no.
@@ -637,7 +637,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     const { fireEvent } = await import("@testing-library/react");
     mountPage();
     await waitFor(() => expect(screen.getByText("WS-ALPHA")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: /Frameworks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Posture by framework/ }));
 
     expect(await screen.findByText("A newer version of this standard exists")).toBeInTheDocument();
     // Sólo el que la tiene: SOC 2 y NIST están al día en el fixture.
@@ -759,8 +759,8 @@ describe("SecurityCompliance — familias de frameworks", () => {
   const FRAMEWORKS_FAM = {
     ok: true,
     frameworks: [
-      { framework: "cis_windows_11_v5.1.0", family: "cis", shortName: "CIS Win11", mappedChecks: 90, catalogChecks: 94 },
-      { framework: "cis_ubuntu_24_v2.0.0", family: "cis", shortName: "CIS Ubuntu 24", mappedChecks: 90, catalogChecks: 94 },
+      { framework: "cis_windows_11_v5.1.0", family: "cis", shortName: "CIS Win11", mappedChecks: 90, catalogChecks: 94, coveredControls: 501, totalControls: 501 },
+      { framework: "cis_ubuntu_24_v2.0.0", family: "cis", shortName: "CIS Ubuntu 24", mappedChecks: 90, catalogChecks: 94, coveredControls: 60, totalControls: 200 },
       { framework: "nist_800_53_rev5", family: "nist_800_53", shortName: "NIST 800-53", mappedChecks: 92, catalogChecks: 94 },
     ],
     families: [
@@ -827,11 +827,15 @@ describe("SecurityCompliance — familias de frameworks", () => {
     // La suma del backend, no la de un miembro.
     expect(within(familyRow).getByText("12")).toBeInTheDocument();
     expect(within(familyRow).getByText("120 / 500")).toBeInTheDocument();
+    // Bajo el nombre, la cobertura sumada de sus benchmarks — el mismo dato
+    // que el resto de filas, no el botón de desplegar.
+    expect(within(familyRow).getByText("Covers 561 of 701 controls in the standards (80%)")).toBeInTheDocument();
+    expect(within(familyRow).queryByText(/benchmarks in use/)).toBeNull();
     // Los miembros no están hasta que se piden…
     expect(screen.queryByText("cis_ubuntu_24_v2.0.0")).toBeNull();
     // La fila entera es role=button, y ARIA vuelve presentacionales a sus
     // hijos: el botón de dentro no se ve por rol, sólo por texto.
-    fireEvent.click(within(familyRow).getByText("Show 2 benchmarks in use"));
+    fireEvent.click(within(familyRow).getByText("2 benchmarks"));
     // …y al pedirlos aparecen con su id, cada uno con sus números.
     expect(await screen.findByText("cis_ubuntu_24_v2.0.0")).toBeInTheDocument();
     expect(screen.getByText("cis_windows_11_v5.1.0")).toBeInTheDocument();

@@ -163,6 +163,42 @@ const ATTESTATION_FRAMEWORK_NOTE = {
  */
 const PLATFORM_LABEL = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
+/**
+ * La cobertura de una familia (CIS, STIG): la suma de la de sus benchmarks
+ * en uso. Cada benchmark es un documento con sus propios controles, así que
+ * sumar los del estándar es legítimo — "1444 of 1444" son los de Windows 10,
+ * 11 y Server 2022 juntos. Lo que NO se suma es "N of M controls mapped": un
+ * mismo check del catálogo mapea a varios benchmarks y el total se contaría
+ * dos veces. Sin cifra verificada en TODOS los miembros no se dice nada: una
+ * suma parcial sería un porcentaje inventado.
+ */
+function FamilyCoverageNote({ members, coverageOf }) {
+  let covered = 0;
+  let standardTotal = 0;
+  for (const m of members) {
+    const c = coverageOf(m.framework);
+    if (!c?.standardTotal || c.covered == null) return null;
+    covered += c.covered;
+    standardTotal += c.standardTotal;
+  }
+  if (!standardTotal) return null;
+  const pct = Math.round((covered / standardTotal) * 100);
+  return (
+    <Tooltip
+      arrow
+      placement="bottom-start"
+      title={
+        `Across the ${members.length} benchmarks in use, Tracenium maps ${covered} of their ${standardTotal} controls (${pct}%). ` +
+        "Each benchmark's own figure is in its row."
+      }
+    >
+      <Typography variant="caption" sx={{ color: BRAND.alert.warningText, fontWeight: 700, cursor: "help" }}>
+        Covers {covered} of {standardTotal} controls in the standards ({pct}%)
+      </Typography>
+    </Tooltip>
+  );
+}
+
 function CoverageNote({ coverage }) {
   if (!coverage || !coverage.total) return null;
   const { mapped, total, platform, covered, standardTotal, standardSource, latestKnownVersion } = coverage;
@@ -1094,81 +1130,6 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         }
       />
 
-      {/* ── Fila de filtros ──────────────────────────────────────────
-          Qué se está mirando, separado de qué se puede hacer con ello.
-
-          El selector de framework vivía dentro del acordeón "Frameworks",
-          que además está plegado: un filtro que gobierna el titular,
-          "What to fix first", la tabla de equipos y los exports no puede
-          esconderse dentro de una de las secciones que filtra. Subió a la
-          cabecera, y con él el de grupos — pero mezclados con los botones
-          de exportar dejaban una fila de siete controles que envolvía.
-          Aquí tienen su propio renglón y se leen como un grupo.
-
-          Sólo en Fleet status: Baselines y Catalog no se filtran por
-          framework ni por grupo, y una barra de filtros inertes es peor
-          que ninguna. */}
-      {effectiveTab === "posture" ? (
-        <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          flexWrap="wrap"
-          useFlexGap
-          // Alineados a la izquierda, en su propia fila bajo la cabecera:
-          // arrancan donde arranca el contenido de la página, así que la
-          // vista cae sobre ellos al bajar del título en vez de tener que
-          // cruzar a la derecha.
-          sx={{ mb: 2 }}
-        >
-          {/* Sólo cuando hay grupos: un selector con una única opción
-              ("All devices") es ruido. */}
-          {assetGroups.length > 0 ? (
-            <Select
-              value={assetGroupId}
-              onChange={(e) => setAssetGroupId(e.target.value)}
-              size="small"
-              displayEmpty
-              inputProps={{ "aria-label": "Filter by asset group" }}
-              sx={{ minWidth: 190, bgcolor: BRAND.surface }}
-            >
-              <MenuItem value="">All devices</MenuItem>
-              {assetGroups.map((g) => (
-                <MenuItem key={g.id} value={String(g.id)}>
-                  {g.name}
-                </MenuItem>
-              ))}
-            </Select>
-          ) : null}
-          <Select
-            value={selectedFramework}
-            onChange={(e) => {
-              setFrameworkTouched(true);
-              setSelectedFramework(e.target.value);
-            }}
-            size="small"
-            displayEmpty
-            inputProps={{ "aria-label": "Filter by framework" }}
-            sx={{ minWidth: 220, bgcolor: BRAND.surface }}
-          >
-            <MenuItem value="">All frameworks (weighted)</MenuItem>
-            {/* Una entrada por familia: "CIS Benchmarks" mide cada equipo
-                contra el benchmark de SU sistema operativo, igual que
-                NIST o PCI son una sola entrada para toda la flota. */}
-            {frameworkOptions.map((o) => (
-              <MenuItem key={o.key} value={o.key}>
-                {o.label}
-                {o.members.length > 1 ? (
-                  <Typography component="span" sx={{ ml: 0.75, fontSize: TEXT.xs, color: BRAND.gray }}>
-                    {o.members.length} benchmarks
-                  </Typography>
-                ) : null}
-              </MenuItem>
-            ))}
-          </Select>
-        </Stack>
-      ) : null}
-
       {/* Las caras del módulo: lo que observamos (Fleet status), lo que
           exigimos (Baselines), lo que evaluamos (Catalog) y cómo se mide
           (Settings).
@@ -1345,6 +1306,20 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
              el resto pasa a ser contexto de una línea, con los números
              que llevan a algún sitio convertidos en enlaces. */
           <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
+            {/* El número a la izquierda y, a su derecha, contra qué se mide.
+                Los selectores tuvieron su propia fila encima de las
+                pestañas, pero ahí se leían como filtros de TODA la página
+                cuando sólo gobiernan Fleet status, y esta tarjeta tenía el
+                lado derecho vacío. Junto al titular dicen exactamente lo
+                que hacen: cambian ESTE número y lo que cuelga de él. En
+                pantallas estrechas bajan debajo. */}
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              justifyContent="space-between"
+              alignItems={{ xs: "stretch", md: "flex-start" }}
+            >
+            <Box sx={{ minWidth: 0, flex: 1 }}>
             <Stack
               direction="row"
               spacing={1.5}
@@ -1446,6 +1421,58 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               {" · your thresholds: "}
               {bands.goodMin}% on track / {bands.warningMin}% needs attention
             </Typography>
+            </Box>
+
+            <Stack spacing={1} sx={{ width: { xs: "100%", md: 260 }, flexShrink: 0 }}>
+              {/* Sólo cuando hay grupos: un selector con una única opción
+                  ("All devices") es ruido. */}
+              {assetGroups.length > 0 ? (
+                <Select
+                  value={assetGroupId}
+                  onChange={(e) => setAssetGroupId(e.target.value)}
+                  size="small"
+                  displayEmpty
+                  fullWidth
+                  inputProps={{ "aria-label": "Filter by asset group" }}
+                  sx={{ bgcolor: BRAND.surface }}
+                >
+                  <MenuItem value="">All devices</MenuItem>
+                  {assetGroups.map((g) => (
+                    <MenuItem key={g.id} value={String(g.id)}>
+                      {g.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              ) : null}
+              <Select
+                value={selectedFramework}
+                onChange={(e) => {
+                  setFrameworkTouched(true);
+                  setSelectedFramework(e.target.value);
+                }}
+                size="small"
+                displayEmpty
+                fullWidth
+                inputProps={{ "aria-label": "Filter by framework" }}
+                sx={{ bgcolor: BRAND.surface }}
+              >
+                <MenuItem value="">All frameworks (weighted)</MenuItem>
+                {/* Una entrada por familia: "CIS Benchmarks" mide cada equipo
+                    contra el benchmark de SU sistema operativo, igual que
+                    NIST o PCI son una sola entrada para toda la flota. */}
+                {frameworkOptions.map((o) => (
+                  <MenuItem key={o.key} value={o.key}>
+                    {o.label}
+                    {o.members.length > 1 ? (
+                      <Typography component="span" sx={{ ml: 0.75, fontSize: TEXT.xs, color: BRAND.gray }}>
+                        {o.members.length} benchmarks
+                      </Typography>
+                    ) : null}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Stack>
+            </Stack>
           </SectionPaper>
         );
       })()}
@@ -1539,10 +1566,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         <AccordionSummary expandIcon={<ExpandMoreIcon />}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap" }}>
             <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
-              Frameworks
-            </Typography>
-            <Typography sx={{ fontSize: TEXT.md, color: BRAND.gray }}>
-              how you score against CIS, NIST and the rest
+              Posture by framework
             </Typography>
             {selectedFramework ? (
               <Chip
@@ -1562,11 +1586,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           sx={{ mb: 1.5 }}
         >
           <Box>
-            <Typography variant="subtitle2" sx={{ color: BRAND.dark, fontWeight: 700 }}>
-              Posture by framework
-            </Typography>
+            {/* El título vive en la cabecera del acordeón; aquí sólo la
+                explicación, como en «Posture by category». */}
             <Typography variant="caption" sx={{ color: BRAND.gray }}>
-              Scoring uses the severity weights defined by each framework. The picker in the page header filters this table, the headline, and what to fix first.
+              Scoring uses the severity weights defined by each framework. The framework picker next to the score filters this table, the headline, and what to fix first.
               {/* Sprint 4 — say so when a compliance pack is trimming the
                   list, so nobody wonders where the other frameworks went. */}
               {data?.packActive ? (
@@ -1585,8 +1608,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               ) : null}
             </Typography>
           </Box>
-          {/* El selector se mudó a la cabecera de la página: gobierna
-              cuatro secciones, no sólo ésta. */}
+          {/* El selector vive junto al titular: gobierna cuatro
+              secciones, no sólo ésta. */}
         </Stack>
 
         <TableContainer>
@@ -1628,12 +1651,12 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                   // Una familia pinta su fila sumada y, si está abierta,
                   // un benchmark por línea debajo, con sangría. Las tres
                   // clases de fila comparten el mismo render.
-                  const rows = [{ f: row, isFamily: Array.isArray(members), indent: false, memberCount: members?.length ?? 0 }];
+                  const rows = [{ f: row, isFamily: Array.isArray(members), indent: false, members: members ?? [] }];
                   if (Array.isArray(members) && openFamilies.has(row.framework)) {
-                    for (const m of members) rows.push({ f: m, isFamily: false, indent: true, memberCount: 0 });
+                    for (const m of members) rows.push({ f: m, isFamily: false, indent: true, members: [] });
                   }
                   return rows;
-                }).map(({ f, isFamily, indent, memberCount }) => (
+                }).map(({ f, isFamily, indent, members }) => (
                   <React.Fragment key={f.framework}>
                   <TableRow
                     hover
@@ -1684,24 +1707,42 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                     </TableCell>
                     <TableCell sx={indent ? { pl: 4 } : undefined}>
                       <Stack>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
-                          {frameworkLabels.get(f.framework) || f.framework}
-                        </Typography>
+                        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexWrap: "wrap" }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: BRAND.dark }}>
+                            {frameworkLabels.get(f.framework) || f.framework}
+                          </Typography>
+                          {isFamily ? (
+                            /* Cuántos benchmarks tienen equipos, y el botón que
+                               los enseña, pegado al nombre: debajo va la
+                               cobertura, como en el resto de filas. Desplegar
+                               los miembros NO filtra ni abre los controles: es
+                               la tercera acción de la fila y va aparte. */
+                            <Button
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFamily(f.framework);
+                              }}
+                              endIcon={openFamilies.has(f.framework) ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                              sx={{
+                                px: 0.75,
+                                py: 0,
+                                minWidth: 0,
+                                fontSize: TEXT.xs,
+                                textTransform: "none",
+                                color: BRAND.tealText,
+                                bgcolor: BRAND.tealSoft,
+                                borderRadius: 999,
+                                "& .MuiButton-endIcon": { ml: 0.25 },
+                                "& .MuiButton-endIcon svg": { fontSize: TEXT.md },
+                              }}
+                            >
+                              {`${members.length} benchmark${members.length === 1 ? "" : "s"}`}
+                            </Button>
+                          ) : null}
+                        </Stack>
                         {isFamily ? (
-                          /* Cuántos benchmarks tienen equipos, y el botón que
-                             los enseña. Desplegar los miembros NO filtra ni
-                             abre los controles: es la tercera acción de la
-                             fila y va aparte de las otras dos. */
-                          <Button
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFamily(f.framework);
-                            }}
-                            sx={{ alignSelf: "flex-start", px: 0.5, py: 0, minWidth: 0, fontSize: TEXT.xs, textTransform: "none", color: BRAND.tealText }}
-                          >
-                            {`${openFamilies.has(f.framework) ? "Hide" : "Show"} ${memberCount} benchmark${memberCount === 1 ? "" : "s"} in use`}
-                          </Button>
+                          <FamilyCoverageNote members={members} coverageOf={(k) => frameworkCoverage.get(k)} />
                         ) : (
                           <Typography variant="caption" sx={{ color: BRAND.gray }}>
                             {f.framework}

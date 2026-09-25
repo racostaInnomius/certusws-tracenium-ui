@@ -26,7 +26,6 @@ import {
   CircularProgress,
   Tooltip,
 } from "@mui/material";
-import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import { scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
@@ -254,12 +253,12 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
   }, [reloadKey]);
 
   return (
-    // Plegable, con la misma cáscara que «Trend over time» y «Frameworks»:
-    // es una tabla larga (una fila por categoría) entre el titular y la tabla
-    // de equipos, y quien va a los equipos tiene que poder quitársela de en
-    // medio. Abierta por defecto — plegarla es decisión de quien mira.
+    // Plegable, con la misma cáscara que «Trend over time» y «Posture by
+    // framework»: es una tabla larga (una fila por categoría) entre el
+    // titular y la tabla de equipos. Plegada por defecto, igual que la de
+    // frameworks — y con su misma cabecera: el título a secas, sin icono,
+    // y la explicación dentro.
     <Accordion
-      defaultExpanded
       disableGutters
       elevation={0}
       sx={{
@@ -271,17 +270,12 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
       }}
     >
       <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <CategoryOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
-          <Box>
-            <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>Posture by category</Typography>
-            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-              Fleet pass rate per control category. Click a category with failures to see which devices fail it.
-            </Typography>
-          </Box>
-        </Stack>
+        <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>Posture by category</Typography>
       </AccordionSummary>
       <AccordionDetails sx={{ pt: 0 }}>
+      <Typography variant="caption" component="p" sx={{ color: BRAND.gray, mb: 1.5 }}>
+        Fleet pass rate per control category. Click a category with failures to see which devices fail it.
+      </Typography>
 
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>

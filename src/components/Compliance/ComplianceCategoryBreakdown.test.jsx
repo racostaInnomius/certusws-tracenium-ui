@@ -77,16 +77,16 @@ describe("ComplianceCategoryBreakdown", () => {
     expect(screen.getByText("96%")).toBeInTheDocument();
   });
 
-  it("abre desplegada y se pliega desde la cabecera", async () => {
-    // Una fila por categoría entre el titular y la tabla de equipos: quien va
-    // a los equipos tiene que poder quitársela de en medio.
+  it("abre plegada y se despliega desde la cabecera", async () => {
+    // Una fila por categoría entre el titular y la tabla de equipos: plegada
+    // por defecto, como «Posture by framework».
     getCategorySummary.mockResolvedValue(ITEMS);
     render(<ComplianceCategoryBreakdown />);
     await screen.findByText("Firewall");
-    const header = screen.getByRole("button", { name: /Posture by category/ });
-    expect(header).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(header);
+    const header = screen.getByRole("button", { name: "Posture by category" });
     expect(header).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows the empty state when there are no findings", async () => {
@@ -112,6 +112,8 @@ describe("ComplianceCategoryBreakdown", () => {
     });
     render(<ComplianceCategoryBreakdown />);
     const firewallCell = await screen.findByText("Firewall");
+    // Plegada por defecto: se abre antes de pulsar una fila de dentro.
+    fireEvent.click(screen.getByRole("button", { name: "Posture by category" }));
     fireEvent.click(within(firewallCell.closest("tr")).getByRole("button"));
 
     expect(await screen.findByText("Domain firewall on")).toBeInTheDocument();
