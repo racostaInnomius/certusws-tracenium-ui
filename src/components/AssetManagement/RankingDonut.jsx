@@ -13,8 +13,8 @@
 // el chunk charts-vendor pesa 394 KB.
 
 import * as React from "react";
-import { Box, Paper, Stack, Tooltip, Typography } from "@mui/material";
-import { BRAND, TEXT } from "../../theme/brand";
+import { Box, ButtonBase, Paper, Stack, Tooltip, Typography } from "@mui/material";
+import { BRAND, FOCUS_RING, TEXT } from "../../theme/brand";
 import { RING_RADIUS as RADIUS, RING_SIZE as SIZE, RING_STROKE as STROKE } from "../Charts/ringGeometry";
 
 const CIRC = 2 * Math.PI * RADIUS;
@@ -48,8 +48,23 @@ export function buildDonutSlices(items, maxSlices = 4) {
   ];
 }
 
-export default function RankingDonut({ title, subtitle, items, totalLabel, emptyLabel, headerExtra }) {
+/**
+ * `onSliceClick(label)` hace la dona interactiva, como las demás de la fila:
+ * la porción filtra la tabla y `activeLabel` la deja resaltada. "Others" no
+ * filtra — agrupa marcas distintas, y para eso está «View all».
+ */
+export default function RankingDonut({
+  title,
+  subtitle,
+  items,
+  totalLabel,
+  emptyLabel,
+  headerExtra,
+  activeLabel = null,
+  onSliceClick,
+}) {
   const slices = buildDonutSlices(items);
+  const clickable = (s) => typeof onSliceClick === "function" && !s.othersCount;
   const sum = slices.reduce((a, s) => a + s.value, 0);
 
   const arcs = slices.reduce((acc, s) => {
@@ -95,9 +110,13 @@ export default function RankingDonut({ title, subtitle, items, totalLabel, empty
                 >
                   <circle
                     cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none"
-                    stroke={a.color} strokeWidth={STROKE}
+                    stroke={a.color} strokeWidth={activeLabel === a.label ? STROKE + 4 : STROKE}
                     strokeDasharray={`${a.len} ${CIRC - a.len}`}
                     transform={`rotate(${a.rotation} ${SIZE / 2} ${SIZE / 2})`}
+                    opacity={activeLabel && activeLabel !== a.label ? 0.35 : 1}
+                    onClick={clickable(a) ? () => onSliceClick(a.label) : undefined}
+                    data-ring="slice"
+                    style={{ cursor: clickable(a) ? "pointer" : "default", transition: "stroke-width 160ms ease" }}
                   />
                 </Tooltip>
               ))}
@@ -108,14 +127,39 @@ export default function RankingDonut({ title, subtitle, items, totalLabel, empty
           </Box>
 
           <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, rowGap: 0.5, mt: 1 }}>
-            {slices.map((s) => (
-              <Stack key={s.label} direction="row" spacing={0.5} alignItems="center">
-                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: s.color }} />
-                <Typography sx={{ fontSize: TEXT.xs, fontWeight: 600, color: "text.secondary" }}>
-                  {s.label} {s.value}
-                </Typography>
-              </Stack>
-            ))}
+            {/* La leyenda es también el control accesible por teclado: las
+                porciones de un SVG no reciben foco. */}
+            {slices.map((s) => {
+              const content = (
+                <>
+                  <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: s.color }} />
+                  <Typography
+                    sx={{
+                      fontSize: TEXT.xs,
+                      fontWeight: activeLabel === s.label ? 800 : 600,
+                      color: activeLabel === s.label ? BRAND.dark : "text.secondary",
+                    }}
+                  >
+                    {s.label} {s.value}
+                  </Typography>
+                </>
+              );
+              return clickable(s) ? (
+                <ButtonBase
+                  key={s.label}
+                  onClick={() => onSliceClick(s.label)}
+                  aria-pressed={activeLabel === s.label}
+                  aria-label={`${s.label}: ${s.value} — filter the table`}
+                  sx={{ gap: 0.5, borderRadius: 1, px: 0.25, "&.Mui-focusVisible": { boxShadow: FOCUS_RING } }}
+                >
+                  {content}
+                </ButtonBase>
+              ) : (
+                <Stack key={s.label} direction="row" spacing={0.5} alignItems="center">
+                  {content}
+                </Stack>
+              );
+            })}
           </Stack>
           {totalLabel ? (
             <Typography sx={{ fontSize: TEXT.xs, color: "text.secondary", mt: 0.5 }}>{totalLabel}</Typography>

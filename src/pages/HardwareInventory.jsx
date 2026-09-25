@@ -76,6 +76,14 @@ const FLEET_FILTER_LABELS = {
   mem_33_plus: "Memory > 32 GB",
 };
 
+const FILTER_CHIP_SX = {
+  height: 26,
+  fontWeight: 800,
+  fontSize: TEXT.xs,
+  bgcolor: BRAND.tealSoft,
+  color: BRAND.tealText,
+};
+
 function fleetFilterLabel(key, summary) {
   if (FLEET_FILTER_LABELS[key]) return FLEET_FILTER_LABELS[key];
   const dist = summary?.fleet?.distribution;
@@ -378,6 +386,15 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
     setFleetFilter((prev) => (prev === key ? "all" : key));
   }, []);
 
+  // Fabricante elegido en «Top manufacturers» (la dona o su «View all»). Se
+  // SUMA al filtro de flota: «Laptops» + «Dell Inc.» son los portátiles Dell.
+  // Antes esta tarjeta era la única de la fila que no filtraba.
+  const [manufacturerFilter, setManufacturerFilter] = React.useState(null);
+  const selectManufacturer = React.useCallback((label) => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    setManufacturerFilter((prev) => (prev === label ? null : label));
+  }, []);
+
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: "",
@@ -390,6 +407,7 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
       const res = await getHardwareInventoryDetail({
         search: search || undefined,
         fleetFilter: fleetFilter && fleetFilter !== "all" ? fleetFilter : undefined,
+        manufacturer: manufacturerFilter || undefined,
         page: paginationModel.page + 1,
         pageSize: paginationModel.pageSize,
       });
@@ -410,7 +428,7 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
 
   React.useEffect(() => {
     loadDetail();
-  }, [search, fleetFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
+  }, [search, fleetFilter, manufacturerFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
 
   const refreshAll = () => {
     reloadSummary();
@@ -704,6 +722,8 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
                 items={topManufacturersRows}
                 emptyLabel="No manufacturer data"
                 totalLabel={`${topManufacturersRows.length} brands reporting`}
+                activeLabel={manufacturerFilter}
+                onSliceClick={selectManufacturer}
                 headerExtra={renderViewAllButton({
                   title: "Top manufacturers",
                   subtitle: rankingSubtitle(topManufacturersRows, rankings?.topManufacturersTotal, "manufacturers"),
@@ -711,6 +731,8 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
                   totalLabel: "hosts",
                   labelHeader: "Manufacturer",
                   valueHeader: "Hosts",
+                  // Una fila del ranking completo filtra igual que su porción.
+                  onSelect: selectManufacturer,
                 })}
               />
             </Box>
@@ -734,19 +756,25 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
       <SectionCard
         title="Hardware Inventory Detail"
         action={
-          fleetFilter !== "all" ? (
-            <Chip
-              size="small"
-              label={`${fleetFilterLabel(fleetFilter, summary)} · ${totalRows}`}
-              onDelete={() => selectFleetFilter("all")}
-              sx={{
-                height: 26,
-                fontWeight: 800,
-                fontSize: TEXT.xs,
-                bgcolor: BRAND.tealSoft,
-                color: BRAND.tealText,
-              }}
-            />
+          fleetFilter !== "all" || manufacturerFilter ? (
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+              {fleetFilter !== "all" ? (
+                <Chip
+                  size="small"
+                  label={`${fleetFilterLabel(fleetFilter, summary)} · ${totalRows}`}
+                  onDelete={() => selectFleetFilter("all")}
+                  sx={FILTER_CHIP_SX}
+                />
+              ) : null}
+              {manufacturerFilter ? (
+                <Chip
+                  size="small"
+                  label={`Manufacturer: ${manufacturerFilter} · ${totalRows}`}
+                  onDelete={() => selectManufacturer(manufacturerFilter)}
+                  sx={FILTER_CHIP_SX}
+                />
+              ) : null}
+            </Stack>
           ) : null
         }
       >
@@ -929,6 +957,14 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
               columns={rankingDialogColumns}
               disableRowSelectionOnClick
               getRowId={(row) => row.id}
+              onRowClick={
+                rankingDialog?.onSelect
+                  ? (params) => {
+                      rankingDialog.onSelect(params.row?.label);
+                      closeRankingDialog();
+                    }
+                  : undefined
+              }
               pageSizeOptions={[10, 25, 50, 100]}
               initialState={{
                 pagination: {
@@ -951,6 +987,9 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
                 },
                 "& .MuiDataGrid-cell": {
                   alignItems: "center",
+                },
+                "& .MuiDataGrid-row": {
+                  cursor: rankingDialog?.onSelect ? "pointer" : "default",
                 },
               }}
             />
