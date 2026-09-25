@@ -42,7 +42,14 @@ const SEVERITY_COLOR = {
 };
 
 /** El texto del bloqueo. Nunca se deja un botón muerto sin explicación. */
-export function blockedReasonText(reason) {
+export function blockedReasonText(reason, guard = null) {
+  // ADR-0035: el fix existe pero no se lanza desde aquí (encender el
+  // firewall se planifica por equipo). No es «nadie sabe arreglarlo».
+  if (reason === "guarded") {
+    return guard
+      ? `Not applied from here: it ${guard}.`
+      : "Not applied from here: this change is planned per device first.";
+  }
   if (reason === "pmp_not_entitled") {
     return "Applying needs Patch Management, which is not in this tenant's plan. The finding is still tracked here.";
   }
@@ -186,7 +193,7 @@ export default function RemediationHubPanel({ reloadKey, onToast, canManage = fa
               </TableRow>
             ) : null}
             {actions.map((a) => {
-              const blocked = blockedReasonText(a.applyBlockedReason);
+              const blocked = blockedReasonText(a.applyBlockedReason, a.guard);
               return (
                 <TableRow key={a.key} hover>
                   <TableCell sx={{ maxWidth: 380 }}>

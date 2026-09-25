@@ -85,6 +85,14 @@ describe("helpers", () => {
     expect(blockedReasonText("no_handler")).toMatch(/by hand/i);
     expect(blockedReasonText(null)).toBeNull();
   });
+
+  it("encender el firewall (ADR-0035) dice por qué no hay botón, no «a mano»", () => {
+    const guard = "turns on or reshapes the firewall — inbound connections no rule allows stop working; plan it per device first (ADR-0035)";
+    const text = blockedReasonText("guarded", guard);
+    expect(text).toMatch(/^Not applied from here: it turns on/);
+    expect(text).not.toMatch(/by hand/i);
+    expect(blockedReasonText("guarded")).toMatch(/planned per device/);
+  });
 });
 
 describe("la fila dice qué cierra", () => {

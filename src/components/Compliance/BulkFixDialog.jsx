@@ -130,7 +130,7 @@ export default function BulkFixDialog({
 
           {plan.guarded.length || plan.manual.length ? (
             <Alert severity="info">
-              {plan.guarded.length ? `${plan.guarded.length} of the selected findings are guarded: they have a fix, but it is exported as a file and applied by a person who has read why. ` : ""}
+              {plan.guarded.length ? `${plan.guarded.length} of the selected findings are guarded: they have a fix, but a person applies it after reading why — never in bulk. ` : ""}
               {plan.manual.length ? `${plan.manual.length} ${plan.manual.length === 1 ? "has" : "have"} no automated fix at all. ` : ""}
               They stay out of this batch.
             </Alert>
