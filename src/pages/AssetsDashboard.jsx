@@ -62,7 +62,7 @@ import {
   getSoftwareInventoryHostApps,
 } from "../api/inventoryDashboard";
 import { getConnectedDevices, getLatestAgentVersions, getAgentVersionsSummary } from "../api/overview";
-import { versionsInBucket } from "../components/Overview/agentVersions";
+import { bucketOfSegmentName, versionsInBucket } from "../components/Overview/agentVersions";
 import { listAssetGroups, listAssetGroupMembers } from "../api/assetGroups";
 import { createDeviceDecommissionJob, getDeviceDecommissionJob, listSilentEnrollments } from "../api/devices";
 import { normalizePlatform, platformColor, platformLabel } from "../utils/platform";
@@ -111,7 +111,7 @@ import { DEVICE_DETAIL_TABS } from "../components/AssetsDashboard/deviceVisuals"
 import ExperienceTab from "../components/dex/ExperienceTab";
 import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
 import AssetAttentionCard from "../components/AssetsDashboard/AssetAttentionCard";
-import { checkInDonutData } from "../components/AssetsDashboard/assetHealthModel";
+import { checkInDonutData, checkInKeyOfName, checkInNameOfKey } from "../components/AssetsDashboard/assetHealthModel";
 
 // Pestaña Experience (ADR-0030) del detalle del equipo; la tarjeta de flota
 // abre la ficha directamente en ella.
@@ -373,6 +373,9 @@ export default function AssetsDashboard({
   const [versionBucketFilter, setVersionBucketFilter] = React.useState(
     initialFilters.versionBucket || ""
   );
+  // Tramo de «Last check-in» (lt1h, lt24h, lt7d, gt7d, never). Lo resuelve el
+  // servidor con la misma regla que cuenta la dona.
+  const [checkInFilter, setCheckInFilter] = React.useState(initialFilters.checkIn || "");
   // Phase 4: filter by Asset Group membership. Two pieces of state —
   // the selected group id (as a string so the dropdown plays nicely
   // with empty=""), and the resolved Set of deviceIds for that group.
@@ -594,6 +597,7 @@ export default function AssetsDashboard({
       sortDir: hostsSortDir,
       platform: platformFilter || undefined,
       assetGroupId: groupFilter || undefined,
+      checkIn: checkInFilter || undefined,
       ...versionFilterParams,
     });
 
@@ -679,9 +683,10 @@ export default function AssetsDashboard({
     platformFilter,
     versionBucketFilter,
     groupFilter,
+    checkInFilter,
   ]);
 
-  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}`;
+  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}:${checkInFilter}`;
   const { data, loading, refetch } = useCachedFetch(hostsCacheKey, loader);
   // Memoize the destructured slices so identity is stable across
   // renders — `data?.foo ?? []` would create a fresh fallback every
@@ -714,7 +719,7 @@ export default function AssetsDashboard({
       return;
     }
     setHostsPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
-  }, [platformFilter, versionBucketFilter, groupFilter]);
+  }, [platformFilter, versionBucketFilter, groupFilter, checkInFilter]);
   const agentVersions = data?.agentVersions ?? null;
 
   const loadState = React.useMemo(
@@ -1295,6 +1300,7 @@ export default function AssetsDashboard({
     !platformFilter &&
     !versionBucketFilter &&
     !groupFilter &&
+    !checkInFilter &&
     Number(hostsMeta.total || 0) === 0 &&
     Number(summary?.activeHosts ?? 0) === 0;
 
@@ -1569,12 +1575,23 @@ const osVersionItems = React.useMemo(() => {
             {/* AgentVersionDonut uses its own <Paper> wrapper via
                 DonutCard — no SectionPaper around it or we'd double
                 the border. */}
+            {/* Interactiva, como las de Hardware Inventory: la rebanada filtra
+                la tabla de abajo y se queda resaltada; pulsarla otra vez quita
+                el filtro. "Not connected" no es un grupo de versión. */}
             <AgentVersionDonut
               byVersion={byVersion}
               latestMap={latestMap}
               loading={loading}
               fleetDevices={fleetDevices}
               agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
+              activeBucket={versionBucketFilter || null}
+              onSegmentClick={(segment) => {
+                const bucket = bucketOfSegmentName(segment?.name);
+                if (!bucket) return;
+                const next = versionBucketFilter === bucket ? "" : bucket;
+                setVersionBucketFilter(next);
+                updateSearchParams({ versionBucket: next });
+              }}
             />
           </Box>
         </Grid>
@@ -1588,6 +1605,14 @@ const osVersionItems = React.useMemo(() => {
               subtitle="When each device last reported"
               data={checkInData}
               loading={assetHealth.loading && !assetHealth.data}
+              activeKey={checkInNameOfKey(checkInFilter)}
+              onSegmentClick={(segment) => {
+                const key = checkInKeyOfName(segment?.name);
+                if (!key) return;
+                const next = checkInFilter === key ? "" : key;
+                setCheckInFilter(next);
+                updateSearchParams({ checkIn: next });
+              }}
               totalLabel="devices"
               fallbackLabel={assetHealth.error ? "Could not load check-ins" : "No check-in data"}
             />
@@ -1872,7 +1897,7 @@ const osVersionItems = React.useMemo(() => {
                   </Typography>
                 </Stack>
 
-                {(platformFilter || versionBucketFilter || groupFilter) ? (
+                {(platformFilter || versionBucketFilter || groupFilter || checkInFilter) ? (
                   <Stack
                     direction="row"
                     spacing={0.75}
@@ -1904,6 +1929,17 @@ const osVersionItems = React.useMemo(() => {
                           updateSearchParams({ versionBucket: "" });
                         }}
                         sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 600 }}
+                      />
+                    ) : null}
+                    {checkInFilter ? (
+                      <Chip
+                        size="small"
+                        label={`Last check-in: ${checkInNameOfKey(checkInFilter) || checkInFilter}`}
+                        onDelete={() => {
+                          setCheckInFilter("");
+                          updateSearchParams({ checkIn: "" });
+                        }}
+                        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
                       />
                     ) : null}
                     {groupFilter ? (

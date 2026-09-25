@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { attentionRows, checkInDonutData } from "./assetHealthModel";
+import { attentionRows, checkInDonutData, checkInKeyOfName, checkInNameOfKey } from "./assetHealthModel";
 
 describe("checkInDonutData", () => {
   it("de lo más reciente a lo más viejo, sin tramos vacíos", () => {
@@ -45,5 +45,17 @@ describe("attentionRows", () => {
     expect(rows.map((r) => r.label)).toContain("Disk ≥ 90% full");
     expect(rows.map((r) => r.label)).toContain("Memory ≤ 4 GB");
     expect(rows.map((r) => r.label)).toContain("No restart in 14+ days");
+  });
+});
+
+describe("rebanada de Last check-in ↔ filtro checkIn", () => {
+  it("ida y vuelta en los cinco tramos", () => {
+    for (const k of ["lt1h", "lt24h", "lt7d", "gt7d", "never"]) {
+      expect(checkInKeyOfName(checkInNameOfKey(k))).toBe(k);
+    }
+  });
+  it("lo que no es un tramo → null", () => {
+    expect(checkInKeyOfName("__pending__")).toBeNull();
+    expect(checkInNameOfKey("")).toBeNull();
   });
 });

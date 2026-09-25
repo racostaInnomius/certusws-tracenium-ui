@@ -108,3 +108,25 @@ export function versionsInBucket(byVersion, latestMap, bucket) {
   }
   return { versions, includeUnknown };
 }
+
+// ── Rebanada de la dona ↔ filtro de la tabla ──────────────────────────────
+//
+// Una sola traducción para las dos superficies que la usan (el enlace del
+// Overview y el filtro de la tabla de Assets): si cada una tuviera la suya,
+// «One behind» podría llevar a un filtro en una y a otro en la otra.
+const SEGMENT_TO_BUCKET = {
+  Current: "current",
+  "One behind": "one_behind",
+  Older: "older",
+  Unknown: "unknown",
+};
+
+/** "One behind" → "one_behind". Lo que no es un grupo de versión → null. */
+export function bucketOfSegmentName(name) {
+  return SEGMENT_TO_BUCKET[String(name ?? "")] ?? null;
+}
+
+/** "one_behind" → "One behind", para resaltar la rebanada del filtro activo. */
+export function segmentNameOfBucket(bucket) {
+  return Object.keys(SEGMENT_TO_BUCKET).find((k) => SEGMENT_TO_BUCKET[k] === bucket) ?? null;
+}

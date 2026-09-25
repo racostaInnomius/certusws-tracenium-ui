@@ -5,7 +5,7 @@
 // "Older 4" y la tabla enseña otra cosa.
 
 import { describe, expect, it } from "vitest";
-import { bucketOfAgentVersion, classifyAgentVersions, versionsInBucket } from "./agentVersions";
+import { bucketOfAgentVersion, classifyAgentVersions, versionsInBucket, bucketOfSegmentName, segmentNameOfBucket } from "./agentVersions";
 
 const LATEST = { "windows:x64": "1.1.70", "macos:arm64": "1.1.69" };
 const BY_VERSION = [
@@ -53,5 +53,20 @@ describe("versionsInBucket", () => {
       versions: [],
       includeUnknown: false,
     });
+  });
+});
+
+describe("rebanada ↔ filtro de la tabla", () => {
+  it("cada rebanada de la dona tiene su grupo, y vuelta", () => {
+    for (const [name, bucket] of [["Current", "current"], ["One behind", "one_behind"], ["Older", "older"], ["Unknown", "unknown"]]) {
+      expect(bucketOfSegmentName(name)).toBe(bucket);
+      expect(segmentNameOfBucket(bucket)).toBe(name);
+    }
+  });
+
+  it("«Not connected» (pendientes) no es un grupo de versión", () => {
+    expect(bucketOfSegmentName("__pending__")).toBeNull();
+    expect(bucketOfSegmentName("Not connected")).toBeNull();
+    expect(segmentNameOfBucket("")).toBeNull();
   });
 });

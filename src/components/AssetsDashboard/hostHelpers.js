@@ -17,6 +17,9 @@ export const ALLOWED_VERSION_BUCKETS = new Set([
   "unknown"
 ]);
 
+// Tramos de «Last check-in» que /dashboard/hosts sabe filtrar.
+export const ALLOWED_CHECK_IN = new Set(["lt1h", "lt24h", "lt7d", "gt7d", "never"]);
+
 export function readUrlFilters() {
   if (typeof window === "undefined") return {};
   const params = new URLSearchParams(window.location.search);
@@ -26,6 +29,7 @@ export function readUrlFilters() {
   // operator can click "View devices" on a group and land on the
   // Dashboard pre-scoped to that group's membership. We coerce to a
   // positive integer string; anything else falls back to "".
+  const checkIn = String(params.get("checkIn") || "").trim();
   const rawGroupId = String(params.get("groupId") || "").trim();
   const groupIdValid = /^[0-9]+$/.test(rawGroupId) && Number(rawGroupId) > 0;
   return {
@@ -34,6 +38,7 @@ export function readUrlFilters() {
       ? versionBucket
       : "",
     groupId: groupIdValid ? rawGroupId : "",
+    checkIn: ALLOWED_CHECK_IN.has(checkIn) ? checkIn : "",
   };
 }
 
@@ -206,6 +211,7 @@ export function buildHostsQuery({
   agentVersions,
   includeUnknownVersion,
   assetGroupId,
+  checkIn,
 }) {
   const params = new URLSearchParams();
   params.set("page", String(page + 1));
@@ -223,6 +229,7 @@ export function buildHostsQuery({
   // aunque esté vacío: un grupo de versiones sin equipos es "ninguno", no
   // "todos".
   if (platform) params.set("platform", platform);
+  if (checkIn && ALLOWED_CHECK_IN.has(checkIn)) params.set("checkIn", checkIn);
   if (Array.isArray(agentVersions)) {
     params.set("agentVersions", agentVersions.join(","));
     if (includeUnknownVersion) params.set("unknownVersion", "1");

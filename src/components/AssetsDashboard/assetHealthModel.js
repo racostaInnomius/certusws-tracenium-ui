@@ -26,6 +26,18 @@ export function checkInDonutData(checkIn) {
   );
 }
 
+/** "1–7 days" → "lt7d": la rebanada pulsada, como filtro `checkIn` de /hosts. */
+export function checkInKeyOfName(name) {
+  return CHECK_IN_SLICES.find((s) => s.name === name)?.key ?? null;
+}
+
+/** "lt7d" → "1–7 days": para resaltar la rebanada y rotular el chip. */
+export function checkInNameOfKey(key) {
+  return CHECK_IN_SLICES.find((s) => s.key === key)?.name ?? null;
+}
+
+export const CHECK_IN_KEYS = new Set(CHECK_IN_SLICES.map((s) => s.key));
+
 /**
  * Las filas de "Needs attention". Cada una con su barra sobre el TOTAL de la
  * flota —no sobre la suma de filas: un equipo puede estar en varias— y con su

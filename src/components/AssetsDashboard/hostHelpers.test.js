@@ -129,6 +129,11 @@ describe("normalizeHostRow", () => {
 });
 
 describe("buildHostsQuery", () => {
+  it("checkIn viaja sólo si es un tramo conocido", () => {
+    expect(new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, checkIn: "gt7d" })).get("checkIn")).toBe("gt7d");
+    expect(new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, checkIn: "yesterday" })).get("checkIn")).toBeNull();
+  });
+
   it("builds a 1-indexed paged query, gating short searches and whitelisting sort", () => {
     const qs = buildHostsQuery({ page: 2, pageSize: 25, search: "ab", sortBy: "bogus", sortDir: "desc" });
     const p = new URLSearchParams(qs);

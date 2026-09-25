@@ -43,7 +43,7 @@ function getValue(result) {
   return result.value ?? null;
 }
 
-import { classifyAgentVersions } from "./agentVersions";
+import { bucketOfSegmentName, classifyAgentVersions, segmentNameOfBucket } from "./agentVersions";
 import FleetCompositionDonut from "../AssetManagement/FleetCompositionDonut";
 
 // Re-exportado: vivía aquí, y ahora es de RingCard, que dibuja la rebanada.
@@ -61,7 +61,9 @@ export function AgentVersionDonut({
   onCardClick,
   onSegmentClick,
   fleetDevices = null,
-  agentTotal = null
+  agentTotal = null,
+  /** Grupo del filtro activo (current, one_behind…): su rebanada se resalta. */
+  activeBucket = null
 }) {
   const { buckets, canonicalLatest } = classifyAgentVersions(
     byVersion,
@@ -112,6 +114,7 @@ export function AgentVersionDonut({
       fallbackLabel={fallback}
       onCardClick={onCardClick}
       onSegmentClick={onSegmentClick}
+      activeKey={segmentNameOfBucket(activeBucket)}
       pendingValue={pendingValue}
       pendingLabel="Not connected"
     />
@@ -134,7 +137,9 @@ export function DonutCard({
   // backend, or the roster fetch failed) — falls back to the donut's
   // own total, exactly like before this existed.
   pendingValue = null,
-  pendingLabel = "Pending"
+  pendingLabel = "Pending",
+  /** `name` de la rebanada del filtro activo, que se dibuja resaltada. */
+  activeKey = null
 }) {
   const hasPending = pendingValue != null && pendingValue > 0;
   // El dibujo es el de Fleet composition (Charts/RingCard): anillo grueso,
@@ -157,6 +162,7 @@ export function DonutCard({
       emptyLabel={fallbackLabel}
       ariaNoun={totalLabel}
       onCardClick={onCardClick}
+      activeKey={activeKey}
       // La rebanada original, con `name`: es lo que los llamadores ya leen
       // para decidir el filtro.
       onSliceClick={
@@ -252,16 +258,7 @@ export default function FleetComposition({ results, loading, onNavigate, patchCo
           // d71f272/0e19984 filtra en el servidor con esta misma regla y
           // validado en el portal da 4/3/46, lo mismo que esta dona.
           onSegmentClick={(segment) => {
-            const label = String(segment.name || "").toLowerCase();
-            const bucket = label.includes("current")
-              ? "current"
-              : label.includes("one behind")
-              ? "one_behind"
-              : label.includes("older")
-              ? "older"
-              : label.includes("unknown")
-              ? "unknown"
-              : null;
+            const bucket = bucketOfSegmentName(segment.name);
             // "Not connected" (pendientes) no es un grupo de versión: a Assets sin filtro.
             navToAssets(bucket ? { versionBucket: bucket } : undefined);
           }}

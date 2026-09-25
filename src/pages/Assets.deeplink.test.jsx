@@ -25,6 +25,7 @@ vi.mock("../msp/MspContext", () => ({
 import Assets from "./Assets";
 
 const hostDetail = [];
+const hostsQueries = [];
 
 afterEach(() => {
   cleanup();
@@ -34,10 +35,12 @@ afterEach(() => {
 function mount(search) {
   const detail = [];
   hostDetail.length = 0;
+  hostsQueries.length = 0;
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
       const url = new URL(request.url);
       if (url.pathname.endsWith("/hardware-inventory/detail")) detail.push(Object.fromEntries(url.searchParams));
+      if (url.pathname.endsWith("/dashboard/hosts")) hostsQueries.push(Object.fromEntries(url.searchParams));
       const m = url.pathname.match(/\/dashboard\/hosts\/([^/]+)\/detail$/);
       if (m) hostDetail.push(decodeURIComponent(m[1]));
       return HttpResponse.json({
@@ -101,5 +104,23 @@ describe("Assets — enlace a UN equipo (?device=)", () => {
     await waitFor(() => expect(hostDetail).toContain("a-2"));
     // El enlace se consume: recargar no vuelve a abrirlo.
     expect(new URLSearchParams(window.location.search).get("device")).toBeNull();
+  });
+});
+
+describe("Assets — filtro de «Last check-in» (?checkIn=)", () => {
+  it("⭐ el enlace filtra la tabla en el servidor y enseña su chip, que lo quita", async () => {
+    mount("&checkIn=gt7d");
+    await waitFor(() => expect(hostsQueries.some((q) => q.checkIn === "gt7d")).toBe(true));
+    const chip = await screen.findByText("Last check-in: > 7 days");
+    expect(chip).toBeTruthy();
+  });
+
+  it("un tramo desconocido no filtra", async () => {
+    mount("&checkIn=bogus");
+    // Sin filtro, la tabla puede salir de la caché de la página (misma clave que
+    // otros tests): lo que se afirma es que NADA pidió un checkIn ni lo rotuló.
+    expect(await screen.findByRole("tab", { name: /dashboard/i, selected: true })).toBeTruthy();
+    expect(screen.queryByText(/Last check-in:/)).toBeNull();
+    expect(hostsQueries.every((q) => !("checkIn" in q))).toBe(true);
   });
 });
