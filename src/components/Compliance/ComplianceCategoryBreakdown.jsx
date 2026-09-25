@@ -9,8 +9,10 @@
 
 import * as React from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
-  Paper,
   Stack,
   Typography,
   Table,
@@ -30,6 +32,7 @@ import { scoreBandRole, scoreBandTextRole } from "../../theme/scoreBands";
 import { useComplianceBands } from "../../hooks/useComplianceBands";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BRAND, ICON, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { getCategorySummary } from "../../api/compliance";
 import CategoryDrilldown from "./CategoryDrilldown";
@@ -251,16 +254,34 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
   }, [reloadKey]);
 
   return (
-    <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: `1px solid ${BRAND.border}` }}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-        <CategoryOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
-        <Box>
-          <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>Posture by category</Typography>
-          <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-            Fleet pass rate per control category. Click a category with failures to see which devices fail it.
-          </Typography>
-        </Box>
-      </Stack>
+    // Plegable, con la misma cáscara que «Trend over time» y «Frameworks»:
+    // es una tabla larga (una fila por categoría) entre el titular y la tabla
+    // de equipos, y quien va a los equipos tiene que poder quitársela de en
+    // medio. Abierta por defecto — plegarla es decisión de quien mira.
+    <Accordion
+      defaultExpanded
+      disableGutters
+      elevation={0}
+      sx={{
+        mb: 2,
+        border: `1px solid ${BRAND.border}`,
+        borderRadius: 2,
+        "&::before": { display: "none" },
+        bgcolor: BRAND.surface,
+      }}
+    >
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <CategoryOutlinedIcon sx={{ color: BRAND.teal, fontSize: ICON.lg }} />
+          <Box>
+            <Typography sx={{ fontSize: TEXT.base, fontWeight: 800, color: BRAND.dark }}>Posture by category</Typography>
+            <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
+              Fleet pass rate per control category. Click a category with failures to see which devices fail it.
+            </Typography>
+          </Box>
+        </Stack>
+      </AccordionSummary>
+      <AccordionDetails sx={{ pt: 0 }}>
 
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
@@ -295,6 +316,7 @@ export default function ComplianceCategoryBreakdown({ reloadKey, baselineBridge 
           </Table>
         </Box>
       )}
-    </Paper>
+      </AccordionDetails>
+    </Accordion>
   );
 }

@@ -10,7 +10,7 @@
 // (compliance.controller.ts); a refactor that re-flattens or re-nests
 // fails here, not in production.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { server, respond } from "../test/msw/server";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
@@ -36,6 +36,12 @@ vi.mock("../components/Compliance/WhatToFixFirst", () => ({ default: () => <div 
 
 import SecurityCompliance from "./SecurityCompliance";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
+
+// La columna «Online» pregunta en cada render de la página; sin respuesta,
+// MSW (onUnhandledRequest: "error") lo convierte en ruido en todos los casos.
+beforeEach(() => {
+  respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, deviceIds: [] });
+});
 
 afterEach(() => {
   cleanup();
@@ -131,6 +137,9 @@ function mountPage({ settings = SETTINGS, onNavigate = vi.fn() } = {}) {
   respond("get", `${BASE}/framework-summary`, FRAMEWORK_SUMMARY);
   respond("get", `${BASE}/devices`, DEVICES);
   respond("get", `${BASE}/settings`, settings);
+  // Columna «Online»: las sesiones gRPC vivas, la misma fuente que Asset
+  // Management. WS-ALPHA encendido, WS-BETA no.
+  respond("get", "/api/v1/orchestrator/devices-connected", { ok: true, tenantId: "1", deviceIds: ["dev-a"], count: 1 });
   // Fase C policy read for the baseline bridge — minimal valid envelope.
   respond("get", "/api/v1/policies/tenants/1/policy", { ok: true, policy: { policy_version: 1, policy_hash: "h", policy_json: {} } });
   // ADR-0011 Phase 3 — canManage now comes from this endpoint instead
@@ -163,6 +172,17 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(screen.getByRole("tab", { name: /Fleet status/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Baselines/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Catalog/ })).toBeInTheDocument();
+  });
+
+  it("⭐ la tabla de equipos dice quién está encendido AHORA, como Asset Management", async () => {
+    // «Last report» es cuándo mandó su último informe; no dice si un arreglo
+    // lanzado desde aquí le va a llegar. El punto sí.
+    mountPage();
+    const alpha = (await screen.findByText("WS-ALPHA")).closest("tr");
+    const beta = screen.getByText("WS-BETA").closest("tr");
+    await waitFor(() => expect(within(alpha).getByLabelText("Online")).toBeInTheDocument());
+    expect(within(beta).getByLabelText("Offline")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Online" })).toBeInTheDocument();
   });
 
   it("bands come from res.settings.effective (the envelope that was mis-read for a release)", async () => {

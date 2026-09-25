@@ -111,7 +111,9 @@ export default function WhatToFixFirst({
 
   return (
     <SectionPaper variant="panel" sx={{ p: 2, mb: 2 }}>
-      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1 }}>
+      {/* Comparte fila con «Time to remediate»: con media anchura el
+          subtítulo baja a su propia línea en vez de apretar el título. */}
+      <Stack direction="row" alignItems="baseline" justifyContent="space-between" flexWrap="wrap" columnGap={2} sx={{ mb: 1 }}>
         <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>
           What to fix first
         </Typography>

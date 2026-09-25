@@ -77,6 +77,18 @@ describe("ComplianceCategoryBreakdown", () => {
     expect(screen.getByText("96%")).toBeInTheDocument();
   });
 
+  it("abre desplegada y se pliega desde la cabecera", async () => {
+    // Una fila por categoría entre el titular y la tabla de equipos: quien va
+    // a los equipos tiene que poder quitársela de en medio.
+    getCategorySummary.mockResolvedValue(ITEMS);
+    render(<ComplianceCategoryBreakdown />);
+    await screen.findByText("Firewall");
+    const header = screen.getByRole("button", { name: /Posture by category/ });
+    expect(header).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(header);
+    expect(header).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("shows the empty state when there are no findings", async () => {
     getCategorySummary.mockResolvedValue({ ok: true, items: [] });
     render(<ComplianceCategoryBreakdown />);

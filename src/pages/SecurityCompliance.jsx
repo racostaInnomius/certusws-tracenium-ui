@@ -122,6 +122,8 @@ import FirstVisitNote from "../components/Compliance/FirstVisitNote";
 import ComplianceTrendChart from "../components/Compliance/ComplianceTrendChart";
 import { listAssetGroups } from "../api/assetGroups";
 import { listFrom } from "../api/shape";
+import { getConnectedDevices } from "../api/overview";
+import OnlineDot from "../components/common/OnlineDot";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
 import { scoreBandTextRole, scoreBandLabel } from "../theme/scoreBands";
@@ -979,6 +981,37 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
     return filteredDevices.slice(start, start + devicesPerPage);
   }, [filteredDevices, devicePage, devicesPerPage]);
 
+  // ── ¿Está encendido ahora? ─────────────────────────────────────────
+  // La misma fuente y el mismo punto que la columna «Online» de Asset
+  // Management: las sesiones gRPC vivas, cada 30 s y sólo con la pestaña
+  // visible. Importa aquí más que allí: un equipo apagado no va a recibir
+  // el arreglo que se le lance desde esta tabla, y «Last report» —cuándo
+  // mandó su último informe— no lo dice.
+  const [connectedIds, setConnectedIds] = React.useState(() => new Set());
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await getConnectedDevices();
+        if (cancelled) return;
+        const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
+        setConnectedIds(new Set(ids.map((id) => String(id))));
+      } catch {
+        // Un fallo deja los puntos en gris hasta la siguiente vuelta; no
+        // tumba la página.
+        if (!cancelled) setConnectedIds(new Set());
+      }
+    };
+    load();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [refreshToken]);
+
   return (
     <Box sx={{ pb: 6 }}>
       {/* Page header ------------------------------------------------------- */}
@@ -1414,25 +1447,42 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           es la única sección que dice qué HACER. La tendencia responde la
           pregunta del CIO y la tabla de frameworks la del auditor; ninguna
           de las dos es la pregunta del operador de turno, y hasta ahora
-          ambas iban por delante de sus equipos. */}
-      <WhatToFixFirst
-        reloadKey={refreshToken}
-        framework={selectedFramework}
-        frameworkLabel={selectedFrameworkLabel}
-        assetGroupId={assetGroupId}
-        assetGroupLabel={assetGroupLabel}
-        onOpenCheck={(row) => {
-          setFocusCheckId(row?.checkId ?? null);
-          setFocusControl(null);
-          setTab("catalog");
+          ambas iban por delante de sus equipos.
+
+          A su lado, «Time to remediate»: qué hay que arreglar y cuánto se
+          tarda en arreglarlo son la misma conversación. Antes vivía más abajo,
+          debajo de las categorías, donde nadie llegaba. En pantallas
+          estrechas se apilan. */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 3fr) minmax(0, 2fr)" },
+          columnGap: 2,
+          alignItems: "stretch",
         }}
-        onRemediate={canRemediate ? handleRemediateCheck : null}
-      />
+      >
+        <WhatToFixFirst
+          reloadKey={refreshToken}
+          framework={selectedFramework}
+          frameworkLabel={selectedFrameworkLabel}
+          assetGroupId={assetGroupId}
+          assetGroupLabel={assetGroupLabel}
+          onOpenCheck={(row) => {
+            setFocusCheckId(row?.checkId ?? null);
+            setFocusControl(null);
+            setTab("catalog");
+          }}
+          onRemediate={canRemediate ? handleRemediateCheck : null}
+        />
+        <MttrCard reloadKey={refreshToken} />
+      </Box>
 
       {/* Fleet compliance trend over time — the audit / CIO "are we improving?"
-          view. Backed by the fleet-timeseries endpoint. Plegada: sigue estando,
-          deja de competir por la primera pantalla. */}
+          view. Backed by the fleet-timeseries endpoint. Abierta por defecto:
+          plegada no la abría nadie, y «¿vamos a mejor?» es lo segundo que se
+          pregunta después de «¿qué arreglo?». Se puede plegar. */}
       <Accordion
+        defaultExpanded
         disableGutters
         elevation={0}
         sx={{
@@ -1717,12 +1767,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           the MTTR/device views (triage). */}
       <ComplianceCategoryBreakdown baselineBridge={baselineBridge} reloadKey={refreshToken} onOpenDevice={openDrawer} />
 
-      {/* Sprint 5 — fleet time-to-close by severity. Mounted between
-          the framework table (top-down "how does the fleet compare to
-          benchmarks") and the device table (drill-down) so an
-          operator's eye lands on it BEFORE they scroll into per-
-          device triage. */}
-      <MttrCard reloadKey={refreshToken} />
+      {/* «Time to remediate» se mudó arriba, al lado de «What to fix first». */}
 
       {/* Device table ------------------------------------------------------ */}
       <SectionPaper variant="panel" sx={{ p: 2 }}>
@@ -1819,6 +1864,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                   that case so the table stays focused on the columns
                   that actually have signal. */}
               <TableRow>
+                <TableCell sx={{ fontWeight: 700, width: 60 }}>Online</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Host</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Platform</TableCell>
                 <TableCell sx={{ fontWeight: 700 }}>Agent</TableCell>
@@ -1838,7 +1884,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
             <TableBody>
               {filteredDevices.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={selectedFramework ? 8 : 7} align="center" sx={{ color: BRAND.gray, py: 3 }}>
+                  <TableCell colSpan={selectedFramework ? 9 : 8} align="center" sx={{ color: BRAND.gray, py: 3 }}>
                     {devices.length === 0
                       ? "No devices have reported compliance under this framework."
                       : "No devices match the applied filters. Clear chips above to see all."}
@@ -1861,6 +1907,9 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                       aria-label={`Open details for ${d.hostname || d.agentId}`}
                       onKeyDown={rowKeyHandler(() => openDrawer(d.agentId))}
                     >
+                      <TableCell>
+                        <OnlineDot online={connectedIds.has(String(d.agentId))} />
+                      </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ color: BRAND.dark, fontWeight: 600 }}>
                           {d.hostname || d.agentId}
