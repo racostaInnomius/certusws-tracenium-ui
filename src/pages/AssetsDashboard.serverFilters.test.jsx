@@ -117,6 +117,20 @@ describe("AssetsDashboard — filtros en servidor", () => {
     expect(screen.getByText("old-a")).toBeTruthy();
   });
 
+  it("⭐ el KPI «Agent versions» es de la flota, no de la página filtrada", async () => {
+    // Prod, 24-sep: con «Current» pulsado en el donut el KPI pasaba de 5 a 1
+    // — contaba las versiones de las filas cargadas en la tabla.
+    mount("&versionBucket=older");
+    await waitFor(() => expect(shownLine()).toMatch(/^2 shown · 2 total/));
+    // Hay dos «Agent versions»: el KPI y el donut. El KPI es la tarjeta corta.
+    const kpi = () =>
+      screen
+        .getAllByText(/^Agent versions$/i)
+        .map((el) => el.closest(".MuiPaper-root"))
+        .find((p) => p && !/Latest published|enrolled/i.test(p.textContent));
+    await waitFor(() => expect(kpi().textContent).toMatch(/Agent versions\s*3$/i));
+  });
+
   it("platform y groupId viajan al servidor", async () => {
     const calls = mount("&platform=linux&groupId=7");
 

@@ -1494,19 +1494,17 @@ const osVersionItems = React.useMemo(() => {
   // summary + hosts aggregates.
   const kpis = React.useMemo(() => {
     const activeHosts = Number(summary?.activeHosts ?? hosts.length ?? 0);
-    const versionSet = new Set(
-      hosts
-        .map((h) => String(h.agent_version || "").trim())
-        .filter(Boolean)
-    );
     const onlineCount = connectedIds.size;
     return {
       activeHosts,
       onlineCount,
       inactiveAssets7d: Number(summary?.inactiveAssets7d ?? 0),
-      versionCount: versionSet.size,
+      // ⚠️ De la flota entera (el mismo agregado que el donut), no de `hosts`:
+      // eso es la PÁGINA filtrada de la tabla, y el KPI pasaba de 5 a 1 al
+      // pulsar «Current» en el donut. "unknown" no es una versión.
+      versionCount: byVersion.filter((v) => v.count > 0 && v.version !== "unknown").length,
     };
-  }, [summary, hosts, connectedIds]);
+  }, [summary, hosts, connectedIds, byVersion]);
 
   if (capabilitiesLoading) {
     return (
