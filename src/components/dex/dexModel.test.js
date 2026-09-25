@@ -1,6 +1,6 @@
 // src/components/dex/dexModel.test.js
 import { describe, expect, it } from "vitest";
-import { formatDuration, groupEvents, periodSummary, seriesWithGaps } from "./dexModel";
+import { formatDuration, groupEvents, periodSummary, seriesWithGaps, dayTicks } from "./dexModel";
 
 const w = (iso, cpu, mem = 50, samples = 15, max = null) => ({ startUtc: iso, minutes: 15, samples, cpuAvgPct: cpu, cpuMaxPct: max ?? cpu, memAvgPct: mem, memMaxPct: mem });
 
@@ -30,5 +30,33 @@ describe("dexModel", () => {
     expect(g.system).toHaveLength(1);
     expect(formatDuration(160_000)).toBe("2 min 40 s");
     expect(formatDuration(null)).toBe("—");
+  });
+});
+
+describe("dayTicks", () => {
+  // 15 min de ventana durante 3 días: Recharts ponía una marca cada pocas
+  // horas y el formato de día las rotulaba todas igual («Sep 22» ×9).
+  const punto = (iso) => ({ t: new Date(iso).getTime() });
+  const tresDias = Array.from({ length: 3 * 96 }, (_, i) => ({ t: new Date(2026, 8, 22, 0, 0).getTime() + i * 15 * 60_000 }));
+
+  it("⭐ una marca por día, a medianoche local, sin repetir día", () => {
+    const ticks = dayTicks(tresDias);
+    expect(ticks).toHaveLength(3);
+    for (const t of ticks) {
+      const d = new Date(t);
+      expect(d.getHours()).toBe(0);
+      expect(d.getMinutes()).toBe(0);
+    }
+    expect(new Set(ticks.map((t) => new Date(t).getDate())).size).toBe(3);
+  });
+
+  it("con 30 días no pasa del máximo", () => {
+    const mes = Array.from({ length: 30 * 24 }, (_, i) => ({ t: new Date(2026, 7, 26).getTime() + i * 3_600_000 }));
+    expect(dayTicks(mes, 8).length).toBeLessThanOrEqual(8);
+  });
+
+  it("sin datos suficientes no fuerza marcas (Recharts decide)", () => {
+    expect(dayTicks([])).toBeUndefined();
+    expect(dayTicks([punto("2026-09-22T10:00:00Z")])).toBeUndefined();
   });
 });

@@ -16,7 +16,7 @@ import { BRAND, ROLE, TEXT, TEXT_MUTED } from "../../theme/brand";
 import { severityMeta } from "../../theme/severity";
 import { formatDate, formatRelative } from "../../utils/format";
 import { getDeviceExperience } from "../../api/dex";
-import { EVENT_KIND_LABEL, SCOPE_NOTE, formatDuration, groupEvents, periodSummary, seriesWithGaps } from "./dexModel";
+import { EVENT_KIND_LABEL, SCOPE_NOTE, dayTicks, formatDuration, groupEvents, periodSummary, seriesWithGaps } from "./dexModel";
 
 const RANGES = [
   { days: 1, label: "24 h" },
@@ -156,7 +156,7 @@ export default function ExperienceTab({ agentId }) {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={series} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tick={X_TICK} tickFormatter={(t) => formatDate(new Date(t), days <= 1 ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" })} />
+                <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tick={X_TICK} ticks={days <= 1 ? undefined : dayTicks(series)} tickFormatter={(t) => formatDate(new Date(t), days <= 1 ? { hour: "2-digit", minute: "2-digit" } : { month: "short", day: "numeric" })} />
                 <YAxis domain={[0, 100]} unit="%" width={44} tick={X_TICK} />
                 <ChartTooltip labelFormatter={(t) => formatDate(new Date(t))} formatter={(v, name) => [v == null ? "—" : `${Math.round(v)}%`, name]} />
                 <Area type="monotone" dataKey="cpuAvg" name="CPU (avg)" stroke={BRAND.teal} fill={BRAND.teal} fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls={false} />

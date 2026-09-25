@@ -45,6 +45,31 @@ export function seriesWithGaps(windows = []) {
   return out;
 }
 
+/**
+ * Las marcas del eje X cuando la gráfica cubre días: UNA por día, a medianoche
+ * local, y como mucho `max` (con 30 días va de tantos en tantos).
+ *
+ * ⚠️ Sin esto Recharts ponía una marca cada pocas horas y el formato de día
+ * las rotulaba todas igual: «Sep 22» nueve veces seguidas (prod, 24-sep).
+ */
+export function dayTicks(series = [], max = 8) {
+  const ts = series.map((p) => p.t).filter(Number.isFinite);
+  if (ts.length < 2) return undefined;
+  const lo = Math.min(...ts);
+  const hi = Math.max(...ts);
+  const d = new Date(lo);
+  d.setHours(0, 0, 0, 0);
+  if (d.getTime() < lo) d.setDate(d.getDate() + 1);
+  const days = [];
+  while (d.getTime() <= hi) {
+    days.push(d.getTime());
+    d.setDate(d.getDate() + 1);
+  }
+  if (days.length === 0) return undefined;
+  const step = Math.ceil(days.length / max);
+  return days.filter((_, i) => i % step === 0);
+}
+
 /** Resumen del periodo: medias ponderadas por muestras y el pico. */
 export function periodSummary(windows = []) {
   let n = 0;
