@@ -376,6 +376,10 @@ export default function AssetsDashboard({
   // Tramo de «Last check-in» (lt1h, lt24h, lt7d, gt7d, never). Lo resuelve el
   // servidor con la misma regla que cuenta la dona.
   const [checkInFilter, setCheckInFilter] = React.useState(initialFilters.checkIn || "");
+  // Filas de «OS versions»: las claves que manda la fila pulsada (una versión,
+  // o todas las de una plataforma). Unidas por comas: es lo que viaja en la
+  // URL y lo que sirve de dependencia.
+  const [osKeysFilter, setOsKeysFilter] = React.useState((initialFilters.osKeys || []).join(","));
   // Phase 4: filter by Asset Group membership. Two pieces of state —
   // the selected group id (as a string so the dropdown plays nicely
   // with empty=""), and the resolved Set of deviceIds for that group.
@@ -598,6 +602,7 @@ export default function AssetsDashboard({
       platform: platformFilter || undefined,
       assetGroupId: groupFilter || undefined,
       checkIn: checkInFilter || undefined,
+      osKeys: osKeysFilter ? osKeysFilter.split(",") : undefined,
       ...versionFilterParams,
     });
 
@@ -684,9 +689,10 @@ export default function AssetsDashboard({
     versionBucketFilter,
     groupFilter,
     checkInFilter,
+    osKeysFilter,
   ]);
 
-  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}:${checkInFilter}`;
+  const hostsCacheKey = `assets:bundle:hosts:${hostsPaginationModel.page}:${hostsPaginationModel.pageSize}:${hostsSearch}:${hostsSortBy}:${hostsSortDir}:${platformFilter}:${versionBucketFilter}:${groupFilter}:${checkInFilter}:${osKeysFilter}`;
   const { data, loading, refetch } = useCachedFetch(hostsCacheKey, loader);
   // Memoize the destructured slices so identity is stable across
   // renders — `data?.foo ?? []` would create a fresh fallback every
@@ -719,7 +725,7 @@ export default function AssetsDashboard({
       return;
     }
     setHostsPaginationModel((prev) => (prev.page === 0 ? prev : { ...prev, page: 0 }));
-  }, [platformFilter, versionBucketFilter, groupFilter, checkInFilter]);
+  }, [platformFilter, versionBucketFilter, groupFilter, checkInFilter, osKeysFilter]);
   const agentVersions = data?.agentVersions ?? null;
 
   const loadState = React.useMemo(
@@ -1301,6 +1307,7 @@ export default function AssetsDashboard({
     !versionBucketFilter &&
     !groupFilter &&
     !checkInFilter &&
+    !osKeysFilter &&
     Number(hostsMeta.total || 0) === 0 &&
     Number(summary?.activeHosts ?? 0) === 0;
 
@@ -1448,6 +1455,19 @@ const osVersionItems = React.useMemo(() => {
     };
   });
 }, [summary]);
+
+  // La fila de «OS versions» del filtro activo: para resaltarla y rotular el
+  // chip. Se busca por sus claves, que es lo único que guarda la URL.
+  const activeOsItem = React.useMemo(() => {
+    if (!osKeysFilter) return null;
+    for (const g of osVersionItems) {
+      if ((g.filterKeys || []).join(",") === osKeysFilter) return g;
+      for (const c of g.children || []) {
+        if ((c.filterKeys || []).join(",") === osKeysFilter) return c;
+      }
+    }
+    return null;
+  }, [osKeysFilter, osVersionItems]);
 
   // `byVersion` for the AgentVersionDonut — the same dedicated
   // `/dashboard/agent-versions` aggregate Overview's FleetComposition
@@ -1604,37 +1624,26 @@ const osVersionItems = React.useMemo(() => {
               emptyLabel="No version data"
               minHeight={280}
               maxItems={6}
-              onClick={onNavigateToHardwareInventory}
-              // Clicking a specific OS (e.g. "macOS Tahoe") jumps to
-              // Hardware Inventory pre-filtered to just that OS via its
-              // friendly name — the same string the "OS Version" column
-              // there searches by. Clicking elsewhere on the card (or
-              // just the expand arrow on a row) keeps the existing
-              // unfiltered "open Hardware Inventory" / "show grouped
-              // versions" behavior.
+              // Cada fila filtra la tabla de equipos, como las donas: una
+              // versión por su clave, una plataforma por las de todas sus
+              // versiones; pulsarla otra vez quita el filtro. Las claves las
+              // pone el backend (su clave de agrupación), así que la tabla
+              // enseña exactamente los equipos que la fila cuenta.
               //
-              // A CHILD row (a specific point release under a "Multiple
-              // Versions" parent, e.g. "26.6.1" under macOS Tahoe) is
-              // distinguished by NOT carrying a `children` array (only
-              // top-level family rows do, even when it's empty). Its
-              // friendly label is identical across every sibling version
-              // ("Version 26.6.1" vs "Version 26.5.2" both just say
-              // "macOS Tahoe" once normalized) so searching by that
-              // wouldn't narrow anything — search by its raw
-              // technical_version instead, which is exactly what the
-              // backend's `distro` column (and therefore the free-text
-              // search) actually contains.
-              // ⚠️ Cada fila trae su PROPIO searchTerm. Antes esto deducia si
-              // la fila era hija mirando si traia `children`, con doce lineas
-              // de comentario explicando la heuristica. Con la plataforma como
-              // primer nivel esa deduccion deja de funcionar —un padre "macOS"
-              // no se busca igual que una version— y en vez de hacerla mas
-              // lista se elimina: quien construye la fila sabe que hay que
-              // buscar, y lo dice.
+              // Un backend anterior no manda claves: entonces la fila sigue
+              // llevando a Hardware Inventory buscada por su término, como
+              // antes, en vez de no hacer nada.
+              activeItemId={activeOsItem?.id ?? null}
               onItemClick={(item) => {
+                if (Array.isArray(item.filterKeys) && item.filterKeys.length > 0) {
+                  const joined = item.filterKeys.join(",");
+                  const next = osKeysFilter === joined ? "" : joined;
+                  setOsKeysFilter(next);
+                  updateSearchParams({ osKeys: next });
+                  return;
+                }
                 onNavigateToHardwareInventory(item.searchTerm || item.label);
               }}
-              actionLabel="Open Hardware Inventory"
             />
           </Box>
         </Grid>
@@ -1897,7 +1906,7 @@ const osVersionItems = React.useMemo(() => {
                   </Typography>
                 </Stack>
 
-                {(platformFilter || versionBucketFilter || groupFilter || checkInFilter) ? (
+                {(platformFilter || versionBucketFilter || groupFilter || checkInFilter || osKeysFilter) ? (
                   <Stack
                     direction="row"
                     spacing={0.75}
@@ -1929,6 +1938,17 @@ const osVersionItems = React.useMemo(() => {
                           updateSearchParams({ versionBucket: "" });
                         }}
                         sx={{ bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, fontWeight: 600 }}
+                      />
+                    ) : null}
+                    {osKeysFilter ? (
+                      <Chip
+                        size="small"
+                        label={`OS: ${activeOsItem?.label || "selected versions"}`}
+                        onDelete={() => {
+                          setOsKeysFilter("");
+                          updateSearchParams({ osKeys: "" });
+                        }}
+                        sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 600 }}
                       />
                     ) : null}
                     {checkInFilter ? (

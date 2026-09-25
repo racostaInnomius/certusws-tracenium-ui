@@ -17,6 +17,9 @@ export const ALLOWED_VERSION_BUCKETS = new Set([
   "unknown"
 ]);
 
+// Clave de una fila de «OS versions» (la pone el backend: `g:` + 12 hex).
+export const OS_FILTER_KEY_RE = /^g:[0-9a-f]{12}$/;
+
 // Tramos de «Last check-in» que /dashboard/hosts sabe filtrar.
 export const ALLOWED_CHECK_IN = new Set(["lt1h", "lt24h", "lt7d", "gt7d", "never"]);
 
@@ -30,6 +33,10 @@ export function readUrlFilters() {
   // Dashboard pre-scoped to that group's membership. We coerce to a
   // positive integer string; anything else falls back to "".
   const checkIn = String(params.get("checkIn") || "").trim();
+  const osKeys = String(params.get("osKeys") || "")
+    .split(",")
+    .map((k) => k.trim())
+    .filter((k) => OS_FILTER_KEY_RE.test(k));
   const rawGroupId = String(params.get("groupId") || "").trim();
   const groupIdValid = /^[0-9]+$/.test(rawGroupId) && Number(rawGroupId) > 0;
   return {
@@ -39,6 +46,7 @@ export function readUrlFilters() {
       : "",
     groupId: groupIdValid ? rawGroupId : "",
     checkIn: ALLOWED_CHECK_IN.has(checkIn) ? checkIn : "",
+    osKeys,
   };
 }
 
@@ -212,6 +220,7 @@ export function buildHostsQuery({
   includeUnknownVersion,
   assetGroupId,
   checkIn,
+  osKeys,
 }) {
   const params = new URLSearchParams();
   params.set("page", String(page + 1));
@@ -230,6 +239,8 @@ export function buildHostsQuery({
   // "todos".
   if (platform) params.set("platform", platform);
   if (checkIn && ALLOWED_CHECK_IN.has(checkIn)) params.set("checkIn", checkIn);
+  const keys = Array.isArray(osKeys) ? osKeys.filter((k) => OS_FILTER_KEY_RE.test(k)) : [];
+  if (keys.length > 0) params.set("osKeys", keys.join(","));
   if (Array.isArray(agentVersions)) {
     params.set("agentVersions", agentVersions.join(","));
     if (includeUnknownVersion) params.set("unknownVersion", "1");

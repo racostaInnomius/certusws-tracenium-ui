@@ -100,3 +100,28 @@ describe("searchTermForVersion", () => {
     expect(searchTermForVersion({}, "macOS Tahoe")).toBe("macOS Tahoe");
   });
 });
+
+describe("filterKeys — con qué filtra cada fila la tabla de equipos", () => {
+  const rows = [
+    { os_platform: "macos", display_title: "macOS Tahoe", technical_version: "26.6.1", host_count: 3, filter_key: "g:aaaaaaaaaaaa" },
+    { os_platform: "macos", display_title: "macOS Sequoia", technical_version: "15.6.1", host_count: 1, filter_key: "g:bbbbbbbbbbbb" },
+    { os_platform: "linux", display_title: "Ubuntu", host_count: 2, filter_key: "g:cccccccccccc" },
+  ];
+  const opts = { displayTitle: (r) => r.display_title };
+
+  it("⭐ una versión filtra por su clave; su plataforma, por las de todas sus versiones", () => {
+    const [mac] = groupOsVersionsByPlatform(rows, opts);
+    expect(mac.filterKeys.sort()).toEqual(["g:aaaaaaaaaaaa", "g:bbbbbbbbbbbb"]);
+    expect(mac.children.map((c) => c.filterKeys)).toEqual([["g:aaaaaaaaaaaa"], ["g:bbbbbbbbbbbb"]]);
+  });
+
+  it("backend anterior (sin filter_key): la fila no filtra, y la plataforma tampoco a medias", () => {
+    const [mac] = groupOsVersionsByPlatform(
+      [rows[0], { ...rows[1], filter_key: undefined }],
+      opts
+    );
+    expect(mac.filterKeys).toBeNull();
+    expect(mac.children.find((c) => c.label === "macOS Sequoia").filterKeys).toBeNull();
+  });
+});
+

@@ -138,3 +138,28 @@ describe("CompositionBars — row vs card click routing", () => {
     expect(screen.getAllByText("50%")).toHaveLength(2);
   });
 });
+
+describe("CompositionBars — fila activa (filtro aplicado)", () => {
+  const items = [
+    { id: "platform-macos", label: "macOS", value: 4, children: [
+      { id: "macos-26", label: "macOS Tahoe", value: 3 },
+      { id: "macos-15", label: "macOS Sequoia", value: 1 },
+    ] },
+    { id: "platform-linux", label: "Linux", value: 2 },
+  ];
+
+  it("⭐ la fila del filtro activo se marca como pulsada; el clic pasa la fila", () => {
+    const onItemClick = vi.fn();
+    render(<CompositionBars title="OS versions" items={items} onItemClick={onItemClick} activeItemId="platform-linux" />);
+    const linux = screen.getByText("Linux").closest("[role=button]");
+    expect(linux.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("macOS").closest("[role=button]").getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(linux);
+    expect(onItemClick).toHaveBeenCalledWith(expect.objectContaining({ id: "platform-linux" }));
+  });
+
+  it("sin filtro activo no marca nada", () => {
+    render(<CompositionBars title="OS versions" items={items} onItemClick={() => {}} />);
+    expect(screen.getByText("Linux").closest("[role=button]").hasAttribute("aria-pressed")).toBe(false);
+  });
+});

@@ -124,3 +124,12 @@ describe("Assets — filtro de «Last check-in» (?checkIn=)", () => {
     expect(hostsQueries.every((q) => !("checkIn" in q))).toBe(true);
   });
 });
+
+describe("Assets — filtro de «OS versions» (?osKeys=)", () => {
+  it("⭐ el enlace filtra la tabla en el servidor y enseña su chip", async () => {
+    mount("&osKeys=g:aaaaaaaaaaaa");
+    await waitFor(() => expect(hostsQueries.some((q) => q.osKeys === "g:aaaaaaaaaaaa")).toBe(true));
+    expect(await screen.findByText(/^OS: /)).toBeTruthy();
+  });
+});
+

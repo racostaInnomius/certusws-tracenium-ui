@@ -129,6 +129,12 @@ describe("normalizeHostRow", () => {
 });
 
 describe("buildHostsQuery", () => {
+  it("osKeys viaja unido por comas, y sólo las claves con forma de clave", () => {
+    const qs = new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, osKeys: ["g:aaaaaaaaaaaa", "bogus", "g:bbbbbbbbbbbb"] }));
+    expect(qs.get("osKeys")).toBe("g:aaaaaaaaaaaa,g:bbbbbbbbbbbb");
+    expect(new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, osKeys: [] })).get("osKeys")).toBeNull();
+  });
+
   it("checkIn viaja sólo si es un tramo conocido", () => {
     expect(new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, checkIn: "gt7d" })).get("checkIn")).toBe("gt7d");
     expect(new URLSearchParams(buildHostsQuery({ page: 0, pageSize: 25, checkIn: "yesterday" })).get("checkIn")).toBeNull();

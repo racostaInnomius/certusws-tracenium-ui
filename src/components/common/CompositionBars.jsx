@@ -84,6 +84,8 @@ export default function CompositionBars({
   totalValue = null,
   showTotalChip = true,
   showPercentages = true,
+  // `id` de la fila (o hija) del filtro activo: se pinta resaltada.
+  activeItemId = null,
 }) {
   const [expandedRows, setExpandedRows] = React.useState({});
   const safeItems = Array.isArray(items) ? items : [];
@@ -373,6 +375,7 @@ export default function CompositionBars({
                         }
                       : undefined
                   }
+                  aria-pressed={activeItemId != null && hasItemClick ? row.id === activeItemId : undefined}
                   sx={{
                     display: "grid",
                     gridTemplateColumns: hasChildren
@@ -383,9 +386,10 @@ export default function CompositionBars({
                     fontSize: TEXT.sm,
                     cursor: rowClickable ? "pointer" : "inherit",
                     borderRadius: 1,
-                    mx: hasChildren ? -0.5 : 0,
-                    px: hasChildren ? 0.5 : 0,
+                    mx: hasChildren || row.id === activeItemId ? -0.5 : 0,
+                    px: hasChildren || row.id === activeItemId ? 0.5 : 0,
                     py: hasChildren ? 0.25 : 0,
+                    ...(activeItemId != null && row.id === activeItemId ? { bgcolor: BRAND.tealSoft } : {}),
                     transition: "background-color 140ms ease",
                     "&:hover": rowClickable
                       ? { bgcolor: "rgba(27,166,166,0.06)" }
@@ -559,6 +563,7 @@ export default function CompositionBars({
                               role={hasItemClick ? "button" : undefined}
                               tabIndex={hasItemClick ? 0 : undefined}
                               onClick={hasItemClick ? handleChildActivate : undefined}
+                              aria-pressed={activeItemId != null && hasItemClick ? child.id === activeItemId : undefined}
                               onKeyDown={
                                 hasItemClick
                                   ? (event) => {
@@ -579,6 +584,7 @@ export default function CompositionBars({
                                 mx: -0.5,
                                 px: 0.5,
                                 py: 0.15,
+                                ...(activeItemId != null && child.id === activeItemId ? { bgcolor: BRAND.tealSoft } : {}),
                                 transition: "background-color 140ms ease",
                                 "&:hover": hasItemClick
                                   ? { bgcolor: "rgba(27,166,166,0.06)" }

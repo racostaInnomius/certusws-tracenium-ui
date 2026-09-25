@@ -85,6 +85,10 @@ export function groupOsVersionsByPlatform(rows, opciones = {}) {
           sub: puntos > 1 ? `${puntos} point releases` : String(r?.technical_version ?? "") || "",
           value: hostCount(r),
           searchTerm: searchTermForVersion(r, titulo),
+          // Con qué filtra esta fila la tabla de equipos (`?osKeys=`). La pone
+          // el backend: es su clave de agrupación, así el filtro devuelve
+          // exactamente los equipos que la fila cuenta. null = backend anterior.
+          filterKeys: r?.filter_key ? [String(r.filter_key)] : null,
           raw: r,
         };
       })
@@ -106,6 +110,12 @@ export function groupOsVersionsByPlatform(rows, opciones = {}) {
       // Buscar por la plataforma trae toda su gente; es lo que espera quien
       // hace clic en "macOS".
       searchTerm: etiqueta,
+      // La plataforma = todas sus versiones. Si a alguna le falta clave, la
+      // fila no filtra: una plataforma a medias diría menos equipos de los que
+      // cuenta.
+      filterKeys: versiones.length > 0 && versiones.every((v) => v.filterKeys)
+        ? versiones.flatMap((v) => v.filterKeys)
+        : null,
       platform: plataforma,
       raw: filas.length === 1 ? filas[0] : null,
     });
