@@ -51,6 +51,9 @@ import { getSearchParam, updateSearchParams } from "../utils/browserState";
 const WINDOWS_TAB = 6;
 const TAB_FROM_URL = { dashboard: 0, groups: 1, hardware: 2, location: 3, printers: 4, software: 5, windows: WINDOWS_TAB, gpos: WINDOWS_TAB, coverage: WINDOWS_TAB, "live-query": 7 };
 const LIVE_QUERY_TAB = 7;
+// Al revés: la clave que se escribe en la URL al cambiar de pestaña, para que
+// recargar o compartir el enlace vuelva a ESA pestaña. Dashboard sin clave.
+const TAB_KEY_BY_VALUE = { 0: "", 1: "groups", 2: "hardware", 3: "location", 4: "printers", 5: "software", [WINDOWS_TAB]: "windows", [LIVE_QUERY_TAB]: "live-query" };
 // Las claves viejas, además de abrir la pestaña, eligen su sección.
 const WINDOWS_SECTION_FROM_URL = { gpos: "gpos", coverage: "coverage" };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
@@ -122,9 +125,10 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     setActiveTab(newValue);
     setPendingHardwareSearch("");
     setPendingFleetFilter("");
-    // El enlace ya se consumió: sin esto, recargar devolvía a la pestaña y
-    // al filtro del enlace en vez de a donde el operador se movió.
-    updateSearchParams({ assetsTab: "", hwFleet: "" });
+    // La URL dice dónde ESTÁ el operador, no por dónde entró: antes se
+    // borraba la clave y recargar llevaba siempre al Dashboard (prod, 24-sep).
+    // El filtro del enlace (hwFleet) y la ficha abierta no se arrastran.
+    updateSearchParams({ assetsTab: TAB_KEY_BY_VALUE[newValue] ?? "", hwFleet: "", device: "" });
   };
 
   // Una fila de Hardware Inventory abre la ficha de ese equipo, que vive en
@@ -133,7 +137,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   // filas no hacían nada y no había forma de ir del inventario al equipo.
   const openDeviceFromTab = React.useCallback((agentId) => {
     if (!agentId) return;
-    updateSearchParams({ device: String(agentId), assetsTab: "", hwFleet: "" });
+    updateSearchParams({ device: String(agentId), assetsTab: TAB_KEY_BY_VALUE[0], hwFleet: "" });
     setPendingHardwareSearch("");
     setPendingFleetFilter("");
     setActiveTab(0);
@@ -143,6 +147,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     setPendingHardwareSearch(searchTerm);
     setPendingFleetFilter(HW_FLEET_KEYS.has(fleetFilter) ? fleetFilter : "");
     setActiveTab(2); // Hardware Inventory
+    updateSearchParams({ assetsTab: TAB_KEY_BY_VALUE[2], device: "" });
 
     // Keep the drill-down feeling intentional: when the user clicks a
     // dashboard card such as OS versions, move them to the top of the
@@ -214,6 +219,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     setLiveTarget(target);
     setLiveTargetNonce((n) => n + 1);
     setActiveTab(LIVE_QUERY_TAB);
+    updateSearchParams({ assetsTab: TAB_KEY_BY_VALUE[LIVE_QUERY_TAB], device: "" });
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }, []);
   const askDevice = React.useCallback(

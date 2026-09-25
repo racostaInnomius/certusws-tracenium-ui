@@ -1095,6 +1095,10 @@ export default function AssetsDashboard({
     setAgentDetailTab("agent");
     setAgentDetailError("");
     setAgentSoftwarePaginationModel({ page: 0, pageSize: 8 });
+    // La ficha abierta vive en la URL (?device=): recargar o compartir el
+    // enlace vuelve a ella. Se quita al cerrarla.
+    const id = host ? getHostDeviceId(host) : "";
+    updateSearchParams({ device: id ? String(id) : "" });
   }, []);
 
   // ⚠️ La ficha y las vistas de trabajo se abren en la sección de la tabla,
@@ -1109,14 +1113,13 @@ export default function AssetsDashboard({
   }, []);
 
   // Enlace a un equipo: `?page=assets&device=<agentId>` abre su ficha. Lo usa
-  // el Overview (lista de "Blind spots"); hasta ahora no había forma de
-  // enlazar a UN equipo desde otra página. Se lee una vez y se consume, para
-  // que recargar no vuelva a abrirlo.
+  // el Overview (lista de "Blind spots") y las filas de Hardware Inventory.
+  // Ya no se consume: la ficha abierta ES el estado de la URL (ver
+  // handleAgentSelect), así que recargar vuelve a ella y cerrarla lo quita.
   React.useEffect(() => {
     const deviceId = String(getSearchParam("device", "") || "").trim();
     if (!deviceId) return;
     handleAgentSelect({ agent_id: deviceId, agentId: deviceId });
-    updateSearchParams({ device: "" });
     revealDevicesSection();
   }, [handleAgentSelect, revealDevicesSection]);
 
@@ -1138,6 +1141,7 @@ export default function AssetsDashboard({
   );
 
   const handleCloseAgentDetail = React.useCallback(() => {
+    updateSearchParams({ device: "" });
     setSelectedAgent(null);
     setAgentDetailTab("agent");
     setAgentDetailError("");
@@ -1860,7 +1864,12 @@ const osVersionItems = React.useMemo(() => {
                         select
                         size="small"
                         value={groupFilter}
-                        onChange={(e) => setGroupFilter(e.target.value)}
+                        onChange={(e) => {
+                          // En la URL como los demás filtros: ?groupId= ya se leía
+                          // (enlace desde Asset Groups) pero el selector no lo escribía.
+                          setGroupFilter(e.target.value);
+                          updateSearchParams({ groupId: e.target.value || "" });
+                        }}
                         helperText=" "
                         sx={{
                           width: { xs: "100%", sm: 220, md: 240 },

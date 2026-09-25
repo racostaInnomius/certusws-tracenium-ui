@@ -102,8 +102,18 @@ describe("Assets — enlace a UN equipo (?device=)", () => {
     mount("&device=a-2");
     expect(await screen.findByRole("tab", { name: /dashboard/i, selected: true })).toBeTruthy();
     await waitFor(() => expect(hostDetail).toContain("a-2"));
-    // El enlace se consume: recargar no vuelve a abrirlo.
-    expect(new URLSearchParams(window.location.search).get("device")).toBeNull();
+    // ⚠️ Ya no se consume (prod, 24-sep): la ficha abierta ES el estado de la
+    // URL, así que recargar o compartir el enlace vuelve a ella.
+    expect(new URLSearchParams(window.location.search).get("device")).toBe("a-2");
+  });
+
+  it("⭐ la pestaña en la que se está queda en la URL (recargar vuelve a ella)", async () => {
+    mount("");
+    const user = (await import("@testing-library/user-event")).default.setup();
+    await user.click(await screen.findByRole("tab", { name: /Printers/i }));
+    expect(new URLSearchParams(window.location.search).get("assetsTab")).toBe("printers");
+    await user.click(screen.getByRole("tab", { name: /Dashboard/i }));
+    expect(new URLSearchParams(window.location.search).get("assetsTab")).toBeNull();
   });
 });
 

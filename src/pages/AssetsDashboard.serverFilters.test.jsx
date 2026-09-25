@@ -75,7 +75,10 @@ function mount(search, { oldBackend = false } = {}) {
           ],
         });
       }
-      if (/\/asset-groups\/7\/members$/.test(url.pathname)) {
+      if (url.pathname.endsWith("/asset-groups")) {
+        return HttpResponse.json({ items: [{ id: 7, name: "Windows PCs", type: "dynamic", memberCount: 30 }] });
+      }
+            if (/\/asset-groups\/7\/members$/.test(url.pathname)) {
         // Página de 25 de un grupo de 30: el chip tiene que decir 30.
         return HttpResponse.json({
           items: Array.from({ length: 25 }, (_, i) => ({ deviceId: `m${i}` })),
@@ -169,6 +172,14 @@ describe("AssetsDashboard — filtros en servidor", () => {
     const calls = mount("&platform=linux&groupId=7");
 
     await waitFor(() => expect(calls.some((q) => q.platform === "linux" && q.assetGroupId === "7")).toBe(true));
+  });
+
+  it("⭐ elegir un grupo en el selector lo deja en la URL (?groupId=), como los demás filtros", async () => {
+    mount("");
+    const user = userEvent.setup();
+    await user.click(await screen.findByText("Filter by group…"));
+    await user.click(await screen.findByRole("option", { name: /Windows PCs/ }));
+    await waitFor(() => expect(new URL(window.location.href).searchParams.get("groupId")).toBe("7"));
   });
 
   it("quitar el chip quita el filtro de la petición y de la URL", async () => {
