@@ -1,6 +1,7 @@
 // src/components/software-delivery/CatalogTab.jsx
 //
-// The catalog of third-party packages: CRUD plus a Deploy action per row.
+// The catalog of third-party packages: the LIBRARY. Deploying lives in the
+// Install tab since 24-sep; the row keeps a shortcut that opens it preselected.
 //
 // Lived inside SoftwareDelivery.jsx until now — 437 lines of state, dialogs and
 // effects declared inside the page component, while its three sibling tabs
@@ -62,7 +63,6 @@ import {
   createPackage,
   updatePackage,
   deletePackage,
-  deployPackage,
   uploadIntake,
   listIntakes,
 } from "../../api/softwareDelivery";
@@ -73,11 +73,10 @@ import IntakeReviewDrawer from "./IntakeReviewDrawer";
 import GlobalCatalogSegment from "./GlobalCatalogSegment";
 import PackageProvenanceDrawer from "./PackageProvenanceDrawer";
 import DeletePackageDialog from "./DeletePackageDialog";
-import DeployWizardDialog from "./DeployWizardDialog";
 import IntakeUploadDialog from "./IntakeUploadDialog";
 import { isVerifiedPackage, originLabel } from "./packageOrigin";
 
-export default function CatalogTab({ canManage, notify, onDeployFire, openReviewQueue, onConsumedReviewQueue, openGlobalCatalog, onConsumedGlobalCatalog, refreshNonce = 0 }) {
+export default function CatalogTab({ canManage, notify, onOpenInstall, openReviewQueue, onConsumedReviewQueue, openGlobalCatalog, onConsumedGlobalCatalog, refreshNonce = 0 }) {
   // La cola de revisión cuelga del catálogo desde la fase 3.
   const [reviewOpen, setReviewOpen] = React.useState(false);
   const [segment, setSegment] = React.useState("mine");
@@ -137,8 +136,6 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
   // Fila cuya procedencia se está mirando.
   const [provenanceFor, setProvenanceFor] = React.useState(null);
 
-  const [deployOpen, setDeployOpen] = React.useState(false);
-  const [deployItem, setDeployItem] = React.useState(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -357,18 +354,6 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
     }
   };
 
-  const handleDeployFire = async (body) => {
-    if (!deployItem) return;
-    const res = await deployPackage(deployItem.id, body);
-    notify(
-      "success",
-      `Deployment #${res?.deployment?.id} created — ${res?.deployment?.counts?.pending ?? 0} job(s) queued`
-    );
-    setDeployOpen(false);
-    setDeployItem(null);
-    onDeployFire?.(res?.deployment?.id);
-  };
-
   const columns = [
     {
       field: "name",
@@ -568,15 +553,18 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
               <ShieldOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
+          {/* ⚠️ ESTO YA NO DESPLIEGA: LLEVA A DESPLEGAR (24-sep). El catálogo
+              es la biblioteca —qué tengo publicado, de dónde salió, qué se
+              verificó— y el verbo vive en la pestaña Install, simétrica con
+              Uninstall. Lo que se conserva es el atajo: quien está mirando
+              «Chrome 154 publicado» no tiene que volver a buscarlo allí. Una
+              pantalla de acción, dos puertas. */}
           {canManage && p.row.isActive ? (
-            <Tooltip title="Deploy to fleet">
+            <Tooltip title="Install on devices">
               <IconButton
-                aria-label="Deploy to fleet"
+                aria-label="Install on devices"
                 size="small"
-                onClick={() => {
-                  setDeployItem(p.row);
-                  setDeployOpen(true);
-                }}
+                onClick={() => onOpenInstall?.(p.row.id)}
                 sx={{ color: BRAND.teal, "&:hover": { color: BRAND.tealHover } }}
               >
                 <RocketLaunchOutlinedIcon fontSize="small" />
@@ -854,16 +842,6 @@ export default function CatalogTab({ canManage, notify, onDeployFire, openReview
         onConfirm={handleDelete}
       />
 
-      <DeployWizardDialog
-        open={deployOpen}
-        pkg={deployItem}
-        onClose={() => {
-          setDeployOpen(false);
-          setDeployItem(null);
-        }}
-        onConfirm={handleDeployFire}
-        notify={notify}
-      />
       </>
       )}
     </SectionPaper>

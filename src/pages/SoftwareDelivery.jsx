@@ -13,7 +13,6 @@ import { Box, Typography } from "@mui/material";
 import InventoryOutlinedIcon from "@mui/icons-material/InventoryOutlined";
 import LocalShippingOutlinedIcon from "@mui/icons-material/LocalShippingOutlined";
 import CloudDownloadOutlinedIcon from "@mui/icons-material/CloudDownloadOutlined";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
 
 import { BRAND, TEXT } from "../theme/brand";
@@ -30,28 +29,41 @@ import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
 
 import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
+import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
+import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import CatalogTab from "../components/software-delivery/CatalogTab";
 import DeploymentsTab from "../components/software-delivery/DeploymentsTab";
 import DistributionTab from "../components/software-delivery/DistributionTab";
 import UninstallTab from "../components/software-delivery/UninstallTab";
+import InstallTab from "../components/software-delivery/InstallTab";
 import OverviewTab from "../components/software-delivery/OverviewTab";
 
 // Tab order in one place: the Overview tab was inserted at 0, which shifts
 // every other index. Naming them keeps cross-tab navigation (deploy →
 // deployments, KPI card → its tab) from silently pointing at the wrong panel
 // the next time the order changes.
+// ⚠️ EL ORDEN ES EL DEL TRABAJO, NO EL ALFABÉTICO (24-sep): mirar · tener ·
+// actuar · comprobar · configurar. `Install` sale del catálogo, que mezclaba
+// «lo que tengo publicado» con «despliégalo», y queda simétrico con `Uninstall`
+// —los dos empiezan por qué y siguen por a quién—. `Distribution` pasa a vivir
+// bajo `Settings`: son sitios y puntos de distribución, se tocan una vez.
+//
+// ⚠️ Mover Distribution a Settings sólo es seguro porque la ALARMA se queda
+// fuera: «Sites with a DP» sigue en la franja del Dashboard, en rojo cuando
+// toca. Si un DP se queda rancio, nadie entra a Settings a mirarlo.
+//
+// ⚠️ Sin `intake`: la fase 3 retiró esa pestaña. Revisar lo que subiste es
+// un paso del flujo del catálogo y vive en un cajón colgado de él, no como
+// sección propia compitiendo en la barra.
 const TAB_INDEX = {
   overview: 0,
   catalog: 1,
   deployments: 2,
-  // ⚠️ Sin `intake`: la fase 3 retiró esa pestaña. Revisar lo que subiste es
-  // un paso del flujo del catálogo y vive en un cajón colgado de él, no como
-  // sección propia compitiendo en la barra.
-  distribution: 3,
-  // ADR-0019 F2 — pestaña propia porque como boton dentro de Deployments no
-  // se encontraba. Va al final, que es donde sigue el orden alfabetico tras
-  // Overview: Catalog · Deployments · Distribution · Uninstall.
+  install: 3,
+  // ADR-0019 F2 — pestaña propia porque como botón dentro de Deployments no
+  // se encontraba. Ahora además hace pareja con Install.
   uninstall: 4,
+  settings: 5,
 };
 
 // ── Page shell ────────────────────────────────────────────────────
@@ -198,6 +210,8 @@ export default function SoftwareDelivery({ onNavigate }) {
     message: "",
   });
   const [autoOpenDeploymentId, setAutoOpenDeploymentId] = React.useState(null);
+  // El paquete que el catálogo manda a la pestaña Install, consumido una vez.
+  const [installPackageId, setInstallPackageId] = React.useState(null);
   // Intención "abre la cola de revisión" que llega desde el Overview. Mismo
   // patrón que autoOpenDeploymentId: la página la transporta y la pestaña la
   // consume.
@@ -281,9 +295,10 @@ export default function SoftwareDelivery({ onNavigate }) {
         items={[
           { value: TAB_INDEX.overview, label: "Dashboard", icon: <SpaceDashboardOutlinedIcon /> },
           { value: TAB_INDEX.catalog, label: "Catalog", icon: <InventoryOutlinedIcon /> },
-          { value: TAB_INDEX.deployments, label: "Deployments", icon: <LocalShippingOutlinedIcon /> },
-          { value: TAB_INDEX.distribution, label: "Distribution", icon: <HubOutlinedIcon /> },
+          { value: TAB_INDEX.deployments, label: "Deployment Status", icon: <LocalShippingOutlinedIcon /> },
+          { value: TAB_INDEX.install, label: "Install", icon: <RocketLaunchOutlinedIcon /> },
           { value: TAB_INDEX.uninstall, label: "Uninstall", icon: <DeleteSweepOutlinedIcon /> },
+          { value: TAB_INDEX.settings, label: "Settings", icon: <SettingsOutlinedIcon /> },
         ]}
       />
 
@@ -311,7 +326,11 @@ export default function SoftwareDelivery({ onNavigate }) {
           refreshNonce={refreshNonce}
           canManage={canManage}
           notify={notify}
-          onDeployFire={handleDeployFired}
+          // La fila del catálogo ya no despliega: manda el paquete a Install.
+          onOpenInstall={(packageId) => {
+            setInstallPackageId(packageId);
+            setActiveTab(TAB_INDEX.install);
+          }}
           openReviewQueue={openReviewQueue}
           onConsumedReviewQueue={() => setOpenReviewQueue(false)}
           openGlobalCatalog={openGlobalCatalog}
@@ -326,6 +345,17 @@ export default function SoftwareDelivery({ onNavigate }) {
           onConsumedAutoOpen={() => setAutoOpenDeploymentId(null)}
         />
       ) : activeTab === 3 ? (
+        <InstallTab
+          canManage={canManage}
+          notify={notify}
+          refreshNonce={refreshNonce}
+          preselectPackageId={installPackageId}
+          onConsumedPreselect={() => setInstallPackageId(null)}
+          onDeployFire={handleDeployFired}
+        />
+      ) : activeTab === 5 ? (
+        // «Settings» son, por ahora, los sitios y los puntos de distribución:
+        // configuración que se toca una vez, no trabajo diario.
         <DistributionTab canManage={canManage} notify={notify} refreshNonce={refreshNonce} />
       ) : (
         <UninstallTab

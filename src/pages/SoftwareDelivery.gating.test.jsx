@@ -93,7 +93,8 @@ describe("SoftwareDelivery — plugin entitlement gate", () => {
     // The gate resolves asynchronously; wait for the page to settle, then
     // assert the false-negative banner never appears.
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Distribution/i })).toBeInTheDocument();
+      // «Distribution» pasó a vivir bajo Settings el 24-sep.
+      expect(screen.getByRole("tab", { name: /Settings/i })).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.queryByText(DISABLED_BANNER)).not.toBeInTheDocument();

@@ -96,19 +96,27 @@ describe("la desinstalación es ALCANZABLE, no sólo está montada", () => {
     // pudre. Al mover la función, la entrada anterior se elimina.
     const user = userEvent.setup();
     mount();
-    await user.click(await screen.findByRole("tab", { name: /deployments/i }));
+    await user.click(await screen.findByRole("tab", { name: /deployment status/i }));
 
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /uninstall detected software/i })).toBeNull()
     );
   });
 
-  it("la pestaña va DESPUÉS de Distribution", async () => {
-    // El orden importa para encontrarla: Overview primero y el resto
-    // alfabético — Catalog · Deployments · Distribution · Uninstall.
+  it("⭐ el orden de las pestañas es el del TRABAJO, no el alfabético", async () => {
+    // Mirar · tener · comprobar · actuar · configurar. Install sale del
+    // catálogo —que mezclaba «lo que tengo» con «despliégalo»— y queda junto a
+    // Uninstall: los dos empiezan por qué y siguen por a quién.
     mount();
     await screen.findByRole("tab", { name: /uninstall/i });
     const labels = screen.getAllByRole("tab").map((t) => t.textContent.trim());
-    expect(labels).toEqual(["Dashboard", "Catalog", "Deployments", "Distribution", "Uninstall"]);
+    expect(labels).toEqual([
+      "Dashboard",
+      "Catalog",
+      "Deployment Status",
+      "Install",
+      "Uninstall",
+      "Settings",
+    ]);
   });
 });
