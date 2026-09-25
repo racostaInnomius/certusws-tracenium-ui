@@ -286,7 +286,14 @@ export default function DeploymentsTab({ canManage, notify, autoOpenDeploymentId
           Dashboard, donde ocupaba 271 px contestando otra pregunta: un
           calendario de 90 días no cambia lo que haces hoy. Debajo de la lista
           sí, porque describe exactamente lo que se acaba de leer. */}
-      <InstallActivitySection deployments={items} refreshNonce={refreshNonce} />
+      {/* ⚠️ El filtro VIAJA. Sin él el calendario dibujaba todo el tenant al
+          lado de un desglose ya filtrado, y con «Failed» puesto anunciaba
+          éxitos que la lista de arriba no contenía. */}
+      <InstallActivitySection
+        deployments={items}
+        status={statusFilter}
+        refreshNonce={refreshNonce}
+      />
 
       <DeploymentDetailDrawer
         open={drawerOpen}

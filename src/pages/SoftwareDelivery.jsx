@@ -27,6 +27,7 @@ import { getMyCapabilities } from "../api/roles";
 import { getTenantPolicy } from "../api/policies";
 import { usePluginCatalog } from "../hooks/usePluginCatalog";
 import { useEffectiveTenantId } from "../hooks/useEffectiveTenantId";
+import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
 import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import RocketLaunchOutlinedIcon from "@mui/icons-material/RocketLaunchOutlined";
@@ -65,6 +66,38 @@ const TAB_INDEX = {
   uninstall: 4,
   settings: 5,
 };
+
+// Nombres que otras pestañas usaron y que siguen llegando desde los enlaces.
+//
+// 🔴 POR QUÉ EXISTE ESTO (25-sep). Al renombrar la pestaña `distribution` a
+// `settings` quedó viva una llamada `onNavigateTab("distribution")` en la
+// franja del Dashboard —el tile «Sites with a DP»—. No dio error ni se vio en
+// las pruebas: el handler resolvía con `TAB_INDEX[key] ?? 0`, así que la clave
+// desconocida caía en «Dashboard» y el tile se quedaba donde estaba. Un clic
+// que no hace nada.
+//
+// ⚠️ Y era el SEGUNDO: la misma tarjeta navegó a `"intake"` cuando se retiró
+// esa pestaña (ver OverviewTab.test.jsx). Lo que las dejó pasar no fue el
+// renombrado —eso se ve en un grep— sino el `??`, que convierte «esta pestaña
+// no existe» en «vete al principio».
+const TAB_ALIASES = { distribution: "settings", intake: "catalog" };
+
+/**
+ * El índice de una pestaña por su nombre.
+ *
+ * ⚠️ NO LLEVA VALOR POR DEFECTO A PROPÓSITO. Devuelve `null` para un nombre
+ * que no existe y quien llama decide: la página lo grita por consola y se
+ * queda quieta, que es lo que un enlace roto debería hacer notar.
+ */
+export function tabIndexFor(key) {
+  const name = TAB_ALIASES[key] ?? key;
+  return Object.prototype.hasOwnProperty.call(TAB_INDEX, name) ? TAB_INDEX[name] : null;
+}
+
+/** El nombre de una pestaña por su índice — para escribirlo en la URL. */
+export function tabKeyFor(index) {
+  return Object.keys(TAB_INDEX).find((k) => TAB_INDEX[k] === index) ?? null;
+}
 
 // ── Page shell ────────────────────────────────────────────────────
 
@@ -203,7 +236,53 @@ export default function SoftwareDelivery({ onNavigate }) {
   // banner shows alongside any existing rows for context).
   const canManage = isAdmin && sdpEnabled === true;
 
-  const [activeTab, setActiveTab] = React.useState(0);
+  // ── La pestaña vive en la URL ────────────────────────────────────
+  //
+  // 🔴 Antes no: cambiar de pestaña no tocaba la barra de direcciones, así que
+  // no había enlace que mandar («mírate Deployment Status»), no se podía
+  // marcar, y **Atrás sacaba de la página entera** —de la pestaña Catalog se
+  // salía a Overview—. Cinco de las seis pestañas eran inalcanzables por URL.
+  //
+  // Misma convención que el resto del portal (`?pmTab=`, `?scpTab=`), con una
+  // diferencia: aquí la entrada se APILA. `updateSearchParams` ya se escribió
+  // para esto («los cambios a los que Atrás debe poder volver: un cambio de
+  // pestaña»), y sin apilar Atrás seguiría saliéndose.
+  //
+  // ⚠️ Apilar OBLIGA a escuchar `popstate`. Con push pero sin escuchar, Atrás
+  // cambiaría la URL y dejaría la pestaña donde estaba: las dos discrepando,
+  // que es peor que no tocar la URL.
+  const [activeTab, setActiveTab] = React.useState(
+    () => tabIndexFor(getSearchParam("sdpTab", "")) ?? 0
+  );
+
+  // La primera vez REEMPLAZA (nadie quiere una entrada de historial por abrir
+  // la página); a partir de ahí apila.
+  const urlSyncedRef = React.useRef(false);
+  React.useEffect(() => {
+    const key = tabKeyFor(activeTab);
+    if (!key) return;
+    // Si la URL ya lo dice, no hay nada que escribir. Esto es lo que corta el
+    // bucle cuando quien cambió la pestaña fue el propio `popstate`.
+    if (getSearchParam("sdpTab", "") === key) {
+      urlSyncedRef.current = true;
+      return;
+    }
+    updateSearchParams({ sdpTab: key }, { push: urlSyncedRef.current });
+    urlSyncedRef.current = true;
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    const onPop = () => {
+      const index = tabIndexFor(getSearchParam("sdpTab", ""));
+      if (index != null) setActiveTab(index);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  // Cambiar de pestaña por cualquier vía —la barra o un enlace de otra
+  // pestaña— pasa por aquí, para que ninguna se salte la URL.
+  const goToTab = React.useCallback((index) => setActiveTab(index), []);
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     severity: "success",
@@ -224,10 +303,13 @@ export default function SoftwareDelivery({ onNavigate }) {
     setSnackbar({ open: true, severity, message });
   }, []);
 
-  const handleDeployFired = React.useCallback((id) => {
-    setAutoOpenDeploymentId(id);
-    setActiveTab(TAB_INDEX.deployments);
-  }, []);
+  const handleDeployFired = React.useCallback(
+    (id) => {
+      setAutoOpenDeploymentId(id);
+      goToTab(TAB_INDEX.deployments);
+    },
+    [goToTab]
+  );
 
   return (
     <Box sx={{ px: { xs: 2, sm: 0.5 }, py: { xs: 2, sm: 0.5 } }}>
@@ -291,7 +373,7 @@ export default function SoftwareDelivery({ onNavigate }) {
 
       <PageTabs
         value={activeTab}
-        onChange={(_e, v) => setActiveTab(v)}
+        onChange={(_e, v) => goToTab(v)}
         items={[
           { value: TAB_INDEX.overview, label: "Dashboard", icon: <SpaceDashboardOutlinedIcon /> },
           { value: TAB_INDEX.catalog, label: "Catalog", icon: <InventoryOutlinedIcon /> },
@@ -312,7 +394,14 @@ export default function SoftwareDelivery({ onNavigate }) {
           notify={notify}
           onDeployFire={handleDeployFired}
           onNavigateTab={(key, opts) => {
-            setActiveTab(TAB_INDEX[key] ?? 0);
+            const index = tabIndexFor(key);
+            if (index == null) {
+              // Quedarse quieto y decirlo. Ir al Dashboard disfrazaba el
+              // enlace roto de «no pasa nada».
+              console.error(`[SoftwareDelivery] pestaña desconocida: ${key}`);
+              return;
+            }
+            goToTab(index);
             if (opts?.reviewQueue) setOpenReviewQueue(true);
             if (opts?.globalCatalog) setOpenGlobalCatalog(true);
             // Una causa de fallo con UN solo despliegue detrás abre ese
@@ -329,7 +418,7 @@ export default function SoftwareDelivery({ onNavigate }) {
           // La fila del catálogo ya no despliega: manda el paquete a Install.
           onOpenInstall={(packageId) => {
             setInstallPackageId(packageId);
-            setActiveTab(TAB_INDEX.install);
+            goToTab(TAB_INDEX.install);
           }}
           openReviewQueue={openReviewQueue}
           onConsumedReviewQueue={() => setOpenReviewQueue(false)}

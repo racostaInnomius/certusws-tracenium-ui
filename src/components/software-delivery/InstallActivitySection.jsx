@@ -11,10 +11,20 @@
 //
 // Vive donde se pregunta: en la pestaña de despliegues, debajo de la lista.
 //
-// ⚠️ EL DESGLOSE DESCRIBE LA LISTA QUE SE ESTÁ VIENDO, filtro incluido. Con
-// «failed» activo cuenta sólo los desenlaces de esos despliegues, y por eso lo
-// dice en el subtítulo: un agregado que cambia bajo un filtro sin avisar es la
-// forma de leer «7 fallos» creyendo que son de toda la flota.
+// ⚠️ LOS DOS PANELES DESCRIBEN LA LISTA QUE SE ESTÁ VIENDO, filtro incluido.
+// Un agregado que cambia bajo un filtro sin avisar es la forma de leer «7
+// fallos» creyendo que son de toda la flota.
+//
+// 🔴 El calendario NO lo hacía (hasta el 25-sep). Pedía la serie del tenant
+// entero mientras el desglose de al lado ya venía filtrado, así que con
+// «Failed» puesto la pantalla enseñaba «14 installs · 5 succeeded · 9 failed»
+// a la izquierda y «13 installs · Failed 13 · 100%» a la derecha. Ninguna de
+// las dos estaba mal por dentro; juntas eran una contradicción.
+//
+// ⚠️ SIGUEN SIN COMPARTIR VENTANA, y eso es a propósito: el desglose cuenta
+// todos los despliegues de la lista y el calendario sólo su selector de días.
+// Lo que se arregló es que ahora se DICE (`calendarScope`) — a 90 días los dos
+// coinciden exactamente, que es la prueba de que describen el mismo conjunto.
 
 import * as React from "react";
 import {
@@ -47,7 +57,27 @@ export function outcomeItems(deployments) {
   ].filter((i) => i.value > 0);
 }
 
-export default function InstallActivitySection({ deployments = [], refreshNonce = 0 }) {
+/**
+ * Lo que el calendario está dibujando, dicho en voz alta.
+ *
+ * ⚠️ Los dos paneles de esta sección comparten filtro pero NO ventana: el
+ * desglose cuenta todos los despliegues de la lista y el calendario sólo los
+ * días que caben en su selector. Que los totales difieran es correcto; que no
+ * se diga de dónde sale cada uno, no. Con «Failed» y 30 días la izquierda decía
+ * 14 y la derecha 13, sin una palabra que lo explicara.
+ */
+export function calendarScope(status) {
+  const filtered = status && status !== "all";
+  return filtered
+    ? `Installs from ${status} deployments, one square per day`
+    : "One square per day in the window";
+}
+
+export default function InstallActivitySection({
+  deployments = [],
+  status = "all",
+  refreshNonce = 0,
+}) {
   const [windowKey, setWindowKey] = React.useState("30d");
   const [buckets, setBuckets] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -55,7 +85,7 @@ export default function InstallActivitySection({ deployments = [], refreshNonce 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getDeploymentTimeseries(windowKey)
+    getDeploymentTimeseries(windowKey, status === "all" ? null : status)
       .then((res) => {
         if (!cancelled) setBuckets(Array.isArray(res?.buckets) ? res.buckets : []);
       })
@@ -70,7 +100,7 @@ export default function InstallActivitySection({ deployments = [], refreshNonce 
     return () => {
       cancelled = true;
     };
-  }, [windowKey, refreshNonce]);
+  }, [windowKey, status, refreshNonce]);
 
   const items = React.useMemo(() => outcomeItems(deployments), [deployments]);
   const hasChartData = buckets.some(
@@ -94,7 +124,7 @@ export default function InstallActivitySection({ deployments = [], refreshNonce 
                 When installs happened
               </Typography>
               <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                One square per day in the window
+                {calendarScope(status)}
               </Typography>
             </Box>
             <ToggleButtonGroup
@@ -119,7 +149,9 @@ export default function InstallActivitySection({ deployments = [], refreshNonce 
               <InstallActivityCalendar buckets={buckets} />
               {!hasChartData ? (
                 <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mt: 1 }}>
-                  Nothing was installed in this window.
+                  {status && status !== "all"
+                    ? `No installs from ${status} deployments in this window.`
+                    : "Nothing was installed in this window."}
                 </Typography>
               ) : null}
             </>

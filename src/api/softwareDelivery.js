@@ -142,8 +142,15 @@ export async function listIntakes(params = {}) {
 // N+1 (one counts query per row), so charting from the list would cost
 // hundreds of round trips. `window` is an "Nd" string, clamped to 90d.
 
-export async function getDeploymentTimeseries(window = "30d") {
-  return httpGetJson(`${BASE}/analytics/timeseries${buildQuery({ window })}`);
+/**
+ * Instalaciones por día.
+ *
+ * ⚠️ `status` acota por el estado del DESPLIEGUE, el mismo eje del filtro de la
+ * lista. Omitirlo daba una serie de todo el tenant al lado de un desglose ya
+ * filtrado, y las dos cifras se leían como la misma.
+ */
+export async function getDeploymentTimeseries(window = "30d", status = null) {
+  return httpGetJson(`${BASE}/analytics/timeseries${buildQuery({ window, status })}`);
 }
 
 export async function getDownloadTierStats(window = "30d") {
