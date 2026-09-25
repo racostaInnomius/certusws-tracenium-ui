@@ -103,8 +103,14 @@ export function groupActivity(events, filtro) {
     } else {
       const clave = `${e.siteName}|${e.toState}`;
       const previo = grupo.first.get(clave);
-      if (previo) previo.count += 1;
-      else grupo.first.set(clave, { siteName: e.siteName, toState: e.toState, count: 1, sample: e });
+      // Los eventos viajan con el grupo: la cifra y la lista que despliega
+      // salen del MISMO array, y no pueden volver a contar días distintos.
+      if (previo) {
+        previo.count += 1;
+        previo.events.push(e);
+      } else {
+        grupo.first.set(clave, { siteName: e.siteName, toState: e.toState, count: 1, sample: e, events: [e] });
+      }
     }
   }
   return [...dias.values()].map((g) => ({ ...g, first: [...g.first.values()] }));
@@ -278,11 +284,12 @@ function Fila({ e }) {
 }
 
 /** Las primeras confirmaciones de un día, en una sola fila que se despliega. */
-function FilaPrimeras({ grupo, eventos }) {
+function FilaPrimeras({ grupo }) {
   const [abierto, setAbierto] = React.useState(false);
-  const detalle = eventos.filter(
-    (e) => classifyTransition(e.fromState, e.toState) === "first" && e.siteName === grupo.siteName && e.toState === grupo.toState
-  );
+  // ⚠️ Antes se filtraba la lista ENTERA por sitio y estado, sin el día: «1
+  // device was first confirmed…» desplegaba los 7 de toda la ventana (T1,
+  // 24-sep). Los del grupo son los de ese día.
+  const detalle = grupo.events;
   return (
     <Box sx={{ py: 1, borderBottom: `1px solid ${BRAND.border}` }}>
       <Stack direction="row" spacing={1.25}>
@@ -409,7 +416,13 @@ export default function RecentTransitions({
           label="Inside now"
           value={estado.dentro}
           color={BRAND.alert.successText}
-          hint={`of ${estado.total} device${estado.total === 1 ? "" : "s"} evaluated`}
+          // ⚠️ La suma es por CERCA: con dos cercas cada equipo cuenta dos
+          // veces, y "of 38 devices" en una flota de 17 era falso (T1, 24-sep).
+          hint={
+            cercas.length > 1
+              ? `of ${estado.total} device checks across ${cercas.length} fences`
+              : `of ${estado.total} device${estado.total === 1 ? "" : "s"} evaluated`
+          }
         />
         <Cifra
           label="Away"
@@ -523,7 +536,7 @@ export default function RecentTransitions({
             </Typography>
             {g.movements.map((e) => <Fila key={e.id} e={e} />)}
             {g.first.map((grupo) => (
-              <FilaPrimeras key={`${grupo.siteName}|${grupo.toState}`} grupo={grupo} eventos={lista} />
+              <FilaPrimeras key={`${grupo.siteName}|${grupo.toState}`} grupo={grupo} />
             ))}
           </Box>
         ))

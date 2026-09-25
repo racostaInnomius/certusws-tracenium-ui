@@ -142,6 +142,38 @@ describe("RecentTransitions", () => {
     expect(screen.getByText("PC-2")).toBeInTheDocument();
   });
 
+  it("⭐ lo que se despliega es lo de ESE día, no lo de toda la ventana", async () => {
+    // T1, 24-sep: «1 device was first confirmed away…» desplegaba 7 equipos —
+    // los de todos los días con esa misma cerca y estado.
+    const user = userEvent.setup();
+    const eventos = [
+      ev({ id: "1", hostname: "PC-HOY", toState: "outside", occurredAt: "2026-09-20T15:00:00Z" }),
+      ev({ id: "2", hostname: "PC-ANTES", toState: "outside", occurredAt: "2026-09-12T15:00:00Z" }),
+      ev({ id: "3", hostname: "PC-MAS-ANTES", toState: "outside", occurredAt: "2026-09-11T15:00:00Z" }),
+    ];
+    render(<RecentTransitions events={eventos} sites={[cerca()]} />);
+
+    const botones = screen.getAllByRole("button", { name: /^Show the device$/i });
+    expect(botones).toHaveLength(3);
+    await user.click(botones[0]);
+    expect(screen.getByText("PC-HOY")).toBeInTheDocument();
+    expect(screen.queryByText("PC-ANTES")).not.toBeInTheDocument();
+    expect(screen.queryByText("PC-MAS-ANTES")).not.toBeInTheDocument();
+  });
+
+  it("⚠️ con dos cercas la suma es de comprobaciones, no de equipos", () => {
+    // Cada equipo se evalúa contra cada cerca: 19 equipos × 2 cercas = 38, y
+    // "of 38 devices evaluated" en una flota de 17 era falso.
+    render(
+      <RecentTransitions
+        events={[]}
+        sites={[cerca({ id: "1", inside: 5, outside: 7, indeterminate: 7 }), cerca({ id: "2", siteName: "Cowork", inside: 3, outside: 9, indeterminate: 7 })]}
+      />
+    );
+    expect(screen.getByText("of 38 device checks across 2 fences")).toBeInTheDocument();
+    expect(screen.queryByText(/38 devices evaluated/)).not.toBeInTheDocument();
+  });
+
   it("⚠️ con movimientos, la vista abre filtrada por ellos y el ruido inicial no estorba", async () => {
     const user = userEvent.setup();
     const eventos = [
