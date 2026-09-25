@@ -703,6 +703,32 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     );
     expect(enviados.framework).toBeTruthy();
   });
+
+  // Asset Management abre la ficha con `?device=`. Este enlace mandaba
+  // `?agentId=`, que allí nadie lee: se aterrizaba en el dashboard, sin el
+  // equipo (recorrido de prod, 25-sep).
+  it("⭐ «View device in Assets →» aterriza en la ficha de ESE equipo", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    const { onNavigate } = mountPage();
+    respond("get", `${BASE}/devices/:agentId`, {
+      ok: true,
+      device: { agentId: "dev-a", hostname: "WS-ALPHA", platform: "windows", overallStatus: "fail", findings: [] },
+    });
+    respond("get", `${BASE}/devices/:agentId/timeseries`, { ok: true, points: [] });
+    respond("get", `${BASE}/devices/:agentId/ranking`, { ok: true, rank: null });
+    respond("get", `${BASE}/devices/:agentId/diff`, { ok: true, added: [], removed: [] });
+    respond("get", "/api/v1/policies/plugins/catalog", { ok: true, catalog: [], entitled: ["scp"] });
+
+    fireEvent.click(await screen.findByRole("button", { name: /Open details for WS-ALPHA/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /View device in Assets/ }));
+
+    const params = new URL(window.location.href).searchParams;
+    expect(params.get("page")).toBe("assets");
+    expect(params.get("device")).toBe("dev-a");
+    expect(params.get("agentId")).toBeNull();
+    // La navegación de esta página va por la URL, no por el callback.
+    expect(onNavigate).not.toHaveBeenCalledWith("assets", expect.anything());
+  });
 });
 
 // ── Selector por FAMILIA ─────────────────────────────────────────────

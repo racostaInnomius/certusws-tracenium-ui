@@ -2076,7 +2076,10 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           frameworkLabels={frameworkLabels}
           onNavigateToAsset={() => {
             closeDrawer();
-            navigateTo("assets", { agentId: drawerAgentId });
+            // `device`, no `agentId`: es el parámetro con el que Asset
+            // Management abre la ficha (AssetsDashboard). Con `agentId` se
+            // aterrizaba en el dashboard sin el equipo.
+            navigateTo("assets", { device: drawerAgentId });
           }}
           // Sprint 3 — lifecycle wiring
           onRequestRefetch={refetchDrawer}
