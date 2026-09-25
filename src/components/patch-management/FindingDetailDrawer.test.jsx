@@ -139,3 +139,67 @@ describe("simular, luego aplicar", () => {
     expect(await screen.findByText("domain-joined warning")).toBeInTheDocument();
   });
 });
+
+// ── El fix ya está en camino ──────────────────────────────────────
+// 25-sep: «Weak SCHANNEL ciphers» seguía en dos equipos con su job en
+// `pending` y el cajón ofrecía «Apply» otra vez sin decir nada.
+describe("equipos a los que el fix ya les está llegando", () => {
+  const busy = (agentId, remediationId = 17, outcome = "pending") => ({
+    ...dev(agentId),
+    inFlight: { deviceId: agentId, remediationId, outcome, createdAt: "2026-09-25T10:00:00.000Z" },
+  });
+
+  it("⭐ se ven en su fila con la remediación, fuera de la selección y sin poder marcarlos", async () => {
+    getDevicesAffectedByCheck.mockResolvedValue({ items: [dev("d1"), busy("d2")] });
+    open();
+    expect(await screen.findByRole("button", { name: /^Apply on 1/ })).toBeEnabled();
+    expect(screen.getByText("Pending · #17")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Select D2" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Select D2" })).not.toBeChecked();
+    expect(screen.getByTestId("in-flight-notice")).toHaveTextContent(/1 of 2 devices already have this fix on its way \(#17\)/);
+
+    // Ni pulsando la fila entra.
+    fireEvent.click(screen.getByTestId("affected-d2"));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply on 1/ }));
+    await waitFor(() => expect(remediate).toHaveBeenCalledTimes(1));
+    expect(remediate.mock.calls[0][0].deviceIds).toEqual(["d1"]);
+  });
+
+  it("si todos lo tienen ya en camino, no hay nada que mandar y se dice", async () => {
+    getDevicesAffectedByCheck.mockResolvedValue({ items: [busy("d1"), busy("d2", 18, "running")] });
+    open();
+    expect(await screen.findByRole("button", { name: /^Apply on 0/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Dry-run on 0/ })).toBeDisabled();
+    expect(screen.getByText("Running · #18")).toBeInTheDocument();
+    expect(screen.getByTestId("in-flight-notice")).toHaveTextContent(/already on its way to all 2 devices \(#17, #18\)/);
+    // «Seleccionar todo» no los mete por la puerta de atrás.
+    expect(screen.getByRole("checkbox", { name: "Select all devices" })).toBeDisabled();
+  });
+
+  it("el chip abre esa remediación, donde se sigue o se cancela", async () => {
+    getDevicesAffectedByCheck.mockResolvedValue({ items: [busy("d1")] });
+    getRemediationResults.mockResolvedValue({ items: [{ id: 9, deviceId: "d1", outcome: "pending" }] });
+    open();
+    fireEvent.click(await screen.findByText("Pending · #17"));
+    await waitFor(() => expect(getRemediationResults).toHaveBeenCalledWith(17));
+    expect(await screen.findByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(remediate).not.toHaveBeenCalled();
+  });
+
+  it("una acción agrupada lo hereda de cualquiera de sus checks", async () => {
+    getDevicesAffectedByCheck.mockImplementation(async (id) => ({
+      items: id === "fw.private" ? [busy("d2")] : [dev("d1"), dev("d2")],
+    }));
+    open({ checkIds: ["fw.domain", "fw.private"] });
+    expect(await screen.findByText("Pending · #17")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Apply on 1/ })).toBeEnabled();
+  });
+
+  it("si el backend quitó a alguien por una carrera, lo dice", async () => {
+    const notify = vi.fn();
+    remediate.mockResolvedValue({ remediation: { id: 7, skippedInFlight: [{ deviceId: "d2", remediationId: 17, outcome: "pending" }] } });
+    open({ notify });
+    fireEvent.click(await screen.findByRole("button", { name: /^Apply on 2/ }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("info", expect.stringMatching(/1 device was left out/)));
+  });
+});

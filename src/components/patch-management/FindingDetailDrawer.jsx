@@ -194,13 +194,26 @@ export default function FindingDetailDrawer({
         ids.map(async (id) => listFrom(await getDevicesAffectedByCheck(id), { context: "findingDetail" }))
       );
       const byId = new Map();
-      for (const list of lists) for (const d of list) if (d?.agentId && !byId.has(d.agentId)) byId.set(d.agentId, d);
+      for (const list of lists) {
+        for (const d of list) {
+          if (!d?.agentId) continue;
+          const prev = byId.get(d.agentId);
+          // En una acción agrupada, el fix «en camino» de cualquiera de sus
+          // checks cuenta: es el mismo handler.
+          if (!prev) byId.set(d.agentId, d);
+          else if (!prev.inFlight && d.inFlight) byId.set(d.agentId, { ...prev, inFlight: d.inFlight });
+        }
+      }
       const items = Array.from(byId.values());
       setDevices(items);
       // Selección por defecto: todos, o sólo los que pidió el llamante (el
-      // equipo abierto). Se puede cambiar antes de simular.
+      // equipo abierto). Se puede cambiar antes de simular. Nunca los que ya
+      // tienen este fix en camino: mandárselo otra vez sólo encola un segundo
+      // job igual detrás del primero.
       const wanted = initialKey ? new Set(initialKey.split(",")) : null;
-      setSelectedDeviceIds(new Set(items.map((d) => d.agentId).filter((id) => !wanted || wanted.has(id))));
+      setSelectedDeviceIds(new Set(
+        items.filter((d) => !d.inFlight).map((d) => d.agentId).filter((id) => !wanted || wanted.has(id))
+      ));
     } catch (err) {
       notifyRef.current?.("error", err?.body?.message || err?.message || "Failed to load affected devices");
     } finally {
@@ -297,11 +310,23 @@ export default function FindingDetailDrawer({
         notify?.("error", "Backend didn't return a remediation id");
         return;
       }
+      // El backend quita a quien ya tenía el fix en camino (una carrera con
+      // otra pestaña u otro operador); se dice, no se calla.
+      const skipped = res?.remediation?.skippedInFlight ?? [];
+      if (skipped.length > 0) {
+        notify?.(
+          "info",
+          `${skipped.length} ${skipped.length === 1 ? "device was" : "devices were"} left out: this fix is already on its way to ${skipped.length === 1 ? "it" : "them"}.`
+        );
+      }
       setActiveMode(theMode);
       setActiveRemediationId(id);
       setMode("progress");
       onChanged?.();
     } catch (err) {
+      // 409: todos los elegidos lo tienen ya en camino. Se recarga la lista
+      // para que la fila lo enseñe.
+      if (err?.body?.error === "PATCH_REMEDIATION_IN_FLIGHT") loadDevices();
       // Backend's well-known failure modes:
       //   PMP_PLUGIN_DISABLED → 403; banner on the page already
       //                         tells the operator how to fix it,
@@ -333,7 +358,12 @@ export default function FindingDetailDrawer({
     }
   };
 
+  // Los que ya tienen este fix en camino no se pueden volver a elegir.
+  const selectableDevices = devices.filter((d) => !d.inFlight);
+  const inFlightDevices = devices.filter((d) => d.inFlight);
+
   const toggleDevice = (agentId) => {
+    if (inFlightDevices.some((d) => d.agentId === agentId)) return;
     setSelectedDeviceIds((prev) => {
       const next = new Set(prev);
       if (next.has(agentId)) next.delete(agentId);
@@ -342,11 +372,17 @@ export default function FindingDetailDrawer({
     });
   };
   const toggleAll = () => {
-    if (selectedDeviceIds.size === devices.length) {
+    if (selectedDeviceIds.size === selectableDevices.length) {
       setSelectedDeviceIds(new Set());
     } else {
-      setSelectedDeviceIds(new Set(devices.map((d) => d.agentId)));
+      setSelectedDeviceIds(new Set(selectableDevices.map((d) => d.agentId)));
     }
+  };
+  const openRemediation = (id) => {
+    setActiveMode("apply");
+    setActiveRemediationId(id);
+    setResults([]);
+    setMode("progress");
   };
 
   // ── Computed ────────────────────────────────────────────────────
@@ -567,6 +603,15 @@ export default function FindingDetailDrawer({
                 </Stack>
               </Stack>
 
+              {inFlightDevices.length > 0 ? (
+                <Alert severity="info" variant="outlined" data-testid="in-flight-notice">
+                  {inFlightDevices.length === devices.length
+                    ? `This fix is already on its way to ${devices.length === 1 ? "this device" : `all ${devices.length} devices`}`
+                    : `${inFlightDevices.length} of ${devices.length} devices already have this fix on its way`}
+                  {" "}({[...new Set(inFlightDevices.map((d) => `#${d.inFlight.remediationId}`))].join(", ")}), so {inFlightDevices.length === 1 ? "it is" : "they are"} left out. An offline device picks it up when it reconnects — open the fix to follow it, or cancel it to send a new one.
+                </Alert>
+              ) : null}
+
               <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", border: `1px solid ${BRAND.border}`, borderRadius: 1 }}>
                 {devicesLoading && devices.length === 0 ? (
                   <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
@@ -585,8 +630,10 @@ export default function FindingDetailDrawer({
                     }}>
                       <Checkbox
                         size="small"
-                        checked={devices.length > 0 && selectedDeviceIds.size === devices.length}
-                        indeterminate={selectedDeviceIds.size > 0 && selectedDeviceIds.size < devices.length}
+                        checked={selectableDevices.length > 0 && selectedDeviceIds.size === selectableDevices.length}
+                        indeterminate={selectedDeviceIds.size > 0 && selectedDeviceIds.size < selectableDevices.length}
+                        disabled={selectableDevices.length === 0}
+                        inputProps={{ "aria-label": "Select all devices" }}
                         onChange={toggleAll}
                         sx={{
                           "&.Mui-checked": { color: BRAND.teal },
@@ -594,28 +641,33 @@ export default function FindingDetailDrawer({
                         }}
                       />
                       <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-                        {selectedDeviceIds.size} of {devices.length} selected
+                        {selectedDeviceIds.size} of {selectableDevices.length} selected
+                        {inFlightDevices.length > 0 ? ` · ${inFlightDevices.length} already being fixed` : ""}
                       </Typography>
                     </Box>
 
                     {devices.map((d) => {
                       const checked = selectedDeviceIds.has(d.agentId);
+                      const busy = d.inFlight;
                       return (
                         <Box
                           key={d.agentId}
+                          data-testid={`affected-${d.agentId}`}
                           onClick={() => toggleDevice(d.agentId)}
                           sx={{
                             display: "flex", alignItems: "center", px: 1, py: 0.75,
                             borderBottom: `1px solid ${BRAND.border}`,
-                            cursor: "pointer",
-                            "&:hover": { bgcolor: BRAND.tealSoft },
+                            cursor: busy ? "default" : "pointer",
+                            ...(busy ? { bgcolor: BRAND.surfaceMuted } : { "&:hover": { bgcolor: BRAND.tealSoft } }),
                           }}
                         >
                           <Checkbox
                             size="small"
                             checked={checked}
+                            disabled={Boolean(busy)}
                             onChange={() => toggleDevice(d.agentId)}
                             onClick={(e) => e.stopPropagation()}
+                            inputProps={{ "aria-label": `Select ${d.hostname || d.agentId}` }}
                             sx={{ "&.Mui-checked": { color: BRAND.teal } }}
                           />
                           <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -626,6 +678,26 @@ export default function FindingDetailDrawer({
                               {d.agentId}
                             </Typography>
                           </Box>
+                          {busy ? (
+                            /* Ya le está llegando: se dice aquí, con la
+                               remediación a la que ir para seguirla o
+                               cancelarla. Volver a mandarlo sólo encolaría
+                               un segundo job igual detrás del primero. */
+                            <Tooltip
+                              arrow
+                              title={`Fix #${busy.remediationId} is ${busy.outcome === "running" ? "running on" : "waiting for"} this device${busy.createdAt ? ` (sent ${formatRelativeTime(busy.createdAt)})` : ""}. Open it to follow or cancel it before sending it again.`}
+                            >
+                              <Chip
+                                size="small"
+                                label={`${busy.outcome === "running" ? "Running" : "Pending"} · #${busy.remediationId}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openRemediation(busy.remediationId);
+                                }}
+                                sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: BRAND.darkSoft, color: BRAND.dark, ml: 1 }}
+                              />
+                            </Tooltip>
+                          ) : null}
                           <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 1 }}>
                             {d.platform || "—"}
                           </Typography>
