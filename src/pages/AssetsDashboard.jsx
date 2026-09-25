@@ -1597,29 +1597,6 @@ const osVersionItems = React.useMemo(() => {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
-            {/* Cuánto de este inventario es de ahora. Los KPIs cuentan equipos
-                online; esto dice cuánto de lo que se ve es de hace una hora y
-                cuánto de hace una semana. */}
-            <DonutCard
-              title="Last check-in"
-              subtitle="When each device last reported"
-              data={checkInData}
-              loading={assetHealth.loading && !assetHealth.data}
-              activeKey={checkInNameOfKey(checkInFilter)}
-              onSegmentClick={(segment) => {
-                const key = checkInKeyOfName(segment?.name);
-                if (!key) return;
-                const next = checkInFilter === key ? "" : key;
-                setCheckInFilter(next);
-                updateSearchParams({ checkIn: next });
-              }}
-              totalLabel="devices"
-              fallbackLabel={assetHealth.error ? "Could not load check-ins" : "No check-in data"}
-            />
-          </Box>
-        </Grid>
-        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
-          <Box sx={{ width: "100%" }}>
             <CompositionBars
               title="OS versions"
               items={osVersionItems}
@@ -1661,13 +1638,36 @@ const osVersionItems = React.useMemo(() => {
             />
           </Box>
         </Grid>
+        <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
+          <Box sx={{ width: "100%" }}>
+            {/* Cuánto de este inventario es de ahora. Los KPIs cuentan equipos
+                online; esto dice cuánto de lo que se ve es de hace una hora y
+                cuánto de hace una semana. */}
+            <DonutCard
+              title="Last check-in"
+              subtitle="When each device last reported"
+              data={checkInData}
+              loading={assetHealth.loading && !assetHealth.data}
+              activeKey={checkInNameOfKey(checkInFilter)}
+              onSegmentClick={(segment) => {
+                const key = checkInKeyOfName(segment?.name);
+                if (!key) return;
+                const next = checkInFilter === key ? "" : key;
+                setCheckInFilter(next);
+                updateSearchParams({ checkIn: next });
+              }}
+              totalLabel="devices"
+              fallbackLabel={assetHealth.error ? "Could not load check-ins" : "No check-in data"}
+            />
+          </Box>
+        </Grid>
       </Grid>
 
       {/* ADR-0030 — equipos con señales de experiencia. Se esconde sola si
           ningún equipo informa todavía. Encima de la tabla porque es desde
           donde se abre la ficha. */}
       {/* Device experience + Needs attention. «Needs attention» mide lo mismo
-          que una columna de la fila de arriba (queda justo bajo OS versions);
+          que una columna de la fila de arriba (queda justo bajo Last check-in);
           si Device experience se esconde —ningún equipo informa aún—, ocupa
           la fila entera en vez de dejar dos tercios vacíos. */}
       <Box
