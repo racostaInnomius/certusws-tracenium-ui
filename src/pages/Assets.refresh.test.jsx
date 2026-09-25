@@ -17,6 +17,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { ConfirmProvider } from "../components/common/ConfirmDialog";
+import { clearCachedFetch } from "../hooks/useCachedFetch";
 
 const MOCK_AUTH = {
   tenantId: "1",
@@ -95,4 +96,25 @@ describe("Asset Management — refrescar funciona en todas las pestañas", () =>
       await waitFor(() => expect(calls.length).toBeGreaterThan(antes), { timeout: 3000 });
     }
   );
+});
+
+describe("Hardware Inventory — el Refresh de la cabecera recarga también las tarjetas", () => {
+  it("⭐ summary y rankings vuelven a pedirse, no sólo la tabla", async () => {
+    // Prod, 24-sep: sólo se relanzaba /hardware-inventory/detail.
+    // Sin caché de pruebas anteriores: la carga inicial tiene que verse.
+    clearCachedFetch();
+    const calls = mount();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: /hardware/i }));
+    await waitFor(() => expect(calls.some((c) => c.endsWith("/hardware-inventory/summary"))).toBe(true));
+    const antes = calls.length;
+
+    await user.click(screen.getAllByRole("button", { name: /^refresh$/i })[0]);
+
+    await waitFor(() => {
+      const despues = calls.slice(antes);
+      expect(despues.some((c) => c.endsWith("/hardware-inventory/summary"))).toBe(true);
+      expect(despues.some((c) => c.endsWith("/hardware-inventory/rankings"))).toBe(true);
+    }, { timeout: 3000 });
+  });
 });

@@ -436,6 +436,17 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
     loadDetail();
   };
 
+  // ⚠️ El Refresh de la CABECERA llega como refreshNonce, y sólo relanzaba la
+  // tabla (efecto de arriba): composición, disco, fabricantes y memoria se
+  // quedaban como estaban hasta pulsar el Refresh de la propia tabla (prod,
+  // 24-sep). El primer render no cuenta: esas tarjetas ya cargan al montar.
+  const primerNonce = React.useRef(refreshNonce);
+  React.useEffect(() => {
+    if (refreshNonce === primerNonce.current) return;
+    reloadSummary();
+    reloadRankings();
+  }, [refreshNonce, reloadSummary, reloadRankings]);
+
   const columns = [
     {
       field: "hostname",
