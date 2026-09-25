@@ -18,8 +18,11 @@ const EXPOSURE = { total: 1043, own: 151, ownPostQuantum: 0, devicesBlocked: 20,
 const OVERVIEW = { roadmap: { systemsTotal: 34, systemsPlanned: 0, devicesBlocked: 20 }, orphanKeys: { total: 0, stale: 0 } };
 
 beforeEach(() => {
-  getCdpFacets.mockImplementation(async ({ by, hasPrivateKey }) =>
-    hasPrivateKey
+  getCdpFacets.mockImplementation(async ({ by, hasPrivateKey, source }) =>
+    // Keys pide aparte los ficheros sin ruta (25-sep); aquí no hay ninguno.
+    source === "file"
+      ? { rows: [] }
+      : hasPrivateKey
       ? { rows: [{ keys: { source: "store", store_name: "LocalMachine\\My", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }] }
       : { rows: [{ keys: { ownership: "own_leaf", source: "store", key_algorithm: "RSA" }, stack: 2048, certs: 146, uniqueCerts: 146, devices: 54 }, { keys: { ownership: "vendor", source: "store", key_algorithm: "RSA" }, stack: 4096, certs: 51, uniqueCerts: 51, devices: 54 }] }
   );
@@ -81,6 +84,8 @@ describe("QuantumSunburst", () => {
   it("⭐ abre en Keys, pide las facetas de claves, y pinta las cuatro bases aunque tres estén vacías", async () => {
     render(<QuantumSunburst exposure={EXPOSURE} overview={OVERVIEW} onSelect={vi.fn()} />);
     await waitFor(() => expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true })));
+    // Y los ficheros aparte, sin ruta: una clave copiada en dos rutas es una.
+    expect(getCdpFacets).toHaveBeenCalledWith(expect.objectContaining({ by: ["key_algorithm"], stack: "key_size_bits", hasPrivateKey: true, source: "file" }));
     // 146 claves en los equipos + 27 que certificó la CA (grupo de Infra).
     expect(await screen.findByText("173")).toBeInTheDocument();
     expect(screen.getByText("private keys")).toBeInTheDocument();

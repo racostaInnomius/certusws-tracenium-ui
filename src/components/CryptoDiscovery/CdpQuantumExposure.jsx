@@ -204,7 +204,13 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
       mode === "certs"
         ? getCdpFacets({ by: ["ownership", "source", "key_algorithm"], stack: "key_size_bits", limit: 1000 }).then((r) => r?.rows ?? [])
         : mode === "keys"
-          ? getCdpFacets({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true, limit: 1000 }).then((r) => r?.rows ?? [])
+          ? // Los ficheros, aparte y sin ruta: el mismo certificado copiado en
+            // dos rutas es UNA clave (ver buildKeysTree). Si esa consulta cae,
+            // se cuenta por ruta como antes, no se pierde el gajo.
+            Promise.all([
+              getCdpFacets({ by: ["source", "store_name", "key_algorithm"], stack: "key_size_bits", hasPrivateKey: true, limit: 1000 }).then((r) => r?.rows ?? []),
+              getCdpFacets({ by: ["key_algorithm"], stack: "key_size_bits", hasPrivateKey: true, source: "file", limit: 1000 }).then((r) => r?.rows ?? null).catch(() => null)
+            ]).then(([rows, fileRows]) => ({ rows, fileRows }))
           : getCdpRoadmap().then((r) => r?.systems ?? []);
     load
       .then((rows) => alive && setData((d) => ({ ...d, [mode]: rows })))
@@ -221,7 +227,7 @@ export function QuantumSunburst({ exposure, overview, refreshNonce = 0, onSelect
     const rows = data[mode];
     if (!rows) return null;
     if (mode === "certs") return buildCertificatesTree(rows, outside, outsideByAlgorithm);
-    if (mode === "keys") return buildKeysTree(rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys, outsideBySource: outside, outsideByAlgorithm });
+    if (mode === "keys") return buildKeysTree(rows.rows, { orphanKeys: overview?.orphanKeys?.total ?? 0, sshHostKeys, outsideBySource: outside, outsideByAlgorithm, fileRows: rows.fileRows });
     return buildServicesTree(rows);
   }, [data, mode, outside, outsideByAlgorithm, overview, sshHostKeys]);
   // Ampliado: el árbol es SOLO ese sector, así que ocupa la vuelta entera.

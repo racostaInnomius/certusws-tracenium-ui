@@ -157,6 +157,21 @@ describe("buildKeysTree", () => {
     expect(files.drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "file" });
     expect(files.children[0].drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "file", keyAlgorithm: "RSA", keySizeBits: 2048 });
   });
+
+  it("⭐ con `fileRows` (facetas SIN ruta) el gajo cuenta cada certificado una vez aunque esté copiado en dos rutas (25-sep: 24 → 21)", () => {
+    const perPath = [
+      facet("own_leaf", "store", "RSA", 2048, 5, { store_name: "LocalMachine\\My" }),
+      facet("own_leaf", "file", "RSA", 2048, 1, { store_name: "C:\\Dell\\a.pfx" }),
+      facet("own_leaf", "file", "RSA", 2048, 1, { store_name: "C:\\dell\\a.pfx" })
+    ];
+    // La misma huella en las dos rutas: sin ruta, UN certificado.
+    const fileRows = [{ keys: { key_algorithm: "RSA" }, stack: 2048, certs: 2, uniqueCerts: 1, devices: 1 }];
+    const files = buildKeysTree(perPath, { fileRows })[0].children.find((c) => c.name === "Certificate files");
+    expect(files.children.map((l) => [l.name, l.v])).toEqual([["RSA-2048", 1]]);
+    expect(files.children[0].drill).toEqual({ to: "inventory", certClass: "all", hasPrivateKey: true, includeRoots: true, source: "file", keyAlgorithm: "RSA", keySizeBits: 2048 });
+    // Sin `fileRows` (la consulta aparte cayó) se cuenta por ruta, como antes.
+    expect(sumNode(buildKeysTree(perPath)[0].children.find((c) => c.name === "Certificate files"))).toBe(2);
+  });
 });
 
 describe("buildServicesTree", () => {

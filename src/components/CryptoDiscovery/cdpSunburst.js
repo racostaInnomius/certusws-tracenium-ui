@@ -310,9 +310,15 @@ export function buildCertificatesTree(facetRows, outsideBySource, outsideByAlgor
  */
 const KEYLESS_ORIGINS = new Set(["ssh", "ct"]);
 
-export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outsideBySource = [], outsideByAlgorithm = [] } = {}) {
+export function buildKeysTree(facetRows, { orphanKeys = 0, sshHostKeys = 0, outsideBySource = [], outsideByAlgorithm = [], fileRows = null } = {}) {
   const bases = skeleton();
-  for (const r of facetRows ?? []) {
+  // Los ficheros, si llegan aparte (`fileRows`: facetas por algoritmo SIN
+  // ruta), se cuentan de ahí: sumar las filas por ruta contaba dos veces el
+  // mismo certificado copiado en dos sitios, y el gajo decía 24 donde la
+  // lista enseñaba 21 (T111, 25-sep).
+  const perPath = Array.isArray(fileRows) ? (facetRows ?? []).filter((r) => r.keys?.source !== "file") : facetRows ?? [];
+  const rows = Array.isArray(fileRows) ? [...perPath, ...fileRows.map((r) => ({ ...r, keys: { ...r.keys, source: "file" } }))] : perPath;
+  for (const r of rows) {
     const source = r.keys?.source ?? "store";
     const store = r.keys?.store_name || SOURCE_LABEL[source] || source;
     const algo = r.keys?.key_algorithm ?? "unknown";
