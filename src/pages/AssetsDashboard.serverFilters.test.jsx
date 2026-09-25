@@ -57,6 +57,13 @@ function mount(search, { oldBackend = false } = {}) {
           items: [{ platform: "windows", arch: "x64", ok: true, data: { latestVersion: "1.1.70" } }],
         });
       }
+      if (url.pathname.endsWith("/orchestrator/devices-connected")) {
+        // Nueve conectados, sólo UNO de ellos entre los «older».
+        return HttpResponse.json({
+          ok: true,
+          deviceIds: ["old-a", ...Array.from({ length: 8 }, (_, i) => `current-${i}`)],
+        });
+      }
       if (url.pathname.endsWith("/dashboard/agent-versions")) {
         return HttpResponse.json({
           ok: true,
@@ -145,6 +152,17 @@ describe("AssetsDashboard — filtros en servidor", () => {
     } finally {
       Element.prototype.scrollIntoView = original;
     }
+  });
+
+  it("⭐ «online» cuenta las filas que se ven, no la flota", async () => {
+    // Prod, 24-sep: «3 shown · 3 total · 9 online».
+    mount("&versionBucket=older");
+    await waitFor(() => expect(shownLine()).toBe("2 shown · 2 total · 1 online"));
+  });
+
+  it("con más filas que la página, lo dice", async () => {
+    mount("");
+    await waitFor(() => expect(shownLine()).toBe("25 shown · 27 total · 8 online on this page"));
   });
 
   it("platform y groupId viajan al servidor", async () => {

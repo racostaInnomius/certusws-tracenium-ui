@@ -1916,7 +1916,12 @@ const osVersionItems = React.useMemo(() => {
                       textAlign: { xs: "left", md: "right" },
                     }}
                   >
-                    {filteredHosts.length} shown · {Number(hostsMeta.total || 0)} total · {kpis.onlineCount} online
+                    {/* ⚠️ "online" de las filas que se ven, no de la flota: con un
+                        filtro decía «3 shown · 3 total · 9 online» (prod, 24-sep).
+                        La flota ya la da el KPI «Online now». */}
+                    {filteredHosts.length} shown · {Number(hostsMeta.total || 0)} total ·{" "}
+                    {filteredHosts.filter((h) => connectedIds.has(String(getHostDeviceId(h)))).length} online
+                    {Number(hostsMeta.total || 0) > filteredHosts.length ? " on this page" : ""}
                   </Typography>
                 </Stack>
 
