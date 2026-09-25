@@ -56,6 +56,7 @@ import GenerateReportDialog from "../components/Reports/GenerateReportDialog";
 import ScheduleCard from "../components/Reports/ScheduleCard";
 import FleetHealthPreview from "../components/Reports/FleetHealthPreview";
 import GenericJsonPreview from "../components/Reports/GenericJsonPreview";
+import AssetExecutivePreview from "../components/Reports/AssetExecutivePreview";
 import {
   getReportTypes, getReportRuns, runReport, generateReport,
   listReportSchedules, updateReportSchedule, deleteReportSchedule, runReportScheduleNow, downloadReportRun,
@@ -79,6 +80,9 @@ import { getSearchParam, saveBlob, updateSearchParams } from "../utils/browserSt
  */
 const PREVIEW_BY_KEY = {
   "global.fleet-health": FleetHealthPreview,
+  // Antes caía en el preview genérico: un volcado de JSON para un informe
+  // que va al CIO del cliente.
+  "amp.asset-executive": AssetExecutivePreview,
 };
 
 /**
