@@ -304,7 +304,7 @@ function RankingViewAllButton({ disabled = false, onClick }) {
   );
 }
 
-export default function HardwareInventory({ initialSearch = "", initialFleetFilter = "", refreshNonce = 0 }) {
+export default function HardwareInventory({ initialSearch = "", initialFleetFilter = "", refreshNonce = 0, onOpenDevice }) {
   const theme = useTheme();
   const rankingDialogFullScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -844,6 +844,8 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
             loading={loadingDetail || loadingRankings}
             disableRowSelectionOnClick
             getRowId={(row) => row.agentId}
+            // Una fila abre la ficha del equipo (ver openDeviceFromTab).
+            onRowClick={onOpenDevice ? (params) => onOpenDevice(params.row?.agentId) : undefined}
             rowCount={totalRows}
             paginationMode="server"
             paginationModel={paginationModel}
@@ -852,7 +854,7 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
             rowHeight={40}
             columnHeaderHeight={44}
             localeText={{ footerRowsPerPage: "Rows" }}
-            sx={enterpriseDataGridSx}
+            sx={onOpenDevice ? { ...enterpriseDataGridSx, "& .MuiDataGrid-row": { cursor: "pointer" } } : enterpriseDataGridSx}
           />
         </Box>
       </SectionCard>

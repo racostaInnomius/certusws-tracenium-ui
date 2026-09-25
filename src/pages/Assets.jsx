@@ -127,6 +127,18 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
     updateSearchParams({ assetsTab: "", hwFleet: "" });
   };
 
+  // Una fila de Hardware Inventory abre la ficha de ese equipo, que vive en
+  // el Dashboard: el enlace ?device= lo consume AssetsDashboard al montarse
+  // (TabPanel desmonta las pestañas ocultas) y la lleva a la vista. Antes las
+  // filas no hacían nada y no había forma de ir del inventario al equipo.
+  const openDeviceFromTab = React.useCallback((agentId) => {
+    if (!agentId) return;
+    updateSearchParams({ device: String(agentId), assetsTab: "", hwFleet: "" });
+    setPendingHardwareSearch("");
+    setPendingFleetFilter("");
+    setActiveTab(0);
+  }, []);
+
   const navigateToHardwareInventory = React.useCallback((searchTerm = "", fleetFilter = "") => {
     setPendingHardwareSearch(searchTerm);
     setPendingFleetFilter(HW_FLEET_KEYS.has(fleetFilter) ? fleetFilter : "");
@@ -294,6 +306,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
           initialSearch={pendingHardwareSearch}
           initialFleetFilter={pendingFleetFilter || initialFleetFilter}
           refreshNonce={refreshNonce}
+          onOpenDevice={openDeviceFromTab}
         />
       </TabPanel>
 

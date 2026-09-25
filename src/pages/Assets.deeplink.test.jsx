@@ -133,3 +133,37 @@ describe("Assets — filtro de «OS versions» (?osKeys=)", () => {
   });
 });
 
+
+describe("Assets — de Hardware Inventory a la ficha del equipo", () => {
+  it("⭐ pulsar una fila abre el Dashboard con la ficha de ESE equipo", async () => {
+    // Prod, 24-sep: las filas de Hardware Inventory no hacían nada, y no había
+    // forma de ir del inventario a la ficha.
+    hostDetail.length = 0;
+    server.use(
+      http.all(/.*\/api\/.*/, ({ request }) => {
+        const url = new URL(request.url);
+        const m = url.pathname.match(/\/dashboard\/hosts\/([^/]+)\/detail$/);
+        if (m) hostDetail.push(decodeURIComponent(m[1]));
+        if (url.pathname.endsWith("/hardware-inventory/detail")) {
+          return HttpResponse.json({ items: [{ agentId: "dev-9", hostname: "PC-NUEVE" }], total: 1 });
+        }
+        return HttpResponse.json({
+          ok: true, items: [], devices: [], hosts: [], groups: [], rows: [],
+          summary: {}, total: 0, count: 0, permissions: ["assets_view"],
+        });
+      })
+    );
+    window.history.replaceState({}, "", "/?page=assets&assetsTab=hardware");
+    render(
+      <ConfirmProvider>
+        <Assets onAssetsEmptyStateChange={vi.fn()} suppressEmptyStateOverlay onNavigate={vi.fn()} />
+      </ConfirmProvider>
+    );
+
+    const celda = await screen.findByText("PC-NUEVE");
+    celda.closest(".MuiDataGrid-cell").click();
+
+    await waitFor(() => expect(hostDetail).toContain("dev-9"));
+    expect(screen.getByRole("tab", { name: /Dashboard/i })).toHaveAttribute("aria-selected", "true");
+  });
+});

@@ -30,7 +30,7 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount(fleetFilter, { disk = [], detailCalls = [] } = {}) {
+function mount(fleetFilter, { disk = [], detailCalls = [], onOpenDevice } = {}) {
   server.use(
     http.all(/.*\/api\/.*/, ({ request }) => {
       const url = new URL(request.url);
@@ -62,7 +62,7 @@ function mount(fleetFilter, { disk = [], detailCalls = [] } = {}) {
       return HttpResponse.json({ ok: true, items: [], total: 0, permissions: ["assets_view"] });
     })
   );
-  render(<HardwareInventory initialFleetFilter={fleetFilter} />);
+  render(<HardwareInventory initialFleetFilter={fleetFilter} onOpenDevice={onOpenDevice} />);
 }
 
 describe("HardwareInventory — chip del filtro", () => {
@@ -109,5 +109,18 @@ describe("HardwareInventory — chip del filtro", () => {
     await user.click(celda.querySelector(".MuiDataGrid-cell"));
     await waitFor(() => expect(detailCalls.some((q) => q.manufacturer === "Dell Inc.")).toBe(true));
     expect(await screen.findByText("Manufacturer: Dell Inc. · 3")).toBeInTheDocument();
+  });
+
+  it("⭐ una fila abre la ficha de ESE equipo (antes no hacía nada)", async () => {
+    const onOpenDevice = vi.fn();
+    mount("", { onOpenDevice });
+    const user = userEvent.setup();
+    const fila = await waitFor(() => {
+      const el = [...document.querySelectorAll(".MuiDataGrid-row")].find((r) => r.textContent.includes("PC-1"));
+      if (!el) throw new Error("fila no pintada");
+      return el;
+    });
+    await user.click(fila.querySelector(".MuiDataGrid-cell"));
+    expect(onOpenDevice).toHaveBeenCalledWith("a1");
   });
 });
