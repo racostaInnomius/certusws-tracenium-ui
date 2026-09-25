@@ -282,12 +282,15 @@ function emitAuthRequired(err, { url } = {}) {
   // must not leave the operator inside protected screens.
   if (!handled) {
     window.setTimeout(() => {
+      // Con returnTo, como la entrada de AuthGate: sin él, este salto dejaba
+      // al operador en la portada en vez de en la página donde estaba.
+      const destino = `${getLoginUrl()}?returnTo=${encodeURIComponent(window.location.href)}`;
       try {
-        if (window.location.href !== getLoginUrl()) {
-          window.location.assign(getLoginUrl());
+        if (!window.location.href.startsWith(getLoginUrl())) {
+          window.location.assign(destino);
         }
       } catch {
-        window.location.href = getLoginUrl();
+        window.location.href = destino;
       }
     }, 50);
   }
