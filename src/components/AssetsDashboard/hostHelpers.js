@@ -175,6 +175,9 @@ export const HOST_SORT_FIELDS = new Set([
   "localIp",
   "agentVersion",
   "collectedAtUtc",
+  // ⚠️ La cabecera «Last boot» se pintaba ordenable y el clic moría aquí: el
+  // backend sí lo admite (sortByMap.lastBootUtc) pero la UI no lo pedía.
+  "lastBootUtc",
 ]);
 
 export function normalizeHostRow(row = {}) {
