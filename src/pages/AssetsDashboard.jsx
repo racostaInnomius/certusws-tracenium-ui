@@ -1622,6 +1622,9 @@ const osVersionItems = React.useMemo(() => {
               fleetDevices={fleetDevices}
               agentTotal={typeof agentVersions?.total === "number" ? agentVersions.total : null}
               activeBucket={versionBucketFilter || null}
+              // Leyenda a la izquierda: en esta fila de tres (383 px) el
+              // anillo crece de 144 a ~200 px. Maqueta del 25-sep con el owner.
+              legendPlacement="side"
               onSegmentClick={(segment) => {
                 const bucket = bucketOfSegmentName(segment?.name);
                 if (!bucket) return;
@@ -1684,6 +1687,7 @@ const osVersionItems = React.useMemo(() => {
               }}
               totalLabel="devices"
               fallbackLabel={assetHealth.error ? "Could not load check-ins" : "No check-in data"}
+              legendPlacement="side"
             />
           </Box>
         </Grid>

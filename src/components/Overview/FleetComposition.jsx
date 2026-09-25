@@ -63,7 +63,9 @@ export function AgentVersionDonut({
   fleetDevices = null,
   agentTotal = null,
   /** Grupo del filtro activo (current, one_behind…): su rebanada se resalta. */
-  activeBucket = null
+  activeBucket = null,
+  /** "bottom" | "side" — ver RingCard. */
+  legendPlacement = "bottom"
 }) {
   const { buckets, canonicalLatest } = classifyAgentVersions(
     byVersion,
@@ -117,6 +119,7 @@ export function AgentVersionDonut({
       activeKey={segmentNameOfBucket(activeBucket)}
       pendingValue={pendingValue}
       pendingLabel="Not connected"
+      legendPlacement={legendPlacement}
     />
   );
 }
@@ -139,7 +142,9 @@ export function DonutCard({
   pendingValue = null,
   pendingLabel = "Pending",
   /** `name` de la rebanada del filtro activo, que se dibuja resaltada. */
-  activeKey = null
+  activeKey = null,
+  /** "bottom" | "side" — ver RingCard. */
+  legendPlacement = "bottom"
 }) {
   const hasPending = pendingValue != null && pendingValue > 0;
   // El dibujo es el de Fleet composition (Charts/RingCard): anillo grueso,
@@ -170,6 +175,7 @@ export function DonutCard({
           ? (s) => onSegmentClick(data.find((d) => d.name === s.key) ?? { name: s.key, value: s.value })
           : null
       }
+      legendPlacement={legendPlacement}
       // Radio 2 y sin sombra, como sus vecinas de fila en Overview y Assets.
       sx={{ borderRadius: 2, boxShadow: "none" }}
     />

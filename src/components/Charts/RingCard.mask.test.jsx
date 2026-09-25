@@ -39,3 +39,26 @@ describe("RingCard · máscara", () => {
     expect(y + h).toBeGreaterThanOrEqual(centro + exterior);
   });
 });
+
+describe("RingCard · leyenda al lado (legendPlacement=\"side\")", () => {
+  // Maqueta del 25-sep: en el Dashboard de Assets (383 px) la leyenda a la
+  // izquierda deja crecer el anillo de 144 a ~200 px. Por defecto sigue abajo:
+  // en cards de 284 px el anillo encogería.
+  it("⭐ la leyenda es una lista vertical pulsable, y el anillo escala", () => {
+    const clicks = [];
+    const { container, getByRole } = render(
+      <RingCard title="Agent versions" slices={SLICES} legendPlacement="side" onSliceClick={(s) => clicks.push(s.key)} />
+    );
+    expect(container.querySelector('[data-legend="side"]')).toBeTruthy();
+    const svg = container.querySelector("svg[role=img]");
+    expect(svg.getAttribute("width")).toBe("100%");
+    getByRole("button", { name: /HP/ }).click();
+    expect(clicks).toEqual(["hp"]);
+  });
+
+  it("por defecto la leyenda sigue abajo y el anillo a su tamaño fijo", () => {
+    const { container } = render(<RingCard title="Fleet" slices={SLICES} />);
+    expect(container.querySelector('[data-legend="bottom"]')).toBeTruthy();
+    expect(container.querySelector("svg[role=img]").getAttribute("width")).toBe(String(RING_SIZE));
+  });
+});

@@ -96,9 +96,32 @@ function usePixelSnap() {
   return { ref, transform: `translate(${ajuste.x}px, ${ajuste.y}px)` };
 }
 
-function Centered({ children }) {
+/** Tope del anillo con la leyenda al lado: cabe en la altura de la card. */
+const SIDE_RING_MAX = 200;
+
+/** El punto de color de la leyenda; rayado para la rebanada `pending`. */
+function LegendDot({ slice }) {
   return (
-    <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: SIZE }}>
+    <Box
+      sx={{
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        flexShrink: 0,
+        ...(slice.pending
+          ? {
+              background: `repeating-linear-gradient(45deg, ${PENDING_COLOR}, ${PENDING_COLOR} 1.5px, transparent 1.5px, transparent 3px)`,
+              border: `1px solid ${PENDING_COLOR}`,
+            }
+          : { bgcolor: slice.color }),
+      }}
+    />
+  );
+}
+
+function Centered({ children, order = 0 }) {
+  return (
+    <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: SIZE, minWidth: 0, order }}>
       {children}
     </Box>
   );
@@ -127,6 +150,15 @@ export default function RingCard({
   loading = false,
   emptyLabel = "No data",
   ariaNoun = "items",
+  /**
+   * "bottom" (por defecto): la leyenda en fichas bajo el anillo.
+   * "side": lista vertical a la IZQUIERDA con la cifra alineada, y el anillo
+   * crece para ocupar el resto. Sólo para cards anchas — en el Dashboard de
+   * Assets (383 px) el anillo pasa de 144 a ~200 px; en una de 284 px
+   * (Hardware Inventory) ENCOGERÍA, por eso no es el defecto (maqueta del
+   * 25-sep, decidido con el owner).
+   */
+  legendPlacement = "bottom",
   sx = null,
 }) {
   const visible = (slices || []).filter((s) => Number(s.value) > 0);
@@ -140,6 +172,7 @@ export default function RingCard({
   // sólo el trazo de la máscara basta para reiniciar la animación.
   const sweepKey = visible.map((v) => `${v.key}:${v.value}`).join("|");
   const { ref: snapRef, transform: snapTransform } = usePixelSnap();
+  const side = legendPlacement === "side";
 
   // stopPropagation: pulsar una rebanada no debe disparar también la
   // navegación sin filtro de la card, que perdería el filtro.
@@ -190,17 +223,24 @@ export default function RingCard({
           <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>{emptyLabel}</Typography>
         </Centered>
       ) : (
-        <>
-          <Centered>
+        // Con la leyenda al lado, fila: la leyenda va primero (order) y el
+        // anillo ocupa lo que queda. Abajo, `contents` deja los hijos como
+        // estaban, en la columna de la card.
+        <Box
+          data-legend={side ? "side" : "bottom"}
+          sx={side ? { flex: 1, display: "flex", alignItems: "center", gap: 2, minHeight: 0, mt: 0.5 } : { display: "contents" }}
+        >
+          <Centered order={side ? 1 : 0}>
             <svg
               ref={snapRef}
-              width={SIZE}
-              height={SIZE}
+              // Al lado, el SVG escala con su viewBox hasta SIDE_RING_MAX.
+              width={side ? "100%" : SIZE}
+              height={side ? undefined : SIZE}
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               // Precisión antes que velocidad: son cuatro arcos, y el borde de
               // un trazo de 22 px es justo lo que se mira.
               shapeRendering="geometricPrecision"
-              style={{ transform: snapTransform }}
+              style={side ? { transform: snapTransform, maxWidth: SIDE_RING_MAX, height: "auto" } : { transform: snapTransform }}
               role="img"
               aria-label={`${shownTotal} ${ariaNoun}: ${visible
                 .map((s) => `${s.value} ${String(s.label).toLowerCase()}`)
@@ -287,6 +327,55 @@ export default function RingCard({
             </svg>
           </Centered>
 
+          {side ? (
+            <Stack spacing={0.75} sx={{ order: 0, flex: "0 1 auto", minWidth: 0, maxWidth: "50%" }}>
+              {visible.map((s) => {
+                const onClick = sliceHandler(s);
+                const active = activeKey === s.key;
+                return (
+                  <Box
+                    key={s.key}
+                    onClick={onClick}
+                    role={onClick ? "button" : undefined}
+                    tabIndex={onClick ? 0 : undefined}
+                    aria-pressed={onClick ? active : undefined}
+                    onKeyDown={onClick ? (e) => (e.key === "Enter" || e.key === " " ? onClick(e) : null) : undefined}
+                    title={`${s.label}: ${s.pending ? "+" : ""}${s.value}`}
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "8px minmax(0, 1fr) auto",
+                      alignItems: "center",
+                      columnGap: 1,
+                      px: 0.5,
+                      mx: -0.5,
+                      py: 0.25,
+                      borderRadius: 1,
+                      cursor: onClick ? "pointer" : "default",
+                      bgcolor: active ? BRAND.tealSoft : "transparent",
+                      "&:hover": onClick ? { bgcolor: BRAND.tealSoft } : undefined,
+                      "&:focus-visible": { outline: `2px solid ${BRAND.teal}`, outlineOffset: 1 },
+                    }}
+                  >
+                    <LegendDot slice={s} />
+                    <Typography
+                      noWrap
+                      sx={{
+                        fontSize: TEXT.sm,
+                        fontWeight: active ? 800 : 500,
+                        fontStyle: s.pending ? "italic" : "normal",
+                        color: active ? BRAND.dark : "text.secondary",
+                      }}
+                    >
+                      {s.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: TEXT.sm, fontWeight: 800, color: BRAND.dark, pl: 1, textAlign: "right" }}>
+                      {`${s.pending ? "+" : ""}${s.value}`}
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Stack>
+          ) : (
           <Stack direction="row" sx={{ flexWrap: "wrap", gap: 1, rowGap: 0.5, mt: 1 }}>
             {visible.map((s) => {
               const onClick = sliceHandler(s);
@@ -300,20 +389,7 @@ export default function RingCard({
                   onClick={onClick}
                   sx={{ cursor: onClick ? "pointer" : "default", minWidth: 0 }}
                 >
-                  <Box
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      flexShrink: 0,
-                      ...(s.pending
-                        ? {
-                            background: `repeating-linear-gradient(45deg, ${PENDING_COLOR}, ${PENDING_COLOR} 1.5px, transparent 1.5px, transparent 3px)`,
-                            border: `1px solid ${PENDING_COLOR}`,
-                          }
-                        : { bgcolor: s.color }),
-                    }}
-                  />
+                  <LegendDot slice={s} />
                   <Typography
                     sx={{
                       fontSize: TEXT.xs,
@@ -328,7 +404,8 @@ export default function RingCard({
               );
             })}
           </Stack>
-        </>
+          )}
+        </Box>
       )}
     </Paper>
   );
