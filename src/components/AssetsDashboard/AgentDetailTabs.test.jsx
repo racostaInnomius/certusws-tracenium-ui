@@ -22,6 +22,10 @@ vi.mock("./DeviceLocationHistoryMap", () => ({
   ),
 }));
 
+vi.mock("./DeviceLocationMap", () => ({
+  default: ({ pin }) => <div data-testid="current-map">{pin?.label}</div>,
+}));
+
 import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "./AgentDetailTabs";
 
 afterEach(cleanup);
@@ -221,7 +225,7 @@ describe("LocationTab", () => {
     expect(container.textContent).toContain("seen");
   });
 
-  it("el mapa del historial no se monta hasta que se pide", async () => {
+  it("⭐ el mapa sale sin pedirlo (sin posición actual, el del historial)", async () => {
     render(
       <LocationTab
         {...base}
@@ -234,8 +238,6 @@ describe("LocationTab", () => {
         }}
       />
     );
-    expect(screen.queryByTestId("history-map")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Map 2/ }));
     expect(await screen.findByTestId("history-map")).toBeInTheDocument();
   });
 
@@ -254,7 +256,6 @@ describe("LocationTab", () => {
         }}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /Map 1/ }));
     expect((await screen.findByTestId("history-map-count")).textContent).toBe("1");
   });
 
@@ -290,7 +291,6 @@ describe("LocationTab", () => {
         }}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /Map 2/ }));
     expect((await screen.findByTestId("history-map")).dataset.selected).toBe("");
 
     // Lista → mapa.
@@ -411,6 +411,40 @@ describe("LocationTab", () => {
     );
     expect(screen.queryByText("Coordinates")).not.toBeInTheDocument();
     expect(screen.queryByText(/0\.00000/)).not.toBeInTheDocument();
+  });
+
+  it("⭐ con posición actual, el mapa la enseña sin botón, y «Map N» cambia al historial", async () => {
+    render(
+      <LocationTab
+        {...base}
+        profile={{
+          ...base.profile,
+          locationSite: "Oficina CDMX",
+          locationMapLat: 19.43,
+          locationMapLon: -99.13,
+          locationMapSource: "site",
+          locationHistory: [
+            { locationKey: "geo:a", lat: 19.3, lon: -99.2, hitCount: 2 },
+            { locationKey: "geo:oficina", lat: 19.4, lon: -99.1, hitCount: 1 },
+          ],
+        }}
+      />
+    );
+    expect(await screen.findByTestId("current-map")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /view on map/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Map 2/ }));
+    expect(await screen.findByTestId("history-map")).toBeInTheDocument();
+    expect(screen.queryByTestId("current-map")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /current position/i }));
+    expect(await screen.findByTestId("current-map")).toBeInTheDocument();
+  });
+
+  it("sin ninguna posición no hay columna de mapa", () => {
+    render(<LocationTab {...base} profile={{ ...base.profile, locationSubnet: "10.20.30.0/24" }} />);
+    expect(screen.queryByTestId("current-map")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("history-map")).not.toBeInTheDocument();
   });
 
   it("⭐ pinta la línea de tiempo que le pasa la ficha", () => {

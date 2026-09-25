@@ -106,6 +106,7 @@ const FleetLocationMap = React.lazy(() =>
   import("../components/AssetsDashboard/FleetLocationMap")
 );
 import { AgentTab, HardwareTab, LocationTab, SoftwareTab, PrintersTab } from "../components/AssetsDashboard/AgentDetailTabs";
+import { CopyButton } from "../components/AssetsDashboard/detailAtoms";
 import { DEVICE_DETAIL_TABS } from "../components/AssetsDashboard/deviceVisuals";
 import ExperienceTab from "../components/dex/ExperienceTab";
 import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
@@ -204,15 +205,9 @@ function AgentDetailWorkbench({
               <Typography sx={{ fontSize: { xs: 20, md: 24 }, fontWeight: 900, color: BRAND.dark }} noWrap title={hostname}>
                 {hostname}
               </Typography>
-              <Chip
-                size="small"
-                label={connected ? "Online" : "Offline"}
-                sx={{
-                  bgcolor: connected ? ROLE.positiveSoft : BRAND.surfaceMuted,
-                  color: connected ? BRAND.alert.successText : BRAND.gray,
-                  fontWeight: 800,
-                }}
-              />
+              {/* El estado vive en la pestaña Agent; aquí, copiar el nombre,
+                  que es lo que se pega en un ticket o en otra consola. */}
+              {hostname && hostname !== "Unknown host" ? <CopyButton value={hostname} label="Hostname" /> : null}
             </Stack>
             <Typography sx={{ mt: 0.5, fontSize: TEXT.sm, color: "text.secondary", fontFamily: "monospace" }} noWrap title={agentId}>
               {agentId}

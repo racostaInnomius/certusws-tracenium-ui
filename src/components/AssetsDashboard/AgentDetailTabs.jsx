@@ -298,8 +298,13 @@ export function LocationTab({
   /** Línea de tiempo del equipo (ADR-0018). La carga el padre, como el resto. */
   timeline = null
 }) {
-  const [mapOpen, setMapOpen] = React.useState(false);
-  const [historyMapOpen, setHistoryMapOpen] = React.useState(false);
+  // El mapa ya NO es opcional: la pestaña entera trata de dónde está el
+  // equipo, y tenerlo detrás de un botón dejaba media pantalla vacía. Lo que
+  // se elige es QUÉ enseña: la posición actual o el historial. Sin posición
+  // actual pero con historial mapeable, empieza en el historial.
+  const [historyMapOpen, setHistoryMapOpen] = React.useState(
+    () => !getMapPin(profile) && buildLocationHistory(profile).mappable > 0
+  );
   // Qué posición del historial está resaltada. Vive aquí y no en el mapa porque
   // la lista y el mapa la comparten: seleccionar en una resalta en el otro.
   const [selectedPosition, setSelectedPosition] = React.useState(null);
@@ -308,9 +313,23 @@ export function LocationTab({
   // El recorrido sale de los EPISODIOS, no del anillo: el orden es lo único que
   // el anillo no puede dar, y sin él la línea sería un viaje inventado.
   const trail = React.useMemo(() => buildTrail(timeline?.episodes), [timeline]);
+  const showHistoryMap = historyMapOpen && history.mappable > 0;
+  const hasMap = Boolean(mapPin) || history.mappable > 0;
+
+  const mapFallback = (
+    <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary" }}>Loading map…</Typography>
+  );
 
   return (
-            <>
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", lg: hasMap ? "minmax(0, 1fr) minmax(0, 1fr)" : "1fr" },
+        gap: 2.5,
+        alignItems: "start",
+      }}
+    >
+            <Box sx={{ minWidth: 0 }}>
               <FieldGrid>
                 <DetailField
                   label="Location"
@@ -324,33 +343,6 @@ export function LocationTab({
                 ) : null}
                 <DetailField label="Location updated" value={formatDetailDate(profile?.locationLastSeenAt)} />
               </FieldGrid>
-
-              {/* The map is opt-in: it costs a chunk download and a round of
-                  tile requests to an external host. */}
-              {mapPin ? (
-                <Box sx={{ mt: 2 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => setMapOpen((v) => !v)}
-                    sx={{ textTransform: "none" }}
-                    aria-expanded={mapOpen}
-                  >
-                    {mapOpen ? "Hide map" : "View on map"}
-                  </Button>
-                  {mapOpen ? (
-                    <React.Suspense
-                      fallback={
-                        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
-                          Loading map…
-                        </Typography>
-                      }
-                    >
-                      <DeviceLocationMap pin={mapPin} />
-                    </React.Suspense>
-                  ) : null}
-                </Box>
-              ) : null}
 
               {/* Location history — el anillo acotado de posiciones DISTINTAS
                   (el tope lo pone el tenant en Asset Management). Se pinta solo
@@ -375,10 +367,11 @@ export function LocationTab({
                         size="small"
                         variant="text"
                         onClick={() => setHistoryMapOpen((v) => !v)}
+                        disabled={showHistoryMap && !mapPin}
                         sx={{ textTransform: "none", fontSize: TEXT.xs, minWidth: 0, py: 0 }}
                         aria-expanded={historyMapOpen}
                       >
-                        {historyMapOpen ? "Hide map" : `Map ${history.mappable}`}
+                        {showHistoryMap ? (mapPin ? "Current position" : "Map") : `Map ${history.mappable}`}
                       </Button>
                     ) : null}
                   </Stack>
@@ -433,29 +426,9 @@ export function LocationTab({
                     </Typography>
                   ) : null}
 
-                  {/* El mapa va ARRIBA de la lista: la selección se hace en la
-                      lista y se mira en el mapa, y tenerlo debajo obligaría a
-                      saltar de un extremo a otro del drawer en cada fila. */}
-                  {historyMapOpen && history.mappable > 0 ? (
-                    <React.Suspense
-                      fallback={
-                        <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mb: 1 }}>
-                          Loading map…
-                        </Typography>
-                      }
-                    >
-                      <DeviceLocationHistoryMap
-                        entries={history.entries}
-                        selectedId={selectedPosition}
-                        onSelect={setSelectedPosition}
-                        trail={trail}
-                      />
-                    </React.Suspense>
-                  ) : null}
-
                   <Stack
                     spacing={0.75}
-                    sx={{ mt: historyMapOpen ? 1.5 : 0, display: timeline?.episodes?.length ? "none" : undefined }}
+                    sx={{ display: timeline?.episodes?.length ? "none" : undefined }}
                   >
                     {history.entries.map((entry) => {
                       const selected = entry.id === selectedPosition;
@@ -544,7 +517,30 @@ export function LocationTab({
                   </Stack>
                 </Box>
               ) : null}
-            </>
+            </Box>
+
+            {/* ── El mapa, a la derecha y sin pedirlo ──
+                Mismo sitio para las dos vistas; la selección de una fila del
+                historial se resalta aquí. Pegado arriba al hacer scroll: la
+                lista es la que se recorre, el mapa es donde se mira. */}
+            {hasMap ? (
+              <Box sx={{ minWidth: 0, position: { lg: "sticky" }, top: { lg: 16 } }}>
+                <React.Suspense fallback={mapFallback}>
+                  {showHistoryMap ? (
+                    <DeviceLocationHistoryMap
+                      entries={history.entries}
+                      selectedId={selectedPosition}
+                      onSelect={setSelectedPosition}
+                      trail={trail}
+                      height={380}
+                    />
+                  ) : mapPin ? (
+                    <DeviceLocationMap pin={mapPin} height={380} />
+                  ) : null}
+                </React.Suspense>
+              </Box>
+            ) : null}
+    </Box>
   );
 }
 

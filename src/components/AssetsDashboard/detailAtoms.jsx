@@ -179,7 +179,7 @@ export function SectionCard({ title, action, children }) {
   );
 }
 
-function CopyButton({ value, label }) {
+export function CopyButton({ value, label }) {
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => {
     if (!copied) return undefined;
