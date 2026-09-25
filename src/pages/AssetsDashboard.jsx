@@ -110,6 +110,8 @@ import { CopyButton } from "../components/AssetsDashboard/detailAtoms";
 import { DEVICE_DETAIL_TABS } from "../components/AssetsDashboard/deviceVisuals";
 import ExperienceTab from "../components/dex/ExperienceTab";
 import ExperienceFleetCard from "../components/dex/ExperienceFleetCard";
+import AssetAttentionCard from "../components/AssetsDashboard/AssetAttentionCard";
+import { checkInDonutData } from "../components/AssetsDashboard/assetHealthModel";
 
 // Pestaña Experience (ADR-0030) del detalle del equipo; la tarjeta de flota
 // abre la ficha directamente en ella.
@@ -1368,35 +1370,25 @@ export default function AssetsDashboard({
   // started reconciling to the full roster and this page didn't.
   const fleetDevices = typeof summary?.fleetDevices === "number" ? summary.fleetDevices : null;
 
-  // Donut-shaped data for the shared OS platform chart from Overview's
-  // FleetComposition. Same palette as the bar items above so swapping
-  // visual idioms doesn't change which slice maps to which platform.
-  function formatPlatformLabel(value) {
-    return String(value || "Unknown")
-      .trim()
-      .split(/\s+/)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-  }
+  // `/dashboard/asset-health`: último check-in + "Needs attention". Aparte del
+  // bundle del dashboard: si falla, fallan estas dos tarjetas y nada más.
+  const [assetHealth, setAssetHealth] = React.useState({ data: null, loading: true, error: false });
+  React.useEffect(() => {
+    if (!canViewAssets) return undefined;
+    let alive = true;
+    setAssetHealth((prev) => ({ ...prev, loading: true }));
+    dashboardApi
+      .getAssetHealth()
+      .then((data) => alive && setAssetHealth({ data, loading: false, error: false }))
+      .catch(() => alive && setAssetHealth((prev) => ({ data: prev.data, loading: false, error: true })));
+    return () => {
+      alive = false;
+    };
+  }, [canViewAssets, refreshNonce]);
 
-  const osDonutData = React.useMemo(() => {
-    const rows = Array.isArray(summary?.osPlatform) ? summary.osPlatform : [];
-    return rows
-      .map((r) => {
-        const rawName = String(r?.os_platform ?? r?.name ?? "Unknown");
-        return {
-          name: formatPlatformLabel(rawName),
-          value: Number(r?.host_count ?? r?.count ?? 0),
-          color: platformColor(rawName).dot,
-        };
-      })
-      .filter((d) => d.value > 0);
-  }, [summary]);
-
-  const osPending =
-    fleetDevices != null
-      ? Math.max(fleetDevices - osDonutData.reduce((sum, x) => sum + x.value, 0), 0)
-      : null;
+  // «OS platform» se fue: OS versions ya agrupa por plataforma con las mismas
+  // cifras, y el hueco lo ocupa «Last check-in» (ver assetHealthModel.js).
+  const checkInData = React.useMemo(() => checkInDonutData(assetHealth.data?.checkIn), [assetHealth.data]);
 
 /**
  * Traduce el estado de soporte de una fila de SO al distintivo de la barra.
@@ -1588,22 +1580,16 @@ const osVersionItems = React.useMemo(() => {
         </Grid>
         <Grid size={{ xs: 12, md: 4 }} sx={{ display: "flex" }}>
           <Box sx={{ width: "100%" }}>
-            {/* Reuses the same OS platform donut Overview shows in
-                FleetComposition so the two surfaces stay visually
-                consistent. */}
+            {/* Cuánto de este inventario es de ahora. Los KPIs cuentan equipos
+                online; esto dice cuánto de lo que se ve es de hace una hora y
+                cuánto de hace una semana. */}
             <DonutCard
-              title="OS platform"
-              subtitle="Operating systems in the fleet"
-              data={osDonutData}
-              loading={loading}
-              // See FleetComposition.jsx's OS platform DonutCard for why
-              // this says "reporting" rather than "devices" — and for why
-              // it switches to "enrolled" once fleetDevices is known
-              // (reconciled total, same as Overview).
-              totalLabel={fleetDevices != null ? "enrolled" : "reporting"}
-              fallbackLabel="No platform breakdown available"
-              pendingValue={osPending}
-              pendingLabel="Pending inventory"
+              title="Last check-in"
+              subtitle="When each device last reported"
+              data={checkInData}
+              loading={assetHealth.loading && !assetHealth.data}
+              totalLabel="devices"
+              fallbackLabel={assetHealth.error ? "Could not load check-ins" : "No check-in data"}
             />
           </Box>
         </Grid>
@@ -1655,8 +1641,32 @@ const osVersionItems = React.useMemo(() => {
       {/* ADR-0030 — equipos con señales de experiencia. Se esconde sola si
           ningún equipo informa todavía. Encima de la tabla porque es desde
           donde se abre la ficha. */}
-      <Box sx={{ mb: 2 }}>
-        <ExperienceFleetCard refreshNonce={refreshNonce} onOpenDevice={openDeviceExperience} />
+      {/* Device experience + Needs attention. «Needs attention» mide lo mismo
+          que una columna de la fila de arriba (queda justo bajo OS versions);
+          si Device experience se esconde —ningún equipo informa aún—, ocupa
+          la fila entera en vez de dejar dos tercios vacíos. */}
+      <Box
+        sx={{
+          mb: 2,
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          gap: 2,
+          alignItems: "stretch",
+          "& > .dex-slot:empty": { display: "none" },
+          "& > .dex-slot:empty + .attention-slot": { flexBasis: "100%" },
+        }}
+      >
+        <Box className="dex-slot" sx={{ flex: "1 1 0", minWidth: 0 }}>
+          <ExperienceFleetCard refreshNonce={refreshNonce} onOpenDevice={openDeviceExperience} />
+        </Box>
+        <Box className="attention-slot" sx={{ flex: { md: "0 0 calc((100% - 32px) / 3)" }, minWidth: 0 }}>
+          <AssetAttentionCard
+            attention={assetHealth.data?.attention}
+            loading={assetHealth.loading}
+            error={assetHealth.error}
+            onOpenFleetFilter={(fleetFilter) => onNavigateToHardwareInventory?.("", fleetFilter)}
+          />
+        </Box>
       </Box>
 
       {/* Row 4 — Devices table. No more "Selected Host Detail"

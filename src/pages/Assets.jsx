@@ -54,7 +54,8 @@ const LIVE_QUERY_TAB = 7;
 // Las claves viejas, además de abrir la pestaña, eligen su sección.
 const WINDOWS_SECTION_FROM_URL = { gpos: "gpos", coverage: "coverage" };
 // Segmentos de la dona de composición que Hardware Inventory sabe filtrar.
-const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual"]);
+// También las de atención de «Needs attention»: el backend ya las filtra.
+const HW_FLEET_KEYS = new Set(["laptop", "desktop", "server", "unknown", "virtual", "disk_high", "low_memory"]);
 import PageHeader from "../components/common/PageHeader";
 import PageTabs from "../components/common/PageTabs";
 import RefreshControl, { useAutoRefresh } from "../components/common/RefreshControl";
@@ -113,17 +114,22 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
   // tab — HardwareInventory only reads it once, as its initial state,
   // the moment TabPanel mounts it.
   const [pendingHardwareSearch, setPendingHardwareSearch] = React.useState("");
+  // Igual que la búsqueda, pero para el filtro de flota: «Needs attention»
+  // del Dashboard abre Hardware Inventory ya en «Disk usage over threshold».
+  const [pendingFleetFilter, setPendingFleetFilter] = React.useState("");
 
   const handleChange = (_event, newValue) => {
     setActiveTab(newValue);
     setPendingHardwareSearch("");
+    setPendingFleetFilter("");
     // El enlace ya se consumió: sin esto, recargar devolvía a la pestaña y
     // al filtro del enlace en vez de a donde el operador se movió.
     updateSearchParams({ assetsTab: "", hwFleet: "" });
   };
 
-  const navigateToHardwareInventory = React.useCallback((searchTerm = "") => {
+  const navigateToHardwareInventory = React.useCallback((searchTerm = "", fleetFilter = "") => {
     setPendingHardwareSearch(searchTerm);
+    setPendingFleetFilter(HW_FLEET_KEYS.has(fleetFilter) ? fleetFilter : "");
     setActiveTab(2); // Hardware Inventory
 
     // Keep the drill-down feeling intentional: when the user clicks a
@@ -286,7 +292,7 @@ export default function Assets({ onAssetsEmptyStateChange, suppressEmptyStateOve
       <TabPanel value={visibleTab} index={2}>
         <HardwareInventory
           initialSearch={pendingHardwareSearch}
-          initialFleetFilter={initialFleetFilter}
+          initialFleetFilter={pendingFleetFilter || initialFleetFilter}
           refreshNonce={refreshNonce}
         />
       </TabPanel>
