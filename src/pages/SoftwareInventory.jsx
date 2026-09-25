@@ -394,6 +394,12 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
   const [hostAppsSearch, setHostAppsSearch] = React.useState("");
 
   const [appLevelDetail, setAppLevelDetail] = React.useState(false);
+  // Una fila de «Top installed apps» o «Top publishers» (o de su «View all»)
+  // filtra la tabla por ESA app o ESE editor, con la misma clave que el
+  // ranking: la tabla da lo que la fila cuenta. Antes esas filas no hacían
+  // nada. { kind: "app" | "publisher", label } o null.
+  const [rankingFilter, setRankingFilter] = React.useState(null);
+  const detailSectionRef = React.useRef(null);
   const [selectedHost, setSelectedHost] = React.useState(null);
 
   const [paginationModel, setPaginationModel] = React.useState({
@@ -462,6 +468,8 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
         search: search || undefined,
         source: source || undefined,
         publisher: publisher || undefined,
+        app: rankingFilter?.kind === "app" ? rankingFilter.label : undefined,
+        rankedPublisher: rankingFilter?.kind === "publisher" ? rankingFilter.label : undefined,
         page: paginationModel.page + 1,
         pageSize: paginationModel.pageSize,
       });
@@ -547,7 +555,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
   React.useEffect(() => {
     if (!appLevelDetail) return;
     loadDetail();
-  }, [appLevelDetail, search, source, publisher, paginationModel.page, paginationModel.pageSize, refreshNonce]);
+  }, [appLevelDetail, search, source, publisher, rankingFilter, paginationModel.page, paginationModel.pageSize, refreshNonce]);
 
   React.useEffect(() => {
     if (appLevelDetail || selectedHost) return;
@@ -701,6 +709,22 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
   const closeRankingDialog = React.useCallback(() => {
     setRankingDialog(null);
     setRankingDialogSearch("");
+  }, []);
+
+  // Pulsar la fila activa quita el filtro. Pasa a la vista por aplicación
+  // (la única que lista apps de toda la flota) y lleva la vista a la tabla.
+  const selectRankingFilter = React.useCallback((kind, label) => {
+    if (!label) return;
+    setRankingFilter((prev) => (prev && prev.kind === kind && prev.label === label ? null : { kind, label }));
+    setAppLevelDetail(true);
+    setSelectedHost(null);
+    setSearch("");
+    setPublisher("");
+    setSource("");
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    window.requestAnimationFrame(() =>
+      detailSectionRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" })
+    );
   }, []);
 
   const rankingDialogRows = React.useMemo(() => {
@@ -972,6 +996,12 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
               <CompositionBars
                 title="Top installed apps"
                 items={topInstalledAppsRows}
+                onItemClick={(row) => selectRankingFilter("app", row.label)}
+                activeItemId={
+                  rankingFilter?.kind === "app"
+                    ? topInstalledAppsRows.find((r) => r.label === rankingFilter.label)?.id ?? null
+                    : null
+                }
                 totalLabel="installs"
                 emptyLabel="No installed apps data"
                 minHeight={260}
@@ -989,6 +1019,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
                   totalLabel: "installs",
                   labelHeader: "Application",
                   valueHeader: "Installs",
+                  onSelect: (label) => selectRankingFilter("app", label),
                 })}
               />
             </Box>
@@ -999,6 +1030,12 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
               <CompositionBars
                 title="Top publishers"
                 items={topPublishersRows}
+                onItemClick={(row) => selectRankingFilter("publisher", row.label)}
+                activeItemId={
+                  rankingFilter?.kind === "publisher"
+                    ? topPublishersRows.find((r) => r.label === rankingFilter.label)?.id ?? null
+                    : null
+                }
                 totalLabel="apps"
                 emptyLabel="No publisher data"
                 minHeight={260}
@@ -1014,6 +1051,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
                   totalLabel: "apps",
                   labelHeader: "Publisher",
                   valueHeader: "Apps",
+                  onSelect: (label) => selectRankingFilter("publisher", label),
                 })}
               />
             </Box>
@@ -1073,7 +1111,9 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
 
       <SectionCard title="">
         <Box
+          ref={detailSectionRef}
           sx={{
+            scrollMarginTop: 120,
             mb: 2,
             display: "flex",
             justifyContent: "space-between",
@@ -1119,6 +1159,15 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
               </Typography>
             </Box>
 
+            {appLevelDetail && rankingFilter ? (
+              <Chip
+                size="small"
+                label={`${rankingFilter.kind === "app" ? "App" : "Publisher"}: ${rankingFilter.label} · ${totalRows}`}
+                onDelete={() => selectRankingFilter(rankingFilter.kind, rankingFilter.label)}
+                sx={{ bgcolor: BRAND.tealSoft, color: BRAND.tealText, fontWeight: 800 }}
+              />
+            ) : null}
+
             {selectedHost && !appLevelDetail && (
               <Chip
                 label={selectedHost.hostname || selectedHost.agentId}
@@ -1139,6 +1188,7 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
                 onChange={(e) => {
                   const checked = e.target.checked;
                   setAppLevelDetail(checked);
+                  setRankingFilter(null);
                   setSelectedHost(null);
                   setSearch("");
                   setHostSearch("");
@@ -1445,6 +1495,14 @@ export default function SoftwareInventory({ refreshNonce = 0 }) {
               columns={rankingDialogColumns}
               disableRowSelectionOnClick
               getRowId={(row) => row.id}
+              onRowClick={
+                rankingDialog?.onSelect
+                  ? (params) => {
+                      rankingDialog.onSelect(params.row?.label);
+                      closeRankingDialog();
+                    }
+                  : undefined
+              }
               pageSizeOptions={[10, 25, 50, 100]}
               initialState={{
                 pagination: {
