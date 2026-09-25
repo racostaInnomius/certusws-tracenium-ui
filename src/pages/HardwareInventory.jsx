@@ -61,7 +61,30 @@ const FLEET_FILTER_LABELS = {
   disk_high: "Disk usage over threshold",
   disk_unknown: "Not reporting disk",
   low_memory: "Under the memory floor",
+  // ⚠️ Los tramos de los histogramas de disco y memoria (DISK_BUCKETS y
+  // MEMORY_BUCKETS en hardware-fleet.ts). Faltaban, y el chip enseñaba la
+  // clave cruda: «disk_0_49 · 8», «mem_17_32 · 3» (prod, 24-sep). Un tramo
+  // nuevo del backend cae en la etiqueta que trae el propio resumen.
+  disk_0_49: "Disk 0–49% used",
+  disk_50_69: "Disk 50–69% used",
+  disk_70_84: "Disk 70–84% used",
+  disk_85_94: "Disk 85–94% used",
+  disk_95_100: "Disk 95–100% used",
+  mem_0_8: "Memory ≤ 8 GB",
+  mem_9_16: "Memory 9–16 GB",
+  mem_17_32: "Memory 17–32 GB",
+  mem_33_plus: "Memory > 32 GB",
 };
+
+function fleetFilterLabel(key, summary) {
+  if (FLEET_FILTER_LABELS[key]) return FLEET_FILTER_LABELS[key];
+  const dist = summary?.fleet?.distribution;
+  const disk = (dist?.disk || []).find((b) => b?.key === key);
+  if (disk?.label) return `Disk ${disk.label} used`;
+  const mem = (dist?.memory || []).find((b) => b?.key === key);
+  if (mem?.label) return `Memory ${mem.label}`;
+  return key;
+}
 
 function SectionCard({ title, children, action }) {
   return (
@@ -714,7 +737,7 @@ export default function HardwareInventory({ initialSearch = "", initialFleetFilt
           fleetFilter !== "all" ? (
             <Chip
               size="small"
-              label={`${FLEET_FILTER_LABELS[fleetFilter] || fleetFilter} · ${totalRows}`}
+              label={`${fleetFilterLabel(fleetFilter, summary)} · ${totalRows}`}
               onDelete={() => selectFleetFilter("all")}
               sx={{
                 height: 26,
