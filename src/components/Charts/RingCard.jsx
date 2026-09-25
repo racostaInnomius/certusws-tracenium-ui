@@ -207,7 +207,12 @@ export default function RingCard({
                 .join(", ")}`}
             >
               <defs>
-                <mask id={maskId}>
+                {/* ⚠️ Región explícita, en el marco del SVG. Por defecto la
+                    máscara mide el 120% de la caja del <g>, y esa caja se
+                    calcula SIN el trazo: radio 48 → 57,6 px de región contra
+                    59 px de anillo (61 activo). Eso era el "cortado" en los
+                    cuatro lados, y por eso agrandar el viewBox no lo arregló. */}
+                <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={SIZE} height={SIZE}>
                   <circle
                     key={sweepKey}
                     className="ring-card-sweep"
