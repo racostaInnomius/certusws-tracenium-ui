@@ -704,6 +704,24 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     expect(enviados.framework).toBeTruthy();
   });
 
+  // Recorrido de prod, 25-sep: «109 critical findings» eran 6 critical + 103
+  // high, y pulsarlo filtraba la tabla por score < 60 — equipos con nota
+  // baja, no hallazgos críticos. Ahora dice lo que cuenta y lleva a Fix, que
+  // ordena las acciones por severidad.
+  it("⭐ el enlace de hallazgos dice critical y high por separado y lleva a Fix", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    mountPage();
+    respond("get", `${BASE}/sla`, { ok: true, configured: false, bySeverity: [], worst: [], targets: {} });
+    respond("get", `${BASE}/remediation-hub`, { ok: true, actions: [], totals: {}, pmpEntitled: true });
+
+    const link = await screen.findByRole("button", { name: "2 critical · 3 high findings" });
+    fireEvent.click(link);
+
+    const param = (k) => new URL(window.location.href).searchParams.get(k);
+    await waitFor(() => expect(param("scpTab")).toBe("fix"));
+    expect(param("score-band")).toBeNull();
+  });
+
   // Asset Management abre la ficha con `?device=`. Este enlace mandaba
   // `?agentId=`, que allí nadie lee: se aterrizaba en el dashboard, sin el
   // equipo (recorrido de prod, 25-sep).

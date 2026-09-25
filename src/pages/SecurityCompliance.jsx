@@ -1321,10 +1321,15 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
         // raw score: the delta IS the weight of the vetted exceptions.
         const avgAdjusted = scoped ? null : summary?.avgScoreAdjusted;
         const complianceAccent = scoreBandTextRole(avgScore, bands) ?? BRAND.tealText;
-        const criticalHigh = scoped
-          ? 0
-          : (summary?.openFindings?.critical ?? 0) +
-            (summary?.openFindings?.high ?? 0);
+        const criticalCount = scoped ? 0 : summary?.openFindings?.critical ?? 0;
+        const highCount = scoped ? 0 : summary?.openFindings?.high ?? 0;
+        const criticalHigh = criticalCount + highCount;
+        // Critical y high por separado: la suma rotulada «critical findings»
+        // decía 109 cuando críticos había 6.
+        const findingsLabel = [
+          criticalCount ? `${criticalCount} critical` : null,
+          highCount ? `${highCount} high` : null,
+        ].filter(Boolean).join(" · ") + " findings";
         const devicesTotal = scoped
           ? fwRow?.devicesReporting ?? 0
           : summary?.devicesReporting ?? 0;
@@ -1410,11 +1415,14 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                     component="span"
                     role="button"
                     tabIndex={0}
-                    onClick={() => setScoreBandFilter("critical")}
+                    // A Fix, que ordena las acciones por severidad. Antes
+                    // filtraba la tabla por score < 60: equipos con nota
+                    // baja, que no es lo que el enlace nombra.
+                    onClick={() => setTab("fix")}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setScoreBandFilter("critical");
+                        setTab("fix");
                       }
                     }}
                     sx={{
@@ -1425,7 +1433,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                       textUnderlineOffset: 2,
                     }}
                   >
-                    {criticalHigh} critical findings
+                    {findingsLabel}
                   </Box>
                 </>
               ) : null}
