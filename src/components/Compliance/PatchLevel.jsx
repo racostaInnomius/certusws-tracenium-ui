@@ -78,6 +78,22 @@ export function PatchChip({ patchSummary }) {
   );
 }
 
+/**
+ * Lo que nombra a un parche en la lista: su id, y si no hay, el KB de su
+ * título, y si tampoco, el título entero.
+ *
+ * ⚠️ El historial de Windows Update (QueryHistory) trae `hotFixId: null` y el
+ * KB dentro del título («…Defender Antivirus - KB2267602 (Version …)»).
+ * Pintando sólo `id`, 9 de cada 10 filas salían como «—».
+ */
+export function patchLabel(patch) {
+  if (patch?.id) return String(patch.id);
+  const title = patch?.title ? String(patch.title) : "";
+  const kb = title.match(/\bKB\d{6,8}\b/i);
+  if (kb) return kb[0].toUpperCase();
+  return title || "—";
+}
+
 // ---------- main page --------------------------------------------------------
 
 function PatchRow({ patch }) {
@@ -114,7 +130,7 @@ function PatchRow({ patch }) {
             whiteSpace: "nowrap"
           }}
         >
-          {patch?.id || "—"}
+          {patchLabel(patch)}
         </Typography>
         <Typography variant="caption" sx={{ color: BRAND.gray, flexShrink: 0 }}>
           {patch?.installedAtUtc
