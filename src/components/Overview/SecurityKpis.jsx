@@ -16,6 +16,7 @@ import ScreenShareOutlinedIcon from "@mui/icons-material/ScreenShareOutlined";
 import { BRAND, ROLE } from "../../theme/brand";
 import { KpiRow } from "./Kpi";
 import { getValue } from "./overviewResults";
+import { formatFleetScore } from "../../theme/scoreBands";
 
 function scoreRole(score) {
   if (score == null) return null;
@@ -37,7 +38,7 @@ export default function SecurityKpis({ results, loading, onNavigate, has, extraC
     cards.push(
       {
         title: "Compliance",
-        value: score != null ? `${Math.round(score)}%` : "—",
+        value: formatFleetScore(score),
         subtitle: reporting != null ? `${reporting} devices reporting` : null,
         icon: ShieldOutlinedIcon,
         accent: role ? ROLE[role] : BRAND.teal,

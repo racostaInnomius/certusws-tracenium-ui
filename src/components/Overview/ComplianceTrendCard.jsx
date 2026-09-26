@@ -30,6 +30,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { BRAND, ROLE, TEXT } from "../../theme/brand";
+import { formatFleetScore } from "../../theme/scoreBands";
 
 function getValue(result) {
   if (!result || result.status !== "fulfilled") return null;
@@ -108,12 +109,12 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
   const interactive = typeof onNavigate === "function";
   const navigate = () => onNavigate?.("ad");
 
-  // Latest score gets formatted with a single decimal so a 0.3-point
-  // movement isn't hidden by rounding. The hero KPI uses Math.round
-  // because integer numbers feel friendlier at the top of the page;
-  // here the SLOPE is the point, so we keep the precision visible.
+  // Un decimal, como el KPI de encima y como toda nota de flota
+  // (formatFleetScore). Hasta el 26-sep el KPI redondeaba a entero y esto
+  // no, y con el mismo número debajo del otro parecían dos cifras. Y ya
+  // son la misma: el último punto de la tendencia es el estado actual.
   const currentValue =
-    delta?.current != null ? delta.current.toFixed(1) : null;
+    delta?.current != null ? formatFleetScore(delta.current).replace("%", "") : null;
   const deltaLabel =
     delta?.diff != null
       ? `${delta.diff > 0 ? "+" : ""}${delta.diff.toFixed(1)} vs 7d`
@@ -170,9 +171,9 @@ export default function ComplianceTrendCard({ result, loading, onNavigate }) {
               {currentValue}
               <Typography
                 component="span"
-                sx={{ fontSize: TEXT.base, color: BRAND.gray, ml: 0.5 }}
+                sx={{ fontSize: TEXT.base, color: BRAND.gray, ml: 0.25 }}
               >
-                /100
+                %
               </Typography>
             </Typography>
           ) : null}

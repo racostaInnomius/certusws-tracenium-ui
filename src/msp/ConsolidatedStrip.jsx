@@ -24,6 +24,7 @@ import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import SectionPaper from "../components/common/SectionPaper";
 import { BRAND, TEXT } from "../theme/brand";
 import { fetchConsolidated } from "./mspApi";
+import { formatFleetScore } from "../theme/scoreBands";
 
 function Kpi({ icon, label, value, sub, accent = BRAND.teal, tint = BRAND.tealSoft }) {
   return (
@@ -109,7 +110,7 @@ export default function ConsolidatedStrip({ onOpenClient }) {
           <Kpi
             icon={<VerifiedUserOutlinedIcon />}
             label="Avg compliance"
-            value={t.avgCompliance == null ? "—" : `${t.avgCompliance}%`}
+            value={formatFleetScore(t.avgCompliance)}
             accent={
               t.avgCompliance == null ? BRAND.teal
                 : t.avgCompliance >= 90 ? BRAND.alert.success

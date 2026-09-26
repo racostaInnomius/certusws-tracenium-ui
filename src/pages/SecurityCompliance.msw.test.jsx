@@ -158,7 +158,7 @@ describe("SecurityCompliance — real envelopes over MSW", () => {
     // PALABRAS y el contexto en una línea. Con las bandas 90/70 del tenant,
     // 81 cae en "needs attention" — que es justo lo que un `81%` a secas no
     // le decía a nadie.
-    expect(await screen.findByText("81%")).toBeInTheDocument();
+    expect(await screen.findByText("81.4%")).toBeInTheDocument();
     expect(await screen.findByText("Needs attention")).toBeInTheDocument();
     expect(await screen.findByText(/9 of 12 devices/)).toBeInTheDocument();
     // Framework table reads res.items[] and the pack chip reads packActive/totalFrameworks

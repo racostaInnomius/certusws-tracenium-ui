@@ -103,3 +103,15 @@ export function scoreBandSoftRole(score, bands = DEFAULT_BANDS) {
   if (key === "critical") return ROLE.criticalSoft;
   return null;
 }
+
+/**
+ * La nota de cumplimiento de una FLOTA (una media), siempre igual en todas
+ * partes: un decimal y «%». 26-sep: el MSP decía «18.1%», Overview y el
+ * titular de Security Compliance «18%» (Math.round) y la tendencia «18.5» —
+ * el mismo número, en dos formatos, parecía otro. La nota de UN equipo es un
+ * entero y no pasa por aquí.
+ */
+export function formatFleetScore(score) {
+  const n = score == null || score === "" ? NaN : Number(score);
+  return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—";
+}

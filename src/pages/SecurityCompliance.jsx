@@ -126,7 +126,7 @@ import { getConnectedDevices } from "../api/overview";
 import OnlineDot from "../components/common/OnlineDot";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useComplianceBands } from "../hooks/useComplianceBands";
-import { scoreBandTextRole, scoreBandLabel } from "../theme/scoreBands";
+import { scoreBandTextRole, scoreBandLabel, formatFleetScore } from "../theme/scoreBands";
 
 // Below this share of the catalog, a framework score is computed on so
 // few controls that reading it as a posture is a mistake. 40% is a
@@ -1336,7 +1336,7 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {avgScore != null ? `${Math.round(avgScore)}%` : "—"}
+                {formatFleetScore(avgScore)}
               </Typography>
               <Typography sx={{ fontSize: TEXT.lg, fontWeight: 700, color: complianceAccent }}>
                 {scoreBandLabel(avgScore, bands)}
@@ -1415,8 +1415,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
               {scoped && (fwRow?.totalFailed ?? 0) > 0 ? (
                 <> · {fwRow.totalFailed} failing controls in this framework</>
               ) : null}
-              {avgAdjusted != null && avgScore != null && Math.round(avgAdjusted) !== Math.round(avgScore) ? (
-                <> · {Math.round(avgAdjusted)}% once accepted exceptions are excluded</>
+              {avgAdjusted != null && avgScore != null && formatFleetScore(avgAdjusted) !== formatFleetScore(avgScore) ? (
+                <> · {formatFleetScore(avgAdjusted)} once accepted exceptions are excluded</>
               ) : null}
               {" · your thresholds: "}
               {bands.goodMin}% on track / {bands.warningMin}% needs attention

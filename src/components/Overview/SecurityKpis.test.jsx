@@ -34,7 +34,7 @@ describe("SecurityKpis", () => {
       />
     );
 
-    expect(screen.getByText("78%")).toBeTruthy();
+    expect(screen.getByText("78.0%")).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
   });
 

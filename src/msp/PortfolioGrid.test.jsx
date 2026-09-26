@@ -50,7 +50,7 @@ describe("PortfolioGrid — el score de Assessment Suite en la tarjeta", () => {
     render(<PortfolioGrid items={[item({ aspScoreMin: null, aspInstances: 0 })]} onSelect={vi.fn()} />);
     expect(screen.queryByText(/Assessment/)).toBeNull();
     // Las otras cuatro siguen ahí.
-    expect(screen.getByText("Compliance: 88%")).toBeTruthy();
+    expect(screen.getByText("Compliance: 88.0%")).toBeTruthy();
   });
 
   it("activo pero todavía sin corrida completa: raya, no 0", () => {

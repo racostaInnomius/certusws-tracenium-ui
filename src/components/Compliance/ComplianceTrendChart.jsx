@@ -40,6 +40,7 @@ import {
   getFleetComplianceTimeseries,
   getFrameworkComplianceTimeseries,
 } from "../../api/compliance";
+import { formatFleetScore } from "../../theme/scoreBands";
 
 const WINDOWS = [30, 60, 90];
 // Per-framework line strokes — see theme/chartPalette (needs wider separation
@@ -169,7 +170,7 @@ export default function ComplianceTrendChart({ notify, reloadKey }) {
         {delta ? (
           <Chip
             size="small"
-            label={`${delta.diff >= 0 ? "▲ +" : "▼ "}${delta.diff} pts · now ${delta.current}/100`}
+            label={`${delta.diff >= 0 ? "▲ +" : "▼ "}${delta.diff} pts · now ${formatFleetScore(delta.current)}`}
             sx={{
               height: 22, fontSize: TEXT.xs, fontWeight: 700,
               bgcolor: delta.diff >= 0 ? BRAND.alert?.successSoft : BRAND.alert?.errorSoft,

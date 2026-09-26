@@ -14,6 +14,7 @@ import {
   scoreBandRole,
   scoreBandSoftRole,
   scoreBandTextRole,
+  formatFleetScore,
 } from "./scoreBands";
 
 describe("DEFAULT_BANDS", () => {
@@ -106,4 +107,20 @@ describe("scoreBandTextRole", () => {
       expect(ratio(fg, scoreBandSoftRole(score))).toBeGreaterThanOrEqual(4.5);
     });
   }
+});
+
+describe("formatFleetScore — la nota de flota, igual en todas partes", () => {
+  it("⭐ un decimal y %: 18.1 no se convierte en 18 en un sitio y 18.1 en otro", () => {
+    expect(formatFleetScore(18.1)).toBe("18.1%");
+    expect(formatFleetScore(18.11)).toBe("18.1%");
+    expect(formatFleetScore(20)).toBe("20.0%");
+    // El rollup del MSP llega de un numeric(5,2) como texto.
+    expect(formatFleetScore("34.40")).toBe("34.4%");
+    expect(formatFleetScore(0)).toBe("0.0%");
+  });
+  it("sin nota, una raya — no un 0 ni «NaN%»", () => {
+    expect(formatFleetScore(null)).toBe("—");
+    expect(formatFleetScore(undefined)).toBe("—");
+    expect(formatFleetScore("")).toBe("—");
+  });
 });

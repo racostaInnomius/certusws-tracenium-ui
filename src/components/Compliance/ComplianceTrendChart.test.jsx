@@ -28,7 +28,7 @@ describe("ComplianceTrendChart", () => {
   it("shows the first→last score delta", async () => {
     getFleetComplianceTimeseries.mockResolvedValue(twoDays);
     render(<ComplianceTrendChart />);
-    expect(await screen.findByText(/\+12 pts · now 82\/100/)).toBeInTheDocument();
+    expect(await screen.findByText(/\+12 pts · now 82.0%/)).toBeInTheDocument();
     expect(getFleetComplianceTimeseries).toHaveBeenCalledWith(30); // default window
   });
 

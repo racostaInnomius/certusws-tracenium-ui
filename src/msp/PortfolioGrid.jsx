@@ -14,7 +14,7 @@
 // de tenerla vacía.
 
 import * as React from "react";
-import { scoreBandKey } from "../theme/scoreBands";
+import { scoreBandKey, formatFleetScore } from "../theme/scoreBands";
 import { Box, Chip, Grid, Stack, Typography } from "@mui/material";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -187,7 +187,7 @@ function PortfolioCard({ item, onSelect }) {
           <MetricChip label="Alerts" value={dash(item.openAlerts)} tone={alertsTone(item.openAlerts)} />
           <MetricChip
             label="Compliance"
-            value={item.compliancePct == null ? "—" : `${item.compliancePct}%`}
+            value={formatFleetScore(item.compliancePct)}
             tone={scoreTone(item.compliancePct)}
           />
           {item.aspInstances > 0 ? (
