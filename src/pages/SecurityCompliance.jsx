@@ -698,8 +698,16 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
   const refetchDrawer = React.useCallback(async () => {
     if (!drawerAgentId) return;
     try {
-      const detail = await getDeviceDetail(drawerAgentId).catch(() => null);
-      setDrawerData(detail ?? null);
+      // Siempre del servidor: se llama DESPUÉS de cambiar algo en el equipo
+      // (rescan, fix, revert, estado de un hallazgo), y la caché de 90 s
+      // devolvía la ficha de antes — «Rescan finished» sobre datos viejos.
+      // Si falla, se queda la que había en vez de vaciar la ficha.
+      const [detail, ts] = await Promise.all([
+        getDeviceDetail(drawerAgentId, { cache: "reload" }).catch(() => null),
+        getDeviceTimeseries(drawerAgentId, 30, { cache: "reload" }).catch(() => null),
+      ]);
+      if (detail) setDrawerData(detail);
+      if (ts) setDrawerTimeseries(ts);
     } catch {
       // Silent — the next user action will retry. We don't want to
       // surface a refetch failure as an error because the underlying

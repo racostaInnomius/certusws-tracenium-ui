@@ -138,14 +138,18 @@ export async function getDevicePosture(params = {}) {
 }
 
 // One device's full drilldown (findings + catalog description inline).
-export async function getDeviceDetail(agentId) {
-  return httpGetJson(`${BASE}/devices/${encodeURIComponent(agentId)}`);
+// `options.cache: "reload"` tras una acción sobre el equipo (rescan, fix,
+// revert): la caché de /security/compliance es de 90 s y un rescan tarda ~60,
+// así que sin ella la ficha «recargada» enseñaba lo de antes.
+export async function getDeviceDetail(agentId, options = {}) {
+  return httpGetJson(`${BASE}/devices/${encodeURIComponent(agentId)}`, options);
 }
 
 // One device's score trend (daily, capped at 90 days server-side).
-export async function getDeviceTimeseries(agentId, windowDays = 30) {
+export async function getDeviceTimeseries(agentId, windowDays = 30, options = {}) {
   return httpGetJson(
-    `${BASE}/devices/${encodeURIComponent(agentId)}/timeseries${buildQuery({ windowDays })}`
+    `${BASE}/devices/${encodeURIComponent(agentId)}/timeseries${buildQuery({ windowDays })}`,
+    options
   );
 }
 
