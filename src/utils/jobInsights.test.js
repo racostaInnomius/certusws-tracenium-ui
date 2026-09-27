@@ -3,6 +3,7 @@ import {
   deriveTriage,
   groupFailingDevices,
   groupFailureCauses,
+  isStuckJob,
   normalizeFailureCause,
 } from "./jobInsights";
 
@@ -97,17 +98,79 @@ describe("deriveTriage", () => {
     expect(t.timedOut).toBe(1);
   });
 
-  it("cuenta como colgado sólo lo que NUNCA se envió y lleva más de un día", () => {
+  it("cuenta como colgado lo que está en vuelo y lleva más de un día sin moverse", () => {
     // Es el estado que dejó dos jobs 46 h sobre un endpoint muerto sin que
     // nada en la interfaz lo dijera.
+    //
+    // 🔴 ESTA PRUEBA PEDÍA ANTES 2, EXCLUYENDO A PROPÓSITO EL CUARTO («sí se
+    // envió»). Fijaba el bug: la regla era `sent_at IS NULL`, así que un job
+    // que salió y después se pudrió NO PODÍA contarse. Es exactamente lo que
+    // le pasó al uninstall de AnyDesk el 26-sep — `retrying` con los cinco
+    // intentos gastados, y la franja decía «0».
     const jobs = [
       { status: "pending", sent_at: null, created_at: haceHoras(46) },
       { status: "retrying", sent_at: null, created_at: haceHoras(30) },
       { status: "pending", sent_at: null, created_at: haceHoras(3) },   // reciente
-      { status: "pending", sent_at: haceHoras(40), created_at: haceHoras(46) }, // sí se envió
+      { status: "pending", sent_at: haceHoras(40), created_at: haceHoras(46) }, // enviado y podrido
       { status: "completed", sent_at: null, created_at: haceHoras(99) }, // terminal
     ];
-    expect(deriveTriage(jobs, { now: AHORA }).stuck).toBe(2);
+    expect(deriveTriage(jobs, { now: AHORA }).stuck).toBe(3);
+  });
+
+  it("🔴 el caso de AnyDesk: retrying, enviado, sin moverse desde hace días", () => {
+    const anydesk = {
+      status: "retrying",
+      sent_at: haceHoras(40),
+      created_at: haceHoras(44),
+      updated_at: haceHoras(39),
+    };
+    expect(isStuckJob(anydesk, { now: AHORA })).toBe(true);
+    expect(deriveTriage([anydesk], { now: AHORA }).stuck).toBe(1);
+  });
+
+  it("⚠️ manda `updated_at`, no `created_at`: un job viejo que AVANZA no está colgado", () => {
+    // Un despliegue por anillos creado hace días y reenviado hace diez minutos
+    // está trabajando. Medir desde la creación lo marcaría colgado para siempre.
+    const vivo = { status: "running", created_at: haceHoras(99), updated_at: haceHoras(0.2) };
+    expect(isStuckJob(vivo, { now: AHORA })).toBe(false);
+  });
+
+  it("⚠️ lo terminal nunca está colgado, por viejo que sea", () => {
+    for (const status of ["completed", "failed", "timeout", "cancelled", "expired"]) {
+      expect(isStuckJob({ status, created_at: haceHoras(500) }, { now: AHORA })).toBe(false);
+    }
+  });
+
+  it("⚠️ sin fechas legibles NO se declara colgado", () => {
+    // «No sé cuándo se movió» no es «lleva un día parado». Inventarlo llenaría
+    // la celda de filas que la tabla no sabría explicar.
+    expect(isStuckJob({ status: "pending" }, { now: AHORA })).toBe(false);
+    expect(isStuckJob({ status: "pending", created_at: "no-es-fecha" }, { now: AHORA })).toBe(false);
+  });
+
+  it("🔴 un job colgado entra en el denominador de la tasa: no es trabajo en curso", () => {
+    // Era lo que dejaba «99 % · 154 of 155» con un job muerto dentro: al estar
+    // en el saco de «en vuelo» no se contaba en ninguna parte.
+    const jobs = [
+      { status: "completed" },
+      { status: "completed" },
+      { status: "completed" },
+      { status: "retrying", sent_at: haceHoras(40), updated_at: haceHoras(40) }, // colgado
+    ];
+    const t = deriveTriage(jobs, { now: AHORA });
+    expect(t.terminal).toBe(4);
+    expect(t.completed).toBe(3);
+    expect(t.successRate).toBe(75);
+  });
+
+  it("⚠️ pero un colgado NO se declara «fallido»", () => {
+    // No sabemos que fallara: sabemos que nadie lo cerró. Entra en el
+    // denominador y no en el numerador, que es justo lo que significa.
+    const colgado = { status: "retrying", sent_at: haceHoras(40), updated_at: haceHoras(40) };
+    const t = deriveTriage([colgado], { now: AHORA });
+    expect(t.failed).toBe(0);
+    expect(t.timedOut).toBe(0);
+    expect(t.successRate).toBe(0);
   });
 
   it("excluye lo que sigue en vuelo del cálculo de la tasa", () => {

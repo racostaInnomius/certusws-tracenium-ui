@@ -85,7 +85,7 @@ import {
   validateNumericField,
   resolveTypeFilter,
 } from "../utils/jobForm";
-import { deriveTriage, groupFailingDevices, groupFailureCauses } from "../utils/jobInsights";
+import { deriveTriage, groupFailingDevices, groupFailureCauses, isStuckJob } from "../utils/jobInsights";
 import { CHART_CATEGORICAL } from "../theme/chartPalette";
 import { hasJobResult, formatJobResult } from "../utils/jobResult";
 
@@ -1335,13 +1335,12 @@ export default function Jobs({ onNavigate }) {
           ? row.__jobs.some((j) => matchesRowSearch(j, q))
           : matchesRowSearch(row, q));
 
-      // "Stuck" has no status of its own: it is pending/retrying that never
-      // left the queue. Without this predicate the triage cell would count
-      // rows the table could not then show.
-      const matchesStuck =
-        triageFilter !== "stuck" ||
-        (["pending", "retrying"].includes(String(row.status || "").toLowerCase()) &&
-          !row.sent_at);
+      // "Stuck" has no status of its own: it is an in-flight job that stopped
+      // moving. Se usa EL MISMO predicado que cuenta la celda —importado, no
+      // reescrito—: cuando eran dos copias, la celda podía contar filas que la
+      // tabla no sabía enseñar, y la de «enviado y abandonado» era justo una
+      // de ellas.
+      const matchesStuck = triageFilter !== "stuck" || isStuckJob(row);
 
       return matchesStatus && matchesSince && matchesJobType && matchesSearch && matchesStuck;
     });
@@ -1574,9 +1573,11 @@ export default function Jobs({ onNavigate }) {
       },
       {
         key: "stuck",
-        label: "STUCK IN QUEUE",
+        label: "STUCK",
         value: triage.stuck,
-        sub: "never sent, >24h",
+        // 🔴 Decía «never sent, >24h», que era la DEFINICIÓN vieja y dejaba
+        // fuera al job enviado que se pudre — el caso de AnyDesk (26-sep).
+        sub: "no progress in 24h",
         dot: BRAND.alert.warning,
         fg: triage.stuck > 0 ? BRAND.alert.warningText : BRAND.dark,
       },
@@ -1609,8 +1610,8 @@ export default function Jobs({ onNavigate }) {
     setTriageFilter((current) => {
       const next = current === key || key === "success" ? "" : key;
       setStatusFilter(next === "failed" ? "failed" : next === "timeout" ? "timeout" : "all");
-      // `stuck` has no status of its own — it is pending/retrying that never
-      // left. The rows are surfaced through the dedicated flag below.
+      // `stuck` has no status of its own — es un job en vuelo que dejó de
+      // moverse. The rows are surfaced through the dedicated flag below.
       return next;
     });
   }, []);
@@ -1962,10 +1963,11 @@ export default function Jobs({ onNavigate }) {
           carries (total, in flight), and NONE showed failures — the one
           number on a jobs page that asks for a person.
 
-          `stuck` in particular exists nowhere else in the UI: jobs that
-          were never sent and have been waiting over a day. Two of them sat
-          on a dead endpoint for 46 hours and only surfaced by querying the
-          database by hand.
+          `stuck` in particular exists nowhere else in the UI: jobs still in
+          flight that have not moved in over a day. Two of them sat on a dead
+          endpoint for 46 hours and only surfaced by querying the database by
+          hand. 🔴 Hasta el 27-sep la regla era «nunca enviados», que dejaba
+          fuera al job que SÍ salió y después se pudrió — ver `isStuckJob`.
 
           Each cell filters the history below — see `applyTriageFilter`. */}
       <SectionPaper variant="panel" sx={{ p: 0, mb: 2, overflow: "hidden" }}>

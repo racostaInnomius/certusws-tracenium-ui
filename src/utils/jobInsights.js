@@ -67,16 +67,48 @@ export function normalizeFailureCause(raw) {
   return text || null;
 }
 
+/** Cuánto lleva un job sin moverse. `null` si no hay ninguna fecha legible. */
+function idleMs(job, now) {
+  const last = ms(job?.updated_at) ?? ms(job?.created_at);
+  return last === null ? null : now - last;
+}
+
+/**
+ * Un job que NO VA A NINGUNA PARTE.
+ *
+ * 🔴 POR QUÉ CAMBIÓ (27-sep). Esto exigía `sent_at IS NULL` — «nunca salió de
+ * la cola»—, que es la forma del caso para el que se escribió (dos jobs sobre
+ * un endpoint muerto 46 h). Pero un job que SÍ se envió y después se pudrió
+ * tiene `sent_at` puesto, así que el detector no podía verlo **por
+ * construcción**. Le pasó al uninstall de AnyDesk el 26-sep: `retrying` con
+ * los cinco intentos gastados, y la franja decía «STUCK IN QUEUE 0» mientras
+ * el job llevaba días muerto.
+ *
+ * La pregunta buena no es «¿salió?» sino «¿se mueve?». Un job no terminal que
+ * lleva más de un día sin que nadie le toque una fila no está en curso: está
+ * abandonado, lo hayamos enviado o no.
+ *
+ * ⚠️ SE EXPORTA porque la tabla filtra las MISMAS filas que este número cuenta.
+ * Cuando eran dos predicados escritos aparte, el riesgo era que la celda
+ * contara filas que la tabla no supiera enseñar — y el comentario de
+ * `matchesStuck` en Jobs.jsx ya avisaba de eso.
+ */
+export function isStuckJob(job, { now = Date.now(), staleHours = 24 } = {}) {
+  if (!IN_FLIGHT.includes(lower(job?.status))) return false;
+  const idle = idleMs(job, now);
+  return idle !== null && idle > staleHours * 3600 * 1000;
+}
+
 /**
  * The four numbers the band leads with.
  *
  * `stuck` is the one that does not exist anywhere else in the UI: a job that
- * is still pending or retrying, has NEVER been sent (`sent_at` null), and has
- * been waiting longer than a day. It is how the two jobs that sat on a dead
- * endpoint for 46 hours would have surfaced without anyone querying the
- * database.
+ * is still in flight and has not moved in over a day. It is how the two jobs
+ * that sat on a dead endpoint for 46 hours would have surfaced without anyone
+ * querying the database — y, desde el 27-sep, también los que se enviaron y
+ * nadie volvió a tocar (ver `isStuckJob`).
  */
-export function deriveTriage(jobs, { now = Date.now(), windowHours = 24 } = {}) {
+export function deriveTriage(jobs, { now = Date.now(), windowHours = 24, staleHours = 24 } = {}) {
   const list = Array.isArray(jobs) ? jobs : [];
   const since = now - windowHours * 3600 * 1000;
   const recent = (j) => {
@@ -87,23 +119,26 @@ export function deriveTriage(jobs, { now = Date.now(), windowHours = 24 } = {}) 
   const failed = list.filter((j) => lower(j.status) === "failed" && recent(j)).length;
   const timedOut = list.filter((j) => lower(j.status) === "timeout" && recent(j)).length;
 
-  const stuck = list.filter((j) => {
-    if (!["pending", "retrying"].includes(lower(j.status))) return false;
-    if (j.sent_at) return false;
-    const created = ms(j.created_at);
-    return created !== null && now - created > 24 * 3600 * 1000;
-  }).length;
+  const stuckJobs = list.filter((j) => isStuckJob(j, { now, staleHours }));
+  const stuck = stuckJobs.length;
 
-  // Success rate over everything that reached a terminal state. Jobs still in
-  // flight are excluded rather than counted as failures — a rate that drops
-  // because work is in progress would be worse than no rate at all.
+  // Success rate over everything that FINISHED — terminal, o abandonado.
+  //
+  // 🔴 Antes el denominador era sólo lo terminal, y el motivo escrito era «lo
+  // que está en curso no puede bajar la tasa». Cierto para el trabajo en
+  // curso; falso para un job que lleva días sin moverse. Con esa regla, el
+  // AnyDesk muerto se quedaba en el saco de «en vuelo» y la portada decía
+  // «99 % · 154 of 155» con él dentro, sin contarlo en ninguna parte.
+  //
+  // ⚠️ Un job atascado NO es un éxito, pero tampoco se declara «fallido»: no
+  // sabemos que fallara, sabemos que nadie lo cerró. Entra en el denominador y
+  // no en el numerador, que es exactamente lo que significa.
   const terminal = list.filter((j) => !IN_FLIGHT.includes(lower(j.status)));
   const completed = terminal.filter((j) => lower(j.status) === "completed").length;
-  const successRate = terminal.length
-    ? Math.round((completed / terminal.length) * 100)
-    : null;
+  const settled = terminal.length + stuck;
+  const successRate = settled ? Math.round((completed / settled) * 100) : null;
 
-  return { failed, timedOut, stuck, successRate, completed, terminal: terminal.length };
+  return { failed, timedOut, stuck, successRate, completed, terminal: settled };
 }
 
 /** Failure causes, most frequent first. */
