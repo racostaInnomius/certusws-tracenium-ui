@@ -31,6 +31,7 @@ import { BRAND, TEXT } from "../../theme/brand";
 import { remediateBatch, getRemediationsBatch } from "../../api/patchManagement";
 import { listFrom } from "../../api/shape";
 import { bulkFixPlan, bulkFixSummary, batchFinished } from "./bulkFixPlan";
+import { outcomeColors, outcomeTone } from "../patch-management/outcomeTone";
 
 const POLL_MS = 5000;
 
@@ -38,9 +39,20 @@ const POLL_MS = 5000;
 function countChips(counts) {
   return Object.entries(counts ?? {})
     .filter(([, v]) => Number(v) > 0)
-    .map(([k, v]) => (
-      <Chip key={k} size="small" label={`${k.replace(/_/g, " ")}: ${v}`} sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700 }} />
-    ));
+    .map(([k, v]) => {
+      // El color dice qué pasó (outcomeTone): verde aplicado, ámbar a falta
+      // de reiniciar, teal ya cumplía, rojo falló. Antes todos en gris.
+      const { bg, fg } = outcomeColors(k);
+      return (
+        <Chip
+          key={k}
+          size="small"
+          data-tone={outcomeTone(k)}
+          label={`${k.replace(/_/g, " ")}: ${v}`}
+          sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: bg, color: fg }}
+        />
+      );
+    });
 }
 
 export default function BulkFixDialog({

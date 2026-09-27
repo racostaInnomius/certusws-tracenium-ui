@@ -57,6 +57,7 @@ import {
 import { formatRelativeTime } from "../Compliance/PatchLevel";
 import { listFrom } from "../../api/shape";
 import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
+import { outcomeColors, outcomeTone } from "./outcomeTone";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -73,28 +74,22 @@ const TERMINAL_OUTCOMES = new Set([
 ]);
 
 function outcomeChip(outcome) {
-  // Same color map the SDP drawer uses for its outcomes — ok/green,
-  // pending/gray, failed/red, reboot/amber. Keeps PMv2 visually
-  // consistent with SDP.
-  const map = {
-    applied:                  { label: "applied",          bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
-    already_compliant:        { label: "compliant",        bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
-    applied_reboot_required:  { label: "applied (reboot)", bg: BRAND.alert?.warningSoft, color: BRAND.alert?.warning },
-    dryrun_would_apply:       { label: "would apply",      bg: BRAND.tealSoft,           color: BRAND.tealText },
-    dryrun_already_compliant: { label: "already compliant",bg: BRAND.alert?.successSoft, color: BRAND.alert?.success },
-    pending:                  { label: "pending",          bg: BRAND.darkSoft,           color: BRAND.gray },
-    running:                  { label: "running",          bg: BRAND.tealSoft,           color: BRAND.tealText },
-    failed:                   { label: "failed",           bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    rejected:                 { label: "rejected",         bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    timed_out:                { label: "timed out",        bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
-    cancelled:                { label: "cancelled",        bg: BRAND.darkSoft,           color: BRAND.gray },
+  // Mismo tono que «Apply fixes on …» (outcomeTone.js): verde aplicado,
+  // ámbar a falta de reiniciar, teal ya cumplía / se aplicaría, rojo falló.
+  const LABELS = {
+    already_compliant: "compliant",
+    applied_reboot_required: "applied (reboot)",
+    dryrun_would_apply: "would apply",
+    dryrun_already_compliant: "already compliant",
+    timed_out: "timed out",
   };
-  const e = map[outcome] || { label: outcome || "—", bg: BRAND.darkSoft, color: BRAND.gray };
+  const { bg, fg } = outcomeColors(outcome);
   return (
     <Chip
       size="small"
-      label={e.label}
-      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: e.bg, color: e.color }}
+      data-tone={outcomeTone(outcome)}
+      label={LABELS[outcome] || outcome || "—"}
+      sx={{ height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: bg, color: fg }}
     />
   );
 }
@@ -813,7 +808,7 @@ export default function FindingDetailDrawer({
                       key={k}
                       size="small"
                       label={`${k.replace(/_/g, " ")}: ${v}`}
-                      sx={{ height: 22, fontWeight: 700, fontSize: TEXT.xs }}
+                      sx={{ height: 22, fontWeight: 700, fontSize: TEXT.xs, bgcolor: outcomeColors(k).bg, color: outcomeColors(k).fg }}
                     />
                   ))}
                 </Stack>

@@ -101,6 +101,8 @@ describe("lo que promete el botón", () => {
     // Y el resultado por fix se ve, no sólo un «hecho».
     await screen.findByTestId("bulk-fix-progress");
     await waitFor(() => expect(screen.getByTestId("bulk-fix-progress")).toHaveTextContent("applied: 1"));
+    // ⭐ Lo aplicado se distingue a simple vista: chip en verde, no en gris.
+    expect(screen.getByText("applied: 1").closest("[data-tone]")).toHaveAttribute("data-tone", "success");
   });
 
   it("sin nada aplicable no se puede lanzar", () => {
