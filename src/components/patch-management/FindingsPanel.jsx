@@ -102,6 +102,9 @@ export default function FindingsPanel({
 }) {
   const [items, setItems] = React.useState([]);
   const [totals, setTotals] = React.useState(ZERO_TOTALS);
+  // El backend devuelve hasta un tope de checks; `totals` cuenta todos. Cuando
+  // corta, la tabla lo dice — antes enseñaba 200 de 1.016 en silencio.
+  const [truncated, setTruncated] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -117,6 +120,7 @@ export default function FindingsPanel({
       const res = await getFindings(params);
       setItems(listFrom(res, { context: "patchFindings" }));
       setTotals(res?.totals ?? ZERO_TOTALS);
+      setTruncated(res?.truncated === true);
     } catch (err) {
       // PMP_PLUGIN_DISABLED → backend 403; the page-level banner
       // already explains; here we silently zero out so the operator
@@ -125,6 +129,7 @@ export default function FindingsPanel({
       if (code === "PMP_PLUGIN_DISABLED") {
         setItems([]);
         setTotals(ZERO_TOTALS);
+        setTruncated(false);
       } else {
         notify?.("error", err?.body?.message || err?.message || "Failed to load findings");
       }
@@ -318,6 +323,12 @@ export default function FindingsPanel({
             {loading ? "Loading…" : "Refresh"}
           </Button>
         </Stack>
+      ) : null}
+
+      {truncated ? (
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, mb: 1 }}>
+          Showing the {items.length} most severe of {totals.distinctChecks} checks. Pick a category to see the rest.
+        </Typography>
       ) : null}
 
       <SectionPaper variant="card" sx={{ p: 0 }}>
