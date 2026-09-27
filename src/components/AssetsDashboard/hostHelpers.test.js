@@ -200,6 +200,17 @@ describe("normalizeHostDetailPayload", () => {
     expect(out.lastSeenAt).toBe("2026-09-25T04:26:00Z");
     expect(out.battery).toEqual({ present: true, healthPct: 100, cycleCount: 3 });
   });
+  it("⭐ abierta por enlace (sin fila de tabla), la identidad sale del detalle", () => {
+    // 27-sep: por ?device= la ficha salía con el UUID de título y sin usuario
+    // ni IP — el backend no los mandaba y no había fila de la que tomarlos.
+    const out = normalizeHostDetailPayload(
+      { hostname: "MacBook-Air-de-Mauricio.local", lastLogonUser: "mauricioalvarez", localIp: "192.168.0.129" },
+      { agent_id: "95b70433-d6f5-4bb6-af5b-2bb5d9fc54d1" }
+    );
+    expect(out.hostname).toBe("MacBook-Air-de-Mauricio.local");
+    expect(out.lastLogonUser).toBe("mauricioalvarez");
+    expect(out.localIp).toBe("192.168.0.129");
+  });
   it("detects mobile devices from either the boolean or the 'true' string", () => {
     expect(normalizeHostDetailPayload({ mobile: true }).isMobile).toBe(true);
     expect(normalizeHostDetailPayload({ mobile: "true" }).isMobile).toBe(true);
