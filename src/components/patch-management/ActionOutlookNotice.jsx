@@ -42,7 +42,16 @@ function whenText(dispatch) {
   return `Held until ${when}${away}.`;
 }
 
-export default function ActionOutlookNotice({ deviceIds = [] }) {
+/**
+ * `onLoaded(outlook | null)` le cuenta al diálogo que lo aloja lo que se supo:
+ * el de instalar parches esconde la retención del snapshot cuando ningún equipo
+ * va a tener snapshot. `null` = no se pudo saber.
+ */
+export default function ActionOutlookNotice({ deviceIds = [], onLoaded }) {
+  const onLoadedRef = React.useRef(onLoaded);
+  React.useEffect(() => {
+    onLoadedRef.current = onLoaded;
+  }, [onLoaded]);
   const [state, setState] = React.useState({ loading: false, outlook: null, error: null });
 
   React.useEffect(() => {
@@ -53,10 +62,18 @@ export default function ActionOutlookNotice({ deviceIds = [] }) {
     let cancelled = false;
     setState((s) => ({ ...s, loading: true }));
     getActionOutlook(deviceIds)
-      .then((outlook) => !cancelled && setState({ loading: false, outlook, error: null }))
+      .then((outlook) => {
+        if (cancelled) return;
+        setState({ loading: false, outlook, error: null });
+        onLoadedRef.current?.(outlook?.dispatch ? outlook : null);
+      })
       // Silent on failure. A wrong outlook is worse than none: if we cannot
       // say when this dispatches or what protects it, we must not guess.
-      .catch((err) => !cancelled && setState({ loading: false, outlook: null, error: err }));
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ loading: false, outlook: null, error: err });
+        onLoadedRef.current?.(null);
+      });
     return () => { cancelled = true; };
   }, [deviceIds.join(",")]);
 

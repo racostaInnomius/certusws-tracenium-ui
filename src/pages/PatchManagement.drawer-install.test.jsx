@@ -38,11 +38,14 @@ const ITEMS = [
 ];
 
 let posted;
-function mount({ jobResponse }) {
+function mount({ jobResponse, outlook = null, devices = DEVICES }) {
   posted = [];
   server.use(
     http.all(/.*\/api\/.*/, async ({ request }) => {
       const url = new URL(request.url);
+      if (outlook && url.pathname.endsWith("/patch-management/action-outlook")) {
+        return HttpResponse.json({ ok: true, ...outlook });
+      }
       if (request.method === "POST" && /\/orchestrator\/devices\/[^/]+\/jobs$/.test(url.pathname)) {
         posted.push(await request.json());
         return jobResponse();
@@ -50,7 +53,7 @@ function mount({ jobResponse }) {
       if (/\/patch-management\/devices\/[^/]+\/items$/.test(url.pathname)) {
         return HttpResponse.json({ ok: true, agentId: "dc-1", items: ITEMS });
       }
-      const items = url.pathname.endsWith("/patch-management/devices") ? DEVICES : [];
+      const items = url.pathname.endsWith("/patch-management/devices") ? devices : [];
       return HttpResponse.json({
         ok: true,
         items,
@@ -213,5 +216,49 @@ describe("Patch Management — reiniciar desde el panel lateral", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^Cancel$/ }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: /Restart MSIG-DOMAIN/ })).toBeNull());
     expect(posted).toEqual([]);
+  });
+});
+
+// ── lo que el diálogo promete, calculado para ESTE equipo ─────────────────
+// 🔴 25-sep, T1 (sin ventanas ni gateway): el diálogo decía «outside a window it
+// waits until the next one opens» —el parche salía en el acto— y ofrecía
+// «Keep the snapshot until I validate» sin snapshot que conservar.
+const NO_WINDOWS_NO_GATEWAY = {
+  dispatch: { restricted: false, openNow: true, minutesUntilOpen: 0, opensAtUtc: null },
+  protection: { snapshotted: [], unprotected: [{ deviceId: "dc-1", reason: "no gateway" }], blocked: [] },
+  reversible: false,
+};
+
+describe("Patch Management — el diálogo dice lo que va a pasar de verdad", () => {
+  it("🔴 sin ventanas ni gateway: «sale ya» y SIN opción de conservar el snapshot", async () => {
+    mount({ jobResponse: HELD, outlook: NO_WINDOWS_NO_GATEWAY });
+    const dialog = await openDrawerAndInstallAll();
+    expect(await within(dialog).findByText(/Goes out immediately — no maintenance windows configured/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/waits until the next one opens/)).toBeNull();
+    expect(within(dialog).queryByLabelText(/Keep the snapshot until I validate/i)).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Install$/ }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0].payload.snapshotHold).toBeUndefined();
+  });
+
+  it("con snapshot previsto, la opción sí aparece", async () => {
+    mount({
+      jobResponse: HELD,
+      outlook: { ...NO_WINDOWS_NO_GATEWAY, protection: { snapshotted: ["dc-1"], unprotected: [], blocked: [] }, reversible: true },
+    });
+    const dialog = await openDrawerAndInstallAll();
+    expect(await within(dialog).findByLabelText(/Keep the snapshot until I validate/i)).toBeInTheDocument();
+  });
+
+  it("⚠️ en un Linux, el reinicio no habla de «un parche de Windows»", async () => {
+    mount({
+      jobResponse: HELD,
+      outlook: NO_WINDOWS_NO_GATEWAY,
+      devices: [{ ...DEVICES[0], platform: "linux" }],
+    });
+    const dialog = await openDrawerAndInstallAll();
+    expect(within(dialog).queryByText(/A Windows patch is not applied/)).toBeNull();
+    expect(within(dialog).getByText(/a new Linux kernel/)).toBeInTheDocument();
   });
 });

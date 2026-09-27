@@ -6,6 +6,7 @@ import {
   goingOutNow,
   groupSkipReasons,
   describeRebootChoice,
+  offersSnapshotHold,
   snapshotHoldField,
   describeSnapshotHold,
 } from "./bulkInstallOutcome";
@@ -94,6 +95,17 @@ describe("describeRebootChoice", () => {
   it("the two are never the same text", () => {
     expect(describeRebootChoice(true)).not.toBe(describeRebootChoice(false));
   });
+
+  it("🔴 sólo habla de «un parche de Windows» si TODOS los destinos son Windows", () => {
+    // 25-sep: el diálogo de SRVOC-MainAgent (Linux) hablaba de Windows.
+    expect(describeRebootChoice(false, ["windows", "windows"])).toContain("A Windows patch is not applied");
+    for (const platforms of [["linux"], ["windows", "macos"], []]) {
+      const t = describeRebootChoice(false, platforms);
+      expect(t).not.toContain("A Windows patch is not applied");
+      expect(t).toContain("not applied until the machine restarts");
+      expect(t).toContain("pending reboot");
+    }
+  });
 });
 
 describe("conservar el punto de retorno hasta validar (P1)", () => {
@@ -106,5 +118,18 @@ describe("conservar el punto de retorno hasta validar (P1)", () => {
     expect(describeSnapshotHold(true)).toMatch(/up to 72 h/);
     expect(describeSnapshotHold(true)).toMatch(/warned before it is removed/);
     expect(describeSnapshotHold(false)).toMatch(/gateway's retention/);
+  });
+});
+
+describe("offersSnapshotHold", () => {
+  it("🔴 sin ningún destino con snapshot, no se ofrece", () => {
+    expect(offersSnapshotHold({ protection: { snapshotted: [] } })).toBe(false);
+  });
+  it("con alguno, sí", () => {
+    expect(offersSnapshotHold({ protection: { snapshotted: ["vm-1"] } })).toBe(true);
+  });
+  it("calculando todavía, no; sin poder saberlo, sí (no se puede descartar)", () => {
+    expect(offersSnapshotHold(undefined)).toBe(false);
+    expect(offersSnapshotHold(null)).toBe(true);
   });
 });

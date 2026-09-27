@@ -77,9 +77,11 @@ import {
   summarizeBulkInstall,
   goingOutNow,
   describeRebootChoice,
-  snapshotHoldField
+  snapshotHoldField,
+  offersSnapshotHold
 } from "../components/patch-management/bulkInstallOutcome";
 import SnapshotHoldChoice from "../components/patch-management/SnapshotHoldChoice";
+import ActionOutlookNotice from "../components/patch-management/ActionOutlookNotice";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
 
@@ -128,6 +130,7 @@ import { createDeviceJob } from "../api/jobs";
 import FindingsPanel from "../components/patch-management/FindingsPanel";
 import { listFrom } from "../api/shape";
 import { getConnectedDevices } from "../api/overview";
+import { useConfirm } from "../components/common/ConfirmDialog";
 // El MISMO punto verde que Asset Management. Nació en su tabla y se extrajo a
 // `common/` justo para que no hubiera dos maneras de decir "este equipo
 // responde": si aquí se pintara otra cosa, dos pantallas del mismo portal
@@ -154,14 +157,19 @@ const CATEGORIES = [
         id: "patch.install_security",
         name: "Install missing security updates",
         description:
-          "Deploy KBs flagged as Critical/Security on devices where Security Compliance reports them as missing.",
+          "Patches rated Critical or Important, on the devices that are missing them.",
         impact: "host",
       },
       {
         id: "patch.install_quality",
-        name: "Install pending quality / rollup updates",
+        // ⚠️ Se llamaba «quality / rollup» y decía «non-security», pero se lleva
+        // todo lo que no es Critical/Important — incluidas las actualizaciones
+        // cuya severidad el SO no informa, que en Linux y macOS son casi todas y
+        // pueden ser de seguridad (25-sep: los tres Mac con «pending security
+        // updates» salían aquí).
+        name: "Install all other pending updates",
         description:
-          "Push non-security cumulative updates to devices that are behind the baseline.",
+          "Everything the security action leaves out: Windows quality and rollup updates, plus updates whose severity the OS does not report — most Linux and macOS updates, which can include security fixes.",
         impact: "host",
       },
       // ⚠️ Aquí había «Schedule reboot for pending patches» y «Apply driver
@@ -264,7 +272,7 @@ const BULK_ACTION_MAP = {
   "patch.install_quality": {
     op: "bulk-install",
     severity: ["moderate", "low", "unknown"],
-    label: "Install pending quality updates"
+    label: "Install other pending updates"
   },
   "patch.scan_now": {
     op: "bulk-scan",
@@ -746,6 +754,8 @@ export default function PatchManagement({ onNavigate }) {
    * hasta el siguiente intento, no rompe la tabla.
    */
   const [connectedIds, setConnectedIds] = React.useState(() => new Set());
+  // Si la consulta falló, el Set vacío NO significa «todos desconectados».
+  const [connectedKnown, setConnectedKnown] = React.useState(false);
 
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const refreshAll = React.useCallback(() => {
@@ -768,10 +778,12 @@ export default function PatchManagement({ onNavigate }) {
         if (cancelado) return;
         const ids = listFrom(res, { keys: ["deviceIds", "items"], context: "getConnectedDevices" });
         setConnectedIds(new Set(ids.map((id) => String(id))));
+        setConnectedKnown(true);
       } catch (e) {
         if (cancelado) return;
         console.warn("devices-connected fetch failed:", e?.message || e);
         setConnectedIds(new Set());
+        setConnectedKnown(false);
       }
     };
     cargar();
@@ -803,6 +815,9 @@ export default function PatchManagement({ onNavigate }) {
   // Conservar el snapshot hasta validar (P1). Como el reinicio: se elige en
   // cada envío, nunca se hereda del anterior.
   const [drawerHold, setDrawerHold] = React.useState(false);
+  // Lo que `action-outlook` dice de ESTE envío: cuándo sale y si hay snapshot.
+  // undefined = calculando, null = no se pudo saber. Ver offersSnapshotHold.
+  const [drawerOutlook, setDrawerOutlook] = React.useState(undefined);
   const [dispatching, setDispatching] = React.useState(false);
   const [snackbar, setSnackbar] = React.useState({ open: false, severity: "success", message: "" });
 
@@ -839,13 +854,25 @@ export default function PatchManagement({ onNavigate }) {
   // this consequential must be made for THIS run, never inherited from the last.
   const [bulkReboot, setBulkReboot] = React.useState(false);
   const [bulkHold, setBulkHold] = React.useState(false);
+  const [bulkOutlook, setBulkOutlook] = React.useState(undefined);
+
+  const confirm = useConfirm();
 
   const handleRunCategoryAction = React.useCallback(async (action) => {
     const cfg = BULK_ACTION_MAP[action.id];
     if (!cfg) return;
 
     if (cfg.op === "bulk-scan") {
-      // Scan is non-destructive — dispatch immediately, no preview.
+      // No instala nada, pero va a TODA la flota con un clic, y un escaneo de
+      // Windows Update no es gratis en el equipo. Se pregunta, diciendo a
+      // cuántos (25-sep: salía sin confirmar).
+      const n = devices.length;
+      const ok = await confirm({
+        title: "Scan every reporting device?",
+        body: `A patch scan goes to ${n > 0 ? `all ${n}` : "all the"} device${n === 1 ? "" : "s"} that report patches. It installs nothing, but each device runs a full update check.`,
+        confirmText: n > 0 ? `Scan ${n} device${n === 1 ? "" : "s"}` : "Scan",
+      });
+      if (!ok) return;
       try {
         const res = await bulkScan();
         const dispatched = Array.isArray(res?.dispatched) ? res.dispatched : [];
@@ -871,6 +898,7 @@ export default function PatchManagement({ onNavigate }) {
     // bulk-install: dry-run first to show preview, then real dispatch on confirm.
     setBulkReboot(false); // never inherited from the previous run
     setBulkHold(false);
+    setBulkOutlook(undefined);
     setBulkDialog({ action, cfg, plan: null, loading: true, dispatching: false });
     try {
       const res = await bulkInstall({
@@ -884,7 +912,7 @@ export default function PatchManagement({ onNavigate }) {
       notify("error", `Could not load plan: ${err?.message || "unknown error"}`);
       setBulkDialog(null);
     }
-  }, [notify]);
+  }, [notify, confirm, devices.length]);
 
   const confirmBulkInstall = React.useCallback(async () => {
     if (!bulkDialog || bulkDialog.dispatching) return;
@@ -895,7 +923,7 @@ export default function PatchManagement({ onNavigate }) {
         mode: "install",
         dryRun: false,
         rebootIfRequired: bulkReboot,
-        ...snapshotHoldField(bulkHold)
+        ...snapshotHoldField(bulkHold && offersSnapshotHold(bulkOutlook))
       });
       // A patch install now passes the maintenance-window and vCenter-snapshot
       // gates, so "dispatched" no longer means "on its way". Only follow the
@@ -919,7 +947,7 @@ export default function PatchManagement({ onNavigate }) {
       notify("error", `Dispatch failed: ${err?.message || "unknown error"}`);
       setBulkDialog((prev) => prev ? { ...prev, dispatching: false } : null);
     }
-  }, [bulkDialog, bulkReboot, bulkHold, notify]);
+  }, [bulkDialog, bulkReboot, bulkHold, bulkOutlook, notify]);
 
   const openDrawer = React.useCallback(async (device) => {
     setDrawerDevice(device);
@@ -1023,6 +1051,7 @@ export default function PatchManagement({ onNavigate }) {
     if (!kbArticleIds.length) return;
     setDrawerReboot(false);
     setDrawerHold(false);
+    setDrawerOutlook(undefined);
     setInstallConfirm({ kbArticleIds, label });
   }, []);
 
@@ -1048,10 +1077,15 @@ export default function PatchManagement({ onNavigate }) {
     setInstallConfirm(null);
     dispatchJob(
       "patch_install",
-      { mode: "install", kbArticleIds, rebootIfRequired: drawerReboot, ...snapshotHoldField(drawerHold) },
+      {
+        mode: "install",
+        kbArticleIds,
+        rebootIfRequired: drawerReboot,
+        ...snapshotHoldField(drawerHold && offersSnapshotHold(drawerOutlook)),
+      },
       label
     );
-  }, [installConfirm, drawerReboot, drawerHold, dispatchJob]);
+  }, [installConfirm, drawerReboot, drawerHold, drawerOutlook, dispatchJob]);
 
   const handleRunScan = React.useCallback(() => {
     dispatchJob("patch_scan", {}, "Patch scan");
@@ -2010,6 +2044,13 @@ export default function PatchManagement({ onNavigate }) {
                           {p.hostname || p.agentId.slice(0, 12)}
                           {p.platform ? <Typography component="span" sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 1 }}>{p.platform}</Typography> : null}
                         </Typography>
+                        {connectedKnown && !connectedIds.has(String(p.agentId)) ? (
+                          <Chip
+                            size="small"
+                            label="offline"
+                            sx={{ bgcolor: BRAND.darkSoft, color: BRAND.gray, fontWeight: 700, height: 20, fontSize: TEXT.xs }}
+                          />
+                        ) : null}
                         <Chip
                           size="small"
                           label={`${p.kbCount} patch${p.kbCount === 1 ? "" : "es"}`}
@@ -2018,10 +2059,26 @@ export default function PatchManagement({ onNavigate }) {
                       </Box>
                     ))}
                   </Box>
-                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1.5 }}>
-                    Each device will receive a <strong>patch_install</strong> job with its specific
-                    KB list. Devices not listed have no matching patches.
+                  <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1.5, mb: 1.5 }}>
+                    Each device gets only its own missing patches. Devices not listed have no
+                    matching patches.
+                    {(() => {
+                      // ⚠️ 25-sep: DESKTOP-9G467VM, sin conectar desde el 19-sep,
+                      // salía en la lista como cualquier otro.
+                      if (!connectedKnown) return null;
+                      const off = bulkDialog.plan.filter((p) => !connectedIds.has(String(p.agentId))).length;
+                      return off > 0
+                        ? ` ${off} of them ${off === 1 ? "is" : "are"} offline right now and won't start until ${off === 1 ? "it reconnects" : "they reconnect"}.`
+                        : null;
+                    })()}
                   </Typography>
+                  {/* Cuándo sale y qué lo protege, calculado para ESTOS equipos —
+                      antes una frase fija prometía una ventana que el tenant
+                      podía no tener. */}
+                  <ActionOutlookNotice
+                    deviceIds={bulkDialog.plan.map((p) => p.agentId)}
+                    onLoaded={setBulkOutlook}
+                  />
 
                   <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
                     <FormControlLabel
@@ -2039,11 +2096,13 @@ export default function PatchManagement({ onNavigate }) {
                       }
                     />
                     <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
-                      {describeRebootChoice(bulkReboot)}
+                      {describeRebootChoice(bulkReboot, bulkDialog.plan.map((p) => p.platform))}
                     </Typography>
                   </Box>
 
-                  <SnapshotHoldChoice checked={bulkHold} onChange={setBulkHold} />
+                  {offersSnapshotHold(bulkOutlook) ? (
+                    <SnapshotHoldChoice checked={bulkHold} onChange={setBulkHold} />
+                  ) : null}
                 </>
               ) : (
                 <Alert severity="info" variant="outlined" sx={{ mt: 1 }}>
@@ -2085,11 +2144,21 @@ export default function PatchManagement({ onNavigate }) {
           <Typography sx={{ fontSize: TEXT.md, color: BRAND.dark }}>
             {installConfirm?.kbArticleIds?.join(", ")}
           </Typography>
-          <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
-            The install respects the tenant&apos;s maintenance windows: outside a window it waits until
-            the next one opens. If the device is a VM behind an Infrastructure Gateway, a snapshot is
-            taken first.
-          </Typography>
+          {/* Cuándo sale y qué lo protege, para ESTE equipo. Antes una frase fija
+              prometía «espera a la ventana» en un tenant sin ventanas, donde el
+              parche sale en el acto (25-sep). */}
+          {drawerDevice ? (
+            <Box sx={{ mt: 1.5 }}>
+              <ActionOutlookNotice deviceIds={[drawerDevice.agentId]} onLoaded={setDrawerOutlook} />
+            </Box>
+          ) : null}
+          {drawerOutlook === null ? (
+            <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 1 }}>
+              The install respects the tenant&apos;s maintenance windows, if any: outside a window it
+              waits until the next one opens. If the device is a VM behind an Infrastructure Gateway, a
+              snapshot is taken first.
+            </Typography>
+          ) : null}
           <Box sx={{ mt: 2, pt: 1.5, borderTop: `1px solid ${BRAND.border}` }}>
             <FormControlLabel
               control={
@@ -2106,10 +2175,12 @@ export default function PatchManagement({ onNavigate }) {
               }
             />
             <Typography sx={{ fontSize: TEXT.sm, color: "text.secondary", mt: 0.5 }}>
-              {describeRebootChoice(drawerReboot)}
+              {describeRebootChoice(drawerReboot, [drawerDevice?.platform])}
             </Typography>
           </Box>
-          <SnapshotHoldChoice checked={drawerHold} onChange={setDrawerHold} />
+          {offersSnapshotHold(drawerOutlook) ? (
+            <SnapshotHoldChoice checked={drawerHold} onChange={setDrawerHold} />
+          ) : null}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setInstallConfirm(null)} sx={{ textTransform: "none" }}>

@@ -88,10 +88,17 @@ function capitalize(s) {
  * safe option and is the one that leaves a fleet permanently pending-reboot, so
  * the off state has to say that out loud rather than saying nothing.
  */
-export function describeRebootChoice(enabled) {
-  return enabled
-    ? "Each device restarts about a minute after its patch finishes — including devices where only some patches installed, because what did install is not applied until the restart. Devices that installed nothing are left alone."
-    : "Devices stay up. A Windows patch is not applied until the machine restarts, so they will report as pending reboot until someone restarts them.";
+export function describeRebootChoice(enabled, platforms = ["windows"]) {
+  if (enabled) {
+    return "Each device restarts about a minute after its patch finishes — including devices where only some patches installed, because what did install is not applied until the restart. Devices that installed nothing are left alone.";
+  }
+  // ⚠️ «Un parche de Windows» en un servidor Linux (25-sep, SRVOC-MainAgent): el
+  // texto sólo habla de Windows cuando TODOS los destinos lo son.
+  const known = (platforms || []).map((p) => String(p || "").toLowerCase()).filter(Boolean);
+  const allWindows = known.length > 0 && known.every((p) => p === "windows");
+  return allWindows
+    ? "Devices stay up. A Windows patch is not applied until the machine restarts, so they will report as pending reboot until someone restarts them."
+    : "Devices stay up. An update that needs a restart — a Windows patch, a new Linux kernel, a macOS system update — is not applied until the machine restarts, so those devices will report as pending reboot until someone restarts them.";
 }
 
 /**
@@ -118,4 +125,20 @@ export function describeSnapshotHold(keepUntilValidated) {
   return keepUntilValidated
     ? `The snapshot stays until you release it as validated, for up to ${VALIDATION_HOLD_HOURS} h after it is taken (less if the gateway's limit is lower). You are warned before it is removed. A failed patch or a server waiting for its restart is kept for a decision either way.`
     : "The snapshot follows the gateway's retention and is removed automatically once the patch has gone fine. You can still extend it from Rollback points.";
+}
+
+/**
+ * ¿Se ofrece «Keep the snapshot until I validate»?
+ *
+ * ⚠️ 25-sep: los dos diálogos lo ofrecían en un tenant SIN gateway, donde ningún
+ * equipo tiene snapshot que conservar. Sale de la previsión de la acción
+ * (`action-outlook`, la misma que usa el panel de un hallazgo):
+ *   undefined → aún calculando: no se ofrece todavía;
+ *   null      → no se pudo saber: se ofrece, no se puede descartar;
+ *   previsión → sólo si algún destino se va a snapshotear.
+ */
+export function offersSnapshotHold(outlook) {
+  if (outlook === undefined) return false;
+  if (outlook === null) return true;
+  return (outlook?.protection?.snapshotted?.length ?? 0) > 0;
 }
