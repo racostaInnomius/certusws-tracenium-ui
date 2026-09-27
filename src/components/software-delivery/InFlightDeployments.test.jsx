@@ -46,6 +46,17 @@ describe("deviceFunnel", () => {
     expect(f.cancelled).toBe(3);
   });
 
+  it("🔴 los caducados tampoco: el equipo nunca apareció", () => {
+    // `expired` = el job caducó sin llegar al equipo. Contarlo como pendiente
+    // dejaría la barra sin llegar al final; contarlo como fallo diría que el
+    // instalador corrió y falló, cuando no llegó a salir.
+    const f = deviceFunnel({ success: 2, expired: 3 });
+    expect(f.total).toBe(2);
+    expect(f.settled).toBe(2);
+    expect(f.failed).toBe(0);
+    expect(f.expired).toBe(3);
+  });
+
   it("sin recuentos no inventa equipos", () => {
     expect(deviceFunnel(undefined)).toMatchObject({ total: 0, settled: 0, done: 0 });
   });

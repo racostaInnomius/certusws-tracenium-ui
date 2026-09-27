@@ -82,14 +82,21 @@ export function deviceFunnel(counts) {
   const running = n("running");
   const pending = n("pending");
   const cancelled = n("cancelled");
+  // 🔴 El job caducó sin llegar al equipo. NO es un fallo —no corrió nada— ni
+  // un éxito, igual que un cancelado: el equipo nunca apareció. Antes esta
+  // fila se quedaba en `pending` para siempre y el despliegue no terminaba
+  // nunca; ahora termina, y este contador es el que lo explica.
+  const expired = n("expired");
   return {
     done,
     failed,
     running,
     pending,
     cancelled,
-    // Los cancelados salen del reparto: si contaran, la barra no llegaría
-    // nunca al final y el despliegue parecería atascado para siempre.
+    expired,
+    // Los cancelados y los caducados salen del reparto: si contaran, la barra
+    // no llegaría nunca al final y el despliegue parecería atascado para
+    // siempre.
     total: done + failed + running + pending,
     settled: done + failed,
   };
@@ -207,6 +214,7 @@ function DeploymentRow({ deployment, formatTime, onOpen }) {
           {funnel.settled}/{funnel.total} reported
           {segments.map((seg) => ` · ${seg.devices} ${seg.label.toLowerCase()}`).join("")}
           {funnel.cancelled > 0 ? ` · ${funnel.cancelled} cancelled` : ""}
+          {funnel.expired > 0 ? ` · ${funnel.expired} never reached` : ""}
         </Typography>
       </Box>
 

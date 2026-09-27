@@ -47,6 +47,11 @@ function outcomeChip(outcome) {
     rejected:          { label: "rejected",          bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
     timed_out:         { label: "timed out",         bg: BRAND.alert?.errorSoft,   color: BRAND.alert?.error },
     cancelled:         { label: "cancelled",         bg: BRAND.darkSoft,           color: BRAND.gray },
+    // ⚠️ «never reached», no «failed»: el job caducó sin llegar al equipo. En
+    // gris, como cancelado: es un hecho de flota —el portátil no volvió—, no un
+    // fallo del instalador. Pintarlo en rojo mandaría a revisar un agente que
+    // nunca recibió nada.
+    expired:           { label: "never reached",     bg: BRAND.darkSoft,           color: BRAND.gray },
   };
   const entry = map[outcome] || {
     label: outcome,
@@ -438,6 +443,7 @@ export default function DeploymentDetailDrawer({
               ["rejected", BRAND.alert?.errorSoft, BRAND.alert?.error],
               ["timed_out", BRAND.alert?.errorSoft, BRAND.alert?.error],
               ["cancelled", BRAND.darkSoft, BRAND.gray],
+              ["expired", BRAND.darkSoft, BRAND.gray],
             ].map(([key, bg, color]) => {
               const n = counts[key] || 0;
               if (n === 0) return null;

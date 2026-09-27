@@ -54,6 +54,10 @@ export function outcomeItems(deployments) {
     { label: "Rejected", value: sumOutcomes(deployments, ["rejected"]), color: BRAND.gray },
     { label: "Timed out", value: sumOutcomes(deployments, ["timed_out"]), color: BRAND.gray },
     { label: "Signature invalid", value: sumOutcomes(deployments, ["signature_invalid"]), color: ROLE.critical },
+    // ⚠️ «Never reached», no «Failed»: el job caducó sin llegar al equipo. Es
+    // un hecho de flota —el portátil no volvió— y no un fallo del instalador,
+    // que es la diferencia entre revisar un agente y revisar un inventario.
+    { label: "Never reached the device", value: sumOutcomes(deployments, ["expired"]), color: BRAND.gray },
   ].filter((i) => i.value > 0);
 }
 
