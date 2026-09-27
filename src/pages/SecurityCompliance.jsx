@@ -2157,6 +2157,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onExportFix={canRemediate ? handleExportFix : null}
           // Deshacer un fix: los mismos gates que aplicarlo.
           canRevert={canRemediate}
+          // «Rescan now» crea un job: la capacidad `jobs`, como en Jobs.
+          canRescan={isActiveMember && Boolean(myPermissions?.has("jobs"))}
           onOpenVulnerabilities={() => {
             closeDrawer();
             navigateTo("patch", { pmTab: "vulnerabilities" });

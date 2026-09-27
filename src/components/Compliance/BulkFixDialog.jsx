@@ -32,6 +32,7 @@ import { remediateBatch, getRemediationsBatch } from "../../api/patchManagement"
 import { listFrom } from "../../api/shape";
 import { bulkFixPlan, bulkFixSummary, batchFinished } from "./bulkFixPlan";
 import { outcomeColors, outcomeTone } from "../patch-management/outcomeTone";
+import RescanComplianceButton from "./RescanComplianceButton";
 
 const POLL_MS = 5000;
 
@@ -61,6 +62,9 @@ export default function BulkFixDialog({
   deviceId,
   hostname = null,
   canManage = false,
+  // Pedir el escaneo al acabar (capacidad `jobs`): así se VE si los fixes
+  // cerraron sus hallazgos, en vez de esperar al ciclo programado.
+  canRescan = false,
   onClose,
   onChanged,         // el llamante recarga la ficha cuando algo se ha lanzado
   notify,
@@ -207,6 +211,16 @@ export default function BulkFixDialog({
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} sx={{ textTransform: "none" }}>Close</Button>
         <Box sx={{ flex: 1 }} />
+        {launched && mode === "apply" && canRescan && batchFinished(items) ? (
+          <RescanComplianceButton
+            agentId={deviceId}
+            label="Rescan to confirm"
+            variant="contained"
+            size="medium"
+            onToast={notify}
+            onFinished={() => onChanged?.()}
+          />
+        ) : null}
         {!launched ? (
           <>
             <Button

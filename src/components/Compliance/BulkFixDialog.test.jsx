@@ -15,7 +15,13 @@ vi.mock("../../api/patchManagement", () => ({
   getRemediationsBatch: vi.fn(),
 }));
 
+vi.mock("../../api/jobs", () => ({
+  createDeviceJob: vi.fn().mockResolvedValue({ ok: true, jobId: "j1" }),
+  listDeviceJobs: vi.fn().mockResolvedValue({ ok: true, jobs: [] }),
+}));
+
 import { remediateBatch, getRemediationsBatch } from "../../api/patchManagement";
+import { createDeviceJob } from "../../api/jobs";
 import BulkFixDialog from "./BulkFixDialog";
 
 const f = (over) => ({ id: over.checkId, checkId: over.checkId, title: `T ${over.checkId}`, status: "fail", agentRemediable: true, ...over });
@@ -114,5 +120,27 @@ describe("lo que promete el botón", () => {
   it("quien sólo lee no lanza", () => {
     open({ canManage: false });
     expect(screen.getByRole("button", { name: /Apply 2/ })).toBeDisabled();
+  });
+});
+
+describe("confirmar con un escaneo", () => {
+  it("⭐ al terminar de APLICAR, ofrece «Rescan to confirm» y lo lanza para ese equipo", async () => {
+    open({ canRescan: true });
+    fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
+    const btn = await screen.findByRole("button", { name: /Rescan to confirm/ });
+    fireEvent.click(btn);
+    await waitFor(() => expect(createDeviceJob).toHaveBeenCalledWith("dev-1", { jobType: "facts_snapshot", payload: { factType: "compliance" } }));
+  });
+
+  it("tras una simulación, o sin la capacidad `jobs`, no se ofrece", async () => {
+    open({ canRescan: true });
+    fireEvent.click(screen.getByRole("button", { name: /Dry-run 2/ }));
+    await screen.findByTestId("bulk-fix-progress");
+    expect(screen.queryByRole("button", { name: /Rescan to confirm/ })).toBeNull();
+    cleanup();
+    open({ canRescan: false });
+    fireEvent.click(screen.getByRole("button", { name: /Apply 2/ }));
+    await screen.findByTestId("bulk-fix-progress");
+    expect(screen.queryByRole("button", { name: /Rescan to confirm/ })).toBeNull();
   });
 });

@@ -47,6 +47,7 @@ import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
 import AppliedFixesSection from "./AppliedFixesSection";
+import RescanComplianceButton from "./RescanComplianceButton";
 import FileIntegritySection from "./FileIntegritySection";
 import FleetRankingLine from "./FleetRankingLine";
 import FrameworkControlsPanel from "./FrameworkControlsPanel";
@@ -97,7 +98,9 @@ export default function DeviceDrawerContent({
   onOpenExtensionControl = null,
   // Deshacer un fix exige lo mismo que aplicarlo (Patch Management en el plan
   // y el permiso): sin él la sección sólo enseña qué cambió Tracenium.
-  canRevert = false
+  canRevert = false,
+  // «Rescan now» lanza un job (facts_snapshot): lo decide la capacidad `jobs`.
+  canRescan = false
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -313,6 +316,11 @@ export default function DeviceDrawerContent({
               : "no report yet"}
           </Typography>
         </Box>
+        {/* Tras aplicar o revertir un fix, ver el resultado YA en vez de al
+            siguiente escaneo programado. Al terminar, la ficha se recarga. */}
+        {canRescan && device ? (
+          <RescanComplianceButton agentId={agentId} onToast={onToast} onFinished={() => onRequestRefetch?.()} />
+        ) : null}
         <IconButton aria-label="Close" onClick={onClose} size="small">
           <CloseOutlinedIcon />
         </IconButton>
@@ -743,6 +751,7 @@ export default function DeviceDrawerContent({
           deviceId={agentId}
           hostname={device?.hostname ?? null}
           canManage={canManage}
+          canRescan={canRescan}
           notify={onToast}
           onChanged={onRequestRefetch}
           onClose={() => setBulkFixOpen(false)}
