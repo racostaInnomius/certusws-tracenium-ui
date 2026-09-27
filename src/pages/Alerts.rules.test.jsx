@@ -217,8 +217,6 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     const scp = await group("Security Compliance");
     // SCP está apagado: el grupo nace plegado.
     await userEvent.click(within(scp).getByRole("button", { name: /expand security compliance/i }));
-    console.log("BOTONES:", within(scp).getAllByRole("button").map((b) => b.textContent).join(" | "));
-    console.log("TEXTO:", scp.textContent.slice(0, 300));
     await userEvent.click(within(scp).getByRole("button", { name: /criteria…/i }));
     // La clave heredada se lee, y se enseña bajo la canónica.
     expect(within(scp).getByRole("spinbutton", { name: /score drops below/i })).toHaveValue(70);
