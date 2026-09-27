@@ -95,6 +95,22 @@ function idleMs(job, now) {
  */
 export function isStuckJob(job, { now = Date.now(), staleHours = 24 } = {}) {
   if (!IN_FLIGHT.includes(lower(job?.status))) return false;
+
+  // 🔴 EL PLAZO LO PONE EL SERVIDOR (27-sep). Con una regla plana de 24 h esta
+  // celda marcaba 14 jobs que el orquestador espera A PROPÓSITO: sus plazos son
+  // POR TIPO —un `agent_update` se guarda 30 días para el portátil que vuelve
+  // de vacaciones, un `patch_scan` sólo 1— y esa tabla vive en el servidor.
+  // Copiarla aquí habría creado otro gemelo que se desincroniza, así que la
+  // lista trae `stale_after` ya calculado (ver `staleAfter` en job-dispatcher).
+  const deadline = ms(job?.stale_after);
+  if (deadline !== null) return now > deadline;
+
+  // ⚠️ Sin el campo —backend anterior al 27-sep— sólo se juzga lo que YA SE
+  // ENVIÓ. Ahí las 24 h valen: a un job enviado no lo cubre ningún plazo por
+  // tipo, y es la clase que la celda no veía (el uninstall de AnyDesk). Un
+  // `pending` sin enviar NO se juzga: sin saber su plazo, adivinarlo es
+  // exactamente lo que producía las catorce falsas alarmas.
+  if (!job?.sent_at) return false;
   const idle = idleMs(job, now);
   return idle !== null && idle > staleHours * 3600 * 1000;
 }

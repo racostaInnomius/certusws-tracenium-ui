@@ -85,6 +85,8 @@ describe("normalizeFailureCause — contra el corpus real", () => {
 
 const AHORA = Date.parse("2026-08-25T12:00:00Z");
 const haceHoras = (h) => new Date(AHORA - h * 3600 * 1000).toISOString();
+// Un plazo del servidor, N horas por delante (+) o por detrás (-) de AHORA.
+const plazo = (h) => new Date(AHORA + h * 3600 * 1000).toISOString();
 
 describe("deriveTriage", () => {
   it("cuenta fallos y timeouts sólo dentro de la ventana", () => {
@@ -107,14 +109,20 @@ describe("deriveTriage", () => {
     // que salió y después se pudrió NO PODÍA contarse. Es exactamente lo que
     // le pasó al uninstall de AnyDesk el 26-sep — `retrying` con los cinco
     // intentos gastados, y la franja decía «0».
+    //
+    // ⚠️ Y AHORA EL PLAZO LO MANDA EL SERVIDOR (`stale_after`), porque medirlo
+    // con 24 h planas marcaba como colgados 14 jobs que el orquestador espera
+    // a propósito. Los dos primeros llevan lo mismo parados y sólo uno ha
+    // agotado SU plazo: eso es lo que distingue la celda útil de la que se
+    // ignora.
     const jobs = [
-      { status: "pending", sent_at: null, created_at: haceHoras(46) },
-      { status: "retrying", sent_at: null, created_at: haceHoras(30) },
-      { status: "pending", sent_at: null, created_at: haceHoras(3) },   // reciente
-      { status: "pending", sent_at: haceHoras(40), created_at: haceHoras(46) }, // enviado y podrido
-      { status: "completed", sent_at: null, created_at: haceHoras(99) }, // terminal
+      { status: "pending", sent_at: null, created_at: haceHoras(46), stale_after: plazo(-2) },  // vencido
+      { status: "retrying", sent_at: null, created_at: haceHoras(30), stale_after: plazo(+600) }, // aún se espera
+      { status: "pending", sent_at: null, created_at: haceHoras(3), stale_after: plazo(+20) },  // reciente
+      { status: "pending", sent_at: haceHoras(40), created_at: haceHoras(46), stale_after: plazo(-12) }, // enviado y podrido
+      { status: "completed", sent_at: null, created_at: haceHoras(99), stale_after: plazo(-99) }, // terminal
     ];
-    expect(deriveTriage(jobs, { now: AHORA }).stuck).toBe(3);
+    expect(deriveTriage(jobs, { now: AHORA }).stuck).toBe(2);
   });
 
   it("🔴 el caso de AnyDesk: retrying, enviado, sin moverse desde hace días", () => {
@@ -133,6 +141,42 @@ describe("deriveTriage", () => {
     // está trabajando. Medir desde la creación lo marcaría colgado para siempre.
     const vivo = { status: "running", created_at: haceHoras(99), updated_at: haceHoras(0.2) };
     expect(isStuckJob(vivo, { now: AHORA })).toBe(false);
+  });
+
+  it("🔴 el plazo lo pone el SERVIDOR: dos jobs igual de viejos, distinto veredicto", () => {
+    // El defecto que esto arregla: con una regla plana de 24 h la celda marcaba
+    // 14 jobs que el orquestador espera A PROPÓSITO. Los plazos son POR TIPO
+    // —`agent_update` 30 días, `patch_scan` 1— y esa tabla vive en el backend,
+    // que ahora manda `stale_after` ya calculado.
+    const viejo = { status: "pending", created_at: haceHoras(48), updated_at: haceHoras(48) };
+    const esperando = { ...viejo, stale_after: plazo(+1) };
+    const vencido = { ...viejo, stale_after: plazo(-1) };
+
+    expect(isStuckJob(esperando, { now: AHORA })).toBe(false);
+    expect(isStuckJob(vencido, { now: AHORA })).toBe(true);
+  });
+
+  it("⚠️ el plazo del servidor GANA a las 24 h locales", () => {
+    // Si no ganara, un agent_update de 30 días volvería a salir a las 24 h y
+    // habríamos arreglado nada.
+    const job = {
+      status: "pending",
+      sent_at: haceHoras(48),
+      updated_at: haceHoras(48),
+      stale_after: plazo(+10),
+    };
+    expect(isStuckJob(job, { now: AHORA })).toBe(false);
+  });
+
+  it("⚠️ sin el campo (backend viejo) se juzga sólo lo ENVIADO", () => {
+    // Un `pending` sin enviar no se puede juzgar sin saber su plazo: adivinarlo
+    // es lo que producía las falsas alarmas. Uno enviado sí: no lo cubre ningún
+    // plazo por tipo, y es la clase que la celda no veía.
+    const sinEnviar = { status: "pending", created_at: haceHoras(100), updated_at: haceHoras(100) };
+    const enviado = { status: "retrying", sent_at: haceHoras(40), updated_at: haceHoras(40) };
+
+    expect(isStuckJob(sinEnviar, { now: AHORA })).toBe(false);
+    expect(isStuckJob(enviado, { now: AHORA })).toBe(true);
   });
 
   it("⚠️ lo terminal nunca está colgado, por viejo que sea", () => {

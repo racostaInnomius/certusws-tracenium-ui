@@ -59,6 +59,10 @@ const anydesk = () => ({
   sent_at: haceHoras(40),
   updated_at: haceHoras(40),
   last_error: "agent_retry:software_install:timed_out",
+  // ⚠️ El plazo que calcula el servidor (`staleAfter`): enviado, sin
+  // presupuesto y con su timeout ya cumplido. Es el camino REAL; el respaldo
+  // de 24 h sólo corre contra un backend anterior al 27-sep.
+  stale_after: haceHoras(39),
 });
 
 const vivos = () => Array.from({ length: 4 }, (_v, i) => ({
@@ -68,6 +72,7 @@ const vivos = () => Array.from({ length: 4 }, (_v, i) => ({
   status: "completed",
   created_at: haceHoras(2),
   updated_at: haceHoras(2),
+  stale_after: haceHoras(-24),
 }));
 
 function mount(items) {
