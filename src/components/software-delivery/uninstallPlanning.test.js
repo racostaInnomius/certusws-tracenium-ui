@@ -172,3 +172,29 @@ describe("predictedSilentCount", () => {
     expect(predictedSilentCount(undefined)).toBe(0);
   });
 });
+
+describe("🔴 no_silent_uninstall: de quién es la ventana que no se puede abrir", () => {
+  // El mismo motivo con dos consecuencias. AnyDesk (26-sep) era de MÁQUINA:
+  // corre como SYSTEM en la sesión 0, la ventana no la ve nadie y el job se
+  // colgó 1740 s cinco veces. La copia decía «pop a window on their desktop»,
+  // que es la del caso por usuario y manda a buscar a un usuario que no existe.
+  const blocked = (scope) => ({ ok: false, reason: "no_silent_uninstall", scope, detail: "x" });
+
+  it("de máquina habla de que NADIE la ve y de que el job se cuelga", () => {
+    const t = describeBlocked(blocked("machine"), { source: "win32-registry" });
+    expect(t).toMatch(/SYSTEM/);
+    expect(t).toMatch(/hang/i);
+    expect(t).not.toMatch(/their desktop/i);
+  });
+
+  it("por usuario sigue hablando de su escritorio", () => {
+    expect(describeBlocked(blocked("user"), { source: "win32-registry" })).toMatch(/their desktop/i);
+  });
+
+  it("⚠️ sin scope (backend viejo) se dice la de usuario, no se inventa la otra", () => {
+    // Las dos filas llegan con el mismo `source`, así que la UI no puede
+    // deducirlo. Afirmar «sesión 0» sobre una respuesta que no lo dice sería
+    // decir algo que el servidor no dijo.
+    expect(describeBlocked(blocked(undefined), { source: "win32-registry" })).toMatch(/their desktop/i);
+  });
+});

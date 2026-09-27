@@ -79,7 +79,19 @@ export function describeBlocked(plan, app) {
       // El detalle del servidor trae las dos versiones; la frase es la acción.
       return "The agent on this device is too old to uninstall per-user apps — update the agent first.";
     case "no_silent_uninstall":
-      return "No silent uninstaller registered: running it as the user would pop a window on their desktop.";
+      // ⚠️ EL MISMO MOTIVO, DOS CONSECUENCIAS. Por usuario la ventana sale en
+      // el escritorio de alguien; de máquina sale en la sesión 0, donde no la
+      // ve NADIE y el job se cuelga hasta agotar el tiempo — le pasó a AnyDesk
+      // el 26-sep: 1740 s × 5 intentos y seguía instalado. La UI no puede
+      // deducir cuál es: las dos filas llegan con `source: "win32-registry"`,
+      // así que el servidor manda `scope`.
+      //
+      // ⚠️ Sin `scope` (backend anterior al 27-sep) se dice la de usuario, que
+      // es la que existía: inventar la de máquina para una respuesta que no la
+      // trae sería afirmar algo que el servidor no dijo.
+      return plan.scope === "machine"
+        ? "No silent uninstaller registered: it runs as SYSTEM, so its window would open where nobody can see it and the job would hang."
+        : "No silent uninstaller registered: running it as the user would pop a window on their desktop.";
     case "name_not_expressible":
       return "The name contains % or _ and there is no ProductCode to identify it by.";
     default:
