@@ -131,17 +131,34 @@ export function getApiCacheSessionScope() {
 // same client instead of bouncing them back to the portfolio. Cleared on
 // sign-out (setApiCacheSessionScope('signed-out') zeroes it below).
 const ACTIVE_TENANT_STORAGE_KEY = "tr_active_tenant";
+
+/**
+ * Un id de tenant utilizable, o null.
+ *
+ * ⚠️ `String(undefined)` es "undefined", y ese texto llegó a viajar como
+ * X-Tenant-Id: el selector de clientes guardaba ids así, el backend
+ * contestaba INVALID_TENANT_ID a todo —bootstrap incluido— y el portal
+ * quedaba en «Backend unavailable» hasta borrar el sessionStorage a mano
+ * (27-sep, prod). Aquí se corta, sea cual sea quien lo mande.
+ */
+export function normalizeTenantId(id) {
+  if (id == null) return null;
+  const s = String(id).trim();
+  if (!s || s === "undefined" || s === "null" || s === "NaN") return null;
+  return s;
+}
+
 let activeTenantId = (() => {
   if (typeof window === "undefined") return null;
   try {
-    return window.sessionStorage?.getItem(ACTIVE_TENANT_STORAGE_KEY) || null;
+    return normalizeTenantId(window.sessionStorage?.getItem(ACTIVE_TENANT_STORAGE_KEY));
   } catch {
     return null;
   }
 })();
 
 export function setActiveTenantId(id) {
-  activeTenantId = id != null && String(id).trim() ? String(id).trim() : null;
+  activeTenantId = normalizeTenantId(id);
   if (typeof window !== "undefined") {
     try {
       if (activeTenantId) {

@@ -17,6 +17,7 @@ import {
   getActiveTenantId,
   isAuthError,
   clearApiCache,
+  normalizeTenantId,
 } from "../api/http";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
 
@@ -44,6 +45,26 @@ function writeJson(key, val) {
   }
 }
 
+/**
+ * La lista del selector, en su forma reducida `{ id, name }`.
+ *
+ * ⚠️ Llegan DOS formas: los items del portfolio traen `tenantId`, y el propio
+ * selector de la cabecera vuelve a pasar su lista ya reducida, que trae `id`.
+ * Leer sólo `tenantId` convertía, al primer cambio desde el selector, TODOS
+ * los ids en "undefined"; el segundo cambio mandaba X-Tenant-Id: undefined y
+ * el portal quedaba en «Backend unavailable» (27-sep, prod). Sin id válido,
+ * la entrada se descarta.
+ */
+export function slimClients(items) {
+  if (!Array.isArray(items)) return [];
+  const out = [];
+  for (const s of items) {
+    const id = normalizeTenantId(s?.tenantId ?? s?.id);
+    if (id) out.push({ id, name: s?.name ?? null });
+  }
+  return out;
+}
+
 export function MspProvider({ children }) {
   const [portfolio, setPortfolio] = React.useState(null); // { level, items } | null
   const [loading, setLoading] = React.useState(true);
@@ -67,7 +88,7 @@ export function MspProvider({ children }) {
   const [activeTenant, setActiveTenantState] = React.useState(() => {
     const id = getActiveTenantId();
     const meta = readJson(ACTIVE_META_KEY);
-    if (id && meta && String(meta.id) === String(id)) return meta;
+    if (id && meta && normalizeTenantId(meta.id) && String(meta.id) === String(id)) return meta;
     if (id) return { id, name: null };
     return null;
   });
@@ -76,7 +97,9 @@ export function MspProvider({ children }) {
   // tenant switcher (jump between clients without returning to the
   // portfolio). Persisted so a refresh keeps the switcher populated.
   const [switchableClients, setSwitchableClients] = React.useState(
-    () => readJson(SWITCHABLE_KEY) || []
+    // Pasa por slimClients: una lista guardada con ids "undefined" (la del
+    // defecto de arriba) se limpia al cargar en vez de seguir rompiendo.
+    () => slimClients(readJson(SWITCHABLE_KEY))
   );
 
   const loadPortfolio = React.useCallback(async () => {
@@ -105,7 +128,11 @@ export function MspProvider({ children }) {
   // `siblings` is the list of client items the selection came from (an
   // MSP's clients) — it powers the switcher so the operator can hop to
   // another client without going back to the portfolio.
-  const enterTenant = React.useCallback((id, name, siblings) => {
+  const enterTenant = React.useCallback((rawId, name, siblings) => {
+    // Un id inválido no cambia nada: mejor quedarse donde se estaba que
+    // mandar X-Tenant-Id: undefined y dejar el portal sin arrancar.
+    const id = normalizeTenantId(rawId);
+    if (!id) return;
     const changed = String(getActiveTenantId() ?? "") !== String(id ?? "");
     setActiveTenantId(id);
     // Switching the active tenant invalidates every cached GET — they were
@@ -126,7 +153,7 @@ export function MspProvider({ children }) {
     writeJson(ACTIVE_META_KEY, meta);
     setActiveTenantState(meta);
     if (Array.isArray(siblings)) {
-      const slim = siblings.map((s) => ({ id: String(s.tenantId), name: s.name }));
+      const slim = slimClients(siblings);
       writeJson(SWITCHABLE_KEY, slim);
       setSwitchableClients(slim);
     }
