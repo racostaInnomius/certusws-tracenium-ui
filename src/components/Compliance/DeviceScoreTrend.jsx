@@ -87,7 +87,7 @@ export default function DeviceScoreTrend({ buckets, windowDays = 30, bands = DEF
             <CartesianGrid stroke={BRAND.border} strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 10, fill: BRAND.gray }}
+              tick={{ fontSize: TEXT.xs, fill: BRAND.gray }}
               tickLine={false}
               axisLine={{ stroke: BRAND.border }}
               interval="preserveStartEnd"
@@ -96,14 +96,14 @@ export default function DeviceScoreTrend({ buckets, windowDays = 30, bands = DEF
             <YAxis
               domain={[0, 100]}
               ticks={[0, 50, 100]}
-              tick={{ fontSize: 10, fill: BRAND.gray }}
+              tick={{ fontSize: TEXT.xs, fill: BRAND.gray }}
               tickLine={false}
               axisLine={false}
             />
             <Tooltip
               formatter={(value) => [`${value}/100`, "Score"]}
               labelFormatter={(label) => label}
-              contentStyle={{ fontSize: 12, borderRadius: 6 }}
+              contentStyle={{ fontSize: TEXT.sm, borderRadius: 6, border: `1px solid ${BRAND.border}` }}
             />
             <Line
               type="monotone"
