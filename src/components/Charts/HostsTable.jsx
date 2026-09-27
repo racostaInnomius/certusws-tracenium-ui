@@ -28,7 +28,7 @@ import {
   Typography,
 } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
-import { normalizePlatform, platformLabel, platformColor } from "../../utils/platform";
+import PlatformChip from "../common/PlatformChip";
 import { describeLastBoot } from "../../utils/lastBoot";
 import OnlineDot from "../common/OnlineDot";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
@@ -46,35 +46,6 @@ const DEVICE_ACTION_LINKS = [
   { key: "remote-control", label: "Remote Control", icon: <DesktopWindowsOutlinedIcon fontSize="small" /> },
   { key: "jobs", label: "Jobs", icon: <AssignmentOutlinedIcon fontSize="small" /> },
 ];
-
-function PlatformChip({ platform }) {
-  const normalized = normalizePlatform(platform);
-  if (!normalized) {
-    return (
-      <Typography variant="caption" sx={{ color: "text.secondary" }}>
-        —
-      </Typography>
-    );
-  }
-
-  const style = platformColor(normalized);
-  const label = platformLabel(normalized);
-
-  return (
-    <Chip
-      size="small"
-      label={label}
-      sx={{
-        height: 20,
-        fontWeight: 700,
-        fontSize: TEXT.xs,
-        bgcolor: style.bg,
-        color: style.fg,
-        border: `1px solid ${style.fg}33`,
-      }}
-    />
-  );
-}
 
 function firstValue(...values) {
   for (const value of values) {

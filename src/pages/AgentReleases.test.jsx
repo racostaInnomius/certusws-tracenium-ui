@@ -114,3 +114,31 @@ describe("AgentReleases — versión y fecha del build publicado", () => {
     expect(within(grid).getByText(/Sep/i)).toBeInTheDocument();
   });
 });
+
+// 27-sep: la plataforma salía en crudo («macos», «windows») mientras Asset
+// Management la pinta con la pastilla del color del SO. Y las tres tarjetas de
+// arriba repetían lo que la tabla ya dice y se puede filtrar.
+describe("AgentReleases — plataforma y cabecera", () => {
+  it("la plataforma usa la pastilla de Asset Management, bien escrita", async () => {
+    listAgentReleases.mockResolvedValue({
+      items: [
+        { ...fila, id: "r1", platform: "macos" },
+        { ...fila, id: "r2", platform: "windows server", name: "Agent Windows Server" },
+      ],
+    });
+    render(<AgentReleases embedded />);
+    // Dos filas: `renderizar` espera UN botón de descarga y aquí hay dos.
+    await screen.findAllByRole("button", { name: /^download$/i });
+
+    expect(screen.getByText("macOS")).toBeInTheDocument();
+    expect(screen.getByText("Windows Server")).toBeInTheDocument();
+    expect(screen.queryByText("macos")).toBeNull();
+  });
+
+  it("no hay tarjetas de resumen sobre la lista", async () => {
+    await renderizar();
+
+    expect(screen.queryByText(/total packages/i)).toBeNull();
+    expect(screen.queryByText(/^platforms$/i)).toBeNull();
+  });
+});

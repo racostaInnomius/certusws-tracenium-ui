@@ -35,7 +35,7 @@ import RefreshRoundedIcon from "@mui/icons-material/RefreshRounded";
 import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import { getInactiveAssets } from "../../api/inventoryDashboard";
 import { BRAND, ICON, ROLE, TEXT } from "../../theme/brand";
-import { normalizePlatform, platformColor } from "../../utils/platform";
+import PlatformChip from "../common/PlatformChip";
 import { formatDate } from "../../utils/format";
 import { listFrom } from "../../api/shape";
 
@@ -82,32 +82,6 @@ function formatInactiveDays(value) {
   const days = Number(value || 0);
   if (!Number.isFinite(days) || days <= 0) return "—";
   return `${days} ${days === 1 ? "day" : "days"}`;
-}
-
-function PlatformChip({ platform }) {
-  // Canonical normalizePlatform returns null for empty; this table renders
-  // those as the "unknown" filter bucket.
-  const normalized = normalizePlatform(platform) ?? "unknown";
-  const style = platformColor(normalized);
-
-  const fixedLabel = normalized === "macos" ? "macOS" : normalized === "ios" ? "iOS" : null;
-  const useFixedCase = fixedLabel !== null;
-
-  return (
-    <Chip
-      size="small"
-      label={fixedLabel ?? normalized}
-      sx={{
-        height: 20,
-        fontWeight: 800,
-        fontSize: TEXT.xs,
-        textTransform: useFixedCase ? "none" : "capitalize",
-        bgcolor: style.bg,
-        color: style.fg,
-        border: `1px solid ${style.fg}33`,
-      }}
-    />
-  );
 }
 
 function InactiveSeverityChip({ inactiveDays }) {
@@ -500,7 +474,7 @@ export default function InactiveAssetsTable({
                   {displayText(row.hostname)}
                 </TableCell>
                 <TableCell sx={{ minWidth: 120 }}>
-                  <PlatformChip platform={row.platform} />
+                  <PlatformChip unknownAs="chip" platform={row.platform} />
                 </TableCell>
                 <TableCell sx={{ fontFamily: "monospace", fontSize: TEXT.sm, minWidth: 150 }}>
                   {displayText(row.serial)}

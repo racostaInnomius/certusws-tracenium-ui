@@ -1,5 +1,4 @@
 import * as React from "react";
-import Grid from "@mui/material/Grid";
 import BrandSnackbar from "../components/common/BrandSnackbar";
 import {
   Box,
@@ -27,46 +26,13 @@ import { BRAND, TEXT } from "../theme/brand";
 import { formatDate } from "../utils/format";
 import UnattendedInstallDialog from "../components/agent-releases/UnattendedInstallDialog";
 import { displayVersion } from "../components/agent-releases/releaseDisplay";
+import PlatformChip from "../components/common/PlatformChip";
 
 const PLATFORM_OPTIONS = ["all", "windows", "macos", "linux"];
 const ARCH_OPTIONS = ["all", "x64", "arm64", "x86"];
 const FORMAT_OPTIONS = ["all", "exe", "msi", "pkg", "dmg", "deb", "rpm", "tar.gz"];
 const CHANNEL_OPTIONS = ["all", "stable", "beta", "rc"];
 const ACTIVE_OPTIONS = ["all", "true", "false"];
-
-function SummaryCard({ title, value, accent = BRAND.teal }) {
-  return (
-    <Paper
-      sx={{
-        p: 2,
-        height: "75%",
-        minHeight: 96,
-        borderRadius: 3,
-        border: `1px solid ${BRAND.border}`,
-        boxShadow: BRAND.shadow,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-      }}
-    >
-      <Typography sx={{ fontSize: TEXT.md, color: "text.secondary" }}>
-        {title}
-      </Typography>
-
-      <Typography
-        sx={{
-          fontSize: TEXT["3xl"],
-          fontWeight: 800,
-          color: accent,
-          lineHeight: 1.1,
-          mt: 1,
-        }}
-      >
-        {value}
-      </Typography>
-    </Paper>
-  );
-}
 
 function renderActiveChip(value) {
   return value ? (
@@ -155,14 +121,6 @@ export default function AgentReleases({ embedded = false }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData closes over stable refs; adding it would re-fetch on every render.
   }, [search, platform, arch, format, channel, isActiveFilter]);
 
-  const summary = React.useMemo(() => {
-    const total = rows.length;
-    const active = rows.filter((r) => Boolean(r.isActive)).length;
-    const platforms = new Set(rows.map((r) => r.platform).filter(Boolean)).size;
-
-    return { total, active, platforms };
-  }, [rows]);
-
   const handleDownload = async (row) => {
     try {
       const res = await resolveAgentReleaseDownload(row.downloadPath);
@@ -198,7 +156,14 @@ export default function AgentReleases({ embedded = false }) {
 
   const columns = [
     { field: "name", headerName: "Name", minWidth: 220, flex: 1.1 },
-    { field: "platform", headerName: "Platform", minWidth: 100, flex: 0.5 },
+    {
+      // Misma pastilla que Asset Management: el mismo dato, leído igual.
+      field: "platform",
+      headerName: "Platform",
+      minWidth: 120,
+      flex: 0.5,
+      renderCell: (params) => <PlatformChip platform={params.value} />,
+    },
     { field: "arch", headerName: "Arch", minWidth: 100, flex: 0.45 },
     { field: "format", headerName: "Format", minWidth: 100, flex: 0.45 },
     {
@@ -345,30 +310,6 @@ export default function AgentReleases({ embedded = false }) {
           </Box>
         </Box>
       )}
-      <Box sx={{ mb: 2 }}>
-        <Grid container spacing={2} alignItems="stretch">
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard title="Total Packages" value={summary.total} />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Platforms"
-              value={summary.platforms}
-              accent={BRAND.tealText}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 2 }}>
-            <SummaryCard
-              title="Active"
-              value={summary.active}
-              accent={BRAND.alert.errorText}
-            />
-          </Grid>
-        </Grid>
-      </Box>
-
       <Paper
         elevation={0}
         sx={{
