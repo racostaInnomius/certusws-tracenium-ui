@@ -46,6 +46,7 @@ import FindingCard from "./FindingCard";
 import StatusChangeDialog from "./StatusChangeDialog";
 import FindingHistoryDialog from "./FindingHistoryDialog";
 import DeviceDiffSection from "./DeviceDiffSection";
+import AppliedFixesSection from "./AppliedFixesSection";
 import FileIntegritySection from "./FileIntegritySection";
 import FleetRankingLine from "./FleetRankingLine";
 import FrameworkControlsPanel from "./FrameworkControlsPanel";
@@ -93,7 +94,10 @@ export default function DeviceDrawerContent({
   // Sprint 4 — cross.vulnerability.* findings link to PM → Vulnerabilities.
   onOpenVulnerabilities = null,
   // cross.browser_extensions.* findings link to PM → Security configuration → Browsers.
-  onOpenExtensionControl = null
+  onOpenExtensionControl = null,
+  // Deshacer un fix exige lo mismo que aplicarlo (Patch Management en el plan
+  // y el permiso): sin él la sección sólo enseña qué cambió Tracenium.
+  canRevert = false
 }) {
   const device = data?.device;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- findings is computed conditionally above; suppressing to preserve existing memo behavior.
@@ -518,6 +522,14 @@ export default function DeviceDrawerContent({
               como se construyo y no lo que es. El hallazgo se queda —dice si
               se PUDO leer el inventario, que si es cumplimiento— pero la lista
               se lee donde vive el resto del inventario. */}
+
+          {/* Qué le cambió Tracenium a este equipo, y deshacerlo ---------- */}
+          <AppliedFixesSection
+            agentId={agentId}
+            canRevert={canManage && canRevert}
+            onToast={onToast}
+            onChanged={onRequestRefetch}
+          />
 
           {/* Sprint 4 — diff vs last scan -------------------------------- */}
           <DeviceDiffSection agentId={agentId} />

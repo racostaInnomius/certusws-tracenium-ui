@@ -82,6 +82,16 @@ describe("simular, luego aplicar", () => {
     expect(remediate).not.toHaveBeenCalled();
   });
 
+  it("la comprobación de un REVERT no se ofrece como simulación del fix", async () => {
+    // Reabrirla aquí llevaría a «Apply on N that would change» del FIX.
+    listRemediations.mockResolvedValue({
+      items: [{ id: 50, mode: "dry_run", status: "completed", createdAt: "2026-09-26T12:00:00.000Z", checkSnapshot: { revertOf: { resultId: 9 } } }],
+    });
+    open();
+    await screen.findByRole("button", { name: /Dry-run on 2/ });
+    expect(screen.queryByTestId("last-dry-run")).toBeNull();
+  });
+
   it("sin simulaciones previas no se inventa el aviso", async () => {
     open();
     await screen.findByRole("button", { name: /Dry-run on 2/ });

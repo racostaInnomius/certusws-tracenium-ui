@@ -2155,6 +2155,8 @@ export default function SecurityCompliance({ initialTab, onNavigate }) {
           onOpenBaselines={() => setTab("baselines")}
           onRemediateFinding={canManage ? handleRemediateFinding : null}
           onExportFix={canRemediate ? handleExportFix : null}
+          // Deshacer un fix: los mismos gates que aplicarlo.
+          canRevert={canRemediate}
           onOpenVulnerabilities={() => {
             closeDrawer();
             navigateTo("patch", { pmTab: "vulnerabilities" });

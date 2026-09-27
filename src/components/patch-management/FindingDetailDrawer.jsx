@@ -232,7 +232,9 @@ export default function FindingDetailDrawer({
       try {
         const res = await listRemediations({ checkId: finding.checkId, limit: 10 });
         const prev = listFrom(res, { context: "findingDetailHistory" })
-          .filter((r) => r?.mode === "dry_run" && r?.id)
+          // Un revert comprobado también es un dry_run del mismo check, pero de
+          // la vuelta atrás: reabrirlo aquí ofrecería «Apply» del FIX.
+          .filter((r) => r?.mode === "dry_run" && r?.id && !r?.checkSnapshot?.revertOf)
           .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))[0] ?? null;
         if (!cancelled) setLastDryRun(prev);
       } catch {

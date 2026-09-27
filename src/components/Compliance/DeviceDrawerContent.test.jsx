@@ -14,6 +14,11 @@ vi.mock("../../api/compliance", () => ({
   bulkFindingOp: vi.fn().mockResolvedValue({ ok: true, summary: { ok: 1, failed: 0, total: 1 } }),
   getFrameworkControls: vi.fn().mockResolvedValue({ ok: true, framework: "cis_windows_11_v5.1.0", controls: [] }),
 }));
+// La sección de fixes aplicados pide los suyos a PMP.
+vi.mock("../../api/patchManagement", () => ({
+  getAppliedFixes: vi.fn().mockResolvedValue({ ok: true, items: [] }),
+  revertRemediationResult: vi.fn(),
+}));
 import { getDeviceFleetRanking, getFrameworkControls } from "../../api/compliance";
 import DeviceDrawerContent from "./DeviceDrawerContent";
 

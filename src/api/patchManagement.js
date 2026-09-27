@@ -128,6 +128,17 @@ export async function getRemediationsBatch(ids = []) {
 
 // También en vivo: el cajón la usa para «último dry-run», y una simulación
 // recién terminada tiene que salir al reabrirlo, no un minuto después.
+// Los fixes que Tracenium aplicó a un equipo (el último por check), si se
+// pueden deshacer, y el estado de su revert / comprobación.
+export async function getAppliedFixes(agentId) {
+  return httpGetJson(`${BASE}/devices/${encodeURIComponent(agentId)}/applied-fixes`, LIVE);
+}
+
+// Deshacer un fix: mode "dry_run" comprueba (no escribe), "apply" revierte.
+export async function revertRemediationResult(resultId, mode) {
+  return httpPostJson(`${BASE}/remediation-results/${encodeURIComponent(resultId)}/revert`, { mode });
+}
+
 export async function listRemediations(params = {}) {
   return httpGetJson(`${BASE}/remediations${buildQuery(params)}`, LIVE);
 }
