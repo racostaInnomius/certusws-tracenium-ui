@@ -94,6 +94,25 @@ describe("PlaybooksTab", () => {
     expect(runs.getByText(/Remediate the check: planned \(would apply win.edge\)/)).toBeInTheDocument();
   });
 
+  it("⭐ las corridas enseñan el nombre del equipo, y el UUID sólo cuando no hay otro", async () => {
+    listPlaybookRuns.mockResolvedValue({
+      ok: true,
+      runs: [
+        { id: 2, deviceId: "039e9ce6-1111-2222-3333-444444444444", hostname: "DESKTOP-9G467VM", decision: "dry_run", skipReason: null, actions: [], createdAt: new Date().toISOString() },
+        // Equipo purgado: el backend no pudo resolverlo.
+        { id: 1, deviceId: "abcdef01-9999-8888-7777-666666666666", hostname: null, decision: "acted", skipReason: null, actions: [], createdAt: new Date().toISOString() },
+      ],
+    });
+    render(<PlaybooksTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Runs" }));
+    const runs = within(await screen.findByTestId("pb-runs"));
+    expect(runs.getByText("DESKTOP-9G467VM")).toBeInTheDocument();
+    expect(runs.queryByText(/039e9ce6-1111/)).not.toBeInTheDocument();
+    // Sin nombre queda el UUID recortado, y el completo en el title.
+    const fallback = runs.getByText("abcdef01…");
+    expect(fallback).toHaveAttribute("title", "abcdef01-9999-8888-7777-666666666666");
+  });
+
   it("crear manda el disparador, la acción y los frenos, y avisa de que nace en ensayo", async () => {
     listPlaybooks.mockResolvedValue({ ok: true, playbooks: [] });
     const notify = vi.fn();

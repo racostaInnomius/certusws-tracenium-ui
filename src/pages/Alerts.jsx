@@ -764,6 +764,18 @@ export default function Alerts({ onNavigate }) {
                 notify("error", describeNotifyError(err, "Could not save email delivery — check the recipients"));
               }
             }}
+            onSaveCriteria={async (rule, criteria) => {
+              try {
+                await patchAlertRule(rule.id, { criteria });
+                notify("success", `${rule.name}: criteria saved`);
+                refetchRules();
+                // El criterio cambia QUÉ empareja: el feed ya no dice lo mismo.
+                refetchFeed();
+              } catch (err) {
+                console.error(err);
+                notify("error", describeRuleError(err, "Could not save the criteria"));
+              }
+            }}
             onDeleteRule={async (rule) => {
               try {
                 await deleteAlertRule(rule.id);

@@ -6,7 +6,7 @@
 // pantalla lo dice y no deja encender lo que la API va a rechazar.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { server, http, HttpResponse } from "../test/msw/server";
 import { clearCachedFetch } from "../hooks/useCachedFetch";
@@ -44,6 +44,7 @@ const RULES = [
   // configurada y no envía nada.
   { id: "r-off", templateId: "offline", name: "Device offline", enabled: true, paused: false,
     plugin: null, source: "device_offline", severity: "high",
+    criteria: { max_hours_offline: 24 },
     notify: {
       email: ["ops@cliente.com"],
       minSeverity: "low",
@@ -63,7 +64,7 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function mount(onNavigate = vi.fn()) {
+function mount(onNavigate = vi.fn(), rules = RULES) {
   const patches = [];
   server.use(
     http.all(/.*\/api\/.*/, async ({ request }) => {
@@ -71,7 +72,7 @@ function mount(onNavigate = vi.fn()) {
       if (path.endsWith("/plugins/catalog")) return HttpResponse.json({ ok: true, catalog: CATALOG, entitled: ["amp", "scp"] });
       if (path.endsWith("/roles/me/capabilities")) return HttpResponse.json({ role: "ADMIN", permissions: [] });
       if (path.endsWith("/alerts/rules")) {
-        return HttpResponse.json({ ok: true, templates: TEMPLATES, rules: RULES, pluginAvailability: AVAILABILITY });
+        return HttpResponse.json({ ok: true, templates: TEMPLATES, rules, pluginAvailability: AVAILABILITY });
       }
       if (request.method === "PATCH") {
         patches.push({ path, body: await request.json() });
@@ -156,7 +157,7 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     // La plantilla sin regla no puede tener entrega (no hay a qué colgarla),
     // y lo dice en vez de callar.
     expect(within(amp).queryByRole("button", { name: /email…/i })).not.toBeInTheDocument();
-    expect(within(amp).getByText("Switch it on to choose who is emailed.")).toBeInTheDocument();
+    expect(within(amp).getByText("Switch it on to choose who is emailed and when it fires.")).toBeInTheDocument();
   });
 
   it("⭐ avisa cuando hay destinatarios pero la matriz no manda nada por correo", async () => {
@@ -167,6 +168,61 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     const aviso = await within(platform).findByRole("alert");
     expect(aviso).toHaveTextContent("1 recipient gets nothing");
     expect(aviso).toHaveTextContent("Turn Email on for at least one severity");
+  });
+
+  it("⭐ el criterio se edita en la pantalla y se guarda con la clave canónica", async () => {
+    // La regla llega con la clave HEREDADA que sembró la plantilla original.
+    const { patches } = mount();
+    const platform = await group("Platform");
+    expect(within(platform).getByText(/After 24h of silence/)).toBeInTheDocument();
+
+    await userEvent.click(within(platform).getByRole("button", { name: /criteria…/i }));
+    const horas = within(platform).getByRole("spinbutton", { name: /hours of silence/i });
+    await userEvent.clear(horas);
+    await userEvent.type(horas, "6");
+    await userEvent.click(within(platform).getByRole("button", { name: /save criteria/i }));
+
+    await waitFor(() => expect(patches.length).toBeGreaterThan(0));
+    expect(patches[0]).toEqual({
+      path: "/api/v1/alerts/rules/r-off",
+      // `max_hours_offline` desaparece: el handler la acepta como alias, pero
+      // la fila deja de llevar dos ortografías de lo mismo.
+      body: { criteria: { threshold_hours: 6, include_disconnected: true } },
+    });
+  });
+
+  it("una fuente sin campos declarados se enseña en solo lectura, sin fingir un editor", async () => {
+    // `cdp_weak_crypto` se configura con una LISTA de banderas, y una lista
+    // todavía no se edita aquí: se enseña tal cual en vez de inventar un
+    // editor genérico que escribiría claves que el handler no lee.
+    mount(vi.fn(), [
+      { id: "r-weak", templateId: "weak", name: "Weak crypto", enabled: false, paused: false,
+        plugin: "cdp", source: "cdp_weak_crypto", severity: "medium",
+        criteria: { flags: ["weak_sig", "weak_key"] }, notify: {} },
+    ]);
+    const cdp = await group("Crypto Discovery");
+    await userEvent.click(within(cdp).getByRole("button", { name: /expand crypto discovery/i }));
+    await userEvent.click(within(cdp).getByRole("button", { name: /criteria…/i }));
+    expect(within(cdp).getByText(/not editable here yet/i)).toBeInTheDocument();
+  });
+
+  it("⭐ lo que el editor no toca se dice, no se esconde", async () => {
+    // El criterio lleva una lista que el editor no enseña: guardar la
+    // conserva, y mientras tanto se nombra en vez de desaparecer.
+    mount(vi.fn(), [
+      { id: "r-score", templateId: "score", name: "Compliance score dropped", enabled: true, paused: false,
+        plugin: "scp", source: "compliance_score", severity: "medium",
+        criteria: { max_score: 70, exclude_tags: ["lab"] }, notify: {} },
+    ]);
+    const scp = await group("Security Compliance");
+    // SCP está apagado: el grupo nace plegado.
+    await userEvent.click(within(scp).getByRole("button", { name: /expand security compliance/i }));
+    console.log("BOTONES:", within(scp).getAllByRole("button").map((b) => b.textContent).join(" | "));
+    console.log("TEXTO:", scp.textContent.slice(0, 300));
+    await userEvent.click(within(scp).getByRole("button", { name: /criteria…/i }));
+    // La clave heredada se lee, y se enseña bajo la canónica.
+    expect(within(scp).getByRole("spinbutton", { name: /score drops below/i })).toHaveValue(70);
+    expect(within(scp).getByTestId("rule-criteria-untouched")).toHaveTextContent("exclude_tags");
   });
 
   it("el KPI 'Active rules' no cuenta la pausada: el backend no la evalúa", async () => {

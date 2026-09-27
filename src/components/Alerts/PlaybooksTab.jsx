@@ -54,6 +54,7 @@ import {
   emptyParams,
   playbookBody,
   playbookProblem,
+  runDeviceLabel,
   skipReasonLabel,
   triggerSummary,
 } from "./playbookModel";
@@ -288,7 +289,7 @@ function Runs({ playbookId }) {
         <Box key={r.id} sx={{ fontSize: TEXT.sm }}>
           <Typography component="span" sx={{ fontSize: TEXT.sm, fontWeight: 700, color: BRAND.dark }}>{DECISION_LABEL[r.decision] ?? r.decision}</Typography>
           <Typography component="span" sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }}>
-            {" "}· {r.deviceId ?? "no device"} · {formatRelative(r.createdAt)}
+            {" "}· <Box component="span" title={r.deviceId ?? undefined}>{runDeviceLabel(r)}</Box> · {formatRelative(r.createdAt)}
             {r.skipReason ? ` · ${skipReasonLabel(r.skipReason)}` : ""}
           </Typography>
           {r.actions?.length ? (

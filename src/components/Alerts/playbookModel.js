@@ -35,6 +35,21 @@ export function skipReasonLabel(raw) {
   return reason || "—";
 }
 
+/**
+ * El equipo de una corrida, para leerlo de un vistazo.
+ *
+ * El backend resuelve el hostname al leer; cuando no puede —equipo purgado, o
+ * la flota no responde— queda el UUID, y de él sólo el primer tramo: el
+ * completo va en el `title`, porque ocho caracteres bastan para reconocerlo y
+ * treinta y seis tapan la decisión.
+ */
+export function runDeviceLabel(run) {
+  if (run?.hostname) return run.hostname;
+  const id = run?.deviceId ? String(run.deviceId) : "";
+  if (!id) return "no device";
+  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
+}
+
 /** «When a compliance alert opens (medium or worse)» */
 export function triggerSummary(trigger) {
   const sources = trigger?.sources?.length ? trigger.sources.map((s) => SOURCE_LABEL[s] || s).join(", ") : "any source";

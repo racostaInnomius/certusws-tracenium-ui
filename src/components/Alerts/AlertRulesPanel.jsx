@@ -35,6 +35,8 @@ import PauseCircleOutlineOutlinedIcon from "@mui/icons-material/PauseCircleOutli
 import { BRAND, ICON, TEXT } from "../../theme/brand";
 import { SOURCE_LABEL } from "./alertSources";
 import RuleNotifyEditor, { NotifyBadge } from "./RuleNotifyEditor";
+import RuleCriteriaEditor from "./RuleCriteriaEditor";
+import { describeCriteria } from "./criteriaFields";
 import { groupRules, describeUnavailable } from "./ruleGroups";
 
 function PausedChip() {
@@ -53,19 +55,37 @@ function PausedChip() {
   );
 }
 
-function DeliveryRow({ rule, open, onToggleOpen, profileNames }) {
+/**
+ * La fila de acciones de una regla: a quién avisa, CUÁNDO avisa y si está
+ * pausada. El criterio se editaba sólo por API; la tarjeta lo describía y no
+ * ofrecía dónde cambiarlo.
+ */
+function RuleControls({ rule, openPanel, onOpen, profileNames }) {
+  const criteria = describeCriteria(rule.source, rule.criteria);
   return (
-    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.75 }}>
-      <NotifyBadge notify={rule.notify} profileNames={profileNames} />
-      <Button
-        size="small"
-        onClick={onToggleOpen}
-        sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
-      >
-        {open ? "Hide" : "Email…"}
-      </Button>
-      {rule.paused ? <PausedChip /> : null}
-    </Stack>
+    <Box sx={{ mt: 1 }}>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
+        <NotifyBadge notify={rule.notify} profileNames={profileNames} />
+        <Button
+          size="small"
+          onClick={() => onOpen("notify")}
+          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
+        >
+          {openPanel === "notify" ? "Hide" : "Email…"}
+        </Button>
+        <Button
+          size="small"
+          onClick={() => onOpen("criteria")}
+          sx={{ textTransform: "none", fontSize: TEXT.sm, color: BRAND.tealText, minWidth: 0 }}
+        >
+          {openPanel === "criteria" ? "Hide" : "Criteria…"}
+        </Button>
+        {rule.paused ? <PausedChip /> : null}
+      </Stack>
+      {criteria ? (
+        <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{criteria}</Typography>
+      ) : null}
+    </Box>
   );
 }
 
@@ -79,13 +99,18 @@ export default function AlertRulesPanel({
   onEnableTemplate,
   onDeleteRule,
   onSaveNotify,
+  onSaveCriteria,
   onNavigate,
   renderSeverity,
   profileNames = null,
   editorProps = {},
 }) {
-  // One delivery editor open at a time — it is two full-width blocks.
-  const [notifyOpenFor, setNotifyOpenFor] = React.useState(null);
+  // Un panel abierto a la vez (entrega o criterio): son bloques a todo ancho.
+  // `{ id, panel }` — `panel` es "notify" | "criteria".
+  const [open, setOpen] = React.useState(null);
+  const panelOf = (id) => (open?.id === id ? open.panel : null);
+  const openPanel = (id, panel) =>
+    setOpen((cur) => (cur?.id === id && cur.panel === panel ? null : { id, panel }));
   const groups = React.useMemo(
     () => groupRules({ templates, rules, catalog, availability }),
     [templates, rules, catalog, availability]
@@ -94,7 +119,6 @@ export default function AlertRulesPanel({
   const [folded, setFolded] = React.useState({});
   const isFolded = (g) => folded[g.key] ?? !g.available;
   const toggleFold = (g) => setFolded((f) => ({ ...f, [g.key]: !isFolded(g) }));
-  const toggleNotify = (id) => setNotifyOpenFor((cur) => (cur === id ? null : id));
 
   if (loading && templates.length === 0) {
     return (
@@ -195,10 +219,10 @@ export default function AlertRulesPanel({
                           </Typography>
                           {/* Delivery config only exists once the template has a tenant rule. */}
                           {primary ? (
-                            <DeliveryRow
+                            <RuleControls
                               rule={primary}
-                              open={notifyOpenFor === primary.id}
-                              onToggleOpen={() => toggleNotify(primary.id)}
+                              openPanel={panelOf(primary.id)}
+                              onOpen={(panel) => openPanel(primary.id, panel)}
                               profileNames={profileNames}
                             />
                           ) : (
@@ -206,7 +230,7 @@ export default function AlertRulesPanel({
                             // es mejor que una fila que aparece de la nada al
                             // encender el interruptor.
                             <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, mt: 1 }}>
-                              Switch it on to choose who is emailed.
+                              Switch it on to choose who is emailed and when it fires.
                             </Typography>
                           )}
                         </Box>
@@ -237,8 +261,11 @@ export default function AlertRulesPanel({
                         </Tooltip>
                       </Stack>
 
-                      {primary && notifyOpenFor === primary.id ? (
+                      {primary && panelOf(primary.id) === "notify" ? (
                         <RuleNotifyEditor rule={primary} onSave={(n) => onSaveNotify(primary, n)} {...editorProps} />
+                      ) : null}
+                      {primary && panelOf(primary.id) === "criteria" ? (
+                        <RuleCriteriaEditor rule={primary} onSave={(c) => onSaveCriteria(primary, c)} />
                       ) : null}
                     </Paper>
                   );
@@ -264,13 +291,10 @@ export default function AlertRulesPanel({
                             sx={{ bgcolor: BRAND.surfaceMuted, color: BRAND.gray }}
                           />
                         </Stack>
-                        <Typography variant="caption" sx={{ color: BRAND.gray, fontFamily: "monospace" }}>
-                          {JSON.stringify(r.criteria)}
-                        </Typography>
-                        <DeliveryRow
+                        <RuleControls
                           rule={r}
-                          open={notifyOpenFor === r.id}
-                          onToggleOpen={() => toggleNotify(r.id)}
+                          openPanel={panelOf(r.id)}
+                          onOpen={(panel) => openPanel(r.id, panel)}
                           profileNames={profileNames}
                         />
                       </Box>
@@ -290,8 +314,11 @@ export default function AlertRulesPanel({
                         </IconButton>
                       </Tooltip>
                     </Stack>
-                    {notifyOpenFor === r.id ? (
+                    {panelOf(r.id) === "notify" ? (
                       <RuleNotifyEditor rule={r} onSave={(n) => onSaveNotify(r, n)} {...editorProps} />
+                    ) : null}
+                    {panelOf(r.id) === "criteria" ? (
+                      <RuleCriteriaEditor rule={r} onSave={(c) => onSaveCriteria(r, c)} />
                     ) : null}
                   </Paper>
                 ))}
