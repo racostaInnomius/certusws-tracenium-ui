@@ -15,7 +15,9 @@ import {
   AlertTitle,
   Box,
   Button,
+  ButtonBase,
   CircularProgress,
+  Collapse,
   FormControl,
   Grid,
   IconButton,
@@ -28,6 +30,7 @@ import {
   Typography
 } from "@mui/material";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
 import GppMaybeOutlinedIcon from "@mui/icons-material/GppMaybeOutlined";
@@ -35,7 +38,6 @@ import { BRAND, ICON, TEXT } from "../../theme/brand";
 import {
   StatusChip,
   ScoreBar,
-  Sparkline,
   RemediationStatusChip,
   REMEDIATION_STATUS_META
 } from "./complianceChips";
@@ -53,6 +55,7 @@ import { bulkFixPlan } from "./bulkFixPlan";
 import { useFindingLifecycle } from "./useFindingLifecycle";
 import { useBulkSelection } from "./useBulkSelection";
 import { PatchLevelSection } from "./PatchLevel";
+import DeviceScoreTrend from "./DeviceScoreTrend";
 
 export default function DeviceDrawerContent({
   agentId,
@@ -187,6 +190,27 @@ export default function DeviceDrawerContent({
       return nameA.localeCompare(nameB);
     });
   }, [visibleFindings, findingSortKey]);
+
+  // ── Una sección por categoría, plegada ─────────────────────────────
+  // Con 40 hallazgos en 12 categorías la lista era un muro. La cabecera de
+  // cada una dice cuántos tiene y cuántos son graves, así que se decide qué
+  // abrir sin abrirlo todo. Abierta de entrada sólo la PRIMERA — la más
+  // grave, por el orden de arriba —: es por donde va a empezar el operador.
+  // Lo que se abre o cierra a mano se respeta al cambiar el filtro.
+  const [openCategories, setOpenCategories] = React.useState(null);
+  const firstCategory = byCategory[0]?.[0] ?? null;
+  const isCategoryOpen = (category) =>
+    openCategories ? openCategories.has(category) : category === firstCategory;
+  const toggleCategory = (category) =>
+    setOpenCategories((prev) => {
+      const next = new Set(prev ?? (firstCategory ? [firstCategory] : []));
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  const allCategoriesOpen = byCategory.length > 0 && byCategory.every(([c]) => isCategoryOpen(c));
+  const setAllCategories = (open) =>
+    setOpenCategories(new Set(open ? byCategory.map(([c]) => c) : []));
 
   const statusCounts = React.useMemo(() => {
     const c = { pass: 0, fail: 0, not_applicable: 0, info: 0, error: 0 };
@@ -477,13 +501,7 @@ export default function DeviceDrawerContent({
                 mb: 2
               }}
             >
-              <Typography
-                variant="caption"
-                sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 1 }}
-              >
-                Score trend · last {timeseries.windowDays} days
-              </Typography>
-              <Sparkline points={timeseries.buckets.map((b) => b.score ?? 0)} />
+              <DeviceScoreTrend buckets={timeseries.buckets} windowDays={timeseries.windowDays} />
             </Paper>
           ) : null}
 
@@ -584,56 +602,99 @@ export default function DeviceDrawerContent({
               >
                 {showOnlyFailures ? "Show all" : "Show only failures"}
               </Button>
+              {byCategory.length > 1 ? (
+                <Button
+                  size="small"
+                  onClick={() => setAllCategories(!allCategoriesOpen)}
+                  sx={{ textTransform: "none", color: BRAND.teal, ml: "auto !important" }}
+                >
+                  {allCategoriesOpen ? "Collapse all" : "Expand all"}
+                </Button>
+              ) : null}
             </Stack>
           ) : null}
 
-          {/* Findings grouped by category --------------------------------- */}
-          {byCategory.map(([category, items]) => (
-            <Box key={category} sx={{ mb: 2 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: BRAND.tealText,
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.8,
-                  display: "block",
-                  mb: 0.75
-                }}
-              >
-                {category.replace(/_/g, " ")}
-              </Typography>
-              <Stack spacing={1}>
-                {items.map((f) => (
-                  <FindingCard
-                    key={f.id ?? f.checkId}
-                    finding={f}
-                    onRequestException={handleRequestException}
-                    onRevoke={handleRevoke}
-                    onChangeStatus={handleChangeStatus}
-                    onShowHistory={(finding) => setHistoryDialog({ finding })}
-                    pendingAction={pendingAction}
-                    readOnly={!canManage}
-                    baselineHint={baselineHintForFinding ? baselineHintForFinding(f) : null}
-                    onOpenBaselines={onOpenBaselines}
-                    onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
-                    onOpenVulnerabilities={onOpenVulnerabilities}
-                    deviceVulnerability={device?.vulnerability ?? null}
-                    deviceBrowserExtensions={device?.browserExtensions ?? null}
-                    onOpenExtensionControl={onOpenExtensionControl}
-                    canExplain={canManage}
-                    // Sprint 6 — bulk selection. Checkbox hidden for
-                    // read-only members (selection only feeds bulk
-                    // mutations, which they can't run).
-                    selected={selectedIds.has(f.id)}
-                    onToggleSelected={
-                      canManage && f.id ? () => toggleSelected(f.id) : null
-                    }
+          {/* Findings grouped by category, cada una plegable -------------- */}
+          {byCategory.map(([category, items]) => {
+            const open = isCategoryOpen(category);
+            const failing = items.filter((f) => f.status === "fail" || f.status === "error");
+            const severe = failing.filter((f) => f.severity === "critical" || f.severity === "high").length;
+            const headerId = `cat-${agentId}-${category}`;
+            return (
+              <Box key={category} sx={{ mb: 1.5, border: `1px solid ${BRAND.border}`, borderRadius: 2, overflow: "hidden" }}>
+                <ButtonBase
+                  id={headerId}
+                  onClick={() => toggleCategory(category)}
+                  aria-expanded={open}
+                  aria-controls={`${headerId}-body`}
+                  sx={{
+                    width: "100%",
+                    justifyContent: "flex-start",
+                    px: 1.25,
+                    py: 0.75,
+                    gap: 1,
+                    bgcolor: open ? BRAND.tealSoft : BRAND.surface,
+                    "&:hover": { bgcolor: BRAND.tealSoft },
+                  }}
+                >
+                  <ExpandMoreIcon
+                    sx={{
+                      fontSize: ICON.md,
+                      color: BRAND.tealText,
+                      transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+                      transition: "transform 150ms",
+                    }}
                   />
-                ))}
-              </Stack>
-            </Box>
-          ))}
+                  <Typography
+                    variant="caption"
+                    sx={{ color: BRAND.tealText, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8 }}
+                  >
+                    {category.replace(/_/g, " ")}
+                  </Typography>
+                  <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>
+                    {items.length} {items.length === 1 ? "control" : "controls"}
+                    {!showOnlyFailures && failing.length > 0 ? ` · ${failing.length} failing` : ""}
+                  </Typography>
+                  {severe > 0 ? (
+                    <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText, fontWeight: 700, ml: "auto" }}>
+                      {severe} critical/high
+                    </Typography>
+                  ) : null}
+                </ButtonBase>
+                <Collapse in={open} timeout="auto" id={`${headerId}-body`} role="region" aria-labelledby={headerId}>
+                  <Stack spacing={1} sx={{ p: 1 }}>
+                    {items.map((f) => (
+                      <FindingCard
+                        key={f.id ?? f.checkId}
+                        finding={f}
+                        onRequestException={handleRequestException}
+                        onRevoke={handleRevoke}
+                        onChangeStatus={handleChangeStatus}
+                        onShowHistory={(finding) => setHistoryDialog({ finding })}
+                        pendingAction={pendingAction}
+                        readOnly={!canManage}
+                        baselineHint={baselineHintForFinding ? baselineHintForFinding(f) : null}
+                        onOpenBaselines={onOpenBaselines}
+                        onRemediate={canManage && onRemediateFinding ? onRemediateFinding : null}
+                        onOpenVulnerabilities={onOpenVulnerabilities}
+                        deviceVulnerability={device?.vulnerability ?? null}
+                        deviceBrowserExtensions={device?.browserExtensions ?? null}
+                        onOpenExtensionControl={onOpenExtensionControl}
+                        canExplain={canManage}
+                        // Sprint 6 — bulk selection. Checkbox hidden for
+                        // read-only members (selection only feeds bulk
+                        // mutations, which they can't run).
+                        selected={selectedIds.has(f.id)}
+                        onToggleSelected={
+                          canManage && f.id ? () => toggleSelected(f.id) : null
+                        }
+                      />
+                    ))}
+                  </Stack>
+                </Collapse>
+              </Box>
+            );
+          })}
 
           <Box sx={{ mt: 2, textAlign: "right" }}>
             <Button size="small" onClick={onNavigateToAsset}>

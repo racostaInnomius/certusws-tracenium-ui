@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { patchRecencyRole, formatRelativeTime, patchLabel, PatchChip, PatchLevelSection } from "./PatchLevel";
 
 afterEach(cleanup);
@@ -105,5 +105,21 @@ describe("PatchLevelSection — parches recientes", () => {
     );
     expect(screen.getByText("KB2267602")).toBeInTheDocument();
     expect(screen.getByText("KB5129195")).toBeInTheDocument();
+  });
+
+  it("⭐ enseña sólo los 5 más recientes; el resto a un clic", () => {
+    const patches = Array.from({ length: 8 }, (_, i) => ({ id: `KB50000${i}`, title: null, installedAtUtc: daysAgoIso(i + 1), source: null, raw: null }));
+    render(
+      <PatchLevelSection
+        patchSummary={{ count: 8, lastInstalledAtUtc: daysAgoIso(1), lastScanUtc: daysAgoIso(1) }}
+        recentPatches={patches}
+      />
+    );
+    expect(screen.getByText("Recent (5 of 8)")).toBeInTheDocument();
+    expect(screen.getByText("KB500004")).toBeInTheDocument();
+    expect(screen.queryByText("KB500005")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show all 8" }));
+    expect(screen.getByText("KB500007")).toBeInTheDocument();
+    expect(screen.getByText("Recent (8 of 8)")).toBeInTheDocument();
   });
 });

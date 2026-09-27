@@ -6,7 +6,7 @@
 // presentation — no data fetching.
 
 import * as React from "react";
-import { Box, Chip, Collapse, Grid, IconButton, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, Collapse, Grid, IconButton, Paper, Stack, Typography } from "@mui/material";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import ExpandLessOutlinedIcon from "@mui/icons-material/ExpandLessOutlined";
 import { BRAND, TEXT } from "../../theme/brand";
@@ -205,7 +205,14 @@ function PatchRow({ patch }) {
  * so coloring stays consistent with the device table.
  */
 
+/** Cuántos parches recientes se enseñan de entrada en la ficha. */
+export const RECENT_PATCHES_SHOWN = 5;
+
 export function PatchLevelSection({ patchSummary, recentPatches }) {
+  // Los 5 más recientes (el backend los manda del más nuevo al más viejo).
+  // Diez filas de KB empujaban los hallazgos —lo que el operador vino a
+  // ver— fuera de la pantalla; el resto sigue a un clic.
+  const [showAllPatches, setShowAllPatches] = React.useState(false);
   const hasData =
     patchSummary &&
     (patchSummary.count != null ||
@@ -296,13 +303,24 @@ export function PatchLevelSection({ patchSummary, recentPatches }) {
             variant="caption"
             sx={{ color: BRAND.gray, fontWeight: 700, textTransform: "uppercase", display: "block", mb: 0.5 }}
           >
-            Recent ({recentPatches.length})
+            {recentPatches.length > RECENT_PATCHES_SHOWN
+              ? `Recent (${showAllPatches ? recentPatches.length : RECENT_PATCHES_SHOWN} of ${recentPatches.length})`
+              : `Recent (${recentPatches.length})`}
           </Typography>
           <Box>
-            {recentPatches.map((patch, idx) => (
+            {(showAllPatches ? recentPatches : recentPatches.slice(0, RECENT_PATCHES_SHOWN)).map((patch, idx) => (
               <PatchRow key={`${patch?.id || "unknown"}-${idx}`} patch={patch} />
             ))}
           </Box>
+          {recentPatches.length > RECENT_PATCHES_SHOWN ? (
+            <Button
+              size="small"
+              onClick={() => setShowAllPatches((v) => !v)}
+              sx={{ textTransform: "none", color: BRAND.teal, px: 0.5, mt: 0.5 }}
+            >
+              {showAllPatches ? "Show fewer" : `Show all ${recentPatches.length}`}
+            </Button>
+          ) : null}
         </>
       ) : null}
     </Paper>

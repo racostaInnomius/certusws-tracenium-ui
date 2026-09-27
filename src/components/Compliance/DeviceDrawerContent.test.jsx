@@ -228,3 +228,56 @@ describe("per-framework headline counts controls, not checks", () => {
     expect(screen.getByText("300/500 checks passing")).toBeInTheDocument();
   });
 });
+
+describe("DeviceDrawerContent — hallazgos por sección, plegables", () => {
+  const many = {
+    device: { hostname: "host-b", platform: "windows", overallStatus: "fail", overallScore: 20, scoresByFramework: {} },
+    findings: [
+      { id: 11, checkId: "fw.a", title: "Firewall A", severity: "critical", status: "fail", category: "firewall" },
+      { id: 12, checkId: "fw.b", title: "Firewall B", severity: "high", status: "fail", category: "firewall" },
+      { id: 21, checkId: "au.a", title: "Audit A", severity: "low", status: "fail", category: "audit" },
+      { id: 31, checkId: "sv.a", title: "Service A", severity: "medium", status: "fail", category: "services" },
+    ],
+  };
+
+  it("⭐ abre sólo la sección más grave; la cabecera dice cuántos y cuántos graves", () => {
+    render(<DeviceDrawerContent {...baseProps} data={many} />);
+    const fw = screen.getByRole("button", { name: /firewall/i });
+    expect(fw).toHaveAttribute("aria-expanded", "true");
+    expect(fw).toHaveTextContent("2 controls");
+    expect(fw).toHaveTextContent("2 critical/high");
+    expect(screen.getByRole("button", { name: /^audit/i })).toHaveAttribute("aria-expanded", "false");
+    // Lo plegado no se ve.
+    expect(screen.getByRole("region", { name: /firewall/i })).toBeVisible();
+  });
+
+  it("se abre una sección, y «Expand all» / «Collapse all» las mueven todas", () => {
+    render(<DeviceDrawerContent {...baseProps} data={many} />);
+    const audit = screen.getByRole("button", { name: /^audit/i });
+    fireEvent.click(audit);
+    expect(audit).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByRole("button", { name: /^services/i })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(screen.getByRole("button", { name: /firewall/i })).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+describe("DeviceDrawerContent — tendencia con números", () => {
+  it("⭐ dice la nota de hoy y cuánto se movió, no sólo una línea", () => {
+    const timeseries = {
+      windowDays: 30,
+      buckets: [
+        { bucket: "2026-09-01", score: 12 },
+        { bucket: "2026-09-10", score: null },
+        { bucket: "2026-09-26", score: 17 },
+      ],
+    };
+    render(<DeviceDrawerContent {...baseProps} data={deviceData} timeseries={timeseries} />);
+    const trend = screen.getByTestId("device-score-trend");
+    expect(trend).toHaveTextContent("Score trend · last 30 days");
+    expect(trend).toHaveTextContent("17/100 now");
+    expect(trend).toHaveTextContent("▲ +5 since");
+    expect(trend).toHaveTextContent("range 12–17");
+  });
+});
