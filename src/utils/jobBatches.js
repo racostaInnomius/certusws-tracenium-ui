@@ -31,6 +31,11 @@ export function buildBatchRow(batchId, jobs) {
       ? completedTimes.reduce((max, t) => (t > max ? t : max))
       : null;
 
+  // Equipos DISTINTOS, no jobs: un lote de 20 fixes a un solo equipo (agente
+  // sin `pmp.remediate.batch`, un job por fix con el mismo batchId) se leía
+  // «20 devices» y listaba el mismo equipo 20 veces (27-sep).
+  const deviceCount = new Set(jobs.map((j) => j.device_id).filter(Boolean)).size || totalCount;
+
   return {
     job_id: `batch:${batchId}`,
     batch_id: batchId,
@@ -39,6 +44,7 @@ export function buildBatchRow(batchId, jobs) {
     __doneCount: doneCount,
     __failedCount: failedCount,
     __totalCount: totalCount,
+    __deviceCount: deviceCount,
     job_type: jobs[0]?.job_type,
     created_at: earliestCreatedAt,
     created_by: jobs[0]?.created_by,
@@ -49,4 +55,28 @@ export function buildBatchRow(batchId, jobs) {
     device_id: null,
     status: doneCount < totalCount ? "running" : failedCount === 0 ? "completed" : "failed",
   };
+}
+
+/**
+ * Qué hace un job, en una línea, a partir de su payload: el fix de una
+ * remediación («Incognito mode must be disabled.»), o cuántos fixes lleva un
+ * job agrupado. Null si el payload no dice nada útil — el llamante cae al id.
+ */
+export function jobPayloadLabel(job) {
+  let p = job?.payload_json ?? job?.payload ?? null;
+  if (typeof p === "string") {
+    try {
+      p = JSON.parse(p);
+    } catch {
+      return null;
+    }
+  }
+  if (!p || typeof p !== "object") return null;
+  if (Array.isArray(p.items)) return `${p.items.length} fix${p.items.length === 1 ? "" : "es"}`;
+  const title = p.checkSnapshot?.title;
+  if (typeof title === "string" && title.trim()) {
+    return p.checkSnapshot?.revertOf ? `Revert: ${title.trim()}` : title.trim();
+  }
+  if (typeof p.factType === "string") return `Facts: ${p.factType}`;
+  return null;
 }

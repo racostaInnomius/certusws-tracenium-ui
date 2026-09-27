@@ -76,7 +76,7 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { listAgentVersions } from "../api/binaries";
 import { formatDate } from "../utils/format";
 import { updateSearchParams } from "../utils/browserState";
-import { buildBatchRow } from "../utils/jobBatches";
+import { buildBatchRow, jobPayloadLabel } from "../utils/jobBatches";
 import { describeJobOrigin, jobOriginText } from "../utils/jobOrigin";
 import {
   alternarSeleccionVisible,
@@ -1247,6 +1247,12 @@ export default function Jobs({ onNavigate }) {
     if (full.length || !filteredJobs) return full;
     return filteredJobs.filter((j) => j.batch_id === selectedBatchId);
   }, [tenantJobs, filteredJobs, selectedBatchId]);
+  const selectedBatchRow = React.useMemo(
+    () => (selectedBatchId && selectedBatchJobs.length ? buildBatchRow(selectedBatchId, selectedBatchJobs) : null),
+    [selectedBatchId, selectedBatchJobs]
+  );
+  // Un lote a un solo equipo: el detalle lista sus JOBS (cada uno con su fix).
+  const batchOnOneDevice = Boolean(selectedBatchRow && selectedBatchRow.__deviceCount === 1 && selectedBatchJobs.length > 1);
 
   // Row click on the Tenant Job History grid: a grouped (multi-device)
   // row selects the batch view; a plain row selects the single-job
@@ -1403,9 +1409,13 @@ export default function Jobs({ onNavigate }) {
       minWidth: 240,
       flex: 1.1,
       sortable: true,
+      // Un lote a UN equipo (varios fixes, un job por fix) se lee como ese
+      // equipo, no como «20 devices»; «20 jobs» va en la línea de debajo.
       valueGetter: (_value, row) =>
         row.__isBatch
-          ? `${row.__totalCount} devices`
+          ? row.__deviceCount === 1
+            ? deviceLabel(row.__jobs[0])
+            : `${row.__deviceCount} devices`
           : deviceLabel(row),
       renderCell: (params) => (
         <Box sx={{ minWidth: 0, py: 0.5 }}>
@@ -1417,6 +1427,9 @@ export default function Jobs({ onNavigate }) {
           </Typography>
           <Typography sx={{ fontSize: TEXT.sm, color: TEXT_MUTED }} noWrap>
             {jobTypeLabels.get(params.row.job_type) || params.row.job_type}
+            {params.row.__isBatch && params.row.__totalCount > params.row.__deviceCount
+              ? ` · ${params.row.__totalCount} jobs`
+              : null}
             {/* "Who" se oculta en pantallas medianas: la recuperación se
                 sigue viendo aquí. */}
             {!params.row.__isBatch && describeJobOrigin(params.row).recovery ? " · Automatic recovery" : null}
@@ -2742,7 +2755,10 @@ export default function Jobs({ onNavigate }) {
                     </Typography>
                     <Box sx={{ mt: 0.5, display: "grid", gap: 0.5 }}>
                       <DetailRow label="Type" value={selectedBatchJobs[0]?.job_type} />
-                      <DetailRow label="Devices" value={String(selectedBatchJobs.length)} />
+                      <DetailRow label="Devices" value={String(selectedBatchRow?.__deviceCount ?? selectedBatchJobs.length)} />
+                      {selectedBatchRow && selectedBatchRow.__deviceCount < selectedBatchJobs.length ? (
+                        <DetailRow label="Jobs" value={String(selectedBatchJobs.length)} />
+                      ) : null}
                       <DetailRow label="Created By" value={selectedBatchJobs[0] ? jobOriginText(selectedBatchJobs[0]) : "—"} />
                       <DetailRow label="Created" value={formatDate(selectedBatchJobs[0]?.created_at)} />
                     </Box>
@@ -2752,7 +2768,11 @@ export default function Jobs({ onNavigate }) {
 
                   <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                     <Typography variant="overline" sx={{ color: BRAND.teal, fontWeight: 800, letterSpacing: 1.2, mb: 0.5 }}>
-                      Devices involved
+                      {/* Un solo equipo: lo que se lista son sus jobs, cada uno
+                          con lo que hace (el fix), no el equipo repetido. */}
+                      {batchOnOneDevice
+                        ? `Jobs on ${deviceLabel(selectedBatchJobs[0])}`
+                        : "Devices involved"}
                     </Typography>
                     <Box sx={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 0.75, pr: 0.5 }}>
                       {selectedBatchJobs.map((job) => (
@@ -2777,8 +2797,15 @@ export default function Jobs({ onNavigate }) {
                         >
                           <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }} noWrap>
-                              {deviceLabel(job)}
+                              {batchOnOneDevice
+                                ? jobPayloadLabel(job) || `Job ${String(job.job_id).slice(0, 8)}`
+                                : deviceLabel(job)}
                             </Typography>
+                            {!batchOnOneDevice && jobPayloadLabel(job) ? (
+                              <Typography sx={{ fontSize: TEXT.xs, color: TEXT_MUTED }} noWrap>
+                                {jobPayloadLabel(job)}
+                              </Typography>
+                            ) : null}
                             {job.last_error ? (
                               <Typography sx={{ fontSize: TEXT.xs, color: BRAND.alert.errorText }} noWrap>
                                 {job.last_error}

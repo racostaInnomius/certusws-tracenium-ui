@@ -97,3 +97,23 @@ describe("buildBatchRow", () => {
     expect(row.device_id).toBeNull();
   });
 });
+
+describe("un lote a UN equipo (27-sep: «dice 20 devices y es solo 1»)", () => {
+  it("⭐ cuenta equipos distintos, no jobs", async () => {
+    const { buildBatchRow } = await import("./jobBatches");
+    const jobs = Array.from({ length: 20 }, (_, i) => ({ job_id: `j${i}`, device_id: "w11", status: "completed" }));
+    const row = buildBatchRow("b", jobs);
+    expect(row.__totalCount).toBe(20);
+    expect(row.__deviceCount).toBe(1);
+    expect(buildBatchRow("b2", [{ job_id: "a", device_id: "d1", status: "completed" }, { job_id: "b", device_id: "d2", status: "completed" }]).__deviceCount).toBe(2);
+  });
+
+  it("jobPayloadLabel dice qué hace cada job", async () => {
+    const { jobPayloadLabel } = await import("./jobBatches");
+    expect(jobPayloadLabel({ payload_json: { checkSnapshot: { title: "Incognito mode must be disabled." } } })).toBe("Incognito mode must be disabled.");
+    expect(jobPayloadLabel({ payload_json: JSON.stringify({ checkSnapshot: { title: "X", revertOf: { resultId: 1 } } }) })).toBe("Revert: X");
+    expect(jobPayloadLabel({ payload_json: { items: [{}, {}, {}] } })).toBe("3 fixes");
+    expect(jobPayloadLabel({ payload_json: { factType: "compliance" } })).toBe("Facts: compliance");
+    expect(jobPayloadLabel({ payload_json: null })).toBeNull();
+  });
+});
