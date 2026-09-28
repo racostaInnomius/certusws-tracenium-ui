@@ -118,6 +118,7 @@ import { checkInDonutData, checkInKeyOfName, checkInNameOfKey } from "../compone
 const EXPERIENCE_TAB = "experience";
 import HardwareChangesPanel from "../components/AssetsDashboard/HardwareChangesPanel";
 import ActivityTab from "../components/AssetsDashboard/ActivityTab";
+import EvidenceTab from "../components/AssetsDashboard/EvidenceTab";
 
 // ---------- deep-link filter helpers -----------------------------------------
 //
@@ -150,6 +151,10 @@ function AgentDetailWorkbench({
   tab,
   onTabChange,
   onBack,
+  // ADR-0032 D7 — pedir y descargar son permisos DISTINTOS, y la pestaña los
+  // trata por separado porque el backend también.
+  canCaptureEvidence = false,
+  canReadEvidence = false,
 }) {
   const hostname = formatDetailValue(profile?.hostname || selectedHost?.hostname || selectedHost?.agent_id, "Unknown host");
   const agentId = formatDetailValue(profile?.agentId || selectedHost?.agent_id || selectedHost?.agentId);
@@ -304,6 +309,11 @@ function AgentDetailWorkbench({
 
           {/* ADR-0031 — lo que se le envió al equipo y lo que se observó en él. */}
           {!loading && tab === "activity" ? <ActivityTab agentId={rawAgentId} /> : null}
+
+          {/* ADR-0032 — capturar el estado de AHORA antes de que lo reinicien. */}
+          {!loading && tab === "evidence" ? (
+            <EvidenceTab agentId={rawAgentId} canCapture={canCaptureEvidence} canRead={canReadEvidence} />
+          ) : null}
         </Box>
       </Paper>
     </Box>
@@ -356,6 +366,11 @@ export default function AssetsDashboard({
   // (POST /devices/:id/decommission-jobs). Con sólo `assets_view` —USER— el
   // botón salía y acababa en 403. Mientras cargan las capacidades, oculto.
   const canDecommission = Boolean(myPermissions?.has("device_management"));
+  // ADR-0032: pedir una captura y leer el paquete son permisos distintos.
+  // Quien sólo tiene el primero puede disparar la captura en mitad de una
+  // incidencia sin poder llevarse las sesiones y las rutas del cliente.
+  const canCaptureEvidence = Boolean(myPermissions?.has("evidence_capture"));
+  const canReadEvidence = Boolean(myPermissions?.has("evidence_read"));
 
   // Set<agent_id> of devices currently connected (has an active
   // gRPC session in the last heartbeat window). Drives the "Online
@@ -1744,6 +1759,8 @@ const osVersionItems = React.useMemo(() => {
                 softwareRows={agentSoftwareRows}
                 softwareTotal={agentSoftwareTotal}
                 softwareLoading={agentSoftwareLoading}
+                canCaptureEvidence={canCaptureEvidence}
+                canReadEvidence={canReadEvidence}
                 softwarePaginationModel={agentSoftwarePaginationModel}
                 onSoftwarePaginationModelChange={setAgentSoftwarePaginationModel}
                 printerRows={agentPrinterRows}

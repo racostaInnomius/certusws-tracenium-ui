@@ -14,6 +14,8 @@
 export const DEVICE_DETAIL_TABS = [
   { value: "agent", label: "Agent" },
   { value: "activity", label: "Activity" },
+  // ADR-0032 — capturar el estado de AHORA antes de que alguien reinicie.
+  { value: "evidence", label: "Evidence" },
   { value: "experience", label: "Experience" },
   { value: "hardware", label: "Hardware" },
   { value: "location", label: "Location" },
