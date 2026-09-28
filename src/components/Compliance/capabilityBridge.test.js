@@ -71,16 +71,32 @@ describe("baselineModeForCategory", () => {
     expect(baselineModeForCategory(formWith({}), "antimalware")).toBeNull();
   });
 
+  // (Estos dos usaban el firewall; desde ADR-0035 no se activa por política.)
   it("summarizes 'auto' only when EVERY enforceable capability is auto", () => {
-    const info = baselineModeForCategory(formWith({ firewall: "auto" }), "firewall");
+    const info = baselineModeForCategory(formWith({ smb: "auto", remoteLogin: "auto", shares: "auto" }), "network_sharing");
     expect(info.mode).toBe("auto");
     expect(info.autoUpgradable).toEqual([]);
   });
 
   it("defaults to report-only and lists enforceable caps as upgradable", () => {
+    const info = baselineModeForCategory(formWith({}), "network_sharing");
+    expect(info.mode).toBe("report-only");
+    expect(info.autoUpgradable.map((c) => c.key)).toContain("smb");
+  });
+
+  // ADR-0035 D1 — validado el 27-sep: la llave «Enable auto-remediation for
+  // firewall» y el chip «Auto-fix available · report-only» ofrecían encender
+  // el firewall en toda la flota con un clic.
+  it("el firewall nunca es «upgradable» a auto: ni llave ni chip", () => {
     const info = baselineModeForCategory(formWith({}), "firewall");
     expect(info.mode).toBe("report-only");
-    expect(info.autoUpgradable.map((c) => c.key)).toEqual(["firewall"]);
+    expect(info.autoUpgradable).toEqual([]);
+    // Aunque el llamador diga que el remediador existe.
+    expect(baselineModeForCategory(formWith({}), "firewall", () => true).autoUpgradable).toEqual([]);
+  });
+
+  it("un firewall guardado en auto (legado) se lee como report-only — es lo que el backend le manda al agente", () => {
+    expect(baselineModeForCategory(formWith({ firewall: "auto" }), "firewall").mode).toBe("report-only");
   });
 
   it("'off' only when every mapped capability is off", () => {

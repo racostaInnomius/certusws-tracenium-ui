@@ -106,7 +106,11 @@ function modeForCapabilities(securityForm, caps, isAutoAvailable) {
     cap,
     mode: resolveMode(securityForm?.capabilities?.[cap.key], securityForm?.defaultMode),
   }));
-  const enforceable = entries.filter((e) => isAutoAvailable(e.cap));
+  // `autoGuard` (ADR-0035, firewall): el remediador existe pero la política
+  // no lo activa. Aquí y no en cada `isAutoAvailable` de los llamadores: sin
+  // esto la llave «Enable auto-remediation for firewall» y el chip «Auto-fix
+  // available» ofrecían justo lo que el backend va a rechazar.
+  const enforceable = entries.filter((e) => isAutoAvailable(e.cap) && !e.cap.autoGuard);
 
   let mode;
   if (entries.every((e) => e.mode === "off")) {

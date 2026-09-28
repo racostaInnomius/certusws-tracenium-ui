@@ -37,6 +37,18 @@ describe("SecurityPolicySection", () => {
     expect(within(listbox).getByText(/Report only/)).toBeInTheDocument();
   });
 
+  // ADR-0035 D1 — el firewall tiene remediador, pero no se activa por política.
+  it("el firewall enseña 'auto: planned per device' y su opción auto está deshabilitada", () => {
+    render(<SecurityPolicySection form={emptyForm} onChange={() => {}} />);
+    expect(screen.getAllByText("auto: planned per device")).toHaveLength(1);
+    const idx = SECURITY_CAPABILITIES.findIndex((c) => c.key === "firewall");
+    fireEvent.mouseDown(screen.getAllByRole("combobox", { name: /Mode/ })[idx]);
+    const listbox = screen.getByRole("listbox");
+    const auto = within(listbox).getByText(/planned per device/).closest("li");
+    expect(auto).toHaveAttribute("aria-disabled", "true");
+    expect(within(listbox).getByText("Report only").closest("li")).not.toHaveAttribute("aria-disabled", "true");
+  });
+
   it("emits a mode change that patches the right capability", () => {
     const onChange = vi.fn();
     render(<SecurityPolicySection form={emptyForm} onChange={onChange} />);

@@ -264,6 +264,10 @@ export const SECURITY_MODES = [
 //                     Mode "auto" actually does something.
 // `detectOnly: true` → nunca habrá remediador (BitLocker, SIP, FileVault):
 //                     la UI no ofrece "auto" ni promete que llegará.
+// `autoGuard: "…"`  → el remediador EXISTE pero no se activa por política
+//                     (ADR-0035, firewall): "auto" se ve deshabilitado con el
+//                     motivo. El backend rechaza guardarlo y lo degrada al
+//                     proyectar; esto evita ofrecer un botón que va a fallar.
 // `enforcer: false` → policy is stored but agent doesn't enforce
 //                     yet. UI grays the mode selector at "auto" and
 //                     marks the card "report-only available, auto
@@ -278,6 +282,9 @@ export const SECURITY_CAPABILITIES = [
     // del backend (remediation-matrix.test) compara estos tags con la matriz.
     osTags: ["Linux", "Windows", "macOS"],
     enforcer: true,
+    // ADR-0035 D1: con `auto`, el agente encendía el firewall en toda la flota
+    // a la vez, y lo entrante que ninguna regla permite dejaba de funcionar.
+    autoGuard: "Turning the firewall on is planned per device, not switched on by policy: inbound connections no rule allows would stop working everywhere at once. Drift is still detected in report-only.",
     fields: [
       { key: "required", label: "Required to be enabled", type: "boolean", default: true },
     ],

@@ -140,6 +140,14 @@ export default function SecurityPolicySection({
                           sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: BRAND.gray, cursor: "help" }}
                         />
                       </Tooltip>
+                    ) : cap.autoGuard ? (
+                      <Tooltip title={cap.autoGuard} arrow>
+                        <Chip
+                          label="auto: planned per device"
+                          size="small"
+                          sx={{ height: 18, fontSize: TEXT.xs, bgcolor: BRAND.surfaceMuted, color: BRAND.gray, cursor: "help" }}
+                        />
+                      </Tooltip>
                     ) : !capabilityAuto(cap.key, cap.enforcer) ? (
                       <Chip
                         label="auto coming soon"
@@ -194,10 +202,11 @@ export default function SecurityPolicySection({
                     const isAuto = m.value === "auto";
                     const notBuilt = !capabilityAuto(cap.key, cap.enforcer) && isAuto;
                     const notPaid = !autoEntitled && isAuto;
+                    const guarded = Boolean(cap.autoGuard) && isAuto;
                     return (
-                      <MenuItem key={m.value} value={m.value} disabled={notBuilt || notPaid}>
+                      <MenuItem key={m.value} value={m.value} disabled={notBuilt || notPaid || guarded}>
                         {m.label}
-                        {notBuilt ? " (coming soon)" : notPaid ? " (requires Patch Management)" : ""}
+                        {guarded ? " (planned per device)" : notBuilt ? " (coming soon)" : notPaid ? " (requires Patch Management)" : ""}
                       </MenuItem>
                     );
                   })}
