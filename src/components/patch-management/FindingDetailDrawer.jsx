@@ -58,6 +58,7 @@ import { formatRelativeTime } from "../Compliance/PatchLevel";
 import { listFrom } from "../../api/shape";
 import { devicesToApplyAfterDryRun, dryRunFinished, dryRunLeftOut } from "./dryRunGate";
 import { outcomeColors, outcomeTone } from "./outcomeTone";
+import { formatDate } from "../../utils/format";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -107,15 +108,8 @@ function severityChip(severity) {
   );
 }
 
-function formatTime(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
-    year: "2-digit", month: "short", day: "2-digit",
-    hourCycle: "h23", hour: "2-digit", minute: "2-digit",
-  });
-}
+// El formato canónico (utils/format): sin el «26» del año que se leía como día.
+const formatTime = (value) => formatDate(value);
 
 // ── Main component ───────────────────────────────────────────────
 
@@ -620,7 +614,11 @@ export default function FindingDetailDrawer({
                   </Box>
                 ) : (
                   <>
-                    {/* Select-all row */}
+                    {/* Select-all row — sólo si hay algo que aplicar. Sin handler
+                        la lista es de consulta: casillas, «selected» y la
+                        previsión de «Apply» prometían una acción que no existe
+                        (recorrido de Patch Management, 25-sep). */}
+                    {isAgentRemediable ? (
                     <Box sx={{
                       display: "flex", alignItems: "center", px: 1, py: 0.5,
                       borderBottom: `1px solid ${BRAND.border}`, bgcolor: BRAND.surfaceMuted,
@@ -642,6 +640,7 @@ export default function FindingDetailDrawer({
                         {inFlightDevices.length > 0 ? ` · ${inFlightDevices.length} already being fixed` : ""}
                       </Typography>
                     </Box>
+                    ) : null}
 
                     {devices.map((d) => {
                       const checked = selectedDeviceIds.has(d.agentId);
@@ -650,14 +649,15 @@ export default function FindingDetailDrawer({
                         <Box
                           key={d.agentId}
                           data-testid={`affected-${d.agentId}`}
-                          onClick={() => toggleDevice(d.agentId)}
+                          onClick={isAgentRemediable ? () => toggleDevice(d.agentId) : undefined}
                           sx={{
                             display: "flex", alignItems: "center", px: 1, py: 0.75,
                             borderBottom: `1px solid ${BRAND.border}`,
-                            cursor: busy ? "default" : "pointer",
-                            ...(busy ? { bgcolor: BRAND.surfaceMuted } : { "&:hover": { bgcolor: BRAND.tealSoft } }),
+                            cursor: busy || !isAgentRemediable ? "default" : "pointer",
+                            ...(busy ? { bgcolor: BRAND.surfaceMuted } : isAgentRemediable ? { "&:hover": { bgcolor: BRAND.tealSoft } } : {}),
                           }}
                         >
+                          {isAgentRemediable ? (
                           <Checkbox
                             size="small"
                             checked={checked}
@@ -667,6 +667,7 @@ export default function FindingDetailDrawer({
                             inputProps={{ "aria-label": `Select ${d.hostname || d.agentId}` }}
                             sx={{ "&.Mui-checked": { color: BRAND.teal } }}
                           />
+                          ) : null}
                           <Box sx={{ minWidth: 0, flex: 1 }}>
                             <Typography sx={{ fontSize: TEXT.md, fontWeight: 600, color: BRAND.dark }}>
                               {d.hostname || d.agentId.slice(0, 16)}
@@ -710,9 +711,11 @@ export default function FindingDetailDrawer({
                   Directly above the buttons on purpose: it answers the
                   questions people ask themselves in the second before they
                   click, and it used to live two tabs away. */}
-              <Box sx={{ pt: 1 }}>
-                <ActionOutlookNotice deviceIds={Array.from(selectedDeviceIds)} />
-              </Box>
+              {isAgentRemediable ? (
+                <Box sx={{ pt: 1 }}>
+                  <ActionOutlookNotice deviceIds={Array.from(selectedDeviceIds)} />
+                </Box>
+              ) : null}
 
               {notice ? <Box sx={{ pt: 1 }}>{notice}</Box> : null}
 
@@ -749,6 +752,7 @@ export default function FindingDetailDrawer({
                   fix conocido en dos vueltas, y al volver a entrar el cajón
                   empezaba otra vez por la simulación aunque ya estuviera
                   hecha. */}
+              {isAgentRemediable ? (
               <Stack direction="row" spacing={1.5} alignItems="center" sx={{ pt: 1 }} flexWrap="wrap" useFlexGap>
                 <Button
                   variant="contained"
@@ -793,6 +797,7 @@ export default function FindingDetailDrawer({
                     : "The dry-run changes nothing: apply then goes only to the devices it says would change."}
                 </Typography>
               </Stack>
+              ) : null}
             </>
           ) : null}
 

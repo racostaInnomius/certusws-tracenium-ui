@@ -16,13 +16,14 @@ import {
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
-import { BRAND, TEXT } from "../../theme/brand";
+import { BRAND, ROLE, TEXT } from "../../theme/brand";
 import {
   listThirdPartyCatalog,
   createThirdPartyCatalog,
@@ -134,6 +135,21 @@ export default function ThirdPartyCatalogManager({ canManage, notify }) {
                   <Typography sx={{ fontSize: TEXT.md, fontWeight: 700, color: BRAND.dark }}>{it.title}</Typography>
                   {it.publisher ? (
                     <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }}>{it.publisher}</Typography>
+                  ) : null}
+                  {/* Una entrada que no casa con nada instalado nunca da un
+                      «desactualizado», y sin esto se ve igual que una sana
+                      (25-sep: «winrar-x64-723es.exe», «MicrosoftEdge»). */}
+                  {it.matchesInstalled === false ? (
+                    <Tooltip
+                      arrow
+                      title={`No installed app on this platform is named "${it.matchName}" once normalized, so this entry never flags an outdated device. Edit its match name to what the devices report (e.g. "winrar" for "WinRAR 7.23 (64-bit)").`}
+                    >
+                      <Chip
+                        size="small"
+                        label="Matches no installed app"
+                        sx={{ mt: 0.5, height: 20, fontSize: TEXT.xs, fontWeight: 700, bgcolor: ROLE.cautionSoft, color: BRAND.alert.warningText, cursor: "help" }}
+                      />
+                    </Tooltip>
                   ) : null}
                 </TableCell>
                 <TableCell>

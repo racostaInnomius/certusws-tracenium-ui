@@ -37,12 +37,14 @@ export function formatBytesToGb(value) {
 
 /**
  * Locale date-time. Invalid/empty → "—".
+ *
+ * ⚠️ Era «Sep 24, 26, 18:17»: el año a dos cifras junto al día se lee como
+ * otro día (recorrido de Patch Management, 25-sep). Ahora el año sólo sale
+ * cuando NO es el actual, y entonces entero: «Sep 24, 18:17» /
+ * «Dec 03, 2025, 09:10». Igual de compacto en el caso común y sin ambigüedad.
+ * Pass `options` to override (e.g. Audit adds seconds).
  */
-// Default matches the compact timestamp ~9 pages already used (2-digit
-// date, 24h clock): e.g. "May 26, 26, 14:30". Pass `options` to override
-// (e.g. Audit adds seconds).
 const DEFAULT_DATE_OPTS = {
-  year: "2-digit",
   month: "short",
   day: "2-digit",
   hour: "2-digit",
@@ -50,11 +52,13 @@ const DEFAULT_DATE_OPTS = {
   hourCycle: "h23",
 };
 
-export function formatDate(value, options) {
+export function formatDate(value, options, now = new Date()) {
   if (!value) return EMPTY;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return EMPTY;
-  return d.toLocaleString("en-US", options ?? DEFAULT_DATE_OPTS);
+  if (options) return d.toLocaleString("en-US", options);
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleString("en-US", sameYear ? DEFAULT_DATE_OPTS : { ...DEFAULT_DATE_OPTS, year: "numeric" });
 }
 
 /**

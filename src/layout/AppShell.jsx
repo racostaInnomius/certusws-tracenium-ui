@@ -1092,10 +1092,23 @@ export default function AppShell() {
     setTemporaryWarning(null);
   }, []);
 
+  // Un salto DESDE una página («Report», «See in Assets»…) apila una entrada:
+  // Atrás tiene que volver a donde estaba el operador. Con `setSelectedPage` a
+  // secas la URL se reemplazaba, y Atrás desde Reports salía del portal
+  // (recorrido de Patch Management, 25-sep). A diferencia del menú, aquí se
+  // conserva la URL: la página de origen acaba de escribir en ella lo que la
+  // de destino tiene que leer (`reportKey`, `highlightAgentId`…).
+  const navigateFromPage = React.useCallback((key) => {
+    if (key !== getSearchParam("page", "overview")) {
+      updateSearchParams({ page: key }, { push: true });
+    }
+    setSelectedPage(key);
+  }, []);
+
   // Page dispatch lives in ./pageRegistry — one entry per page instead of a
   // flat if-ladder that re-evaluated every branch on each render.
   const content = renderPage(selectedPage, {
-    onNavigate: setSelectedPage,
+    onNavigate: navigateFromPage,
     onAssetsEmptyStateChange: handleAssetsEmptyStateChange,
   });
 

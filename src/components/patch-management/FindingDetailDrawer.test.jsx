@@ -213,3 +213,18 @@ describe("equipos a los que el fix ya les está llegando", () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith("info", expect.stringMatching(/1 device was left out/)));
   });
 });
+
+// 🔴 25-sep: «No nonstandard root CAs» (sin handler) enseñaba casillas, «9 of 9
+// selected», la previsión de Apply y dos botones grises — una acción que no
+// existe. Sin handler la lista es de consulta.
+describe("⭐ sin arreglo automático, la lista es de consulta", () => {
+  it("equipos sí; casillas, selección y botones de aplicar no", async () => {
+    open({ finding: { ...FINDING, agentRemediable: false } });
+    expect(await screen.findByText("D1")).toBeInTheDocument();
+    expect(screen.getByText("D2")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByText(/selected/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Dry-run on/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Apply on/ })).toBeNull();
+  });
+});

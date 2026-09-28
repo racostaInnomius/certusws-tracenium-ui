@@ -43,7 +43,23 @@ vi.mock("./Topbar", () => ({
   CHROME_LINE_WIDTH: 3,
 }));
 vi.mock("./pageRegistry", () => ({
-  renderPage: (page) => <div data-testid="pagina">{page}</div>,
+  // Un botón que salta a Reports como lo hace «Report»: escribe su parámetro y
+  // llama a onNavigate.
+  renderPage: (page, { onNavigate }) => (
+    <div>
+      <div data-testid="pagina">{page}</div>
+      <button
+        onClick={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set("reportKey", "pmp.operations");
+          window.history.replaceState({}, "", url);
+          onNavigate("reports");
+        }}
+      >
+        to-reports
+      </button>
+    </div>
+  ),
   PAGES: [],
 }));
 vi.mock("../api/licensing", () => ({
@@ -81,5 +97,28 @@ describe("AppShell — navegar desde el menú", () => {
     fireEvent.click(screen.getByText("go-jobs"));
 
     expect(new URLSearchParams(window.location.search).get("status")).toBe("failed");
+  });
+});
+
+// 🔴 25-sep: «Report» en Patch Management llevaba a Reports y Atrás SALÍA del
+// portal: el salto reemplazaba la entrada del historial.
+describe("AppShell — saltar desde una página", () => {
+  it("⭐ apila: Atrás vuelve a la página (y la pestaña) de origen", async () => {
+    window.history.replaceState({}, "", "/?page=patch&pmTab=vulnerabilities");
+    const before = window.history.length;
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByTestId("pagina").textContent).toBe("patch"));
+
+    fireEvent.click(screen.getByText("to-reports"));
+
+    await waitFor(() => expect(screen.getByTestId("pagina").textContent).toBe("reports"));
+    expect(window.history.length).toBe(before + 1);
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("page")).toBe("reports");
+    expect(params.get("reportKey")).toBe("pmp.operations"); // lo que el destino tiene que leer
+
+    window.history.back();
+    await waitFor(() => expect(screen.getByTestId("pagina").textContent).toBe("patch"));
+    expect(new URLSearchParams(window.location.search).get("pmTab")).toBe("vulnerabilities");
   });
 });

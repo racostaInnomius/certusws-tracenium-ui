@@ -49,6 +49,7 @@ import SectionPaper from "../common/SectionPaper";
 import { getFindings } from "../../api/patchManagement";
 import FindingDetailDrawer from "./FindingDetailDrawer";
 import { listFrom } from "../../api/shape";
+import { formatDate } from "../../utils/format";
 
 function severityChip(severity) {
   // Canonical severity scale (theme/severity.js) — High was red (== Critical);
@@ -64,15 +65,8 @@ function severityChip(severity) {
   );
 }
 
-function formatTime(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-US", {
-    year: "2-digit", month: "short", day: "2-digit",
-    hourCycle: "h23", hour: "2-digit", minute: "2-digit",
-  });
-}
+// El formato canónico (utils/format): sin el «26» del año que se leía como día.
+const formatTime = (value) => formatDate(value);
 
 const ZERO_TOTALS = {
   totalFindings: 0,

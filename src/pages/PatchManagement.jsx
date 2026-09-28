@@ -1,5 +1,6 @@
 import * as React from "react";
 import { getSearchParam, updateSearchParams, searchForPage } from "../utils/browserState";
+import { formatDate } from "../utils/format";
 import Grid from "@mui/material/Grid";
 import {
   Alert,
@@ -1301,14 +1302,8 @@ export default function PatchManagement({ onNavigate }) {
       flex: 0.9,
       minWidth: 160,
       renderCell: (params) => {
-        const v = params.row.collectedAtUtc;
-        if (!v) return "—";
-        try {
-          return new Date(v).toLocaleString("en-US", {
-            year: "2-digit", month: "short", day: "2-digit",
-            hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-          });
-        } catch { return "—"; }
+        // «Sep 24, 26, 18:17» se leía como dos días: el formato canónico.
+        return formatDate(params.row.collectedAtUtc);
       }
     }
   ],
@@ -1574,7 +1569,7 @@ export default function PatchManagement({ onNavigate }) {
         title="Patch Management"
         subtitle={
           pmpEnabled
-            ? "Active. Scan + remediation surfaces below; per-device drill-down via the Devices table."
+            ? "Missing patches, insecure settings and vulnerable software across your devices — and how to fix them."
             : "Remediate findings collected by Security Compliance."
         }
         icon={<SystemUpdateAltOutlinedIcon />}

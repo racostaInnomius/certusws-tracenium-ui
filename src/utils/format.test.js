@@ -31,11 +31,13 @@ describe("formatDate", () => {
     expect(formatDate(null)).toBe(EMPTY);
     expect(formatDate("not-a-date")).toBe(EMPTY);
   });
-  it("formats a valid ISO date in the compact default (2-digit, 24h)", () => {
-    const out = formatDate("2026-05-26T10:00:00.000Z");
-    expect(out).toMatch(/May/);
-    expect(out).toMatch(/26/); // 2-digit year / day
-    expect(out).not.toMatch(/2026/); // not the 4-digit year
+  it("⭐ this year's dates carry no year — «May 26, 26, 10:00» read as two days", () => {
+    const out = formatDate("2026-05-26T10:00:00", undefined, new Date("2026-09-25T12:00:00"));
+    expect(out).toBe("May 26, 10:00");
+  });
+  it("⭐ other years carry the FULL year, never two digits", () => {
+    const out = formatDate("2025-12-03T09:10:00", undefined, new Date("2026-09-25T12:00:00"));
+    expect(out).toBe("Dec 03, 2025, 09:10");
   });
   it("honors explicit options (e.g. seconds)", () => {
     const out = formatDate("2026-05-26T10:00:05.000Z", {
