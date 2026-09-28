@@ -66,24 +66,29 @@ afterEach(() => {
 
 function mount(onNavigate = vi.fn(), rules = RULES) {
   const patches = [];
+  const posts = [];
   server.use(
     http.all(/.*\/api\/.*/, async ({ request }) => {
       const path = new URL(request.url).pathname;
       if (path.endsWith("/plugins/catalog")) return HttpResponse.json({ ok: true, catalog: CATALOG, entitled: ["amp", "scp"] });
       if (path.endsWith("/roles/me/capabilities")) return HttpResponse.json({ role: "ADMIN", permissions: [] });
-      if (path.endsWith("/alerts/rules")) {
+      if (path.endsWith("/alerts/rules") && request.method === "GET") {
         return HttpResponse.json({ ok: true, templates: TEMPLATES, rules, pluginAvailability: AVAILABILITY });
       }
       if (request.method === "PATCH") {
         patches.push({ path, body: await request.json() });
         return HttpResponse.json({ ok: true, rule: {} });
       }
+      if (request.method === "POST" && path.endsWith("/alerts/rules")) {
+        posts.push(await request.json());
+        return HttpResponse.json({ ok: true, rule: { id: "nueva" } }, { status: 201 });
+      }
       return HttpResponse.json({ ok: true, items: [], events: [], summary: {}, total: 0, lastSeenAt: null });
     })
   );
   window.history.replaceState({}, "", "/?page=alerts&alertsTab=rules");
   render(<Alerts onNavigate={onNavigate} />);
-  return { patches };
+  return { patches, posts };
 }
 
 const group = (title) => screen.findByRole("region", { name: `${title} alert rules` });
@@ -221,6 +226,46 @@ describe("Alerts — reglas agrupadas por plugin", () => {
     // La clave heredada se lee, y se enseña bajo la canónica.
     expect(within(scp).getByRole("spinbutton", { name: /score drops below/i })).toHaveValue(70);
     expect(within(scp).getByTestId("rule-criteria-untouched")).toHaveTextContent("exclude_tags");
+  });
+
+  it("⭐ una regla a medida se crea desde la pantalla, no por API", async () => {
+    // La nota prometía un «custom rule builder» en una Fase 2 que no llegó,
+    // mientras el backend aceptaba reglas sin plantilla desde el principio.
+    const { posts } = mount();
+    await group("Platform");
+    await userEvent.click(screen.getByRole("button", { name: /new rule/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /new alert rule/i });
+    await userEvent.click(within(dialog).getByRole("combobox", { name: /what it watches/i }));
+    await userEvent.click(await screen.findByRole("option", { name: /^device offline$/i }));
+
+    // El nombre se propone y la severidad por defecto es media.
+    expect(within(dialog).getByRole("textbox", { name: "Name" })).toHaveValue("Device offline");
+    const horas = within(dialog).getByRole("spinbutton", { name: /hours of silence/i });
+    await userEvent.clear(horas);
+    await userEvent.type(horas, "168");
+    await userEvent.click(within(dialog).getByRole("button", { name: /create rule/i }));
+
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0]).toEqual({
+      name: "Device offline",
+      severity: "medium",
+      source: "device_offline",
+      criteria: { threshold_hours: 168, include_disconnected: true },
+      enabled: true,
+    });
+  });
+
+  it("⚠️ no se ofrece crear una regla de un plugin que el tenant no tiene", async () => {
+    mount();
+    await group("Platform");
+    await userEvent.click(screen.getByRole("button", { name: /new rule/i }));
+    const dialog = await screen.findByRole("dialog", { name: /new alert rule/i });
+    await userEvent.click(within(dialog).getByRole("combobox", { name: /what it watches/i }));
+
+    // CDP no está contratado en este tenant: su fuente aparece, pero apagada.
+    const cdp = await screen.findByRole("option", { name: /endpoint cert expiry — not in your plan/i });
+    expect(cdp).toHaveAttribute("aria-disabled", "true");
   });
 
   it("el KPI 'Active rules' no cuenta la pausada: el backend no la evalúa", async () => {

@@ -764,6 +764,21 @@ export default function Alerts({ onNavigate }) {
                 notify("error", describeNotifyError(err, "Could not save email delivery — check the recipients"));
               }
             }}
+            onCreateRule={async (body) => {
+              try {
+                await createAlertRule(body);
+                notify("success", `${body.name} created — set who gets it in Email…`);
+                refetchRules();
+                refetchFeed();
+              } catch (err) {
+                console.error(err);
+                notify("error", describeRuleError(err, "Could not create the rule"));
+                // El diálogo se queda abierto con lo escrito: el operador
+                // corrige en vez de teclearlo otra vez.
+                return false;
+              }
+              return true;
+            }}
             onSaveCriteria={async (rule, criteria) => {
               try {
                 await patchAlertRule(rule.id, { criteria });

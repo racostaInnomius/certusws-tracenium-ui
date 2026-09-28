@@ -28,6 +28,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
@@ -38,6 +39,7 @@ import RuleNotifyEditor, { NotifyBadge } from "./RuleNotifyEditor";
 import RuleCriteriaEditor from "./RuleCriteriaEditor";
 import { describeCriteria } from "./criteriaFields";
 import { groupRules, describeUnavailable } from "./ruleGroups";
+import NewRuleDialog from "./NewRuleDialog";
 
 function PausedChip() {
   return (
@@ -100,6 +102,7 @@ export default function AlertRulesPanel({
   onDeleteRule,
   onSaveNotify,
   onSaveCriteria,
+  onCreateRule,
   onNavigate,
   renderSeverity,
   profileNames = null,
@@ -117,6 +120,16 @@ export default function AlertRulesPanel({
   );
   // Locked groups start folded: they are reference, not something to act on.
   const [folded, setFolded] = React.useState({});
+  const [creating, setCreating] = React.useState(false);
+  // Fuente → plugin, de lo que ya trajo el backend: el diálogo lo necesita
+  // para no ofrecer una fuente de un plugin que la API va a rechazar.
+  const sourcePlugin = React.useMemo(() => {
+    const map = {};
+    for (const row of [...templates, ...rules]) {
+      if (row?.source && row.plugin !== undefined) map[row.source] = row.plugin;
+    }
+    return map;
+  }, [templates, rules]);
   const isFolded = (g) => folded[g.key] ?? !g.available;
   const toggleFold = (g) => setFolded((f) => ({ ...f, [g.key]: !isFolded(g) }));
 
@@ -130,10 +143,24 @@ export default function AlertRulesPanel({
 
   return (
     <Stack spacing={2}>
-      <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray }}>
-        Rules are grouped by the plugin that produces the data. Switch on the ones you want; each rule decides who is
-        emailed in <strong>Email…</strong>.
-      </Typography>
+      <Stack direction="row" alignItems="flex-start" spacing={1}>
+        <Typography sx={{ fontSize: TEXT.sm, color: BRAND.gray, flex: 1 }}>
+          Rules are grouped by the plugin that produces the data. Switch on the ones you want; each rule decides who is
+          emailed in <strong>Email…</strong>. Need a second rule of the same kind — a longer threshold for a different
+          audience — add your own.
+        </Typography>
+        {onCreateRule ? (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AddOutlinedIcon />}
+            onClick={() => setCreating(true)}
+            sx={{ textTransform: "none", whiteSpace: "nowrap", borderColor: BRAND.border, color: BRAND.dark }}
+          >
+            New rule
+          </Button>
+        ) : null}
+      </Stack>
 
       {groups.map((g) => {
         const lockedText = g.available ? "" : describeUnavailable(g);
@@ -328,9 +355,18 @@ export default function AlertRulesPanel({
         );
       })}
 
-      <Typography variant="caption" sx={{ display: "block", color: BRAND.gray, fontStyle: "italic" }}>
-        Custom rule builder lands in Phase 2. For now, enable templates from the catalog above.
-      </Typography>
+      {onCreateRule ? (
+        <NewRuleDialog
+          open={creating}
+          onClose={() => setCreating(false)}
+          onCreate={async (body) => {
+            const created = await onCreateRule(body);
+            if (created !== false) setCreating(false);
+          }}
+          sourcePlugin={sourcePlugin}
+          availability={availability}
+        />
+      ) : null}
     </Stack>
   );
 }

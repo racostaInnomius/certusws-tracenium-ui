@@ -9,8 +9,9 @@
 // el handler no lee.
 
 import * as React from "react";
-import { Box, Button, FormControlLabel, MenuItem, Stack, Switch, TextField, Typography } from "@mui/material";
+import { Box, Button, Stack, Typography } from "@mui/material";
 import { BRAND, TEXT } from "../../theme/brand";
+import CriteriaFieldInputs from "./CriteriaFieldInputs";
 import {
   criteriaFieldsFor,
   isCriteriaEditable,
@@ -56,55 +57,7 @@ export default function RuleCriteriaEditor({ rule, onSave, busy = false }) {
       </Typography>
 
       <Stack spacing={1.5}>
-        {fields.map((f) =>
-          f.type === "number" ? (
-            <TextField
-              key={f.key}
-              size="small"
-              type="number"
-              label={f.label}
-              value={values[f.key]}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value === "" ? "" : Number(e.target.value) }))}
-              disabled={busy}
-              error={Boolean(errors[f.key])}
-              helperText={errors[f.key] || f.help}
-              inputProps={{ min: f.min, max: f.max, step: 1, "aria-label": f.label }}
-              sx={{ maxWidth: 420 }}
-            />
-          ) : f.type === "choice" ? (
-            <TextField
-              key={f.key}
-              select
-              size="small"
-              label={f.label}
-              value={values[f.key]}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              disabled={busy}
-              helperText={f.help}
-              slotProps={{ htmlInput: { "aria-label": f.label } }}
-              sx={{ maxWidth: 420 }}
-            >
-              {f.choices.map((c) => (
-                <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
-              ))}
-            </TextField>
-          ) : (
-            <Box key={f.key}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={values[f.key] === true}
-                    onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.checked }))}
-                    disabled={busy}
-                    slotProps={{ input: { "aria-label": f.label } }}
-                  />
-                }
-                label={<Typography sx={{ fontSize: TEXT.sm }}>{f.label}</Typography>}
-              />
-              <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray, ml: 6 }}>{f.help}</Typography>
-            </Box>
-          )
-        )}
+        <CriteriaFieldInputs fields={fields} values={values} errors={errors} busy={busy} onChange={setValues} />
 
         {untouched.length > 0 ? (
           <Typography sx={{ fontSize: TEXT.xs, color: BRAND.gray }} data-testid="rule-criteria-untouched">

@@ -282,6 +282,15 @@ const FIELDS = {
   ],
 };
 
+/**
+ * Las fuentes cuyos criterios se pueden declarar aquí — y por tanto las
+ * únicas que se ofrecen al crear una regla a medida. Ofrecer una fuente sin
+ * campos sería un formulario que no puede escribir su criterio.
+ */
+export function editableSources() {
+  return Object.keys(FIELDS);
+}
+
 export function criteriaFieldsFor(source) {
   return FIELDS[source] ?? [];
 }
