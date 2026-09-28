@@ -17,13 +17,16 @@ import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import SectionPaper from "../common/SectionPaper";
 import SummaryCard from "../common/SummaryCard";
 import { BRAND } from "../../theme/brand";
-import { describeMissing, mdmOverview } from "./mdmModel";
+import { describeMissing, mdmOverview, pushCertificateStatus } from "./mdmModel";
 import { Field, StatusChip } from "./mdmAtoms";
 
 export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
   const counts = mdmOverview({ devices: mdm.devices, enrollments: mdm.enrollments, appDevices });
   const enrollment = mdm.status?.enrollment;
   const commands = mdm.status?.commands;
+  // Un backend anterior al Apple setup no manda `pushCertificate`: sin él no
+  // se pinta la casilla, en vez de decir «Not set up» de algo que no sabe.
+  const pushCertificate = mdm.status?.pushCertificate ?? null;
 
   // Bloques normales, no un contenedor CSS grid: el `Grid` de MUI usa márgenes
   // negativos y dentro de una pista de grid se desborda por la derecha.
@@ -38,7 +41,7 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
         <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
           <Typography sx={{ fontWeight: 800, color: BRAND.dark, mb: 1.5 }}>Apple device management</Typography>
           <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Field label="Device enrollment">
                 {enrollment ? (
                   <StatusChip
@@ -49,7 +52,14 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
                 ) : "—"}
               </Field>
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            {pushCertificate ? (
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Field label="Apple push certificate">
+                  <StatusChip status={pushCertificateStatus(pushCertificate)} />
+                </Field>
+              </Grid>
+            ) : null}
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Field label="Commands and policies to devices">
                 {commands ? (
                   <StatusChip
@@ -60,7 +70,7 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
                 ) : "—"}
               </Field>
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Field label="Enrollment links">
                 {counts.pendingEnrollments} active
               </Field>
@@ -72,11 +82,28 @@ export default function MdmOverviewTab({ mdm, appDevices, onOpenTab }) {
               {describeMissing(enrollment.missing)}.
             </Typography>
           ) : null}
-          {commands && !commands.deliverable ? (
+          {commands && !commands.deliverable && commands.reason === "sender_not_available" ? (
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 1.5 }}>
-              Macs, iPhones and iPads can enroll and report, but Tracenium can&apos;t wake them to
-              deliver commands or policies until the Apple push certificate is set up.
+              The Apple push certificate is installed. Sending commands and policies to Macs, iPhones
+              and iPads isn&apos;t available yet; enrolled devices keep reporting in the meantime.
             </Typography>
+          ) : null}
+          {commands && !commands.deliverable && commands.reason !== "sender_not_available" ? (
+            <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1.5, mt: 1.5 }}>
+              <Typography variant="body2" sx={{ color: "text.secondary", flex: "1 1 320px" }}>
+                Macs, iPhones and iPads can enroll and report, but Tracenium can&apos;t wake them to
+                deliver commands or policies until the Apple push certificate is set up.
+              </Typography>
+              {pushCertificate ? (
+                <Button
+                  variant="outlined"
+                  onClick={() => onOpenTab("apple-setup")}
+                  sx={{ textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
+                >
+                  Set up Apple push
+                </Button>
+              ) : null}
+            </Box>
           ) : null}
         </SectionPaper>
       )}

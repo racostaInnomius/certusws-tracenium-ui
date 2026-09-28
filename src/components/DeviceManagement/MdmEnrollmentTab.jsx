@@ -161,7 +161,7 @@ export default function MdmEnrollmentTab({ mdm, canEnroll, onChanged, notify, on
           {describeMissing(mdm.status.enrollment?.missing)}.
         </Alert>
       ) : null}
-      {mdm.status && available && !deliverable ? (
+      {mdm.status && available && !deliverable && mdm.status.enrollment?.topicSource !== "organization" ? (
         <Alert severity="info" sx={{ borderRadius: 3, mb: 2 }}>
           Devices you enroll now report to Tracenium, but can&apos;t receive commands or policies until
           the Apple push certificate is set up — and will need to enroll again then.

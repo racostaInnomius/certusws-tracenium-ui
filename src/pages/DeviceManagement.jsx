@@ -9,8 +9,9 @@
 //   - Devices: equipos por MDM y por la app, con su detalle.
 //   - Enrollment: dar de alta un Mac/iPhone/iPad por su número de serie.
 //   - Policies: la política de la app (MAM) y los ajustes macOS / iOS.
-// «Apple setup» (certificado de push) no se pinta hasta que exista: lo no
-// construido no aparece en el producto; su estado se dice en Overview.
+//   - Apple setup: el certificado de push de APNs de la organización (28-sep).
+//     Sólo con la capacidad `enrollment`, como toda la API de MDM; descargar
+//     la solicitud e instalar el `.pem` piden además ADMIN/OWNER.
 //
 // Las políticas se escriben por el PATCH de dominio: guardar aquí no puede
 // tocar los bloques de configuración del agente ni de seguridad.
@@ -25,6 +26,7 @@ import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DevicesOutlinedIcon from "@mui/icons-material/DevicesOutlined";
 import AddLinkOutlinedIcon from "@mui/icons-material/AddLinkOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
+import AppleIcon from "@mui/icons-material/Apple";
 
 import PageHeader from "../components/common/PageHeader";
 import SectionPaper from "../components/common/SectionPaper";
@@ -35,6 +37,7 @@ import PageTabs from "../components/common/PageTabs";
 import MdmOverviewTab from "../components/DeviceManagement/MdmOverviewTab";
 import MdmDevicesTab from "../components/DeviceManagement/MdmDevicesTab";
 import MdmEnrollmentTab from "../components/DeviceManagement/MdmEnrollmentTab";
+import MdmAppleSetupTab from "../components/DeviceManagement/MdmAppleSetupTab";
 import { getMdmStatus, listMdmDevices, listMdmEnrollments } from "../api/mdm";
 import { getSearchParam, updateSearchParams } from "../utils/browserState";
 
@@ -74,7 +77,7 @@ function isMobileRow(d) {
   return MOBILE_PLATFORMS.has(p);
 }
 
-const TABS = ["overview", "devices", "enrollment", "policies"];
+const TABS = ["overview", "devices", "enrollment", "policies", "apple-setup"];
 const tabA11y = (key) => ({ id: `mdm-tab-${key}`, "aria-controls": `mdm-tabpanel-${key}` });
 
 function TabPanel({ value, tab, children }) {
@@ -144,6 +147,12 @@ export default function DeviceManagement({ onNavigate }) {
   // a quien gestione dispositivos sin ser administrador le saldría una puerta
   // que termina en "no disponible".
   const canReport = isActiveMember && ["ADMIN", "OWNER"].includes(String(myRole || ""));
+  // Mismo par que exige el servidor para pedir la solicitud o instalar el
+  // `.pem`: cambia el Topic de toda la organización.
+  const canConfigurePush = canEnroll && ["ADMIN", "OWNER"].includes(String(myRole || ""));
+  // Sin `enrollment` la pestaña no existe: un `?mdmTab=apple-setup` viejo cae
+  // en Overview en vez de dejar las pestañas sin ninguna seleccionada.
+  const shownTab = tab === "apple-setup" && !canEnroll ? "overview" : tab;
 
   const [policyRow, setPolicyRow] = React.useState(null);
   // ManagedAppSection is props-driven against `form.managedApp`.
@@ -453,7 +462,7 @@ export default function DeviceManagement({ onNavigate }) {
       />
 
       <PageTabs
-        value={tab}
+        value={shownTab}
         onChange={(_e, v) => setTab(v)}
         aria-label="MDM / MAM sections"
         items={[
@@ -461,18 +470,21 @@ export default function DeviceManagement({ onNavigate }) {
           { value: "devices", label: "Devices", icon: <DevicesOutlinedIcon />, ...tabA11y("devices") },
           { value: "enrollment", label: "Enrollment", icon: <AddLinkOutlinedIcon />, ...tabA11y("enrollment") },
           { value: "policies", label: "Policies", icon: <TuneOutlinedIcon />, ...tabA11y("policies") },
+          ...(canEnroll
+            ? [{ value: "apple-setup", label: "Apple setup", icon: <AppleIcon />, ...tabA11y("apple-setup") }]
+            : []),
         ]}
       />
 
-      <TabPanel value={tab} tab="overview">
+      <TabPanel value={shownTab} tab="overview">
         <MdmOverviewTab mdm={mdm} appDevices={mobileDevices} onOpenTab={setTab} />
       </TabPanel>
 
-      <TabPanel value={tab} tab="devices">
+      <TabPanel value={shownTab} tab="devices">
         <MdmDevicesTab mdm={mdm} appDevices={mobileDevices} onNavigate={onNavigate} onOpenTab={setTab} />
       </TabPanel>
 
-      <TabPanel value={tab} tab="enrollment">
+      <TabPanel value={shownTab} tab="enrollment">
         <MdmEnrollmentTab
           mdm={mdm}
           canEnroll={canEnroll}
@@ -482,7 +494,7 @@ export default function DeviceManagement({ onNavigate }) {
         />
       </TabPanel>
 
-      <TabPanel value={tab} tab="policies">
+      <TabPanel value={shownTab} tab="policies">
         {/* ── Política de la app (MAM) ───────────────────────────────── */}
         <SectionPaper variant="panel" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
           <Box sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1, mb: 0.5 }}>
@@ -680,6 +692,16 @@ export default function DeviceManagement({ onNavigate }) {
           )}
         </SectionPaper>
       </TabPanel>
+
+      {canEnroll ? (
+        <TabPanel value={shownTab} tab="apple-setup">
+          <MdmAppleSetupTab
+            canConfigure={canConfigurePush}
+            notify={(message, severity) => showSnack(message, severity)}
+            onChanged={reloadMdm}
+          />
+        </TabPanel>
+      ) : null}
 
       <BrandSnackbar
         open={snackbar.open}

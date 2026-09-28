@@ -26,6 +26,11 @@ vi.mock("../auth/AuthContext", () => ({
 vi.mock("../msp/MspContext", () => ({
   useMspOptional: () => ({ activeTenant: null }),
 }));
+const downloads = [];
+vi.mock("../utils/browserState", async (importOriginal) => ({
+  ...(await importOriginal()),
+  downloadTextFile: (filename, content) => downloads.push({ filename, content }),
+}));
 
 import DeviceManagement from "./DeviceManagement";
 
@@ -59,7 +64,17 @@ beforeEach(() => {
     posts: [],
     deletes: [],
     mdmCalls: 0,
+    setup: {
+      pushCertificate: { configured: false, state: "missing", pendingRequestAt: null, appleAccount: null },
+      requests: { available: true, vendorCertificate: "ok", keyStorage: true },
+      portalUrl: "https://identity.apple.com/pushcert/",
+      devices: { enrolled: 1, onOtherTopic: 1 },
+    },
+    requests: 0,
+    puts: [],
+    putReplies: [],
   };
+  downloads.length = 0;
 });
 afterEach(() => {
   cleanup();
@@ -87,6 +102,20 @@ function mount(search = "") {
       };
       state.enrollments = [{ ...created, downloadCount: 0, createdAt: new Date().toISOString(), device: null }, ...state.enrollments];
       return HttpResponse.json(created, { status: 201 });
+    }),
+    http.get(/\/api\/v1\/mdm\/push-certificate$/, () => HttpResponse.json(state.setup)),
+    http.post(/\/api\/v1\/mdm\/push-certificate\/request$/, () => {
+      state.requests += 1;
+      return HttpResponse.json(
+        { filename: "Tracenium-PushCertificateRequest-2026-09-28.plist", content: "UExJU1Q=", requestedAt: new Date().toISOString() },
+        { status: 201 }
+      );
+    }),
+    http.put(/\/api\/v1\/mdm\/push-certificate$/, async ({ request }) => {
+      state.puts.push(await request.json());
+      const reply = state.putReplies.shift();
+      if (reply) return HttpResponse.json(reply.body, { status: reply.status });
+      return HttpResponse.json({ ...state.setup, topicChanged: false });
     }),
     http.delete(/\/api\/v1\/mdm\/enrollments\/[^/]+$/, ({ request }) => {
       state.deletes.push(new URL(request.url).pathname.split("/").pop());
@@ -188,5 +217,108 @@ describe("MDM / MAM — sin la capacidad Enrollment", () => {
     expect(await screen.findByText(/needs the enrollment capability/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /enroll a device/i })).toBeNull();
     expect(state.mdmCalls).toBe(0);
+  });
+});
+
+const PEM = "-----BEGIN CERTIFICATE-----\nMIIBfakecertificate\n-----END CERTIFICATE-----\n";
+const pemFile = () => new File([PEM], "MDM_ Certus ITM LLC_Certificate.pem", { type: "application/x-pem-file" });
+
+describe("MDM / MAM — Apple setup", () => {
+  it("❗ descarga la solicitud firmada tal como la devuelve el servidor", async () => {
+    const user = userEvent.setup();
+    mount("&mdmTab=apple-setup");
+    expect(await screen.findByText("Not set up")).toBeTruthy();
+    expect(screen.getByText(/1 enrolled device will need to enroll again/i)).toBeTruthy();
+
+    const download = await screen.findByRole("button", { name: /download request/i });
+    await waitFor(() => expect(download).not.toBeDisabled());
+    await user.click(download);
+    await waitFor(() => expect(downloads).toHaveLength(1));
+    expect(downloads[0]).toEqual({ filename: "Tracenium-PushCertificateRequest-2026-09-28.plist", content: "UExJU1Q=" });
+    expect(screen.getByRole("link", { name: /open apple push certificates portal/i }).getAttribute("href")).toBe(
+      "https://identity.apple.com/pushcert/"
+    );
+  });
+
+  it("❗ sin certificado de proveedor, no se puede descargar y dice por qué", async () => {
+    state.setup.requests = { available: false, vendorCertificate: "not_configured", keyStorage: true };
+    mount("&mdmTab=apple-setup");
+    expect(await screen.findByText(/waiting for Apple to issue its MDM vendor certificate/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /download request/i })).toBeDisabled();
+  });
+
+  it("❗ instala el .pem con la Apple Account", async () => {
+    const user = userEvent.setup();
+    mount("&mdmTab=apple-setup");
+    await screen.findByText("Not set up");
+    await user.upload(screen.getByTestId("push-certificate-file"), pemFile());
+    expect(await screen.findByText("MDM_ Certus ITM LLC_Certificate.pem")).toBeTruthy();
+    await user.type(screen.getByLabelText(/apple account/i), "it@certusitm.com");
+    await user.click(screen.getByRole("button", { name: /install certificate/i }));
+
+    await waitFor(() => expect(state.puts).toHaveLength(1));
+    expect(state.puts[0]).toEqual({ certificate: PEM, appleAccount: "it@certusitm.com" });
+  });
+
+  it("❗ si cambia el Topic, pregunta antes y sólo entonces confirma", async () => {
+    const user = userEvent.setup();
+    state.setup.pushCertificate = {
+      configured: true, state: "valid", topic: "com.apple.mgmt.External.aaaa", appleAccount: "it@certusitm.com",
+      notAfter: "2027-09-28T00:00:00Z", uploadedAt: "2026-09-28T00:00:00Z", pendingRequestAt: null,
+    };
+    state.putReplies.push({
+      status: 409,
+      body: { error: "topic_changed", message: "different topic", currentTopic: "com.apple.mgmt.External.aaaa",
+        newTopic: "com.apple.mgmt.External.bbbb", currentAppleAccount: "it@certusitm.com" },
+    });
+    mount("&mdmTab=apple-setup");
+    expect(await screen.findByText("com.apple.mgmt.External.aaaa")).toBeTruthy();
+    // La cuenta con la que se creó viene puesta: renovar con otra cambia el Topic.
+    expect(screen.getByLabelText(/apple account/i)).toHaveValue("it@certusitm.com");
+
+    await user.upload(screen.getByTestId("push-certificate-file"), pemFile());
+    await user.clear(screen.getByLabelText(/apple account/i));
+    await user.type(screen.getByLabelText(/apple account/i), "otra@certusitm.com");
+    await user.click(screen.getByRole("button", { name: /install certificate/i }));
+
+    expect(await screen.findByText(/every mac, iphone and ipad will have to enroll again/i)).toBeTruthy();
+    expect(state.puts).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: /replace and re-enroll/i }));
+    await waitFor(() => expect(state.puts).toHaveLength(2));
+    expect(state.puts[1]).toMatchObject({ appleAccount: "otra@certusitm.com", confirmTopicChange: true });
+  });
+
+  it("❗ quien no es ADMIN/OWNER lo ve, pero no puede cambiarlo", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management", "enrollment"] };
+    mount("&mdmTab=apple-setup");
+    expect(await screen.findByText(/only tenant admins and owners/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /download request/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /choose \.pem file/i })).toBeDisabled();
+  });
+
+  it("❗ sin la capacidad Enrollment la pestaña no existe", async () => {
+    capabilities = { role: "Mobile Operator", permissions: ["device_management"] };
+    mount("&mdmTab=apple-setup");
+    expect(await screen.findByRole("tab", { name: /overview/i })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /apple setup/i })).toBeNull();
+  });
+
+  it("Overview enseña el certificado y, con él instalado, no culpa al certificado", async () => {
+    state.status = {
+      enrollment: { available: true, missing: [], topicSource: "organization" },
+      pushCertificate: { configured: true, state: "expiring", daysLeft: 12 },
+      commands: { deliverable: false, reason: "sender_not_available" },
+    };
+    mount();
+    expect(await screen.findByText("Expires in 12 days")).toBeTruthy();
+    expect(screen.getByText(/the apple push certificate is installed/i)).toBeTruthy();
+    expect(screen.queryByText(/until the Apple push certificate is set up/i)).toBeNull();
+  });
+
+  it("❗ un equipo con otro Topic sale como «Re-enroll needed»", async () => {
+    state.devices = [{ ...MAC, needsReEnrollment: true }];
+    mount("&mdmTab=devices");
+    const row = (await screen.findByText("JPR-MacBookPro")).closest("tr");
+    expect(within(row).getByText("Re-enroll needed")).toBeTruthy();
   });
 });

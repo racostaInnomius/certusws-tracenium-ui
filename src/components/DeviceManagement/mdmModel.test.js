@@ -8,6 +8,9 @@ import {
   mdmDeviceStatus,
   mdmOverview,
   mdmPlatform,
+  looksLikePem,
+  pushCertificateStatus,
+  requestBlocker,
   STALE_AFTER_MS,
 } from "./mdmModel";
 
@@ -55,6 +58,16 @@ describe("estado de un equipo MDM", () => {
     expect(mdmDeviceStatus({ enrollmentState: "enrolled", lastSeenAt: past }, NOW).key).toBe("enrolled");
   });
 
+  it("❗ enrolado con otro Topic: hay que re-enrolarlo (y sigue contando como gestionado)", () => {
+    const d = { enrollmentState: "enrolled", lastSeenAt: past, needsReEnrollment: true };
+    expect(mdmDeviceStatus(d, NOW)).toMatchObject({ key: "reenroll", tone: "caution" });
+    // `null` = sin certificado de la organización todavía: no se sabe.
+    expect(mdmDeviceStatus({ ...d, needsReEnrollment: null }, NOW).key).toBe("enrolled");
+    // Un perfil quitado manda sobre el Topic.
+    expect(mdmDeviceStatus({ ...d, enrollmentState: "checked_out" }, NOW).key).toBe("removed");
+    expect(mdmOverview({ now: NOW, devices: [d] }).mdmManaged).toBe(1);
+  });
+
   it("la plataforma sale de lo que reporta el equipo", () => {
     expect(mdmPlatform({ productName: "Mac15,7" })).toBe("macos");
     expect(mdmPlatform({ productName: "iPhone16,2" })).toBe("ios");
@@ -93,5 +106,30 @@ describe("textos", () => {
       name: "iPhone de Ana",
       platform: "ios",
     });
+  });
+});
+
+describe("Apple setup", () => {
+  it("el estado del certificado, con los días que le quedan", () => {
+    expect(pushCertificateStatus(null)).toMatchObject({ key: "missing", label: "Not set up" });
+    expect(pushCertificateStatus({ state: "valid" })).toMatchObject({ key: "valid", tone: "positive" });
+    expect(pushCertificateStatus({ state: "expiring", daysLeft: 12 }).label).toBe("Expires in 12 days");
+    expect(pushCertificateStatus({ state: "expiring", daysLeft: 1 }).label).toBe("Expires in 1 day");
+    expect(pushCertificateStatus({ state: "expiring", daysLeft: 0 }).label).toBe("Expires today");
+    expect(pushCertificateStatus({ state: "expired" })).toMatchObject({ key: "expired", tone: "critical" });
+  });
+
+  it("❗ por qué no se puede descargar la solicitud — o null si se puede", () => {
+    expect(requestBlocker({ available: true, vendorCertificate: "ok", keyStorage: true })).toBeNull();
+    expect(requestBlocker({ available: false, vendorCertificate: "not_configured", keyStorage: true })).toMatch(
+      /waiting for Apple to issue its MDM vendor certificate/
+    );
+    expect(requestBlocker({ available: false, vendorCertificate: "expired", keyStorage: true })).toMatch(/expired/);
+    expect(requestBlocker({ available: false, vendorCertificate: "ok", keyStorage: false })).toMatch(/private key/);
+  });
+
+  it("un .pem se reconoce antes de mandarlo", () => {
+    expect(looksLikePem("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")).toBe(true);
+    expect(looksLikePem("hola")).toBe(false);
   });
 });

@@ -203,14 +203,32 @@ export default function MdmDevicesTab({ mdm, appDevices, onNavigate, onOpenTab }
         PaperProps={{ sx: { width: { xs: "100%", sm: 380 }, p: 2 } }}
       >
         {selected ? (
-          <DeviceDetail row={selected} onClose={() => setSelected(null)} onNavigate={onNavigate} />
+          <DeviceDetail
+            row={selected}
+            commandsReason={mdm.status?.commands?.reason ?? null}
+            onClose={() => setSelected(null)}
+            onNavigate={onNavigate}
+            onOpenTab={onOpenTab}
+          />
         ) : null}
       </Drawer>
     </Box>
   );
 }
 
-function DeviceDetail({ row, onClose, onNavigate }) {
+/** Qué puede recibir un equipo MDM hoy. Hechos del servidor, no promesas. */
+function commandsText(device, commandsReason) {
+  if (device.needsReEnrollment === true) {
+    return "This device enrolled with a different push topic than your organization's Apple push certificate, so Tracenium can't wake it. Enroll it again with a new link to manage it.";
+  }
+  if (!device.pushReady) return "The device hasn't registered for push yet.";
+  if (commandsReason === "sender_not_available") {
+    return "The device registered for push with your organization's certificate. Sending commands isn't available yet.";
+  }
+  return "The device registered for push. Tracenium can send it commands once the Apple push certificate is set up.";
+}
+
+function DeviceDetail({ row, commandsReason, onClose, onNavigate, onOpenTab }) {
   const d = row.device;
   return (
     <Box sx={{ display: "grid", gap: 2 }} aria-label="Device detail">
@@ -246,10 +264,17 @@ function DeviceDetail({ row, onClose, onNavigate }) {
               Commands
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-              {d.pushReady
-                ? "The device registered for push. Tracenium can send it commands once the Apple push certificate is set up."
-                : "The device hasn't registered for push yet."}
+              {commandsText(d, commandsReason)}
             </Typography>
+            {d.needsReEnrollment === true ? (
+              <Button
+                variant="outlined"
+                onClick={() => onOpenTab?.("enrollment")}
+                sx={{ mt: 1, textTransform: "none", fontWeight: 700, borderColor: BRAND.teal, color: BRAND.tealText }}
+              >
+                Create enrollment link
+              </Button>
+            ) : null}
           </Box>
         </>
       ) : (
